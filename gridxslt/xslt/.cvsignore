@@ -1,0 +1,12 @@
+.deps
+.libs
+Makefile
+Makefile.in
+*.lo
+*.la
+grammar.tab.c
+grammar.tab.h
+dftest
+lexer.yy.c
+testxpath
+testxslt
