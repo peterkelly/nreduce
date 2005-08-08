@@ -1,0 +1,34 @@
+A local attribute declaration with the form set to qualified, i.e. one which
+inherits the schema's target namespace, and the schema with the 
+"attributeFormDefault" attribute set to "qualified"
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org" attributeFormDefault="qualified">
+  <xsd:complexType name="ct1">
+    <xsd:attribute name="attribute1" form="qualified"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: http://target.org
+  Default attribute form: qualified
+  Default element form: unqualified
+  Complex type {http://target.org}ct1
+    Complex content
+    Derivation method: restriction
+    Base type: (built-in ur-type)
+    Abstract: false
+    Mixed: false
+    Prohibited substitutions: 
+    Final: 
+    (built-in type anyType)
+    Attribute use
+      Required: false
+      Value constraint: (none)
+      Attribute {http://target.org}attribute1
+        (built-in type anySimpleType)
+================================== RETURN CODE =================================
+0

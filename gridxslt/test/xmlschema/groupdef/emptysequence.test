@@ -1,0 +1,20 @@
+Test a model group definition with an empty <sequence> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="mgd1">
+    <xsd:sequence/>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="mgd1">
+    <xsd:sequence/>
+  </xsd:group>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

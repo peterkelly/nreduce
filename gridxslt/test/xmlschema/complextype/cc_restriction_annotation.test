@@ -1,0 +1,28 @@
+<restriction> with just an <annotation> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:annotation>foo</xsd:annotation>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2"/>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

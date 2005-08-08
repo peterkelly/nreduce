@@ -1,0 +1,17 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+The "node()" SequenceType denotes any node. It is normalized into a choice
+between the corresponding wildcard types for each kind of node.
+ 
+[node()]sequencetype
+==
+(element | attribute | text | document | comment | processing-instruction)
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+node()
+==================================== OUTPUT ====================================
+(((((element | attribute) | text) | document) | comment) | processing-instruction)
+================================== RETURN CODE =================================
+0

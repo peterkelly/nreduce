@@ -1,0 +1,20 @@
+An attribute group containing duplicate attributes, where one of the attributes
+is inside a referenced group
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:attributeGroup name="ag1">
+    <xsd:attribute name="attribute1"/>
+    <xsd:attributeGroup ref="ag2"/>
+  </xsd:attributeGroup>
+  <xsd:attributeGroup name="ag2">
+    <xsd:attribute name="attribute1"/>
+  </xsd:attributeGroup>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error ag-props-correct.2: duplicate attribute not allowed: attribute1
+================================== RETURN CODE =================================
+1

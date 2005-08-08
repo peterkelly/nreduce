@@ -1,0 +1,13 @@
+A top-level <element> with the "maxOccurs" attribute set
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" maxOccurs="x"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error: "maxOccurs" attribute not allowed here
+================================== RETURN CODE =================================
+1

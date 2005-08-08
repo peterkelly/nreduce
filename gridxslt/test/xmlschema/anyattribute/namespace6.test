@@ -1,0 +1,23 @@
+Attribute wildcard specifying several namespaces, including ##targetNamespace,
+when the schema does not have a target namespace. Note: in this case, the output
+specifies ##local because ##targetNamespace corresponds to an absent namespace
+when no target namespace is specified for the schema.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:anyAttribute namespace="http://test.org http://foo.org ##targetNamespace http://bar.org"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:anyAttribute namespace="http://test.org http://foo.org ##local http://bar.org"/>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

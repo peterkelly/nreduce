@@ -1,0 +1,23 @@
+Effective total range of a <sequence> particle
+
+=================================== PROGRAM ====================================
+testxmlschema -r ct1
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:element name="element1"/>
+      <xsd:any minOccurs="4" maxOccurs="12"/>
+      <xsd:choice minOccurs="2" maxOccurs="2">
+        <xsd:element name="element1" minOccurs="3" maxOccurs="5"/>
+        <xsd:element name="element2" minOccurs="4" maxOccurs="6"/>
+      </xsd:choice>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Min: 11
+Max: 25
+================================== RETURN CODE =================================
+0

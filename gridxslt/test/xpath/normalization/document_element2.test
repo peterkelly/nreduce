@@ -1,0 +1,19 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+A "document-node" sequence type with an element test (resp. a schema element
+test) is normalized into the corresponding document type, whose content is the
+normalization of the element test (resp. schema element test), interleaved with
+an arbitrary sequence of processing instruction, comment, and text nodes.
+
+[document-node(ElementTest)]sequencetype
+==
+document { [ElementTest]sequencetype & ( processing-instruction | comment ) *}
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+document-node(element(foo,xsd:integer?))
+==================================== OUTPUT ====================================
+document { (element foo nillable of type xsd:integer & (processing-instruction | comment)*) }
+================================== RETURN CODE =================================
+0

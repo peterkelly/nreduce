@@ -1,0 +1,20 @@
+<extension> with an <all> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="st1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error src-ct.1: complex type with complex content cannot extend or restrict a simple type
+================================== RETURN CODE =================================
+1

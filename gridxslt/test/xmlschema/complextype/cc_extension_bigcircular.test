@@ -1,0 +1,53 @@
+A circular reference several levels deep
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+          <xsd:element name="element2"/>
+          <xsd:element name="element3"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:extension base="ct3">
+        <xsd:sequence>
+          <xsd:element name="e"/>
+          <xsd:element name="f"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct3">
+    <xsd:complexContent>
+      <xsd:extension base="ct4">
+        <xsd:sequence>
+          <xsd:element name="c"/>
+          <xsd:element name="d"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct4">
+    <xsd:complexContent>
+      <xsd:extension base="ct1">
+        <xsd:sequence>
+          <xsd:element name="a"/>
+          <xsd:element name="b"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:34: error: Circular type reference detected: ct4 -> ct1 -> ct2 -> ct3 -> ct4
+================================== RETURN CODE =================================
+1

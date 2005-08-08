@@ -1,0 +1,52 @@
+Schema Component Constraint: Particle Restriction OK (Elt:Elt -- NameAndTypeOK)
+
+rcase-NameAndTypeOK.3.2.4
+
+ct1 is a valid derivation of ct2, because both the base and derived
+elements take their {disallowed substitutions} from the schema default, and
+therefore disallow the same set of substitutions
+
+Note: the output differs from the source input due to the fact that the
+output code always specifies block and final values explicitly on elements,
+rather than using the schema default.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" blockDefault="restriction substitution">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:element name="element1"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" block="restriction">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1" block="restriction substitution"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2" block="restriction">
+    <xsd:sequence>
+      <xsd:element name="element1" block="restriction substitution"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

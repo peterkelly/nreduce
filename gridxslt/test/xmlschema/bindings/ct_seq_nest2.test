@@ -1,0 +1,63 @@
+Complex type with some elements and multiple nested <sequence>s
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="test">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int"/>
+      <xsd:element name="b" type="xsd:int"/>
+      <xsd:sequence>
+        <xsd:element name="c" type="xsd:int"/>
+        <xsd:element name="d" type="xsd:int"/>
+        <xsd:element name="e" type="xsd:int"/>
+      </xsd:sequence>
+      <xsd:sequence>
+        <xsd:element name="f" type="xsd:int"/>
+        <xsd:element name="g" type="xsd:int"/>
+      </xsd:sequence>
+      <xsd:sequence>
+        <xsd:element name="h" type="xsd:int"/>
+        <xsd:element name="i" type="xsd:int"/>
+      </xsd:sequence>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest1 XMLtest1;
+typedef struct XMLtest2 XMLtest2;
+typedef struct XMLtest3 XMLtest3;
+typedef struct XMLtest XMLtest;
+
+struct XMLtest1 {
+  int c;
+  int d;
+  int e;
+} __attribute__((__packed__));
+/* model group - 12 bytes */
+
+struct XMLtest2 {
+  int f;
+  int g;
+} __attribute__((__packed__));
+/* model group - 8 bytes */
+
+struct XMLtest3 {
+  int h;
+  int i;
+} __attribute__((__packed__));
+/* model group - 8 bytes */
+
+struct XMLtest {
+  int a;
+  int b;
+  XMLtest1 sequence;
+  XMLtest2 sequence1;
+  XMLtest3 sequence2;
+} __attribute__((__packed__));
+/* complex type - 36 bytes */
+
+================================== RETURN CODE =================================
+0

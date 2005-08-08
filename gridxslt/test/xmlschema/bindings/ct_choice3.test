@@ -1,0 +1,64 @@
+Complex type with a <choice> model group with contents of different types, and
+also other model groups
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="test">
+    <xsd:choice>
+      <xsd:element name="a" type="xsd:double"/>
+      <xsd:element name="b" type="xsd:byte"/>
+      <xsd:sequence>
+        <xsd:element name="c" type="xsd:byte"/>
+        <xsd:element name="d" type="xsd:byte"/>
+      </xsd:sequence>
+      <xsd:choice>
+        <xsd:element name="e" type="xsd:byte"/>
+        <xsd:element name="f" type="xsd:byte"/>
+      </xsd:choice>
+    </xsd:choice>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest1 XMLtest1;
+typedef struct XMLtest2 XMLtest2;
+typedef struct XMLtest XMLtest;
+
+struct XMLtest1 {
+  char c;
+  char d;
+} __attribute__((__packed__));
+/* model group - 2 bytes */
+
+#define XMLtest2_e 1
+#define XMLtest2_f 2
+
+struct XMLtest2 {
+  int valtype;
+  union {
+    char e;
+    char f;
+  } val;
+} __attribute__((__packed__));
+/* model group - 5 bytes */
+
+#define XMLtest_a 1
+#define XMLtest_b 2
+#define XMLtest_sequence 3
+#define XMLtest_choice 4
+
+struct XMLtest {
+  int valtype;
+  union {
+    double a;
+    char b;
+    XMLtest1 sequence;
+    XMLtest2 choice;
+  } val;
+} __attribute__((__packed__));
+/* complex type - 12 bytes */
+
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,31 @@
+Element wildcard specifying ##any, with leading and trailing whitespace
+present (this tests that "namespace" is interpreted as a string with whitespace
+collapsed)
+
+=================================== PROGRAM ====================================
+testxmlschema -w
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:any namespace="   
+   ##any  
+
+"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Attribute wildcard for type {http://target.org}ct1:
+(none)
+
+Element wildcard within type {http://target.org}ct1:
+Wildcard
+  Namespace constraint type: any
+  Namespace not value: (absent)
+  Namespace list: (empty)
+  Process contents: strict
+  Annotation: (none)
+================================== RETURN CODE =================================
+0

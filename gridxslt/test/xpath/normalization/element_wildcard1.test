@@ -1,0 +1,17 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+An "element" SequenceType without content or with a wildcard and no type name
+is normalized into a wildcard element type.
+
+[element()]sequencetype
+==
+element
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+element()
+==================================== OUTPUT ====================================
+element
+================================== RETURN CODE =================================
+0

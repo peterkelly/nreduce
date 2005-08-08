@@ -1,0 +1,17 @@
+A local attribute declaration using "ref", with both the "default" and "fixed"
+attributes specified
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:attribute name="attribute1"/>
+  <xsd:complexType name="ct1">
+    <xsd:attribute ref="attribute1" default="somevalue" fixed="somevalue"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:5: error src-attribute.1: "default" attribute cannot be used in conjunction with "fixed" here
+================================== RETURN CODE =================================
+1

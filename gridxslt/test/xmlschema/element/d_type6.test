@@ -1,0 +1,22 @@
+An empty <element> with an explicit type declaration of xsd:anyType
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" type="xsd:anyType"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: (none)
+  Default attribute form: unqualified
+  Default element form: unqualified
+  Element element1
+    Type reference: {http://www.w3.org/2001/XMLSchema}anyType
+    Abstract: false
+    Nillable: false
+    Disallowed substitutions: 
+    Substitution group exclusions: 
+================================== RETURN CODE =================================
+0

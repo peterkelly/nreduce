@@ -1,0 +1,55 @@
+Schema Component Constraint: Particle Derivation OK (Sequence:All -- RecurseUnordered)
+
+rcase-RecurseUnordered.2
+
+Test for xs_compute_particle_mapping() with the following options:
+  order_preserving=0
+  require_nonemptiable_unique=1
+  require_nonemptiable_mapped=1
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+          <xsd:element name="element2"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:all>
+      <xsd:element name="element1"/>
+      <xsd:element name="element2"/>
+      <xsd:element name="element3" minOccurs="0"/>
+    </xsd:all>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+          <xsd:element name="element2"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:all>
+      <xsd:element name="element1"/>
+      <xsd:element name="element2"/>
+      <xsd:element name="element3" minOccurs="0"/>
+    </xsd:all>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

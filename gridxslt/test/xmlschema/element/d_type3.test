@@ -1,0 +1,35 @@
+An empty <element> with no type declared, but which is in a substitution group
+who's head element has a type declared. The element should take the type of
+the substitution group head. This type should not be explicitly included for
+the element in the output, however.
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" substitutionGroup="element2"/>
+  <xsd:element name="element2" type="xsd:float"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: (none)
+  Default attribute form: unqualified
+  Default element form: unqualified
+  Element element1
+    Type reference: {http://www.w3.org/2001/XMLSchema}float
+    Substitution group reference: element2
+    Abstract: false
+    Nillable: false
+    Disallowed substitutions: 
+    Substitution group exclusions: 
+  Element element2
+    Type reference: {http://www.w3.org/2001/XMLSchema}float
+    Substitution group members:
+      element1
+    Abstract: false
+    Nillable: false
+    Disallowed substitutions: 
+    Substitution group exclusions: 
+================================== RETURN CODE =================================
+0

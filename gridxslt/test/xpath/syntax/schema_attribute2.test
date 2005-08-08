@@ -1,0 +1,19 @@
+=================================== PROGRAM ====================================
+testxpath -s runtests.tmp/schema.xml runtests.tmp/input.xml
+===================================== FILE =====================================
+schema.xml
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:test="http://test.org"
+            targetNamespace="http://test.org">
+  <xsd:attribute name="foo" type="test:fooType"/>
+  <xsd:simpleType name="fooType">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== INPUT =====================================
+$test instance of schema-attribute(test:foo)
+==================================== OUTPUT ====================================
+$test instance of schema-attribute(test:foo)
+================================== RETURN CODE =================================
+0

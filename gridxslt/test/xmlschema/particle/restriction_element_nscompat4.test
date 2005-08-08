@@ -1,0 +1,52 @@
+Schema Component Constraint: Particle Derivation OK (Elt:Any -- NSCompat)
+
+rcase-NSCompat.1
+
+ct2 is a valid derivation of ct1, because the element in the derived type
+is compatible with the wildcard in the base type, since it has the
+namespace http://target.org set (as the "form" attribute is not specified and
+defaults to "qualified") and the wildcard allows elements from this namespace
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            targetNamespace="http://target.org"
+            xmlns:tns="http://target.org"
+            elementFormDefault="qualified">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="tns:ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:any namespace="##targetNamespace"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://target.org" targetNamespace="http://target.org" elementFormDefault="qualified">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="tns:ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:any namespace="##targetNamespace"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

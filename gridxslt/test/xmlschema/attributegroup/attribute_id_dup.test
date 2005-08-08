@@ -1,0 +1,16 @@
+Multiple attributes with the type ID
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:attributeGroup name="ag1">
+    <xsd:attribute name="attribute1" type="xsd:ID"/>
+    <xsd:attribute name="attribute2" type="xsd:ID"/>
+  </xsd:attributeGroup>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:5: error ag-props-correct.3: only one attribute in a group can be of type ID (or a derivative); attribute2 conflicts with attribute1
+================================== RETURN CODE =================================
+1

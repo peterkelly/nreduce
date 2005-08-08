@@ -1,0 +1,31 @@
+Schema Component Constraint: Particle Derivation OK (Sequence:Choice -- MapAndSum)
+
+rcase-MapAndSum.2
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+          <xsd:element name="element2"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:choice>
+      <xsd:element name="element1"/>
+      <xsd:element name="element2"/>
+      <xsd:element name="element3"/>
+    </xsd:choice>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error rcase-MapAndSum.2: Total occurrence range 2-2 is not a valid restriction of the range 1-1, declared on the corresponding <choice> of the base type
+================================== RETURN CODE =================================
+1

@@ -1,0 +1,17 @@
+A top-level attribute with type derived from ID and the "fixed" attribute set
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:attribute name="attribute1" fixed="x">
+    <xsd:simpleType>
+      <xsd:restriction base="xsd:ID"/>
+    </xsd:simpleType>
+  </xsd:attribute>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error a-props-correct.3: value constraints cannot be specified for ID-derived attributes
+================================== RETURN CODE =================================
+1

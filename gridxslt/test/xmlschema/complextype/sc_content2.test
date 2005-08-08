@@ -1,0 +1,31 @@
+A complex type with simple content attempting to restrict a complex type with
+complex content that does not allow mixed content
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:simpleContent>
+      <xsd:restriction base="ct2">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string"/>
+        </xsd:simpleType>
+      </xsd:restriction>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="xsd:anyType">
+        <xsd:sequence>
+          <xsd:element name="element1" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error: ct2 cannot be restricted with simple content, because it does not have its "mixed" attribute set to "true" (XML Schema Part 2: Datatypes Second Edition, section 3.4.2)
+================================== RETURN CODE =================================
+1

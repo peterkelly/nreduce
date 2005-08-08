@@ -1,0 +1,27 @@
+Model group with multiple elements of the same type, all with single encoding
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="test">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int"/>
+      <xsd:element name="b" type="xsd:int"/>
+      <xsd:element name="c" type="xsd:int"/>
+    </xsd:sequence>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest XMLtest;
+
+struct XMLtest {
+  int a;
+  int b;
+  int c;
+} __attribute__((__packed__));
+/* model group - 12 bytes */
+
+================================== RETURN CODE =================================
+0

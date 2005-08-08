@@ -1,0 +1,17 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+An "attribute" SequenceType with a wildcard and a type name is normalized into
+a wildcard attribute type with a corresponding type name.
+ 
+[attribute(*,TypeName)]sequencetype
+==
+attribute of type TypeName
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+attribute(*,xsd:integer)
+==================================== OUTPUT ====================================
+attribute of type xsd:integer
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,29 @@
+A complex type with simple content attempting to restrict a complex type with
+complex content, but it does not have a <simpleType> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:simpleContent>
+      <xsd:restriction base="ct2">
+        <xsd:minLength value="2"/>
+      </xsd:restriction>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2" mixed="true">
+    <xsd:complexContent>
+      <xsd:extension base="xsd:anyType">
+        <xsd:sequence>
+          <xsd:element name="element1" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error: A complex type with simple content that restricts a complex type with complex content must contain a <simpleType> child (XML Schema Part 2: Datatypes Second Edition, section 3.4.2)
+================================== RETURN CODE =================================
+1

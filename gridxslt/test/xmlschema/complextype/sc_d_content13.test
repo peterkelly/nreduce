@@ -1,0 +1,31 @@
+A complex type with simple content that extends a simple type
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:string">
+        <xsd:attribute name="attribute1"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: (none)
+  Default attribute form: unqualified
+  Default element form: unqualified
+  Complex type ct1
+    Simple content
+    (built-in type string)
+    (built-in type string)
+    Attribute use
+      Required: false
+      Value constraint: (none)
+      Attribute attribute1
+        (built-in type anySimpleType)
+================================== RETURN CODE =================================
+0

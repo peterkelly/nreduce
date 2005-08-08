@@ -1,0 +1,21 @@
+Invalid derivation due to an attempt to extend a type for which extension is
+declared final
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" finalDefault="extension">
+  <xsd:simpleType name="st1">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:complexType name="ct2">
+    <xsd:simpleContent>
+      <xsd:extension base="st1"/>
+    </xsd:simpleContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error cos-ct-extends.2.2: Invalid derivation; base type is declared final for extensions
+================================== RETURN CODE =================================
+1

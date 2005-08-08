@@ -1,0 +1,15 @@
+Global simple type declaration with a missing "name" attributge
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType>
+    <xsd:list itemType="xsd:string"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error: "name" attribute missing
+================================== RETURN CODE =================================
+1

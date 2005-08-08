@@ -1,0 +1,56 @@
+An empty <element> with an explicit anonymous complex type declaration
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1">
+    <xsd:complexType>
+      <xsd:choice>
+        <xsd:element name="element2"/>
+        <xsd:element name="element3"/>
+      </xsd:choice>
+    </xsd:complexType>
+  </xsd:element>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: (none)
+  Default attribute form: unqualified
+  Default element form: unqualified
+  Element element1
+    Abstract: false
+    Nillable: false
+    Disallowed substitutions: 
+    Substitution group exclusions: 
+    Complex type (unnamed)
+      Complex content
+      Derivation method: restriction
+      Base type: (built-in ur-type)
+      Abstract: false
+      Mixed: false
+      Prohibited substitutions: 
+      Final: 
+      (built-in type anyType)
+      Particle, occurs 1-1
+        Model group
+          Compositor: choice
+          Particle, occurs 1-1
+            Element element2
+              Type reference: {http://www.w3.org/2001/XMLSchema}anyType
+              Abstract: false
+              Nillable: false
+              Disallowed substitutions: 
+              Substitution group exclusions: 
+              (built-in type anyType)
+          Particle, occurs 1-1
+            Element element3
+              Type reference: {http://www.w3.org/2001/XMLSchema}anyType
+              Abstract: false
+              Nillable: false
+              Disallowed substitutions: 
+              Substitution group exclusions: 
+              (built-in type anyType)
+================================== RETURN CODE =================================
+0

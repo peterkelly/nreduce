@@ -1,0 +1,24 @@
+A circular base reference several levels deep
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1">
+    <xsd:restriction base="st2"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:restriction base="st3"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st3">
+    <xsd:restriction base="st4"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st4">
+    <xsd:restriction base="st1"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:12: error: Circular type reference detected: st4 -> st1 -> st2 -> st3 -> st4
+================================== RETURN CODE =================================
+1

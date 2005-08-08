@@ -1,0 +1,19 @@
+A top-level <element> with the "nillable" attribute set to "0"
+
+Also tests that parsing attribute values with "0" instead of "false" works
+(not tested elsewhere)
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" nillable="0"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1"/>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

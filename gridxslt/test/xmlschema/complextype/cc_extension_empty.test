@@ -1,0 +1,26 @@
+<extension> with no child elements and an empty base
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2"/>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

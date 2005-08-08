@@ -1,0 +1,28 @@
+Attribute wildcard union - case 3.10.6-3-3
+
+Both wildcards are sets of (namespace names or absent)
+
+=================================== PROGRAM ====================================
+testxmlschema -u ct1,ct2
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:anyAttribute namespace="http://foo.org http://test.org"/>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:anyAttribute namespace="http://test.org http://bar.org"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Wildcard
+  Namespace constraint type: set
+  Namespace not value: (absent)
+  Namespace list:
+    http://foo.org
+    http://test.org
+    http://bar.org
+  Process contents: skip
+  Annotation: (none)
+================================== RETURN CODE =================================
+0

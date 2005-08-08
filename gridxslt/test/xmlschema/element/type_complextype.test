@@ -1,0 +1,15 @@
+An element declaration with both the "type" attribute and a <complexType> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" type="xsd:string">
+    <xsd:complexType/>
+  </xsd:element>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error src-element.3: "type" attribute must not be specified if a <simpleType> or <complexType> child is present
+================================== RETURN CODE =================================
+1

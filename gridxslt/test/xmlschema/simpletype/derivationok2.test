@@ -1,0 +1,20 @@
+3.14.6 Schema Component Constraint: Type Derivation OK (Simple)
+
+Rule 2.2.1 - D's base type definition is B
+
+=================================== PROGRAM ====================================
+testxmlschema -v d,b
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="d">
+    <xsd:restriction base="b"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="b">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Type derivation ok
+================================== RETURN CODE =================================
+0

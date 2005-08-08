@@ -1,0 +1,18 @@
+Simple type definition with <list> and <list> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1" final="#all">
+    <xsd:union memberTypes="xsd:string xsd:int"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:restriction base="st1"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error st-props-correct.3: Base type disallows restriction
+================================== RETURN CODE =================================
+1

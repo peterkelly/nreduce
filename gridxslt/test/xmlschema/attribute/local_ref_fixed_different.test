@@ -1,0 +1,17 @@
+An attribute with with a value specified for "fixed", and a reference that
+specifies a different "fixed" value
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:attribute ref="attribute1" fixed="y"/>
+  </xsd:complexType>
+  <xsd:attribute name="attribute1" fixed="x"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error au-props-correct.2: attribute reference must contain a "fixed" value equal to that of the attribute it references
+================================== RETURN CODE =================================
+1

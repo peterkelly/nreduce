@@ -1,0 +1,23 @@
+A complex type restricting another complex type, where the derived type is empty
+and the base allows mixed content but has a non-emptiable particle
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:all>
+      <xsd:element name="element1"/>
+    </xsd:all>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:8: error derivation-ok-restriction.5.3.2: A complex type can only have empty content if it's base also has empty content, or allows mixed content and has an emptiable particle as its content type
+================================== RETURN CODE =================================
+1

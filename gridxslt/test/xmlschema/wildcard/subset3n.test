@@ -1,0 +1,20 @@
+Attribute wildcard subset - case 3.10.6-2-3
+
+Sub is set and super is not
+
+=================================== PROGRAM ====================================
+testxmlschema -b ct1,ct2
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:anyAttribute namespace="http://foo.org ##local http://bar.org"/>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:anyAttribute namespace="##other"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Subset: false
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,17 @@
+Element with a "maxOccurs" value of 0
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:element name="element1" maxOccurs="0"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:5: error p-props-correct.2.1: if maxOccurs has a finite value, it must be greater than or equal to 1
+================================== RETURN CODE =================================
+1

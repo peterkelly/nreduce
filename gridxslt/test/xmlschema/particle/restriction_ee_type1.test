@@ -1,0 +1,47 @@
+Schema Component Constraint: Particle Restriction OK (Elt:Elt -- NameAndTypeOK)
+
+rcase-NameAndTypeOK.3.2.5
+
+ct1 is a valid derivation of ct2, because the derived element is of a simple
+type that is the same as the base element's type
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:element name="element1" type="xsd:string"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:restriction base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:element name="element1" type="xsd:string"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

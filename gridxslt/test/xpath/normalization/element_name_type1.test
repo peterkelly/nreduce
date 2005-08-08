@@ -1,0 +1,18 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+An "element" SequenceType with a wildcard and a type name is normalized into a
+wildcard element type with a corresponding type name. The presence of a "?"
+after the type name indicates a nillable element.
+
+[element(ElementName,TypeName)]sequencetype
+==
+element ElementName of type TypeName
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+element(foo,xsd:integer)
+==================================== OUTPUT ====================================
+element foo of type xsd:integer
+================================== RETURN CODE =================================
+0

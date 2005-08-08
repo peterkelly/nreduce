@@ -1,0 +1,42 @@
+A local element declaration with the form set to qualified, i.e. one which
+inherits the schema's target namespace, and the schema with the 
+"elementFormDefault" attribute not set (i.e. defaulting to unqualified)
+
+=================================== PROGRAM ====================================
+testxmlschema -d
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:element name="element1" form="qualified"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Schema
+  Target namespace: http://target.org
+  Default attribute form: unqualified
+  Default element form: unqualified
+  Complex type {http://target.org}ct1
+    Complex content
+    Derivation method: restriction
+    Base type: (built-in ur-type)
+    Abstract: false
+    Mixed: false
+    Prohibited substitutions: 
+    Final: 
+    (built-in type anyType)
+    Particle, occurs 1-1
+      Model group
+        Compositor: sequence
+        Particle, occurs 1-1
+          Element {http://target.org}element1
+            Type reference: {http://www.w3.org/2001/XMLSchema}anyType
+            Abstract: false
+            Nillable: false
+            Disallowed substitutions: 
+            Substitution group exclusions: 
+            (built-in type anyType)
+================================== RETURN CODE =================================
+0

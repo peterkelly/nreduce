@@ -1,0 +1,24 @@
+Model group with single element, maxOccurs=unbounded (array_ptr encoding)
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="test">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int" maxOccurs="unbounded"/>
+    </xsd:sequence>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest XMLtest;
+
+struct XMLtest {
+  int na;
+  int *a;
+} __attribute__((__packed__));
+/* model group - 8 bytes */
+
+================================== RETURN CODE =================================
+0

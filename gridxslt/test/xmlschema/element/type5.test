@@ -1,0 +1,20 @@
+An empty <element> with no type declared, but which is in a substitution group
+who's head element has an no type declared. Both elements should default to
+anyType, but neither should have this type explicitly shown in the output.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" substitutionGroup="element2"/>
+  <xsd:element name="element2"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" substitutionGroup="element2"/>
+  <xsd:element name="element2"/>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

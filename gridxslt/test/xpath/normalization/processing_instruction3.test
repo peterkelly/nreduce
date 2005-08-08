@@ -1,0 +1,19 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+The [XPath/XQuery] type system does not model the target of a
+processing-instruction, which is treated as a dynamic property. Therefore a
+"processing-instruction" SequenceType with a string or NCName parameter is
+normalized into an optional processing-instruction type.
+ 
+[processing-instruction(NCName)]sequencetype
+==
+processing-instruction ?
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+processing-instruction(foo)
+==================================== OUTPUT ====================================
+processing-instruction?
+================================== RETURN CODE =================================
+0

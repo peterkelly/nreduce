@@ -1,0 +1,19 @@
+Simple type definition with <list>, where the itemType is declared final for
+"list"
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" finalDefault="list">
+  <xsd:simpleType name="st1">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:list itemType="st1"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error cos-st-restricts.2.3.1.1: Item type st1 disallows use in lists
+================================== RETURN CODE =================================
+1

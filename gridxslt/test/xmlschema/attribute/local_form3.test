@@ -1,0 +1,25 @@
+A local attribute declaration with the form set to unqualified, i.e. one which
+doesn't inherit the schema's target namespace, and the schema with the 
+"attributeFormDefault" attribute not set (i.e. defaulting to unqualified)
+
+In the output, the "form" attribute is not set because is uses the schema's
+default, "unqualified"
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org">
+  <xsd:complexType name="ct1">
+    <xsd:attribute name="attribute1" form="unqualified"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org">
+  <xsd:complexType name="ct1">
+    <xsd:attribute name="attribute1"/>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

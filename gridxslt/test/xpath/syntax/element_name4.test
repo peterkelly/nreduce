@@ -1,0 +1,12 @@
+element(name) actually gets normalised to element(name,xsd:anyType?); this
+checks that when it's printed out the simpler equivalent is used, even when
+anyType was explicitly specified
+
+=================================== PROGRAM ====================================
+testxpath
+==================================== INPUT =====================================
+$test instance of element(xsd:foo,xsd:anyType?)
+==================================== OUTPUT ====================================
+$test instance of element(xsd:foo)
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,25 @@
+Attribute wildcard union - case 3.10.6-3-5
+
+One wildcard is a pair of not and a namespace, and the other is a set
+
+=================================== PROGRAM ====================================
+testxmlschema -u ct1,ct2
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org">
+  <xsd:complexType name="ct1">
+    <xsd:anyAttribute namespace="http://target.org ##local"/>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:anyAttribute namespace="##other"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Wildcard
+  Namespace constraint type: any
+  Namespace not value: (absent)
+  Namespace list: (empty)
+  Process contents: skip
+  Annotation: (none)
+================================== RETURN CODE =================================
+0

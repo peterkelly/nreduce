@@ -1,0 +1,26 @@
+Element wildcard specifying "##other" in a schema with no target namespace
+
+=================================== PROGRAM ====================================
+testxmlschema -w
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:any namespace="##other"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Attribute wildcard for type ct1:
+(none)
+
+Element wildcard within type ct1:
+Wildcard
+  Namespace constraint type: not
+  Namespace not value: (absent)
+  Namespace list: (empty)
+  Process contents: strict
+  Annotation: (none)
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,29 @@
+A local element declaration with the form set to qualified, i.e. one which
+inherits the schema's target namespace, and the schema with the 
+"elementFormDefault" attribute set to "qualified"
+
+In the output, the "form" attribute is not set because it is the same as the
+schema default.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org" elementFormDefault="qualified">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:element name="element1" form="qualified"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org" elementFormDefault="qualified">
+  <xsd:complexType name="ct1">
+    <xsd:sequence>
+      <xsd:element name="element1"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

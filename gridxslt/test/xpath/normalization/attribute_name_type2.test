@@ -1,0 +1,17 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+An "attribute" SequenceType with a name and a type name is normalized into an
+attribute type with a corresponding type name.
+ 
+[attribute(AttributeName,TypeName)]sequencetype
+==
+attribute AttributeName of type TypeName
+ 
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+attribute(xsd:foo,xsd:integer)
+==================================== OUTPUT ====================================
+attribute xsd:foo of type xsd:integer
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,17 @@
+Model group definition using <sequence> with a circular reference
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="mgd1">
+    <xsd:sequence>
+      <xsd:group ref="mgd1"/>
+    </xsd:sequence>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error mg-props-correct.2: Circular model group reference detected: mgd1 -> mgd1
+================================== RETURN CODE =================================
+1

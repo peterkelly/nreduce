@@ -1,0 +1,35 @@
+A complex type restricting another complex type, where the derived type is empty
+and the base allows mixed content and has an emptiable particle
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" mixed="true">
+    <xsd:sequence minOccurs="0">
+      <xsd:element name="element1"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" mixed="true">
+    <xsd:sequence minOccurs="0">
+      <xsd:element name="element1"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,34 @@
+Complex type that specifies an attribute that is already declared on the base.
+Since we are using extension here, the base version of attribute2 is also
+taken into account, and so we should get a duplicate attribute error.
+
+Not 100% sure that this is the correct thing to do... in the XML representation
+summary for complex type definition it states we should take the "union" of
+clause 1, 2, and 3, which could possibly be interpreted as taking only one of
+each attribute declaration. But schema component constraint 3.4.6-1-4 states
+that two distinct attribute declarations with the same name and target namespace
+are not allowed. According to the latter, it seems we should throw an error
+here. Note that this is for the extension case only, not restriction.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2">
+        <xsd:attribute name="attribute1"/>
+        <xsd:attribute name="attribute2" default="bar"/>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:attribute name="attribute2" default="foo"/>
+    <xsd:attribute name="attribute3"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:7: error ct-props-correct.4: duplicate attribute not allowed: attribute2
+================================== RETURN CODE =================================
+1

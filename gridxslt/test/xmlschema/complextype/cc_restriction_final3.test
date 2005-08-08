@@ -1,0 +1,27 @@
+Attempting to restrict a complex type. This case should succeed because the 
+base type declares final for extension but not restriction.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" final="extension"/>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" final="extension"/>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:restriction base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

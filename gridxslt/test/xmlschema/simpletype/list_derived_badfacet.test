@@ -1,0 +1,28 @@
+Simple type definition with <list> and <list> child
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1">
+    <xsd:list itemType="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:restriction base="st1">
+      <xsd:length value="4"/>
+      <xsd:minLength value="4"/>
+      <xsd:maxLength value="4"/>
+      <xsd:whiteSpace value="preserve"/>
+      <xsd:pattern value="foo"/>
+      <xsd:pattern value="bar"/>
+      <xsd:totalDigits value="17"/>
+      <xsd:enumeration value="enum1"/>
+      <xsd:enumeration value="enum2"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error cos-st-restricts.2.3.2.4: Facet totalDigits is not allowed in a list or list-derived type
+================================== RETURN CODE =================================
+1

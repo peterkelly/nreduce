@@ -1,0 +1,30 @@
+Valid derivation; final of base type declares restriction but not extension
+
+Note: in the output, the final values are explicitly included on individual
+elements. This is due to the way the output code deals with final and block
+defaults. The result is perfectly valid and has the same meaning.
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" finalDefault="restriction">
+  <xsd:complexType name="ct1"/>
+  <xsd:complexType name="ct2">
+    <xsd:complexContent>
+      <xsd:extension base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1" final="restriction"/>
+  <xsd:complexType name="ct2" final="restriction">
+    <xsd:complexContent>
+      <xsd:extension base="ct1"/>
+    </xsd:complexContent>
+  </xsd:complexType>
+</xsd:schema>
+================================== RETURN CODE =================================
+0

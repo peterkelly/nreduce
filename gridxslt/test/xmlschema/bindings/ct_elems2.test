@@ -1,0 +1,32 @@
+Complex type with multiple elements of the same type, with different
+encoding types
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="test">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int"/>
+      <xsd:element name="b" type="xsd:int" maxOccurs="unbounded"/>
+      <xsd:element name="c" type="xsd:int" minOccurs="5" maxOccurs="5"/>
+      <xsd:element name="d" type="xsd:int" minOccurs="1" maxOccurs="5"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest XMLtest;
+
+struct XMLtest {
+  int a;
+  int nb;
+  int *b;
+  int c[5];
+  int nd;
+  int d[5];
+} __attribute__((__packed__));
+/* complex type - 56 bytes */
+
+================================== RETURN CODE =================================
+0

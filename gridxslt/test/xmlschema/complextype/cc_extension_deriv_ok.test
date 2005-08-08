@@ -1,0 +1,27 @@
+Type derivation OK check for a complex type extending another complex type,
+where extension is disallowed
+
+=================================== PROGRAM ====================================
+testxmlschema -v ct1,ct2 -f extension
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2">
+        <xsd:sequence>
+          <xsd:element name="element1"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:element name="element1"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error cos-ct-derived-ok.1: ct1 is not a valid extension of ct2; extension is disallowed for the latter
+================================== RETURN CODE =================================
+1

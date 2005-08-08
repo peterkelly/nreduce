@@ -1,0 +1,16 @@
+XQuery 1.0 and XPath 2.0 Formal Semantics - 3.5.4 SequenceType Matching
+
+A "comment()" SequenceType is normalized into the corresponding comment type.
+
+[comment()]sequencetype
+==
+comment
+
+=================================== PROGRAM ====================================
+testxpath -n
+==================================== INPUT =====================================
+comment()
+==================================== OUTPUT ====================================
+comment
+================================== RETURN CODE =================================
+0

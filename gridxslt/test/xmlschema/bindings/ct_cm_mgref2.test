@@ -1,0 +1,47 @@
+Complex type with a model group reference as its content model - the contenst
+of the model group go directly in the type's struct. The type also defines
+several attributes, one of which has the same name as an element in the model
+group (thus the attribute gets renamed; the element name takes precedence).
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="test">
+    <xsd:group ref="agroup"/>
+    <xsd:attribute name="c" type="xsd:int"/>
+    <xsd:attribute name="d" type="xsd:int"/>
+    <xsd:attribute name="e" type="xsd:int"/>
+  </xsd:complexType>
+  <xsd:group name="agroup">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int"/>
+      <xsd:element name="b" type="xsd:int"/>
+      <xsd:element name="c" type="xsd:int"/>
+    </xsd:sequence>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLagroup XMLagroup;
+typedef struct XMLtest XMLtest;
+
+struct XMLagroup {
+  int a;
+  int b;
+  int c;
+} __attribute__((__packed__));
+/* model group - 12 bytes */
+
+struct XMLtest {
+  int a;
+  int b;
+  int c;
+  int c1;
+  int d;
+  int e;
+} __attribute__((__packed__));
+/* complex type - 24 bytes */
+
+================================== RETURN CODE =================================
+0

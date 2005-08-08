@@ -1,0 +1,24 @@
+Model group with single element, minOccurs < maxOccurs (max_array encoding)
+
+=================================== PROGRAM ====================================
+genbindings -c
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:group name="test">
+    <xsd:sequence>
+      <xsd:element name="a" type="xsd:int" minOccurs="1" maxOccurs="5"/>
+    </xsd:sequence>
+  </xsd:group>
+</xsd:schema>
+==================================== OUTPUT ====================================
+typedef struct XMLtest XMLtest;
+
+struct XMLtest {
+  int na;
+  int a[5];
+} __attribute__((__packed__));
+/* model group - 24 bytes */
+
+================================== RETURN CODE =================================
+0

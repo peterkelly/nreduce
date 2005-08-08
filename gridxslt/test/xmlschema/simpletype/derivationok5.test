@@ -1,0 +1,22 @@
+3.14.6 Schema Component Constraint: Type Derivation OK (Simple)
+
+Rule 2.2.4 - B's {variety} is union and D is validly derived from a type
+definition in B's {member type definitions} given the subset, as defined by
+this constraint
+
+=================================== PROGRAM ====================================
+testxmlschema -v d,b
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="d">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="b">
+    <xsd:union memberTypes="xsd:string xsd:int"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Type derivation ok
+================================== RETURN CODE =================================
+0

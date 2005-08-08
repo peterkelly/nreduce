@@ -1,0 +1,52 @@
+=================================== PROGRAM ====================================
+dftest runtests.tmp/temp.xl
+===================================== FILE =====================================
+people.xml
+<?xml version="1.0"?>
+<people>
+  <person test="wow">
+    <name>Fred</name>
+    <age>20</age>
+    <occupation>Plumber</occupation>
+  </person>
+  <person>
+    <name>Joe</name>
+    <age>33</age>
+    <occupation>Marketing executive</occupation>
+  </person>
+  <person>
+    <name>Bob</name>
+    <age>38</age>
+    <occupation>Builder</occupation>
+  </person>
+</people>
+===================================== FILE =====================================
+temp.xl
+transform {
+
+  xsd:int main() {
+    sequence(fn:doc("runtests.tmp/people.xml"));
+  }
+
+}
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<people>
+  <person test="wow">
+    <name>Fred</name>
+    <age>20</age>
+    <occupation>Plumber</occupation>
+  </person>
+  <person>
+    <name>Joe</name>
+    <age>33</age>
+    <occupation>Marketing executive</occupation>
+  </person>
+  <person>
+    <name>Bob</name>
+    <age>38</age>
+    <occupation>Builder</occupation>
+  </person>
+</people>
+================================== RETURN CODE =================================
+0

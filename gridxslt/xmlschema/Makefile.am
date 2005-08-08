@@ -1,0 +1,10 @@
+noinst_LTLIBRARIES = libxmlschema.la
+noinst_PROGRAMS = testxmlschema genbindings binxml
+testxmlschema_SOURCES = testxmlschema.c
+libxmlschema_la_SOURCES = xmlschema.c derivation.c output.c parse.c validation.c
+genbindings_SOURCES = genbindings.c
+binxml_SOURCES = binxml.c
+gridxsltincludedir = $(includedir)/gridxslt
+noinst_HEADERS = xmlschema.h derivation.h output.h parse.h validation.h
+INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
+LDADD = libxmlschema.la ../util/libutil.la @ALL_LIBS@

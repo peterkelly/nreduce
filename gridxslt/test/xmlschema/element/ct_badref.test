@@ -1,0 +1,13 @@
+An empty <element> with a reference to a complex type that does not exist
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="element1" type="ct1"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:3: error: No such type ct1
+================================== RETURN CODE =================================
+1

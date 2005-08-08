@@ -1,0 +1,32 @@
+Test for the unique particle attribution constraint in the case where two
+particles may validate adjacent element information items and the first has
+minOccurs < maxOccurs
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct2">
+    <xsd:sequence>
+      <xsd:element name="a"/>
+      <xsd:element name="b"/>
+      <xsd:choice>
+        <xsd:element name="c"/>
+        <xsd:element name="d"/>
+        <xsd:element name="e" minOccurs="0"/>
+      </xsd:choice>
+      <xsd:choice>
+        <xsd:element name="c"/>
+        <xsd:element name="d"/>
+        <xsd:element name="e"/>
+      </xsd:choice>
+      <xsd:element name="f"/>
+      <xsd:element name="g"/>
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:10: error cos-nonambig: unique particle attribution constraint violated: overlapping particles element e and element e may validate adjacent information items, and the former has minOccurs less than maxOccurs
+================================== RETURN CODE =================================
+1

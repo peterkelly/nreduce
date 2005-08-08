@@ -1,0 +1,12 @@
+A schema with a target namespace and the attributeFormDefault set to unqualified
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org" attributeFormDefault="unqualified"/>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://target.org"/>
+================================== RETURN CODE =================================
+0

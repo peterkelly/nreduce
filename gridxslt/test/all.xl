@@ -1,0 +1,406 @@
+transform {
+
+  template t1
+    value-of (4 + foo(12));
+  template t2 {}
+  template t3 {
+    value-of (4 + foo(12));
+  }
+  template t4 {
+    value-of (1);
+    value-of (0);
+  }
+  template t5 () {}
+  template t6 ($a) {}
+  template t7 ($a, $b = 2, $c = { value-of (1); }) {}
+  template match(book) {}
+  template t8 match(book) {}
+  template () match (book) {}
+  template ($a) match (book) {}
+  template ($a, $b = 2, $c = { value-of (1); }) match (book) {}
+  template t9 () match (book) {}
+  template t10 ($a) match (book) {}
+  template t11 ($a, $b = 2, $c = { value-of (1); }) match (book) {}
+
+  function test() {
+
+
+    var $a;
+    var $b:a;
+    var $a = 4 + foo(12);
+    var $a = {};
+    var $a = { value-of (4 + foo(12)); };
+
+    analyze-string ($foo,$pattern)
+      matching-substring value-of (.);
+    analyze-string ($foo,$pattern)
+      non-matching-substring value-of (.);
+    analyze-string ($foo,$pattern)
+      matching-substring { value-of (.); value-of (4 + foo(12)); }
+    analyze-string ($foo,$pattern)
+      non-matching-substring { value-of (.); value-of (4 + foo(12)); }
+    analyze-string ($foo,$pattern) {
+      matching-substring value-of (.);
+      non-matching-substring value-of (.);
+    }
+    analyze-string ($foo,$pattern) {
+      matching-substring { value-of (.); value-of (4 + foo(12)); }
+      non-matching-substring { value-of (.); value-of (4 + foo(12)); }
+    }
+    analyze-string ($foo,$pattern,$flags)
+      matching-substring value-of (.);
+
+    apply-imports;
+    apply-imports();
+    apply-imports($a = 2);
+    apply-imports($a = 2, $b = 2);
+    apply-imports($a = {}, $b = {});
+    apply-imports($a = { value-of(2); value-of(4); });
+
+    apply-templates;
+    apply-templates to (book);
+    apply-templates mode foo;
+    apply-templates mode f:oo;
+    apply-templates to (book) mode foo;
+    apply-templates sort (@title);
+    apply-templates sort (@title,@author);
+    apply-templates to (book) sort (@title,@author);
+    apply-templates mode foo sort (@title,@author);
+    apply-templates to (book) mode foo sort (@title,@author);
+    apply-templates ($a = 4);
+    apply-templates ($a = 4, $b = { value-of (2); });
+    apply-templates ($a = 4, $b = { value-of (2); }) to (book);
+    apply-templates ($a = 4, $b = { value-of (2); }) mode foo;
+    apply-templates ($a = 4, $b = { value-of (2); }) to (book) mode foo;
+    apply-templates ($a = 4, $b = { value-of (2); }) sort (@title,@author);
+    apply-templates ($a = 4, $b = { value-of (2); }) to (book) sort (@title,@author);
+    apply-templates ($a = 4, $b = { value-of (2); }) mode foo sort (@title,@author);
+    apply-templates ($a = 4, $b = { value-of (2); }) to (book) mode foo sort (@title,@author);
+    apply-templates ();
+    apply-templates () to (book) mode foo sort (@title,@author);
+
+    #someattr;
+    #($somevar);
+    #someattr(4 + foo(12));
+    #($somevar)(4 + foo(12));
+    #someattr
+      value-of (4 + foo(12));
+    #($somevar)
+      value-of (4 + foo(12));
+    #someattr {}
+    #($somevar) {}
+    #someattr {
+      value-of (2);
+      value-of (4 + foo(12));
+    }
+    #($somevar) {
+      value-of (2);
+      value-of (4 + foo(12));
+    }
+
+    call-template foo;
+    call-template f:oo;
+    call-template foo();
+    call-template foo($a = 4);
+    call-template foo($a = 4, $b = { value-of (2); });
+
+    choose {
+      when ($a > $b)
+        value-of (4 + foo(12));
+    }
+    choose {
+      when ($a > $b)
+        value-of (4 + foo(12));
+      otherwise
+        value-of (0);
+    }
+    choose {
+      when ($a > $b)
+        value-of (4 + foo(12));
+      when ($a = $b) {
+        value-of (2);
+        value-of (4 + foo(12));
+      }
+      otherwise {
+        value-of (1);
+        value-of (0);
+      }
+    }
+
+    comment(4 + foo(12));
+    comment
+      value-of (4 + foo(12));
+    comment {}
+    comment {
+      value-of (1);
+      value-of (0);
+    }
+
+    copy;
+    copy
+      value-of (4 + foo(12));
+    copy {}
+    copy {
+      value-of (1);
+      value-of (0);
+    }
+
+    copy-of(book/chapter);
+
+    %someelem;
+    %($somevar);
+    %someelem {}
+    %($somevar) {}
+    %someelem
+      value-of (4 + foo(12));
+    %($somevar)
+      value-of (4 + foo(12));
+    %someelem {
+      value-of (1);
+      value-of (0);
+    }
+    %($somevar) {
+      value-of (1);
+      value-of (0);
+    }
+
+    fallback {}
+    fallback
+      value-of (4 + foo(12));
+    fallback {
+      value-of (1);
+      value-of (0);
+    }
+
+    for-each (book) {}
+    for-each (book)
+      value-of (4 + foo(12));
+    for-each (book) {
+      value-of (1);
+      value-of (0);
+    }
+
+    for-each (book) sort (@title) {}
+    for-each (book) sort (@title,@author) {}
+    for-each (book) sort (@title,@author)
+      value-of (4 + foo(12));
+    for-each (book) sort (@title,@author) {
+      value-of (1);
+      value-of (0);
+    }
+
+    for-each (book) group by (@author)
+      value-of (4 + foo(12));
+    for-each (book) group adjacent (@author)
+      value-of (4 + foo(12));
+    for-each (book) group starting-with (@author)
+      value-of (4 + foo(12));
+    for-each (book) group ending-with (@author)
+      value-of (4 + foo(12));
+    for-each (book) group by (@author) sort (@title) {}
+    for-each (book) group by (@author) sort (@title,@author) {}
+    for-each (book) group by (@author) sort (@title,@author)
+      value-of (4 + foo(12));
+    for-each (book) group by (@author) sort (@title,@author) {
+      value-of (1);
+      value-of (0);
+    }
+
+    if ($b > $a) {}
+    if ($b > $a) {
+      value-of (4 + foo(12));
+    }
+    if ($b > $a) {
+      value-of (1);
+      value-of (0);
+    }
+
+    message;
+    message {}
+    message
+      value-of (4 + foo(12));
+    message {
+      value-of (1);
+      value-of (0);
+    }
+
+    message("test");
+    message("test") {}
+    message("test")
+      value-of (4 + foo(12));
+    message("test") {
+      value-of (1);
+      value-of (0);
+    }
+
+    message("test") terminate;
+    message("test") terminate($somevar);
+    message("test") terminate {}
+    message("test") terminate($somevar) {}
+    message("test") terminate
+      value-of (4 + foo(12));
+    message("test") terminate($somevar)
+      value-of (4 + foo(12));
+    message("test") terminate {
+      value-of (1);
+      value-of (0);
+    }
+    message("test") terminate($somevar) {
+      value-of (1);
+      value-of (0);
+    }
+    message terminate;
+    message terminate($somevar);
+    message terminate
+      value-of (4 + foo(12));
+    message terminate($somevar)
+      value-of (4 + foo(12));
+
+    namespace foo ("http://some.namespace") ;
+    namespace foo {}
+    namespace foo {
+      value-of ("http://some.namespace");
+    }
+    namespace foo {
+      value-of ("http://some");
+      value-of (".namespace");
+    }
+
+    namespace ($somevar) ("http://some.namespace") ;
+    namespace ($somevar) {}
+    namespace ($somevar) {
+      value-of ("http://some.namespace");
+    }
+    namespace ($somevar) {
+      value-of ("http://some");
+      value-of (".namespace");
+    }
+
+    next-match;
+    next-match {}
+    next-match
+      fallback
+        value-of("fallback1");
+    next-match {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    next-match();
+    next-match() {}
+    next-match()
+      fallback
+        value-of("fallback1");
+    next-match() {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    next-match($a = 4);
+    next-match($a = 4) {}
+    next-match($a = 4)
+      fallback
+        value-of("fallback1");
+    next-match($a = 4) {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    next-match($a = 4, $b = { value-of (2); });
+    next-match($a = 4, $b = { value-of (2); }) {}
+    next-match($a = 4, $b = { value-of (2); })
+      fallback
+        value-of("fallback1");
+    next-match($a = 4, $b = { value-of (2); }) {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    perform-sort sort (@author) {}
+    perform-sort sort (@author)
+      value-of (4 + foo(12));
+    perform-sort sort (@author) {
+      value-of (1);
+      value-of (0);
+    }
+
+    perform-sort sort (@author,@title) {}
+    perform-sort sort (@author,@title)
+      value-of (4 + foo(12));
+    perform-sort sort (@author,@title) {
+      value-of (1);
+      value-of (0);
+    }
+
+    perform-sort (book) sort (@author,@title);
+    perform-sort (book) sort (@author,@title) {}
+    perform-sort (book) sort (@author,@title)
+      fallback
+        value-of("fallback1");
+    perform-sort (book) sort (@author,@title) {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    insert-processing-instruction somepi (4 + foo(12));
+    insert-processing-instruction somepi {}
+    insert-processing-instruction somepi
+      value-of (4 + foo(12));
+    insert-processing-instruction somepi {
+      value-of (1);
+      value-of (0);
+    }
+
+    insert-processing-instruction ($somevar) (4 + foo(12));
+    insert-processing-instruction ($somevar) {}
+    insert-processing-instruction ($somevar)
+      value-of (4 + foo(12));
+    insert-processing-instruction ($somevar) {
+      value-of (1);
+      value-of (0);
+    }
+
+    sequence (4 + foo(12));
+    sequence (4 + foo(12)) {}
+    sequence (4 + foo(12))
+      fallback
+        value-of("fallback1");
+    sequence (4 + foo(12)) {
+      fallback
+        value-of("fallback1");
+      fallback
+        value-of("fallback2");
+    }
+
+    text "foo";
+
+    value-of (4 + foo(12));
+    value-of (4 + foo(12)) separator (string-join('sep'+other()));
+    value-of {}
+    value-of separator (string-join('sep'+other())) {}
+    value-of
+      copy-of (text());
+    value-of separator (string-join('sep'+other()))
+      copy-of (text());
+    value-of {
+      copy-of (../text());
+      copy-of (text());
+    }
+    value-of separator (string-join('sep'+other())) {
+      copy-of (../text());
+      copy-of (text());
+    }
+
+
+  }
+}

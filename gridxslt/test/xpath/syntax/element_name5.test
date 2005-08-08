@@ -1,0 +1,12 @@
+element(name) actually gets normalised to element(name,xsd:anyType?); thus
+if the type is anyType? the simpler equivalent gets printed (see
+element_name4.test), but _not_ if the question mark is omitted
+
+=================================== PROGRAM ====================================
+testxpath
+==================================== INPUT =====================================
+$test instance of element(xsd:foo,xsd:anyType)
+==================================== OUTPUT ====================================
+$test instance of element(xsd:foo,xsd:anyType)
+================================== RETURN CODE =================================
+0

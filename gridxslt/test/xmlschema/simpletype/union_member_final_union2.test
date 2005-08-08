@@ -1,0 +1,18 @@
+A circular union reference several levels deep
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1" final="#all">
+    <xsd:restriction base="xsd:string"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:union memberTypes="xsd:string st1 xsd:int"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:6: error cos-st-restricts.3.3.1.1: Member type st1 disallows use inside <union>
+================================== RETURN CODE =================================
+1

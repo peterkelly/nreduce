@@ -1,0 +1,43 @@
+Complex type attribute wildcard of a derived type. For <extension>, if the
+derived type does not have a local attribute wildcard, then the one from the
+base type is taken.
+
+=================================== PROGRAM ====================================
+testxmlschema -w
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:complexContent>
+      <xsd:extension base="ct2">
+        <xsd:sequence/>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="ct2">
+    <xsd:anyAttribute namespace="http://ns4.org http://ns2.org"
+                      processContents="skip"/>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+Attribute wildcard for type ct1:
+Wildcard
+  Namespace constraint type: set
+  Namespace not value: (absent)
+  Namespace list:
+    http://ns4.org
+    http://ns2.org
+  Process contents: skip
+  Annotation: (none)
+
+Attribute wildcard for type ct2:
+Wildcard
+  Namespace constraint type: set
+  Namespace not value: (absent)
+  Namespace list:
+    http://ns4.org
+    http://ns2.org
+  Process contents: skip
+  Annotation: (none)
+================================== RETURN CODE =================================
+0

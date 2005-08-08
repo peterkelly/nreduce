@@ -1,0 +1,15 @@
+Simple type definition with <union> with no types
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1">
+    <xsd:union/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error: <union> requires one or more member types
+================================== RETURN CODE =================================
+1

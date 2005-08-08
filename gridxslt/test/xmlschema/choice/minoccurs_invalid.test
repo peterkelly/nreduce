@@ -1,0 +1,18 @@
+<choice> with an invalid value for "minOccurs"
+
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="ct1">
+    <xsd:choice minOccurs="x">
+      <xsd:element name="element1"/>
+      <xsd:element name="element2"/>
+    </xsd:choice>
+  </xsd:complexType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error: Invalid value "x" for attribute "minOccurs"
+================================== RETURN CODE =================================
+1
