@@ -24,11 +24,22 @@
 
 #include "xslt.h"
 #include "util/macros.h"
+#include "util/debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+
+static const char *reserved_namespaces[7] = {
+  XSLT_NAMESPACE,
+  FN_NAMESPACE,
+  XML_NAMESPACE,
+  XS_NAMESPACE,
+  XDT_NAMESPACE,
+  XSI_NAMESPACE,
+  NULL
+};
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -130,16 +141,14 @@ void xl_snode_free(xl_snode *sn)
   if (sn->name_expr)
     xp_expr_free(sn->name_expr);
 
-  free(sn->qname.prefix);
-  free(sn->qname.localpart);
-  free(sn->mode.prefix);
-  free(sn->mode.localpart);
+  qname_free(sn->qn);
+  qname_free(sn->mode);
   if (NULL != sn->seqtype)
     df_seqtype_deref(sn->seqtype);
   free(sn->strval);
   free(sn->deffilename);
-  free(sn->name);
-  free(sn->ns);
+  nsname_free(sn->ident);
+  free(sn->uri);
 
   ns_map_free(sn->namespaces,0);
   free(sn);
@@ -152,6 +161,7 @@ void xl_snode_set_parent(xl_snode *first, xl_snode *parent)
     sn->parent = parent;
     if (NULL != parent)
       sn->namespaces->parent = parent->namespaces;
+
     if (sn->child)
       xl_snode_set_parent(sn->child,sn);
     if (sn->param)
@@ -166,16 +176,71 @@ void xl_snode_set_parent(xl_snode *first, xl_snode *parent)
       xp_set_parent(sn->expr2,NULL,sn);
     if (sn->name_expr)
       xp_set_parent(sn->name_expr,NULL,sn);
+
     if (sn->next)
       sn->next->prev = sn;
   }
 }
 
+static int check_duplicate_params(xl_snode *sn, error_info *ei)
+{
+  xl_snode *p1;
+  xl_snode *p2;
+
+  /* @implements(xslt20:parameters-4)
+     status { partial }
+     test { xslt/parse/function_paramdup1.test }
+     test { xslt/parse/function_paramdup2.test }
+     test { xslt/parse/function_paramdup3.test }
+     test { xslt/parse/function_paramdup4.test }
+     issue { need to test with templates as well (not just functions) - also stylsheets? }
+     @end */
+
+  for (p1 = sn->param; p1; p1 = p1->next) {
+    for (p2 = p1->next; p2; p2 = p2->next) {
+      if (nsname_equals(p1->ident,p2->ident)) {
+        return error(ei,p2->deffilename,p2->defline,"XTSE0580","Duplicate parameter: %#n",
+                     p1->ident);
+      }
+    }
+  }
+
+  return 0;
+}
+
 int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_info *ei)
 {
   xl_snode *sn;
+
   for (sn = first; sn; sn = sn->next) {
-/*     printf("xl_snode_resolve: %s\n",xslt_element_names[sn->type]); */
+
+    assert(NULL == sn->ident.name);
+    assert(NULL == sn->ident.ns);
+
+    if (!qname_isnull(sn->qn)) {
+      sn->ident = qname_to_nsname(sn->namespaces,sn->qn);
+      if (nsname_isnull(sn->ident))
+        return error(ei,filename,sn->defline,"XTSE0280",
+                     "Could not resolve namespace for prefix \"%s\"",sn->qn.prefix);
+    }
+
+    if ((XSLT_DECL_FUNCTION == sn->type) && (NULL != sn->ident.ns)) {
+      /* @implements(xslt20:stylesheet-functions-5)
+         test { xslt/parse/function_name4.test }
+         test { xslt/parse/function_name5.test }
+         test { xslt/parse/function_name6.test }
+         test { xslt/parse/function_name7.test }
+         test { xslt/parse/function_name8.test }
+         test { xslt/parse/function_name9.test }
+         @end */
+      const char **rn;
+      for (rn = reserved_namespaces; *rn; rn++) {
+        if (!strcmp(sn->ident.ns,*rn))
+          return error(ei,filename,sn->defline,"XTSE0740",
+                       "A function cannot have a prefix that refers to a reserved namespace");
+      }
+    }
+
     if (sn->child)
       CHECK_CALL(xl_snode_resolve(sn->child,s,filename,ei))
     if (sn->param)
@@ -194,13 +259,16 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
     if (NULL != sn->seqtype)
       CHECK_CALL(df_seqtype_resolve(sn->seqtype,sn->namespaces,s,filename,sn->defline,ei))
 
+    if (XSLT_DECL_FUNCTION == sn->type)
+      CHECK_CALL(check_duplicate_params(sn,ei))
+
     if (sn->next)
       sn->next->prev = sn;
   }
   return 0;
 }
 
-xl_snode *xl_snode_resolve_var(xl_snode *from, qname_t varname)
+xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname)
 {
   /* FIXME: support for namespaces (note that variables with different prefixes could
      potentially have the same namespace href */
@@ -215,7 +283,7 @@ xl_snode *xl_snode_resolve_var(xl_snode *from, qname_t varname)
       if (sn && (XSLT_DECL_FUNCTION == sn->type)) {
         xl_snode *p;
         for (p = sn->param; p; p = p->next)
-          if (!strcmp(p->qname.localpart,varname.localpart))
+          if (!strcmp(p->qn.localpart,varname.localpart))
             return p;
       }
 
@@ -226,32 +294,32 @@ xl_snode *xl_snode_resolve_var(xl_snode *from, qname_t varname)
       break;
 /*     printf("xl_snode_resolve_var: checking %s\n",xslt_element_names[sn->type]); */
     /* FIXME: comparison needs to be namespace aware (keep in mind prefix mappings could differ) */
-    if ((XSLT_VARIABLE == sn->type) && !strcmp(sn->qname.localpart,varname.localpart))
+    if ((XSLT_VARIABLE == sn->type) && !strcmp(sn->qn.localpart,varname.localpart))
       return sn;
   }
 
   return NULL;
 }
 
-void xp_expr_resolve_var(xp_expr *from, qname_t varname, xp_expr **defexpr, xl_snode **defnode)
+void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode)
 {
   xp_expr *e;
 
   *defexpr = NULL;
   *defnode = NULL;
 
-/*   printf("xp_expr_resolve_var: varname \"%s\"\n",varname.localpart); */
-/*   printf("xp_expr_resolve_var: from = %s\n",xp_expr_types[from->type]); */
+/*   debugl("xp_expr_resolve_var: varname \"%s\"",varname.localpart); */
+/*   debugl("xp_expr_resolve_var: from = %s",xp_expr_types[from->type]); */
   /* First try to find a declaration of the variable in the XPath expression tree */
   for (e = from->parent; e; e = e->parent) {
-/*     printf("xp_expr_resolve_var: checking parent %s\n",xp_expr_types[from->type]); */
+/*     debugl("xp_expr_resolve_var: checking parent %s",xp_expr_types[from->type]); */
     if (XPATH_EXPR_FOR == e->type) {
       xp_expr *ve = e->conditional;
-/*         printf("xp_expr_resolve_var: for var: %s\n",ve->qname.localpart); */
+/*         debugl("xp_expr_resolve_var: for var: %s",ve->qn.localpart); */
         /* FIXME: comparison needs to be namespace aware (keep in mind prefix mappings
            could differ) */
-        if (!strcmp(varname.localpart,ve->qname.localpart)) {
-/*           printf("xp_expr_resolve_var: found it!\n"); */
+        if (!strcmp(varname.localpart,ve->qn.localpart)) {
+/*           debugl("xp_expr_resolve_var: found it!"); */
           *defexpr = ve;
           return;
         }
@@ -259,12 +327,12 @@ void xp_expr_resolve_var(xp_expr *from, qname_t varname, xp_expr **defexpr, xl_s
   }
 
   /* If not found, look in the XSLT syntax tree */
-/*   printf("xp_expr_resolve_var: looking in XSLT tree\n"); */
+/*   debugl("xp_expr_resolve_var: looking in XSLT tree"); */
   if (NULL == (*defnode = xl_snode_resolve_var(from->stmt,varname))) {
-/*     printf("xp_expr_resolve_var: not found\n"); */
+/*     debugl("xp_expr_resolve_var: not found"); */
   }
   else {
-/*     printf("xp_expr_resolve_var: found - XSLT def\n"); */
+/*     debugl("xp_expr_resolve_var: found - XSLT def"); */
   }
   return;
 }
@@ -318,10 +386,7 @@ xl_snode *xl_snode_parse(char *str, char *filename, int baseline, error_info *ei
 
 void xl_snode_print_tree(xl_snode *sn, int indent)
 {
-  int i;
-  for (i = 0; i < indent; i++)
-    printf("  ");
-  printf("%s\n",xslt_element_names[sn->type]);
+  print("%p %#i%s %#n\n",sn,2*indent,xslt_element_names[sn->type],sn->ident);
 
   if (sn->select)
     xp_expr_print_tree(sn->select,indent+1);
@@ -333,15 +398,11 @@ void xl_snode_print_tree(xl_snode *sn, int indent)
     xp_expr_print_tree(sn->name_expr,indent+1);
 
   if (sn->param) {
-    for (i = 0; i < indent+1; i++)
-      printf("  ");
-    printf("[param]\n");
+    print("%#i[param]\n",2*(indent+1));
     xl_snode_print_tree(sn->param,indent+1);
   }
   if (sn->sort) {
-    for (i = 0; i < indent+1; i++)
-      printf("  ");
-    printf("[osrt]\n");
+    print("%#i[sort]\n",2*(indent+1));
     xl_snode_print_tree(sn->sort,indent+1);
   }
   if (sn->child)
