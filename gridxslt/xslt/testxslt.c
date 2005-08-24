@@ -21,6 +21,7 @@
  */
 
 #include "xslt/parse.h"
+#include "xslt/output.h"
 #include "xslt/xslt.h"
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
@@ -40,7 +41,6 @@ int ends_with(char *filename, char *ext)
 int main(int argc, char **argv)
 {
   char *infilename;
-  FILE *in;
   xl_snode *tree;
   error_info ei;
   xs_globals *globals;
@@ -57,15 +57,16 @@ int main(int argc, char **argv)
 
   infilename = argv[1];
 
-  if (NULL == (in = fopen(infilename,"r"))) {
-    perror(infilename);
-    exit(1);
-  }
-
   if (ends_with(infilename,".xl")) {
     stringbuf *input = stringbuf_new();
     char buf[1024];
     int r;
+    FILE *in;
+
+    if (NULL == (in = fopen(infilename,"r"))) {
+      perror(infilename);
+      exit(1);
+    }
 
     while (0 < (r = fread(buf,1,1024,in)))
       stringbuf_append(input,buf,r);
@@ -78,27 +79,26 @@ int main(int argc, char **argv)
     }
 
     stringbuf_free(input);
+    fclose(in);
   }
   else if (ends_with(infilename,".xsl") ||
            ends_with(infilename,".xslt") ||
            ends_with(infilename,".xml")) {
-/*     printf("Parsing XSLT file\n"); */
+    char *uri = get_real_uri(infilename);
     tree = xl_snode_new(XSLT_TRANSFORM);
-    if (0 != parse_xslt(in,tree,&ei,infilename)) {
+    if (0 != parse_xslt_relative_uri(&ei,NULL,0,NULL,uri,uri,tree)) {
       error_info_print(&ei,stderr);
       error_info_free_vals(&ei);
       xl_snode_free(tree);
-      fclose(in);
+      free(uri);
       exit(1);
     }
+    free(uri);
   }
   else {
     fprintf(stderr,"Unknown file type: %s\n",infilename);
-    fclose(in);
     exit(1);
   }
-
-  fclose(in);
 
   globals = xs_globals_new();
   schema = xs_schema_new(globals);
