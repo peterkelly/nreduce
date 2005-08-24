@@ -31,6 +31,19 @@
 #include <string.h>
 #include <assert.h>
 
+static void qname_list_attr(xmlTextWriter *writer, char *attrname, qname *qnames)
+{
+  stringbuf *buf = stringbuf_new();
+  int i;
+  for (i = 0; qnames[i].localpart; i++) {
+    stringbuf_format(buf,"%#q",qnames[i]);
+    if (qnames[i+1].localpart)
+      stringbuf_format(buf," ");
+  }
+  xmlTextWriterWriteAttribute(writer,attrname,buf->data);
+  stringbuf_free(buf);
+}
+
 bp_snode *bp_snode_new(int type)
 {
   bp_snode *sn = (bp_snode*)calloc(1,sizeof(bp_snode));
@@ -112,11 +125,11 @@ void bpel_output_scope_contents(xmlTextWriter *writer, bp_scope *scope)
       xmlTextWriterStartElement(writer,"variable");
       xmlTextWriterWriteAttribute(writer,"name",v->name);
       if (v->message_type.localpart)
-        qname_attr(writer,"messageType",v->message_type);
+        xml_write_attr(writer,"messageType","%#q",v->message_type);
       if (v->type.localpart)
-        qname_attr(writer,"type",v->type);
+        xml_write_attr(writer,"type","%#q",v->type);
       if (v->element.localpart)
-        qname_attr(writer,"element",v->element);
+        xml_write_attr(writer,"element","%#q",v->element);
       xmlTextWriterEndElement(writer);
     }
     xmlTextWriterEndElement(writer);
@@ -142,7 +155,7 @@ void bpel_output_scope_contents(xmlTextWriter *writer, bp_scope *scope)
     for (catch = scope->fh_catches; catch; catch = catch->next) {
       xmlTextWriterStartElement(writer,"catch");
       if (catch->fault_name.localpart)
-        qname_attr(writer,"faultName",catch->fault_name);
+        xml_write_attr(writer,"faultName","%#q",catch->fault_name);
       if (catch->fault_variable)
         xmlTextWriterWriteAttribute(writer,"faultVariable",catch->fault_variable);
       bpel_output_activities(writer,catch->activities);
@@ -173,7 +186,7 @@ void bpel_output_scope_contents(xmlTextWriter *writer, bp_scope *scope)
     for (om = scope->eh_on_message; om; om = om->next) {
       xmlTextWriterStartElement(writer,"onMessage");
       xmlTextWriterWriteAttribute(writer,"partnerLink",om->partner_link);
-      qname_attr(writer,"portType",om->port_type);
+      xml_write_attr(writer,"portType","%#q",om->port_type);
       xmlTextWriterWriteAttribute(writer,"operation",om->operation);
       if (om->variable)
         xmlTextWriterWriteAttribute(writer,"variable",om->variable);
@@ -232,7 +245,7 @@ void output_bpel(FILE *f, bp_scope *scope)
     for (pl = scope->partner_links; pl; pl = pl->next) {
       xmlTextWriterStartElement(writer,"partnerLink");
       xmlTextWriterWriteAttribute(writer,"name",pl->name);
-      qname_attr(writer,"partnerLinkType",pl->partner_link_type);
+      xml_write_attr(writer,"partnerLinkType","%#q",pl->partner_link_type);
       if (pl->my_role)
         xmlTextWriterWriteAttribute(writer,"myRole",pl->my_role);
       if (pl->partner_role)
@@ -447,7 +460,7 @@ int bpel_parse_partner_links(bp_scope *scope, xmlNodePtr n)
 
     pl = (bp_partner_link*)calloc(1,sizeof(bp_partner_link));
     pl->name = strdup(name);
-    pl->partner_link_type = get_qname(partner_link_type);
+    pl->partner_link_type = qname_parse(partner_link_type);
     if (my_role)
       pl->my_role = strdup(my_role);
     if (partner_role)
@@ -571,11 +584,11 @@ int bpel_parse_variables(bp_scope *scope, xmlNodePtr n)
     v = (bp_variable*)calloc(1,sizeof(bp_variable));
     v->name = strdup(name);
     if (message_type)
-      v->message_type = get_qname(message_type);
+      v->message_type = qname_parse(message_type);
     if (type)
-      v->type = get_qname(type);
+      v->type = qname_parse(type);
     if (element)
-      v->element = get_qname(element);
+      v->element = qname_parse(element);
 
     *vptr = v;
     vptr = &v->next;
@@ -619,7 +632,7 @@ int bpel_parse_correlation_sets(bp_scope *scope, xmlNodePtr n)
 
     cs = (bp_correlation_set*)calloc(1,sizeof(bp_correlation_set));
     cs->name = strdup(name);
-    cs->properties = get_qname_list(properties);
+    cs->properties = qname_list_parse(properties);
 
     *csptr = cs;
     csptr = &cs->next;
@@ -668,7 +681,7 @@ int bpel_parse_fault_handlers(bp_scope *scope, xmlNodePtr n)
 
       catch = (bp_catch*)calloc(1,sizeof(bp_catch));
       if (fault_name)
-        catch->fault_name = get_qname(fault_name);
+        catch->fault_name = qname_parse(fault_name);
       if (fault_variable)
         catch->fault_variable = strdup(fault_variable);
       *catchptr = catch;
@@ -732,7 +745,7 @@ int bpel_parse_event_handlers(bp_scope *scope, xmlNodePtr n)
 
       om = (bp_on_message*)calloc(1,sizeof(bp_on_message));
       om->partner_link = strdup(partner_link);
-      om->port_type = get_qname(port_type);
+      om->port_type = qname_parse(port_type);
       om->operation = strdup(operation);
       if (variable)
         om->variable = strdup(variable);

@@ -61,7 +61,7 @@ typedef struct bp_scope bp_scope;
 
 struct bp_partner_link {
   char *name;                /* requried */
-  qname_t partner_link_type; /* requried */
+  qname partner_link_type; /* requried */
   char *my_role;             /* optional */
   char *partner_role;        /* optional */
 
@@ -82,22 +82,22 @@ struct bp_partner {
 
 struct bp_variable {
   char *name;           /* required */
-  qname_t message_type; /* optional */
-  qname_t type;         /* optional */
-  qname_t element;      /* optional */
+  qname message_type; /* optional */
+  qname type;         /* optional */
+  qname element;      /* optional */
 
   bp_variable *next;
 };
 
 struct bp_correlation_set {
   char *name;           /* required */
-  qname_t *properties;  /* required */
+  qname *properties;  /* required */
 
   bp_correlation_set *next;
 };
 
 struct bp_catch {
-  qname_t fault_name;
+  qname fault_name;
   char *fault_variable;
   bp_activity *activities;
 
@@ -114,7 +114,7 @@ struct bp_correlation {
 
 struct bp_on_message {
   char *partner_link; /* required */
-  qname_t port_type;  /* required */
+  qname port_type;  /* required */
   char *operation;   /* required */
   char *variable;    /* optional */
 
@@ -168,7 +168,7 @@ struct bp_activity {
   /* receive */
   struct {
     char *partnerLink;  /* required */
-    qname_t portType;   /* required */
+    qname portType;   /* required */
     char *operation;    /* required */
     char *variable;     /* optional */
     int createInstance; /* default: no */
@@ -179,10 +179,10 @@ struct bp_activity {
   /* reply */
   struct {
     char *partnerLink; /* required */
-    qname_t portType; /* required */
+    qname portType; /* required */
     char *operation; /* required */
     char *variable; /* optional */
-    qname_t faultName; /* optional */
+    qname faultName; /* optional */
 
     bp_correlation *correlations;
   } reply;
@@ -190,7 +190,7 @@ struct bp_activity {
   /* invoke */
   struct {
     char *partnerLink; /* required */
-    qname_t portType; /* required */
+    qname portType; /* required */
     char *operation; /* required */
     char *inputVariable; /* optional */
     char *outputVariable; /* optional */
