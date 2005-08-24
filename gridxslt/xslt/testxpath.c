@@ -102,6 +102,7 @@ int main(int argc, char **argv)
   xp_expr *expr;
   error_info ei;
   list *l;
+  int r = 0;
 
   setbuf(stdout,NULL);
 
@@ -118,9 +119,9 @@ int main(int argc, char **argv)
   exprstr = stringbuf_new();
   input = stringbuf_new();
 
-/*   stringbuf_printf(input,"__just_expr "); */
+/*   stringbuf_format(input,"__just_expr "); */
   if (arguments.normalized_seqtypes)
-    stringbuf_printf(input,"0 instance of ");
+    stringbuf_format(input,"0 instance of ");
 
 
   if (NULL != arguments.filename) {
@@ -137,10 +138,10 @@ int main(int argc, char **argv)
   }
   else {
     assert(NULL != arguments.expr);
-    stringbuf_printf(input,"%s",arguments.expr);
+    stringbuf_format(input,"%s",arguments.expr);
   }
 
-  if (NULL == (expr = xp_expr_parse(input->data,arguments.filename,1,&ei))) {
+  if (NULL == (expr = xp_expr_parse(input->data,arguments.filename,1,&ei,0))) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
     exit(1);
@@ -150,30 +151,32 @@ int main(int argc, char **argv)
   /* add default namespaces declared in schema */
   for (l = s->globals->namespaces->defs; l; l = l->next) {
     ns_def *ns = (ns_def*)l->data;
-    ns_add(stmt->namespaces,ns->href,ns->prefix);
+    ns_add_direct(stmt->namespaces,ns->href,ns->prefix);
   }
 
   if (0 != xp_expr_resolve(expr,s,arguments.filename,&ei)) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
-    exit(1);
-  }
-
-  if (arguments.normalized_seqtypes) {
-    stringbuf *buf = stringbuf_new();
-    assert(XPATH_EXPR_INSTANCE_OF == expr->type);
-    assert(NULL != expr->seqtype);
-    df_seqtype_print_fs(buf,expr->seqtype,s->globals->namespaces->defs);
-    printf("%s\n",buf->data);
-    stringbuf_free(buf);
+    r = 1;
   }
   else {
-    xp_expr_serialize(exprstr,expr,0);
-    printf("%s\n",exprstr->data);
+    if (arguments.normalized_seqtypes) {
+      stringbuf *buf = stringbuf_new();
+      assert(XPATH_EXPR_INSTANCE_OF == expr->type);
+      assert(NULL != expr->seqtype);
+      df_seqtype_print_fs(buf,expr->seqtype,s->globals->namespaces->defs);
+      printf("%s\n",buf->data);
+      stringbuf_free(buf);
+    }
+    else {
+      xp_expr_serialize(exprstr,expr,0);
+      printf("%s\n",exprstr->data);
+    }
+
+    if (arguments.tree)
+      xp_expr_print_tree(expr,0);
   }
 
-  if (arguments.tree)
-    xp_expr_print_tree(expr,0);
   xp_expr_free(expr);
   stringbuf_free(exprstr);
   stringbuf_free(input);
@@ -182,5 +185,5 @@ int main(int argc, char **argv)
   xs_schema_free(s);
   xs_globals_free(g);
 
-  return 0;
+  return r;
 }
