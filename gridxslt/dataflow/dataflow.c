@@ -33,7 +33,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-const char *typenames[TYPE_COUNT] = {
+const char *df_type_names[TYPE_COUNT] = {
   "",
   "xs:string",
   "xs:boolean",
@@ -100,7 +100,7 @@ const char *typenames[TYPE_COUNT] = {
 
   "numeric"};
 
-const char *specialopnames[OP_SPECIAL_COUNT] = {
+const char *df_special_op_names[OP_SPECIAL_COUNT] = {
   "const",
   "dup",
   "split",
@@ -123,9 +123,11 @@ const char *specialopnames[OP_SPECIAL_COUNT] = {
   "namespace",
   "select",
   "filter",
+  "empty",
+  "contains-node",
 };
 
-const char *itemtypes[ITEM_COUNT] = {
+const char *df_item_types[ITEM_COUNT] = {
   NULL,
   "atomic",
   "document",
@@ -134,6 +136,24 @@ const char *itemtypes[ITEM_COUNT] = {
   "processing-instruction",
   "comment",
   "text",
+  "namespace",
+};
+
+const char *df_axis_types[AXIS_COUNT] = {
+  NULL,
+  "child",
+  "descendant",
+  "attribute",
+  "self",
+  "descendant-or-self",
+  "following-sibling",
+  "following",
+  "namespace",
+  "parent",
+  "ancestor",
+  "preceding-sibling",
+  "preceding",
+  "ancestor-or-self",
 };
 
 df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
@@ -141,19 +161,20 @@ df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
   df_seqtype *st = NULL;
 
   if (TYPE_LAST_XMLSCHEMA_TYPE >= optype->type) {
-    char *colon = strchr(typenames[optype->type],':');
-    char *ns;
+    char *colon = strchr(df_type_names[optype->type],':');
+    nsname nn;
     assert(NULL != colon);
 
-    if (!strncmp(typenames[optype->type],"xs:",3))
-      ns = XS_NAMESPACE;
-    else if (!strncmp(typenames[optype->type],"xdt:",4))
-      ns = XDT_NAMESPACE;
+    if (!strncmp(df_type_names[optype->type],"xs:",3))
+      nn.ns = XS_NAMESPACE;
+    else if (!strncmp(df_type_names[optype->type],"xdt:",4))
+      nn.ns = XDT_NAMESPACE;
     else
       assert(0);
 
     st = df_seqtype_new_item(ITEM_ATOMIC);
-    st->item->type = xs_lookup_type(state->schema,colon+1,ns);
+    nn.name = colon+1;
+    st->item->type = xs_lookup_type(state->schema,nn);
     assert(NULL != st->item->type);
   }
   else {
@@ -185,12 +206,13 @@ df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
     case TYPE_NONE:
       st = df_seqtype_new(SEQTYPE_EMPTY);
       break;
-    case TYPE_NUMERIC:
+    case TYPE_NUMERIC: {
       st = df_seqtype_new_item(ITEM_ATOMIC);
       /* FIXME: this should really be decimal */
-      st->item->type = xs_lookup_type(state->schema,"int",XS_NAMESPACE);
+      st->item->type = xs_lookup_type(state->schema,nsname_temp(XS_NAMESPACE,"int"));
       assert(NULL != st->item->type);
       break;
+    }
     default:
       assert(!"invalid optype->type");
       break;
@@ -210,12 +232,12 @@ df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
   }
 }
 
-int df_instruction_compute_types(df_instruction *instr)
+int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
 {
   int i;
 
   instr->computed = 1;
-/*   debug("df_instruction_compute_types %s:%d (%s) (%p)", */
+/*   debugl("df_instruction_compute_types %s:%d (%s) (%p)", */
 /*          instr->fun->name,instr->id,df_opstr(instr->opcode),instr); */
   switch (instr->opcode) {
   case OP_SPECIAL_CONST:
@@ -233,6 +255,8 @@ int df_instruction_compute_types(df_instruction *instr)
     assert(NULL == instr->outports[1].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
     instr->outports[1].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
+    instr->outports[2].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
+    instr->outports[2].seqtype->item->type = g->boolean_type;
     break;
   case OP_SPECIAL_MERGE:
 /*     if (!df_seqtype_compatible(instr->inports[0].seqtype,instr->inports[1].seqtype)) { */
@@ -317,10 +341,17 @@ int df_instruction_compute_types(df_instruction *instr)
        occurrence range as not all input items will necessarily be in the output sequence */
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
+  case OP_SPECIAL_EMPTY:
+    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_EMPTY);
+    break;
+  case OP_SPECIAL_CONTAINS_NODE:
+    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
+    instr->outports[0].seqtype->item->type = g->boolean_type;
+    break;
   }
 
   if (OP_SPECIAL_RETURN == instr->opcode) {
-/*     debug("  return instruction; skipping rest"); */
+/*     debugl("  return instruction; skipping rest"); */
     return 0;
   }
 
@@ -351,7 +382,7 @@ int df_instruction_compute_types(df_instruction *instr)
         if (NULL == outport->dest->inports[j].seqtype)
           isready = 0;
       if (isready)
-        CHECK_CALL(df_instruction_compute_types(outport->dest))
+        CHECK_CALL(df_instruction_compute_types(outport->dest,g))
     }
   }
   return 0;
@@ -375,7 +406,7 @@ int df_compute_types(df_function *fun)
     }
 /*     if (NULL == fun->params[i].start->inports[0].seqtype) */
 /*       fun->params[i].start->inports[0].seqtype = fun->params[i].seqtype; */
-    CHECK_CALL(df_instruction_compute_types(fun->params[i].start))
+    CHECK_CALL(df_instruction_compute_types(fun->params[i].start,fun->state->schema->globals))
   }
 
   if (1 != fun->start->ninports) {
@@ -384,7 +415,7 @@ int df_compute_types(df_function *fun)
     return -1;
   }
   assert(NULL != fun->start->inports[0].seqtype);
-  CHECK_CALL(df_instruction_compute_types(fun->start))
+  CHECK_CALL(df_instruction_compute_types(fun->start,fun->state->schema->globals))
   return 0;
 }
 
@@ -421,14 +452,6 @@ int df_get_op_id(char *name)
   return -1;
 }
 
-static int is_whitespace(char *str)
-{
-  for (; *str; str++)
-    if (!isspace(*str))
-      return 0;
-  return 1;
-}
-
 df_node *df_node_from_xmlnode(xmlNodePtr xn)
 {
   df_node *n = NULL;
@@ -438,18 +461,18 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
   switch (xn->type) {
   case XML_ELEMENT_NODE:
     n = df_node_new(NODE_ELEMENT);
-    n->name = strdup(xn->name);
+    n->ident.name = strdup(xn->name);
     /* FIXME: prefix/namespace */
 
     for (aptr = xn->properties; aptr; aptr = aptr->next) {
       df_node *attr = df_node_new(NODE_ATTRIBUTE);
       stringbuf *valbuf = stringbuf_new();
       xmlNodePtr ac;
-      attr->name = strdup(aptr->name);
+      attr->ident.name = strdup(aptr->name);
 
       for (ac = aptr->children; ac; ac = ac->next) {
         if (NULL != ac->content)
-          stringbuf_printf(valbuf,"%s",ac->content);
+          stringbuf_format(valbuf,"%s",ac->content);
       }
 
       attr->value = strdup(valbuf->data);
@@ -462,8 +485,6 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
     assert(0);
     break;
   case XML_TEXT_NODE:
-    if (is_whitespace(xn->content))
-      return NULL;
     n = df_node_new(NODE_TEXT);
     n->value = strdup(xn->content);
     break;
@@ -504,7 +525,19 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   case FN_NODE_NAME: assert(!"not yet implemented"); break;
   case FN_NILLED: assert(!"not yet implemented"); break;
   case FN_STRING: assert(!"not yet implemented"); break;
-  case FN_STRING2: assert(!"not yet implemented"); break;
+  case FN_STRING2: {
+    char *str;
+    if (SEQTYPE_EMPTY == values[0]->seqtype->type) {
+      *result = df_value_new_string(g,"");
+    }
+    else {
+      assert(SEQTYPE_ITEM == values[0]->seqtype->type);
+      str = df_value_as_string(g,values[0]);
+      *result = df_value_new_string(g,str);
+      free(str);
+    }
+    break;
+  }
   case FN_DATA: assert(!"not yet implemented"); break;
   case FN_BASE_URI: assert(!"not yet implemented"); break;
   case FN_BASE_URI2: assert(!"not yet implemented"); break;
@@ -720,7 +753,12 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   case OP_BOOLEAN_EQUAL: assert(!"not yet implemented"); break;
   case OP_BOOLEAN_LESS_THAN: assert(!"not yet implemented"); break;
   case OP_BOOLEAN_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_NOT: assert(!"not yet implemented"); break;
+  case FN_NOT:
+    /* FIXME: we can't assume the input is a boolean! arg def is item()*; we have to reduce it
+       to a boolean ourselves */
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.b = !values[0]->value.b;
+    break;
   case OP_YEARMONTHDURATION_EQUAL: assert(!"not yet implemented"); break;
   case OP_YEARMONTHDURATION_LESS_THAN: assert(!"not yet implemented"); break;
   case OP_YEARMONTHDURATION_GREATER_THAN: assert(!"not yet implemented"); break;
@@ -816,12 +854,26 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   case OP_NODE_BEFORE: assert(!"not yet implemented"); break;
   case OP_NODE_AFTER: assert(!"not yet implemented"); break;
   case FN_ROOT: assert(!"not yet implemented"); break;
-  case FN_ROOT2: assert(!"not yet implemented"); break;
+  case FN_ROOT2: {
+    df_node *n;
+    assert(values[0]->seqtype->type == SEQTYPE_ITEM);
+    assert(values[0]->seqtype->item->kind != ITEM_ATOMIC);
+    n = values[0]->value.n;
+    while (NULL != n->parent)
+      n = n->parent;
+
+    *result = df_node_to_value(n);
+    break;
+  }
   case FN_BOOLEAN: assert(!"not yet implemented"); break;
   case OP_CONCATENATE: assert(!"not yet implemented"); break;
   case FN_INDEX_OF: assert(!"not yet implemented"); break;
   case FN_INDEX_OF2: assert(!"not yet implemented"); break;
-  case FN_EMPTY: assert(!"not yet implemented"); break;
+  case FN_EMPTY: {
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.b = (SEQTYPE_EMPTY == values[0]->seqtype->type);
+    break;
+  }
   case FN_EXISTS: assert(!"not yet implemented"); break;
   case FN_DISTINCT_VALUES: assert(!"not yet implemented"); break;
   case FN_DISTINCT_VALUES2: assert(!"not yet implemented"); break;
@@ -862,7 +914,7 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
     df_seqtype *restype;
     assert(df_check_derived_atomic_type(state,values[0],g->string_type));
     uri = values[0]->value.s;
-/*     debug("Loading document \"%s\"...",uri); */
+/*     debugl("Loading document \"%s\"...",uri); */
 
     if (NULL == (f = fopen(uri,"r"))) {
       fprintf(stderr,"Can't open %s: %s\n",uri,strerror(errno));
@@ -918,21 +970,51 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   return 0;
 }
 
-df_function *df_new_function(df_state *state, const char *name)
+void df_init_function(df_state *state, df_function *fun)
+{
+  assert(NULL == fun->ret);
+  assert(NULL == fun->start);
+  assert(NULL == fun->rtype);
+
+  fun->ret = df_add_instruction(state,fun,OP_SPECIAL_RETURN);
+  fun->start = df_add_instruction(state,fun,OP_SPECIAL_PASS);
+  fun->start->inports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
+  fun->start->inports[0].seqtype->item->type = state->schema->globals->int_type;
+  fun->start->outports[0].dest = fun->ret;
+  fun->start->outports[0].destp = 0;
+
+  fun->rtype = df_seqtype_new_item(ITEM_ATOMIC);
+  fun->rtype->item->type = state->schema->globals->complex_ur_type;
+}
+
+df_function *df_new_function(df_state *state, const nsname ident)
 {
   df_function *fun = (df_function*)calloc(1,sizeof(df_function));
   list_append(&state->functions,fun);
-  fun->name = strdup(name);
+  fun->ident = nsname_copy(ident);
   fun->state = state;
+
+  /* Create sequence instruction (not actually part of the program, but used by the map operator
+     to collate results of inner function calls) */
+  fun->mapseq = df_add_instruction(state,fun,OP_SPECIAL_SEQUENCE);
+  fun->mapseq->internal = 1;
+  fun->mapseq->inports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
+  fun->mapseq->inports[0].seqtype->item->type = state->schema->globals->complex_ur_type;
+  fun->mapseq->inports[1].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
+  fun->mapseq->inports[1].seqtype->item->type = state->schema->globals->complex_ur_type;
+  fun->mapseq->outports[0].seqtype = df_seqtype_new(SEQTYPE_SEQUENCE);
+  fun->mapseq->outports[0].seqtype->left = df_seqtype_ref(fun->mapseq->inports[0].seqtype);
+  fun->mapseq->outports[0].seqtype->right = df_seqtype_ref(fun->mapseq->inports[1].seqtype);
+
   return fun;
 }
 
-df_function *df_lookup_function(df_state *state, const char *name)
+df_function *df_lookup_function(df_state *state, const nsname ident)
 {
   list *l;
   for (l = state->functions; l; l = l->next) {
     df_function *fun = (df_function*)l->data;
-    if (!strcmp(fun->name,name))
+    if (nsname_equals(fun->ident,ident))
       return fun;
   }
   return NULL;
@@ -943,7 +1025,7 @@ void df_free_function(df_function *fun)
   int i;
   list_free(fun->instructions,(void*)df_free_instruction);
 
-  free(fun->name);
+  nsname_free(fun->ident);
   assert(NULL != fun->rtype);
   df_seqtype_deref(fun->rtype);
 
@@ -953,19 +1035,20 @@ void df_free_function(df_function *fun)
   }
 
   free(fun->params);
+  free(fun->mode);
   free(fun);
 }
 
 df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode)
 {
   df_instruction *instr = (df_instruction*)calloc(1,sizeof(df_instruction));
+  int i;
   list_append(&fun->instructions,instr);
   instr->id = fun->nextid++;
   instr->opcode = opcode;
   instr->fun = fun;
 
   if (FN_OP_COUNT > opcode) {
-    int i;
     instr->ninports = df_opdefs[opcode].nparams;
     instr->inports = (df_inport*)calloc(instr->ninports,sizeof(df_inport));
     for (i = 0; i < instr->ninports; i++)
@@ -988,10 +1071,10 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
       break;
     case OP_SPECIAL_SPLIT:
       instr->ninports = 2;
-      instr->noutports = 2;
+      instr->noutports = 3;
       break;
     case OP_SPECIAL_MERGE:
-      instr->ninports = 1;
+      instr->ninports = 2;
       instr->noutports = 1;
       break;
     case OP_SPECIAL_CALL:
@@ -999,7 +1082,7 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
       instr->noutports = 1;
       break;
     case OP_SPECIAL_MAP:
-      instr->ninports = 2;
+      instr->ninports = 1;
       instr->noutports = 1;
       break;
     case OP_SPECIAL_PASS:
@@ -1061,6 +1144,14 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
       instr->ninports = 2;
       instr->noutports = 1;
       break;
+    case OP_SPECIAL_EMPTY:
+      instr->ninports = 1;
+      instr->noutports = 1;
+      break;
+    case OP_SPECIAL_CONTAINS_NODE:
+      instr->ninports = 2;
+      instr->noutports = 1;
+      break;
     default:
       assert(!"invalid opcode");
       break;
@@ -1072,16 +1163,21 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
       instr->outports = (df_outport*)calloc(instr->noutports,sizeof(df_outport));
   }
 
+  for (i = 0; i < instr->noutports; i++) {
+    instr->outports[i].owner = instr;
+    instr->outports[i].portno = i;
+  }
+
   return instr;
 }
 
 void df_delete_instruction(df_state *state, df_function *fun, df_instruction *instr)
 {
   list **lptr = &fun->instructions;
-/*   debug("deleting instruction %s:%d (%s), actual function is %s", */
+/*   debugl("deleting instruction %s:%d (%s), actual function is %s", */
 /*          instr->fun->name,instr->id,df_opstr(instr->opcode),fun->name); */
 /*   if (instr->fun != fun) { */
-/*     debug("function does not match!"); */
+/*     debugl("function does not match!"); */
 /*   } */
   assert(instr->fun == fun);
   while (NULL != *lptr) {
@@ -1090,12 +1186,12 @@ void df_delete_instruction(df_state *state, df_function *fun, df_instruction *in
       *lptr = (*lptr)->next;
       free(old);
       df_free_instruction(instr);
-/*       debug("done"); */
+/*       debugl("done"); */
       return;
     }
     lptr = &((*lptr)->next);
   }
-/*   debug("not found"); */
+/*   debugl("not found"); */
   assert(!"instruction not found");
 }
 
@@ -1118,12 +1214,14 @@ void df_free_instruction(df_instruction *instr)
   free(instr->outports);
 
   if (OP_SPECIAL_CONST == instr->opcode) {
-/*     debug("df_free_instruction CONT: instr->cvalue = %p, with %d refs (before my deref)", */
+/*     debugl("df_free_instruction CONT: instr->cvalue = %p, with %d refs (before my deref)", */
 /*           instr->cvalue,instr->cvalue->refcount); */
     df_value_deref(instr->fun->state->schema->globals,instr->cvalue);
   }
 
   free(instr->nametest);
+  if (NULL != instr->seqtypetest)
+    df_seqtype_deref(instr->seqtypetest);
   free(instr);
 }
 
@@ -1132,14 +1230,14 @@ const char *df_opstr(int opcode)
   if (FN_OP_COUNT >= opcode)
     return df_opdefs[opcode].name;
   else
-    return specialopnames[opcode-OP_SPECIAL_BASE];
+    return df_special_op_names[opcode-OP_SPECIAL_BASE];
 }
 
 df_state *df_state_new(xs_schema *schema)
 {
   df_state *state = (df_state*)calloc(1,sizeof(df_state));
   state->schema = schema;
-  state->init = df_new_function(state,"_init");
+  state->init = df_new_function(state,nsname_temp(NULL,"_init"));
   state->init->start = df_add_instruction(state,state->init,OP_SPECIAL_PRINT);
   state->init->rtype = df_seqtype_new_item(ITEM_ATOMIC);
   state->init->rtype->item->type = schema->globals->complex_ur_type;
@@ -1171,20 +1269,20 @@ void df_output_dot(df_state *state, FILE *f)
     if (fun == state->init)
       continue;
     fprintf(f,"  subgraph cluster%p {\n",fun);
-    fprintf(f,"    label=\"%s\";\n",fun->name);
+    fprintf(f,"    label=\"%s\";\n",fun->ident.name);
 
     fprintf(f,"  subgraph clusterz%p {\n",fun);
     fprintf(f,"    label=\"\";\n");
     fprintf(f,"    color=white;\n");
 
-    fprintf(f,"    %sstart [label=\"[context]\",color=white];\n",fun->name);
+    fprintf(f,"    %sstart [label=\"[context]\",color=white];\n",fun->ident.name);
     if (NULL != fun->start)
-      fprintf(f,"    %sstart -> %s%d;\n",fun->name,fun->name,fun->start->id);
+      fprintf(f,"    %sstart -> %s%d;\n",fun->ident.name,fun->ident.name,fun->start->id);
     for (i = 0; i < fun->nparams; i++) {
-      fprintf(f,"    %sp%d [label=\"[param %d]\",color=white];\n",fun->name,i,i);
+      fprintf(f,"    %sp%d [label=\"[param %d]\",color=white];\n",fun->ident.name,i,i);
       if (NULL != fun->params[i].start)
         fprintf(f,"    %sp%d -> %s%d;\n",
-                fun->name,i,fun->name,fun->params[i].start->id);
+                fun->ident.name,i,fun->ident.name,fun->params[i].start->id);
     }
     fprintf(f,"  }\n");
 
@@ -1196,34 +1294,54 @@ void df_output_dot(df_state *state, FILE *f)
       df_instruction *instr = (df_instruction*)il->data;
       int i;
 
+      if (fun->mapseq == instr)
+        continue;
+
       if (OP_SPECIAL_DUP == instr->opcode) {
         fprintf(f,"    %s%d [label=\"\",style=filled,height=0.2,width=0.2,"
-                "fixedsize=true,color=\"#808080\",shape=circle];\n",fun->name,instr->id);
+                "fixedsize=true,color=\"#808080\",shape=circle];\n",fun->ident.name,instr->id);
       }
       else if (OP_SPECIAL_GATE == instr->opcode) {
         fprintf(f,"    %s%d [label=\"\",height=0.4,width=0.4,style=solid,"
-                "fixedsize=true,color=\"#808080\",shape=triangle];\n",fun->name,instr->id);
+                "fixedsize=true,color=\"#808080\",shape=triangle];\n",fun->ident.name,instr->id);
       }
       else {
 
         if (OP_SPECIAL_CONST == instr->opcode) {
-          fprintf(f,"    %s%d [label=\"%d|",fun->name,instr->id,instr->id);
+          fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
           df_value_print(g,f,instr->cvalue);
           fprintf(f,"\",fillcolor=\"#FF8080\"];\n");
         }
         else if (OP_SPECIAL_CALL == instr->opcode) {
-          fprintf(f,"    %s%d [label=\"%d|",fun->name,instr->id,instr->id);
-          fprintf(f,"call(%s)",instr->cfun->name);
+          fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
+          fprintf(f,"call(%s)",instr->cfun->ident.name);
           fprintf(f,"\",fillcolor=\"#C0FFC0\"];\n");
         }
         else if (OP_SPECIAL_MAP == instr->opcode) {
-          fprintf(f,"    %s%d [label=\"%d|",fun->name,instr->id,instr->id);
-          fprintf(f,"map(%s)",instr->cfun->name);
+          fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
+          fprintf(f,"map(%s)",instr->cfun->ident.name);
           fprintf(f,"\",fillcolor=\"#FFFFC0\"];\n");
         }
         else {
-          fprintf(f,"    %s%d [label=\"%d|",fun->name,instr->id,instr->id);
-          fprintf(f,"%s",df_opstr(instr->opcode));
+          fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
+
+          if (OP_SPECIAL_SELECT == instr->opcode) {
+            fprintf(f,"select: ");
+            if (NULL != instr->nametest) {
+              fprintf(f,"%s",instr->nametest);
+            }
+            else {
+              stringbuf *buf = stringbuf_new();
+              /* FIXME: need to use the namespace map of the syntax tree node */
+              df_seqtype_print_xpath(buf,instr->seqtypetest,state->schema->globals->namespaces);
+              fprintf(f,"%s",buf->data);
+              stringbuf_free(buf);
+            }
+            fprintf(f,"\\n[%s]",df_axis_types[instr->axis]);
+          }
+          else {
+            fprintf(f,"%s",df_opstr(instr->opcode));
+          }
           fprintf(f,"\",fillcolor=\"#80E0FF\"];\n");
         }
 
@@ -1232,21 +1350,26 @@ void df_output_dot(df_state *state, FILE *f)
 
       for (i = 0; i < instr->noutports; i++) {
         if (NULL != instr->outports[i].dest) {
-            fprintf(f,"    %s%d -> %s%d [label=\"",
-                    fun->name,instr->id,fun->name,instr->outports[i].dest->id);
-/*             if ((OP_SPLIT == instr->opcode) && (0 == i)) */
-/*               fprintf(f,"F"); */
-/*             else if ((OP_SPLIT == instr->opcode) && (1 == i)) */
-/*               fprintf(f,"T"); */
+          df_instruction *dest = instr->outports[i].dest;
+          fprintf(f,"    %s%d -> %s%d [label=\"",
+                  fun->ident.name,instr->id,dest->fun->ident.name,dest->id);
+/*           if ((OP_SPLIT == instr->opcode) && (0 == i)) */
+/*             fprintf(f,"F"); */
+/*           else if ((OP_SPLIT == instr->opcode) && (1 == i)) */
+/*             fprintf(f,"T"); */
 
-            fprintf(f,"\"");
+          fprintf(f,"\"");
 
-            if (OP_SPECIAL_DUP == instr->outports[i].dest->opcode)
-              fprintf(f,",color=\"#808080\",arrowhead=none");
-            else if (OP_SPECIAL_DUP == instr->opcode)
-              fprintf(f,",color=\"#808080\"");
+          if (OP_SPECIAL_DUP == instr->outports[i].dest->opcode)
+            fprintf(f,",color=\"#808080\",arrowhead=none");
+          else if (OP_SPECIAL_DUP == instr->opcode)
+            fprintf(f,",color=\"#808080\"");
+          else if ((2 == i) &&
+                   (OP_SPECIAL_SPLIT == instr->opcode) &&
+                   (OP_SPECIAL_MERGE == instr->outports[i].dest->opcode))
+            fprintf(f,",style=dashed");
 
-            fprintf(f,"];\n");
+          fprintf(f,"];\n");
         }
       }
     }
@@ -1268,7 +1391,7 @@ void df_output_df(df_state *state, FILE *f)
 
     if (fun == state->init)
       continue;
-    fprintf(f,"function %s {\n",fun->name);
+    fprintf(f,"function %s {\n",fun->ident.name);
     assert(NULL != fun->rtype);
     stringbuf_clear(buf);
     df_seqtype_print_fs(buf,fun->rtype,state->schema->globals->namespaces->defs);
@@ -1284,11 +1407,16 @@ void df_output_df(df_state *state, FILE *f)
 
     for (il = fun->instructions; il; il = il->next) {
       df_instruction *instr = (df_instruction*)il->data;
+
+      if (fun->mapseq == instr)
+        continue;
+
       fprintf(f,"  %-5d %-20s",instr->id,df_opstr(instr->opcode));
       if (OP_SPECIAL_RETURN != instr->opcode) {
         for (i = 0; i < instr->noutports; i++) {
           if (0 < i)
             fprintf(f," ");
+          assert(NULL != instr->outports[i].dest);
           fprintf(f,"%d:%d",instr->outports[i].dest->id,instr->outports[i].destp);
         }
       }
