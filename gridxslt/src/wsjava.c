@@ -21,6 +21,7 @@
  */
 
 #include "xslt/parse.h"
+#include "xslt/output.h"
 #include "util/namespace.h"
 #include "util/stringbuf.h"
 #include <stdio.h>
@@ -267,9 +268,9 @@ void fix_expr_function_calls(xp_expr *e)
 #if 0
     xp_expr *stubcall = xp_expr_new(XPATH_EXPR_FUNCTION_CALL,NULL,NULL);
     xp_expr *stubparam = xp_expr_new(XPATH_EXPR_ACTUAL_PARAM,NULL,NULL);
-    stubcall->qname.prefix = (char*)malloc(strlen(e->qname.prefix)+strlen("stub")+1);
-    sprintf(stubcall->qname.prefix,"%sstub",e->qname.prefix);
-    stubcall->qname.localpart = strdup("getStub");
+    stubcall->qn.prefix = (char*)malloc(strlen(e->qn.prefix)+strlen("stub")+1);
+    sprintf(stubcall->qn.prefix,"%sstub",e->qn.prefix);
+    stubcall->qn.localpart = strdup("getStub");
     stubparam->left = stubcall;
     stubparam->nextseq = e->left;
     e->left = stubparam;
@@ -344,7 +345,7 @@ int process_xslt(xl_snode *sroot)
 
     sprintf(stubprefix,"%sstub",prefix);
     sprintf(stubhref,"java:wsbinding.%s.XSLTStub",prefix);
-    ns_add(sroot->namespaces,stubhref,stubprefix);
+    ns_add_direct(sroot->namespaces,stubhref,stubprefix);
     free(stubprefix);
     free(stubhref);
 
@@ -410,11 +411,11 @@ int main(int argc, char **argv)
 {
   char *xsltin;
   char *xsltout;
-  FILE *in;
   FILE *out;
   xl_snode *sroot;
   int r = 0;
   error_info ei;
+  char *uri;
 
   setbuf(stdout,NULL);
 
@@ -426,21 +427,18 @@ int main(int argc, char **argv)
   xsltin = argv[1];
   xsltout = argv[2];
 
-  if (NULL == (in = fopen(xsltin,"r"))) {
-    perror(xsltin);
-    exit(1);
-  }
-
   memset(&ei,0,sizeof(error_info));
 
+  uri = get_real_uri(xsltin);
   sroot = xl_snode_new(XSLT_TRANSFORM);
-  if (0 != parse_xslt(in,sroot,&ei,xsltin)) {
+  if (0 != parse_xslt_relative_uri(&ei,NULL,0,NULL,uri,uri,sroot)) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
+    xl_snode_free(sroot);
+    free(uri);
     exit(1);
   }
-
-  fclose(in);
+  free(uri);
 
   r = process_xslt(sroot);
 
