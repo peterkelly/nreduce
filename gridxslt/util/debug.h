@@ -23,8 +23,9 @@
 #ifndef _UTIL_DEBUG_H
 #define _UTIL_DEBUG_H
 
-//#define DEBUG
+#define DEBUG
 
+void debugl(const char *format, ...);
 void debug(const char *format, ...);
 void debug_indent(int indent, const char *format, ...);
 

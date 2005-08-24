@@ -25,15 +25,45 @@
 #include <string.h>
 #include <stdarg.h>
 #include "debug.h"
+#include "stringbuf.h"
+
+void debugl(const char *format, ...)
+{
+#ifdef DEBUG
+  va_list ap;
+  stringbuf *buf;
+
+  if (NULL == getenv("DEBUG"))
+    return;
+
+  buf = stringbuf_new();
+  va_start(ap,format);
+  stringbuf_vformat(buf,format,ap);
+  va_end(ap);
+
+  printf("%s",buf->data);
+  stringbuf_free(buf);
+  printf("\n");
+#endif
+}
 
 void debug(const char *format, ...)
 {
 #ifdef DEBUG
   va_list ap;
+  stringbuf *buf;
+
+  if (NULL == getenv("DEBUG"))
+    return;
+
+  buf = stringbuf_new();
   va_start(ap,format);
-  vprintf(format,ap);
+  stringbuf_vformat(buf,format,ap);
   va_end(ap);
-  printf("\n");
+
+  printf("%s",buf->data);
+  stringbuf_free(buf);
+
 #endif
 }
 
@@ -42,6 +72,8 @@ void debug_indent(int indent, const char *format, ...)
 #ifdef DEBUG
   int i;
   va_list ap;
+  if (NULL == getenv("DEBUG"))
+    return;
   for (i = 0; i < indent; i++)
     printf("  ");
   va_start(ap,format);
