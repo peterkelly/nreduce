@@ -41,7 +41,7 @@ void df_remove_redundant(df_state *state, df_function *fun)
         df_instruction *dest;
         int destp;
 
-/*         debug("Redundant: swallow %s:%d, dup %s:%d", */
+/*         debugl("Redundant: swallow %s:%d, dup %s:%d", */
 /*                fun->name,instr->id,fun->name,dup->id); */
 
         if (0 == instr->inports[0].sourcep) {
