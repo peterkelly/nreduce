@@ -28,6 +28,7 @@
 #include "util/list.h"
 #include "util/namespace.h"
 #include "util/xmlutils.h"
+#include <libxml/xmlwriter.h>
 
 #define ITEM_INVALID                  0
 #define ITEM_ATOMIC                   1
@@ -37,7 +38,8 @@
 #define ITEM_PI                       5
 #define ITEM_COMMENT                  6
 #define ITEM_TEXT                     7
-#define ITEM_COUNT                    8
+#define ITEM_NAMESPACE                8
+#define ITEM_COUNT                    9
 
 #define SEQTYPE_INVALID               0
 #define SEQTYPE_ITEM                  1
@@ -70,6 +72,7 @@
 #define NODE_PI                       ITEM_PI
 #define NODE_COMMENT                  ITEM_COMMENT
 #define NODE_TEXT                     ITEM_TEXT
+#define NODE_NAMESPACE                ITEM_NAMESPACE
 
 typedef struct df_itemtype df_itemtype;
 typedef struct df_seqtype df_seqtype;
@@ -82,10 +85,10 @@ struct df_itemtype {
   xs_type *type;
   xs_element *elem;
   xs_attribute *attr;
-  qname_t typeref;
-  qname_t elemref;
-  qname_t attrref;
-  qname_t localname;
+  qname typeref;
+  qname elemref;
+  qname attrref;
+  qname localname;
   char *pistr;
   int nillable;
   df_seqtype *content;
@@ -113,8 +116,7 @@ struct df_node {
   list *namespaces;
   list *attributes;
   char *prefix;
-  char *ns;
-  char *name;
+  nsname ident;
   char *value;
   int refcount;
 
@@ -171,11 +173,22 @@ void df_node_add_attribute(df_node *n, df_node *attr);
 df_value *df_node_to_value(df_node *n);
 df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v);
 
+df_value *df_value_new_string(xs_globals *g, const char *str);
+
 df_value *df_value_new(df_seqtype *seqtype);
 df_value *df_value_ref(df_value *v);
+void df_node_print(xmlTextWriter *writer, df_node *n);
 void df_value_printbuf(xs_globals *globals, stringbuf *buf, df_value *v);
 void df_value_print(xs_globals *globals, FILE *f, df_value *v);
 void df_value_deref(xs_globals *globals, df_value *v);
 void df_value_deref_list(xs_globals *globals, list *l);
+int df_value_equals(df_value *a, df_value *b);
+void df_get_sequence_values(df_value *v, list **values);
+list *df_sequence_to_list(df_value *seq);
+df_value *df_list_to_sequence(xs_globals *g, list *values);
+void df_node_to_string(df_node *n, stringbuf *buf);
+char *df_value_as_string(xs_globals *g, df_value *v);
+df_value *df_atomize(xs_globals *g, df_value *v);
+df_value *df_cast(xs_globals *g, df_value *v, df_seqtype *as);
 
 #endif /* _DATAFLOW_SEQUENCETYPE_H */
