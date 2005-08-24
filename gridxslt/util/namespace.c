@@ -21,6 +21,7 @@
  */
 
 #include "namespace.h"
+#include "debug.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -46,7 +47,7 @@ void ns_map_free(ns_map *map, int free_parents)
   free(map);
 }
 
-void ns_add(ns_map *map, const char *href, const char *preferred_prefix)
+void ns_add_preferred(ns_map *map, const char *href, const char *preferred_prefix)
 {
   ns_def *ns;
   char *prefix;
@@ -68,6 +69,14 @@ void ns_add(ns_map *map, const char *href, const char *preferred_prefix)
     sprintf(prefix,"%s%d",preferred_prefix,number++);
   ns = (ns_def*)calloc(1,sizeof(ns_def));
   ns->prefix = prefix;
+  ns->href = strdup(href);
+  list_append(&map->defs,ns);
+}
+
+void ns_add_direct(ns_map *map, const char *href, const char *prefix)
+{
+  ns_def *ns = (ns_def*)calloc(1,sizeof(ns_def));
+  ns->prefix = strdup(prefix);
   ns->href = strdup(href);
   list_append(&map->defs,ns);
 }
@@ -100,17 +109,33 @@ ns_def *ns_lookup_href(ns_map *map, const char *href)
     return NULL;
 }
 
-nsname_t qname_to_nsname(ns_map *map, qname_t qn)
+nsname qname_to_nsname(ns_map *map, const qname qn)
 {
-  nsname_t nn;
-  /* FIXME */
+  nsname nn;
+  ns_def *def;
+  nn.ns = NULL;
+  nn.name = NULL;
+  if (NULL != qn.prefix) {
+    if (NULL == (def = ns_lookup_prefix(map,qn.prefix)))
+      return nn;
+    nn.ns = strdup(def->href);
+  }
+  nn.name = strdup(qn.localpart);
   return nn;
 }
 
-qname_t nsname_to_qname(ns_map *map, nsname_t nn)
+qname nsname_to_qname(ns_map *map, const nsname nn)
 {
-  qname_t qn;
-  /* FIXME */
+  qname qn;
+  ns_def *def;
+  qn.prefix = NULL;
+  qn.localpart = NULL;
+  if (NULL != nn.ns) {
+    if (NULL == (def = ns_lookup_href(map,nn.ns)))
+      return qn;
+    qn.prefix = strdup(def->prefix);
+  }
+  qn.localpart = strdup(nn.name);
   return qn;
 }
 

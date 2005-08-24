@@ -38,6 +38,7 @@
 #define XSI_NAMESPACE "http://www.w3.org/2001/XMLSchema-instance"
 #define SVG_NAMESPACE "http://www.w3.org/2000/svg"
 #define XML_NAMESPACE "http://www.w3.org/XML/1998/namespace"
+#define GX_NAMESPACE "http://gridxslt.sourceforge.net"
 
 typedef struct ns_def ns_def;
 typedef struct ns_map ns_map;
@@ -57,11 +58,12 @@ void ns_def_free(ns_def *def);
 ns_map *ns_map_new();
 void ns_map_free(ns_map *map, int free_parents);
 
-void ns_add(ns_map *map, const char *href, const char *preferred_prefix);
+void ns_add_preferred(ns_map *map, const char *href, const char *preferred_prefix);
+void ns_add_direct(ns_map *map, const char *href, const char *prefix);
 ns_def *ns_lookup_prefix(ns_map *map, const char *prefix);
 ns_def *ns_lookup_href(ns_map *map, const char *href);
 
-nsname_t qname_to_nsname(ns_map *map, qname_t qn);
-qname_t nsname_to_qname(ns_map *map, nsname_t nn);
+nsname qname_to_nsname(ns_map *map, const qname qn);
+qname nsname_to_qname(ns_map *map, const nsname nn);
 
 #endif /* _UTIL_NAMESPACE_H */
