@@ -1,6 +1,6 @@
 %option noyywrap
 %option outfile="lexer.yy.c"
-%x str1 str2
+%x vstr1 vstr2
 %{
 /*
  * This file is part of the GridXSLT project
@@ -81,24 +81,24 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 
 %%
 
-\"      string_buf_ptr = string_buf; BEGIN(str1);
+\"      string_buf_ptr = string_buf; BEGIN(vstr1);
 
-<str1>\"         { /* saw closing quote - all done */
+<vstr1>\"         { /* saw closing quote - all done */
                   BEGIN(INITIAL);
                   *string_buf_ptr = '\0';
                   yylval.string = strdup(string_buf);
                   return STRING_LITERAL;
                 }
 
-<str1>\\n        *string_buf_ptr++ = '\n';
-<str1>\\t        *string_buf_ptr++ = '\t';
-<str1>\\r        *string_buf_ptr++ = '\r';
-<str1>\\b        *string_buf_ptr++ = '\b';
-<str1>\\f        *string_buf_ptr++ = '\f';
+<vstr1>\\n        *string_buf_ptr++ = '\n';
+<vstr1>\\t        *string_buf_ptr++ = '\t';
+<vstr1>\\r        *string_buf_ptr++ = '\r';
+<vstr1>\\b        *string_buf_ptr++ = '\b';
+<vstr1>\\f        *string_buf_ptr++ = '\f';
 
-<str1>\\(.|\n)   *string_buf_ptr++ = yytext[1];
+<vstr1>\\(.|\n)   *string_buf_ptr++ = yytext[1];
 
-<str1>[^\\\n\"]+ {
+<vstr1>[^\\\n\"]+ {
                   char *yptr = yytext;
 
                   while ( *yptr )
@@ -108,24 +108,24 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 
 
 
-\'      string_buf_ptr = string_buf; BEGIN(str2);
+\'      string_buf_ptr = string_buf; BEGIN(vstr2);
 
-<str2>\'         { /* saw closing quote - all done */
+<vstr2>\'         { /* saw closing quote - all done */
                   BEGIN(INITIAL);
                   *string_buf_ptr = '\0';
                   yylval.string = strdup(string_buf);
                   return STRING_LITERAL;
                 }
 
-<str2>\\n        *string_buf_ptr++ = '\n';
-<str2>\\t        *string_buf_ptr++ = '\t';
-<str2>\\r        *string_buf_ptr++ = '\r';
-<str2>\\b        *string_buf_ptr++ = '\b';
-<str2>\\f        *string_buf_ptr++ = '\f';
+<vstr2>\\n        *string_buf_ptr++ = '\n';
+<vstr2>\\t        *string_buf_ptr++ = '\t';
+<vstr2>\\r        *string_buf_ptr++ = '\r';
+<vstr2>\\b        *string_buf_ptr++ = '\b';
+<vstr2>\\f        *string_buf_ptr++ = '\f';
 
-<str2>\\(.|\n)   *string_buf_ptr++ = yytext[1];
+<vstr2>\\(.|\n)   *string_buf_ptr++ = yytext[1];
 
-<str2>[^\\\n\']+ {
+<vstr2>[^\\\n\']+ {
                   char *yptr = yytext;
 
                   while ( *yptr )
@@ -236,6 +236,7 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 "match"         { return MATCH; }
 "__just_expr"   { return JUST_EXPR; }
 "__just_seqtype" { return JUST_SEQTYPE; }
+"__just_pattern" { return JUST_PATTERN; }
 "return"        { return RETURN; }
 "for"           { return FOR; }
 "in"            { return IN; }
@@ -270,7 +271,9 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 "schema-element" { return SCHEMA_ELEMENT; }
 "item"          { return ITEM; }
 "element"       { return ELEMENT; }
-"multiply"      { return MULTIPLY;}
+"multiply"      { return MULTIPLY; }
+"id"            { return ID1; }
+"key"           { return KEY; }
 
 
 
