@@ -1,0 +1,13 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.0">
+  <xsl:function name="f:myfunc">
+    <xsl:param name="a" as="xs:string2"/>
+  </xsl:function>
+</xsl:transform>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error: No such type: xs:string2
+================================== RETURN CODE =================================
+1

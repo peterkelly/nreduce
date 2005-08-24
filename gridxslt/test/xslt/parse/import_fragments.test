@@ -1,0 +1,45 @@
+=================================== PROGRAM ====================================
+testxslt runtests.tmp/input.xml
+===================================== FILE =====================================
+other.xsl
+<?xml version="1.0"?>
+<foo>
+  <xsl:transform xml:id="sheet1" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+    <xsl:function name="f:myfunc">
+      <xsl:param name="a"/>
+      <xsl:param name="b"/>
+      <xsl:param name="c"/>
+    </xsl:function>
+  </xsl:transform>
+  <xsl:transform xml:id="sheet2" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+    <xsl:function name="f:myfunc">
+      <xsl:param name="a"/>
+      <xsl:param name="b"/>
+      <xsl:param name="c"/>
+    </xsl:function>
+  </xsl:transform>
+</foo>
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+  <xsl:import href="other.xsl#sheet1"/>
+  <xsl:import href="other.xsl#sheet2"/>
+  <xsl:function name="f:myfunc">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:param name="c"/>
+  </xsl:function>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+  <xsl:import href="other.xsl#sheet1"/>
+  <xsl:import href="other.xsl#sheet2"/>
+  <xsl:function name="f:myfunc">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:param name="c"/>
+  </xsl:function>
+</xsl:transform>
+================================== RETURN CODE =================================
+0

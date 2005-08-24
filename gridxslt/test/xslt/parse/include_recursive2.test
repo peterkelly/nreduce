@@ -1,0 +1,39 @@
+=================================== PROGRAM ====================================
+testxslt runtests.tmp/test1.xsl
+===================================== FILE =====================================
+test1.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+  <xsl:include href="test2.xsl"/>
+  <xsl:function name="f:fun1">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:param name="c"/>
+  </xsl:function>
+</xsl:transform>
+===================================== FILE =====================================
+test2.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+  <xsl:include href="test3.xsl"/>
+  <xsl:function name="f:fun2">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:param name="c"/>
+  </xsl:function>
+</xsl:transform>
+===================================== FILE =====================================
+test3.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
+  <xsl:include href="test1.xsl"/>
+  <xsl:function name="f:fun3">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:param name="c"/>
+  </xsl:function>
+</xsl:transform>
+==================================== OUTPUT ====================================
+runtests.tmp/test3.xsl:3: error XTSE0180: It is a static error if a stylesheet module directly or indirectly includes itself
+================================== RETURN CODE =================================
+1

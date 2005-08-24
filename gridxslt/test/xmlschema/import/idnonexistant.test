@@ -1,0 +1,26 @@
+=================================== PROGRAM ====================================
+testxmlschema runtests.tmp/input.xml
+===================================== FILE =====================================
+other.xml
+<?xml version="1.0"?>
+<foo>
+  <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://test.org">
+    <xsd:complexType name="ct1">
+      <xsd:sequence>
+        <xsd:element name="a"/>
+        <xsd:element name="b"/>
+        <xsd:element name="c"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:schema>
+</foo>
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:test="http://test.org">
+  <xsd:import namespace="http://test.org" schemaLocation="other.xml#myid"/>
+  <xsd:element name="myelem1" type="test:ct1"/>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/other.xml: error: No such fragment "myid"
+================================== RETURN CODE =================================
+1
