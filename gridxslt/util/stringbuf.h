@@ -23,6 +23,9 @@
 #ifndef _UTIL_STRINGBUF_H
 #define _UTIL_STRINGBUF_H
 
+#include <stdio.h>
+#include <stdarg.h>
+
 typedef struct stringbuf stringbuf;
 
 struct stringbuf {
@@ -32,7 +35,8 @@ struct stringbuf {
 };
 
 stringbuf *stringbuf_new();
-void stringbuf_printf(stringbuf *buf, const char *format, ...);
+void stringbuf_vformat(stringbuf *buf, const char *format, va_list ap);
+void stringbuf_format(stringbuf *buf, const char *format, ...);
 void stringbuf_append(stringbuf *buf, const char *data, int size);
 void stringbuf_clear(stringbuf *buf);
 void stringbuf_free(stringbuf *buf);
