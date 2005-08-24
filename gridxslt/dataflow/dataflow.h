@@ -28,6 +28,7 @@
 #include "util/list.h"
 #include "sequencetype.h"
 #include <stdio.h>
+#include <libxml/tree.h>
 
 #define TYPE_INVALID                  0
 
@@ -125,7 +126,9 @@
 #define OP_SPECIAL_NAMESPACE          1019
 #define OP_SPECIAL_SELECT             1020
 #define OP_SPECIAL_FILTER             1021
-#define OP_SPECIAL_COUNT              22
+#define OP_SPECIAL_EMPTY              1022
+#define OP_SPECIAL_CONTAINS_NODE      1023
+#define OP_SPECIAL_COUNT              24
 
 #define AXIS_INVALID                  0
 #define AXIS_CHILD                    1
@@ -141,6 +144,7 @@
 #define AXIS_PRECEDING_SIBLING        11
 #define AXIS_PRECEDING                12
 #define AXIS_ANCESTOR_OR_SELF         13
+#define AXIS_COUNT                    14
 
 typedef struct df_optype df_optype;
 typedef struct df_opdef df_opdef;
@@ -174,6 +178,9 @@ struct df_outport {
   df_seqtype *seqtype;
   df_instruction *dest;
   int destp;
+
+  df_instruction *owner;
+  int portno;
 };
 
 struct df_instruction {
@@ -209,16 +216,18 @@ struct df_parameter {
 };
 
 struct df_function {
+  nsname ident;
   list *instructions;
   int nparams;
   df_parameter *params;
   df_seqtype *rtype;
   df_instruction *start;
   df_instruction *ret;
-  char *name;
   int nextid;
   df_instruction *mapseq;
   df_state *state;
+  int isapply;
+  char *mode;
 };
 
 int df_compute_types(df_function *fun);
@@ -228,8 +237,9 @@ int df_get_op_id(char *name);
 int df_execute_op(df_state *state, df_instruction *instr, int opcode,
                   df_value **values, df_value **result);
 
-df_function *df_new_function(df_state *state, const char *name);
-df_function *df_lookup_function(df_state *state, const char *name);
+void df_init_function(df_state *state, df_function *fun);
+df_function *df_new_function(df_state *state, const nsname ident);
+df_function *df_lookup_function(df_state *state, const nsname ident);
 void df_free_function(df_function *fun);
 
 df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode);
@@ -241,6 +251,7 @@ struct df_state {
   list *functions;
   list *activities;
   df_function *init;
+  df_function *deftmpl;
   xs_schema *schema;
   int actno;
   int nextanonid;
@@ -251,6 +262,8 @@ struct df_state {
 
 const char *df_opstr(int opcode);
 
+df_node *df_node_from_xmlnode(xmlNodePtr xn);
+
 df_state *df_state_new(xs_schema *schema);
 void df_state_free(df_state *state);
 
@@ -258,8 +271,10 @@ void df_output_dot(df_state *s, FILE *f);
 void df_output_df(df_state *s, FILE *f);
 
 #ifndef _DATAFLOW_DATAFLOW_C
-extern const char *typenames[TYPE_COUNT];
-extern const char *itemtypes[ITEM_COUNT];
+extern const char *df_type_names[TYPE_COUNT];
+extern const char *df_special_op_names[OP_SPECIAL_COUNT];
+extern const char *df_item_types[ITEM_COUNT];
+extern const char *df_axis_types[AXIS_COUNT];
 #endif
 
 #endif /* _DATAFLOW_DATAFLOW_H */
