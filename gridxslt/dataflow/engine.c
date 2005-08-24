@@ -21,6 +21,7 @@
  */
 
 #include "engine.h"
+#include "serialization.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include <stdio.h>
@@ -111,7 +112,7 @@ df_activity *df_activate_function(df_state *state, df_function *fun,
       for (i = 0; i < instr->noutports; i++) {
         if (NULL == instr->outports[i].dest) {
           fprintf(stderr,"Instruction %s:%d has no destination assigned to output port %d\n",
-                  fun->name,instr->id,i);
+                  fun->ident.name,instr->id,i);
         }
         assert(NULL != instr->outports[i].dest);
         a->outports[i].a = instr->outports[i].dest->act;
@@ -145,131 +146,21 @@ void df_output_value(df_activity *source, int sourcep, df_value *v)
 void df_print_actmsg(const char *prefix, df_activity *a)
 {
   printf("%s [%d] %s.%d - %s\n",prefix,
-         a->actno,a->instr->fun->name,a->instr->id,df_opstr(a->instr->opcode));
+         a->actno,a->instr->fun->ident.name,a->instr->id,df_opstr(a->instr->opcode));
 }
 
-void df_deref_activity(df_activity *a, int indent)
+void df_deref_activity(df_activity *a, int indent, df_activity *merge)
 {
   int i;
   a->refs--;
   assert(0 <= a->refs);
-  if ((OP_SPECIAL_RETURN == a->instr->opcode) || (OP_SPECIAL_MERGE == a->instr->opcode))
+  assert(OP_SPECIAL_MERGE == merge->instr->opcode);
+  if ((OP_SPECIAL_RETURN == a->instr->opcode) || (merge == a))
     return;
   if (0 == a->refs) {
     for (i = 0; i < a->instr->noutports; i++)
-      df_deref_activity(a->outports[i].a,indent+1);
+      df_deref_activity(a->outports[i].a,indent+1,merge);
   }
-}
-
-static void get_seq_values(df_value *v, list **values)
-{
-  if (SEQTYPE_SEQUENCE == v->seqtype->type) {
-    get_seq_values(v->value.pair.left,values);
-    get_seq_values(v->value.pair.right,values);
-  }
-  else if (SEQTYPE_ITEM == v->seqtype->type) {
-    list_append(values,v);
-  }
-  else {
-    assert(SEQTYPE_EMPTY == v->seqtype->type);
-  }
-}
-
-void df_node_to_string(df_node *n, stringbuf *buf)
-{
-  switch (n->type) {
-  case NODE_DOCUMENT:
-    /* FIXME */
-    break;
-  case NODE_ELEMENT: {
-    df_node *c;
-    for (c = n->first_child; c; c = c->next)
-      df_node_to_string(c,buf);
-    break;
-  }
-  case NODE_ATTRIBUTE:
-    stringbuf_printf(buf,n->value);
-    break;
-  case NODE_PI:
-    /* FIXME */
-    break;
-  case NODE_COMMENT:
-    /* FIXME */
-    break;
-  case NODE_TEXT:
-    stringbuf_printf(buf,n->value);
-    break;
-  default:
-    assert(!"invalid node type");
-    break;
-  }
-}
-
-df_value *df_atomize(xs_globals *g, df_value *v)
-{
-  if (SEQTYPE_SEQUENCE == v->seqtype->type) {
-    df_seqtype *atomicseq;
-    df_value *atom;
-    df_value *left = df_atomize(g,v->value.pair.left);
-    df_value *right = df_atomize(g,v->value.pair.right);
-
-    atomicseq = df_seqtype_new(SEQTYPE_SEQUENCE);
-    atomicseq->left = df_seqtype_ref(left->seqtype);
-    atomicseq->right = df_seqtype_ref(right->seqtype);
-
-    atom = df_value_new(atomicseq);
-    atom->value.pair.left = left;
-    atom->value.pair.right = right;
-    return atom;
-  }
-  else if (SEQTYPE_ITEM == v->seqtype->type) {
-    if (ITEM_ATOMIC == v->seqtype->item->kind) {
-      return df_value_ref(v);
-    }
-    else {
-      /* FIXME: this is just a quick and dirty implementation of node atomization... need to
-         follow the rules set out in XPath 2.0 section 2.5.2 */
-      df_seqtype *strtype = df_seqtype_new_item(ITEM_ATOMIC);
-      df_value *atom = df_value_new(strtype);
-      stringbuf *buf = stringbuf_new();
-      strtype->item->type = g->string_type;
-      df_node_to_string(v->value.n,buf);
-      atom->value.s = strdup(buf->data);
-      stringbuf_free(buf);
-      return atom;
-    }
-  }
-  else {
-    assert(SEQTYPE_EMPTY == v->seqtype->type);
-    /* FIXME: is this safe? are there any situations in which df_atomize could be called with
-       an empty sequence? */
-    assert(!"can't atomize an empty sequence");
-    return NULL;
-  }
-}
-
-char *df_value_as_string(xs_globals *g, df_value *v)
-{
-  df_value *atomicv;
-  char *str;
-  stringbuf *buf = stringbuf_new();
-
-  if (SEQTYPE_EMPTY != v->seqtype->type) {
-    if ((SEQTYPE_ITEM != v->seqtype->type) ||
-        (ITEM_ATOMIC != v->seqtype->item->kind))
-      atomicv = df_atomize(g,v);
-    else
-      atomicv = df_value_ref(v);
-  }
-
-  df_value_printbuf(g,buf,v);
-
-
-  str = strdup(buf->data);
-
-  df_value_deref(g,v);
-  stringbuf_free(buf);
-  return str;
 }
 
 static int is_text_node(df_value *v)
@@ -282,21 +173,19 @@ static char *df_construct_simple_content(xs_globals *g, df_value *v)
 {
   char *str;
   stringbuf *buf = stringbuf_new();
-  list *values = NULL;
+  list *values = df_sequence_to_list(v);
   list *strings = NULL;
   list *l;
   char *separator = " "; /* FIXME: allow custom separators */
   char *nextsep = "";
 
-  get_seq_values(v,&values);
-
   for (l = values; l; l = l->next) {
     df_value *v = (df_value*)l->data;
-    stringbuf_printf(buf,"%s",nextsep);
+    stringbuf_format(buf,"%s",nextsep);
     if (is_text_node(v)) {
       if (0 == strlen(v->value.n->value))
         continue;
-      stringbuf_printf(buf,v->value.n->value);
+      stringbuf_format(buf,v->value.n->value);
       if (l->next && (is_text_node((df_value*)l->next->data)))
         nextsep = "";
       else
@@ -304,7 +193,7 @@ static char *df_construct_simple_content(xs_globals *g, df_value *v)
     }
     else {
       char *str = df_value_as_string(g,v);
-      stringbuf_printf(buf,str);
+      stringbuf_format(buf,str);
       free(str);
       nextsep = separator;
     }
@@ -319,37 +208,11 @@ static char *df_construct_simple_content(xs_globals *g, df_value *v)
   return str;
 }
 
-static df_value *list_to_sequence(xs_globals *g, list *values)
-{
-  list *l;
-  df_value *result = NULL;
-  if (NULL == values)
-    return df_value_new(df_seqtype_new(SEQTYPE_EMPTY));
-
-  for (l = values; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if (NULL == result) {
-      result = df_value_ref(v);
-    }
-    else {
-      df_seqtype *st = df_seqtype_new(SEQTYPE_SEQUENCE);
-      df_value *newresult = df_value_new(st);
-      df_seqtype_deref(st);
-      st->left = df_seqtype_ref(result->seqtype);
-      st->right = df_seqtype_ref(v->seqtype);
-      newresult->value.pair.left = result;
-      newresult->value.pair.right = df_value_ref(v);
-      result = newresult;
-    }
-  }
-  return result;
-}
-
 static int nodetest_matches(df_node *n, char *nametest, df_seqtype *seqtypetest)
 {
   if (NULL != nametest) {
     return (((NODE_ELEMENT == n->type) || (NODE_ATTRIBUTE == n->type)) &&
-            !strcmp(n->name,nametest));
+            !strcmp(n->ident.name,nametest));
   }
   else {
     assert(NULL != seqtypetest);
@@ -366,8 +229,7 @@ static int nodetest_matches(df_node *n, char *nametest, df_seqtype *seqtypetest)
         if (NULL != seqtypetest->item->elem) {
           /* FIXME: support checks based on type annotation of node, e.g. element(*,xs:string) */
           return ((n->type == NODE_ELEMENT) &&
-                  ns_name_equals(n->ns,n->name,
-                                 seqtypetest->item->elem->ns,seqtypetest->item->elem->name));
+                  nsname_equals(n->ident,seqtypetest->item->elem->def.ident));
         }
         else {
           return (n->type == NODE_ELEMENT);
@@ -385,10 +247,17 @@ static int nodetest_matches(df_node *n, char *nametest, df_seqtype *seqtypetest)
       case ITEM_TEXT:
         return (n->type == NODE_TEXT);
         break;
+      case ITEM_NAMESPACE:
+        return (n->type == NODE_NAMESPACE);
+        break;
       default:
         assert(!"invalid item type");
         break;
       }
+    }
+    else if (SEQTYPE_CHOICE == seqtypetest->type) {
+      return (nodetest_matches(n,NULL,seqtypetest->left) ||
+              nodetest_matches(n,NULL,seqtypetest->right));
     }
   }
 
@@ -411,14 +280,12 @@ static int append_matching_nodes(df_node *self, char *nametest, df_seqtype *seqt
       CHECK_CALL(append_matching_nodes(c,nametest,seqtypetest,AXIS_DESCENDANT_OR_SELF,matches))
     break;
   case AXIS_ATTRIBUTE:
-    printf("append_matching_nodes: AXIS_ATTRIBUTE: element %s, have %d attributes\n",
-           self->name,list_count(self->attributes));
     for (l = self->attributes; l; l = l->next) {
       df_node *attr = (df_node*)l->data;
       if (nodetest_matches(attr,nametest,seqtypetest)) {
         df_value *val = df_node_to_value(attr);
         list_append(matches,val);
-        debug("adding matching attribute %p; root %p refcount is now %d",
+        debugl("adding matching attribute %p; root %p refcount is now %d",
               val->value.n,df_node_root(val->value.n),df_node_root(val->value.n)->refcount);
       }
     }
@@ -474,12 +341,12 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
 {
   list *l;
 
-/*   debug("add_sequence_as_child_nodes: values are:"); */
+/*   debugl("add_sequence_as_child_nodes: values are:"); */
 
 /*   for (l = values; l; l = l->next) { */
 /*     df_value *v = (df_value*)l->data; */
 /*     assert(SEQTYPE_ITEM == v->seqtype->type); */
-/*     debug("  %s",itemtypes[v->seqtype->item->kind]); */
+/*     debugl("  %s",df_item_types[v->seqtype->item->kind]); */
 /*   } */
 
   for (l = values; l; l = l->next) {
@@ -488,7 +355,7 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
     switch (v->seqtype->item->kind) {
     case ITEM_ATOMIC: {
       df_node *textnode = df_atomic_value_to_text_node(g,v);
-      debug("created text node %p for atomic value %p (which has %d refs)",textnode,v,v->refcount);
+      debugl("created text node %p for atomic value %p (which has %d refs)",textnode,v,v->refcount);
       df_node_add_child(parent,textnode);
       break;
     }
@@ -520,13 +387,13 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
     }
     case ITEM_ATTRIBUTE:
       if ((1 == v->refcount) && (1 == v->value.n->refcount)) {
-        debug("***** adding existing attribute node");
+        debugl("***** adding existing attribute node");
         v->value.n->refcount = 0;
         df_node_add_attribute(parent,v->value.n);
         v->value.n = NULL;
       }
       else {
-        debug("!!! copying attribute node");
+        debugl("!!! copying attribute node");
         df_node_add_attribute(parent,df_node_deep_copy(v->value.n));
       }
       break;
@@ -534,8 +401,9 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
     case ITEM_PI:
     case ITEM_COMMENT:
     case ITEM_TEXT:
+    case ITEM_NAMESPACE:
       if ((1 == v->refcount) && (1 == v->value.n->refcount)) {
-        debug("***** adding existing text node");
+        debugl("***** adding existing text node");
         v->value.n->refcount = 0;
         df_node_add_child(parent,v->value.n);
         v->value.n = NULL;
@@ -570,16 +438,17 @@ int df_fire_activity(df_state *state, df_activity *a)
   case OP_SPECIAL_SPLIT:
     if (0 == a->values[0]->value.b) {
       df_output_value(a,0,a->values[1]);
-      df_deref_activity(a->outports[1].a,0);
+      df_deref_activity(a->outports[1].a,0,a->outports[2].a);
     }
     else {
       df_output_value(a,1,a->values[1]);
-      df_deref_activity(a->outports[0].a,0);
+      df_deref_activity(a->outports[0].a,0,a->outports[2].a);
     }
-    df_value_deref(g,a->values[0]);
+    df_output_value(a,2,a->values[0]);
     break;
   case OP_SPECIAL_MERGE:
     df_output_value(a,0,a->values[0]);
+    df_value_deref(state->schema->globals,a->values[1]);
     break;
   case OP_SPECIAL_CALL: {
     df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
@@ -603,12 +472,18 @@ int df_fire_activity(df_state *state, df_activity *a)
   }
   case OP_SPECIAL_MAP: {
     df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
-    list *values = NULL;
+    list *values = df_sequence_to_list(a->values[0]);
     list *l;
     int i;
     df_activity *ultimate_desta = a->outports[0].a;
     int ultimate_destp = a->outports[0].p;
-    get_seq_values(a->values[0],&values);
+
+    if (NULL == values) {
+      df_seqtype *empty = df_seqtype_new(SEQTYPE_EMPTY);
+      df_value *ev = df_value_new(empty);
+      df_seqtype_deref(empty);
+      df_output_value(a,0,ev);
+    }
 
 /*     printf("Map values:\n"); */
     for (l = values; l; l = l->next) {
@@ -669,17 +544,35 @@ int df_fire_activity(df_state *state, df_activity *a)
   case OP_SPECIAL_RETURN:
     df_output_value(a,0,a->values[0]);
     break;
-  case OP_SPECIAL_PRINT:
+  case OP_SPECIAL_PRINT: {
+#if 0
 /*     printf("Program result:\n"); */
     df_value_print(g,stdout,a->values[0]);
     if ((SEQTYPE_ITEM != a->values[0]->seqtype->type) ||
         (ITEM_ATOMIC == a->values[0]->seqtype->item->kind))
       printf("\n");
 
-    debug("OP_SPECIAL_PRINT: before dereference of a->values[0]");
+    debugl("OP_SPECIAL_PRINT: before dereference of a->values[0]");
     df_value_deref(g,a->values[0]);
-    debug("OP_SPECIAL_PRINT: after dereference of a->values[0]");
+    debugl("OP_SPECIAL_PRINT: after dereference of a->values[0]");
+#endif
+
+    stringbuf *buf = stringbuf_new();
+    df_seroptions options;
+
+    memset(&options,0,sizeof(df_seroptions));
+
+    if (0 != df_serialize(g,a->values[0],buf,&options,&state->ei)) {
+      df_value_deref(g,a->values[0]);
+      return -1;
+    }
+
+    printf("%s",buf->data);
+
+    stringbuf_free(buf);
+    df_value_deref(g,a->values[0]);
     break;
+  }
   case OP_SPECIAL_SEQUENCE: {
     df_value *pair;
     assert(SEQTYPE_SEQUENCE == a->instr->outports[0].seqtype->type);
@@ -700,18 +593,16 @@ int df_fire_activity(df_state *state, df_activity *a)
   case OP_SPECIAL_DOCUMENT: {
     df_node *docnode = df_node_new(NODE_DOCUMENT);
     df_value *docval = df_value_new(a->instr->outports[0].seqtype);
-    list *values = NULL;
+    list *values = df_sequence_to_list(a->values[0]);
     docval->value.n = docnode;
     assert(0 == docval->value.n->refcount);
     docval->value.n->refcount++;
 
-    get_seq_values(a->values[0],&values);
-
     add_sequence_as_child_nodes(g,values,docnode);
 
     if (NULL != docnode->attributes) {
-      set_error_info2(&state->ei,"",0,"XTDE0420",
-                      "Attribute nodes cannot be added directly as children of a document");
+      error(&state->ei,"",0,"XTDE0420",
+            "Attribute nodes cannot be added directly as children of a document");
       df_value_deref(g,docval);
       list_free(values,NULL);
       return -1;
@@ -724,22 +615,23 @@ int df_fire_activity(df_state *state, df_activity *a)
     break;
   }
   case OP_SPECIAL_ELEMENT: {
-    list *values = NULL;
+    list *values = df_sequence_to_list(a->values[0]);
     df_value *elemvalue = df_value_new(a->instr->outports[0].seqtype);
     df_node *elem = df_node_new(NODE_ELEMENT);
     assert(a->instr->outports[0].seqtype->type == SEQTYPE_ITEM);
     assert(a->instr->outports[0].seqtype->item->kind == ITEM_ELEMENT);
-    get_seq_values(a->values[0],&values);
 
     elemvalue->value.n = elem;
     assert(0 == elemvalue->value.n->refcount);
     elemvalue->value.n->refcount++;
 
     assert(df_check_derived_atomic_type(state,a->values[1],g->string_type));
-    elem->name = strdup(a->values[1]->value.s);
+    elem->ident.name = strdup(a->values[1]->value.s);
 
     /* FIXME: namespace (should be received on an input port) - what about prefix? */
 
+    debug("OP_SPECIAL_ELEMENT %p (\"%s\"): %d items in child sequence\n",
+          elemvalue,elem->ident.name,list_count(values));
     add_sequence_as_child_nodes(g,values,elem);
 
     df_output_value(a,0,elemvalue);
@@ -759,7 +651,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     attrvalue->value.n->refcount++;
 
     assert(df_check_derived_atomic_type(state,a->values[1],g->string_type));
-    attr->name = strdup(a->values[1]->value.s);
+    attr->ident.name = strdup(a->values[1]->value.s);
     attr->value = df_construct_simple_content(g,a->values[0]);
 
     df_output_value(a,0,attrvalue);
@@ -783,28 +675,25 @@ int df_fire_activity(df_state *state, df_activity *a)
     /* FIXME */
     break;
   case OP_SPECIAL_SELECT: {
-    list *values = NULL;
+    list *values = df_sequence_to_list(a->values[0]);
     list *output = NULL;
     list *l;
-    get_seq_values(a->values[0],&values);
 
-    printf("OP_SPECIAL_SELECT firing: %d values in input sequence\n",list_count(values));
     for (l = values; l; l = l->next) {
       df_value *v = (df_value*)l->data;
       /* FIXME: raise a dynamic error here instead of asserting */
-      assert((SEQTYPE_ITEM == v->seqtype->type) && (ITEM_ATOMIC != v->seqtype->item->kind));
-/*       printf("item kind: %d\n",v->seqtype->item->kind); */
-      if ((ITEM_ELEMENT == v->seqtype->item->kind) ||
-          (ITEM_DOCUMENT == v->seqtype->item->kind)) {
-/*         printf("element name: %s\n",v->value.n->name); */
-
+      if ((SEQTYPE_ITEM != v->seqtype->type) || (ITEM_ATOMIC == v->seqtype->item->kind)) {
+        fprintf(stderr,"ERROR: non-node in select input\n");
+        assert(0);
+      }
+      if (ITEM_ATOMIC != v->seqtype->item->kind) {
         CHECK_CALL(append_matching_nodes(v->value.n,a->instr->nametest,a->instr->seqtypetest,
                                          a->instr->axis,&output))
       }
     }
 
     list_free(values,NULL);
-    df_output_value(a,0,list_to_sequence(g,output));
+    df_output_value(a,0,df_list_to_sequence(g,output));
     df_value_deref(g,a->values[0]);
     df_value_deref_list(g,output);
     list_free(output,NULL);
@@ -812,13 +701,11 @@ int df_fire_activity(df_state *state, df_activity *a)
   }
   case OP_SPECIAL_FILTER: {
 #if 0
-    list *values = NULL;
-    list *mask = NULL;
+    list *values = df_sequence_to_list(a->values[0]);
+    list *mask = df_sequence_to_list(a->values[1]);
     list *output = NULL;
     list *vl;
     list *ml;
-    get_seq_values(a->values[0],&values);
-    get_seq_values(a->values[0],&mask);
 
     assert(list_count(values) == list_count(mask));
 
@@ -834,6 +721,34 @@ int df_fire_activity(df_state *state, df_activity *a)
     }
 #endif
 
+    break;
+  }
+  case OP_SPECIAL_EMPTY:
+    df_output_value(a,0,df_value_new(a->instr->outports[0].seqtype));
+    df_value_deref(g,a->values[0]);
+    break;
+  case OP_SPECIAL_CONTAINS_NODE: {
+    list *nodevals = df_sequence_to_list(a->values[0]);
+    df_value *result = df_value_new(a->instr->outports[0].seqtype);
+    df_node *n = a->values[1]->value.n;
+    int found = 0;
+    list *l;
+    assert(SEQTYPE_ITEM == a->values[1]->seqtype->type);
+    assert(ITEM_ATOMIC != a->values[1]->seqtype->item->kind);
+
+    for (l = nodevals; l; l = l->next) {
+      df_value *nv = (df_value*)l->data;
+      assert(SEQTYPE_ITEM == nv->seqtype->type);
+      assert(ITEM_ATOMIC != nv->seqtype->item->kind);
+      if (nv->value.n == n)
+        found = 1;
+    }
+
+    result->value.b = found;
+    df_output_value(a,0,result);
+    list_free(nodevals,NULL);
+    df_value_deref(g,a->values[0]);
+    df_value_deref(g,a->values[1]);
     break;
   }
   default: {
@@ -887,22 +802,27 @@ int df_execute_network(df_state *state)
     for (l = state->activities; l; l = l->next) {
       df_activity *a = (df_activity*)l->data;
       fprintf(stderr,"[%d] %s.%d - %s\n",
-             a->actno,a->instr->fun->name,a->instr->id,df_opstr(a->instr->opcode));
+             a->actno,a->instr->fun->ident.name,a->instr->id,df_opstr(a->instr->opcode));
     }
   }
   return 0;
 }
 
-int df_execute(df_state *state, int trace, error_info *ei)
+int df_execute(df_state *state, int trace, error_info *ei, df_value *context)
 {
   df_function *mainfun;
   df_activity *print;
   df_activity *start;
-  df_value *invalue;
 
   state->trace = trace;
 
-  if (NULL == (mainfun = df_lookup_function(state,"main"))) {
+  mainfun = df_lookup_function(state,nsname_temp(GX_NAMESPACE,"main"));
+  if (NULL == mainfun)
+    mainfun = df_lookup_function(state,nsname_temp(NULL,"main"));
+  if (NULL == mainfun)
+    mainfun = df_lookup_function(state,nsname_temp(NULL,"default"));
+
+  if (NULL == mainfun) {
     fprintf(stderr,"No main function defined\n");
     return -1;
   }
@@ -919,9 +839,11 @@ int df_execute(df_state *state, int trace, error_info *ei)
 
   start = df_activate_function(state,mainfun,print,0,NULL,0);
 
-  invalue = df_value_new(state->intype);
-  invalue->value.i = 0;
-  df_set_input(start,0,invalue);
+  if (NULL == context) {
+    context = df_value_new(state->intype);
+    context->value.i = 0;
+  }
+  df_set_input(start,0,context);
 
   return df_execute_network(state);
 }
