@@ -51,7 +51,7 @@ extern char *parse_filename;
   xp_expr *expr;
   xl_snode *snode;
   int flags;
-  qname_t qname;
+  qname qn;
   int gmethod;
   int compare;
   char c;
@@ -131,6 +131,7 @@ extern char *parse_filename;
 %token MATCH
 %token JUST_EXPR
 %token JUST_SEQTYPE
+%token JUST_PATTERN
 %token RETURN
 %token FOR
 %token IN
@@ -166,6 +167,8 @@ extern char *parse_filename;
 %token ITEM
 %token ELEMENT
 %token MULTIPLY
+%token ID1
+%token KEY
 
 %token <string> NCNAME
 %token <string> STRING_LITERAL
@@ -173,7 +176,7 @@ extern char *parse_filename;
 %token <number> DECIMAL_LITERAL
 %token <number> DOUBLE_LITERAL
 
-%type <qname> QName
+%type <qn> QName
 
 %type <snode> XSLTDeclarations
 %type <snode> XSLTDeclaration
@@ -238,6 +241,15 @@ extern char *parse_filename;
 %type <expr> XSLTInstrValueOfSeparator
 %type <snode> XSLTInstrValueOf
 
+%type <expr> XSLTPattern
+%type <expr> XSLTPathPattern
+%type <expr> XSLTRelativePathPattern
+%type <expr> XSLTPatternStep
+%type <axis> XSLTPatternAxis
+%type <expr> XSLTIdKeyPattern
+%type <expr> XSLTIdValue
+%type <expr> XSLTKeyValue
+
 %type <snode> XSLTSequenceConstructor
 %type <snode> XSLTSequenceConstructors
 %type <snode> XSLTSequenceConstructorBlock
@@ -272,20 +284,22 @@ extern char *parse_filename;
 %type <expr> XPathRelativePathExpr
 %type <expr> XPathStepExpr
 %type <expr> XPathAxisStep
-%type <expr> ForwardStep
-%type <axis> ForwardAxis
-%type <expr> AbbrevForwardStep
-%type <expr> ReverseStep
-%type <axis> ReverseAxis
-%type <expr> AbbrevReverseStep
-%type <expr> NodeTest
-%type <expr> NameTest
-%type <qname> Wildcard
+%type <expr> XPathForwardStep
+%type <axis> XPathForwardAxis
+%type <expr> XPathAbbrevForwardStep
+%type <expr> XPathReverseStep
+%type <axis> XPathReverseAxis
+%type <expr> XPathAbbrevReverseStep
+%type <expr> XPathNodeTest
+%type <expr> XPathNameTest
+%type <qn> XPathWildcard
 %type <expr> XPathFilterExpr
 %type <expr> XPathPredicateList
 %type <expr> XPathPredicate
 %type <expr> XPathPrimaryExpr
 %type <expr> XPathLiteral
+%type <expr> XPathNumericLiteral
+%type <expr> XPathStringLiteral
 %type <expr> XPathVarRef
 %type <expr> XPathParenthesizedExpr
 %type <expr> XPathContextItemExpr
@@ -309,10 +323,10 @@ extern char *parse_filename;
 %type <st> XPathTextTest
 %type <st> XPathAnyKindTest
 
-%type <qname> AttribNameOrWildcard
-%type <qname> ElementNameOrWildcard
-%type <qname> TypeName
-%type <qname> VarName
+%type <qn> XPathAttribNameOrWildcard
+%type <qn> XPathElementNameOrWildcard
+%type <qn> XPathTypeName
+%type <qn> XPathVarName
 
 %%
 
@@ -361,8 +375,8 @@ XPathForExpr:
 ;
 
 XPathVarIn:
-  '$' VarName IN XPathExprSingle  { $$ = xp_expr_new(XPATH_EXPR_VAR_IN,$4,NULL);
-                                    $$->qname = $2; }
+  '$' XPathVarName IN XPathExprSingle  { $$ = xp_expr_new(XPATH_EXPR_VAR_IN,$4,NULL);
+                                    $$->qn = $2; }
 ;
 
 XPathVarInList:
@@ -525,7 +539,8 @@ XPathPathExpr:
 | SLASHSLASH XPathRelativePathExpr
                                   { xp_expr *dos;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
-                                    dos->nodetest = XPATH_NODE_TEST_ANY_KIND;
+                                    dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
+                                    dos->seqtype = df_normalize_itemnode(0);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL);
                                     $$->left = xp_expr_new(XPATH_EXPR_STEP,dos,$2); }
@@ -540,7 +555,8 @@ XPathRelativePathExpr:
                                   { xp_expr *dos;
                                     xp_expr *step1;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
-                                    dos->nodetest = XPATH_NODE_TEST_ANY_KIND;
+                                    dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
+                                    dos->seqtype = df_normalize_itemnode(0);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     step1 = xp_expr_new(XPATH_EXPR_STEP,dos,$3);
                                     $$ = xp_expr_new(XPATH_EXPR_STEP,$1,step1); }
@@ -552,19 +568,21 @@ XPathStepExpr:
 ;
 
 XPathAxisStep:
-  ForwardStep                     { $$ = $1; }
-| ForwardStep XPathPredicateList  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$1,$2); }
-| ReverseStep                     { $$ = $1; }
-| ReverseStep XPathPredicateList  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$1,$2); }
+  XPathForwardStep                { $$ = $1; }
+| XPathForwardStep XPathPredicateList
+                                  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$1,$2); }
+| XPathReverseStep                { $$ = $1; }
+| XPathReverseStep XPathPredicateList
+                                  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$1,$2); }
 ;
 
-ForwardStep:
-  ForwardAxis NodeTest            { $$ = $2;
+XPathForwardStep:
+  XPathForwardAxis XPathNodeTest  { $$ = $2;
                                     $$->axis = $1; }
-| AbbrevForwardStep               { $$ = $1; }
+| XPathAbbrevForwardStep          { $$ = $1; }
 ;
 
-ForwardAxis:
+XPathForwardAxis:
   CHILD COLONCOLON                { $$ = AXIS_CHILD; }
 | DESCENDANT COLONCOLON           { $$ = AXIS_DESCENDANT; }
 | ATTRIBUTE COLONCOLON            { $$ = AXIS_ATTRIBUTE; }
@@ -575,20 +593,20 @@ ForwardAxis:
 | NAMESPACE COLONCOLON            { $$ = AXIS_NAMESPACE; }
 ;
 
-AbbrevForwardStep:
-  NodeTest                        { $$ = $1;
+XPathAbbrevForwardStep:
+  XPathNodeTest                   { $$ = $1;
                                     $$->axis = AXIS_CHILD; }
-| '@' NodeTest                    { $$ = $2;
+| '@' XPathNodeTest               { $$ = $2;
                                     $$->axis = AXIS_ATTRIBUTE; }
 ;
 
-ReverseStep:
-  ReverseAxis NodeTest            { $$ = $2;
+XPathReverseStep:
+  XPathReverseAxis XPathNodeTest  { $$ = $2;
                                     $$->axis = $1; }
-| AbbrevReverseStep               { $$ = $1; }
+| XPathAbbrevReverseStep          { $$ = $1; }
 ;
 
-ReverseAxis:
+XPathReverseAxis:
   PARENT COLONCOLON               { $$ = AXIS_PARENT; }
 | ANCESTOR COLONCOLON             { $$ = AXIS_ANCESTOR; }
 | PRECEDING_SIBLING COLONCOLON    { $$ = AXIS_PRECEDING_SIBLING; }
@@ -596,29 +614,30 @@ ReverseAxis:
 | ANCESTOR_OR_SELF COLONCOLON     { $$ = AXIS_ANCESTOR_OR_SELF; }
 ;
 
-AbbrevReverseStep:
+XPathAbbrevReverseStep:
   DOTDOT                          { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     $$->axis = AXIS_PARENT;
-                                    $$->nodetest = XPATH_NODE_TEST_ANY_KIND; }
+                                    $$->nodetest = XPATH_NODE_TEST_SEQTYPE;
+                                    $$->seqtype = df_normalize_itemnode(0); }
 ;
 
-NodeTest:
+XPathNodeTest:
   XPathKindTest                   { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     $$->nodetest = XPATH_NODE_TEST_SEQTYPE;
                                     $$->seqtype = $1; }
-| NameTest                        { $$ = $1; }
+| XPathNameTest                        { $$ = $1; }
 ;
 
-NameTest:
+XPathNameTest:
   QName                           { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     $$->nodetest = XPATH_NODE_TEST_NAME;
-                                    $$->qname = $1; }
-| Wildcard                        { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
+                                    $$->qn = $1; }
+| XPathWildcard                        { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     $$->nodetest = XPATH_NODE_TEST_NAME;
-                                    $$->qname = $1; }
+                                    $$->qn = $1; }
 ;
 
-Wildcard:
+XPathWildcard:
   '*'                             { $$.prefix = NULL;
                                     $$.localpart = NULL; }
 | NCNAME ':' '*'                  { $$.prefix = $1;
@@ -640,7 +659,7 @@ XPathPredicateList:
 ;
 
 XPathPredicate:
-  '[' XPathExpr ']'                    { $$ = $2; }
+  '[' XPathExpr ']'               { $$ = $2; }
 ;
 
 XPathPrimaryExpr:
@@ -652,21 +671,27 @@ XPathPrimaryExpr:
 ;
 
 XPathLiteral:
+  XPathNumericLiteral             { $$ = $1; }
+| XPathStringLiteral              { $$ = $1; }
+;
 
+XPathNumericLiteral:
   INTEGER_LITERAL                 { $$ = xp_expr_new(XPATH_EXPR_INTEGER_LITERAL,NULL,NULL);
                                     $$->ival = $1; }
 | DECIMAL_LITERAL                 { $$ = xp_expr_new(XPATH_EXPR_DECIMAL_LITERAL,NULL,NULL);
                                     $$->dval = $1; }
 | DOUBLE_LITERAL                  { $$ = xp_expr_new(XPATH_EXPR_DOUBLE_LITERAL,NULL,NULL);
                                     $$->dval = $1; }
-| STRING_LITERAL                  { $$ = xp_expr_new(XPATH_EXPR_STRING_LITERAL,NULL,NULL);
+;
+
+XPathStringLiteral:
+  STRING_LITERAL                  { $$ = xp_expr_new(XPATH_EXPR_STRING_LITERAL,NULL,NULL);
                                     $$->strval = $1; }
 ;
 
-
 XPathVarRef:
-  '$' VarName                     { $$ = xp_expr_new(XPATH_EXPR_VAR_REF,NULL,NULL);
-                                    $$->qname = $2; }
+  '$' XPathVarName                     { $$ = xp_expr_new(XPATH_EXPR_VAR_REF,NULL,NULL);
+                                    $$->qn = $2; }
 ;
 
 XPathParenthesizedExpr:
@@ -689,10 +714,10 @@ XPathFunctionCallParams:
 
 XPathFunctionCall:
   QName '(' ')'                   { $$ = xp_expr_new(XPATH_EXPR_FUNCTION_CALL,NULL,NULL);
-                                    $$->qname = $1; }
+                                    $$->qn = $1; }
 | QName '(' XPathFunctionCallParams ')'
                                   { $$ = xp_expr_new(XPATH_EXPR_FUNCTION_CALL,$3,NULL);
-                                    $$->qname = $1; }
+                                    $$->qn = $1; }
 ;
 
 XPathSingleType:
@@ -721,8 +746,7 @@ XPathOccurrenceIndicator:
 XPathItemType:
   XPathAtomicType                 { $$ = $1; }
 | XPathKindTest                   { $$ = $1; }
-| ITEM '(' ')'                    { $$ = df_normalize_itemnode(1);
-                                    $$->isitem = 1; }
+| ITEM '(' ')'                    { $$ = df_normalize_itemnode(1); }
 ;
 
 XPathAtomicType:
@@ -754,14 +778,14 @@ XPathDocumentTest:
  
 XPathElementTest:
   ELEMENT '(' ')'                 { $$ = df_seqtype_new_item(ITEM_ELEMENT); }
-| ELEMENT '(' ElementNameOrWildcard ')'
+| ELEMENT '(' XPathElementNameOrWildcard ')'
                                   { $$ = df_seqtype_new_item(ITEM_ELEMENT);
                                     $$->item->localname = $3; }
-| ELEMENT '(' ElementNameOrWildcard ',' TypeName ')'
+| ELEMENT '(' XPathElementNameOrWildcard ',' XPathTypeName ')'
                                   { $$ = df_seqtype_new_item(ITEM_ELEMENT);
                                     $$->item->localname = $3;
                                     $$->item->typeref = $5; }
-| ELEMENT '(' ElementNameOrWildcard ',' TypeName '?' ')'
+| ELEMENT '(' XPathElementNameOrWildcard ',' XPathTypeName '?' ')'
                                   { $$ = df_seqtype_new_item(ITEM_ELEMENT);
                                     $$->item->localname = $3;
                                     $$->item->typeref = $5;
@@ -770,10 +794,10 @@ XPathElementTest:
 
 XPathAttributeTest:
   ATTRIBUTE '(' ')'               { $$ = df_seqtype_new_item(ITEM_ATTRIBUTE); }
-| ATTRIBUTE '(' AttribNameOrWildcard ')'
+| ATTRIBUTE '(' XPathAttribNameOrWildcard ')'
                                   { $$ = df_seqtype_new_item(ITEM_ATTRIBUTE);
                                     $$->item->localname = $3; }
-| ATTRIBUTE '(' AttribNameOrWildcard ',' TypeName ')'
+| ATTRIBUTE '(' XPathAttribNameOrWildcard ',' XPathTypeName ')'
                                   { $$ = df_seqtype_new_item(ITEM_ATTRIBUTE);
                                     $$->item->localname = $3;
                                     $$->item->typeref = $5; }
@@ -813,27 +837,26 @@ XPathTextTest:
 ;
 
 XPathAnyKindTest:
-  NODE '(' ')'                    { $$ = df_normalize_itemnode(0);
-                                    $$->isnode = 1; }
+  NODE '(' ')'                    { $$ = df_normalize_itemnode(0); }
 ;
 
-AttribNameOrWildcard:
+XPathAttribNameOrWildcard:
   QName                           { $$ = $1; }
 | '*'                             { $$.prefix = NULL;
                                     $$.localpart = NULL; }
 ;
 
-ElementNameOrWildcard:
+XPathElementNameOrWildcard:
   QName                           { $$ = $1; }
 | '*'                             { $$.prefix = NULL;
                                     $$.localpart = NULL; }
 ;
 
-TypeName:
+XPathTypeName:
   QName                           { $$ = $1; }
 ;
 
-VarName:
+XPathVarName:
   QName                           { $$ = $1; }
 ;
 
@@ -957,20 +980,20 @@ XSLTParamOptions:
 
 XSLTParamNameValueOptions:
   '$' QName XSLTParamOptions      { $$ = xl_snode_new(XSLT_PARAM);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->flags = $3; }
 | '$' QName '=' XPathExprSingle XSLTParamOptions
                                   { $$ = xl_snode_new(XSLT_PARAM);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->select = $4;
                                     $$->flags = $5; }
 | '$' QName '=' '{' '}' XSLTParamOptions
                                   { $$ = xl_snode_new(XSLT_PARAM);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->flags = $6; }
 | '$' QName '=' '{' XSLTSequenceConstructors '}' XSLTParamOptions
                                   { $$ = xl_snode_new(XSLT_PARAM);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->child = $5;
                                     $$->flags = $7; }
 ;
@@ -1029,23 +1052,24 @@ XSLTTransform:
   TRANSFORM '{' XSLTDeclarations '}'
                                   { $$ = parse_tree = xl_snode_new(XSLT_TRANSFORM);
                                     $$->child = $3;
-                                    ns_add($$->namespaces,XSLT_NAMESPACE,"xsl");
-                                    ns_add($$->namespaces,XHTML_NAMESPACE,"xhtml"); }
+                                    ns_add_direct($$->namespaces,XSLT_NAMESPACE,"xsl");
+                                    ns_add_direct($$->namespaces,XHTML_NAMESPACE,"xhtml"); }
 | JUST_EXPR XPathExpr             { parse_expr = $2; }
+| JUST_PATTERN XSLTPattern        { parse_expr = $2; }
 | JUST_SEQTYPE XPathSequenceType  { parse_seqtype = $2; }
 ;
 
 XSLTVariableNameValue:
   '$' QName                       { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 | '$' QName '=' XPathExprSingle   { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2; 
+                                    $$->qn = $2; 
                                     $$->select = $4; }
 | '$' QName '=' '{' '}'           { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2;  }
+                                    $$->qn = $2;  }
 | '$' QName '=' '{' XSLTSequenceConstructors '}'
                                   { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2; 
+                                    $$->qn = $2; 
                                     $$->child = $5; }
 ;
 
@@ -1071,13 +1095,13 @@ XSLTWhens:
 
 XSLTWithParamNameValue:
   '$' QName '=' XPathExprSingle   { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2; 
+                                    $$->qn = $2; 
                                     $$->select = $4; }
 | '$' QName '=' '{' '}'           { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2;  }
+                                    $$->qn = $2;  }
 | '$' QName '=' '{' XSLTSequenceConstructors '}'
                                   { $$ = xl_snode_new(XSLT_VARIABLE);
-                                    $$->qname = $2; 
+                                    $$->qn = $2; 
                                     $$->child = $5; }
 ;
 
@@ -1140,25 +1164,25 @@ XSLTDeclDecimalFormat:
 XSLTDeclFunction:
   FUNCTION QName XSLTFormalParams XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_FUNCTION);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3;
                                     $$->child = $4; }
 | FUNCTION QName XSLTFormalParams OVERRIDE XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_FUNCTION);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3;
                                     $$->flags = FLAG_OVERRIDE;
                                     $$->child = $5; }
 | XPathSequenceType QName XSLTFormalParams XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_FUNCTION);
                                     $$->seqtype = $1;
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3;
                                     $$->child = $4; }
 | XPathSequenceType QName XSLTFormalParams OVERRIDE XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_FUNCTION);
                                     $$->seqtype = $1;
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3;
                                     $$->flags = FLAG_OVERRIDE;
                                     $$->child = $5; }
@@ -1197,11 +1221,11 @@ XSLTDeclStripSpace:
 XSLTDeclTemplate:
   TEMPLATE QName XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_TEMPLATE);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->child = $3; }
 | TEMPLATE QName XSLTFormalParams XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_TEMPLATE);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3;
                                     $$->child = $4; }
 | TEMPLATE MATCH '(' XPathExpr ')' XSLTSequenceConstructorBlock
@@ -1210,7 +1234,7 @@ XSLTDeclTemplate:
                                     $$->child = $6; }
 | TEMPLATE QName MATCH '(' XPathExpr ')' XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_TEMPLATE);
-                                    $$->qname = $2; 
+                                    $$->qn = $2; 
                                     $$->select = $5; 
                                     $$->child = $7; }
 | TEMPLATE XSLTFormalParams MATCH '(' XPathExpr ')' XSLTSequenceConstructorBlock
@@ -1220,7 +1244,7 @@ XSLTDeclTemplate:
                                     $$->child = $7; }
 | TEMPLATE QName XSLTFormalParams MATCH '(' XPathExpr ')' XSLTSequenceConstructorBlock
                                   { $$ = xl_snode_new(XSLT_DECL_TEMPLATE);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $3; 
                                     $$->select = $6; 
                                     $$->child = $8; }
@@ -1305,7 +1329,7 @@ XSLTInstrApplyTemplates:
 
 XSLTInstrAttributeName:
   '#' QName                       { $$ = xl_snode_new(XSLT_INSTR_ATTRIBUTE);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 | '#' '(' XPathExpr ')'                { $$ = xl_snode_new(XSLT_INSTR_ATTRIBUTE);
                                     $$->name_expr = $3; }
 ;
@@ -1322,12 +1346,12 @@ XSLTInstrAttribute:
 
 XSLTInstrCallTemplate:
   CALL_TEMPLATE QName ';'         { $$ = xl_snode_new(XSLT_INSTR_CALL_TEMPLATE);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 | CALL_TEMPLATE QName '(' ')' ';' { $$ = xl_snode_new(XSLT_INSTR_CALL_TEMPLATE);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 | CALL_TEMPLATE QName '(' XSLTWithParams ')' ';'
                                   { $$ = xl_snode_new(XSLT_INSTR_CALL_TEMPLATE);
-                                    $$->qname = $2;
+                                    $$->qn = $2;
                                     $$->param = $4; }
 ;
 
@@ -1367,7 +1391,7 @@ XSLTInstrCopyOf:
 
 XSLTInstrElementName:
   '%' QName                       { $$ = xl_snode_new(XSLT_INSTR_ELEMENT);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 | '%' '(' XPathExpr ')'           { $$ = xl_snode_new(XSLT_INSTR_ELEMENT);
                                     $$->name_expr = $3; }
 ;
@@ -1527,7 +1551,7 @@ XSLTInstrPerformSort:
   with the PI nodetest in XPAth */
 XSLTInstrProcessingInstructionName:
   INSERT_PROCESSING_INSTRUCTION QName    { $$ = xl_snode_new(XSLT_INSTR_PROCESSING_INSTRUCTION);
-                                    $$->qname = $2; }
+                                    $$->qn = $2; }
 
 | INSERT_PROCESSING_INSTRUCTION '(' XPathExpr ')'
                                   { $$ = xl_snode_new(XSLT_INSTR_PROCESSING_INSTRUCTION);
@@ -1583,6 +1607,86 @@ XSLTInstrValueOf:
 
 
 
+
+
+
+
+
+XSLTPattern:
+  XSLTPathPattern                 { $$ = $1; }
+| XSLTPattern '|' XSLTPathPattern { $$ = xp_expr_new(XPATH_EXPR_UNION2,$1,$3); }
+;
+
+XSLTPathPattern:
+  XSLTRelativePathPattern         { $$ = $1 }
+| '/'                             { $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL); }
+| '/' XSLTRelativePathPattern     { $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL);
+                                    $$->left = $2; }
+| SLASHSLASH XSLTRelativePathPattern
+                                  { xp_expr *dos;
+                                    dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
+                                    dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
+                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->axis = AXIS_DESCENDANT_OR_SELF;
+                                    $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL);
+                                    $$->left = xp_expr_new(XPATH_EXPR_STEP,dos,$2); }
+| XSLTIdKeyPattern                { $$ = NULL; /* FIXME */ }
+| XSLTIdKeyPattern '/' XSLTRelativePathPattern
+                                  { $$ = NULL; /* FIXME */ }
+| XSLTIdKeyPattern SLASHSLASH XSLTRelativePathPattern
+                                  { $$ = NULL; /* FIXME */ }
+;
+
+XSLTRelativePathPattern:
+  XSLTPatternStep                 { $$ = $1; }
+| XSLTPatternStep '/' XSLTRelativePathPattern
+                                  { $$ = xp_expr_new(XPATH_EXPR_STEP,$1,$3); }
+
+| XSLTPatternStep SLASHSLASH XSLTRelativePathPattern
+                                  { xp_expr *dos;
+                                    xp_expr *step1;
+                                    dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
+                                    dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
+                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->axis = AXIS_DESCENDANT_OR_SELF;
+                                    step1 = xp_expr_new(XPATH_EXPR_STEP,dos,$3);
+                                    $$ = xp_expr_new(XPATH_EXPR_STEP,$1,step1); }
+;
+
+XSLTPatternStep:
+  XPathNodeTest                   { $$ = $1;
+                                    $$->axis = AXIS_CHILD; }
+| XPathNodeTest XPathPredicateList
+                                  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$1,$2);
+                                    $$->axis = AXIS_CHILD; }
+| XSLTPatternAxis XPathNodeTest   { $$ = $2;
+                                    $$->axis = $1; }
+| XSLTPatternAxis XPathNodeTest XPathPredicateList
+                                  { $$ = xp_expr_new(XPATH_EXPR_FILTER,$2,$3);
+                                    $$->axis = $1; }
+;
+
+XSLTPatternAxis:
+  CHILD COLONCOLON                { $$ = AXIS_CHILD; }
+| ATTRIBUTE COLONCOLON            { $$ = AXIS_ATTRIBUTE }
+| '@'                             { $$ = AXIS_ATTRIBUTE }
+;
+
+XSLTIdKeyPattern:
+  ID1 '(' XSLTIdValue ')'         { $$ = NULL; /* FIXME */ }
+| KEY '(' XPathStringLiteral ',' XSLTKeyValue ')'
+                                  { $$ = NULL; /* FIXME */ }
+;
+
+XSLTIdValue:
+  XPathStringLiteral              { $$ = NULL; /* FIXME */ }
+| XPathVarRef                     { $$ = NULL; /* FIXME */ }
+;
+
+XSLTKeyValue:
+  XPathLiteral                    { $$ = NULL; /* FIXME */ }
+| XPathVarRef                     { $$ = NULL; /* FIXME */ }
+;
 
 
 
@@ -1686,7 +1790,7 @@ XSLTImports:
 int yyerror(const char *err)
 {
   if (parse_ei)
-    set_error_info2(parse_ei,parse_filename,parse_firstline+lex_lineno,NULL,"%s",err);
+    error(parse_ei,parse_filename,parse_firstline+lex_lineno,NULL,"%s",err);
   else if (parse_errstr)
     fprintf(stderr,"Parse error at line %d%s: %s\n",parse_firstline+lex_lineno,parse_errstr,err);
   else
