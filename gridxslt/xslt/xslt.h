@@ -26,6 +26,7 @@
 #include "xpath.h"
 #include "util/namespace.h"
 #include "util/xmlutils.h"
+#include "util/list.h"
 #include "dataflow/sequencetype.h"
 
 #define XSLT_DECLARATION                  0
@@ -133,8 +134,8 @@ struct xl_snode {
 
   ns_map *namespaces;
 
-  qname_t qname;
-  qname_t mode;
+  qname qn;
+  qname mode;
   df_seqtype *seqtype;
   int gmethod;
   char *strval;
@@ -142,18 +143,23 @@ struct xl_snode {
   int defline; /* FIXME: set this during parsing */
   char *deffilename;
 
-  char *name;
-  char *ns;
+  char *uri;
+
+  nsname ident;
+
+  int templateno;
+  struct template *tmpl;
 
   struct df_outport *outp;
+  list *templates;
 };
 
 xl_snode *xl_snode_new(int type);
 void xl_snode_free(xl_snode *sn);
 void xl_snode_set_parent(xl_snode *first, xl_snode *parent);
 int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_info *ei);
-xl_snode *xl_snode_resolve_var(xl_snode *from, qname_t varname);
-void xp_expr_resolve_var(xp_expr *from, qname_t varname, xp_expr **defexpr, xl_snode **defnode);
+xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname);
+void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode);
 
 int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
                     xp_expr **expr, xl_snode **sn, df_seqtype **st);
