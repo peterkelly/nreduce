@@ -35,18 +35,18 @@ Schema
       Simple content
       (built-in type string)
       (built-in type string)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         minLength=6
       (built-in type token)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         maxLength=8
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:

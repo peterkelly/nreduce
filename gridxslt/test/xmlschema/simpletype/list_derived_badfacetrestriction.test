@@ -20,6 +20,6 @@ testxmlschema
   </xsd:simpleType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:13: error: "3" is not a valid restriction of "4" for the minLength facet (XML Schema Part 2: Datatypes Second Edition, section 3.14.6)
+runtests.tmp/input.xml:13: error structures-3.14.6: "3" is not a valid restriction of "4" for the minLength facet
 ================================== RETURN CODE =================================
 1

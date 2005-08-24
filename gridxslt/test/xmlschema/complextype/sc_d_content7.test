@@ -51,18 +51,18 @@ Schema
               Disallowed substitutions: 
               Substitution group exclusions: 
               (built-in type anyType)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         minLength=4
       (built-in type string)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         maxLength=8
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:

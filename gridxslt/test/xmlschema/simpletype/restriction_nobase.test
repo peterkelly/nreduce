@@ -10,6 +10,6 @@ testxmlschema
   </xsd:simpleType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error: <restriction> must have either the "base" attribute set, or a <simpleType> child (XML Schema Part 2: Datatypes Second Edition, section 3.14.4)
+runtests.tmp/input.xml:4: error structures-3.14.4: <restriction> must have either the "base" attribute set, or a <simpleType> child
 ================================== RETURN CODE =================================
 1

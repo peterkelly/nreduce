@@ -36,34 +36,34 @@ Schema
     Complex type ct2
       Simple content
       (built-in type anyType)
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:
           minLength=4
         (built-in type string)
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:
           pattern=abcde
-        Simple type (unnamed)
+        Simple type 
           Type: restriction
           Variety: atomic
           Locally declared facets:
             minLength=4
           (built-in type string)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         maxLength=8
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:
           pattern=abcde
-        Simple type (unnamed)
+        Simple type 
           Type: restriction
           Variety: atomic
           Locally declared facets:
@@ -72,18 +72,18 @@ Schema
   Complex type ct2
     Simple content
     (built-in type anyType)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         minLength=4
       (built-in type string)
-    Simple type (unnamed)
+    Simple type 
       Type: restriction
       Variety: atomic
       Locally declared facets:
         pattern=abcde
-      Simple type (unnamed)
+      Simple type 
         Type: restriction
         Variety: atomic
         Locally declared facets:

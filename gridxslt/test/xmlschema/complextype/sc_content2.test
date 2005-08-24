@@ -26,6 +26,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: ct2 cannot be restricted with simple content, because it does not have its "mixed" attribute set to "true" (XML Schema Part 2: Datatypes Second Edition, section 3.4.2)
+runtests.tmp/input.xml:3: error structures-3.4.2: ct2 cannot be restricted with simple content, because it does not have its "mixed" attribute set to "true"
 ================================== RETURN CODE =================================
 1

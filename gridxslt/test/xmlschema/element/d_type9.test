@@ -21,7 +21,7 @@ Schema
     Nillable: false
     Disallowed substitutions: 
     Substitution group exclusions: 
-    Simple type (unnamed)
+    Simple type 
       Type: list
       Variety: list
       Locally declared facets:

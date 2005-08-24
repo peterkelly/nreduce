@@ -11,6 +11,6 @@ testxmlschema
   </xsd:simpleType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: An atomic type must be ultimately derived from a built-in primitive type (XML Schema Part 2: Datatypes Second Edition, section 3.14.6)
+runtests.tmp/input.xml:3: error structures-3.14.6: An atomic type must be ultimately derived from a built-in primitive type
 ================================== RETURN CODE =================================
 1

@@ -27,6 +27,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:7: error rcase-NSSubset.2: Element wildcard is not a valid restriction of the corresponding wildcard in the base type, because the it's namespace constraint is not an intensional subset of the base wildcard's
+runtests.tmp/input.xml:7: error rcase-NSSubset.2: Element wildcard is not a valid restriction of the corresponding wildcard in the base type, because its namespace constraint is not an intensional subset of the base wildcard's
 ================================== RETURN CODE =================================
 1

@@ -22,6 +22,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: A complex type with simple content cannot extend a complex type with complex content (XML Schema Part 2: Datatypes Second Edition, section 3.4.2)
+runtests.tmp/input.xml:3: error structures-3.4.2: A complex type with simple content cannot extend a complex type with complex content
 ================================== RETURN CODE =================================
 1
