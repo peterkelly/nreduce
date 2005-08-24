@@ -24,8 +24,9 @@
 #define _DATAFLOW_ENGINE_H
 
 #include "dataflow.h"
+#include "sequencetype.h"
 #include "util/xmlutils.h"
 
-int df_execute(df_state *state, int trace, error_info *ei);
+int df_execute(df_state *state, int trace, error_info *ei, df_value *context);
 
 #endif /* _DATAFLOW_ENGINE_H */
