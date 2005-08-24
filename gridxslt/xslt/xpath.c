@@ -26,6 +26,7 @@
 #include "xslt.h"
 #include "util/namespace.h"
 #include "util/macros.h"
+#include "util/debug.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -95,12 +96,16 @@ xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right)
   return xp;
 }
 
-xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei)
+xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei,
+                       int pattern)
 {
   int r;
-  char *source = (char*)malloc(strlen("__just_expr ")+strlen(str)+1);
+  char *source = (char*)malloc(strlen("__just_pattern ")+strlen(str)+1);
   xp_expr *expr = NULL;
-  sprintf(source,"__just_expr %s",str);
+  if (pattern)
+    sprintf(source,"__just_pattern %s",str);
+  else
+    sprintf(source,"__just_expr %s",str);
   r = parse_xl_syntax(source,filename,baseline,ei,&expr,NULL,NULL);
   free(source);
   if (0 != r)
@@ -133,6 +138,9 @@ void xp_expr_free(xp_expr *xp)
     xp_expr_free(xp->right);
   if (NULL != xp->seqtype)
     df_seqtype_deref(xp->seqtype);
+  qname_free(xp->qn);
+  qname_free(xp->type_qname);
+  nsname_free(xp->ident);
   free(xp);
 }
 
@@ -153,7 +161,17 @@ int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *
 {
   assert(e->stmt);
 
-/*   printf("xp_expr_resolve: %s\n",xp_expr_types[e->type]); */
+  assert(NULL == e->ident.name);
+  assert(NULL == e->ident.ns);
+
+  if (!qname_isnull(e->qn)) {
+    e->ident = qname_to_nsname(e->stmt->namespaces,e->qn);
+    if (nsname_isnull(e->ident))
+      return error(ei,filename,e->defline,"XPST0081",
+                   "Could not resolve namespace for prefix \"%s\"",e->qn.prefix);
+  }
+
+
   if (NULL != e->conditional)
     CHECK_CALL(xp_expr_resolve(e->conditional,s,filename,ei))
   if (NULL != e->left)
@@ -170,40 +188,38 @@ int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *
 void print_binary_expr(stringbuf *buf, xp_expr *expr, char *op)
 {
   xp_expr_serialize(buf,expr->left,1);
-  stringbuf_printf(buf," %s ",op);
+  stringbuf_format(buf," %s ",op);
   xp_expr_serialize(buf,expr->right,1);
 }
 
-void print_qname(stringbuf *buf, qname_t qname)
+void print_qname(stringbuf *buf, qname qn)
 {
   /* FIXME: make sure we're printing "*" when we're supposed to (wildcards); below just supports
      the case of localpart="*" */
-  if (qname.prefix)
-    stringbuf_printf(buf,"%s:%s",qname.prefix,qname.localpart);
-  else if (!qname.localpart)
-    stringbuf_printf(buf,"*",qname.localpart);
+  if (qname_isnull(qn))
+    stringbuf_format(buf,"*");
   else
-    stringbuf_printf(buf,"%s",qname.localpart);
+    stringbuf_format(buf,"%#n",qn);
 }
 
-void print_qname_or_double_wildcard(stringbuf *buf, qname_t qname)
+void print_qname_or_double_wildcard(stringbuf *buf, qname qn)
 {
-  if (qname.prefix)
-    stringbuf_printf(buf,"%s:",qname.prefix);
+  if (qn.prefix)
+    stringbuf_format(buf,"%s:",qn.prefix);
   else
-    stringbuf_printf(buf,"*:");
-  if (qname.localpart)
-    stringbuf_printf(buf,"%s",qname.localpart);
+    stringbuf_format(buf,"*:");
+  if (qn.localpart)
+    stringbuf_format(buf,"%s",qn.localpart);
   else
-    stringbuf_printf(buf,"*");
+    stringbuf_format(buf,"*");
 }
 
-void print_qname_or_wildcard(stringbuf *buf, qname_t qname)
+void print_qname_or_wildcard(stringbuf *buf, qname qn)
 {
-  if ((NULL == qname.prefix) && (NULL == qname.localpart))
-    stringbuf_printf(buf,"*");
+  if ((NULL == qn.prefix) && (NULL == qn.localpart))
+    stringbuf_format(buf,"*");
   else
-    print_qname(buf,qname);
+    print_qname(buf,qn);
 }
 
 
@@ -217,35 +233,35 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     assert(0);
     break;
   case XPATH_EXPR_FOR:
-    stringbuf_printf(buf,"for ");
+    stringbuf_format(buf,"for ");
     xp_expr_serialize(buf,e->conditional,1);
-    stringbuf_printf(buf," return ");
+    stringbuf_format(buf," return ");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_SOME:
-    stringbuf_printf(buf,"some ");
+    stringbuf_format(buf,"some ");
     xp_expr_serialize(buf,e->conditional,1);
-    stringbuf_printf(buf," satisfies ");
+    stringbuf_format(buf," satisfies ");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_EVERY:
-    stringbuf_printf(buf,"every ");
+    stringbuf_format(buf,"every ");
     xp_expr_serialize(buf,e->conditional,1);
-    stringbuf_printf(buf," satisfies ");
+    stringbuf_format(buf," satisfies ");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_IF:
-    stringbuf_printf(buf,"if (");
+    stringbuf_format(buf,"if (");
     xp_expr_serialize(buf,e->conditional,1);
-    stringbuf_printf(buf,") then ");
+    stringbuf_format(buf,") then ");
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf," else ");
+    stringbuf_format(buf," else ");
     xp_expr_serialize(buf,e->right,1);
     break;
   case XPATH_EXPR_VAR_IN:
-    stringbuf_printf(buf,"$");
-    print_qname(buf,e->qname);
-    stringbuf_printf(buf," in ");
+    stringbuf_format(buf,"$");
+    print_qname(buf,e->qn);
+    stringbuf_format(buf," in ");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_OR:
@@ -355,7 +371,7 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     break;
   case XPATH_EXPR_INSTANCE_OF:
     xp_expr_serialize(buf,e->left,0);
-    stringbuf_printf(buf," instance of ");
+    stringbuf_format(buf," instance of ");
     df_seqtype_print_xpath(buf,e->seqtype,e->stmt->namespaces);
     break;
   case XPATH_EXPR_TREAT:
@@ -368,11 +384,11 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     /* FIXME */
     break;
   case XPATH_EXPR_UNARY_MINUS:
-    stringbuf_printf(buf,"-");
+    stringbuf_format(buf,"-");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_UNARY_PLUS:
-    stringbuf_printf(buf,"+");
+    stringbuf_format(buf,"+");
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_ROOT:
@@ -382,32 +398,33 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     break;
   case XPATH_EXPR_STRING_LITERAL:
     /* FIXME: quote ' (and other?) characters inside string */
-    stringbuf_printf(buf,"'%s'",e->strval);
+    stringbuf_format(buf,"'%s'",e->strval);
     break;
   case XPATH_EXPR_INTEGER_LITERAL:
-    stringbuf_printf(buf,"%d",e->ival);
+    stringbuf_format(buf,"%d",e->ival);
     break;
   case XPATH_EXPR_DECIMAL_LITERAL:
-    stringbuf_printf(buf,"%f",e->dval);
+    stringbuf_format(buf,"%f",e->dval);
     break;
   case XPATH_EXPR_DOUBLE_LITERAL:
-    stringbuf_printf(buf,"%f",e->dval);
+    stringbuf_format(buf,"%f",e->dval);
     break;
   case XPATH_EXPR_VAR_REF:
-    stringbuf_printf(buf,"$");
-    print_qname(buf,e->qname);
+    stringbuf_format(buf,"$");
+    print_qname(buf,e->qn);
     break;
   case XPATH_EXPR_EMPTY:
     break;
   case XPATH_EXPR_CONTEXT_ITEM:
-    stringbuf_printf(buf,".");
+    stringbuf_format(buf,".");
     break;
   case XPATH_EXPR_NODE_TEST:
 
     if ((AXIS_PARENT == e->axis) &&
-        (XPATH_NODE_TEST_ANY_KIND == e->nodetest)) {
+        (XPATH_NODE_TEST_SEQTYPE == e->nodetest) &&
+        (e->seqtype->isnode)) {
       /* abbreviated form .. for parent::node() */
-      stringbuf_printf(buf,"..");
+      stringbuf_format(buf,"..");
     }
     else {
 
@@ -416,41 +433,41 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
         /* nothing, since child is default axis */
         break;
       case AXIS_DESCENDANT:
-        stringbuf_printf(buf,"descendant::");
+        stringbuf_format(buf,"descendant::");
         break;
       case AXIS_ATTRIBUTE:
         /* use abbreviation @ instead of attribute:: */
-        stringbuf_printf(buf,"@");
+        stringbuf_format(buf,"@");
         break;
       case AXIS_SELF:
-        stringbuf_printf(buf,"self::");
+        stringbuf_format(buf,"self::");
         break;
       case AXIS_DESCENDANT_OR_SELF:
-        stringbuf_printf(buf,"descendant-or-self::");
+        stringbuf_format(buf,"descendant-or-self::");
         break;
       case AXIS_FOLLOWING_SIBLING:
-        stringbuf_printf(buf,"following-sibling::");
+        stringbuf_format(buf,"following-sibling::");
         break;
       case AXIS_FOLLOWING:
-        stringbuf_printf(buf,"following::");
+        stringbuf_format(buf,"following::");
         break;
       case AXIS_NAMESPACE:
-        stringbuf_printf(buf,"namespace::");
+        stringbuf_format(buf,"namespace::");
         break;
       case AXIS_PARENT:
-        stringbuf_printf(buf,"parent::");
+        stringbuf_format(buf,"parent::");
         break;
       case AXIS_ANCESTOR:
-        stringbuf_printf(buf,"ancestor::");
+        stringbuf_format(buf,"ancestor::");
         break;
       case AXIS_PRECEDING_SIBLING:
-        stringbuf_printf(buf,"preceding-sibling::");
+        stringbuf_format(buf,"preceding-sibling::");
         break;
       case AXIS_PRECEDING:
-        stringbuf_printf(buf,"preceding::");
+        stringbuf_format(buf,"preceding::");
         break;
       case AXIS_ANCESTOR_OR_SELF:
-        stringbuf_printf(buf,"ancestor-or-self::");
+        stringbuf_format(buf,"ancestor-or-self::");
         break;
       default:
         fprintf(stderr,"unknown axis %d\n",e->axis);
@@ -459,47 +476,7 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
       }
       switch (e->nodetest) {
       case XPATH_NODE_TEST_NAME:
-        print_qname(buf,e->qname);
-        break;
-#if 0
-      case XPATH_NODE_TEST_DOCUMENT:
-        stringbuf_printf(buf,"document-node(");
-        if (e->left)
-          xp_expr_serialize(buf,e->left,1);
-        stringbuf_printf(buf,")");
-        break;
-      case XPATH_NODE_TEST_ELEMENT:
-        stringbuf_printf(buf,"element(");
-        print_qname_or_wildcard(buf,e->qname);
-        stringbuf_printf(buf,")");
-        break;
-      case XPATH_NODE_TEST_ATTRIBUTE:
-        stringbuf_printf(buf,"attribute(");
-        print_qname_or_wildcard(buf,e->qname);
-        stringbuf_printf(buf,")");
-        break;
-      case XPATH_NODE_TEST_SCHEMA_ELEMENT:
-        stringbuf_printf(buf,"schema-element(");
-        print_qname(buf,e->qname);
-        stringbuf_printf(buf,")");
-        break;
-      case XPATH_NODE_TEST_SCHEMA_ATTRIBUTE:
-        stringbuf_printf(buf,"schema-attribute(");
-        print_qname(buf,e->qname);
-        stringbuf_printf(buf,")");
-        break;
-      case XPATH_NODE_TEST_PI:
-        stringbuf_printf(buf,"processing-instruction()");
-        break;
-      case XPATH_NODE_TEST_COMMENT:
-        stringbuf_printf(buf,"comment()");
-        break;
-      case XPATH_NODE_TEST_TEXT:
-        stringbuf_printf(buf,"text()");
-        break;
-#endif
-      case XPATH_NODE_TEST_ANY_KIND:
-        stringbuf_printf(buf,"node()");
+        print_qname(buf,e->qn);
         break;
       case XPATH_NODE_TEST_SEQTYPE:
         /* FIXME */
@@ -515,16 +492,16 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     xp_expr_serialize(buf,e->left,0);
     break;
   case XPATH_EXPR_FUNCTION_CALL:
-    print_qname(buf,e->qname);
-    stringbuf_printf(buf,"(");
+    print_qname(buf,e->qn);
+    stringbuf_format(buf,"(");
     if (e->left)
       xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,")");
+    stringbuf_format(buf,")");
     break;
   case XPATH_EXPR_PAREN:
-    stringbuf_printf(buf,"(");
+    stringbuf_format(buf,"(");
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,")");
+    stringbuf_format(buf,")");
     break;
 
   case XPATH_EXPR_ATOMIC_TYPE:
@@ -535,22 +512,22 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     break;
   case XPATH_EXPR_SEQUENCE:
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,", ");
+    stringbuf_format(buf,", ");
     xp_expr_serialize(buf,e->right,1);
     break;
   case XPATH_EXPR_STEP:
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,"/");
+    stringbuf_format(buf,"/");
     xp_expr_serialize(buf,e->right,1);
     break;
   case XPATH_EXPR_VARINLIST:
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,", ");
+    stringbuf_format(buf,", ");
     xp_expr_serialize(buf,e->right,1);
     break;
   case XPATH_EXPR_PARAMLIST:
     xp_expr_serialize(buf,e->left,1);
-    stringbuf_printf(buf,", ");
+    stringbuf_format(buf,", ");
     xp_expr_serialize(buf,e->right,1);
     break;
   case XPATH_EXPR_FILTER:
@@ -564,25 +541,22 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
   }
 /*   for (f = e->filter; f; f = f->filter) { */
 /*     xp_expr *x = f->filter; */
-/*     stringbuf_printf(buf,"["); */
+/*     stringbuf_format(buf,"["); */
 /*     f->filter = NULL; */
 /*     xp_expr_serialize(buf,f,1); */
 /*     f->filter = x; */
-/*     stringbuf_printf(buf,"]"); */
+/*     stringbuf_format(buf,"]"); */
 /*   } */
 
 
 
 /*   if (brackets) */
-/*     stringbuf_printf(buf,")"); */
+/*     stringbuf_format(buf,")"); */
 }
 
 void xp_expr_print_tree(xp_expr *e, int indent)
 {
-  int i;
-  for (i = 0; i < indent; i++)
-    printf("  ");
-  printf("%s\n",xp_expr_types[e->type]);
+  print("%p %#i%s %#n\n",e,2*indent,xp_expr_types[e->type],e->ident);
   if (e->conditional)
     xp_expr_print_tree(e->conditional,indent+1);
   if (e->left)
@@ -591,3 +565,19 @@ void xp_expr_print_tree(xp_expr *e, int indent)
     xp_expr_print_tree(e->right,indent+1);
 }
 
+/*
+
+  @implements(xpath20:id-normative-references-1) status { info } @end
+  @implements(xpath20:id-non-normative-references-1) status { info } @end
+  @implements(xpath20:id-background-material-1) status { info } @end
+
+  @implements(xpath20:id-glossary-1) status { info } @end
+
+  @implements(xpath20:id-revisions-log-1) status { info } @end
+  @implements(xpath20:N14CF6-1) status { info } @end
+  @implements(xpath20:N14D62-1) status { info } @end
+  @implements(xpath20:N14DA3-1) status { info } @end
+  @implements(xpath20:N14DBC-1) status { info } @end
+  @implements(xpath20:N14DD9-1) status { info } @end
+
+*/
