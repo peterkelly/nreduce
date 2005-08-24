@@ -28,25 +28,27 @@
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/uri.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
 
-static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
+#define ALLOWED_ATTRIBUTES(_node,...) \
+      CHECK_CALL(enforce_allowed_attributes(ei,filename,(_node),standard_attributes, \
+                                            __VA_ARGS__,NULL))
+#define REQUIRED_ATTRIBUTE(_node,_name) \
+      if (!xmlHasNsProp((_node),(_name),NULL)) \
+        return missing_attribute2(ei,filename,(_node)->line,NULL,(_name));
+
+static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr doc,
                                        error_info *ei, const char *filename);
 
-static const char *reserved_namespaces[7] = {
-  XSLT_NAMESPACE,
-  FN_NAMESPACE,
-  XML_NAMESPACE,
-  XS_NAMESPACE,
-  XDT_NAMESPACE,
-  XSI_NAMESPACE,
-  NULL
-};
-
-static const nsname_t standard_attributes[13] = {
+/* FIXME: should also allow xml:id (and others, e.g. XML Schema instance?) */
+/* Should we really enforece the absence of attributes from other namespaces? Probably not
+   strictly necessary and it may restrict other uses of the element trees which rely on
+   the ability to add their own attributes */
+static const nsname standard_attributes[13] = {
   { XSLT_NAMESPACE, "version" },
   { XSLT_NAMESPACE, "exclude-result-prefixes" },
   { XSLT_NAMESPACE, "extension-element-prefixes" },
@@ -62,18 +64,27 @@ static const nsname_t standard_attributes[13] = {
   { NULL, NULL }
 };
 
-void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node);
 
-static void xs_skip_others(xmlNodePtr *c)
+static void xslt_skip_others(xmlNodePtr *c)
 {
-  while ((*c) && (XML_COMMENT_NODE == (*c)->type))
+  while ((*c) &&
+         ((XML_COMMENT_NODE == (*c)->type) ||
+          (XML_PI_NODE == (*c)->type) ||
+          ((XML_TEXT_NODE == (*c)->type) && is_all_whitespace((*c)->content))))
     (*c) = (*c)->next;
 }
 
 static void xslt_next_element(xmlNodePtr *c)
 {
   *c = (*c)->next;
-  xs_skip_others(c);
+  xslt_skip_others(c);
+}
+
+static xmlNodePtr xslt_first_child(xmlNodePtr n)
+{
+  xmlNodePtr c = n->children;
+  xslt_skip_others(&c);
+  return c;
 }
 
 static void print_node(xmlDocPtr doc, xmlNodePtr n, int indent)
@@ -117,14 +128,14 @@ static void print_node(xmlDocPtr doc, xmlNodePtr n, int indent)
 /* #define XSLT_WHEN                         12 */
 /* #define XSLT_WITH_PARAM                   13 */
 
-static xp_expr *get_expr(xmlNodePtr n, const char *attrname, const char *str)
+static xp_expr *get_expr(xmlNodePtr n, const char *attrname, const char *str, int pattern)
 {
   xp_expr *expr;
   error_info ei;
   memset(&ei,0,sizeof(error_info));
 
   /* FIXME: filename */
-  if (NULL == (expr = xp_expr_parse(str,"",n->line,&ei))) {
+  if (NULL == (expr = xp_expr_parse(str,"",n->line,&ei,pattern))) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
     return NULL;
@@ -140,7 +151,7 @@ static xp_expr *get_expr_attr(xmlNodePtr n, const char *attrname, const char *st
     char *expr_str = (char*)alloca(strlen(str)-1);
     memcpy(expr_str,str+1,strlen(str)-2);
     expr_str[strlen(str)-2] = '\0';
-    return get_expr(n,attrname,expr_str);
+    return get_expr(n,attrname,expr_str,0);
   }
   else if ((NULL != strchr(str,'{')) || (NULL != strchr(str,'}'))) {
     fprintf(stderr,"FIXME: I don't support handling attributes with only partial "
@@ -156,11 +167,9 @@ static xp_expr *get_expr_attr(xmlNodePtr n, const char *attrname, const char *st
 
 static void add_ns_defs(xl_snode *sn, xmlNodePtr node)
 {
-  /* FIXME: support namespace definitions located anywhere in the doc. Will need to test this
-     everywhere a qname can be used inside an attribute, e.g. function:as */
   xmlNsPtr ns;
   for (ns = node->nsDef; ns; ns = ns->next)
-    ns_add(sn->namespaces,ns->href,ns->prefix);
+    ns_add_direct(sn->namespaces,ns->href,ns->prefix);
 }
 
 static xl_snode *add_node(xl_snode ***ptr, int type, const char *filename, xmlNodePtr n)
@@ -174,57 +183,108 @@ static xl_snode *add_node(xl_snode ***ptr, int type, const char *filename, xmlNo
   return new_node;
 }
 
+static int xslt_invalid_element(error_info *ei, const char *filename, xmlNodePtr n)
+{
+  /* @implements(xslt20:import-4)
+     test { xslt/parse/import_nottoplevel.test }
+     @end */
+  if (check_element(n,"import",XSLT_NAMESPACE))
+    return error(ei,filename,n->line,"XTSE0190",
+                 "An xsl:import element must be a top-level element");
+  /* @implements(xslt20:include-4)
+     test { xslt/parse/include_nottoplevel.test }
+     @end */
+  else if (check_element(n,"include",XSLT_NAMESPACE))
+    return error(ei,filename,n->line,"XTSE0170",
+                 "An xsl:include element must be a top-level element");
+  else
+    return invalid_element2(ei,filename,n);
+}
+
+
+static int parse_optional_as(xmlNodePtr n, xl_snode *sn, error_info *ei, const char *filename)
+{
+  if (xmlHasNsProp(n,"as",NULL)) {
+    char *as = xmlGetNsProp(n,"as",NULL);
+    sn->seqtype = df_seqtype_parse(as,filename,n->line,ei);
+    free(as);
+    if (NULL == sn->seqtype)
+      return -1;
+  }
+  return 0;
+}
+
 static int parse_param(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
                        error_info *ei, const char *filename)
 {
-  char *name = xmlGetNsProp(n,"name",NULL);
-  char *select = xmlGetNsProp(n,"select",NULL);
-  char *required = xmlGetNsProp(n,"required",NULL);
-  char *tunnel = xmlGetNsProp(n,"tunnel",NULL);
+  char *name;
+/*   char *select = xmlGetNsProp(n,"select",NULL); */
+/*   char *required = xmlGetNsProp(n,"required",NULL); */
+/*   char *tunnel = xmlGetNsProp(n,"tunnel",NULL); */
   xl_snode **param_ptr = &sn->param;
   xl_snode *new_sn;
+  char *fullname;
+  char *fullns;
 
-  CHECK_CALL(enforce_allowed_attributes(ei,filename,n,standard_attributes,
-                                        "name","select","as","required","tunnel",NULL))
-  if (!xmlHasNsProp(n,"name",NULL))
-    return missing_attribute2(ei,filename,n->line,NULL,"name");
+  /* @implements(xslt20:parameters-5) status { info } @end */
 
+  ALLOWED_ATTRIBUTES(n,"name","select","as","required","tunnel")
   while (*param_ptr)
     param_ptr = &((*param_ptr)->next);
 
   if ((XSLT_TRANSFORM != sn->type) &&
       (XSLT_DECL_FUNCTION != sn->type) &&
       (XSLT_DECL_TEMPLATE != sn->type))
-    return invalid_element2(ei,filename,n);
+    return xslt_invalid_element(ei,filename,n);
 
   new_sn = add_node(&param_ptr,XSLT_PARAM,filename,n);
 
 
+  /* @implements(xslt20:parameters-3)
+     test { xslt/parse/function_param1.test }
+     test { test/xslt/parse/function_param2.test }
+     test { test/xslt/parse/function_param3.test }
+     test { test/xslt/parse/function_param_noname.test }
+     @end */
+  REQUIRED_ATTRIBUTE(n,"name")
 
+  name = xmlGetNsProp(n,"name",NULL);
+  new_sn->qn = qname_parse(name);
 
+  if (0 != get_ns_name_from_qname(n,doc,name,&fullns,&fullname)) {
+    free(name);
+    return error(ei,filename,n->line,"XTSE0280","Could not resolve namespace for prefix \"%s\"",
+                 new_sn->qn.prefix);
+  }
+  free(name);
+  free(fullname);
+  free(fullns);
 
+  /* @implements(xslt20:parameters-8)
+     test { xslt/parse/param_as1.test }
+     test { xslt/parse/param_as2.test }
+     test { xslt/parse/param_as3.test }
+     @end */
+  CHECK_CALL(parse_optional_as(n,new_sn,ei,filename))
 
-
-
-
-
-
+#if 0
   if (NULL == name)
     return missing_attribute(n,"name");
-  new_sn->qname = get_qname(name);
-  if ((NULL != select) && (NULL == (new_sn->select = get_expr(n,"select",select))))
+  new_sn->qn = qname_parse(name);
+  if ((NULL != select) && (NULL == (new_sn->select = get_expr(n,"select",select,0))))
     return -1;
   if ((NULL != required) && !strcmp(required,"yes"))
     new_sn->flags |= FLAG_REQUIRED;
   if ((NULL != tunnel) && !strcmp(tunnel,"yes"))
     new_sn->flags |= FLAG_TUNNEL;
+#endif
 
-  CHECK_CALL(parse_sequence_constructors(new_sn,n,doc,ei,filename))
+  CHECK_CALL(parse_sequence_constructors(new_sn,n->children,doc,ei,filename))
 
   return 0;
 }
 
-static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
+static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr doc,
                                        error_info *ei, const char *filename)
 {
   xmlNodePtr c;
@@ -243,7 +303,8 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
   /* FIXME: verify that all missing_attribute() calls have a return before them! */
 
-  for (c = n->children; c; c = c->next) {
+  xslt_skip_others(&start);
+  for (c = start; c; xslt_next_element(&c)) {
     if (check_element(c,"analyze-string",XSLT_NAMESPACE)) {
       /* FIXME: add testcases to all.xl for use of fallback inside analyze-string */
       char *select = xmlGetNsProp(c,"select",NULL);
@@ -261,7 +322,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_INSTR_ANALYZE_STRING,filename,c);
       child2_ptr = &new_sn->child;
 
-      if (NULL == (new_sn->select = get_expr(c,"select",select)))
+      if (NULL == (new_sn->select = get_expr(c,"select",select,0)))
         return -1;
       if (NULL == (new_sn->expr1 = get_expr_attr(c,"regex",regex)))
         return -1;
@@ -271,17 +332,17 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       for (c2 = c->children; c2; c2 = c2->next) {
         if (check_element(c2,"matching-substring",XSLT_NAMESPACE)) {
           xl_snode *matching = add_node(&child2_ptr,XSLT_MATCHING_SUBSTRING,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(matching,c2,doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(matching,c2->children,doc,ei,filename))
           mcount++;
         }
         else if (check_element(c2,"non-matching-substring",XSLT_NAMESPACE)) {
           xl_snode *non_matching = add_node(&child2_ptr,XSLT_NON_MATCHING_SUBSTRING,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(non_matching,c2,doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(non_matching,c2->children,doc,ei,filename))
           nmcount++;
         }
         else if (check_element(c2,"fallback",XSLT_NAMESPACE)) {
           xl_snode *fallback = add_node(&child2_ptr,XSLT_INSTR_FALLBACK,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(fallback,c2,doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(fallback,c2->children,doc,ei,filename))
         }
       }
       if ((0 == mcount) && (0 == nmcount))
@@ -303,7 +364,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
           return parse_error(c2,"not allowed here");
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"apply-templates",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
@@ -320,13 +381,16 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
       new_sn = add_node(&child_ptr,XSLT_INSTR_APPLY_TEMPLATES,filename,c);
 
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
       /* FIXME: multiple modes? */
       if ((NULL != mode))
-        new_sn->mode = get_qname(mode);
+        new_sn->mode = qname_parse(mode);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      free(select);
+      free(mode);
+
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"attribute",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -340,10 +404,10 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
       if (NULL == name)
         return missing_attribute(c,"name");
-      new_sn->qname = get_qname(name);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      new_sn->qn = qname_parse(name);
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"call-template",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -352,7 +416,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
       if (NULL == name)
         return missing_attribute(c,"name");
-      new_sn->qname = get_qname(name);
+      new_sn->qn = qname_parse(name);
 
       /* make sure all children are <xsl:with-param> elements */
       for (c2 = c->children; c2; c2 = c2->next) {
@@ -362,7 +426,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
           return parse_error(c2,"not allowed here");
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"choose",XSLT_NAMESPACE)) {
       new_sn = add_node(&child_ptr,XSLT_INSTR_CHOOSE,filename,c);
@@ -376,7 +440,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
           if (NULL != otherwise)
             return parse_error(c2,"Only one <otherwise> is allowed inside <choose>");
           otherwise = add_node(&child2_ptr,XSLT_OTHERWISE,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(otherwise,c2,doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(otherwise,c2->children,doc,ei,filename))
         }
         else if (check_element(c2,"when",XSLT_NAMESPACE)) {
           char *test = xmlGetNsProp(c2,"test",NULL);
@@ -385,18 +449,19 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
             return parse_error(c2,"No <when> allowed after an <otherwise>");
           if (NULL == test)
             return missing_attribute(c2,"test");
-          if (NULL == (when->select = get_expr(c2,"test",test)))
+          if (NULL == (when->select = get_expr(c2,"test",test,0)))
             return -1;
-          CHECK_CALL(parse_sequence_constructors(when,c2,doc,ei,filename))
+          free(test);
+          CHECK_CALL(parse_sequence_constructors(when,c2->children,doc,ei,filename))
         }
       }
     }
     else if (check_element(c,"comment",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
       new_sn = add_node(&child_ptr,XSLT_INSTR_COMMENT,filename,c);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"copy",XSLT_NAMESPACE)) {
       /* FIXME: support "copy-namespaces" */
@@ -405,7 +470,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       /* FIXME: support "type" */
       /* FIXME: support "validation" */
       new_sn = add_node(&child_ptr,XSLT_INSTR_COPY,filename,c);
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"copy-of",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
@@ -415,7 +480,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_INSTR_COPY_OF,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
-      if (NULL == (new_sn->select = get_expr(c,"select",select)))
+      if (NULL == (new_sn->select = get_expr(c,"select",select,0)))
         return -1;
       for (c2 = c->children; c2; c2 = c2->next) {
         if (XML_ELEMENT_NODE == c2->type)
@@ -433,20 +498,20 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       if (NULL == name)
         return missing_attribute(c,"name");
       new_sn->name_expr = get_expr_attr(c,"name",name);
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"fallback",XSLT_NAMESPACE)) {
       new_sn = add_node(&child_ptr,XSLT_INSTR_FALLBACK,filename,c);
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"for-each",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
       new_sn = add_node(&child_ptr,XSLT_INSTR_FOR_EACH,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
-      if (NULL == (new_sn->select = get_expr(c,"select",select)))
+      if (NULL == (new_sn->select = get_expr(c,"select",select,0)))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"for-each-group",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
@@ -459,27 +524,27 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_INSTR_FOR_EACH_GROUP,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
-      if (NULL == (new_sn->select = get_expr(c,"select",select)))
+      if (NULL == (new_sn->select = get_expr(c,"select",select,0)))
         return -1;
       if (NULL != group_by) {
         groupcount++;
         new_sn->gmethod = XSLT_GROUPING_BY;
-        new_sn->expr1 = get_expr(c,"group-by",group_by);
+        new_sn->expr1 = get_expr(c,"group-by",group_by,0);
       }
       if (NULL != group_adjacent) {
         groupcount++;
         new_sn->gmethod = XSLT_GROUPING_ADJACENT;
-        new_sn->expr1 = get_expr(c,"group-adjacent",group_adjacent);
+        new_sn->expr1 = get_expr(c,"group-adjacent",group_adjacent,0);
       }
       if (NULL != group_starting_with) {
         groupcount++;
         new_sn->gmethod = XSLT_GROUPING_STARTING_WITH;
-        new_sn->expr1 = get_expr(c,"group-starting-with",group_starting_with);
+        new_sn->expr1 = get_expr(c,"group-starting-with",group_starting_with,0);
       }
       if (NULL != group_ending_with) {
         groupcount++;
         new_sn->gmethod = XSLT_GROUPING_ENDING_WITH;
-        new_sn->expr1 = get_expr(c,"group-ending-with",group_ending_with);
+        new_sn->expr1 = get_expr(c,"group-ending-with",group_ending_with,0);
       }
       if (0 == groupcount)
         return parse_error(c,"No grouping method specified");
@@ -487,22 +552,22 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
         return -1;
       if (1 < groupcount)
         return parse_error(c,"Only one grouping method can be specified");
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"if",XSLT_NAMESPACE)) {
       char *test = xmlGetNsProp(c,"test",NULL);
       new_sn = add_node(&child_ptr,XSLT_INSTR_IF,filename,c);
       if (NULL == test)
         return missing_attribute(c,"test");
-      if (NULL == (new_sn->select = get_expr(c,"test",test)))
+      if (NULL == (new_sn->select = get_expr(c,"test",test,0)))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"message",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
       char *terminate = xmlGetNsProp(c,"terminate",NULL);
       new_sn = add_node(&child_ptr,XSLT_INSTR_MESSAGE,filename,c);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
       if ((NULL != terminate) && !strcmp(terminate,"yes")) {
         new_sn->flags |= FLAG_TERMINATE;
@@ -513,7 +578,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
         /* FIXME: handle the case where the attribute specifies another value other than one
            inside {}'s */
       }
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"namespace",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -524,9 +589,9 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       /* FIXME: if name specified just as a normal attribute value, assign to qname instead */
       if (NULL == (new_sn->name_expr = get_expr_attr(c,"name",name)))
         return -1;
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"next-match",XSLT_NAMESPACE)) {
       new_sn = add_node(&child_ptr,XSLT_INSTR_NEXT_MATCH,filename,c);
@@ -540,7 +605,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
           return parse_error(c2,"not allowed here");
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"number",XSLT_NAMESPACE)) {
       /* FIXME */
@@ -548,9 +613,9 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
     else if (check_element(c,"perform-sort",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
       new_sn = add_node(&child_ptr,XSLT_INSTR_PERFORM_SORT,filename,c);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"processing-instruction",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -561,9 +626,9 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       /* FIXME: if it's just a normal (non-expr) attribute value, set qname instead */
       if ((NULL == (new_sn->name_expr = get_expr_attr(c,"name",name))))
         return -1;
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"result-document",XSLT_NAMESPACE)) {
       /* FIXME */
@@ -573,8 +638,9 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_INSTR_SEQUENCE,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
-      if (NULL == (new_sn->select = get_expr(c,"select",select)))
+      if (NULL == (new_sn->select = get_expr(c,"select",select,0)))
         return -1;
+      free(select);
       /* make sure all children are <xsl:fallback> elements */
       for (c2 = c->children; c2; c2 = c2->next) {
         if (XML_ELEMENT_NODE != c2->type)
@@ -582,7 +648,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
         if (!check_element(c2,"fallback",XSLT_NAMESPACE))
           return parse_error(c2,"not allowed here");
       }
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"text",XSLT_NAMESPACE)) {
       /* FIXME: support "disable-output-escaping" */
@@ -610,12 +676,14 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       /* FIXME: support "disable-output-escaping" */
 
       new_sn = add_node(&child_ptr,XSLT_INSTR_VALUE_OF,filename,c);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
       if ((NULL != separator) && (NULL == (new_sn->expr1 = get_expr_attr(c,"separator",separator))))
         return -1;
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
+      free(select);
+      free(separator);
     }
     else if (check_element(c,"variable",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -624,13 +692,13 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_VARIABLE,filename,c);
       if (NULL == name)
         return missing_attribute(c,"name");
-      new_sn->qname = get_qname(name);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      new_sn->qn = qname_parse(name);
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"param",XSLT_NAMESPACE)) {
-      CHECK_CALL(parse_param(sn,c,doc,ei,filename))
+      assert(!"params should already be handled by the parent function/template/stylesheet");
     }
     else if (check_element(c,"with-param",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
@@ -648,12 +716,12 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
       if (NULL == name)
         return missing_attribute(c,"name");
-      new_sn->qname = get_qname(name);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      new_sn->qn = qname_parse(name);
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
       if ((NULL != tunnel) && !strcmp(tunnel,"yes"))
         new_sn->flags |= FLAG_TUNNEL;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"sort",XSLT_NAMESPACE)) {
       char *select = xmlGetNsProp(c,"select",NULL);
@@ -675,12 +743,12 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
 
       new_sn = add_node(&sort_ptr,XSLT_SORT,filename,c);
 
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select))))
+      if ((NULL != select) && (NULL == (new_sn->select = get_expr(c,"select",select,0))))
         return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (c->ns && (!strcmp(c->ns->href,XSLT_NAMESPACE))) {
-      return parse_error(c,"Invalid element");
+      return xslt_invalid_element(ei,filename,c);
     }
     else if (XML_ELEMENT_NODE == c->type) {
       xmlAttrPtr attr;
@@ -689,11 +757,11 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
       new_sn = add_node(&child_ptr,XSLT_INSTR_ELEMENT,filename,c);
       child2_ptr = &new_sn->child;
 
-      new_sn->qname.localpart = strdup(c->name);
+      new_sn->qn.localpart = strdup(c->name);
       /* FIXME: ensure that this prefix is ok to use in the result document... i.e. the
          prefix -> namespace mapping must be established in the result document */
       if (c->ns && c->ns->prefix)
-        new_sn->qname.prefix = strdup(c->ns->prefix);
+        new_sn->qn.prefix = strdup(c->ns->prefix);
 
       /* copy attributes */
       for (attr = c->properties; attr; attr = attr->next) {
@@ -719,16 +787,16 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
         val[pos] = '\0';
 
         anode = add_node(&child2_ptr,XSLT_INSTR_ATTRIBUTE,filename,c);
-        anode->qname.localpart = strdup(attr->name);
+        anode->qn.localpart = strdup(attr->name);
         if (attr->ns && attr->ns->prefix)
-          anode->qname.prefix = strdup(attr->ns->prefix);
+          anode->qn.prefix = strdup(attr->ns->prefix);
 
         if (NULL == (anode->select = get_expr_attr(c,attr->name,val)))
           return -1;
         free(val);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     /* FIXME: also support adding literal text from stylesheet file */
   }
@@ -736,14 +804,150 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc
   return 0;
 }
 
+static int parse_import_include(xl_snode *parent, xmlNodePtr n, xmlDocPtr doc, error_info *ei,
+                                const char *filename, int type, xl_snode ***child_ptr)
+{
+  char *href;
+  xl_snode *import = add_node(child_ptr,type,filename,n);
+  xl_snode *transform = xl_snode_new(XSLT_TRANSFORM);
+  xmlNodePtr c;
+  xl_snode *p;
+  char *full_uri;
+  import->child = transform;
+
+  transform->parent = import;
+  import->parent = parent;
+
+  /* FIXME: test with fragments (including another stylsheet in the same document but with
+     a different id) */
+
+/*
+
+  @implements(xslt20:locating-modules-1) status { info } @end
+  @implements(xslt20:locating-modules-2) status { info } @end
+  @implements(xslt20:locating-modules-3)
+  test { xslt/parse/import_fragments.test }
+  test { xslt/parse/import_samedoc1.test }
+  test { xslt/parse/import_samedoc2.test }
+  test { xslt/parse/include_fragments.test }
+  test { xslt/parse/include_samedoc1.test }
+  test { xslt/parse/include_samedoc2.test }
+  @end
+  @implements(xslt20:locating-modules-5) status { info } @end
+
+
+  @implements(xslt20:include-1)
+     test { xslt/parse/include_badattr.test }
+     test { xslt/parse/include_badchildren.test }
+  @end
+  @implements(xslt20:import-1)
+     test { xslt/parse/import_badattr.test }
+     test { xslt/parse/import_badchildren.test }
+  @end
+
+  @implements(xslt20:include-2)
+  test { xslt/parse/include1.test }
+  test { xslt/parse/include2.test }
+  @end
+  @implements(xslt20:import-2)
+  test { xslt/parse/import.test }
+  @end
+
+
+  @implements(xslt20:include-5) status { info } @end
+  @implements(xslt20:include-6) status { info } @end
+
+  @implements(xslt20:import-6) status { info } @end
+  @implements(xslt20:import-7) status { info } @end
+  @implements(xslt20:import-8) status { info } @end
+  @implements(xslt20:import-9) status { info } @end
+  @implements(xslt20:import-10) status { info } @end
+  @implements(xslt20:import-11) status { info } @end
+  @implements(xslt20:import-12) status { info } @end
+  @implements(xslt20:import-13) status { info } @end
+  @implements(xslt20:import-14) status { info } @end
+
+*/
+
+  assert(XSLT_TRANSFORM == parent->type);
+  assert(NULL != parent->uri);
+
+  ALLOWED_ATTRIBUTES(n,"href")
+
+  /* @implements(xslt20:include-3)
+     test { xslt/parse/include_nohref.test }
+     @end
+     @implements(xslt20:import-3)
+     test { xslt/parse/import_nohref.test }
+     @end */
+  REQUIRED_ATTRIBUTE(n,"href")
+
+  href = xmlGetNsProp(n,"href",NULL);
+
+  /* @implements(xslt20:locating-modules-6)
+     test { xslt/parse/import_baduri.test }
+     test { xslt/parse/include_baduri.test }
+     test { xslt/parse/import_badmethod.test }
+     test { xslt/parse/include_badmethod.test }
+     test { xslt/parse/import_nonexistant.test }
+     test { xslt/parse/include_nonexistant.test }
+     @end */
+  if (NULL == (full_uri = xmlBuildURI(href,parent->uri))) {
+    error(ei,filename,n->line,"XTSE0165","\"%s\" is not a valid relative or absolute URI",href);
+    free(href);
+    return -1;
+  }
+  free(href);
+
+  for (p = transform->parent; p; p = p->parent) {
+    if ((p->type == XSLT_TRANSFORM) && !strcmp(p->uri,full_uri)) {
+      /* @implements(xslt20:import-15)
+         test { xslt/parse/import_recursive1.test }
+         test { xslt/parse/import_recursive2.test }
+         test { xslt/parse/import_recursive3.test }
+         @end */
+      if (XSLT_IMPORT == type)
+        error(ei,filename,n->line,"XTSE0210","It is a static error if a stylesheet module directly "
+              "or indirectly imports itself");
+      /* @implements(xslt20:include-7)
+         test { xslt/parse/include_recursive1.test }
+         test { xslt/parse/include_recursive2.test }
+         test { xslt/parse/include_recursive3.test }
+         @end */
+      else
+        error(ei,filename,n->line,"XTSE0180","It is a static error if a stylesheet module directly "
+              "or indirectly includes itself");
+      free(full_uri);
+      return -1;
+    }
+  }
+
+  if (0 != parse_xslt_uri(ei,filename,n->line,"XTSE0165",full_uri,transform,parent->uri)) {
+    free(full_uri);
+    return -1;
+  }
+  free(full_uri);
+
+  if (NULL != (c = xslt_first_child(n)))
+    return xslt_invalid_element(ei,filename,c);
+
+  return 0;
+}
+
 static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
                        error_info *ei, const char *filename)
 {
-  xmlNodePtr c;
+  xmlNodePtr c = xslt_first_child(n);
   xl_snode *new_sn;
   xl_snode **child_ptr = &sn->child;
 
-  for (c = n->children; c; c = c->next) {
+  /* FIXME: parse imports here; these come before all other top-level elements */
+  while (c && check_element(c,"import",XSLT_NAMESPACE)) {
+    CHECK_CALL(parse_import_include(sn,c,doc,ei,filename,XSLT_IMPORT,&child_ptr))
+    xslt_next_element(&c);
+  }
+
+  for (; c; xslt_next_element(&c)) {
     if (check_element(c,"attribute-set",XSLT_NAMESPACE)) {
       /* FIXME */
     }
@@ -754,90 +958,78 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
       /* FIXME */
     }
     else if (check_element(c,"function",XSLT_NAMESPACE)) {
-      const char **rn;
-      char *name;
       xmlNodePtr c2;
 
-      CHECK_CALL(enforce_allowed_attributes(ei,filename,c,standard_attributes,
-                                            "name","as","override",NULL))
+      /* @implements(xslt20:stylesheet-functions-1) status { info } @end */
+      /* @implements(xslt20:stylesheet-functions-6) status { info } @end */
+      /* @implements(xslt20:stylesheet-functions-20) status { info } @end */
+      /* @implements(xslt20:stylesheet-functions-26) status { info } @end */
+      /* @implements(xslt20:stylesheet-functions-27) status { info } @end */
+      /* @implements(xslt20:stylesheet-functions-28) status { info } @end */
 
-      if (!xmlHasNsProp(c,"name",NULL))
-        return missing_attribute2(ei,filename,c->line,NULL,"name");
+      /* @implements(xslt20:stylesheet-functions-2)
+         status { partial }
+         issue { need to test invalid child sequences }
+         test { xslt/parse/function_badattr.test }
+         @end */
+      ALLOWED_ATTRIBUTES(c,"name","as","override")
 
-      /* FIXME: ensure params get processed */
+      /* @implements(xslt20:stylesheet-functions-3)
+         test { xslt/parse/function_name1.test }
+         test { xslt/parse/function_name3.test }
+         test { xslt/parse/function_noname.test }
+         @end */
+      REQUIRED_ATTRIBUTE(c,"name")
 
       new_sn = add_node(&child_ptr,XSLT_DECL_FUNCTION,filename,c);
-
-      name = xmlGetNsProp(c,"name",NULL);
-      new_sn->qname = get_qname(name);
+      new_sn->qn = xml_attr_qname(c,"name");
 
       /* @implements(xslt20:stylesheet-functions-5)
          test { xslt/parse/function_name2.test }
-         test { xslt/parse/function_name3.test }
-         test { xslt/parse/function_name4.test }
-         test { xslt/parse/function_name5.test }
-         test { xslt/parse/function_name6.test }
-         test { xslt/parse/function_name7.test }
-         test { xslt/parse/function_name8.test }
-         test { xslt/parse/function_name9.test }
          @end */
-      if (NULL == new_sn->qname.prefix) {
-        free(name);
-        return set_error_info2(ei,filename,c->line,"XTSE0740",
-                               "A stylesheet function MUST have a prefixed name, to remove any "
-                               "risk of a clash with a function in the default function namespace");
-      }
+      if (NULL == new_sn->qn.prefix)
+        return error(ei,filename,c->line,"XTSE0740",
+                     "A stylesheet function MUST have a prefixed name, to remove any "
+                     "risk of a clash with a function in the default function namespace");
 
-      if (0 != get_ns_name_from_qname(c,doc,name,&new_sn->ns,&new_sn->name)) {
-        free(name);
-        return set_error_info2(ei,filename,c->line,NULL,
-                               "Could not resolve namespace for prefix \"%s\"",
-                               new_sn->qname.prefix);
-      }
-      free(name);
+      /* @implements(xslt20:stylesheet-functions-17)
+         test { function_as1.test }
+         test { function_as2.test }
+         test { function_as3.test }
+         @end */
+      CHECK_CALL(parse_optional_as(c,new_sn,ei,filename))
 
-      for (rn = reserved_namespaces; *rn; rn++) {
-        if (!strcmp(new_sn->ns,*rn)) {
-          return set_error_info2(ei,filename,c->line,"XTSE0740",
-                                 "A function cannot have a prefix refers to a reserved namespace");
-        }
-      }
-
-      if (xmlHasNsProp(c,"as",NULL)) {
-        char *as = xmlGetNsProp(c,"as",NULL);
-        new_sn->seqtype = df_seqtype_parse(as,filename,c->line,ei);
-        free(as);
-        if (NULL == new_sn->seqtype)
-          return -1;
-      }
-
-
+      /* @implements(xslt20:stylesheet-functions-12)
+         status { partial }
+         test { xslt/parse/function_override1.test }
+         test { xslt/parse/function_override2.test }
+         test { xslt/parse/function_override3.test }
+         @end */
       new_sn->flags |= FLAG_OVERRIDE;
       if (xmlHasNsProp(c,"override",NULL)) {
-        char *override = xmlGetNsProp(c,"override",NULL);
-        if (!strcmp(override,"no")) {
+        if (!xml_attr_strcmp(c,"override","no"))
           new_sn->flags &= ~FLAG_OVERRIDE;
-        }
-        else if (strcmp(override,"yes")) {
-          free(override);
+        else if (xml_attr_strcmp(c,"override","yes"))
           return invalid_attribute_val(ei,filename,c,"override");
-        }
-        free(override);
       }
 
-      c2 = c->children;
-      while ((NULL != c2) && check_element(c,"param",XSLT_NAMESPACE)) {
-        CHECK_CALL(parse_param(sn,c2,doc,ei,filename))
+      /* @implements(xslt20:stylesheet-functions-7)
+         status { partial }
+         issue { need tests to ensure content model is enforced }
+         @end */
+      c2 = xslt_first_child(c);
+      while (c2 && check_element(c2,"param",XSLT_NAMESPACE)) {
+        CHECK_CALL(parse_param(new_sn,c2,doc,ei,filename))
         xslt_next_element(&c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c2,doc,ei,filename))
     }
     else if (check_element(c,"import-schema",XSLT_NAMESPACE)) {
       /* FIXME */
     }
     else if (check_element(c,"include",XSLT_NAMESPACE)) {
-      /* FIXME */
+      CHECK_CALL(parse_import_include(sn,c,doc,ei,filename,XSLT_DECL_INCLUDE,&child_ptr))
     }
     else if (check_element(c,"key",XSLT_NAMESPACE)) {
       /* FIXME */
@@ -855,639 +1047,414 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
       /* FIXME */
     }
     else if (check_element(c,"template",XSLT_NAMESPACE)) {
-      char *match = xmlGetNsProp(c,"match",NULL);
-      char *name = xmlGetNsProp(c,"name",NULL);
       /* FIXME: support "priority" */
       /* FIXME: support "mode" */
       /* FIXME: support "as" */
 
       /* FIXME: ensure params get processed */
 
+      /* @implements(xslt20:rules-1) status { info } @end */
+
+      /* @implements(xslt20:defining-templates-1)
+         status { partial }
+         issue { need to test invalid child sequences }
+         test { xslt/parse/template_badattr.test }
+         @end */
+      ALLOWED_ATTRIBUTES(c,"match","name","priority","mode","as")
+
+      /* @implements(xslt20:defining-templates-2) status { info } @end */
+
+      /* @implements(xslt20:defining-templates-3)
+         test { xslt/parse/template_nomatchname.test }
+         test { xslt/parse/template_matchmode.test }
+         test { xslt/parse/template_matchpriority.test }
+         @end */
+      if (!xmlHasNsProp(c,"match",NULL) && !xmlHasNsProp(c,"name",NULL))
+          return error(ei,filename,c->line,"XTSE0500",
+                       "\"name\" and/or \"match\" attribute required");
+
+      if (!xmlHasNsProp(c,"match",NULL) && xmlHasNsProp(c,"mode",NULL))
+        return conflicting_attributes(ei,filename,c->line,"XTSE0500","mode","name");
+      if (!xmlHasNsProp(c,"match",NULL) && xmlHasNsProp(c,"priority",NULL))
+        return conflicting_attributes(ei,filename,c->line,"XTSE0500","priority","name");
+
+      /* @implements(xslt20:defining-templates-4)
+         status { info }
+         @end */
+
       new_sn = add_node(&child_ptr,XSLT_DECL_TEMPLATE,filename,c);
 
-      if (name)
-        new_sn->qname = get_qname(name);
-      if (match && (NULL == (new_sn->select = get_expr(c,"match",match))))
-        return -1;
-      CHECK_CALL(parse_sequence_constructors(new_sn,c,doc,ei,filename))
+      if (xmlHasNsProp(c,"name",NULL)) {
+        char *name = xmlGetNsProp(c,"name",NULL);
+        new_sn->qn = qname_parse(name);
+        free(name);
+      }
+      if (xmlHasNsProp(c,"match",NULL)) {
+        char *match = xmlGetNsProp(c,"match",NULL);
+        if (match && (NULL == (new_sn->select = get_expr(c,"match",match,1)))) {
+          free(match);
+          return -1;
+        }
+        free(match);
+      }
+      CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (XML_ELEMENT_NODE == c->type) {
-      return parse_error(c,"Invalid element");
+      /* @implements(xslt20:import-5)
+         test { xslt/parse/import_notatstart.test }
+         @end */
+      if (check_element(c,"import",XSLT_NAMESPACE))
+        return error(ei,filename,n->line,"XTSE0200","The xsl:import element children must precede "
+                     "all other element children of an xsl:stylesheet element, including any "
+                     "xsl:include element children and any user-defined data elements.");
+      else
+        return xslt_invalid_element(ei,filename,c);
     }
     /* FIXME: check for other stuff that can appear here like <variable> and <param> */
+    /* FIXME: support "user-defined data elements"; I think we also need to make these
+       accessible to code within the stylesheet (i.e. put them in a DOM tree) */
   }
 
   return 0;
 }
 
-int parse_xslt(FILE *f, xl_snode *sroot, error_info *ei, const char *filename)
+int parse_xslt_module(xl_snode *sroot, xmlNodePtr n, xmlDocPtr doc,
+                      error_info *ei, const char *uri)
+{
+  sroot->uri = strdup(uri);
+  CHECK_CALL(parse_decls(sroot,n,doc,ei,uri))
+  add_ns_defs(sroot,n);
+  xl_snode_set_parent(sroot,NULL);
+  return 0;
+}
+
+int parse_xslt_relative_uri(error_info *ei, const char *filename, int line, const char *errname,
+                            const char *base_uri, const char *uri, xl_snode *sroot)
+{
+  char *full_uri;
+
+  if (NULL == (full_uri = xmlBuildURI(uri,base_uri))) {
+    return error(ei,filename,line,errname,"\"%s\" is not a valid relative or absolute URI",uri);
+  }
+
+  if (0 != parse_xslt_uri(ei,filename,line,errname,full_uri,sroot,base_uri)) {
+    free(full_uri);
+    return -1;
+  }
+  free(full_uri);
+
+  return 0;
+}
+
+int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
+                   const char *full_uri, xl_snode *sroot, const char *refsource)
 {
   xmlDocPtr doc;
-  xmlNodePtr root;
+  xmlNodePtr node;
 
-  if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
-    fprintf(stderr,"XML parse error.\n");
-    return -1;
-  }
+  CHECK_CALL(retrieve_uri_element(ei,filename,line,errname,full_uri,&doc,&node,refsource))
 
-  if (NULL == (root = xmlDocGetRootElement(doc))) {
-    fprintf(stderr,"No root element.\n");
+  /* FIXME: check version */
+  /* FIXME: support simplified stylsheet modules */
+  if (!check_element(node,"transform",XSLT_NAMESPACE) &&
+      !check_element(node,"stylesheet",XSLT_NAMESPACE)) {
+    error(ei,filename,line,errname,"Expected element {%s}%s or {%s}%s",
+          XS_NAMESPACE,"transform",XS_NAMESPACE,"schema");
     xmlFreeDoc(doc);
     return -1;
   }
 
-  if (!check_element(root,"transform",XSLT_NAMESPACE)) {
-    printf("Invalid element at root: %s\n",root->name);
+  if (0 != parse_xslt_module(sroot,node,doc,ei,full_uri)) {
     xmlFreeDoc(doc);
     return -1;
   }
-
-  if (0 != parse_decls(sroot,root,doc,ei,filename)) {
-    xmlFreeDoc(doc);
-    return -1;
-  }
-
-  add_ns_defs(sroot,root);
-
-  if (root->ns) {
-/*     printf("root element namespace prefix \"%s\" href \"%s\"\n", */
-/*            root->ns->prefix,root->ns->href); */
-/*   printf("root element prefix = \"%s\"\n",root->prefix); */
-  }
-
-
-/*   print_node(doc,root,0); */
 
   xmlFreeDoc(doc);
-
-  xl_snode_set_parent(sroot,NULL);
-
-/*   printf("=================== DONE BUILDING TREE FROM XSL SOURCE =================\n"); */
   return 0;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-void expr_attr(xmlTextWriter *writer, char *attrname, xp_expr *expr, int brackets)
-{
-  stringbuf *buf = stringbuf_new();
-
-  if (brackets) {
-    if (XPATH_EXPR_STRING_LITERAL == expr->type) {
-      /* expression can just be used directly as a value */
-      xmlTextWriterWriteAttribute(writer,attrname,expr->strval);
-    }
-    else {
-      stringbuf_printf(buf,"{");
-      xp_expr_serialize(buf,expr,0);
-      stringbuf_printf(buf,"}");
-      xmlTextWriterWriteAttribute(writer,attrname,buf->data);
-    }
-  }
-  else {
-    xp_expr_serialize(buf,expr,0);
-    xmlTextWriterWriteAttribute(writer,attrname,buf->data);
-  }
-
-  stringbuf_free(buf);
-}
-
-void qname_attr(xmlTextWriter *writer, char *attrname, qname_t qname)
-{
-  stringbuf *buf = stringbuf_new();
-  if (qname.prefix)
-    stringbuf_printf(buf,"%s:%s",qname.prefix,qname.localpart);
-  else
-    stringbuf_printf(buf,"%s",qname.localpart);
-  xmlTextWriterWriteAttribute(writer,attrname,buf->data);
-  stringbuf_free(buf);
-}
-
-void qname_list_attr(xmlTextWriter *writer, char *attrname, qname_t *qnames)
-{
-  stringbuf *buf = stringbuf_new();
-  int i;
-  for (i = 0; qnames[i].localpart; i++) {
-    if (qnames[i].prefix)
-      stringbuf_printf(buf,"%s:%s",qnames[i].prefix,qnames[i].localpart);
-    else
-      stringbuf_printf(buf,"%s",qnames[i].localpart);
-    if (qnames[i+1].localpart)
-      stringbuf_printf(buf," ");
-  }
-  xmlTextWriterWriteAttribute(writer,attrname,buf->data);
-  stringbuf_free(buf);
-}
-
-static void xslt_start_element(xmlTextWriter *writer, xl_snode *sn, const char *name)
-{
-  list *l;
-  char *qname = build_qname("xsl",name);
-  xmlTextWriterStartElement(writer,qname);
-  free(qname);
-
-  for (l = sn->namespaces->defs; l; l = l->next) {
-    ns_def *def = (ns_def*)l->data;
-    char *attrname = (char*)malloc(strlen("xmlns:")+strlen(def->prefix)+1);
-    sprintf(attrname,"xmlns:%s",def->prefix);
-    xmlTextWriterWriteAttribute(writer,attrname,def->href);
-    free(attrname);
-  }
-}
-
-static void xslt_end_element(xmlTextWriter *writer)
-{
-  xmlTextWriterEndElement(writer);
-}
-
-void output_xslt_with_param(xmlTextWriter *writer, xl_snode *wp)
-{
-  xl_snode *c;
-
-  assert(XSLT_WITH_PARAM == wp->type);
-  xslt_start_element(writer,wp,"with-param");
-
-  qname_attr(writer,"name",wp->qname);
-  /* FIXME: attribute "as" for seqtype */
-  if (wp->select)
-    expr_attr(writer,"select",wp->select,0);
-  if (wp->flags & FLAG_TUNNEL)
-    xmlTextWriterWriteAttribute(writer,"tunnel","yes");
-
-  for (c = wp->child; c; c = c->next)
-    output_xslt_sequence_constructor(writer,c);
-  xslt_end_element(writer);
-}
-
-void output_xslt_param(xmlTextWriter *writer, xl_snode *node)
-{
-  assert(XSLT_PARAM == node->type);
-
-  xslt_start_element(writer,node,"param");
-
-  /* FIXME: attribute "as" for seqtype */
-
-  qname_attr(writer,"name",node->qname);
-
-  /* flags */
-  if (node->flags & FLAG_REQUIRED)
-    xmlTextWriterWriteAttribute(writer,"required","yes");
-  if (node->flags & FLAG_TUNNEL)
-    xmlTextWriterWriteAttribute(writer,"tunnel","yes");
-
-  /* default value */
-  if (node->select)
-    expr_attr(writer,"select",node->select,0);
-  else if (node->child)
-    output_xslt_sequence_constructor(writer,node->child);
-    
-  xslt_end_element(writer);
-
-}
-
-void output_xslt_sort(xmlTextWriter *writer, xl_snode *node)
-{
-  xl_snode *c;
-  /* FIXME: support for "lang" */
-  /* FIXME: support for "order" */
-  /* FIXME: support for "collation" */
-  /* FIXME: support for "stable" */
-  /* FIXME: support for "case-order" */
-  /* FIXME: support for "data-type" */
-  xslt_start_element(writer,node,"sort");
-  if (node->select) {
-    expr_attr(writer,"select",node->select,0);
-  }
-  else {
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-  }
-  xslt_end_element(writer);
-}
-
-void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
-{
-  xl_snode *c;
-  xl_snode *c2;
-
-  switch (node->type) {
-  case XSLT_VARIABLE:
-    xslt_start_element(writer,node,"variable");
-    qname_attr(writer,"name",node->qname);
-    /* FIXME: attribute "as" for seqtype */
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    else if (node->child) {
-      for (c = node->child; c; c = c->next)
-        output_xslt_sequence_constructor(writer,c);
-    }
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_ANALYZE_STRING:
-    xslt_start_element(writer,node,"analyze-string");
-    expr_attr(writer,"select",node->select,0);
-    expr_attr(writer,"regex",node->expr1,1);
-    if (node->expr2)
-      expr_attr(writer,"flags",node->expr2,1);
-    for (c = node->child; c; c = c->next) {
-
-      if (XSLT_MATCHING_SUBSTRING == c->type) {
-        xslt_start_element(writer,c,"matching-substring");
-        for (c2 = c->child; c2; c2 = c2->next)
-          output_xslt_sequence_constructor(writer,c2);
-        xslt_end_element(writer);
-      }
-      else if (XSLT_NON_MATCHING_SUBSTRING == c->type) {
-        xslt_start_element(writer,c,"non-matching-substring");
-        for (c2 = c->child; c2; c2 = c2->next)
-          output_xslt_sequence_constructor(writer,c2);
-        xslt_end_element(writer);
-      }
-      else {
-        output_xslt_sequence_constructor(writer,c);
-    }
-    }
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_APPLY_IMPORTS:
-    xslt_start_element(writer,node,"apply-imports");
-    for (c = node->param; c; c = c->next)
-      output_xslt_with_param(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_APPLY_TEMPLATES:
-    /* FIXME: support for multiple modes, as well as #default and #all */
-    xslt_start_element(writer,node,"apply-templates");
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    if (node->mode.localpart)
-      qname_attr(writer,"mode",node->mode);
-    for (c = node->param; c; c = c->next)
-      output_xslt_with_param(writer,c);
-    for (c = node->sort; c; c = c->next)
-      output_xslt_sort(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_ATTRIBUTE:
-    /* FIXME: support for "namespace" attribute */
-    /* FIXME: support for "separator" attribute */
-    /* FIXME: support for "type" attribute */
-    /* FIXME: support for "validation" attribute */
-    xslt_start_element(writer,node,"attribute");
-    if (node->qname.localpart)
-      qname_attr(writer,"name",node->qname);
-    else
-      expr_attr(writer,"name",node->name_expr,1);
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_CALL_TEMPLATE:
-    xslt_start_element(writer,node,"call-template");
-    qname_attr(writer,"name",node->qname);
-    for (c = node->param; c; c = c->next)
-      output_xslt_with_param(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_CHOOSE:
-    xslt_start_element(writer,node,"choose");
-    for (c = node->child; c; c = c->next) {
-      if (XSLT_WHEN == c->type) {
-        xslt_start_element(writer,c,"when");
-        assert(c->select);
-        expr_attr(writer,"test",c->select,0);
-        for (c2 = c->child; c2; c2 = c2->next)
-          output_xslt_sequence_constructor(writer,c2);
-        xslt_end_element(writer);
-      }
-      else if (XSLT_OTHERWISE == c->type) {
-        xslt_start_element(writer,c,"otherwise");
-        for (c2 = c->child; c2; c2 = c2->next)
-          output_xslt_sequence_constructor(writer,c2);
-        xslt_end_element(writer);
-      }
-      else {
-        /* FIXME: return with error, don't exit! */
-        fprintf(stderr,"Unexpected element inside <xsl:transform>: %d\n",c->type);
-        exit(1);
-      }
-    }
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_COMMENT:
-    xslt_start_element(writer,node,"comment");
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_COPY:
-    /* FIXME: support "copy-namespaces" */
-    /* FIXME: support "inherit-namespaces" */
-    /* FIXME: support "use-attribute-sets" */
-    /* FIXME: support "type" */
-    /* FIXME: support "validation" */
-    xslt_start_element(writer,node,"copy");
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_COPY_OF:
-    /* FIXME: support "copy-namespaces" */
-    /* FIXME: support "type" */
-    /* FIXME: support "validation" */
-    xslt_start_element(writer,node,"copy-of");
-    expr_attr(writer,"select",node->select,0);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_ELEMENT:
-    /* FIXME: support "namespace" */
-    /* FIXME: support "inherit-namespace" */
-    /* FIXME: support "use-attribute-sets" */
-    /* FIXME: support "type" */
-    /* FIXME: support "validation" */
-    if (node->qname.localpart) {
-      stringbuf *buf = stringbuf_new();
-      if (node->qname.prefix)
-        stringbuf_printf(buf,"%s:%s",node->qname.prefix,node->qname.localpart);
-      else
-        stringbuf_printf(buf,"%s",node->qname.localpart);
-      xmlTextWriterStartElement(writer,buf->data);
-      stringbuf_free(buf);
-    }
-    else {
-      xmlTextWriterStartElement(writer,"xsl:element");
-      expr_attr(writer,"name",node->name_expr,1);
-    }
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xmlTextWriterEndElement(writer);
-    break;
-  case XSLT_INSTR_FALLBACK:
-    xslt_start_element(writer,node,"fallback");
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_FOR_EACH:
-    xslt_start_element(writer,node,"for-each");
-    expr_attr(writer,"select",node->select,0);
-    for (c = node->sort; c; c = c->next)
-      output_xslt_sort(writer,c);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_FOR_EACH_GROUP:
-    /* FIXME: support "collation" */
-    /* FIXME: enforce the restriction that for starting-with and ending-with, the result
-       must be a pattern (xslt section 5.5.2) */
-    xslt_start_element(writer,node,"for-each-group");
-    expr_attr(writer,"select",node->select,0);
-    switch (node->gmethod) {
-    case XSLT_GROUPING_BY:
-      expr_attr(writer,"group-by",node->expr1,0);
-      break;
-    case XSLT_GROUPING_ADJACENT:
-      expr_attr(writer,"group-adjacent",node->expr1,0);
-      break;
-    case XSLT_GROUPING_STARTING_WITH:
-      expr_attr(writer,"group-starting-with",node->expr1,0);
-      break;
-    case XSLT_GROUPING_ENDING_WITH:
-      expr_attr(writer,"group-ending-with",node->expr1,0);
-      break;
-    default:
-      assert(0);
-      break;
-    } 
-    for (c = node->sort; c; c = c->next)
-      output_xslt_sort(writer,c);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_IF:
-    xslt_start_element(writer,node,"if");
-    expr_attr(writer,"test",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_MESSAGE:
-    xslt_start_element(writer,node,"message");
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    if (node->flags & FLAG_TERMINATE) {
-      if (node->expr1)
-        expr_attr(writer,"terminate",node->expr1,1);
-      else
-        xmlTextWriterWriteAttribute(writer,"terminate","yes");
-    }
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_NAMESPACE:
-    xslt_start_element(writer,node,"namespace");
-    if (node->name_expr)
-      expr_attr(writer,"name",node->name_expr,1);
-    else
-      xmlTextWriterWriteAttribute(writer,"name",node->strval);
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_NEXT_MATCH:
-    xslt_start_element(writer,node,"next-match");
-    for (c = node->param; c; c = c->next)
-      output_xslt_with_param(writer,c);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_NUMBER:
-    /* FIXME */
-    break;
-  case XSLT_INSTR_PERFORM_SORT:
-    xslt_start_element(writer,node,"perform-sort");
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    for (c = node->sort; c; c = c->next)
-      output_xslt_sort(writer,c);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_PROCESSING_INSTRUCTION:
-    xslt_start_element(writer,node,"processing-instruction");
-    if (node->qname.localpart)
-      qname_attr(writer,"name",node->qname);
-    else
-      expr_attr(writer,"name",node->name_expr,1);
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_RESULT_DOCUMENT:
-    /* FIXME */
-    break;
-  case XSLT_INSTR_SEQUENCE:
-    xslt_start_element(writer,node,"sequence");
-    expr_attr(writer,"select",node->select,0);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_TEXT:
-    /* FIXME: support "disable-output-escaping" */
-    xslt_start_element(writer,node,"text");
-    xmlTextWriterWriteFormatString(writer,"%s",node->strval);
-    xslt_end_element(writer);
-    break;
-  case XSLT_INSTR_VALUE_OF:
-    xslt_start_element(writer,node,"value-of");
-    if (node->select)
-      expr_attr(writer,"select",node->select,0);
-    if (node->expr1)
-      expr_attr(writer,"separator",node->expr1,1);
-    for (c = node->child; c; c = c->next)
-      output_xslt_sequence_constructor(writer,c);
-    xslt_end_element(writer);
-    break;
-  /* FIXME: allow result-elements here */
-  default:
-    break;
-  }
-}
-
 /*
+  @implements(xslt20:xml-versions-1) status { deferred } @end
+  @implements(xslt20:xml-versions-2) status { deferred } @end
+  @implements(xslt20:xml-versions-3) status { deferred } @end
+  @implements(xslt20:xml-versions-4) status { deferred } @end
+  @implements(xslt20:xml-versions-5) status { deferred } @end
+  @implements(xslt20:stylesheet-stripping-1) status { deferred } @end
+  @implements(xslt20:stylesheet-stripping-2) status { deferred } @end
+  @implements(xslt20:stylesheet-stripping-3) status { deferred } @end
+  @implements(xslt20:stylesheet-stripping-4) status { deferred } @end
+  @implements(xslt20:stripping-annotations-1) status { deferred } @end
+  @implements(xslt20:stripping-annotations-2) status { deferred } @end
+  @implements(xslt20:stripping-annotations-3) status { deferred } @end
+  @implements(xslt20:stripping-annotations-4) status { deferred } @end
+  @implements(xslt20:stripping-annotations-5) status { deferred } @end
+  @implements(xslt20:stripping-annotations-6) status { deferred } @end
+  @implements(xslt20:strip-1) status { deferred } @end
+  @implements(xslt20:strip-2) status { deferred } @end
+  @implements(xslt20:strip-3) status { deferred } @end
+  @implements(xslt20:strip-4) status { deferred } @end
+  @implements(xslt20:strip-5) status { deferred } @end
+  @implements(xslt20:strip-6) status { deferred } @end
+  @implements(xslt20:strip-7) status { deferred } @end
+  @implements(xslt20:strip-8) status { deferred } @end
+  @implements(xslt20:strip-9) status { deferred } @end
+  @implements(xslt20:strip-10) status { deferred } @end
+  @implements(xslt20:strip-11) status { deferred } @end
+  @implements(xslt20:strip-12) status { deferred } @end
+  @implements(xslt20:strip-13) status { deferred } @end
+  @implements(xslt20:strip-14) status { deferred } @end
+  @implements(xslt20:strip-15) status { deferred } @end
+  @implements(xslt20:strip-16) status { deferred } @end
+  @implements(xslt20:id-in-data-model-1) status { deferred } @end
+  @implements(xslt20:id-in-data-model-2) status { deferred } @end
+  @implements(xslt20:d-o-e-in-data-model-1) status { deferred } @end
+  @implements(xslt20:d-o-e-in-data-model-2) status { deferred } @end
+  @implements(xslt20:d-o-e-in-data-model-3) status { deferred } @end
+  @implements(xslt20:d-o-e-in-data-model-4) status { deferred } @end
 
-Section 3.6: Stylesheet Element
-Content: (xsl:import*, other-declarations)
+  @implements(xslt20:number-1) status { deferred } @end
+  @implements(xslt20:number-2) status { deferred } @end
+  @implements(xslt20:number-3) status { deferred } @end
+  @implements(xslt20:number-4) status { deferred } @end
+  @implements(xslt20:number-5) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-1) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-2) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-3) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-4) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-5) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-6) status { deferred } @end
+  @implements(xslt20:formatting-supplied-number-7) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-1) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-2) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-3) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-4) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-5) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-6) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-7) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-8) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-9) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-10) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-11) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-12) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-13) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-14) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-15) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-16) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-17) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-18) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-19) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-20) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-21) status { deferred } @end
+  @implements(xslt20:numbering-based-on-position-22) status { deferred } @end
+  @implements(xslt20:convert-1) status { deferred } @end
+  @implements(xslt20:convert-2) status { deferred } @end
+  @implements(xslt20:convert-3) status { deferred } @end
+  @implements(xslt20:convert-4) status { deferred } @end
+  @implements(xslt20:convert-5) status { deferred } @end
+  @implements(xslt20:convert-6) status { deferred } @end
+  @implements(xslt20:convert-7) status { deferred } @end
+  @implements(xslt20:convert-8) status { deferred } @end
+  @implements(xslt20:convert-9) status { deferred } @end
+  @implements(xslt20:convert-10) status { deferred } @end
+  @implements(xslt20:convert-11) status { deferred } @end
+  @implements(xslt20:convert-12) status { deferred } @end
+  @implements(xslt20:convert-13) status { deferred } @end
+  @implements(xslt20:convert-14) status { deferred } @end
+  @implements(xslt20:convert-15) status { deferred } @end
 
-Note: <xsl:stylesheet> and <xsl:transform> have the same meaning. In the syntax
-tree they are treated as XSLT_TRANSFORM
+  @implements(xslt20:key-1) status { deferred } @end
+  @implements(xslt20:xsl-key-1) status { deferred } @end
+  @implements(xslt20:xsl-key-2) status { deferred } @end
+  @implements(xslt20:xsl-key-3) status { deferred } @end
+  @implements(xslt20:xsl-key-4) status { deferred } @end
+  @implements(xslt20:xsl-key-5) status { deferred } @end
+  @implements(xslt20:xsl-key-6) status { deferred } @end
+  @implements(xslt20:xsl-key-7) status { deferred } @end
+  @implements(xslt20:xsl-key-8) status { deferred } @end
+  @implements(xslt20:xsl-key-9) status { deferred } @end
+  @implements(xslt20:xsl-key-10) status { deferred } @end
+  @implements(xslt20:xsl-key-11) status { deferred } @end
+  @implements(xslt20:xsl-key-12) status { deferred } @end
+  @implements(xslt20:xsl-key-13) status { deferred } @end
+  @implements(xslt20:xsl-key-14) status { deferred } @end
+  @implements(xslt20:xsl-key-15) status { deferred } @end
+  @implements(xslt20:xsl-key-16) status { deferred } @end
+  @implements(xslt20:keys-1) status { deferred } @end
+  @implements(xslt20:keys-2) status { deferred } @end
+  @implements(xslt20:keys-3) status { deferred } @end
+  @implements(xslt20:keys-4) status { deferred } @end
+  @implements(xslt20:keys-5) status { deferred } @end
+  @implements(xslt20:keys-6) status { deferred } @end
+  @implements(xslt20:keys-7) status { deferred } @end
+  @implements(xslt20:keys-8) status { deferred } @end
+  @implements(xslt20:keys-9) status { deferred } @end
+  @implements(xslt20:keys-10) status { deferred } @end
+  @implements(xslt20:keys-11) status { deferred } @end
+  @implements(xslt20:keys-12) status { deferred } @end
+  @implements(xslt20:keys-13) status { deferred } @end
+  @implements(xslt20:keys-14) status { deferred } @end
+  @implements(xslt20:keys-15) status { deferred } @end
+  @implements(xslt20:keys-16) status { deferred } @end
+  @implements(xslt20:keys-17) status { deferred } @end
+  @implements(xslt20:keys-18) status { deferred } @end
 
-*/
-void output_xslt(FILE *f, xl_snode *node)
-{
-  xl_snode *sn;
-  xl_snode *c;
-  xmlOutputBuffer *buf = xmlOutputBufferCreateFile(f,NULL);
-  xmlTextWriter *writer = xmlNewTextWriter(buf);
+  @implements(xslt20:format-number-1) status { deferred } @end
+  @implements(xslt20:format-number-2) status { deferred } @end
+  @implements(xslt20:format-number-3) status { deferred } @end
+  @implements(xslt20:format-number-4) status { deferred } @end
+  @implements(xslt20:format-number-5) status { deferred } @end
+  @implements(xslt20:format-number-6) status { deferred } @end
+  @implements(xslt20:format-number-7) status { deferred } @end
+  @implements(xslt20:format-number-8) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-1) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-2) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-3) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-4) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-5) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-6) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-7) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-8) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-9) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-10) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-11) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-12) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-13) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-14) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-15) status { deferred } @end
+  @implements(xslt20:defining-decimal-format-16) status { deferred } @end
+  @implements(xslt20:processing-picture-string-1) status { deferred } @end
+  @implements(xslt20:processing-picture-string-2) status { deferred } @end
+  @implements(xslt20:processing-picture-string-3) status { deferred } @end
+  @implements(xslt20:processing-picture-string-4) status { deferred } @end
+  @implements(xslt20:processing-picture-string-5) status { deferred } @end
+  @implements(xslt20:processing-picture-string-6) status { deferred } @end
+  @implements(xslt20:processing-picture-string-7) status { deferred } @end
+  @implements(xslt20:analysing-picture-string-1) status { deferred } @end
+  @implements(xslt20:analysing-picture-string-2) status { deferred } @end
+  @implements(xslt20:analysing-picture-string-3) status { deferred } @end
+  @implements(xslt20:analysing-picture-string-4) status { deferred } @end
+  @implements(xslt20:analysing-picture-string-5) status { deferred } @end
+  @implements(xslt20:formatting-the-number-1) status { deferred } @end
+  @implements(xslt20:formatting-the-number-2) status { deferred } @end
+  @implements(xslt20:formatting-the-number-3) status { deferred } @end
+  @implements(xslt20:format-date-1) status { deferred } @end
+  @implements(xslt20:format-date-2) status { deferred } @end
+  @implements(xslt20:format-date-3) status { deferred } @end
+  @implements(xslt20:format-date-4) status { deferred } @end
+  @implements(xslt20:format-date-5) status { deferred } @end
+  @implements(xslt20:format-date-6) status { deferred } @end
+  @implements(xslt20:format-date-7) status { deferred } @end
+  @implements(xslt20:format-date-8) status { deferred } @end
+  @implements(xslt20:format-date-9) status { deferred } @end
+  @implements(xslt20:format-date-10) status { deferred } @end
+  @implements(xslt20:format-date-11) status { deferred } @end
+  @implements(xslt20:format-date-12) status { deferred } @end
+  @implements(xslt20:format-date-13) status { deferred } @end
+  @implements(xslt20:format-date-14) status { deferred } @end
+  @implements(xslt20:format-date-15) status { deferred } @end
+  @implements(xslt20:format-date-16) status { deferred } @end
+  @implements(xslt20:date-picture-string-1) status { deferred } @end
+  @implements(xslt20:date-picture-string-2) status { deferred } @end
+  @implements(xslt20:date-picture-string-3) status { deferred } @end
+  @implements(xslt20:date-picture-string-4) status { deferred } @end
+  @implements(xslt20:date-picture-string-5) status { deferred } @end
+  @implements(xslt20:date-picture-string-6) status { deferred } @end
+  @implements(xslt20:date-picture-string-7) status { deferred } @end
+  @implements(xslt20:date-picture-string-8) status { deferred } @end
+  @implements(xslt20:date-picture-string-9) status { deferred } @end
+  @implements(xslt20:date-picture-string-10) status { deferred } @end
+  @implements(xslt20:date-picture-string-11) status { deferred } @end
+  @implements(xslt20:date-picture-string-12) status { deferred } @end
+  @implements(xslt20:date-picture-string-13) status { deferred } @end
+  @implements(xslt20:date-picture-string-14) status { deferred } @end
+  @implements(xslt20:date-picture-string-15) status { deferred } @end
+  @implements(xslt20:date-picture-string-16) status { deferred } @end
+  @implements(xslt20:date-picture-string-17) status { deferred } @end
+  @implements(xslt20:date-picture-string-18) status { deferred } @end
+  @implements(xslt20:date-picture-string-19) status { deferred } @end
+  @implements(xslt20:date-picture-string-20) status { deferred } @end
+  @implements(xslt20:date-picture-string-21) status { deferred } @end
+  @implements(xslt20:lang-cal-country-1) status { deferred } @end
+  @implements(xslt20:lang-cal-country-2) status { deferred } @end
+  @implements(xslt20:lang-cal-country-3) status { deferred } @end
+  @implements(xslt20:lang-cal-country-4) status { deferred } @end
+  @implements(xslt20:lang-cal-country-5) status { deferred } @end
+  @implements(xslt20:lang-cal-country-6) status { deferred } @end
+  @implements(xslt20:lang-cal-country-7) status { deferred } @end
+  @implements(xslt20:lang-cal-country-8) status { deferred } @end
+  @implements(xslt20:lang-cal-country-9) status { deferred } @end
+  @implements(xslt20:lang-cal-country-10) status { deferred } @end
+  @implements(xslt20:lang-cal-country-11) status { deferred } @end
+  @implements(xslt20:lang-cal-country-12) status { deferred } @end
+  @implements(xslt20:lang-cal-country-13) status { deferred } @end
+  @implements(xslt20:lang-cal-country-14) status { deferred } @end
+  @implements(xslt20:lang-cal-country-15) status { deferred } @end
+  @implements(xslt20:lang-cal-country-16) status { deferred } @end
+  @implements(xslt20:lang-cal-country-17) status { deferred } @end
+  @implements(xslt20:lang-cal-country-18) status { deferred } @end
+  @implements(xslt20:date-time-examples-1) status { deferred } @end
+  @implements(xslt20:date-time-examples-2) status { deferred } @end
+  @implements(xslt20:date-time-examples-3) status { deferred } @end
 
-  assert(XSLT_TRANSFORM == node->type);
+  @implements(xslt20:unparsed-entity-uri-1) status { deferred } @end
+  @implements(xslt20:unparsed-entity-uri-2) status { deferred } @end
+  @implements(xslt20:unparsed-entity-uri-3) status { deferred } @end
+  @implements(xslt20:unparsed-entity-uri-4) status { deferred } @end
+  @implements(xslt20:unparsed-entity-public-id-1) status { deferred } @end
+  @implements(xslt20:unparsed-entity-public-id-2) status { deferred } @end
+  @implements(xslt20:unparsed-entity-public-id-3) status { deferred } @end
+  @implements(xslt20:unparsed-entity-public-id-4) status { deferred } @end
+  @implements(xslt20:generate-id-1) status { deferred } @end
+  @implements(xslt20:generate-id-2) status { deferred } @end
+  @implements(xslt20:generate-id-3) status { deferred } @end
+  @implements(xslt20:generate-id-4) status { deferred } @end
+  @implements(xslt20:system-property-1) status { deferred } @end
+  @implements(xslt20:system-property-2) status { deferred } @end
+  @implements(xslt20:system-property-3) status { deferred } @end
+  @implements(xslt20:system-property-4) status { deferred } @end
+  @implements(xslt20:system-property-5) status { deferred } @end
+  @implements(xslt20:system-property-6) status { deferred } @end
+  @implements(xslt20:system-property-7) status { deferred } @end
+  @implements(xslt20:system-property-8) status { deferred } @end
+  @implements(xslt20:system-property-9) status { deferred } @end
+  @implements(xslt20:system-property-10) status { deferred } @end
+  @implements(xslt20:system-property-11) status { deferred } @end
 
-  xmlTextWriterSetIndent(writer,1);
-  xmlTextWriterSetIndentString(writer,"  ");
-  xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
-  xslt_start_element(writer,node,"transform");
-  xmlTextWriterWriteAttribute(writer,"version","2.0");
+  @implements(xslt20:message-1) status { deferred } @end
+  @implements(xslt20:message-2) status { deferred } @end
+  @implements(xslt20:message-3) status { deferred } @end
+  @implements(xslt20:message-4) status { deferred } @end
+  @implements(xslt20:message-5) status { deferred } @end
+  @implements(xslt20:message-6) status { deferred } @end
+  @implements(xslt20:message-7) status { deferred } @end
+  @implements(xslt20:message-8) status { deferred } @end
+  @implements(xslt20:message-9) status { deferred } @end
+  @implements(xslt20:message-10) status { deferred } @end
+  @implements(xslt20:message-11) status { deferred } @end
+  @implements(xslt20:message-12) status { deferred } @end
 
-  for (sn = node->child; sn && (XSLT_IMPORT == sn->type); sn = sn->next) {
-    /* import */
-  }
-
-  for (; sn; sn = sn->next) {
-    switch (sn->type) {
-    case XSLT_DECL_INCLUDE:
-      break;
-    case XSLT_DECL_ATTRIBUTE_SET:
-      break;
-    case XSLT_DECL_CHARACTER_MAP:
-      break;
-    case XSLT_DECL_DECIMAL_FORMAT:
-      break;
-    case XSLT_DECL_FUNCTION: {
-      stringbuf *buf;
-      xslt_start_element(writer,sn,"function");
-      qname_attr(writer,"name",sn->qname);
-      if (!(sn->flags & FLAG_OVERRIDE))
-        xmlTextWriterWriteAttribute(writer,"override","no");
-
-      if (NULL != sn->seqtype) {
-        buf = stringbuf_new();
-        df_seqtype_print_xpath(buf,sn->seqtype,sn->namespaces);
-        xmlTextWriterWriteAttribute(writer,"as",buf->data);
-        stringbuf_free(buf);
-      }
-
-      for (c = sn->param; c; c = c->next)
-        output_xslt_param(writer,c);
-      for (c = sn->child; c; c = c->next)
-        output_xslt_sequence_constructor(writer,c);
-      xslt_end_element(writer);
-      break;
-    }
-    case XSLT_DECL_IMPORT_SCHEMA:
-      break;
-    case XSLT_DECL_KEY:
-      break;
-    case XSLT_DECL_NAMESPACE_ALIAS:
-      break;
-    case XSLT_DECL_OUTPUT:
-      break;
-    case XSLT_PARAM:
-      break;
-    case XSLT_DECL_PRESERVE_SPACE:
-      break;
-    case XSLT_DECL_STRIP_SPACE:
-      break;
-    case XSLT_DECL_TEMPLATE:
-      /* FIXME: support "priority" */
-      /* FIXME: support "mode" */
-      /* FIXME: support "as" */
-      xslt_start_element(writer,sn,"template");
-      if (sn->qname.localpart)
-        qname_attr(writer,"name",sn->qname);
-      if (sn->select)
-        expr_attr(writer,"match",sn->select,0);
-      for (c = sn->param; c; c = c->next)
-        output_xslt_param(writer,c);
-      for (c = sn->child; c; c = c->next)
-        output_xslt_sequence_constructor(writer,c);
-      xslt_end_element(writer);
-      break;
-    case XSLT_VARIABLE:
-      break;
-    default:
-      /* FIXME: return with error, don't exit! */
-      fprintf(stderr,"Unexpected element inside <xsl:transform>: %d\n",sn->type);
-      exit(1);
-      break;
-    }
-  }
-
-  xslt_end_element(writer);
-  xmlTextWriterEndDocument(writer);
-  xmlTextWriterFlush(writer);
-  xmlFreeTextWriter(writer);
-}
-
-/*
-
+  @implements(xslt20:external-objects-1) status { deferred } @end
+  @implements(xslt20:external-objects-2) status { deferred } @end
+  @implements(xslt20:extension-instruction-1) status { deferred } @end
+  @implements(xslt20:extension-instruction-2) status { deferred } @end
+  @implements(xslt20:designating-extension-namespace-1) status { deferred } @end
+  @implements(xslt20:designating-extension-namespace-2) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-1) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-2) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-3) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-4) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-5) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-6) status { deferred } @end
+  @implements(xslt20:testing-instruction-available-7) status { deferred } @end
+  @implements(xslt20:fallback-1) status { deferred } @end
+  @implements(xslt20:fallback-2) status { deferred } @end
+  @implements(xslt20:fallback-3) status { deferred } @end
+  @implements(xslt20:fallback-4) status { deferred } @end
+  @implements(xslt20:fallback-5) status { deferred } @end
+  @implements(xslt20:fallback-6) status { deferred } @end
 
   @implements(xslt20:normative-references-1) status { info } @end
   @implements(xslt20:other-references-1) status { info } @end
-
 
   @implements(xslt20:glossary-1) status { info } @end
 
