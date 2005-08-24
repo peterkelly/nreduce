@@ -25,6 +25,7 @@
 #include "util/stringbuf.h"
 #include <stdio.h>
 #include <assert.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -291,7 +292,7 @@ void process_valgrind_log(struct arguments *args, stringbuf *output)
     if (' ' == *line2)
       line2++;
 
-    stringbuf_printf(output,"    %s\n",line2);
+    stringbuf_format(output,"    %s\n",line2);
 
     *end = oldend;
     line = strchr(line,'\n');
@@ -478,7 +479,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
         if (args->valgrind) {
           stringbuf *temp = stringbuf_new();
           char *realprog = find_program(line);
-          stringbuf_printf(temp,"%s --log-file="TEMP_DIR"/vglog %s",args->valgrind_cmd,realprog);
+          stringbuf_format(temp,"%s --log-file="TEMP_DIR"/vglog %s",args->valgrind_cmd,realprog);
           program = strdup(temp->data);
           stringbuf_free(temp);
           free(realprog);
@@ -507,7 +508,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
         fprintf(input,"%s\n",line);
         break;
       case STATE_OUTPUT:
-        stringbuf_printf(expected,"%s\n",line);
+        stringbuf_format(expected,"%s\n",line);
         break;
       case STATE_RETURN:
         if (got_expected_rc) {
@@ -759,6 +760,7 @@ int main(int argc, char **argv)
 {
   struct stat statbuf;
   struct arguments arguments;
+  char *pathend;
   int r;
 
   memset(&arguments,0,sizeof(struct arguments));
@@ -766,6 +768,10 @@ int main(int argc, char **argv)
   setbuf(stdout,NULL);
 
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
+
+  pathend = &arguments.path[strlen(arguments.path)-1];
+  while ((pathend >= arguments.path) && ('/' == *pathend))
+    (*pathend--) = '\0';
 
   if (0 != stat(arguments.path,&statbuf)) {
     perror(arguments.path);
