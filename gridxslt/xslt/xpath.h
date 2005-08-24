@@ -80,16 +80,7 @@
 
 #define XPATH_NODE_TEST_INVALID           0
 #define XPATH_NODE_TEST_NAME              1
-/* #define XPATH_NODE_TEST_DOCUMENT          2 */
-/* #define XPATH_NODE_TEST_ELEMENT           3 */
-/* #define XPATH_NODE_TEST_ATTRIBUTE         4 */
-/* #define XPATH_NODE_TEST_SCHEMA_ELEMENT    5 */
-/* #define XPATH_NODE_TEST_SCHEMA_ATTRIBUTE  6 */
-/* #define XPATH_NODE_TEST_PI                7 */
-/* #define XPATH_NODE_TEST_COMMENT           8 */
-/* #define XPATH_NODE_TEST_TEXT              9 */
-#define XPATH_NODE_TEST_ANY_KIND          10
-#define XPATH_NODE_TEST_SEQTYPE           11
+#define XPATH_NODE_TEST_SEQTYPE           2
 
 #define XPATH_GENERAL_COMP_INVALID        0
 #define XPATH_GENERAL_COMP_EQ             1
@@ -128,10 +119,12 @@ struct xp_expr {
   char *strval;
   int ival;
   double dval;
-  qname_t qname;
-  qname_t type_qname;
+  qname qn;
+  qname type_qname;
   int nillable;
   int axis;
+
+  nsname ident;
 
   xp_expr *parent;
   xl_snode *stmt;
@@ -142,7 +135,8 @@ struct xp_expr {
 };
 
 xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right);
-xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei);
+xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei,
+                       int pattern);
 df_seqtype *df_seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei);
 void xp_expr_free(xp_expr *xp);
 void xp_set_parent(xp_expr *xp, xp_expr *parent, xl_snode *stmt);
