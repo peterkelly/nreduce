@@ -7,6 +7,6 @@ testxslt
   <xsl:function name="f:myfunc"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error XTSE0740: A function cannot have a prefix refers to a reserved namespace
+runtests.tmp/input.xml:4: error XTSE0740: A function cannot have a prefix that refers to a reserved namespace
 ================================== RETURN CODE =================================
 1

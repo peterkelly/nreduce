@@ -6,6 +6,6 @@ testxslt
   <xsl:function name="f:myfunc"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: Could not resolve namespace for prefix "f"
+runtests.tmp/input.xml:3: error XTSE0280: Could not resolve namespace for prefix "f"
 ================================== RETURN CODE =================================
 1
