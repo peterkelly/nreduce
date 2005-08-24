@@ -27,11 +27,9 @@
 #include "util/xmlutils.h"
 #include <stdio.h>
 
-void expr_attr(xmlTextWriter *writer, char *attrname, xp_expr *expr, int brackets);
-void qname_attr(xmlTextWriter *writer, char *attrname, qname_t qname);
-void qname_list_attr(xmlTextWriter *writer, char *attrname, qname_t *qnames);
-
-int parse_xslt(FILE *f, xl_snode *sroot, error_info *ei, const char *filename);
-void output_xslt(FILE *f, xl_snode *node);
+int parse_xslt_relative_uri(error_info *ei, const char *filename, int line, const char *errname,
+                            const char *base_uri, const char *uri, xl_snode *sroot);
+int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
+                   const char *full_uri, xl_snode *sroot, const char *refsource);
 
 #endif /* _XSLT_PARSE_H */
