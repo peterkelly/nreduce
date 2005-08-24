@@ -345,7 +345,8 @@ void xs_init_cnames_mg(xs_schema *s, xs_model_group *mg, int indent)
     assert(NULL == p->cvar);
     switch (p->term_type) {
     case XS_PARTICLE_TERM_ELEMENT:
-      p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,p->term.e->name,p->term.e->ns);
+      p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,
+                               p->term.e->def.ident.name,p->term.e->def.ident.ns);
       break;
     case XS_PARTICLE_TERM_WILDCARD:
       p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,"any",NULL);
@@ -396,13 +397,14 @@ void xs_init_attribute_cnames(xs_schema *s, list *attribute_uses, list *attribut
     xs_attribute_use *au = (xs_attribute_use*)l->data;
     assert(NULL == au->cvar);
     au->cvar = xs_alloc_cname(s->globals,0,cnames,cnames2,
-                               au->attribute->name,au->attribute->ns);
+                              au->attribute->def.ident.name,au->attribute->def.ident.ns);
   }
 
   for (l = attribute_group_refs; l; l = l->next) {
     xs_attribute_group_ref *agr = (xs_attribute_group_ref*)l->data;
     assert(NULL == agr->cvar);
-    agr->cvar = xs_alloc_cname(s->globals,0,cnames,cnames2,agr->ag->name,agr->ag->ns);
+    agr->cvar = xs_alloc_cname(s->globals,0,cnames,cnames2,
+                               agr->ag->def.ident.name,agr->ag->def.ident.ns);
   }
 }
 
@@ -429,16 +431,17 @@ void xs_init_cnames(xs_schema *s)
   /* Attribute groups (these are always top-level */
   for (sse = s->symt->ss_attribute_groups->entries; sse; sse = sse->next) {
     xs_attribute_group *ag = (xs_attribute_group*)sse->object;
-    ag->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,ag->name,ag->ns);
+    ag->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
+                               ag->def.ident.name,ag->def.ident.ns);
   }
 
   /* Top-level model groups: use the name of the model group definition */
   for (sse = s->symt->ss_model_group_defs->entries; sse; sse = sse->next) {
     xs_model_group_def *mgd = (xs_model_group_def*)sse->object;
     mgd->model_group->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                                             mgd->name,mgd->ns);
-    mgd->model_group->parent_name = strdup(mgd->name);
-    mgd->model_group->parent_ns = mgd->ns ? strdup(mgd->ns) : NULL;
+                                             mgd->def.ident.name,mgd->def.ident.ns);
+    mgd->model_group->parent_name = strdup(mgd->def.ident.name);
+    mgd->model_group->parent_ns = mgd->def.ident.ns ? strdup(mgd->def.ident.ns) : NULL;
   }
 
   /* Top-level type declarations: use the name of the type, or the base custom cname for simple
@@ -448,11 +451,13 @@ void xs_init_cnames(xs_schema *s)
     if (!t->complex && t->base->custom_ctype)
       t->ctype = strdup(t->base->ctype);
     else if (t->builtin)
-      t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,t->name,t->ns);
+      t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
+                                t->def.ident.name,t->def.ident.ns);
     else
-      t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,t->name,t->ns);
-    t->parent_name = strdup(t->name);
-    t->parent_ns = t->ns ? strdup(t->ns) : NULL;
+      t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
+                                t->def.ident.name,t->def.ident.ns);
+    t->parent_name = strdup(t->def.ident.name);
+    t->parent_ns = t->def.ident.ns ? strdup(t->def.ident.ns) : NULL;
   }
 
   /* Anonymous type declarations inside <element>: use the name of the element */
@@ -461,13 +466,14 @@ void xs_init_cnames(xs_schema *s)
     if ((NULL == e->typeref) && ((NULL == e->sghead) || (e->type != e->sghead->type)))  {
       if (NULL != e->type->ctype) {
         printf("type cname already set! %s (name=%s,element=%s)\n",
-               e->type->ctype,e->type->name,e->name);
+               e->type->ctype,e->type->def.ident.name,e->def.ident.name);
       }
       assert(NULL == e->type->ctype);
       assert(NULL == e->type->parent_name);
-      e->type->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,e->name,e->ns);
-      e->type->parent_name = strdup(e->name);
-      e->type->parent_ns = e->ns ? strdup(e->ns) : NULL;
+      e->type->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
+                                      e->def.ident.name,e->def.ident.ns);
+      e->type->parent_name = strdup(e->def.ident.name);
+      e->type->parent_ns = e->def.ident.ns ? strdup(e->def.ident.ns) : NULL;
     }
   }
 
@@ -819,6 +825,7 @@ void xs_print_defs(xs_schema *s)
 void xs_validator_free(xs_validator *v)
 {
   error_info_free_vals(&v->ei);
+  free(v);
 }
 
 
@@ -868,13 +875,13 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
   int inbrackets = 0;
   if (((1 != p->range.min_occurs) || (1 != p->range.max_occurs)) &&
       (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)) {
-    stringbuf_printf(buf,"(");
+    stringbuf_format(buf,"(");
     inbrackets = 1;
   }
 
   switch (p->term_type) {
   case XS_PARTICLE_TERM_ELEMENT: {
-    stringbuf_printf(buf,"%s",p->term.e->name);
+    stringbuf_format(buf,"%s",p->term.e->def.ident.name);
     break;
   }
   case XS_PARTICLE_TERM_MODEL_GROUP:
@@ -885,15 +892,15 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
     case XS_MODEL_GROUP_COMPOSITOR_CHOICE: {
       list *l;
       if (!inbrackets)
-        stringbuf_printf(buf,"(");
+        stringbuf_format(buf,"(");
       for (l = p->term.mg->particles; l; l = l ->next) {
         xs_particle *p2 = (xs_particle*)l->data;
         get_particle_pattern(buf,p2);
         if (l->next)
-          stringbuf_printf(buf,"|");
+          stringbuf_format(buf,"|");
       }
       if (!inbrackets)
-        stringbuf_printf(buf,")");
+        stringbuf_format(buf,")");
       break;
     }
     case XS_MODEL_GROUP_COMPOSITOR_SEQUENCE: {
@@ -902,7 +909,7 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
         xs_particle *p2 = (xs_particle*)l->data;
         get_particle_pattern(buf,p2);
         if (l->next)
-          stringbuf_printf(buf," ");
+          stringbuf_format(buf," ");
       }
       break;
     }
@@ -920,20 +927,20 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
   }
   if ((1 != p->range.min_occurs) || (1 != p->range.max_occurs)) {
     if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
-      stringbuf_printf(buf,")");
+      stringbuf_format(buf,")");
 
     if (p->range.min_occurs == p->range.max_occurs)
-      stringbuf_printf(buf,"{%d}",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"{%d}",p->range.min_occurs,p->range.max_occurs);
     else if ((0 == p->range.min_occurs) && (1 == p->range.max_occurs))
-      stringbuf_printf(buf,"?",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"?",p->range.min_occurs,p->range.max_occurs);
     else if (0 <= p->range.max_occurs)
-      stringbuf_printf(buf,"{%d,%d}",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"{%d,%d}",p->range.min_occurs,p->range.max_occurs);
     else if (0 == p->range.min_occurs)
-      stringbuf_printf(buf,"*",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"*",p->range.min_occurs,p->range.max_occurs);
     else if (1 == p->range.min_occurs)
-      stringbuf_printf(buf,"+",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"+",p->range.min_occurs,p->range.max_occurs);
     else
-      stringbuf_printf(buf,"{%d,}",p->range.min_occurs,p->range.max_occurs);
+      stringbuf_format(buf,"{%d,}",p->range.min_occurs,p->range.max_occurs);
   }
 }
 
@@ -1090,7 +1097,7 @@ int validate_element_against_particle(xs_validator *v,
       }
 
       /* Is it the right element? */
-      if (!check_element(*n,p->term.e->name,p->term.e->ns)) {
+      if (!check_element(*n,p->term.e->def.ident.name,p->term.e->def.ident.ns)) {
         v->inv_type = XS_VALIDATOR_INV_WRONG_ELEMENT;
         v->inv_p = p;
         v->inv_e = p->term.e;
@@ -1259,6 +1266,7 @@ int validate_element_against_particle(xs_validator *v,
     memcpy(encoded->data+s->datapos,&spos,sizeof(IMPL_INT));
 /*     printf("string relpos 0x%02x (abspos 0x%02x) value \"%s\"\n",spos,encoded->size-1,s->str); */
     stringbuf_append(encoded,s->str,strlen(s->str)+1);
+    free(s->str);
   }
   list_free(strings,(void*)free);
 
@@ -1287,27 +1295,25 @@ void set_inv_error(xs_validator *v, char *filename)
   case XS_VALIDATOR_INV_NONE:
     break;
   case XS_VALIDATOR_INV_MISSING_ELEMENT: {
-    char *fn1 = get_full_name(v->inv_p->term.e->ns,v->inv_p->term.e->name);
     if (0 < v->inv_count)
-      set_error_info(&v->ei,filename,v->inv_lineno,NULL,NULL,
-                     "Expected another %s element; found %d instance(s) but require at least %d",
-                     fn1,v->inv_count,v->inv_p->range.min_occurs);
+      error(&v->ei,filename,v->inv_lineno,NULL,
+            "Expected another %#n element; found %d instance(s) but require at least %d",
+            v->inv_p->term.e->def.ident,v->inv_count,v->inv_p->range.min_occurs);
     else
-      set_error_info(&v->ei,filename,v->inv_lineno,NULL,NULL,"Expected element %s",fn1);
-    free(fn1);
+      error(&v->ei,filename,v->inv_lineno,NULL,"Expected element %#n",v->inv_p->term.e->def.ident);
     break;
   }
   case XS_VALIDATOR_INV_WRONG_ELEMENT: {
-    char *fn1 = get_full_name(v->inv_p->term.e->ns,v->inv_p->term.e->name);
-    char *fn2 = get_full_name(v->inv_n->ns ? v->inv_n->ns->href : NULL,v->inv_n->name);
-    set_error_info(&v->ei,filename,v->inv_lineno,NULL,NULL,
-                   "Expected element %s, but found %s",fn1,fn2);
-    free(fn1);
-    free(fn2);
+    nsname fn2;
+    fn2.ns = (v->inv_n->ns ? strdup(v->inv_n->ns->href) : NULL);
+    fn2.name = strdup(v->inv_n->name);
+    error(&v->ei,filename,v->inv_lineno,NULL,"Expected element %#n, but found %#n",
+          v->inv_p->term.e->def.ident,fn2);
+    nsname_free(fn2);
     break;
   }
   case XS_VALIDATOR_INV_NOTHING_MORE_ALLOWED:
-    set_error_info(&v->ei,filename,v->inv_lineno,NULL,NULL,"No more elements allowed here");
+    error(&v->ei,filename,v->inv_lineno,NULL,"No more elements allowed here");
     break;
   default:
     assert(!"invalid inv_type");
@@ -1322,16 +1328,23 @@ int validate_root(xs_validator *v, char *filename, xmlNodePtr n, stringbuf *enco
   int pos = encoded->size-1;
 
   if (XML_ELEMENT_NODE != n->type)
-    return set_error_info(&v->ei,filename,n->line,NULL,NULL,"Element expected\n");
+    return error(&v->ei,filename,n->line,NULL,"Element expected\n");
   if (n->ns) {
-    if (NULL == (t = xs_lookup_type(v->s,n->name,n->ns->href)))
-      return set_error_info(&v->ei,filename,n->line,NULL,NULL,
-                            "No type definition for element {%s}%s",n->ns->href,n->name);
+    nsname nn = nsname_new(n->ns->href,n->name);
+    if (NULL == (t = xs_lookup_type(v->s,nn))) {
+      nsname_free(nn);
+      return error(&v->ei,filename,n->line,NULL,"No type definition for element {%s}%s",
+                   n->ns->href,n->name);
+    }
+    nsname_free(nn);
   }
   else {
-    if (NULL == (t = xs_lookup_type(v->s,n->name,NULL)))
-      return set_error_info(&v->ei,filename,n->line,NULL,NULL,
-                            "No type definition for element %s",n->name);
+    nsname nn = nsname_new(NULL,n->name);
+    if (NULL == (t = xs_lookup_type(v->s,nn))) {
+      nsname_free(nn);
+      return error(&v->ei,filename,n->line,NULL,"No type definition for element %s",n->name);
+    }
+    nsname_free(nn);
   }
 
   /* FIXME: what if root is a simple type (i.e. not a model group)? */
@@ -1351,7 +1364,7 @@ int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, xs_particle *p, s
 /*   printf("xs_decode_particle pos 0x%02x particle %s (enctype %d)\n",pos,p->cvar,p->enctype); */
   if (XS_PARTICLE_TERM_ELEMENT == p->term_type) {
     xs_element *e = p->term.e;
-    xmlTextWriterStartElement(writer,e->name);
+    xmlTextWriterStartElement(writer,e->def.ident.name);
     if (!e->type->complex) {
       if (v->s->globals->boolean_type == e->type) {
         IMPL_BOOLEAN val = *(IMPL_BOOLEAN*)(encoded->data+pos);
@@ -1461,8 +1474,8 @@ int xs_decode(xs_validator *v, xmlTextWriter *writer, xs_type *t, stringbuf *enc
 {
   int r;
   assert(t->content_type);
-  assert(t->name);
-  xmlTextWriterStartElement(writer,t->name);
+  assert(t->def.ident.name);
+  xmlTextWriterStartElement(writer,t->def.ident.name);
   r = xs_decode_particle(v,writer,t->content_type,encoded,pos);
   xmlTextWriterEndElement(writer);
   return r;

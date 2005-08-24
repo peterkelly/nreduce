@@ -253,10 +253,10 @@ void dump_all_wildcards(dumpinfo *di, xs_schema *s)
     if (!t->builtin) {
       if (prevline)
         printf("\n");
-      if (t->ns)
-        printf("Attribute wildcard for type {%s}%s:\n",t->ns,t->name);
+      if (t->def.ident.ns)
+        printf("Attribute wildcard for type {%s}%s:\n",t->def.ident.ns,t->def.ident.name);
       else
-        printf("Attribute wildcard for type %s:\n",t->name);
+        printf("Attribute wildcard for type %s:\n",t->def.ident.name);
       if (t->attribute_wildcard) {
         dump_wildcard(s,NULL,di,0,t->attribute_wildcard);
         dump_wildcard(s,NULL,di,1,t->attribute_wildcard);
@@ -274,10 +274,10 @@ void dump_all_wildcards(dumpinfo *di, xs_schema *s)
         xs_wildcard *w = (xs_wildcard*)l->data;
         if (prevline)
           printf("\n");
-        if (t->ns)
-          printf("Element wildcard within type {%s}%s:\n",t->ns,t->name);
+        if (t->def.ident.ns)
+          printf("Element wildcard within type {%s}%s:\n",t->def.ident.ns,t->def.ident.name);
         else
-          printf("Element wildcard within type %s:\n",t->name);
+          printf("Element wildcard within type %s:\n",t->def.ident.name);
         dump_wildcard(s,NULL,di,0,w);
         dump_wildcard(s,NULL,di,1,w);
         prevline = 1;
@@ -290,10 +290,10 @@ void dump_all_wildcards(dumpinfo *di, xs_schema *s)
     xs_attribute_group *ag = (xs_attribute_group*)sse->object;
     if (prevline)
       printf("\n");
-    if (ag->ns)
-      printf("Attribute wildcard for attribute group {%s}%s:\n",ag->ns,ag->name);
+    if (ag->def.ident.ns)
+      printf("Attribute wildcard for attribute group {%s}%s:\n",ag->def.ident.ns,ag->def.ident.name);
     else
-      printf("Attribute wildcard for attribute group %s:\n",ag->name);
+      printf("Attribute wildcard for attribute group %s:\n",ag->def.ident.name);
     if (ag->attribute_wildcard) {
       dump_wildcard(s,NULL,di,0,ag->attribute_wildcard);
       dump_wildcard(s,NULL,di,1,ag->attribute_wildcard);
@@ -319,14 +319,14 @@ void get_types(xs_schema *s, char *typenames, xs_type **t1, xs_type **t2)
   name2 = strdup(comma+1);
   *comma = '\0';
 
-  if ((NULL == (*t1 = xs_lookup_type(s,name1,s->ns))) &&
-      (NULL == (*t1 = xs_lookup_type(s,name1,XS_NAMESPACE)))) {
+  if ((NULL == (*t1 = xs_lookup_type(s,nsname_temp(s->ns,name1)))) &&
+      (NULL == (*t1 = xs_lookup_type(s,nsname_temp(XS_NAMESPACE,name1))))) {
     fprintf(stderr,"No such type: %s\n",name1);
     exit(1);
   }
 
-  if ((NULL == (*t2 = xs_lookup_type(s,name2,s->ns))) &&
-      (NULL == (*t2 = xs_lookup_type(s,name2,XS_NAMESPACE)))) {
+  if ((NULL == (*t2 = xs_lookup_type(s,nsname_temp(s->ns,name2)))) &&
+      (NULL == (*t2 = xs_lookup_type(s,nsname_temp(XS_NAMESPACE,name2))))) {
     fprintf(stderr,"No such type: %s\n",name2);
     exit(1);
   }
@@ -342,12 +342,12 @@ void get_type_wildcards(xs_schema *s, char *typenames, xs_wildcard **O1, xs_wild
   get_types(s,typenames,&t1,&t2);
 
   if (NULL == (*O1 = t1->attribute_wildcard)) {
-    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t1->name);
+    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t1->def.ident.name);
     exit(1);
   }
 
   if (NULL == (*O2 = t2->attribute_wildcard)) {
-    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t2->name);
+    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t2->def.ident.name);
     exit(1);
   }
 }
@@ -399,7 +399,7 @@ void print_range(xs_schema *s, char *typename)
   xs_type *t;
   xs_range r;
 
-  if (NULL == (t = xs_lookup_type(s,typename,s->ns))) {
+  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typename)))) {
     fprintf(stderr,"No such type: %s\n",typename);
     exit(1);
   }
@@ -453,14 +453,14 @@ int test_type_derivation(xs_schema *s, char *typenames, char *final_set)
   if (t1->complex) {
     if (0 != xs_check_complex_type_derivation_ok(s,t1,t2,final_extension,final_restriction)) {
       error_info_print(&s->ei,stderr);
-      exit(1);
+      return 1;
     }
   }
   else {
     if (0 != xs_check_simple_type_derivation_ok(s,t1,t2,final_extension,final_restriction,
                                                final_list,final_union)) {
       error_info_print(&s->ei,stderr);
-      exit(1);
+      return 1;
     }
   }
 
@@ -475,7 +475,7 @@ void print_non_pointless(xs_schema *s, char *typename)
   xs_particle *p;
   ignore_pointless_data ipd;
 
-  if (NULL == (t = xs_lookup_type(s,typename,s->ns))) {
+  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typename)))) {
     fprintf(stderr,"No such type: %s\n",typename);
     exit(1);
   }
@@ -513,8 +513,10 @@ int main(int argc, char **argv)
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
-  if (NULL == (s = parse_xmlschema_file(arguments.filename,g)))
+  if (NULL == (s = parse_xmlschema_file(arguments.filename,g))) {
+    xs_globals_free(g);
     exit(1);
+  }
 
   if (arguments.dump)
     dump_xmlschema(stdout,s);

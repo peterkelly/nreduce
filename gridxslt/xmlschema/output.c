@@ -28,18 +28,12 @@
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/uri.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-
-void dump_indent(dumpinfo *di)
-{
-  int i;
-  for (i = 0; i < di->indent; i++)
-    fprintf(di->f,"  ");
-}
 
 void dump_inc_indent(dumpinfo *di)
 {
@@ -55,32 +49,23 @@ void dump_dec_indent(dumpinfo *di)
 void dump_printf(dumpinfo *di, const char *format, ...)
 {
   va_list ap;
+  stringbuf *buf = stringbuf_new();
 
-  dump_indent(di);
+  stringbuf_format(buf,"%#i",2*di->indent);
 
   va_start(ap,format);
-  vfprintf(di->f,format,ap);
+  stringbuf_vformat(buf,format,ap);
   va_end(ap);
+
+  fprintf(di->f,buf->data);
+  stringbuf_free(buf);
 }
 
 void dump_reference(dumpinfo *di, char *type, xs_reference *r)
 {
   if (!r)
     return;
-  if (r->ns)
-    dump_printf(di,"  %s reference: {%s}%s\n",type,r->ns,r->name);
-  else
-    dump_printf(di,"  %s reference: %s\n",type,r->name);
-}
-
-void dump_object_name(dumpinfo *di, char *type, char *name, char *ns)
-{
-  if (name && ns)
-    dump_printf(di,"%s {%s}%s\n",type,ns,name);
-  else if (name)
-    dump_printf(di,"%s %s\n",type,name);
-  else
-    dump_printf(di,"%s (unnamed)\n",type,name);
+  dump_printf(di,"  %s reference: %#n\n",type,r->def.ident);
 }
 
 void dump_enum_val(dumpinfo *di, const char **enumvals, char *name, int val)
@@ -116,13 +101,13 @@ void dump_value_constraint(dumpinfo *di, xs_value_constraint *vc)
 
 void write_ref_attribute(xs_schema *s, xmlTextWriter *writer, char *attrname, xs_reference *r)
 {
-  if (r->ns) {
-    ns_def *ns = ns_lookup_href(s->globals->namespaces,r->ns);
+  if (r->def.ident.ns) {
+    ns_def *ns = ns_lookup_href(s->globals->namespaces,r->def.ident.ns);
     assert(NULL != ns);
-    xmlTextWriterWriteFormatAttribute(writer,attrname,"%s:%s",ns->prefix,r->name);
+    xmlTextWriterWriteFormatAttribute(writer,attrname,"%s:%s",ns->prefix,r->def.ident.name);
   }
   else {
-    xmlTextWriterWriteAttribute(writer,attrname,r->name);
+    xmlTextWriterWriteAttribute(writer,attrname,r->def.ident.name);
   }
 }
 
@@ -132,15 +117,15 @@ void xs_output_block_final(xmlTextWriter *writer, char *attrname,
   if (extension || restriction || substitution || list || union1) {
     stringbuf *buf = stringbuf_new();
     if (extension)
-      stringbuf_printf(buf,"extension ");
+      stringbuf_format(buf,"extension ");
     if (restriction)
-      stringbuf_printf(buf,"restriction ");
+      stringbuf_format(buf,"restriction ");
     if (substitution)
-      stringbuf_printf(buf,"substitution ");
+      stringbuf_format(buf,"substitution ");
     if (list)
-      stringbuf_printf(buf,"list ");
+      stringbuf_format(buf,"list ");
     if (union1)
-      stringbuf_printf(buf,"union ");
+      stringbuf_format(buf,"union ");
     if (buf->size != 1)
       buf->data[buf->size-2] = '\0';
     xmlTextWriterWriteAttribute(writer,attrname,buf->data);
@@ -159,11 +144,11 @@ void output_wildcard_attrs(xs_schema *s, xmlTextWriter *writer, xs_wildcard *w)
     for (l = w->nslist; l; l = l->next) {
       char *ns = (char*)l->data;
       if (NULL == ns)
-        stringbuf_printf(buf,"##local ");
+        stringbuf_format(buf,"##local ");
       else if ((NULL != s->ns) && !strcmp(ns,s->ns))
-        stringbuf_printf(buf,"##targetNamespace ");
+        stringbuf_format(buf,"##targetNamespace ");
       else
-        stringbuf_printf(buf,"%s ",ns);
+        stringbuf_format(buf,"%s ",ns);
     }
     if (buf->size != 1)
       buf->data[buf->size-2] = '\0';
@@ -225,8 +210,8 @@ int output_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
     if (!post) {
 
       xmlTextWriterStartElement(writer,"xsd:simpleType");
-      if (t->name)
-        xmlTextWriterWriteAttribute(writer,"name",t->name);
+      if (t->def.ident.name)
+        xmlTextWriterWriteAttribute(writer,"name",t->def.ident.name);
 
       xs_output_block_final(writer,"final",t->final_extension,t->final_restriction,0,
                             t->final_list,t->final_union);
@@ -258,14 +243,9 @@ int output_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
           xs_member_type *mt = (xs_member_type*)l->data;
 
           if (mt->ref) {
-            if (mt->ref->ns) {
-              ns_def *ns = ns_lookup_href(s->globals->namespaces,mt->ref->ns);
-              assert(NULL != ns);
-              stringbuf_printf(member_types,"%s:%s ",ns->prefix,mt->ref->name);
-            }
-            else {
-              stringbuf_printf(member_types,"%s ",mt->ref->name);
-            }
+            qname qn = nsname_to_qname(s->globals->namespaces,mt->ref->def.ident);
+            stringbuf_format(member_types,"%#q ",qn);
+            qname_free(qn);
           }
         }
 
@@ -291,8 +271,8 @@ int output_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
     /* <complexType> */
     if (!post) {
       xmlTextWriterStartElement(writer,"xsd:complexType");
-      if (t->name)
-        xmlTextWriterWriteAttribute(writer,"name",t->name);
+      if (t->def.ident.name)
+        xmlTextWriterWriteAttribute(writer,"name",t->def.ident.name);
       if (t->mixed)
         xmlTextWriterWriteAttribute(writer,"mixed","true");
 
@@ -399,7 +379,7 @@ int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
       return 0; /* skip processing the default typedefs */
     if (!post) {
       if (!di->in_builtin_type)
-        dump_printf(di,"(built-in type %s)\n",t->name);
+        dump_printf(di,"(built-in type %s)\n",t->def.ident.name);
       di->in_builtin_type++;
     }
     else {
@@ -420,7 +400,7 @@ int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
     list *l;
     /* <simpleType> */
 
-    dump_object_name(di,"Simple type",t->name,t->ns);
+    dump_printf(di,"Simple type %#n\n",t->def.ident);
 
     if (XS_TYPE_SIMPLE_BUILTIN == t->stype)
       dump_printf(di,"  Type: built-in\n");
@@ -452,7 +432,7 @@ int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
       dump_printf(di,"    enumeration=%s\n",(char*)l->data);
   }
   else {
-    dump_object_name(di,"Complex type",t->name,t->ns);
+    dump_printf(di,"Complex type %#n\n",t->def.ident);
 
     if (!t->complex_content) {
       /* <simpleContent> */
@@ -474,10 +454,11 @@ int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
       }
 
       if (t->baseref) {
-        if (t->baseref->ns)
-          dump_printf(di,"  Base type: %s [%s]\n",t->baseref->name,t->baseref->ns);
+        if (t->baseref->def.ident.ns)
+          dump_printf(di,"  Base type: %s [%s]\n",t->baseref->def.ident.name,
+                      t->baseref->def.ident.ns);
         else
-          dump_printf(di,"  Base type: %s\n",t->baseref->name);
+          dump_printf(di,"  Base type: %s\n",t->baseref->def.ident.name);
       }
 /*       else if (t->base == s->globals->simple_ur_type) { */
 /*         dump_printf(di,"  Base type: {http://www.w3.org/2001/XMLSchema}anySimpleType\n"); */
@@ -493,16 +474,16 @@ int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t)
 
       tmpbuf = stringbuf_new();
       if (t->prohibited_extension)
-        stringbuf_printf(tmpbuf,"extension ");
+        stringbuf_format(tmpbuf,"extension ");
       if (t->prohibited_restriction)
-        stringbuf_printf(tmpbuf,"restriction ");
+        stringbuf_format(tmpbuf,"restriction ");
       dump_printf(di,"  Prohibited substitutions: %s\n",tmpbuf->data);
 
       tmpbuf->data[0] = '\0';
       if (t->final_extension)
-        stringbuf_printf(tmpbuf,"extension ");
+        stringbuf_format(tmpbuf,"extension ");
       if (t->final_restriction)
-        stringbuf_printf(tmpbuf,"restriction ");
+        stringbuf_format(tmpbuf,"restriction ");
       dump_printf(di,"  Final: %s\n",tmpbuf->data);
       stringbuf_free(tmpbuf);
     }
@@ -612,7 +593,7 @@ int output_particle(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_partic
       if (p->ref)
         write_ref_attribute(s,writer,"ref",p->ref);
       else
-        xmlTextWriterWriteAttribute(writer,"name",p->term.e->name);
+        xmlTextWriterWriteAttribute(writer,"name",p->term.e->def.ident.name);
 
       if (p->term.e->typeref)
         maybe_output_element_typeref(s,p->term.e,writer);
@@ -626,9 +607,9 @@ int output_particle(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_partic
       output_value_constraint(writer,&p->term.e->vc);
       output_particle_minmax(writer,p);
 
-      if ((NULL != p->term.e->ns) && !s->elemformq)
+      if ((NULL != p->term.e->def.ident.ns) && !s->elemformq)
         xmlTextWriterWriteAttribute(writer,"form","qualified");
-      else if ((NULL == p->term.e->ns) && s->elemformq)
+      else if ((NULL == p->term.e->def.ident.ns) && s->elemformq)
         xmlTextWriterWriteAttribute(writer,"form","unqualified");
     }
     else {
@@ -717,7 +698,7 @@ int output_model_group_def(xs_schema *s, xmlDocPtr doc, void *data, int post,
 
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:group");
-    xmlTextWriterWriteAttribute(writer,"name",mgd->name);
+    xmlTextWriterWriteAttribute(writer,"name",mgd->def.ident.name);
     assert(mgd->model_group);
 
     if (XS_MODEL_GROUP_COMPOSITOR_ALL == mgd->model_group->compositor)
@@ -746,7 +727,7 @@ int dump_model_group_def(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_m
   }
 
   assert(mgd->model_group);
-  dump_object_name(di,"Model group",mgd->name,mgd->ns);
+  dump_printf(di,"Model group %#n\n",mgd->def.ident);
   if (XS_MODEL_GROUP_COMPOSITOR_ALL == mgd->model_group->compositor)
     dump_printf(di,"  Compositor: all\n");
   else if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mgd->model_group->compositor)
@@ -770,7 +751,7 @@ int output_element(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_element
   }
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:element");
-    xmlTextWriterWriteAttribute(writer,"name",e->name);
+    xmlTextWriterWriteAttribute(writer,"name",e->def.ident.name);
 
     assert(e->type);
     if (e->typeref)
@@ -802,7 +783,7 @@ int dump_element(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_element *
     return 0;
   }
 
-  dump_object_name(di,"Element",e->name,e->ns);
+  dump_printf(di,"Element %#n\n",e->def.ident);
   dump_reference(di,"Type",e->typeref);
   if (NULL != e->sgheadref) {
     assert(NULL != e->sghead);
@@ -812,10 +793,7 @@ int dump_element(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_element *
     dump_printf(di,"  Substitution group members:\n");
     for (l = e->sgmembers; l; l = l->next) {
       xs_element *member = (xs_element*)l->data;
-      if (NULL != member->ns)
-        dump_printf(di,"    {%s}%s\n",member->ns,member->name);
-      else
-        dump_printf(di,"    %s\n",member->name);
+      dump_printf(di,"    %#n\n",member->def.ident);
     }
   }
 
@@ -824,18 +802,18 @@ int dump_element(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_element *
 
   tmpbuf = stringbuf_new();
   if (e->disallow_substitution)
-    stringbuf_printf(tmpbuf,"substitution ");
+    stringbuf_format(tmpbuf,"substitution ");
   if (e->disallow_extension)
-    stringbuf_printf(tmpbuf,"extension ");
+    stringbuf_format(tmpbuf,"extension ");
   if (e->disallow_restriction)
-    stringbuf_printf(tmpbuf,"restriction ");
+    stringbuf_format(tmpbuf,"restriction ");
   dump_printf(di,"  Disallowed substitutions: %s\n",tmpbuf->data);
 
   tmpbuf->data[0] = '\0';
   if (e->exclude_extension)
-    stringbuf_printf(tmpbuf,"extension ");
+    stringbuf_format(tmpbuf,"extension ");
   if (e->exclude_restriction)
-    stringbuf_printf(tmpbuf,"restriction ");
+    stringbuf_format(tmpbuf,"restriction ");
   dump_printf(di,"  Substitution group exclusions: %s\n",tmpbuf->data);
   stringbuf_free(tmpbuf);
 
@@ -852,7 +830,7 @@ int output_attribute(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_attri
   }
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:attribute");
-    xmlTextWriterWriteAttribute(writer,"name",a->name);
+    xmlTextWriterWriteAttribute(writer,"name",a->def.ident.name);
 
     if (a->typeref)
       write_ref_attribute(s,writer,"type",a->typeref);
@@ -875,14 +853,14 @@ int output_attribute_use(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_a
       write_ref_attribute(s,writer,"ref",au->ref);
     }
     else {
-      xmlTextWriterWriteAttribute(writer,"name",au->attribute->name);
+      xmlTextWriterWriteAttribute(writer,"name",au->attribute->def.ident.name);
 
       if (au->attribute->typeref)
         write_ref_attribute(s,writer,"type",au->attribute->typeref);
 
-      if ((NULL != au->attribute->ns) && !s->attrformq)
+      if ((NULL != au->attribute->def.ident.ns) && !s->attrformq)
         xmlTextWriterWriteAttribute(writer,"form","qualified");
-      else if ((NULL == au->attribute->ns) && s->attrformq)
+      else if ((NULL == au->attribute->def.ident.ns) && s->attrformq)
         xmlTextWriterWriteAttribute(writer,"form","unqualified");
     }
 
@@ -908,7 +886,7 @@ int dump_attribute_group(xs_schema *s, xmlDocPtr doc, void *data, int post,
     return 0;
   }
 
-  dump_object_name(di,"Attribute group",ag->name,ag->ns);
+  dump_printf(di,"Attribute group %#n\n",ag->def.ident);
 
   dump_inc_indent(di);
   return 0;
@@ -923,10 +901,7 @@ int dump_attribute_group_ref(xs_schema *s, xmlDocPtr doc, void *data, int post,
     return 0;
   }
 
-  if (agr->ref->ns)
-    dump_printf(di,"Attribute group reference: {%s}%s\n",agr->ref->ns,agr->ref->name);
-  else
-    dump_printf(di,"Attribute group reference: %s\n",agr->ref->name);
+  dump_printf(di,"Attribute group reference: %#n\n",agr->ref->def.ident);
 
   dump_inc_indent(di);
   return 0;
@@ -938,7 +913,7 @@ int output_attribute_group(xs_schema *s, xmlDocPtr doc, void *data, int post,
   xmlTextWriter *writer = (xmlTextWriter*)data;
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:attributeGroup");
-    xmlTextWriterWriteAttribute(writer,"name",ag->name);
+    xmlTextWriterWriteAttribute(writer,"name",ag->def.ident.name);
   }
   else {
     /* attribute wildcard - we do this when post=1 so it goes after the content */
@@ -978,7 +953,7 @@ int dump_attribute(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_attribu
 
   assert(a->type);
 
-  dump_object_name(di,"Attribute",a->name,a->ns);
+  dump_printf(di,"Attribute %#n\n",a->def.ident);
 
   if (a->toplevel)
     dump_value_constraint(di,&a->vc);
@@ -1040,6 +1015,17 @@ void output_xmlschema(FILE *f, xs_schema *s)
     xmlTextWriterWriteAttribute(writer,"attributeFormDefault","qualified");
   if (s->elemformq)
     xmlTextWriterWriteAttribute(writer,"elementFormDefault","qualified");
+
+  for (l = s->imports; l; l = l->next) {
+    xs_schema *import = (xs_schema*)l->data;
+    char *rel = get_relative_uri(import->uri,s->uri);
+    xmlTextWriterStartElement(writer,"xsd:import");
+    if (NULL != import->ns)
+      xmlTextWriterWriteAttribute(writer,"namespace",import->ns);
+    xmlTextWriterWriteAttribute(writer,"schemaLocation",rel);
+    xmlTextWriterEndElement(writer);
+    free(rel);
+  }
 
   v.visit_type = output_type;
   v.visit_element = output_element;

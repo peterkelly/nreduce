@@ -30,22 +30,18 @@
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <curl/curl.h>
-#include <curl/types.h>
-#include <curl/easy.h>
+#include <libxml/uri.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
-#include <errno.h>
 
 int xs_check_attribute_type(xs_schema *s, xs_reference *r)
 {
   xs_attribute *a = (xs_attribute*)r->source;
   assert(a->type);
   if (a->type->complex)
-    return set_error_info(&s->ei,s->uri,r->line,NULL,NULL,
-                          "Attributes can only use simple types");
+    return error(&s->ei,s->uri,r->def.loc.line,NULL,"Attributes can only use simple types");
   return 0;
 }
 
@@ -93,9 +89,9 @@ int xs_check_sgheadref(xs_schema *s, xs_reference *r)
 {
   xs_element *source = (xs_element*)r->source;
   xs_element *head = (xs_element*)r->target;
-/*   debug("resolved sghead for %s: %s\n",source->name,head->name); */
-/*   debug("head->exclude_extension = %d\n",head->exclude_extension); */
-/*   debug("head->exclude_restriction = %d\n",head->exclude_restriction); */
+/*   debugl("resolved sghead for %s: %s\n",source->name,head->name); */
+/*   debugl("head->exclude_extension = %d\n",head->exclude_extension); */
+/*   debugl("head->exclude_restriction = %d\n",head->exclude_restriction); */
   list_push(&head->sgmembers,source);
   return 0;
 }
@@ -116,12 +112,12 @@ int xs_init_toplevel_object(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     return missing_attribute2(&s->ei,s->uri,n->line,NULL,"name");
   name = get_wscollapsed_attr(n,"name");
 
-  if (NULL != ss_lookup_local(ss,name,ns)) {
-    set_error_info(&s->ei,s->uri,n->line,NULL,NULL,"%s \"%s\" already declared",typestr,name);
+  if (NULL != ss_lookup_local(ss,nsname_temp(ns,name))) {
+    error(&s->ei,s->uri,n->line,NULL,"%s \"%s\" already declared",typestr,name);
     free(name);
     return -1;
   }
-  ss_add(ss,name,ns,obj);
+  ss_add(ss,nsname_temp(ns,name),obj);
 
   *obj_name = name;
   if (ns)
@@ -161,7 +157,7 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
   char *name = NULL;
   char *ns = NULL;
   xs_reference *r;
-  qname_t qn;
+  qname qn;
 
   *refptr = NULL;
 
@@ -169,8 +165,8 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
     return 0;
 
   namestr = get_wscollapsed_attr(n,attrname);
-  qn = get_qname(namestr);
-/*   debug("line %d: Parsing %s reference %s",n->line,ss->type,namestr); */
+  qn = qname_parse(namestr);
+/*   debugl("line %d: Parsing %s reference %s",n->line,ss->type,namestr); */
 
   /* @implements(xmlschema-1:src-qname.1) @end
      @implements(xmlschema-1:src-qname.1.1)
@@ -183,27 +179,27 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
      @implements(xmlschema-1:src-qname.2.2.1) @end
      @implements(xmlschema-1:src-qname.2.2.2) @end */
   if (0 != get_ns_name_from_qname(n,doc,namestr,&ns,&name)) {
-    set_error_info2(&s->ei,s->uri,n->line,"src-qname.1.1",
-                    "Could not resolve namespace for prefix \"%s\"",qn.prefix);
-    free(qn.prefix);
-    free(qn.localpart);
+    error(&s->ei,s->uri,n->line,"src-qname.1.1",
+          "Could not resolve namespace for prefix \"%s\"",qn.prefix);
+    qname_free(qn);
     free(namestr);
     return -1;
   }
 
   if (NULL != ns)
-    ns_add(s->globals->namespaces,ns,qn.prefix);
-  free(qn.prefix);
-  free(qn.localpart);
+    ns_add_preferred(s->globals->namespaces,ns,qn.prefix);
+  qname_free(qn);
   free(namestr);
 
   *refptr = r = xs_reference_new(s->as);
   r->s = s;
-  r->ns = ns;
-  r->name = name;
-  r->line = n->line;
+  r->def.ident = nsname_new(ns,name);
+  r->def.loc.line = n->line;
   r->type = type;
   r->obj = obj;
+
+  free(ns);
+  free(name);
   return 0;
 }
 
@@ -345,8 +341,9 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
   /* case 1: parent is <schema> */
   if (NULL == particles_list) {
     e = xs_element_new(s->as);
-    e->defline = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_elements,e,&e->name,&e->ns,"element"))
+    e->def.loc.line = n->line;
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_elements,e,
+               &e->def.ident.name,&e->def.ident.ns,"element"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"form"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"minOccurs"))
@@ -401,19 +398,19 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
         return missing_attribute2(&s->ei,s->uri,n->line,"src-element.2.1","name");
 
       e = xs_element_new(s->as);
-      e->defline = n->line;
+      e->def.loc.line = n->line;
       p = xs_particle_new(s->as);
       p->range.min_occurs = min_occurs_val;
       p->range.max_occurs = max_occurs_val;
       p->term.e = e;
       p->term_type = XS_PARTICLE_TERM_ELEMENT;
-      p->defline = e->defline;
+      p->defline = e->def.loc.line;
       list_append(particles_list,p);
 
       /* FIXME: testcases for form */
-      e->name = xmlGetProp(n,"name");
+      e->def.ident.name = xmlGetProp(n,"name");
       if (ns && qualified)
-        e->ns = strdup(ns);
+        e->def.ident.ns = strdup(ns);
     }
 
     /* case 3: has ancestor of <complexType> or <group> and #ref is present */
@@ -512,15 +509,15 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
        test { element_type_simpletype.test }
        @end */
     if (xmlHasProp(n,"type"))
-      return set_error_info2(&s->ei,s->uri,n->line,"src-element.3","\"type\" attribute must not be "
-                             "specified if a <simpleType> or <complexType> child is present");
+      return error(&s->ei,s->uri,n->line,"src-element.3","\"type\" attribute must not be specified "
+                   "if a <simpleType> or <complexType> child is present");
 
     if (check_element(c,"simpleType",XS_NAMESPACE)) {
       CHECK_CALL(xs_parse_simple_type(s,c,doc,ns,0,&e->type))
       xs_next_element(&c);
     }
     else { /* complexType */
-      CHECK_CALL(xs_parse_complex_type(s,c,doc,ns,0,&e->type,e->name,e->ns))
+      CHECK_CALL(xs_parse_complex_type(s,c,doc,ns,0,&e->type,e->def.ident.name,e->def.ident.ns))
       assert(e->type);
       xs_next_element(&c);
     }
@@ -612,8 +609,9 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   if (toplevel) {
     /* top-level attribute declaration */
     a = xs_attribute_new(s->as);
-    a->defline = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attributes,a,&a->name,&a->ns,"attribute"))
+    a->def.loc.line = n->line;
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attributes,a,
+               &a->def.ident.name,&a->def.ident.ns,"attribute"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"form"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"use"))
@@ -661,7 +659,7 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     CHECK_CALL(xs_parse_attribute_use(s,n,&use))
 
     a = xs_attribute_new(s->as);
-    a->defline = n->line;
+    a->def.loc.line = n->line;
     au = xs_attribute_use_new(s->as);
     au->defline = n->line;
 
@@ -670,9 +668,9 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
        @end */
     if (!xmlHasProp(n,"name"))
       return missing_attribute2(&s->ei,s->uri,n->line,"src-attribute.3.1","name");
-    a->name = xmlGetProp(n,"name");
+    a->def.ident.name = xmlGetProp(n,"name");
     if (ns && qualified)
-      a->ns = strdup(ns);
+      a->def.ident.ns = strdup(ns);
     au->required = (XS_ATTRIBUTE_USE_REQUIRED == use);
     au->prohibited = (XS_ATTRIBUTE_USE_PROHIBITED == use);
     au->attribute = a;
@@ -687,9 +685,8 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      @end */
   /* FIXME: when form is implemented, make sure attrs can be declared with the schema having
      a targetNamespace of XSI_NAMESPACE when the attr doesn't inherit this namespace } */
-  if (a && !strcmp(a->name,"xmlns"))
-    return set_error_info2(&s->ei,s->uri,n->line,"no-xmlns",
-                           "\"xmlns\" cannot be used as an attribute name");
+  if (a && !strcmp(a->def.ident.name,"xmlns"))
+    return error(&s->ei,s->uri,n->line,"no-xmlns","\"xmlns\" cannot be used as an attribute name");
 
   if (au && a) {
     a->vc.type = au->vc.type;
@@ -700,10 +697,9 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      test { attribute_tl_xsi.test }
      test { attribute_local_xsi.test }
      @end */
-  if (a && a->ns && !strcmp(a->ns,XSI_NAMESPACE))
-    return set_error_info2(&s->ei,s->uri,n->line,"no-xsi",
-                           "attributes cannot be declared with a target namespace of \"%s\"",
-                           XSI_NAMESPACE);
+  if (a && a->def.ident.ns && !strcmp(a->def.ident.ns,XSI_NAMESPACE))
+    return error(&s->ei,s->uri,n->line,"no-xsi",
+                 "attributes cannot be declared with a target namespace of \"%s\"",XSI_NAMESPACE);
   /* FIXME: need to add the 4 built-in types in section 3.2.7 by default */
 
   /* @implements(xmlschema-1:src-attribute.1)
@@ -725,8 +721,8 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      test { attribute_local_ref_default_use3.test }
      @end */
   if (xmlHasProp(n,"default") && (XS_ATTRIBUTE_USE_OPTIONAL != use))
-    return set_error_info2(&s->ei,s->uri,n->line,"src-attribute.2",
-                           "\"use\" must be \"optional\" when default value specified");
+    return error(&s->ei,s->uri,n->line,"src-attribute.2",
+                 "\"use\" must be \"optional\" when default value specified");
 
   if (!xmlHasProp(n,"ref")) {
     CHECK_CALL(xs_parse_ref(s,n,doc,"type",XS_OBJECT_TYPE,(void**)&a->type,&a->typeref))
@@ -743,13 +739,13 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     /* @implements(xmlschema-1:src-attribute.3) @end
        @implements(xmlschema-1:src-attribute.3.1) test { attribute_local_ref_simpletype.test } @end */
     if (xmlHasProp(n,"ref"))
-      return set_error_info2(&s->ei,s->uri,c->line,"src-attribute.3.1",
-                             "<simpleType> not allowed here when \"ref\" is set on <attribute>");
+      return error(&s->ei,s->uri,c->line,"src-attribute.3.1",
+                   "<simpleType> not allowed here when \"ref\" is set on <attribute>");
 
     /* @implements(xmlschema-1:src-attribute.4) test { attribute_tl_type_simple_ref.test} @end */
     if (NULL != a->typeref)
-      return set_error_info2(&s->ei,s->uri,c->line,"src-attribute.4",
-                             "<simpleType> not allowed here when \"type\" is set on <attribute>");
+      return error(&s->ei,s->uri,c->line,"src-attribute.4",
+                   "<simpleType> not allowed here when \"type\" is set on <attribute>");
     CHECK_CALL(xs_parse_simple_type(s,c,doc,ns,0,&a->type))
     assert(NULL != a->type);
   }
@@ -774,9 +770,9 @@ int xs_parse_attribute_group_def(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char
      @implements(xmlschema-1:Schema{attribute group definitions}) @end
    */
 
-  CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attribute_groups,ag,&ag->name,&ag->ns,
-                                     "attribute group"))
-  ag->defline = n->line;
+  CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attribute_groups,ag,
+                                     &ag->def.ident.name,&ag->def.ident.ns,"attribute group"))
+  ag->def.loc.line = n->line;
   CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
 
   for (c = xs_first_non_annotation_child(n); c; xs_next_element(&c)) {
@@ -849,7 +845,7 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
   }
   else {
     if (NULL != fd->strval[facet])
-      return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,"facet already defined");
+      return error(&s->ei,s->uri,n->line,NULL,"facet already defined");
     fd->strval[facet] = get_wscollapsed_attr(n,"value");
     fd->defline[facet] = n->line;
 
@@ -859,16 +855,14 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
         (XS_FACET_TOTALDIGITS == facet) ||
         (XS_FACET_FRACTIONDIGITS == facet)) {
       if (0 != convert_to_nonneg_int(fd->strval[facet],&fd->intval[facet]))
-        return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,
-                              "Invalid value for facet %s: must be a non-negative integer",
-                               n->name);
+        return error(&s->ei,s->uri,n->line,NULL,
+                     "Invalid value for facet %s: must be a non-negative integer",n->name);
     }
     else if (XS_FACET_TOTALDIGITS == facet) {
       if ((0 != convert_to_nonneg_int(fd->strval[facet],&fd->intval[facet])) ||
           (0 == fd->intval[facet]))
-        return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,
-                              "Invalid value for facet %s: must be a positive integer",
-                               n->name);
+        return error(&s->ei,s->uri,n->line,NULL,
+                     "Invalid value for facet %s: must be a positive integer",n->name);
     }
 
   }
@@ -882,7 +876,7 @@ int xs_is_builtin_type_redeclaration(xs_schema *s, char *ns, xmlNodePtr n)
     xs_type *existing;
     char *name = get_wscollapsed_attr(n,"name");
     if ((NULL != (existing = xs_symbol_table_lookup_object(s->globals->symt,XS_OBJECT_TYPE,
-                                                           name,ns))) &&
+                                                           nsname_temp(ns,name)))) &&
         existing->builtin) {
       free(name);
       return 1;
@@ -919,8 +913,9 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
       return 0;
 
     t = xs_type_new(s->as);
-    t->defline = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,&t->name,&t->ns,"type"))
+    t->def.loc.line = n->line;
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,
+               &t->def.ident.name,&t->def.ident.ns,"type"))
 
     /* @implements(xmlschema-1:Simple Type Definition{final})
        test { simpletype_final1.test }
@@ -940,7 +935,7 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   }
   else {
     t = xs_type_new(s->as);
-    t->defline = n->line;
+    t->def.loc.line = n->line;
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"name"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"final"))
   }
@@ -952,8 +947,8 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   c = xs_first_non_annotation_child(n);
 
   if (!c)
-    return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,
-                          "<simpleType> requires a <restriction>, <list>, or <union>");
+    return error(&s->ei,s->uri,n->line,NULL,
+                 "<simpleType> requires a <restriction>, <list>, or <union>");
 
   if (check_element(c,"restriction",XS_NAMESPACE)) {
     xmlNodePtr c2 = xs_first_non_annotation_child(c);
@@ -972,16 +967,16 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
        @end */
     if (c2 && check_element(c2,"simpleType",XS_NAMESPACE)) {
       if (NULL != t->baseref)
-        return set_error_info2(&s->ei,s->uri,c2->line,"src-simple-type.2","<simpleType> not "
-                               "allowed here when \"base\" is set on <restriction>");
+        return error(&s->ei,s->uri,c2->line,"src-simple-type.2",
+                     "<simpleType> not allowed here when \"base\" is set on <restriction>");
       CHECK_CALL(xs_parse_simple_type(s,c2,doc,ns,0,&t->base));
       t->variety = t->base->variety;
       xs_next_element(&c2);
     }
 
     if ((NULL == t->base) && (NULL == t->baseref))
-      return set_error_info(&s->ei,s->uri,c->line,XS_SPEC_D,"3.14.4","<restriction> must have "
-                            "either the \"base\" attribute set, or a <simpleType> child");
+      return error(&s->ei,s->uri,c->line,"structures-3.14.4","<restriction> must have either the "
+                   "\"base\" attribute set, or a <simpleType> child");
 
     while (c2) {
 
@@ -1028,15 +1023,15 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
        @end */
     if (c2 && check_element(c2,"simpleType",XS_NAMESPACE)) {
       if (NULL != t->item_typeref)
-        return set_error_info2(&s->ei,s->uri,c2->line,"src-simple-type.3",
-                               "<simpleType> not allowed here when \"itemType\" is set on <list>");
+        return error(&s->ei,s->uri,c2->line,"src-simple-type.3",
+                     "<simpleType> not allowed here when \"itemType\" is set on <list>");
       CHECK_CALL(xs_parse_simple_type(s,c2,doc,ns,0,&t->item_type));
       xs_next_element(&c2);
     }
 
     if ((NULL == t->item_type) && (NULL == t->item_typeref))
-      return set_error_info2(&s->ei,s->uri,c->line,"src-simple-type.3","<list> must have "
-                             "either the \"itemType\" attribute set, or a <simpleType> child");
+      return error(&s->ei,s->uri,c->line,"src-simple-type.3","<list> must have "
+                   "either the \"itemType\" attribute set, or a <simpleType> child");
 
     if (c2)
       return invalid_element2(&s->ei,s->uri,c2);
@@ -1072,14 +1067,13 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
             }
 
             /* FIXME!: make sure member types are handled property with namespaces */
-/*             debug("line %d: Parsing union member type %s",c->line,start); */
+/*             debugl("line %d: Parsing union member type %s",c->line,start); */
             mt = xs_member_type_new(s->as);
             list_append(&t->members,mt);
             mt->ref = xs_reference_new(s->as);
             mt->ref->s = s;
-            mt->ref->ns = ref_ns;
-            mt->ref->name = ref_name;
-            mt->ref->line = c->line;
+            mt->ref->def.ident = nsname_temp(ref_ns,ref_name);
+            mt->ref->def.loc.line = c->line;
             mt->ref->type = XS_OBJECT_TYPE;
             mt->ref->obj = (void**)&mt->type;
 
@@ -1108,8 +1102,7 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     }
 
     if (NULL == t->members)
-      return set_error_info(&s->ei,s->uri,c->line,NULL,NULL,
-                            "<union> requires one or more member types");
+      return error(&s->ei,s->uri,c->line,NULL,"<union> requires one or more member types");
 
     t->variety = XS_TYPE_VARIETY_UNION;
     t->stype = XS_TYPE_SIMPLE_UNION;
@@ -1236,7 +1229,8 @@ int xs_parse_complex_content_children(xs_schema *s,
       CHECK_CALL(xs_parse_group_ref(s,c,doc,NULL,&effective_content))
     }
     else { /* must be <all>, <choice> or <sequence> - otherwise test211 would be true */
-      CHECK_CALL(xs_parse_all_choice_sequence(s,c,ns,doc,NULL,&effective_content,t->name,t->ns))
+      CHECK_CALL(xs_parse_all_choice_sequence(s,c,ns,doc,NULL,&effective_content,
+                 t->def.ident.name,t->def.ident.ns))
       assert(effective_content);
       assert(XS_PARTICLE_TERM_MODEL_GROUP == effective_content->term_type);
       assert(effective_content->term.mg);
@@ -1281,8 +1275,9 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
       return 0;
 
     t = xs_type_new(s->as);
-    t->defline = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,&t->name,&t->ns,"type"))
+    t->def.loc.line = n->line;
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,
+               &t->def.ident.name,&t->def.ident.ns,"type"))
 
     /* @implements(xmlschema-1:Complex Type Definition{prohibited substitutions})
        test { complextype_cc_extension_block.test }
@@ -1308,7 +1303,7 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   }
   else {
     t = xs_type_new(s->as);
-    t->defline = n->line;
+    t->def.loc.line = n->line;
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"name"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"abstract"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"final"))
@@ -1334,8 +1329,7 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     xmlNodePtr rest;
 
     if (NULL == (c2 = xs_first_non_annotation_child(c)))
-      return set_error_info(&s->ei,s->uri,c->line,NULL,NULL,
-                            "expected <restriction> or <extension>");
+      return error(&s->ei,s->uri,c->line,NULL,"expected <restriction> or <extension>");
 
     /* @implements(xmlschema-1:Complex Type Definition{derivation method}) @end */
     if (check_element(c2,"restriction",XS_NAMESPACE))
@@ -1410,9 +1404,9 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
    */
 
   mgd = xs_model_group_def_new(s->as);
-  mgd->defline = n->line;
+  mgd->def.loc.line = n->line;
   CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_model_group_defs,mgd,
-                                     &mgd->name,&mgd->ns,"group"))
+                                     &mgd->def.ident.name,&mgd->def.ident.ns,"group"))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"ref","name",NULL))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"minOccurs","name",NULL))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"maxOccurs","name",NULL))
@@ -1422,15 +1416,15 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
   /* FIXME: handle the case of <redefine> */
 
   if (NULL == (c = xs_first_non_annotation_child(n)))
-    return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,"Model group definition requires an "
-                          "<all>, <choice> or <sequence> child element");
+    return error(&s->ei,s->uri,n->line,NULL,
+                 "Model group definition requires an <all>, <choice> or <sequence> child element");
 
   if (!check_element(c,"all",XS_NAMESPACE) &&
       !check_element(c,"choice",XS_NAMESPACE) &&
       !check_element(c,"sequence",XS_NAMESPACE))
     return invalid_element2(&s->ei,s->uri,c);
 
-  CHECK_CALL(xs_parse_model_group(s,c,ns,doc,&mgd->model_group,mgd->name,mgd->ns))
+  CHECK_CALL(xs_parse_model_group(s,c,ns,doc,&mgd->model_group,mgd->def.ident.name,mgd->def.ident.ns))
   assert(mgd->model_group);
   mgd->model_group->mgd = mgd;
 
@@ -1449,8 +1443,8 @@ int xs_parse_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particl
   xs_particle *p;
 
   if (!xmlHasProp(n,"ref"))
-    return set_error_info(&s->ei,s->uri,n->line,NULL,NULL,"<group> can only be used as a group "
-                          "reference here");
+    return error(&s->ei,s->uri,n->line,NULL,
+                 "<group> can only be used as a group reference here");
 
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"name","ref",NULL))
   CHECK_CALL(xs_parse_max_occurs(s,n,&max_occurs_val))
@@ -1766,120 +1760,124 @@ int xs_parse_any(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_lis
   return 0;
 }
 
-size_t xs_write_import_src(void *ptr, size_t size, size_t nmemb, void *data)
-{
-  stringbuf_append((stringbuf*)data,ptr,size*nmemb);
-  return size*nmemb;
-}
-
 int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
 {
   char *schemaloc;
-  stringbuf *src = NULL;
+/*   stringbuf *src = stringbuf_new(); */
   xmlDocPtr import_doc;
-  xmlNodePtr import_root;
+  xmlNodePtr import_elem;
   xs_schema *import_schema = NULL;
+  char *namespace;
+  char *full_uri;
   if (!xmlHasProp(n,"schemaLocation"))
-    return set_error_info2(&s->ei,s->uri,n->line,NULL,
-                           "No schemaLocation specified; don't know what to import here");
+    return error(&s->ei,s->uri,n->line,NULL,
+                 "No schemaLocation specified; don't know what to import here");
+
+  /* FIXME: test with bad and nonexistant uris, like with xsl:import */
+
+  /* @implements(xmlschema-1:src-import.1) @end */
+
+  /* @implements(xmlschema-1:src-import.1.1)
+     test { xmlschema/import/nsconflict1.test }
+     @end */
+  if (xmlHasProp(n,"namespace") && (NULL != s->ns)) {
+    namespace = xmlGetProp(n,"namespace");
+    if (!strcmp(namespace,s->ns)) {
+      free(namespace);
+      return error(&s->ei,s->uri,n->line,"src-import.1.1","The \"namespace\" attribute for this "
+                   "import must either be absent, or different to the target namespace of the "
+                   "enclosing schema");
+    }
+    free(namespace);
+  }
+
+  /* @implements(xmlschema-1:src-import.1.2)
+     test { xmlschema/import/nsconflict2.test }
+     @end */
+  if (!xmlHasProp(n,"namespace") && (NULL == s->ns))
+    return error(&s->ei,s->uri,n->line,"src-import.1.1","A \"namespace\" attribute is required on "
+                 "this import element since the enclosing schema has no target namespace defined");
+
   schemaloc = get_wscollapsed_attr(n,"schemaLocation");
 
-  /* FIXME: support importing from document fragments (#id) */
-
-  if (!strncasecmp(schemaloc,"http:",5)) {
-    CURL *h;
-    CURLcode cr;
-    long rc = 0;
-    src = stringbuf_new();
-
-/*     printf("Retrieving %s\n",schemaloc); */
-    h = curl_easy_init();
-    curl_easy_setopt(h,CURLOPT_URL,schemaloc);
-    curl_easy_setopt(h,CURLOPT_WRITEFUNCTION,xs_write_import_src);
-    curl_easy_setopt(h,CURLOPT_WRITEDATA,src);
-    curl_easy_setopt(h,CURLOPT_USERAGENT,"libcurl-agent/1.0");
-    cr = curl_easy_perform(h);
-    curl_easy_cleanup(h);
-
-    if (0 != cr) {
-      set_error_info2(&s->ei,s->uri,n->line,NULL,
-                      "Error importing schema \"%s\": %s",schemaloc,curl_easy_strerror(cr));
-      stringbuf_free(src);
-      free(schemaloc);
-      return -1;
-    }
-
-    curl_easy_getinfo(h,CURLINFO_RESPONSE_CODE,&rc);
-    if (200 != rc) {
-      /* FIXME: would be nice to display a string instead of just the response code */
-      set_error_info2(&s->ei,s->uri,n->line,NULL,
-                      "Error importing schema \"%s\": HTTP %d",
-                      schemaloc,rc);
-      stringbuf_free(src);
-      free(schemaloc);
-      return -1;
-    }
-
-  }
-  else {
-    FILE *f;
-    char buf[1024];
-    int r;
-    if (NULL == (f = fopen(schemaloc,"r"))) {
-      set_error_info2(&s->ei,s->uri,n->line,NULL,
-                      "Can't open imported schema file \"%s\": %s",schemaloc,strerror(errno));
-      free(schemaloc);
-      return -1;
-    }
-
-    src = stringbuf_new();
-    while (0 < (r = fread(buf,1,1024,f)))
-      stringbuf_append(src,buf,r);
-
-    fclose(f);
+  if (NULL == (full_uri = xmlBuildURI(schemaloc,s->uri))) {
+    return error(&s->ei,s->uri,n->line,NULL,
+                 "\"%s\" is not a valid relative or absolute URI",schemaloc);
   }
 
-  assert(src);
-
-  if (NULL == (import_doc = xmlReadMemory(src->data,src->size-1,schemaloc,NULL,0))) {
-    set_error_info2(&s->ei,s->uri,n->line,NULL,
-                           "Error parsing imported schema \"%s\"",schemaloc);
-    stringbuf_free(src);
+  if (0 != retrieve_uri_element(&s->ei,s->uri,n->line,NULL,full_uri,
+                                &import_doc,&import_elem,s->uri)) {
+    /* FIXME: not sure if we're really supposed to signal an error here... see note
+       in import2.test */
     free(schemaloc);
+    free(full_uri);
     return -1;
   }
 
-  stringbuf_free(src);
+  /* @implements(xmlschema-1:src-import.2)
+     test { xmlschema/import/id.test }
+     test { xmlschema/import/idnonexistant.test }
+     test { xmlschema/import/idnotschema.test }
+     test { xmlschema/import/nonexistant.test }
+     test { xmlschema/import/notschema.test }
+     @end
+     @implements(xmlschema-1:src-import.2.1) @end
+     @implements(xmlschema-1:src-import.2.2) @end */
 
-  if (NULL == (import_root = xmlDocGetRootElement(import_doc))) {
-    set_error_info2(&s->ei,s->uri,n->line,NULL,
-                           "No root element in imported schema \"%s\"",schemaloc);
+  if (!check_element(import_elem,"schema",XS_NAMESPACE)) {
+    char *justdoc = strdup(full_uri);
+    char *hash;
+    if (NULL != (hash = strchr(justdoc,'#')))
+      *hash = '\0';
+    error(&s->ei,justdoc,import_elem->line,NULL,"Expected element {%s}%s",XS_NAMESPACE,"schema");
+    free(justdoc);
     free(schemaloc);
+    free(full_uri);
     xmlFreeDoc(import_doc);
     return -1;
   }
 
-  if (!check_element(import_root,"schema",XS_NAMESPACE)) {
-    fprintf(stderr,"The document \"%s\" is not an XML schema document; its root element name is "
-            "not \"schema\", or is not in the namespace %s",schemaloc,XS_NAMESPACE);
+  if (0 != parse_xmlschema_element(import_elem,import_doc,full_uri,schemaloc,
+                                   &import_schema,&s->ei,s->globals)) {
     free(schemaloc);
     xmlFreeDoc(import_doc);
+    free(full_uri);
     return -1;
   }
-
-  if (0 != parse_xmlschema_element(import_root,import_doc,schemaloc,&import_schema,&s->ei,
-                                   s->globals)) {
-    free(schemaloc);
-    xmlFreeDoc(import_doc);
-    return -1;
-  }
-
-  /* FIXME: if a target namespace was specified, we must enforce the rule that the imported
-     schema must specify that as it's targetNamespace */
+  free(full_uri);
 
   list_append(&s->imports,import_schema);
   xmlFreeDoc(import_doc);
 
+
+  /* @implements(xmlschema-1:src-import.3) @end
+     @implements(xmlschema-1:src-import.3.1)
+     test { xmlschema/import/nsmismatch1.test }
+     test { xmlschema/import/nsmismatch3.test }
+     @end
+     @implements(xmlschema-1:src-import.3.2)
+     test { xmlschema/import/nsmismatch2.test }
+     @end */
+  namespace = xmlGetProp(n,"namespace");
+  if (NULL == import_schema->ns) {
+    if (NULL != namespace) {
+      free(schemaloc);
+      free(namespace);
+      return error(&s->ei,s->uri,n->line,"src-import.3.1","This import element must not have a "
+                   "\"namespace\" attribute, since the imported schema does not define a target "
+                   "namespace");
+    }
+  }
+  else {
+    if ((NULL == namespace) || strcmp(namespace,import_schema->ns)) {
+      free(namespace);
+      free(schemaloc);
+      return error(&s->ei,s->uri,n->line,"src-import.3.1","This import element must its "
+                   "\"namespace\" attribute set to \"%s\", which is the target namespace declared "
+                   "by the imported schema",import_schema->ns);
+    }
+  }
+  free(namespace);
   free(schemaloc);
   return 0;
 }

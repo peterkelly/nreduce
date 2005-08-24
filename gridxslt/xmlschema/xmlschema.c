@@ -166,10 +166,11 @@ int xs_visit_attribute_use(xs_schema *s, xmlDocPtr doc, void *data, xs_attribute
 char *xs_particle_str(xs_particle *p)
 {
   if (XS_PARTICLE_TERM_ELEMENT == p->term_type) {
-    char *fn = get_full_name(p->term.e->ns,p->term.e->name);
-    char *s = (char*)malloc(strlen("element ")+strlen(fn)+1);
-    sprintf(s,"element %s",fn);
-    free(fn);
+    stringbuf *buf = stringbuf_new();
+    char *s;
+    stringbuf_format(buf,"element %#n",p->term.e->def.ident);
+    s = strdup(buf->data);
+    stringbuf_free(buf);
     return s;
   }
   else if (XS_PARTICLE_TERM_WILDCARD == p->term_type) {
@@ -224,24 +225,13 @@ int xs_resolve_ref(xs_schema *s, xs_reference *r)
      @implements(xmlschema-1:src-resolve.4.2.1) @end
      @implements(xmlschema-1:src-resolve.4.2.2) @end */
   assert(!r->builtin);
-  assert(NULL != r->name);
+  assert(NULL != r->def.ident.name);
   assert(NULL == r->target); /* shouldn't be resolved yet */
   assert(!r->resolved);
 
-/*   if (NULL != r->ns) */
-/*     debug("line %d: Resolving %s {%s}%s",r->line,r->ss->type,r->ns,r->name); */
-/*   else */
-/*     debug("line %d: Resolving %s %s",r->line,r->ss->type,r->name); */
-
-  if (NULL == (r->target = xs_lookup_object(r->s,r->type,r->name,r->ns))) {
-    if (r->ns)
-      return set_error_info(&s->ei,s->uri,r->line,NULL,NULL,"No such %s {%s}%s",
-                            xs_object_types[r->type],r->ns,r->name);
-    else
-      return set_error_info(&s->ei,s->uri,r->line,NULL,NULL,"No such %s %s",
-                            xs_object_types[r->type],r->name);
-  }
-
+  if (NULL == (r->target = xs_lookup_object(r->s,r->type,r->def.ident)))
+    return error(&s->ei,s->uri,r->def.loc.line,NULL,"No such %s %#n",
+                 xs_object_types[r->type],r->def.ident);
 
   if (r->obj)
     *r->obj = r->target;
@@ -282,8 +272,8 @@ xs_type *xs_init_complex_ur_type(xs_globals *g)
   p->in_anyType = 1;
   complex_ur_type->builtin = 1;
   complex_ur_type->complex = 1;
-  complex_ur_type->name = strdup("anyType");
-  complex_ur_type->ns = strdup(XS_NAMESPACE);
+  complex_ur_type->def.ident.name = strdup("anyType");
+  complex_ur_type->def.ident.ns = strdup(XS_NAMESPACE);
   complex_ur_type->base = complex_ur_type;
   complex_ur_type->derivation_method = XS_TYPE_DERIVATION_RESTRICTION;
   complex_ur_type->mixed = 1;
@@ -334,8 +324,8 @@ xs_type *xs_init_simple_ur_type(xs_globals *g)
   xs_type *simple_ur_type = xs_type_new(g->as);
   simple_ur_type->builtin = 1;
   simple_ur_type->complex = 0;
-  simple_ur_type->name = strdup("anySimpleType");
-  simple_ur_type->ns = strdup(XS_NAMESPACE);
+  simple_ur_type->def.ident.name = strdup("anySimpleType");
+  simple_ur_type->def.ident.ns = strdup(XS_NAMESPACE);
   assert(g->complex_ur_type);
   simple_ur_type->base = g->complex_ur_type;
   simple_ur_type->final_extension = 0;
@@ -748,18 +738,13 @@ int check_attribute_uses(xs_schema *s, list *attribute_uses, char *constraint1, 
     for (l2 = encountered; l2; l2 = l2->next) {
       xs_attribute_use *au2 = (xs_attribute_use*)l2->data;
       assert(NULL != au->attribute);
-      if (!strcmp(au->attribute->name,au2->attribute->name) &&
-          (((NULL == au->attribute->ns) && (NULL == au2->attribute->ns)) ||
-           ((NULL != au->attribute->ns) && (NULL != au2->attribute->ns) &&
-            !strcmp(au->attribute->ns,au2->attribute->ns)))) {
+      if (!strcmp(au->attribute->def.ident.name,au2->attribute->def.ident.name) &&
+          (((NULL == au->attribute->def.ident.ns) && (NULL == au2->attribute->def.ident.ns)) ||
+           ((NULL != au->attribute->def.ident.ns) && (NULL != au2->attribute->def.ident.ns) &&
+            !strcmp(au->attribute->def.ident.ns,au2->attribute->def.ident.ns)))) {
         list_free(encountered,NULL);
-        if (au2->attribute->ns)
-          return set_error_info2(&s->ei,s->uri,au2->defline,constraint1,
-                                 "duplicate attribute not allowed: {%s}%s",
-                                 au2->attribute->ns,au2->attribute->name);
-        else
-          return set_error_info2(&s->ei,s->uri,au2->defline,constraint1,
-                                 "duplicate attribute not allowed: %s",au2->attribute->name);
+        return error(&s->ei,s->uri,au2->defline,constraint1,"duplicate attribute not allowed: %#n",
+                     au2->attribute->def.ident);
       }
     }
 
@@ -781,10 +766,9 @@ int check_attribute_uses(xs_schema *s, list *attribute_uses, char *constraint1, 
       if (t == s->globals->id_type) {
         if (NULL != id_derivative) {
           list_free(encountered,NULL);
-          return set_error_info2(&s->ei,s->uri,au->defline,constraint2,
-                                 "only one attribute in a group can be of type ID (or a "
-                                 "derivative); %s conflicts with %s",au->attribute->name,
-                                 id_derivative->attribute->name);
+          return error(&s->ei,s->uri,au->defline,constraint2,"only one attribute in a group can be "
+                       "of type ID (or a derivative); %s conflicts with %s",
+                       au->attribute->def.ident.name,id_derivative->attribute->def.ident.name);
         }
         id_derivative = au;
       }
@@ -817,17 +801,16 @@ int check_circular_references(xs_schema *s, void *obj, char *type, int defline, 
         list *l2;
         for (l2 = encountered; l2; l2 = l2->next) {
           char *name2 = get_obj_name(l2->data);
-          stringbuf_printf(buf,"%s -> ",name2);
+          stringbuf_format(buf,"%s -> ",name2);
         }
-        stringbuf_printf(buf,"%s",name);
+        stringbuf_format(buf,"%s",name);
 
         /* FIXME: circular references are allowed inside a <redefine> - see section 3.6.3 rule 3 */
         if (constraint)
-          set_error_info2(&s->ei,s->uri,defline,constraint,
-                         "Circular %s reference detected: %s",type,buf->data);
+          error(&s->ei,s->uri,defline,constraint,"Circular %s reference detected: %s",
+                type,buf->data);
         else
-          set_error_info(&s->ei,s->uri,defline,NULL,NULL,
-                         "Circular %s reference detected: %s",type,buf->data);
+          error(&s->ei,s->uri,defline,NULL,"Circular %s reference detected: %s",type,buf->data);
         stringbuf_free(buf);
         list_free(tocheck,NULL);
         list_free(encountered,NULL);
@@ -846,7 +829,7 @@ int check_circular_references(xs_schema *s, void *obj, char *type, int defline, 
 
 char* get_model_group_def_name(void *obj)
 {
-  return ((xs_model_group_def*)obj)->name;
+  return ((xs_model_group_def*)obj)->def.ident.name;
 }
 
 void add_model_group_mgdrefs(xs_schema *s, xs_model_group *mg, list **mgds, int indent)
@@ -882,7 +865,8 @@ int post_process_model_group_def(xs_schema *s, xmlDocPtr doc, xs_model_group_def
      test { groupdef_choice_circular2.test }
      test { groupdef_choice_bigcircular.test }
      @end */
-  CHECK_CALL(check_circular_references(s,mgd,"model group",mgd->defline,NULL,"mg-props-correct.2",
+  CHECK_CALL(check_circular_references(s,mgd,"model group",mgd->def.loc.line,NULL,
+                                       "mg-props-correct.2",
                                        get_model_group_def_name,add_model_group_def_references));
   return 0;
 }
@@ -967,7 +951,7 @@ int particles_overlap(xs_particle *p1, xs_particle *p2, int indent)
      {target namespace}. */
   if ((XS_PARTICLE_TERM_ELEMENT == p1->term_type) &&
       (XS_PARTICLE_TERM_ELEMENT == p2->term_type) &&
-      ns_name_equals(p1->term.e->ns,p1->term.e->name,p2->term.e->ns,p2->term.e->name))
+      nsname_equals(p1->term.e->def.ident,p2->term.e->def.ident))
     return 1;
 
   /* or They are both element declaration particles one of whose {name} and {target namespace} are
@@ -1140,8 +1124,8 @@ int post_process_model_group(xs_schema *s, xmlDocPtr doc, xs_model_group *mg)
     for (l = mg->particles; l; l = l->next) {
       xs_particle *p = (xs_particle*)l->data;
       if ((0 != p->range.max_occurs) && (1 != p->range.max_occurs))
-        return set_error_info2(&s->ei,s->uri,p->defline,"cos-all-limited.2",
-                               "items directly within <all> must have maxOccurs equal to 0 or 1");
+        return error(&s->ei,s->uri,p->defline,"cos-all-limited.2",
+                     "items directly within <all> must have maxOccurs equal to 0 or 1");
     }
   }
 
@@ -1160,23 +1144,21 @@ int post_process_model_group(xs_schema *s, xmlDocPtr doc, xs_model_group *mg)
      @end
   */
 
-/*   debug("post_process_model_group"); */
+/*   debugl("post_process_model_group"); */
   if (xs_mg_particles_overlap(mg,&overlap1,&overlap2)) {
     char *overlap1str = xs_particle_str(overlap1);
     char *overlap2str = xs_particle_str(overlap2);
-/*     debug("found overlapping particles that can match adjacent elements"); */
+/*     debugl("found overlapping particles that can match adjacent elements"); */
 
     if (overlap1 == overlap2) {
-      set_error_info2(&s->ei,s->uri,overlap1->defline,"cos-nonambig",
-                      "unique particle attribution constraint violated: separate instances of "
-                      "%s may validate adjacent information items, and minOccurs is less than "
-                      "maxOccurs",overlap1str);
+      error(&s->ei,s->uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
+            "violated: separate instances of %s may validate adjacent information items, and "
+            "minOccurs is less than maxOccurs",overlap1str);
     }
     else {
-      set_error_info2(&s->ei,s->uri,overlap1->defline,"cos-nonambig",
-                      "unique particle attribution constraint violated: overlapping particles "
-                      "%s and %s may validate adjacent information items, and the former has "
-                      "minOccurs less than maxOccurs",overlap1str,overlap2str);
+      error(&s->ei,s->uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
+            "violated: overlapping particles %s and %s may validate adjacent information items, "
+            "and the former has minOccurs less than maxOccurs",overlap1str,overlap2str);
     }
     free(overlap1str);
     free(overlap2str);
@@ -1204,10 +1186,9 @@ int post_process_model_group(xs_schema *s, xmlDocPtr doc, xs_model_group *mg)
         if (particles_overlap(few1,few2,0)) {
           char *few1str = xs_particle_str(few1);
           char *few2str = xs_particle_str(few2);
-          set_error_info2(&s->ei,s->uri,few1->defline,"cos-nonambig",
-                                 "unique particle attribution constraint violated: %s and %s "
-                                 "overlap, and are both within the same <choice> or <all> group",
-                                 few1str,few2str);
+          error(&s->ei,s->uri,few1->defline,"cos-nonambig","unique particle attribution constraint "
+                "violated: %s and %s overlap, and are both within the same <choice> or <all> group",
+                few1str,few2str);
           free(few1str);
           free(few2str);
           list_free(first_ew,NULL);
@@ -1243,23 +1224,30 @@ int post_process_model_group(xs_schema *s, xmlDocPtr doc, xs_model_group *mg)
     list *l2;
     for (l2 = l->next; l2; l2 = l2->next) {
       xs_element *e2 = (xs_element*)l2->data;
-      if (!strcmp(e1->name,e2->name) &&
-          (((NULL == e1->ns) && (NULL == e2->ns)) ||
-           ((NULL != e1->ns) && (NULL != e2->ns) && !strcmp(e1->ns,e2->ns)))) {
+      if (!strcmp(e1->def.ident.name,e2->def.ident.name) &&
+          (((NULL == e1->def.ident.ns) && (NULL == e2->def.ident.ns)) ||
+           ((NULL != e1->def.ident.ns) && (NULL != e2->def.ident.ns) &&
+            !strcmp(e1->def.ident.ns,e2->def.ident.ns)))) {
         if (e1->type != e2->type) {
-          char *ename = get_full_name(e1->ns,e1->name);
-          char *t1name = (e1->type && e1->type->name) ?
-                           get_full_name(e1->type->ns,e1->type->name) : strdup("(none)");
-          char *t2name = (e2->type && e2->type->name) ?
-                           get_full_name(e2->type->ns,e2->type->name) : strdup("(none)");
-          set_error_info2(&s->ei,s->uri,e1->defline,"cos-element-consistent",
-                          "inconsistent element declarations found for %s: types %s and %s are not "
-                          "the same top-level type declaration; both elements must have the same "
-                          "type for them to be used within the same model group",
-                          ename,t1name,t2name);
-          free(ename);
-          free(t1name);
-          free(t2name);
+          stringbuf *t1 = stringbuf_new();
+          stringbuf *t2 = stringbuf_new();
+          if (e1->type && !nsname_isnull(e1->type->def.ident))
+            stringbuf_format(t1,"%#n",e1->type->def.ident);
+          else
+            stringbuf_format(t1,"(none)");
+
+          if (e2->type && !nsname_isnull(e2->type->def.ident))
+            stringbuf_format(t2,"%#n",e2->type->def.ident);
+          else
+            stringbuf_format(t2,"(none)");
+
+          error(&s->ei,s->uri,e1->def.loc.line,"cos-element-consistent","inconsistent element "
+                "declarations found for %#n: types %s and %s are not the same top-level type "
+                "declaration; both elements must have the same type for them to be used within the "
+                "same model group",e1->def.ident,t1->data,t2->data);
+
+          stringbuf_free(t1);
+          stringbuf_free(t2);
           list_free(elements,NULL);
           return -1;
         }
@@ -1273,7 +1261,7 @@ int post_process_model_group(xs_schema *s, xmlDocPtr doc, xs_model_group *mg)
 
 char *get_element_name(void *obj)
 {
-  return ((xs_element*)obj)->name;
+  return ((xs_element*)obj)->def.ident.name;
 }
 
 void add_element_sgreferences(xs_schema *s, void *obj, list **tocheck)
@@ -1342,9 +1330,9 @@ void compute_element_type(xs_schema *s, xs_element *e)
     else {
       e->type = s->globals->complex_ur_type;
       e->typeref = xs_reference_new(s->as);
-      e->typeref->ns = strdup(e->type->ns);
-      e->typeref->name = strdup(e->type->name);
-      e->typeref->line = e->defline;
+      e->typeref->def.ident.ns = strdup(e->type->def.ident.ns);
+      e->typeref->def.ident.name = strdup(e->type->def.ident.name);
+      e->typeref->def.loc.line = e->def.loc.line;
       e->typeref->type = XS_OBJECT_TYPE;
       e->typeref->obj = (void**)&e->type;
       e->typeref->builtin = 0;
@@ -1361,7 +1349,8 @@ int post_process_element1(xs_schema *s, xmlDocPtr doc, xs_element *e)
      test { element_sg_circular2.test }
      test { element_sg_circular.test }
      @end */
-  CHECK_CALL(check_circular_references(s,e,"substitution group",e->defline,NULL,"e-props-correct.6",
+  CHECK_CALL(check_circular_references(s,e,"substitution group",e->def.loc.line,NULL,
+                                       "e-props-correct.6",
                                        get_element_name,add_element_sgreferences));
   return 0;
 }
@@ -1401,8 +1390,8 @@ int post_process_element2(xs_schema *s, xmlDocPtr doc, xs_element *e)
       /* FIXME: check t->{content type} */
     }
     if (id_derived)
-      return set_error_info2(&s->ei,s->uri,e->defline,"e-props-correct.5",
-                             "value constraints cannot be specified for ID-derived elements");
+      return error(&s->ei,s->uri,e->def.loc.line,"e-props-correct.5",
+                   "value constraints cannot be specified for ID-derived elements");
     /* If default/fixed value specified, need to check here that it is valid */
   }
 
@@ -1421,8 +1410,8 @@ int post_process_attribute(xs_schema *s, xmlDocPtr doc, xs_attribute *a)
     xs_type *t;
     for (t = a->type; t && t != t->base; t = t->base)
       if (t == s->globals->id_type)
-        return set_error_info2(&s->ei,s->uri,a->defline,"a-props-correct.3",
-                               "value constraints cannot be specified for ID-derived attributes");
+        return error(&s->ei,s->uri,a->def.loc.line,"a-props-correct.3",
+                     "value constraints cannot be specified for ID-derived attributes");
   }
 
   return 0;
@@ -1450,8 +1439,8 @@ int post_process_attribute_use(xs_schema *s, xmlDocPtr doc, xs_attribute_use *au
     xs_type *t;
     for (t = au->attribute->type; t && t != t->base; t = t->base)
       if (t == s->globals->id_type)
-        return set_error_info2(&s->ei,s->uri,au->defline,"a-props-correct.3",
-                               "value constraints cannot be specified for ID-derived attributes");
+        return error(&s->ei,s->uri,au->defline,"a-props-correct.3",
+                     "value constraints cannot be specified for ID-derived attributes");
   }
 
   /* @implements(xmlschema-1:au-props-correct.2)
@@ -1463,9 +1452,8 @@ int post_process_attribute_use(xs_schema *s, xmlDocPtr doc, xs_attribute_use *au
   if (XS_VALUE_CONSTRAINT_FIXED == au->attribute->vc.type) {
     if ((XS_VALUE_CONSTRAINT_FIXED != au->vc.type) ||
         strcmp(au->attribute->vc.value,au->vc.value))
-      return set_error_info2(&s->ei,s->uri,au->defline,"au-props-correct.2",
-                             "attribute reference must contain a \"fixed\" value equal to that "
-                             "of the attribute it references");
+      return error(&s->ei,s->uri,au->defline,"au-props-correct.2","attribute reference must "
+                   "contain a \"fixed\" value equal to that of the attribute it references");
   }
 
   return 0;
@@ -1473,7 +1461,7 @@ int post_process_attribute_use(xs_schema *s, xmlDocPtr doc, xs_attribute_use *au
 
 char *get_attribute_group_name(void *obj)
 {
-  return ((xs_attribute_group*)obj)->name;
+  return ((xs_attribute_group*)obj)->def.ident.name;
 }
 
 void add_attribute_group_references(xs_schema *s, void *obj, list **tocheck)
@@ -1497,7 +1485,7 @@ int post_process_attribute_group(xs_schema *s, xmlDocPtr doc, xs_attribute_group
      issue { Test task 1 }
      issue { Test task 2 }
      @end */
-  CHECK_CALL(check_circular_references(s,ag,"attribute group",ag->defline,NULL,
+  CHECK_CALL(check_circular_references(s,ag,"attribute group",ag->def.loc.line,NULL,
                                        "src-attribute_group.3",
                                        get_attribute_group_name,add_attribute_group_references));
 
@@ -1562,7 +1550,7 @@ int compute_content_type(xs_schema *s, xs_type *t)
         p->term_type = XS_PARTICLE_TERM_MODEL_GROUP;
         p->term.mg = xs_model_group_new(s->as);
         p->term.mg->compositor = XS_MODEL_GROUP_COMPOSITOR_SEQUENCE;
-        p->defline = t->defline;
+        p->defline = t->def.loc.line;
         p->extension_for = t;
         list_push(&p->term.mg->particles,t->base->content_type);
         list_append(&p->term.mg->particles,t->effective_content);
@@ -1593,8 +1581,8 @@ int compute_content_type(xs_schema *s, xs_type *t)
          test { complextype_sc_restriction_simpletype.test }
          @end */
       if (!t->base->complex)
-        return set_error_info2(&s->ei,s->uri,t->defline,"ct-props-correct.2","base type is a "
-                               "simple type; must use <extension> instead of <restriction>");
+        return error(&s->ei,s->uri,t->def.loc.line,"ct-props-correct.2","base type is a "
+                     "simple type; must use <extension> instead of <restriction>");
 
       /* 1 If the type definition resolved to by the actual value of the base [attribute] is a
            complex type definition whose own {content type} is a simple type definition and the
@@ -1608,14 +1596,14 @@ int compute_content_type(xs_schema *s, xs_type *t)
                <restriction> if there is one; */
         if (NULL != t->child_type) {
           base = t->child_type;
-          defline = t->child_type->defline;
+          defline = t->child_type->def.loc.line;
         }
         /* 1.2 otherwise (<restriction> has no <simpleType> among its [children]), the simple type
                definition which is the {content type} of the type definition resolved to by the
                actual value of the base [attribute] */
         else {
           base = t->base->simple_content_type;
-          defline = t->defline;
+          defline = t->def.loc.line;
         }
         /* a simple type definition which restricts the simple type definition identified in clause
            1.1 or clause 1.2 with a set of facet components corresponding to the appropriate element
@@ -1631,23 +1619,15 @@ int compute_content_type(xs_schema *s, xs_type *t)
            emptiable, as defined in Particle Emptiable (3.9.6) and the <restriction> alternative is
            chosen, then */
       else {
-        if (!t->base->mixed) {
-          char *bname = get_full_name(t->base->ns,t->base->name);
-          set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.4.2",
-                         "%s cannot be restricted with simple content, because it does not have "
-                         "its \"mixed\" attribute set to \"true\"",bname);
-          free(bname);
-          return -1;
-        }
+        if (!t->base->mixed)
+          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","%#n cannot be restricted "
+                       "with simple content, because it does not have its \"mixed\" attribute "
+                       "set to \"true\"",t->base->def.ident);
 
-        if ((NULL != t->base->content_type) && !particle_emptiable(s,t->base->content_type)) {
-          char *bname = get_full_name(t->base->ns,t->base->name);
-          set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.4.2",
-                         "%s cannot be restricted with simple content, because its content model "
-                         "requires one or more elements to be present",bname);
-          free(bname);
-          return -1;
-        }
+        if ((NULL != t->base->content_type) && !particle_emptiable(s,t->base->content_type))
+          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","%#n cannot be restricted "
+                       "with simple content, because its content model requires one or more "
+                       "elements to be present",t->base->def.ident);
 
         /* starting from the simple type definition corresponding to the <simpleType> among the
            [children] of <restriction> (which must be present) a simple type definition which
@@ -1656,11 +1636,11 @@ int compute_content_type(xs_schema *s, xs_type *t)
            which specify facets, if any), as defined in Simple Type Restriction (Facets)
            (3.14.6); */
         if (NULL == t->child_type)
-          return set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.4.2",
-                                "A complex type with simple content that restricts a complex type "
-                                "with complex content must contain a <simpleType> child");
+          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","A complex type with "
+                       "simple content that restricts a complex type with complex content must "
+                       "contain a <simpleType> child");
 
-        CHECK_CALL(xs_create_simple_type_restriction(s,t->child_type,t->child_type->defline,
+        CHECK_CALL(xs_create_simple_type_restriction(s,t->child_type,t->child_type->def.loc.line,
                                                      &t->child_facets,&t->simple_content_type))
         assert(NULL != t->simple_content_type);
       }
@@ -1674,8 +1654,8 @@ int compute_content_type(xs_schema *s, xs_type *t)
       if (t->base->complex) {
 
         if (t->base->complex_content)
-          return set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.4.2","A complex type with "
-                                "simple content cannot extend a complex type with complex content");
+          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","A complex type with "
+                       "simple content cannot extend a complex type with complex content");
 
 /*         printf("t = %s\n",t->name); */
 /*         printf("t->base = %s\n",t->base->name); */
@@ -1711,7 +1691,7 @@ int compute_complete_wildcard(xs_schema *s, xs_wildcard *local_wildcard, list *a
        this cannot cause an infinite loop because we've already checked for circular references. */
     if (!ag->computed_wildcard) {
       CHECK_CALL(compute_complete_wildcard(s,ag->local_wildcard,ag->attribute_group_refs,
-                                           ag->defline,&ag->attribute_wildcard))
+                                           ag->def.loc.line,&ag->attribute_wildcard))
       ag->computed_wildcard = 1;
     }
 
@@ -1728,10 +1708,9 @@ int compute_complete_wildcard(xs_schema *s, xs_wildcard *local_wildcard, list *a
         /* FIXME: no test for this currently because there is no way to create "not" wildcards in
            different namespaces... this requires <import> functionality */
         if (NULL == w)
-          return set_error_info(&s->ei,s->uri,defline,XS_SPEC_D,"3.10.6",
-                              "Attribute wildcard intersection with the local wildcard and/or one "
-                              "or more attribute groups is not expressible, because two wildcards "
-                              "are negations of different namespaces");
+          return error(&s->ei,s->uri,defline,"structures-3.10.6","Attribute wildcard intersection "
+                       "with the local wildcard and/or one or more attribute groups is not "
+                       "expressible, because two wildcards are negations of different namespaces");
 
       }
       /* FIXME: the spec gives additional instructions on how to handle annotations when merging
@@ -1810,16 +1789,14 @@ int compute_attribute_uses_type(xs_schema *s, xs_type *t)
            a referenced attribute group? */
         for (l2 = t->attribute_uses; l2; l2 = l2->next) {
           xs_attribute_use *au2 = (xs_attribute_use*)l2->data;
-          if (ns_name_equals(au->attribute->ns,au->attribute->name,
-                             au2->attribute->ns,au2->attribute->name))
+          if (nsname_equals(au->attribute->def.ident,au2->attribute->def.ident))
             add = 0;
         }
 
         /* is this attribute declared in the local attribute uses as "prohibited"? */
         for (l2 = t->local_attribute_uses; l2; l2 = l2->next) {
           xs_attribute_use *au2 = (xs_attribute_use*)l2->data;
-          if (ns_name_equals(au->attribute->ns,au->attribute->name,
-                             au2->attribute->ns,au2->attribute->name) &&
+          if (nsname_equals(au->attribute->def.ident,au2->attribute->def.ident) &&
               au2->prohibited)
             add = 0;
         }
@@ -1858,7 +1835,7 @@ int compute_attribute_wildcard(xs_schema *s, xs_type *t)
     CHECK_CALL(compute_attribute_wildcard(s,t->base))
 
   CHECK_CALL(compute_complete_wildcard(s,t->local_wildcard,t->attribute_group_refs,
-                                       t->defline,&t->attribute_wildcard))
+                                       t->def.loc.line,&t->attribute_wildcard))
 
   if ((XS_TYPE_DERIVATION_EXTENSION == t->derivation_method) &&
       t->base && (t->base != t) && t->base->complex && t->base->attribute_wildcard) {
@@ -1868,11 +1845,10 @@ int compute_attribute_wildcard(xs_schema *s, xs_type *t)
                                        t->attribute_wildcard->process_contents);
 
       if (NULL == t->attribute_wildcard)
-        return set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.10.6",
-                              "Union of local attribute wildcard and base type's attribute "
-                              "wildcard is not expressible, because one is a negation and the "
-                              "other is a set of namespaces including ##local but not "
-                              "##targetNamespace");
+        return error(&s->ei,s->uri,t->def.loc.line,"structures-3.10.6","Union of local attribute "
+                     "wildcard and base type's attribute wildcard is not expressible, because one "
+                     "is a negation and the other is a set of namespaces including ##local but not "
+                     "##targetNamespace");
     }
     else
        t->attribute_wildcard = t->base->attribute_wildcard;
@@ -1884,7 +1860,7 @@ int compute_attribute_wildcard(xs_schema *s, xs_type *t)
 
 char* get_type_name(void *obj)
 {
-  return ((xs_type*)obj)->name;
+  return ((xs_type*)obj)->def.ident.name;
 }
 
 void add_type_references(xs_schema *s, void *obj, list **tocheck)
@@ -1923,8 +1899,8 @@ int post_process_particle(xs_schema *s, xmlDocPtr doc, xs_particle *p)
        test { sequence_maxoccurs0.test }
        @end */
     if (0 == p->range.max_occurs)
-      return set_error_info2(&s->ei,s->uri,p->defline,"p-props-correct.2.1","if maxOccurs has a "
-                             "finite value, it must be greater than or equal to 1");
+      return error(&s->ei,s->uri,p->defline,"p-props-correct.2.1",
+                   "if maxOccurs has a finite value, it must be greater than or equal to 1");
     /* @implements(xmlschema-1:p-props-correct.2.2)
        test { any_minoccursgtmaxoccurs.test }
        test { choice_minoccursgtmaxoccurs.test }
@@ -1933,8 +1909,8 @@ int post_process_particle(xs_schema *s, xmlDocPtr doc, xs_particle *p)
        test { sequence_minoccursgtmaxoccurs.test }
        @end */
     if (p->range.min_occurs > p->range.max_occurs)
-      return set_error_info2(&s->ei,s->uri,p->defline,"p-props-correct.2.2","minOccurs must not be "
-                             "greater than maxOccurs");
+      return error(&s->ei,s->uri,p->defline,"p-props-correct.2.2",
+                   "minOccurs must not be greater than maxOccurs");
   }
 
   return 0;
@@ -1952,8 +1928,8 @@ int post_process_type1(xs_schema *s, xmlDocPtr doc, xs_type *t)
      test { complextype_cc_restriction_simpletype2.test }
      @end */
   if (t->complex && t->complex_content && !t->base->complex)
-    return set_error_info2(&s->ei,s->uri,t->defline,"src-ct.1","complex type with complex content "
-                           "cannot extend or restrict a simple type");
+    return error(&s->ei,s->uri,t->def.loc.line,"src-ct.1",
+                 "complex type with complex content cannot extend or restrict a simple type");
 
   /* @implements(xmlschema-1:ct-props-correct.3)
      description { Check for circular base type references }
@@ -1965,7 +1941,7 @@ int post_process_type1(xs_schema *s, xmlDocPtr doc, xs_type *t)
      test { complextype_cc_extension_sequence_circular2.test }
      test { complextype_cc_extension_sequence_circular.test }
      @end */
-  CHECK_CALL(check_circular_references(s,t,"type",t->defline,NULL,NULL,
+  CHECK_CALL(check_circular_references(s,t,"type",t->def.loc.line,NULL,NULL,
                                        get_type_name,add_type_references));
 
   if (t->restriction) {
@@ -2000,9 +1976,9 @@ int post_process_type1(xs_schema *s, xmlDocPtr doc, xs_type *t)
        test { simpletype_restriction_derivation_complex.test }
        @end */
     if (!found && (t != s->globals->simple_ur_type))
-      return set_error_info2(&s->ei,s->uri,t->defline,"st-props-correct.2",
-                             "Simple type must ultimately be derived from {%s}%s",
-                             s->globals->simple_ur_type->ns,s->globals->simple_ur_type->name);
+      return error(&s->ei,s->uri,t->def.loc.line,"st-props-correct.2",
+                   "Simple type must ultimately be derived from %#n",
+                   s->globals->simple_ur_type->def.ident);
   }
 
   return 0;
@@ -2027,12 +2003,13 @@ int post_process_type2(xs_schema *s, xmlDocPtr doc, xs_type *t)
        above rule (by necessity) when defining the built-in simple types. */
 
     if ((t == s->globals->simple_ur_type) ||
-        ((NULL != t->ns) && !strcmp(t->ns,XS_NAMESPACE) && (t->base == s->globals->simple_ur_type)))
+        ((NULL != t->def.ident.ns) && !strcmp(t->def.ident.ns,XS_NAMESPACE) &&
+        (t->base == s->globals->simple_ur_type)))
       t->primitive_type = s->globals->simple_ur_type;
 
     if ((XS_TYPE_VARIETY_ATOMIC == t->variety) && (NULL == t->primitive_type)) {
-      return set_error_info(&s->ei,s->uri,t->defline,XS_SPEC_D,"3.14.6","An atomic type must be "
-                            "ultimately derived from a built-in primitive type");
+      return error(&s->ei,s->uri,t->def.loc.line,"structures-3.14.6",
+                   "An atomic type must be ultimately derived from a built-in primitive type");
     }
 
     /* @implements(xmlschema-1:st-props-correct.3)
@@ -2050,8 +2027,8 @@ int post_process_type2(xs_schema *s, xmlDocPtr doc, xs_type *t)
        test { simpletype_union_base_final_restriction4.test }
        @end */
     if (t->base->final_restriction)
-      return set_error_info2(&s->ei,s->uri,t->defline,"st-props-correct.3",
-                             "Base type disallows restriction");
+      return error(&s->ei,s->uri,t->def.loc.line,"st-props-correct.3",
+                   "Base type disallows restriction");
 
     /* rule 4 - actually marked as "deleted" in the spec file, not sure how to hide it in table
        @implements(xmlschema-1:st-props-correct.4) @end
@@ -2065,7 +2042,7 @@ int post_process_type2(xs_schema *s, xmlDocPtr doc, xs_type *t)
        test { simpletype_union_circular2.test }
        test { simpletype_union_bigcircular.test }
        @end */
-    CHECK_CALL(check_circular_references(s,t,"union",t->defline,NULL,"src-simple-type.4",
+    CHECK_CALL(check_circular_references(s,t,"union",t->def.loc.line,NULL,"src-simple-type.4",
                                          get_type_name,add_type_union_members));
 
     CHECK_CALL(xs_check_simple_type_derivation_valid(s,t))
@@ -2125,7 +2102,7 @@ int xs_post_process_schema(xs_schema *s, xmlDocPtr doc)
     xs_attribute_group *ag = (xs_attribute_group*)l->data;
     if (!ag->computed_wildcard) {
       CHECK_CALL(compute_complete_wildcard(s,ag->local_wildcard,ag->attribute_group_refs,
-                                           ag->defline,&ag->attribute_wildcard))
+                                           ag->def.loc.line,&ag->attribute_wildcard))
       ag->computed_wildcard = 1;
     }
     if (!ag->computed_attribute_uses) {
@@ -2167,8 +2144,8 @@ int xs_post_process_schema(xs_schema *s, xmlDocPtr doc)
   return 0;
 }
 
-int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, char *uri, xs_schema **sout,
-                            error_info *ei, xs_globals *g)
+int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const char *uri, const char *sourceloc,
+                            xs_schema **sout, error_info *ei, xs_globals *g)
 {
   xs_schema *s = xs_schema_new(g);
   s->uri = strdup(uri);
@@ -2192,6 +2169,7 @@ xs_schema *parse_xmlschema_file(char *filename, xs_globals *g)
   xs_schema *s = NULL;
   error_info ei;
   FILE *f;
+  char *uri;
 
   memset(&ei,0,sizeof(error_info));
 
@@ -2222,12 +2200,15 @@ xs_schema *parse_xmlschema_file(char *filename, xs_globals *g)
     return NULL;
   }
 
-  if (0 != parse_xmlschema_element(root,doc,filename,&s,&ei,g)) {
+  uri = get_real_uri(filename);
+  if (0 != parse_xmlschema_element(root,doc,uri,filename,&s,&ei,g)) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
     xmlFreeDoc(doc);
+    free(uri);
     return NULL;
   }
+  free(uri);
 
   xmlFreeDoc(doc);
   return s;
@@ -2565,8 +2546,8 @@ xs_type *new_primitive_type(xs_globals *g, char *name, int size, char *ctype)
   int i;
   int found_allowed_facets = 0;
   xs_type *t = xs_type_new(g->as);
-  t->name = strdup(name);
-  t->ns = strdup(XS_NAMESPACE);
+  t->def.ident.name = strdup(name);
+  t->def.ident.ns = strdup(XS_NAMESPACE);
   t->primitive = 1;
   t->builtin = 1;
   t->variety = XS_TYPE_VARIETY_ATOMIC;
@@ -2590,7 +2571,7 @@ xs_type *new_primitive_type(xs_globals *g, char *name, int size, char *ctype)
   }
 
   for (i = 0; xs_allowed_facets[i].typename; i++) {
-    if (!strcmp(t->name,xs_allowed_facets[i].typename)) {
+    if (!strcmp(t->def.ident.name,xs_allowed_facets[i].typename)) {
       t->allowed_facets = xs_allowed_facets[i].facets;
       found_allowed_facets = 1;
       break;
@@ -2598,19 +2579,19 @@ xs_type *new_primitive_type(xs_globals *g, char *name, int size, char *ctype)
   }
   assert(found_allowed_facets);
 
-  ss_add(g->symt->ss_types,name,XS_NAMESPACE,t);
+  ss_add(g->symt->ss_types,nsname_temp(XS_NAMESPACE,name),t);
   return t;
 }
 
 xs_type *new_derived_type(xs_globals *g, char *name, char *base, int size, char *ctype)
 {
   xs_type *t = xs_type_new(g->as);
-  t->name = strdup(name);
-  t->ns = strdup(XS_NAMESPACE);
+  t->def.ident.name = strdup(name);
+  t->def.ident.ns = strdup(XS_NAMESPACE);
   t->builtin = 1;
   t->variety = XS_TYPE_VARIETY_ATOMIC;
   t->stype = XS_TYPE_SIMPLE_RESTRICTION;
-  t->base = ss_lookup_local(g->symt->ss_types,base,XS_NAMESPACE);
+  t->base = ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,base));
   if (!t->base) {
     printf("no such base type %s for %s\n",base,name);
     assert(0);
@@ -2634,28 +2615,28 @@ xs_type *new_derived_type(xs_globals *g, char *name, char *base, int size, char 
   }
 
   t->baseref = xs_reference_new(g->as);
-  t->baseref->ns = strdup(name);
-  t->baseref->name = strdup(XS_NAMESPACE);
-  t->baseref->line = -1;
+  t->baseref->def.ident.ns = strdup(name);
+  t->baseref->def.ident.name = strdup(XS_NAMESPACE);
+  t->baseref->def.loc.line = -1;
   t->baseref->type = XS_OBJECT_TYPE;
   t->baseref->obj = (void**)&t->base;
   t->baseref->builtin = 1;
   
   assert(t->base);
-  ss_add(g->symt->ss_types,name,XS_NAMESPACE,t);
+  ss_add(g->symt->ss_types,nsname_temp(XS_NAMESPACE,name),t);
   return t;
 }
 
 xs_type *new_list_type(xs_globals *g, char *name, char *item_type)
 {
   xs_type *t = xs_type_new(g->as);
-  t->name = strdup(name);
-  t->ns = strdup(XS_NAMESPACE);
+  t->def.ident.name = strdup(name);
+  t->def.ident.ns = strdup(XS_NAMESPACE);
   t->builtin = 1;
   t->variety = XS_TYPE_VARIETY_LIST;
   t->stype = XS_TYPE_SIMPLE_LIST;
   t->base = g->simple_ur_type;
-  t->item_type = ss_lookup_local(g->symt->ss_types,item_type,XS_NAMESPACE);
+  t->item_type = ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,item_type));
   if (!t->item_type) {
     printf("no such item type %s for %s\n",item_type,name);
     assert(0);
@@ -2669,28 +2650,27 @@ xs_type *new_list_type(xs_globals *g, char *name, char *item_type)
   sprintf(t->ctype,"XS%s",name);
 
   t->baseref = xs_reference_new(g->as);
-  t->baseref->ns = strdup(t->base->ns);
-  t->baseref->name = strdup(t->base->name);
-  t->baseref->line = -1;
+  t->baseref->def.ident.ns = strdup(t->base->def.ident.ns);
+  t->baseref->def.ident.name = strdup(t->base->def.ident.name);
+  t->baseref->def.loc.line = -1;
   t->baseref->type = XS_OBJECT_TYPE;
   t->baseref->obj = (void**)&t->base;
   t->baseref->builtin = 1;
 
   t->item_typeref = xs_reference_new(g->as);
-  t->item_typeref->ns = strdup(t->item_type->ns);
-  t->item_typeref->name = strdup(t->item_type->name);
-  t->item_typeref->line = -1;
+  t->item_typeref->def.ident.ns = strdup(t->item_type->def.ident.ns);
+  t->item_typeref->def.ident.name = strdup(t->item_type->def.ident.name);
+  t->item_typeref->def.loc.line = -1;
   t->item_typeref->type = XS_OBJECT_TYPE;
   t->item_typeref->obj = (void**)&t->base;
   t->item_typeref->builtin = 1;
   
   assert(t->base);
-  ss_add(g->symt->ss_types,name,XS_NAMESPACE,t);
+  ss_add(g->symt->ss_types,nsname_temp(XS_NAMESPACE,name),t);
   return t;
 }
 
-void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type,
-                                    const char *name, const char *ns)
+void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type, const nsname ident)
 {
   symbol_space *ss = NULL;
   switch (type) {
@@ -2719,59 +2699,58 @@ void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type,
     assert(!"invalid object type");
     break;
   }
-  return ss_lookup(ss,name,ns);
+  return ss_lookup(ss,ident);
 }
 
-void *xs_lookup_object(xs_schema *s, int type, const char *name, const char *ns)
+void *xs_lookup_object(xs_schema *s, int type, const nsname ident)
 {
   list *l;
   void *obj;
-  if (NULL != (obj = xs_symbol_table_lookup_object(s->globals->symt,type,name,ns)))
+  if (NULL != (obj = xs_symbol_table_lookup_object(s->globals->symt,type,ident)))
     return obj;
-  if (NULL != (obj = xs_symbol_table_lookup_object(s->symt,type,name,ns)))
+  if (NULL != (obj = xs_symbol_table_lookup_object(s->symt,type,ident)))
     return obj;
   for (l = s->imports; l; l = l->next) {
     xs_schema *is = (xs_schema*)l->data;
-    if (NULL != (obj = xs_lookup_object(is,type,name,ns)))
+    if (NULL != (obj = xs_lookup_object(is,type,ident)))
       return obj;
   }
   return NULL;
 }
 
-xs_type *xs_lookup_type(xs_schema *s, const char *name, const char *ns)
+xs_type *xs_lookup_type(xs_schema *s, const nsname ident)
 {
-  return (xs_type*)xs_lookup_object(s,XS_OBJECT_TYPE,name,ns);
+  return (xs_type*)xs_lookup_object(s,XS_OBJECT_TYPE,ident);
 }
 
-xs_attribute *xs_lookup_attribute(xs_schema *s, const char *name, const char *ns)
+xs_attribute *xs_lookup_attribute(xs_schema *s, const nsname ident)
 {
-  return (xs_attribute*)xs_lookup_object(s,XS_OBJECT_ATTRIBUTE,name,ns);
+  return (xs_attribute*)xs_lookup_object(s,XS_OBJECT_ATTRIBUTE,ident);
 }
 
-xs_element *xs_lookup_element(xs_schema *s, const char *name, const char *ns)
+xs_element *xs_lookup_element(xs_schema *s, const nsname ident)
 {
-  return (xs_element*)xs_lookup_object(s,XS_OBJECT_ELEMENT,name,ns);
+  return (xs_element*)xs_lookup_object(s,XS_OBJECT_ELEMENT,ident);
 }
 
-xs_attribute_group *xs_lookup_attribute_group(xs_schema *s, const char *name, const char *ns)
+xs_attribute_group *xs_lookup_attribute_group(xs_schema *s, const nsname ident)
 {
-  return (xs_attribute_group*)xs_lookup_object(s,XS_OBJECT_ATTRIBUTE_GROUP,name,ns);
+  return (xs_attribute_group*)xs_lookup_object(s,XS_OBJECT_ATTRIBUTE_GROUP,ident);
 }
 
-xs_identity_constraint *xs_lookup_identity_constraint(xs_schema *s,
-                                                      const char *name, const char *ns)
+xs_identity_constraint *xs_lookup_identity_constraint(xs_schema *s, const nsname ident)
 {
-  return (xs_identity_constraint*)xs_lookup_object(s,XS_OBJECT_IDENTITY_CONSTRAINT,name,ns);
+  return (xs_identity_constraint*)xs_lookup_object(s,XS_OBJECT_IDENTITY_CONSTRAINT,ident);
 }
 
-xs_model_group_def *xs_lookup_model_group_def(xs_schema *s, const char *name, const char *ns)
+xs_model_group_def *xs_lookup_model_group_def(xs_schema *s, const nsname ident)
 {
-  return (xs_model_group_def*)xs_lookup_object(s,XS_OBJECT_MODEL_GROUP_DEF,name,ns);
+  return (xs_model_group_def*)xs_lookup_object(s,XS_OBJECT_MODEL_GROUP_DEF,ident);
 }
 
-xs_notation *xs_lookup_notation(xs_schema *s, const char *name, const char *ns)
+xs_notation *xs_lookup_notation(xs_schema *s, const nsname ident)
 {
-  return (xs_notation*)xs_lookup_object(s,XS_OBJECT_NOTATION,name,ns);
+  return (xs_notation*)xs_lookup_object(s,XS_OBJECT_NOTATION,ident);
 }
 
 void xs_globals_init_simple_types(xs_globals *g)
@@ -2886,8 +2865,8 @@ xs_type *xs_new_simple_builtin(xs_globals *g, char *name, char *ns, xs_type *bas
   t = xs_type_new(g->as);
   t->builtin = 1;
   t->complex = 0;
-  t->name = strdup(name);
-  t->ns = strdup(ns);
+  t->def.ident.name = strdup(name);
+  t->def.ident.ns = strdup(ns);
   t->base = g->simple_ur_type;
   t->variety = XS_TYPE_VARIETY_ATOMIC;
   t->stype = XS_TYPE_SIMPLE_BUILTIN;
@@ -2896,7 +2875,7 @@ xs_type *xs_new_simple_builtin(xs_globals *g, char *name, char *ns, xs_type *bas
   t->size = sizeof(IMPL_POINTER);
   t->ctype = (char*)malloc(strlen("XS")+strlen(name)+1);
   sprintf(t->ctype,"XS%s",name);
-  ss_add(g->symt->ss_types,t->name,t->ns,t);
+  ss_add(g->symt->ss_types,t->def.ident,t);
   return t;
 }
 
@@ -2916,16 +2895,16 @@ xs_globals *xs_globals_new()
   g->symt = xs_symbol_table_new();
   g->complex_ur_type = xs_init_complex_ur_type(g);
   g->simple_ur_type = xs_init_simple_ur_type(g);
-  ss_add(g->symt->ss_types,"anyType",XS_NAMESPACE,g->complex_ur_type);
-  ss_add(g->symt->ss_types,"anySimpleType",XS_NAMESPACE,g->simple_ur_type);
+  ss_add(g->symt->ss_types,nsname_temp(XS_NAMESPACE,"anyType"),g->complex_ur_type);
+  ss_add(g->symt->ss_types,nsname_temp(XS_NAMESPACE,"anySimpleType"),g->simple_ur_type);
 
   /* FIXME: init builtin attributes (section 3.2.7) */
   xs_globals_init_xdt_types(g);
   xs_globals_init_simple_types(g);
 
   g->namespaces = ns_map_new();
-  ns_add(g->namespaces,XS_NAMESPACE,"xsd");
-  ns_add(g->namespaces,XDT_NAMESPACE,"xdt");
+  ns_add_direct(g->namespaces,XS_NAMESPACE,"xsd");
+  ns_add_direct(g->namespaces,XDT_NAMESPACE,"xdt");
 
   return g;
 }
@@ -2935,6 +2914,7 @@ void xs_globals_free(xs_globals *g)
   xs_symbol_table_free(g->symt);
   xs_allocset_free(g->as);
   list_free(g->ctypes,(void*)free);
+  list_free(g->cstructs,NULL);
   ns_map_free(g->namespaces,0);
   free(g);
 }
@@ -2987,8 +2967,7 @@ xs_reference *xs_reference_new(xs_allocset *as)
 
 void xs_reference_free(xs_reference *r)
 {
-  free(r->name);
-  free(r->ns);
+  nsname_free(r->def.ident);
   free(r);
 }
 
@@ -3022,8 +3001,7 @@ void xs_facetdata_freevals(xs_facetdata *fd)
 
 void xs_type_free(xs_type *t)
 {
-  free(t->name);
-  free(t->ns);
+  nsname_free(t->def.ident);
   list_free(t->attribute_uses,NULL);
   list_free(t->local_attribute_uses,NULL);
   list_free(t->attribute_group_refs,NULL);
@@ -3046,8 +3024,7 @@ xs_attribute *xs_attribute_new(xs_allocset *as)
 
 void xs_attribute_free(xs_attribute *a)
 {
-  free(a->name);
-  free(a->ns);
+  nsname_free(a->def.ident);
   free(a->vc.value);
   free(a);
 }
@@ -3061,8 +3038,7 @@ xs_element *xs_element_new(xs_allocset *as)
 
 void xs_element_free(xs_element *e)
 {
-  free(e->name);
-  free(e->ns);
+  nsname_free(e->def.ident);
   free(e->vc.value);
   list_free(e->sgmembers,NULL);
   free(e);
@@ -3090,12 +3066,12 @@ xs_attribute_group *xs_attribute_group_new(xs_allocset *as)
 
 void xs_attribute_group_free(xs_attribute_group *ag)
 {
-  free(ag->name);
-  free(ag->ns);
+  nsname_free(ag->def.ident);
   list_free(ag->attribute_uses,NULL);
   list_free(ag->local_attribute_uses,NULL);
   list_free(ag->attribute_group_refs,NULL);
-  list_free(ag->cvars,NULL);
+  list_free(ag->cvars,free);
+  free(ag->ctype);
   free(ag);
 }
 
@@ -3120,8 +3096,7 @@ xs_model_group_def *xs_model_group_def_new(xs_allocset *as)
 
 void xs_model_group_def_free(xs_model_group_def *mgd)
 {
-  free(mgd->name);
-  free(mgd->ns);
+  nsname_free(mgd->def.ident);
   free(mgd);
 }
 
@@ -3163,6 +3138,7 @@ xs_particle *xs_particle_new(xs_allocset *as)
 
 void xs_particle_free(xs_particle *p)
 {
+  free(p->cvar);
   free(p);
 }
 
@@ -3190,6 +3166,7 @@ xs_attribute_use *xs_attribute_use_new(xs_allocset *as)
 void xs_attribute_use_free(xs_attribute_use *au)
 {
   free(au->vc.value);
+  free(au->cvar);
   free(au);
 }
 

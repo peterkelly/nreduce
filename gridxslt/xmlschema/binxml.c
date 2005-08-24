@@ -99,7 +99,9 @@ void decode(FILE *out, xs_validator *v, xmlNodePtr n, stringbuf *encoded)
 {
   xmlOutputBuffer *buf = xmlOutputBufferCreateFile(out,NULL);
   xmlTextWriter *writer = xmlNewTextWriter(buf);
-  xs_type *t = xs_lookup_type(v->s,n->name,NULL);
+  nsname nn = nsname_new(NULL,n->name);
+  xs_type *t = xs_lookup_type(v->s,nn);
+  nsname_free(nn);
   assert(t);
 
   xmlTextWriterSetIndent(writer,1);

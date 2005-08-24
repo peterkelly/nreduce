@@ -236,10 +236,8 @@ struct xs_value_constraint {
 };
 
 struct xs_reference {
+  definition def;
   xs_schema *s;
-  char *name;
-  char *ns;
-  int line;
   int type;
   void **obj;
   int resolved;
@@ -263,10 +261,10 @@ struct xs_facetdata {
 };
 
 struct xs_type {
+  definition def;                  /* {name} and {target namespace} */
+
   int complex;
 
-  char *name;                      /* {name} */
-  char *ns;                        /* {target namespace} */
   xs_type *base;                   /* {base type definition} */
   xs_reference *baseref;
 
@@ -308,8 +306,6 @@ struct xs_type {
 
   int complex_content;
 
-  int defline;
-
   xs_particle *effective_content;
   int effective_mixed;
 
@@ -330,20 +326,19 @@ struct xs_type {
 };
 
 struct xs_attribute {
-  char *name;                            /* {name} */
-  char *ns;                              /* {target namespace} */
+  definition def;                        /* {name} and {target namespace} */
+
   xs_type *type;                         /* {type definition} */
   xs_reference *typeref;
                                          /* {scope} (nothing corresponds to this) */
   xs_value_constraint vc;                /* {value constraint} */
   void *annotation;                      /* {annotation} */
   int toplevel;
-  int defline;
 };
 
 struct xs_element {
-  char *name;                            /* {name} */
-  char *ns;                              /* {target namespace} */
+  definition def;                        /* {name} and {target namespace} */
+
   xs_type *type;                         /* {type definition} */
   xs_reference *typeref;
                                          /* {scope} (nothing corresponds to this) */
@@ -365,7 +360,6 @@ struct xs_element {
   int abstract;                          /* {abstract} */
   void *annotation;                      /* {annotation} */
   int toplevel;
-  int defline;
   int computed_type;
 };
 
@@ -380,15 +374,14 @@ struct xs_attribute_group_ref {
 };
 
 struct xs_attribute_group {
-  char *name;                            /* {name} */
-  char *ns;                              /* {target_namespace} */
+  definition def;                        /* {name} and {target namespace} */
+
   list *attribute_uses;                  /* {attribute uses} */
   list *local_attribute_uses;
   xs_wildcard *attribute_wildcard;       /* {attribute wildcard} */
   xs_wildcard *local_wildcard;
   void *annotation;                      /* {annotation} */
   list *attribute_group_refs;            /* list of xs_reference */
-  int defline;
 
   int computed_wildcard;
   int computed_attribute_uses;
@@ -404,11 +397,9 @@ struct xs_identity_constraint {
 };
 
 struct xs_model_group_def {
-  char *name;
-  char *ns;
+  definition def;
   xs_model_group *model_group;
   void *annotation;
-  int defline;
 };
 
 struct xs_model_group {
@@ -490,17 +481,15 @@ struct xs_attribute_use {
   char *cvar;
 };
 
-void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type,
-                                    const char *name, const char *ns);
-void *xs_lookup_object(xs_schema *s, int type, const char *name, const char *ns);
-xs_type *xs_lookup_type(xs_schema *s, const char *name, const char *ns);
-xs_attribute *xs_lookup_attribute(xs_schema *s, const char *name, const char *ns);
-xs_element *xs_lookup_element(xs_schema *s, const char *name, const char *ns);
-xs_attribute_group *xs_lookup_attribute_group(xs_schema *s, const char *name, const char *ns);
-xs_identity_constraint *xs_lookup_identity_constraint(xs_schema *s,
-                                                      const char *name, const char *ns);
-xs_model_group_def *xs_lookup_model_group_def(xs_schema *s, const char *name, const char *ns);
-xs_notation *xs_lookup_notation(xs_schema *s, const char *name, const char *ns);
+void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type, const nsname ident);
+void *xs_lookup_object(xs_schema *s, int type, const nsname ident);
+xs_type *xs_lookup_type(xs_schema *s, const nsname ident);
+xs_attribute *xs_lookup_attribute(xs_schema *s, const nsname ident);
+xs_element *xs_lookup_element(xs_schema *s, const nsname ident);
+xs_attribute_group *xs_lookup_attribute_group(xs_schema *s, const nsname ident);
+xs_identity_constraint *xs_lookup_identity_constraint(xs_schema *s, const nsname ident);
+xs_model_group_def *xs_lookup_model_group_def(xs_schema *s, const nsname ident);
+xs_notation *xs_lookup_notation(xs_schema *s, const nsname ident);
 
 struct xs_cstruct {
   int type;
@@ -615,8 +604,8 @@ xs_wildcard *xs_wildcard_constraint_union(xs_schema *s, xs_wildcard *O1, xs_wild
 xs_wildcard *xs_wildcard_constraint_intersection(xs_schema *s, xs_wildcard *a, xs_wildcard *b,
                                                  int process_contents);
 
-int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, char *uri, xs_schema **sout,
-                            error_info *ei, xs_globals *g);
+int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const char *uri, const char *sourceloc,
+                            xs_schema **sout, error_info *ei, xs_globals *g);
 
 xs_schema *parse_xmlschema_file(char *filename, xs_globals *g);
 int xs_visit_schema(xs_schema *s, xmlDocPtr doc, void *data, xs_visitor *v);
