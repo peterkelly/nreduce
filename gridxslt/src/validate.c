@@ -145,7 +145,7 @@ int validation_input_equals(void *a, void *b)
 {
   validation_input *va = (validation_input*)a;
   validation_input *vb = (validation_input*)b;
-  if (va->e && vb->e && !strcmp(va->e->name,vb->e->name))
+  if (va->e && vb->e && !strcmp(va->e->def.ident.name,vb->e->def.ident.name))
     return 1;
   else
     return 0;
@@ -155,7 +155,7 @@ void validation_input_print(FILE *f, void *input)
 {
   validation_input *vi = (validation_input*)input;
   if (vi->e)
-    fprintf(f,"<%s>",vi->e->name);
+    fprintf(f,"<%s>",vi->e->def.ident.name);
   else
     fprintf(f,"*");
 }
@@ -185,7 +185,7 @@ void build_term_fsm(xs_schema *s, xs_particle *p, fsm *f,
   switch (p->term_type) {
   case XS_PARTICLE_TERM_ELEMENT: {
     trace(1,"element <%s>: start %d:%d end %d:%d",
-           p->term.e->name,start->num,startid,end->num,endid);
+           p->term.e->def.ident.name,start->num,startid,end->num,endid);
     if (userel) {
       trace(0," USEREL %d",userel);
     }
@@ -242,7 +242,7 @@ void build_model_group_entry_fsm(xs_schema *s, xs_particle *p, fsm *f,
   if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
     trace(0," ********MG");
   else
-    trace(0," <%s>",p->term.e->name);
+    trace(0," <%s>",p->term.e->def.ident.name);
   trace(0," start %d:%d end %d:%d",start->num,startid,end->num,endid);
   if (userel) {
     trace(0," USEREL %d",userel);
@@ -424,7 +424,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
           if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
             trace(0,"MG");
           else
-            trace(0,p->term.e->name);
+            trace(0,p->term.e->def.ident.name);
           trace(0,": added intermediate state %d\n",bd->intermediate->num);
           bd->intermediateid = 0;
         }
@@ -432,7 +432,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
         if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
           trace(0,"MG");
         else
-          trace(0,p->term.e->name);
+          trace(0,p->term.e->def.ident.name);
         trace(0,": setting intermediate state %d count to %d + %d = %d\n",
                bd->intermediate->num,
                bd->intermediate->count,mul,
@@ -538,7 +538,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
 int build_fsm(xs_schema *s, fsm *f, FILE *dotfile)
 {
   list *allocated_inputs = NULL;
-  xs_type *t = xs_lookup_type(s,"root",NULL);
+  xs_type *t = xs_lookup_type(s,nsname_temp(NULL,"root"));
   fsm_state *start = f->start = fsm_add_state(f);
   int startid = 0;
   fsm *df = fsm_new(validation_input_equals,validation_input_print);
