@@ -21,40 +21,41 @@
  */
 
 #include "xmlutils.h"
+#include "namespace.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/uri.h>
+#include <curl/curl.h>
+#include <curl/types.h>
+#include <curl/easy.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <unistd.h>
+#include <limits.h>
+#include <stdlib.h>
 
-qname_t get_qname(const char *name)
+qname qname_parse(const char *name)
 {
-  qname_t qn;
+  qname qn;
   qn.localpart = xmlSplitQName2(name,((xmlChar**)&qn.prefix));
   if (NULL == qn.localpart)
     qn.localpart = strdup(name);
   return qn;
 }
 
-qname_t copy_qname(qname_t qname)
-{
-  qname_t copy;
-  copy.prefix = qname.prefix ? strdup(qname.prefix) : NULL;
-  copy.localpart = qname.localpart ? strdup(qname.localpart) : NULL;
-  return copy;
-}
-
-qname_t *get_qname_list(const char *list)
+qname *qname_list_parse(const char *list)
 {
   const char *start;
   const char *c;
   int count = 0;
   int pos = 0;
-  qname_t *qnames;
+  qname *qnames;
 
   start = list;
   c = list;
@@ -69,7 +70,7 @@ qname_t *get_qname_list(const char *list)
     c++;
   }
 
-  qnames = (qname_t*)calloc(count+1,sizeof(qname_t));
+  qnames = (qname*)calloc(count+1,sizeof(qname));
 
   start = list;
   c = list;
@@ -79,7 +80,7 @@ qname_t *get_qname_list(const char *list)
         char *str = (char*)malloc(c-start+1);
         memcpy(str,start,c-start);
         str[c-start] = '\0';
-        qnames[pos++] = get_qname(str);
+        qnames[pos++] = qname_parse(str);
         free(str);
       }
       start = c+1;
@@ -91,24 +92,107 @@ qname_t *get_qname_list(const char *list)
   return qnames;
 }
 
+int nsname_equals(const nsname nn1, const nsname nn2)
+{
+  return (!strcmp(nn1.name,nn2.name) &&
+          (((NULL == nn1.ns) && (NULL == nn2.ns)) ||
+           ((NULL != nn1.ns) && (NULL != nn2.ns) && !strcmp(nn1.ns,nn2.ns))));
+}
+
+int nsname_isnull(const nsname nn)
+{
+  return (NULL == nn.name);
+}
+
+int qname_isnull(const qname qn)
+{
+  return (NULL == qn.localpart);
+}
+
+qname qname_temp(char *prefix, char *localpart)
+{
+  qname qn;
+  qn.prefix = prefix;
+  qn.localpart = localpart;
+  return qn;
+}
+
+nsname nsname_temp(char *ns, char *name)
+{
+  nsname nn;
+  nn.ns = ns;
+  nn.name = name;
+  return nn;
+}
+
+qname qname_new(const char *prefix, const char *localpart)
+{
+  qname qn;
+  qn.prefix = prefix ? strdup(prefix) : NULL;
+  qn.localpart = localpart ? strdup(localpart) : NULL;
+  return qn;
+}
+
+nsname nsname_new(const char *ns, const char *name)
+{
+  nsname nn;
+  nn.ns = ns ? strdup(ns) : NULL;
+  nn.name = name ? strdup(name) : NULL;
+  return nn;
+}
+
+qname qname_copy(const qname qn)
+{
+  return qname_new(qn.prefix,qn.localpart);
+}
+
+nsname nsname_copy(const nsname nn)
+{
+  return nsname_new(nn.ns,nn.name);
+}
+
+void qname_free(qname qn)
+{
+  free(qn.prefix);
+  free(qn.localpart);
+}
+
+void nsname_free(nsname nn)
+{
+  free(nn.ns);
+  free(nn.name);
+}
+
+void print(const char *format, ...)
+{
+  va_list ap;
+  stringbuf *buf = stringbuf_new();
+
+  va_start(ap,format);
+  stringbuf_vformat(buf,format,ap);
+  va_end(ap);
+
+  printf("%s",buf->data);
+  stringbuf_free(buf);
+}
+
 int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
                            char **namespace, char **localpart)
 {
-  qname_t qname = get_qname(name);
+  qname qn = qname_parse(name);
   xmlNsPtr ns = NULL;
 
   *namespace = NULL;
   *localpart = NULL;
 
   /* FIXME: maybe set error info here instead of requiring thet caller to do it? */
-  if ((NULL == (ns = xmlSearchNs(doc,n,qname.prefix))) && (NULL != qname.prefix)) {
-    free(qname.prefix);
-    free(qname.localpart);
+  if ((NULL == (ns = xmlSearchNs(doc,n,qn.prefix))) && (NULL != qn.prefix)) {
+    qname_free(qn);
     return -1;
   }
   *namespace = ns ? strdup(ns->href) : NULL;
-  *localpart = qname.localpart;
-  free(qname.prefix);
+  *localpart = qn.localpart;
+  free(qn.prefix);
 
   return 0;
 }
@@ -128,13 +212,36 @@ void error_info_copy(error_info *to, error_info *from)
 
 void error_info_print(error_info *ei, FILE *f)
 {
+  if (NULL != ei->filename) {
+    char *rel;
+
+    if (NULL != strchr(ei->filename,':')) {
+      char *cwduri;
+      char cwd[PATH_MAX];
+      getcwd(cwd,PATH_MAX);
+      cwduri = (char*)malloc(strlen("file://")+strlen(cwd)+2);
+      sprintf(cwduri,"file://%s/",cwd);
+      rel = xmlBuildRelativeURI(ei->filename,cwduri);
+      free(cwduri);
+    }
+    else {
+      rel = strdup(ei->filename);
+    }
+
+    if (0 <= ei->line)
+      fprintf(stderr,"%s:%d: ",rel,ei->line);
+    else
+      fprintf(stderr,"%s: ",rel);
+    free(rel);
+  }
+
   if (ei->spec && ei->section)
-    fprintf(stderr,"%s:%d: error: %s (%s, section %s)\n",
-            ei->filename,ei->line,ei->message,ei->spec,ei->section);
+    fprintf(stderr,"error: %s (%s, section %s)\n",ei->message,ei->spec,ei->section);
   else if (ei->errname)
-    fprintf(stderr,"%s:%d: error %s: %s\n",ei->filename,ei->line,ei->errname,ei->message);
+    fprintf(stderr,"error %s: %s\n",ei->errname,ei->message);
   else
-    fprintf(stderr,"%s:%d: error: %s\n",ei->filename,ei->line,ei->message);
+    fprintf(stderr,"error: %s\n",ei->message);
+
 }
 
 void error_info_free_vals(error_info *ei)
@@ -147,49 +254,22 @@ void error_info_free_vals(error_info *ei)
   memset(ei,0,sizeof(error_info));
 }
 
-int set_error_info(error_info *ei, const char *filename, int line, const char *spec,
-                   const char *section, const char *format, ...)
+int error(error_info *ei, const char *filename, int line,
+          const char *errname, const char *format, ...)
 {
-  int flen;
   va_list ap;
+  stringbuf *buf;
 
   error_info_free_vals(ei);
 
   va_start(ap,format);
-  flen = vsnprintf(NULL,0,format,ap);
+  buf = stringbuf_new();
+  stringbuf_vformat(buf,format,ap);
+  ei->message = strdup(buf->data);
+  stringbuf_free(buf);
   va_end(ap);
 
-  ei->message = (char*)malloc(flen+1);
-  va_start(ap,format);
-  vsnprintf(ei->message,flen+1,format,ap);
-  va_end(ap);
-
-  ei->filename = strdup(filename);
-  ei->line = line;
-  ei->spec = spec ? strdup(spec) : NULL;
-  ei->section = section ? strdup(section) : NULL;
-
-  return -1;
-}
-
-int set_error_info2(error_info *ei, const char *filename, int line, const char *errname,
-                    const char *format, ...)
-{
-  int flen;
-  va_list ap;
-
-  error_info_free_vals(ei);
-
-  va_start(ap,format);
-  flen = vsnprintf(NULL,0,format,ap);
-  va_end(ap);
-
-  ei->message = (char*)malloc(flen+1);
-  va_start(ap,format);
-  vsnprintf(ei->message,flen+1,format,ap);
-  va_end(ap);
-
-  ei->filename = strdup(filename);
+  ei->filename = filename ? strdup(filename) : NULL;
   ei->line = line;
   ei->errname = errname ? strdup(errname) : NULL;
 
@@ -217,11 +297,9 @@ int parse_error(xmlNodePtr n, const char *format, ...)
 int invalid_element2(error_info *ei, const char *filename, xmlNodePtr n)
 {
   if (n->ns && n->ns->href)
-    return set_error_info(ei,filename,n->line,NULL,NULL,
-                          "Element {%s}%s is not valid here",n->ns->href,
-                          n->name);
+    return error(ei,filename,n->line,NULL,"Element {%s}%s is not valid here",n->ns->href,n->name);
   else
-    return set_error_info(ei,filename,n->line,NULL,NULL,"Element %s is not valid here",n->name);
+    return error(ei,filename,n->line,NULL,"Element %s is not valid here",n->name);
   return -1;
 }
 
@@ -237,7 +315,7 @@ int invalid_element(xmlNodePtr n)
 int missing_attribute2(error_info *ei, const char *filename, int line, const char *errname,
                        const char *attrname)
 {
-  return set_error_info2(ei,filename,line,errname,"\"%s\" attribute missing",attrname);
+  return error(ei,filename,line,errname,"\"%s\" attribute missing",attrname);
 }
 
 int missing_attribute(xmlNodePtr n, const char *attrname)
@@ -253,22 +331,20 @@ int missing_attribute(xmlNodePtr n, const char *attrname)
 
 int attribute_not_allowed(error_info *ei, const char *filename, int line, const char *attrname)
 {
-  return set_error_info(ei,filename,line,NULL,NULL,"\"%s\" attribute not allowed here",attrname);
+  return error(ei,filename,line,NULL,"\"%s\" attribute not allowed here",attrname);
 }
 
-int conflicting_attributes(error_info *ei, char *filename, int line, const char *errname,
+int conflicting_attributes(error_info *ei, const char *filename, int line, const char *errname,
                            const char *conflictor, const char *conflictee)
 {
-  return set_error_info2(ei,filename,line,errname,
-                         "\"%s\" attribute cannot be used in conjunction with \"%s\" here",
-                         conflictor,conflictee);
+  return error(ei,filename,line,errname,"\"%s\" attribute cannot be used in conjunction "
+               "with \"%s\" here",conflictor,conflictee);
 }
 
 int invalid_attribute_val(error_info *ei, const char *filename, xmlNodePtr n, const char *attrname)
 {
   char *val = xmlGetProp(n,attrname);
-  set_error_info(ei,filename,n->line,NULL,NULL,
-                 "Invalid value \"%s\" for attribute \"%s\"",val,attrname);
+  error(ei,filename,n->line,NULL,"Invalid value \"%s\" for attribute \"%s\"",val,attrname);
   free(val);
   return -1;
 }
@@ -352,31 +428,6 @@ int parse_optional_boolean_attr(error_info *ei, char *filename, xmlNodePtr n,
   return 0;
 }
 
-char *get_full_name(const char *ns, const char *name)
-{
-  char *str;
-  if (NULL == name)
-    return NULL;
-  if (NULL == ns)
-    return strdup(name);
-  str = (char*)malloc(strlen("{}")+strlen(ns)+strlen(name)+1);
-  sprintf(str,"{%s}%s",ns,name);
-  return str;
-}
-
-char *build_qname(const char *prefix, const char *localpart)
-{
-  if (NULL != prefix) {
-    char *qname = (char*)malloc(strlen(prefix)+1+strlen(localpart)+1);
-    sprintf(qname,"%s:%s",prefix,localpart);
-    return qname;
-  }
-  else {
-    return strdup(localpart);
-  }
-}
-
-
 void replace_whitespace(char *str)
 {
   char *c;
@@ -425,11 +476,35 @@ char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname)
   return val;
 }
 
-int ns_name_equals(const char *ns1, const char *name1, const char *ns2, const char *name2)
+void xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...)
 {
-  return (!strcmp(name1,name2) &&
-          (((NULL == ns1) && (NULL == ns2)) ||
-           ((NULL != ns1) && (NULL != ns2) && !strcmp(ns1,ns2))));
+  va_list ap;
+  stringbuf *buf = stringbuf_new();
+
+  va_start(ap,format);
+  stringbuf_vformat(buf,format,ap);
+  va_end(ap);
+
+  xmlTextWriterWriteAttribute(writer,attrname,buf->data);
+
+  stringbuf_free(buf);
+}
+
+qname xml_attr_qname(xmlNodePtr n, const char *attrname)
+{
+  char *name = xmlGetNsProp(n,attrname,NULL);
+  qname qn = qname_parse(name);
+  free(name);
+  return qn;
+}
+
+int xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s)
+{
+  char *val = xmlGetNsProp(n,attrname,NULL);
+  int r;
+  r = strcmp(val,s);
+  free(val);
+  return r;
 }
 
 char *escape_str(const char *s)
@@ -484,7 +559,7 @@ char *escape_str(const char *s)
 }
 
 int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr n,
-                               const nsname_t *stdattrs, ...)
+                               const nsname *stdattrs, ...)
 {
   va_list ap;
   xmlAttr *attr;
@@ -492,8 +567,9 @@ int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr 
   for (attr = n->properties; attr; attr = attr->next) {
     int allowed = 0;
     char *cur;
-    const nsname_t *s;
+    const nsname *s;
     const char *ns = attr->ns ? attr->ns->href : NULL;
+    nsname attrnn;
 
     va_start(ap,stdattrs);
     while ((NULL != (cur = va_arg(ap,char*))) && !allowed) {
@@ -502,21 +578,250 @@ int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr 
     }
     va_end(ap);
 
+    attrnn = nsname_new(ns,attr->name);
     for (s = stdattrs; s->name && !allowed; s++)
-      if (ns_name_equals(s->ns,s->name,ns,attr->name))
+      if (nsname_equals(*s,attrnn))
         allowed = 1;
+    nsname_free(attrnn);
 
     if (!allowed) {
-      char *attrqname = build_qname(attr->ns ? attr->ns->prefix : NULL,attr->name);
-      char *nodeqname = build_qname(n->ns ? n->ns->prefix : NULL,n->name);
-      set_error_info2(ei,filename,n->line,NULL,
-                             "attribute \"%s\" is not permitted on element \"%s\"",
-                             attrqname,nodeqname);
-      free(attrqname);
-      free(nodeqname);
+      qname attrqn = qname_new(attr->ns ? attr->ns->prefix : NULL,attr->name);
+      qname nodeqn = qname_new(n->ns ? n->ns->prefix : NULL,n->name);
+      error(ei,filename,n->line,NULL,"attribute \"%#q\" is not permitted on element \"%#q\"",
+            attrqn,nodeqn);
+      qname_free(attrqn);
+      qname_free(nodeqn);
       return -1;
     }
   }
+
+  return 0;
+}
+
+int is_all_whitespace(const char *s)
+{
+  for (; '\0' != *s; s++)
+    if (!isspace(*s))
+      return 0;
+  return 1;
+}
+
+static size_t write_buf(void *ptr, size_t size, size_t nmemb, void *data)
+{
+  stringbuf_append((stringbuf*)data,ptr,size*nmemb);
+  return size*nmemb;
+}
+
+char *get_real_uri(const char *filename)
+{
+  char *real;
+  if (NULL != strstr(filename,"://")) {
+    /* full uri */
+    return strdup(filename);
+  }
+  else {
+    char path[PATH_MAX];
+    if ('/' == filename[0]) {
+      /* absolute filename */
+      realpath(filename,path);
+    }
+    else {
+      /* relative filename */
+      char *full;
+      char cwd[PATH_MAX];
+      getcwd(cwd,PATH_MAX);
+      full = (char*)malloc(strlen(cwd)+1+strlen(filename)+1);
+      sprintf(full,"%s/%s",cwd,filename);
+      realpath(full,path);
+      free(full);
+    }
+    real = (char*)malloc(strlen("file://")+strlen(path)+1);
+    sprintf(real,"file://%s",path);
+    return real;
+  }
+}
+
+char *get_relative_uri(const char *uri, const char *base)
+{
+  char *relfilename = xmlBuildRelativeURI(uri,base);
+  char *rel;
+  xmlURIPtr parsed = xmlParseURI(uri);
+  if (NULL == parsed->fragment) {
+    rel = strdup(relfilename);
+  }
+  else {
+    char *escfrag = xmlURIEscape(parsed->fragment);
+    rel = (char*)malloc(strlen(relfilename)+1+strlen(escfrag)+1);
+    sprintf(rel,"%s#%s",relfilename,escfrag);
+    free(escfrag);
+  }
+  xmlFreeURI(parsed);
+  free(relfilename);
+  return rel;
+}
+
+xmlNodePtr get_element_by_id(xmlNodePtr n, const char *id)
+{
+  xmlNodePtr c;
+  if (xmlHasNsProp(n,"id",XML_NAMESPACE)) {
+    char *nid = xmlGetNsProp(n,"id",XML_NAMESPACE);
+    int equal;
+    collapse_whitespace(nid);
+    equal = !strcmp(nid,id);
+    free(nid);
+    if (equal)
+      return n;
+  }
+  for (c = n->children; c; c = c->next) {
+    xmlNodePtr match;
+    if (NULL != (match = get_element_by_id(c,id)))
+      return match;
+  }
+  return NULL;
+}
+
+int retrieve_uri_element(error_info *ei, const char *filename, int line, const char *errname,
+                         const char *full_uri, xmlDocPtr *doc, xmlNodePtr *node,
+                         const char *refsource)
+{
+  stringbuf *src = stringbuf_new();
+  xmlNodePtr root;
+  xmlURIPtr parsed;
+  char *justdoc;
+  char *hash;
+
+  /* FIXME: support normal ID attributes (not just xml:id)... there seems to be rather complex
+     rules regarding what exactly constitutes an ID attribute; I think we need to examine
+     the DTD or schema of the imported document because it may not actually be called "id".
+     xml:id will have to do for now. */
+
+  justdoc = strdup(full_uri);
+
+  if (NULL != (hash = strchr(justdoc,'#')))
+    *hash = '\0';
+
+  if (0 != retrieve_uri(ei,filename,line,errname,full_uri,src,refsource)) {
+    stringbuf_free(src);
+    free(justdoc);
+    return -1;
+  }
+
+  if (NULL == (*doc = xmlReadMemory(src->data,src->size-1,full_uri,NULL,0))) {
+    error(ei,full_uri,-1,errname,"Parse error");
+    stringbuf_free(src);
+    free(justdoc);
+    return -1;
+  }
+
+  stringbuf_free(src);
+
+  if (NULL == (root = xmlDocGetRootElement(*doc))) {
+    error(ei,full_uri,-1,errname,"No root element found");
+    xmlFreeDoc(*doc);
+    free(justdoc);
+    return -1;
+  }
+
+  parsed = xmlParseURI(full_uri);
+  if (NULL != parsed->fragment) {
+    if (NULL == (*node = get_element_by_id(root,parsed->fragment))) {
+      error(ei,full_uri,-1,errname,"No such fragment \"%s\"",parsed->fragment);
+      xmlFreeDoc(*doc);
+      xmlFreeURI(parsed);
+      free(justdoc);
+      return -1;
+    }
+  }
+  else {
+    *node = root;
+  }
+
+  xmlFreeURI(parsed);
+  free(justdoc);
+  return 0;
+}
+
+int retrieve_uri(error_info *ei, const char *filename, int line, const char *errname,
+                 const char *full_uri1, stringbuf *buf, const char *refsource)
+{
+  char *colon;
+  char *hash;
+  char *uri = strdup(full_uri1);
+
+  if (NULL != (hash = strchr(uri,'#')))
+    *hash = '\0';
+
+  if (NULL == (colon = strchr(uri,':'))) {
+    error(ei,filename,line,errname,"\"%s\" is not a valid absolute URI",uri);
+    free(uri);
+    return -1;
+  }
+
+  if (!strncasecmp(uri,"http:",5)) {
+    CURL *h;
+    CURLcode cr;
+    long rc = 0;
+
+    h = curl_easy_init();
+    curl_easy_setopt(h,CURLOPT_URL,uri);
+    curl_easy_setopt(h,CURLOPT_WRITEFUNCTION,write_buf);
+    curl_easy_setopt(h,CURLOPT_WRITEDATA,buf);
+    curl_easy_setopt(h,CURLOPT_USERAGENT,"libcurl-agent/1.0");
+    cr = curl_easy_perform(h);
+
+    if (0 != cr) {
+      error(ei,filename,line,errname,"Error retrieving \"%s\": %s",uri,curl_easy_strerror(cr));
+      curl_easy_cleanup(h);
+      free(uri);
+      return -1;
+    }
+
+    curl_easy_getinfo(h,CURLINFO_RESPONSE_CODE,&rc);
+    if (200 != rc) {
+      /* FIXME: would be nice to display a string instead of just the response code */
+      error(ei,filename,line,errname,"Error retrieving schema \"%s\": HTTP %d",uri,rc);
+      curl_easy_cleanup(h);
+      free(uri);
+      return -1;
+    }
+
+    curl_easy_cleanup(h);
+  }
+  else if (!strncasecmp(uri,"file://",7)) {
+    FILE *f;
+    char tmp[1024];
+    int r;
+    const char *importfn = uri+7;
+
+    if (strncasecmp(refsource,"file:",5)) {
+      error(ei,filename,line,errname,"Permission denied for file \"%s\"; cannot access local file "
+            "from a remote resource",importfn);
+      free(uri);
+      return -1;
+    }
+
+    if (NULL == (f = fopen(importfn,"r"))) {
+      error(ei,uri,-1,errname,"%s",strerror(errno));
+      free(uri);
+      return -1;
+    }
+
+    while (0 < (r = fread(tmp,1,1024,f)))
+      stringbuf_append(buf,tmp,r);
+
+    fclose(f);
+  }
+  else {
+    int methodlen = colon-uri;
+    char *method = (char*)malloc(methodlen+1);
+    memcpy(method,uri,methodlen);
+    method[methodlen] = '\0';
+    error(ei,filename,line,errname,"Method \"%s\" not supported",method,strerror(errno));
+    free(method);
+    free(uri);
+    return -1;
+  }
+  free(uri);
 
   return 0;
 }
@@ -529,42 +834,38 @@ symbol_space *ss_new(symbol_space *fallback, const char *type)
   return ss;
 }
 
-void *ss_lookup_local(symbol_space *ss, const char *name, const char *ns)
+void *ss_lookup_local(symbol_space *ss, const nsname ident)
 {
   symbol_space_entry *sse;
-  for (sse = ss->entries; sse; sse = sse->next) {
-    if ((((NULL == sse->ns) && (NULL == ns)) ||
-          ((NULL != sse->ns) && (NULL != ns) && !strcmp(sse->ns,ns))) &&
-        !strcmp(sse->name,name))
+  for (sse = ss->entries; sse; sse = sse->next)
+    if (nsname_equals(sse->ident,ident))
       return sse->object;
-  }
   return NULL;
 }
 
-void *ss_lookup(symbol_space *ss, const char *name, const char *ns)
+void *ss_lookup(symbol_space *ss, const nsname ident)
 {
   void *object;
-  if (NULL != (object = ss_lookup_local(ss,name,ns)))
+  if (NULL != (object = ss_lookup_local(ss,ident)))
     return object;
   else if (NULL != ss->fallback)
-    return ss_lookup(ss->fallback,name,ns);
+    return ss_lookup(ss->fallback,ident);
   else
     return NULL;
 }
 
-int ss_add(symbol_space *ss, const char *name, const char *ns, void *object)
+int ss_add(symbol_space *ss, const nsname ident, void *object)
 {
   symbol_space_entry **sptr = &ss->entries;
 
-  if (NULL != ss_lookup_local(ss,name,ns))
+  if (NULL != ss_lookup_local(ss,ident))
     return -1; /* already exists */
 
   while (*sptr)
     sptr = &((*sptr)->next);
 
   *sptr = (symbol_space_entry*)calloc(1,sizeof(symbol_space_entry));
-  (*sptr)->name = strdup(name);
-  (*sptr)->ns = ns ? strdup(ns) : NULL;
+  (*sptr)->ident = nsname_copy(ident);
   (*sptr)->object = object;
 
   return 0;
@@ -575,8 +876,7 @@ void ss_free(symbol_space *ss)
   symbol_space_entry *sse = ss->entries;
   while (sse) {
     symbol_space_entry *next = sse->next;
-    free(sse->name);
-    free(sse->ns);
+    nsname_free(sse->ident);
     free(sse);
     sse = next;
   }
