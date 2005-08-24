@@ -22,6 +22,7 @@
 #include "xslt.h"
 #include "util/xmlutils.h"
 #include "util/macros.h"
+#include "util/debug.h"
 #include "dataflow/dataflow.h"
 #include "dataflow/sequencetype.h"
 #include "dataflow/engine.h"
@@ -30,6 +31,7 @@
 #include <assert.h>
 #include <string.h>
 #include <argp.h>
+#include <unistd.h>
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -51,6 +53,7 @@ static char args_doc[] = "FILENAME1 FILENAME2 ...";
 
 static struct argp_option options[] = {
   {"dot",                      'd', "FILE",  0, "Output graph in dot format to FILE" },
+  {"input",                    'i', "FILE",  0, "Input file" },
   {"df",                       'f', NULL,    0, "Just print compiled dataflow graph; do not "
                                                 "execute" },
   {"trace",                    't', NULL,    0, "Enable tracing" },
@@ -62,6 +65,7 @@ static struct argp_option options[] = {
 struct arguments {
   list *filenames;
   char *dot;
+  char *input;
   int df;
   int trace;
   int parse_tree;
@@ -75,6 +79,9 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
   switch (key) {
   case 'd':
     arguments->dot = arg;
+    break;
+  case 'i':
+    arguments->input = arg;
     break;
   case 'f':
     arguments->df = 1;
@@ -134,30 +141,37 @@ static int add_file(df_state *state, xs_schema *schema, char *filename, int prin
     /* add default namespaces declared in schema */
     for (l = state->schema->globals->namespaces->defs; l; l = l->next) {
       ns_def *ns = (ns_def*)l->data;
-      ns_add(tree->namespaces,ns->href,ns->prefix);
+      ns_add_direct(tree->namespaces,ns->href,ns->prefix);
     }
+
+    /* temp - functions and operators namespace */
+    ns_add_direct(tree->namespaces,FN_NAMESPACE,"fn");
 
     stringbuf_free(input);
   }
   else if (ends_with(filename,".xsl") ||
            ends_with(filename,".xslt") ||
            ends_with(filename,".xml")) {
+    char *uri = get_real_uri(filename);
     tree = xl_snode_new(XSLT_TRANSFORM);
-    if (0 != parse_xslt(f,tree,&ei,filename)) {
+    if (0 != parse_xslt_relative_uri(&ei,NULL,0,NULL,uri,uri,tree)) {
       error_info_print(&ei,stderr);
       error_info_free_vals(&ei);
       xl_snode_free(tree);
+      free(uri);
       exit(1);
     }
+    free(uri);
   }
-
-  if (print_tree)
-    xl_snode_print_tree(tree,0);
 
   if (0 != xl_snode_resolve(tree,schema,filename,&ei)) {
     error_info_print(&ei,stderr);
     exit(1);
   }
+
+  if (print_tree)
+    xl_snode_print_tree(tree,0);
+
   if (0 != df_program_from_xl(state,tree)) {
     res = 1;
   }
@@ -183,6 +197,9 @@ int main(int argc, char **argv)
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
+  if (NULL != arguments.dot)
+    unlink(arguments.dot);
+
   for (l = arguments.filenames; l; l = l->next) {
     char *filename = (char*)l->data;
     if (0 != add_file(state,schema,filename,arguments.parse_tree)) {
@@ -207,15 +224,56 @@ int main(int argc, char **argv)
     }
     else {
 
-/*       printf("Starting execution\n"); */
-      if (0 != df_execute(state,arguments.trace,&ei)) {
+      df_value *context = NULL;
+
+      if (NULL != arguments.input) {
+        FILE *f;
+        xmlDocPtr doc;
+        xmlNodePtr root;
+        df_node *docnode;
+        df_node *rootelem;
+        df_seqtype *doctype;
+
+        if (NULL == (f = fopen(arguments.input,"r"))) {
+          fprintf(stderr,"Can't open %s: %s\n",arguments.input,strerror(errno));
+          return -1; /* FIXME: raise an error here */
+        }
+
+        if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
+          fclose(f);
+          fprintf(stderr,"XML parse error.\n");
+          return -1; /* FIXME: raise an error here */
+        }
+        fclose(f);
+
+        if (NULL == (root = xmlDocGetRootElement(doc))) {
+          fprintf(stderr,"No root element.\n");
+          xmlFreeDoc(doc);
+          return -1; /* FIXME: raise an error here */
+        }
+
+        docnode = df_node_new(NODE_DOCUMENT);
+        rootelem = df_node_from_xmlnode(root);
+        df_node_add_child(docnode,rootelem);
+
+        doctype = df_seqtype_new_item(ITEM_DOCUMENT);
+        context = df_value_new(doctype);
+        df_seqtype_deref(doctype);
+        context->value.n = docnode;
+        context->value.n->refcount++;
+/*         printf("context node is %p (type %d)\n",context->value.n,context->value.n->type); */
+
+        xmlFreeDoc(doc);
+      }
+
+      if (0 != df_execute(state,arguments.trace,&ei,context)) {
         error_info_print(&ei,stderr);
         error_info_free_vals(&ei);
         r = 1;
       }
-      else {
-/*         printf("Program completed successfully\n"); */
-      }
+
+/*       if (NULL != context) */
+/*         df_value_deref(state->schema->globals,context); */
     }
   }
 
