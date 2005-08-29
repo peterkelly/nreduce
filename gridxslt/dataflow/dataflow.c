@@ -111,6 +111,7 @@ const char *df_special_op_names[OP_SPECIAL_COUNT] = {
   "swallow",
   "return",
   "print",
+  "output",
   "sequence",
   "gate",
   "document",
@@ -125,18 +126,6 @@ const char *df_special_op_names[OP_SPECIAL_COUNT] = {
   "filter",
   "empty",
   "contains-node",
-};
-
-const char *df_item_types[ITEM_COUNT] = {
-  NULL,
-  "atomic",
-  "document",
-  "element",
-  "attribute",
-  "processing-instruction",
-  "comment",
-  "text",
-  "namespace",
 };
 
 const char *df_axis_types[AXIS_COUNT] = {
@@ -156,7 +145,7 @@ const char *df_axis_types[AXIS_COUNT] = {
   "ancestor-or-self",
 };
 
-df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
+static df_seqtype *df_get_seqtype_from_optype(df_program *program, const df_optype *optype)
 {
   df_seqtype *st = NULL;
 
@@ -172,9 +161,8 @@ df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
     else
       assert(0);
 
-    st = df_seqtype_new_item(ITEM_ATOMIC);
     nn.name = colon+1;
-    st->item->type = xs_lookup_type(state->schema,nn);
+    st = df_seqtype_new_atomic(xs_lookup_type(program->schema,nn));
     assert(NULL != st->item->type);
   }
   else {
@@ -207,9 +195,8 @@ df_seqtype *df_get_seqtype_from_optype(df_state *state, const df_optype *optype)
       st = df_seqtype_new(SEQTYPE_EMPTY);
       break;
     case TYPE_NUMERIC: {
-      st = df_seqtype_new_item(ITEM_ATOMIC);
       /* FIXME: this should really be decimal */
-      st->item->type = xs_lookup_type(state->schema,nsname_temp(XS_NAMESPACE,"int"));
+      st = df_seqtype_new_atomic(xs_lookup_type(program->schema,nsname_temp(XS_NAMESPACE,"int")));
       assert(NULL != st->item->type);
       break;
     }
@@ -255,8 +242,7 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
     assert(NULL == instr->outports[1].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
     instr->outports[1].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
-    instr->outports[2].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
-    instr->outports[2].seqtype->item->type = g->boolean_type;
+    instr->outports[2].seqtype = df_seqtype_new_atomic(g->boolean_type);
     break;
   case OP_SPECIAL_MERGE:
 /*     if (!df_seqtype_compatible(instr->inports[0].seqtype,instr->inports[1].seqtype)) { */
@@ -290,6 +276,9 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
   case OP_SPECIAL_PRINT:
+    break;
+  case OP_SPECIAL_OUTPUT:
+    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_EMPTY);
     break;
   case OP_SPECIAL_SEQUENCE:
     assert(NULL == instr->outports[0].seqtype);
@@ -345,8 +334,7 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
     instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_EMPTY);
     break;
   case OP_SPECIAL_CONTAINS_NODE:
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
-    instr->outports[0].seqtype->item->type = g->boolean_type;
+    instr->outports[0].seqtype = df_seqtype_new_atomic(g->boolean_type);
     break;
   }
 
@@ -406,7 +394,7 @@ int df_compute_types(df_function *fun)
     }
 /*     if (NULL == fun->params[i].start->inports[0].seqtype) */
 /*       fun->params[i].start->inports[0].seqtype = fun->params[i].seqtype; */
-    CHECK_CALL(df_instruction_compute_types(fun->params[i].start,fun->state->schema->globals))
+    CHECK_CALL(df_instruction_compute_types(fun->params[i].start,fun->program->schema->globals))
   }
 
   if (1 != fun->start->ninports) {
@@ -415,18 +403,11 @@ int df_compute_types(df_function *fun)
     return -1;
   }
   assert(NULL != fun->start->inports[0].seqtype);
-  CHECK_CALL(df_instruction_compute_types(fun->start,fun->state->schema->globals))
+  CHECK_CALL(df_instruction_compute_types(fun->start,fun->program->schema->globals))
   return 0;
 }
 
-int df_check_is_atomic_type(df_state *state, df_seqtype *st, xs_type *type)
-{
-  return ((SEQTYPE_ITEM == st->type) &&
-          (ITEM_ATOMIC == st->item->kind) &&
-          (st->item->type == type));
-}
-
-int df_check_derived_atomic_type(df_state *state, df_value *v, xs_type *type)
+int df_check_derived_atomic_type(df_value *v, xs_type *type)
 {
   xs_type *t1;
   if (SEQTYPE_ITEM != v->seqtype->type)
@@ -452,556 +433,36 @@ int df_get_op_id(char *name)
   return -1;
 }
 
-df_node *df_node_from_xmlnode(xmlNodePtr xn)
-{
-  df_node *n = NULL;
-  xmlNodePtr c;
-  struct _xmlAttr *aptr;
-
-  switch (xn->type) {
-  case XML_ELEMENT_NODE:
-    n = df_node_new(NODE_ELEMENT);
-    n->ident.name = strdup(xn->name);
-    /* FIXME: prefix/namespace */
-
-    for (aptr = xn->properties; aptr; aptr = aptr->next) {
-      df_node *attr = df_node_new(NODE_ATTRIBUTE);
-      stringbuf *valbuf = stringbuf_new();
-      xmlNodePtr ac;
-      attr->ident.name = strdup(aptr->name);
-
-      for (ac = aptr->children; ac; ac = ac->next) {
-        if (NULL != ac->content)
-          stringbuf_format(valbuf,"%s",ac->content);
-      }
-
-      attr->value = strdup(valbuf->data);
-      stringbuf_free(valbuf);
-      df_node_add_attribute(n,attr);
-    }
-    break;
-  case XML_ATTRIBUTE_NODE:
-    /* Should never see this in the main element tree */
-    assert(0);
-    break;
-  case XML_TEXT_NODE:
-    n = df_node_new(NODE_TEXT);
-    n->value = strdup(xn->content);
-    break;
-  case XML_PI_NODE:
-    n = df_node_new(NODE_PI);
-    /* FIXME: do we know that xn->content will always be non-NULL here? */
-    n->value = strdup(xn->content);
-    break;
-  case XML_COMMENT_NODE:
-    n = df_node_new(NODE_COMMENT);
-    /* FIXME: do we know that xn->content will always be non-NULL here? */
-    n->value = strdup(xn->content);
-    break;
-  case XML_DOCUMENT_NODE:
-    n = df_node_new(NODE_DOCUMENT);
-    break;
-  default:
-    /* FIXME: support other node types such as CDATA sections and entities */
-    assert(!"node type not supported");
-  }
-
-  for (c = xn->children; c; c = c->next) {
-    df_node *cn = df_node_from_xmlnode(c);
-    if (NULL != cn)
-      df_node_add_child(n,cn);
-  }
-
-  return n;
-}
-
-int df_execute_op(df_state *state, df_instruction *instr, int opcode,
-                  df_value **values, df_value **result)
-{
-  xs_globals *g = state->schema->globals;
-
-  switch (opcode) {
-
-  case FN_NODE_NAME: assert(!"not yet implemented"); break;
-  case FN_NILLED: assert(!"not yet implemented"); break;
-  case FN_STRING: assert(!"not yet implemented"); break;
-  case FN_STRING2: {
-    char *str;
-    if (SEQTYPE_EMPTY == values[0]->seqtype->type) {
-      *result = df_value_new_string(g,"");
-    }
-    else {
-      assert(SEQTYPE_ITEM == values[0]->seqtype->type);
-      str = df_value_as_string(g,values[0]);
-      *result = df_value_new_string(g,str);
-      free(str);
-    }
-    break;
-  }
-  case FN_DATA: assert(!"not yet implemented"); break;
-  case FN_BASE_URI: assert(!"not yet implemented"); break;
-  case FN_BASE_URI2: assert(!"not yet implemented"); break;
-  case FN_DOCUMENT_URI: assert(!"not yet implemented"); break;
-  case FN_ERROR: assert(!"not yet implemented"); break;
-  case FN_ERROR2: assert(!"not yet implemented"); break;
-  case FN_ERROR3: assert(!"not yet implemented"); break;
-  case FN_ERROR4: assert(!"not yet implemented"); break;
-  case FN_TRACE: assert(!"not yet implemented"); break;
-  case FN_DATETIME: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_ADD: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_SUBTRACT: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_MULTIPLY: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_MOD: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_UNARY_PLUS: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_UNARY_MINUS: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_EQUAL: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_DECIMAL_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_ABS: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_CEILING: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_FLOOR: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_ROUND: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
-  case FN_DECIMAL_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
-  case OP_INTEGER_ADD: assert(!"not yet implemented"); break;
-  case OP_INTEGER_SUBTRACT: assert(!"not yet implemented"); break;
-  case OP_INTEGER_MULTIPLY: assert(!"not yet implemented"); break;
-  case OP_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_INTEGER_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_INTEGER_MOD: assert(!"not yet implemented"); break;
-  case OP_INTEGER_UNARY_PLUS: assert(!"not yet implemented"); break;
-  case OP_INTEGER_UNARY_MINUS: assert(!"not yet implemented"); break;
-  case OP_INTEGER_EQUAL: assert(!"not yet implemented"); break;
-  case OP_INTEGER_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_INTEGER_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_INTEGER_ABS: assert(!"not yet implemented"); break;
-  case FN_INTEGER_CEILING: assert(!"not yet implemented"); break;
-  case FN_INTEGER_FLOOR: assert(!"not yet implemented"); break;
-  case FN_INTEGER_ROUND: assert(!"not yet implemented"); break;
-  case FN_INTEGER_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
-  case FN_INTEGER_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
-  case OP_FLOAT_ADD: assert(!"not yet implemented"); break;
-  case OP_FLOAT_SUBTRACT: assert(!"not yet implemented"); break;
-  case OP_FLOAT_MULTIPLY: assert(!"not yet implemented"); break;
-  case OP_FLOAT_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_FLOAT_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_FLOAT_MOD: assert(!"not yet implemented"); break;
-  case OP_FLOAT_UNARY_PLUS: assert(!"not yet implemented"); break;
-  case OP_FLOAT_UNARY_MINUS: assert(!"not yet implemented"); break;
-  case OP_FLOAT_EQUAL: assert(!"not yet implemented"); break;
-  case OP_FLOAT_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_FLOAT_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_FLOAT_ABS: assert(!"not yet implemented"); break;
-  case FN_FLOAT_CEILING: assert(!"not yet implemented"); break;
-  case FN_FLOAT_FLOOR: assert(!"not yet implemented"); break;
-  case FN_FLOAT_ROUND: assert(!"not yet implemented"); break;
-  case FN_FLOAT_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
-  case FN_FLOAT_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_ADD: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_SUBTRACT: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_MULTIPLY: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_MOD: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_UNARY_PLUS: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_UNARY_MINUS: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_EQUAL: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_DOUBLE_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_ABS: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_CEILING: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_FLOOR: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_ROUND: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
-  case FN_DOUBLE_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
-
-  case OP_NUMERIC_ADD:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->int_type));
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.i = values[0]->value.i + values[1]->value.i;
-    break;
-
-  case OP_NUMERIC_SUBTRACT:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->int_type));
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.i = values[0]->value.i - values[1]->value.i;
-    break;
-
-  case OP_NUMERIC_MULTIPLY:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->int_type));
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.i = values[0]->value.i * values[1]->value.i;
-    break;
-
-  case OP_NUMERIC_DIVIDE:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->int_type));
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.i = values[0]->value.i / values[1]->value.i;
-    break;
-
-  case OP_NUMERIC_INTEGER_DIVIDE:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->int_type));
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.i = values[0]->value.i / values[1]->value.i;
-    break;
-
-  case OP_NUMERIC_MOD: assert(!"not yet implemented"); break;
-  case OP_NUMERIC_UNARY_PLUS: assert(!"not yet implemented"); break;
-  case OP_NUMERIC_UNARY_MINUS: assert(!"not yet implemented"); break;
-
-  case OP_NUMERIC_EQUAL:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->boolean_type)); 
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->boolean_type));
-
-    *result = df_value_new(instr->outports[0].seqtype);
-    if (values[0]->value.i == values[1]->value.i)
-      (*result)->value.b = 1;
-    else
-      (*result)->value.b = 0;
-    break;
-
-  case OP_NUMERIC_LESS_THAN:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->boolean_type));
-
-    *result = df_value_new(instr->outports[0].seqtype);
-    if (values[0]->value.i < values[1]->value.i)
-      (*result)->value.b = 1;
-    else
-      (*result)->value.b = 0;
-    break;
-
-  case OP_NUMERIC_GREATER_THAN:
-    /* FIXME: type promotion and use appropriate typed operator */
-    assert(df_check_derived_atomic_type(state,values[0],g->int_type));
-    assert(df_check_derived_atomic_type(state,values[1],g->int_type));
-    assert(df_check_is_atomic_type(state,instr->outports[0].seqtype,g->boolean_type));
-
-    *result = df_value_new(instr->outports[0].seqtype);
-    if (values[0]->value.i > values[1]->value.i)
-      (*result)->value.b = 1;
-    else
-      (*result)->value.b = 0;
-    break;
-  case FN_ABS: assert(!"not yet implemented"); break;
-  case FN_CEILING: assert(!"not yet implemented"); break;
-  case FN_FLOOR: assert(!"not yet implemented"); break;
-  case FN_ROUND: assert(!"not yet implemented"); break;
-  case FN_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
-  case FN_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
-  case FN_CODEPOINTS_TO_STRING: assert(!"not yet implemented"); break;
-  case FN_STRING_TO_CODEPOINTS: assert(!"not yet implemented"); break;
-  case FN_COMPARE: assert(!"not yet implemented"); break;
-  case FN_COMPARE2: assert(!"not yet implemented"); break;
-  case FN_CODEPOINT_EQUAL: assert(!"not yet implemented"); break;
-  case FN_CONCAT: assert(!"not yet implemented"); break;
-  case FN_STRING_JOIN: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING2: assert(!"not yet implemented"); break;
-  case FN_STRING_LENGTH: assert(!"not yet implemented"); break;
-  case FN_STRING_LENGTH2: assert(!"not yet implemented"); break;
-  case FN_NORMALIZE_SPACE: assert(!"not yet implemented"); break;
-  case FN_NORMALIZE_SPACE2: assert(!"not yet implemented"); break;
-  case FN_NORMALIZE_UNICODE: assert(!"not yet implemented"); break;
-  case FN_NORMALIZE_UNICODE2: assert(!"not yet implemented"); break;
-  case FN_UPPER_CASE: assert(!"not yet implemented"); break;
-  case FN_LOWER_CASE: assert(!"not yet implemented"); break;
-  case FN_TRANSLATE: assert(!"not yet implemented"); break;
-  case FN_ESCAPE_URI: assert(!"not yet implemented"); break;
-  case FN_CONTAINS: assert(!"not yet implemented"); break;
-  case FN_CONTAINS2: assert(!"not yet implemented"); break;
-  case FN_STARTS_WITH: assert(!"not yet implemented"); break;
-  case FN_STARTS_WITH2: assert(!"not yet implemented"); break;
-  case FN_ENDS_WITH: assert(!"not yet implemented"); break;
-  case FN_ENDS_WITH2: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING_BEFORE: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING_BEFORE2: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING_AFTER: assert(!"not yet implemented"); break;
-  case FN_SUBSTRING_AFTER2: assert(!"not yet implemented"); break;
-  case FN_MATCHES: assert(!"not yet implemented"); break;
-  case FN_MATCHES2: assert(!"not yet implemented"); break;
-  case FN_REPLACE: assert(!"not yet implemented"); break;
-  case FN_REPLACE2: assert(!"not yet implemented"); break;
-  case FN_TOKENIZE: assert(!"not yet implemented"); break;
-  case FN_TOKENIZE2: assert(!"not yet implemented"); break;
-  case FN_RESOLVE_URI: assert(!"not yet implemented"); break;
-  case FN_RESOLVE_URI2: assert(!"not yet implemented"); break;
-  case FN_TRUE: assert(!"not yet implemented"); break;
-  case FN_FALSE: assert(!"not yet implemented"); break;
-  case OP_BOOLEAN_EQUAL: assert(!"not yet implemented"); break;
-  case OP_BOOLEAN_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_BOOLEAN_GREATER_THAN: assert(!"not yet implemented"); break;
-  case FN_NOT:
-    /* FIXME: we can't assume the input is a boolean! arg def is item()*; we have to reduce it
-       to a boolean ourselves */
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.b = !values[0]->value.b;
-    break;
-  case OP_YEARMONTHDURATION_EQUAL: assert(!"not yet implemented"); break;
-  case OP_YEARMONTHDURATION_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_YEARMONTHDURATION_GREATER_THAN: assert(!"not yet implemented"); break;
-  case OP_DAYTIMEDURATION_EQUAL: assert(!"not yet implemented"); break;
-  case OP_DAYTIMEDURATION_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_DAYTIMEDURATION_GREATER_THAN: assert(!"not yet implemented"); break;
-  case OP_DATETIME_EQUAL: assert(!"not yet implemented"); break;
-  case OP_DATETIME_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_DATETIME_GREATER_THAN: assert(!"not yet implemented"); break;
-  case OP_DATE_EQUAL: assert(!"not yet implemented"); break;
-  case OP_DATE_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_DATE_GREATER_THAN: assert(!"not yet implemented"); break;
-  case OP_TIME_EQUAL: assert(!"not yet implemented"); break;
-  case OP_TIME_LESS_THAN: assert(!"not yet implemented"); break;
-  case OP_TIME_GREATER_THAN: assert(!"not yet implemented"); break;
-  case OP_GYEARMONTH_EQUAL: assert(!"not yet implemented"); break;
-  case OP_GYEAR_EQUAL: assert(!"not yet implemented"); break;
-  case OP_GMONTHDAY_EQUAL: assert(!"not yet implemented"); break;
-  case OP_GMONTH_EQUAL: assert(!"not yet implemented"); break;
-  case OP_GDAY_EQUAL: assert(!"not yet implemented"); break;
-  case FN_YEARS_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_MONTHS_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_DAYS_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_HOURS_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_MINUTES_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_SECONDS_FROM_DURATION: assert(!"not yet implemented"); break;
-  case FN_YEAR_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_MONTH_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_DAY_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_HOURS_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_MINUTES_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_SECONDS_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_TIMEZONE_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case FN_YEAR_FROM_DATE: assert(!"not yet implemented"); break;
-  case FN_MONTH_FROM_DATE: assert(!"not yet implemented"); break;
-  case FN_DAY_FROM_DATE: assert(!"not yet implemented"); break;
-  case FN_TIMEZONE_FROM_DATE: assert(!"not yet implemented"); break;
-  case FN_HOURS_FROM_TIME: assert(!"not yet implemented"); break;
-  case FN_MINUTES_FROM_TIME: assert(!"not yet implemented"); break;
-  case FN_SECONDS_FROM_TIME: assert(!"not yet implemented"); break;
-  case FN_TIMEZONE_FROM_TIME: assert(!"not yet implemented"); break;
-  case OP_ADD_YEARMONTHDURATIONS: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_YEARMONTHDURATIONS: assert(!"not yet implemented"); break;
-  case OP_MULTIPLY_YEARMONTHDURATION: assert(!"not yet implemented"); break;
-  case OP_DIVIDE_YEARMONTHDURATION: assert(!"not yet implemented"); break;
-  case OP_DIVIDE_YEARMONTHDURATION_BY_YEARMONTHDURATION: assert(!"not yet implemented"); break;
-  case OP_ADD_DAYTIMEDURATIONS: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DAYTIMEDURATIONS: assert(!"not yet implemented"); break;
-  case OP_MULTIPLY_DAYTIMEDURATION: assert(!"not yet implemented"); break;
-  case OP_DIVIDE_DAYTIMEDURATION: assert(!"not yet implemented"); break;
-  case OP_DIVIDE_DAYTIMEDURATION_BY_DAYTIMEDURATION: assert(!"not yet implemented"); break;
-  case FN_ADJUST_DATETIME_TO_TIMEZONE: assert(!"not yet implemented"); break;
-  case FN_ADJUST_DATETIME_TO_TIMEZONE2: assert(!"not yet implemented"); break;
-  case FN_ADJUST_DATE_TO_TIMEZONE: assert(!"not yet implemented"); break;
-  case FN_ADJUST_DATE_TO_TIMEZONE2: assert(!"not yet implemented"); break;
-  case FN_ADJUST_TIME_TO_TIMEZONE: assert(!"not yet implemented"); break;
-  case FN_ADJUST_TIME_TO_TIMEZONE2: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DATETIMES_YIELDING_DAYTIMEDURATION: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DATES_YIELDING_DAYTIMEDURATION: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_TIMES: assert(!"not yet implemented"); break;
-  case OP_ADD_YEARMONTHDURATION_TO_DATETIME: assert(!"not yet implemented"); break;
-  case OP_ADD_DAYTIMEDURATION_TO_DATETIME: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_YEARMONTHDURATION_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DAYTIMEDURATION_FROM_DATETIME: assert(!"not yet implemented"); break;
-  case OP_ADD_YEARMONTHDURATION_TO_DATE: assert(!"not yet implemented"); break;
-  case OP_ADD_DAYTIMEDURATION_TO_DATE: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_YEARMONTHDURATION_FROM_DATE: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DAYTIMEDURATION_FROM_DATE: assert(!"not yet implemented"); break;
-  case OP_ADD_DAYTIMEDURATION_TO_TIME: assert(!"not yet implemented"); break;
-  case OP_SUBTRACT_DAYTIMEDURATION_FROM_TIME: assert(!"not yet implemented"); break;
-  case FN_RESOLVE_QNAME: assert(!"not yet implemented"); break;
-  case FN_QNAME: assert(!"not yet implemented"); break;
-  case OP_QNAME_EQUAL: assert(!"not yet implemented"); break;
-  case FN_PREFIX_FROM_QNAME: assert(!"not yet implemented"); break;
-  case FN_LOCAL_NAME_FROM_QNAME: assert(!"not yet implemented"); break;
-  case FN_NAMESPACE_URI_FROM_QNAME: assert(!"not yet implemented"); break;
-  case FN_NAMESPACE_URI_FOR_PREFIX: assert(!"not yet implemented"); break;
-  case FN_IN_SCOPE_PREFIXES: assert(!"not yet implemented"); break;
-  case OP_HEXBINARY_EQUAL: assert(!"not yet implemented"); break;
-  case OP_BASE64BINARY_EQUAL: assert(!"not yet implemented"); break;
-  case OP_NOTATION_EQUAL: assert(!"not yet implemented"); break;
-  case FN_NAME: assert(!"not yet implemented"); break;
-  case FN_NAME2: assert(!"not yet implemented"); break;
-  case FN_LOCAL_NAME: assert(!"not yet implemented"); break;
-  case FN_LOCAL_NAME2: assert(!"not yet implemented"); break;
-  case FN_NAMESPACE_URI: assert(!"not yet implemented"); break;
-  case FN_NAMESPACE_URI2: assert(!"not yet implemented"); break;
-  case FN_NUMBER: assert(!"not yet implemented"); break;
-  case FN_NUMBER2: assert(!"not yet implemented"); break;
-  case FN_LANG: assert(!"not yet implemented"); break;
-  case FN_LANG2: assert(!"not yet implemented"); break;
-  case OP_IS_SAME_NODE: assert(!"not yet implemented"); break;
-  case OP_NODE_BEFORE: assert(!"not yet implemented"); break;
-  case OP_NODE_AFTER: assert(!"not yet implemented"); break;
-  case FN_ROOT: assert(!"not yet implemented"); break;
-  case FN_ROOT2: {
-    df_node *n;
-    assert(values[0]->seqtype->type == SEQTYPE_ITEM);
-    assert(values[0]->seqtype->item->kind != ITEM_ATOMIC);
-    n = values[0]->value.n;
-    while (NULL != n->parent)
-      n = n->parent;
-
-    *result = df_node_to_value(n);
-    break;
-  }
-  case FN_BOOLEAN: assert(!"not yet implemented"); break;
-  case OP_CONCATENATE: assert(!"not yet implemented"); break;
-  case FN_INDEX_OF: assert(!"not yet implemented"); break;
-  case FN_INDEX_OF2: assert(!"not yet implemented"); break;
-  case FN_EMPTY: {
-    *result = df_value_new(instr->outports[0].seqtype);
-    (*result)->value.b = (SEQTYPE_EMPTY == values[0]->seqtype->type);
-    break;
-  }
-  case FN_EXISTS: assert(!"not yet implemented"); break;
-  case FN_DISTINCT_VALUES: assert(!"not yet implemented"); break;
-  case FN_DISTINCT_VALUES2: assert(!"not yet implemented"); break;
-  case FN_INSERT_BEFORE: assert(!"not yet implemented"); break;
-  case FN_REMOVE: assert(!"not yet implemented"); break;
-  case FN_REVERSE: assert(!"not yet implemented"); break;
-  case FN_SUBSEQUENCE: assert(!"not yet implemented"); break;
-  case FN_SUBSEQUENCE2: assert(!"not yet implemented"); break;
-  case FN_UNORDERED: assert(!"not yet implemented"); break;
-  case FN_ZERO_OR_ONE: assert(!"not yet implemented"); break;
-  case FN_ONE_OR_MORE: assert(!"not yet implemented"); break;
-  case FN_EXACTLY_ONE: assert(!"not yet implemented"); break;
-  case FN_DEEP_EQUAL: assert(!"not yet implemented"); break;
-  case FN_DEEP_EQUAL2: assert(!"not yet implemented"); break;
-  case OP_UNION: assert(!"not yet implemented"); break;
-  case OP_INTERSECT: assert(!"not yet implemented"); break;
-  case OP_EXCEPT: assert(!"not yet implemented"); break;
-  case FN_COUNT: assert(!"not yet implemented"); break;
-  case FN_AVG: assert(!"not yet implemented"); break;
-  case FN_MAX: assert(!"not yet implemented"); break;
-  case FN_MAX2: assert(!"not yet implemented"); break;
-  case FN_MIN: assert(!"not yet implemented"); break;
-  case FN_MIN2: assert(!"not yet implemented"); break;
-  case FN_SUM: assert(!"not yet implemented"); break;
-  case FN_SUM2: assert(!"not yet implemented"); break;
-  case OP_TO: assert(!"not yet implemented"); break;
-  case FN_ID: assert(!"not yet implemented"); break;
-  case FN_ID2: assert(!"not yet implemented"); break;
-  case FN_IDREF: assert(!"not yet implemented"); break;
-  case FN_IDREF2: assert(!"not yet implemented"); break;
-  case FN_DOC: {
-    char *uri;
-    FILE *f;
-    xmlDocPtr doc;
-    xmlNodePtr root;
-    df_node *docnode;
-    df_node *rootelem;
-    df_seqtype *restype;
-    assert(df_check_derived_atomic_type(state,values[0],g->string_type));
-    uri = values[0]->value.s;
-/*     debugl("Loading document \"%s\"...",uri); */
-
-    if (NULL == (f = fopen(uri,"r"))) {
-      fprintf(stderr,"Can't open %s: %s\n",uri,strerror(errno));
-      return -1; /* FIXME: raise an error here */
-    }
-
-    if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
-      fclose(f);
-      fprintf(stderr,"XML parse error.\n");
-      return -1; /* FIXME: raise an error here */
-    }
-    fclose(f);
-
-    if (NULL == (root = xmlDocGetRootElement(doc))) {
-      fprintf(stderr,"No root element.\n");
-      xmlFreeDoc(doc);
-      return -1; /* FIXME: raise an error here */
-    }
-
-    docnode = df_node_new(NODE_DOCUMENT);
-    rootelem = df_node_from_xmlnode(root);
-    df_node_add_child(docnode,rootelem);
-
-    xmlFreeDoc(doc);
-
-    restype = df_seqtype_new_item(ITEM_DOCUMENT);
-    *result = df_value_new(restype);
-    df_seqtype_deref(restype);
-    (*result)->value.n = docnode;
-    assert(0 == (*result)->value.n->refcount);
-    (*result)->value.n->refcount++;
-    break;
-  }
-  case FN_DOC_AVAILABLE: assert(!"not yet implemented"); break;
-  case FN_COLLECTION: assert(!"not yet implemented"); break;
-  case FN_COLLECTION2: assert(!"not yet implemented"); break;
-  case FN_POSITION: assert(!"not yet implemented"); break;
-  case FN_LAST: assert(!"not yet implemented"); break;
-  case FN_CURRENT_DATETIME: assert(!"not yet implemented"); break;
-  case FN_CURRENT_DATE: assert(!"not yet implemented"); break;
-  case FN_CURRENT_TIME: assert(!"not yet implemented"); break;
-  case FN_IMPLICIT_TIMEZONE: assert(!"not yet implemented"); break;
-  case FN_DEFAULT_COLLATION: assert(!"not yet implemented"); break;
-  case FN_STATIC_BASE_URI: assert(!"not yet implemented"); break;
-
-  /* Special operations: handled in df_fire_activity() */
-
-  default:
-    assert(!"invalid opcode");
-    break;
-  }
-
-  return 0;
-}
-
-void df_init_function(df_state *state, df_function *fun)
+void df_init_function(df_program *program, df_function *fun)
 {
   assert(NULL == fun->ret);
   assert(NULL == fun->start);
   assert(NULL == fun->rtype);
 
-  fun->ret = df_add_instruction(state,fun,OP_SPECIAL_RETURN);
-  fun->start = df_add_instruction(state,fun,OP_SPECIAL_PASS);
-  fun->start->inports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
-  fun->start->inports[0].seqtype->item->type = state->schema->globals->int_type;
+  fun->ret = df_add_instruction(program,fun,OP_SPECIAL_RETURN);
+  fun->start = df_add_instruction(program,fun,OP_SPECIAL_PASS);
+  fun->start->inports[0].seqtype = df_seqtype_new_atomic(program->schema->globals->int_type);
   fun->start->outports[0].dest = fun->ret;
   fun->start->outports[0].destp = 0;
 
-  fun->rtype = df_seqtype_new_item(ITEM_ATOMIC);
-  fun->rtype->item->type = state->schema->globals->complex_ur_type;
+  fun->rtype = df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
 }
 
-df_function *df_new_function(df_state *state, const nsname ident)
+df_function *df_new_function(df_program *program, const nsname ident)
 {
   df_function *fun = (df_function*)calloc(1,sizeof(df_function));
-  list_append(&state->functions,fun);
+  list_append(&program->functions,fun);
   fun->ident = nsname_copy(ident);
-  fun->state = state;
+  fun->program = program;
 
   /* Create sequence instruction (not actually part of the program, but used by the map operator
      to collate results of inner function calls) */
-  fun->mapseq = df_add_instruction(state,fun,OP_SPECIAL_SEQUENCE);
+  fun->mapseq = df_add_instruction(program,fun,OP_SPECIAL_SEQUENCE);
   fun->mapseq->internal = 1;
-  fun->mapseq->inports[0].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
-  fun->mapseq->inports[0].seqtype->item->type = state->schema->globals->complex_ur_type;
-  fun->mapseq->inports[1].seqtype = df_seqtype_new_item(ITEM_ATOMIC);
-  fun->mapseq->inports[1].seqtype->item->type = state->schema->globals->complex_ur_type;
+  fun->mapseq->inports[0].seqtype =
+    df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
+  fun->mapseq->inports[1].seqtype =
+    df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
   fun->mapseq->outports[0].seqtype = df_seqtype_new(SEQTYPE_SEQUENCE);
   fun->mapseq->outports[0].seqtype->left = df_seqtype_ref(fun->mapseq->inports[0].seqtype);
   fun->mapseq->outports[0].seqtype->right = df_seqtype_ref(fun->mapseq->inports[1].seqtype);
@@ -1009,10 +470,10 @@ df_function *df_new_function(df_state *state, const nsname ident)
   return fun;
 }
 
-df_function *df_lookup_function(df_state *state, const nsname ident)
+df_function *df_lookup_function(df_program *program, const nsname ident)
 {
   list *l;
-  for (l = state->functions; l; l = l->next) {
+  for (l = program->functions; l; l = l->next) {
     df_function *fun = (df_function*)l->data;
     if (nsname_equals(fun->ident,ident))
       return fun;
@@ -1039,7 +500,7 @@ void df_free_function(df_function *fun)
   free(fun);
 }
 
-df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode)
+df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode)
 {
   df_instruction *instr = (df_instruction*)calloc(1,sizeof(df_instruction));
   int i;
@@ -1053,10 +514,10 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
     instr->inports = (df_inport*)calloc(instr->ninports,sizeof(df_inport));
     for (i = 0; i < instr->ninports; i++)
       instr->inports[i].seqtype =
-        df_get_seqtype_from_optype(state,&df_opdefs[opcode].paramtypes[i]);
+        df_get_seqtype_from_optype(program,&df_opdefs[opcode].paramtypes[i]);
     instr->noutports = 1;
     instr->outports = (df_outport*)calloc(1,sizeof(df_outport));
-    instr->outports[0].seqtype = df_get_seqtype_from_optype(state,&df_opdefs[opcode].rettype);
+    instr->outports[0].seqtype = df_get_seqtype_from_optype(program,&df_opdefs[opcode].rettype);
   }
   else {
 
@@ -1100,6 +561,10 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
     case OP_SPECIAL_PRINT:
       instr->ninports = 1;
       instr->noutports = 0;
+      break;
+    case OP_SPECIAL_OUTPUT:
+      instr->ninports = 1;
+      instr->noutports = 1;
       break;
     case OP_SPECIAL_SEQUENCE:
       instr->ninports = 2;
@@ -1171,7 +636,7 @@ df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode
   return instr;
 }
 
-void df_delete_instruction(df_state *state, df_function *fun, df_instruction *instr)
+void df_delete_instruction(df_program *program, df_function *fun, df_instruction *instr)
 {
   list **lptr = &fun->instructions;
 /*   debugl("deleting instruction %s:%d (%s), actual function is %s", */
@@ -1216,12 +681,14 @@ void df_free_instruction(df_instruction *instr)
   if (OP_SPECIAL_CONST == instr->opcode) {
 /*     debugl("df_free_instruction CONT: instr->cvalue = %p, with %d refs (before my deref)", */
 /*           instr->cvalue,instr->cvalue->refcount); */
-    df_value_deref(instr->fun->state->schema->globals,instr->cvalue);
+    df_value_deref(instr->fun->program->schema->globals,instr->cvalue);
   }
 
   free(instr->nametest);
   if (NULL != instr->seqtypetest)
     df_seqtype_deref(instr->seqtypetest);
+  if (NULL != instr->seroptions)
+    df_seroptions_free(instr->seroptions);
   free(instr);
 }
 
@@ -1233,41 +700,33 @@ const char *df_opstr(int opcode)
     return df_special_op_names[opcode-OP_SPECIAL_BASE];
 }
 
-df_state *df_state_new(xs_schema *schema)
+df_program *df_program_new(xs_schema *schema)
 {
-  df_state *state = (df_state*)calloc(1,sizeof(df_state));
-  state->schema = schema;
-  state->init = df_new_function(state,nsname_temp(NULL,"_init"));
-  state->init->start = df_add_instruction(state,state->init,OP_SPECIAL_PRINT);
-  state->init->rtype = df_seqtype_new_item(ITEM_ATOMIC);
-  state->init->rtype->item->type = schema->globals->complex_ur_type;
-  state->intype = df_seqtype_new_item(ITEM_ATOMIC);
-  state->intype->item->type = schema->globals->int_type;
-  return state;
+  df_program *program = (df_program*)calloc(1,sizeof(df_program));
+  program->schema = schema;
+  return program;
 }
 
-void df_state_free(df_state *state)
+void df_program_free(df_program *program)
 {
-  list_free(state->functions,(void*)df_free_function);
-  df_seqtype_deref(state->intype);
-  free(state);
+  list_free(program->functions,(void*)df_free_function);
+  free(program);
 }
 
-void df_output_dot(df_state *state, FILE *f)
+void df_output_dot(df_program *program, FILE *f)
 {
-  xs_globals *g = state->schema->globals;
+  xs_globals *g = program->schema->globals;
   list *l;
   fprintf(f,"digraph {\n");
 /*   fprintf(f,"  rankdir=LR;\n"); */
   fprintf(f,"  nodesep=0.5;\n");
   fprintf(f,"  ranksep=0.3;\n");
   fprintf(f,"  node[shape=record,fontsize=12,fontname=\"Arial\",style=filled];\n");
-  for (l = state->functions; l; l = l->next) {
+  for (l = program->functions; l; l = l->next) {
     df_function *fun = (df_function*)l->data;
     list *il;
     int i;
-    if (fun == state->init)
-      continue;
+
     fprintf(f,"  subgraph cluster%p {\n",fun);
     fprintf(f,"    label=\"%s\";\n",fun->ident.name);
 
@@ -1333,7 +792,7 @@ void df_output_dot(df_state *state, FILE *f)
             else {
               stringbuf *buf = stringbuf_new();
               /* FIXME: need to use the namespace map of the syntax tree node */
-              df_seqtype_print_xpath(buf,instr->seqtypetest,state->schema->globals->namespaces);
+              df_seqtype_print_xpath(buf,instr->seqtypetest,program->schema->globals->namespaces);
               fprintf(f,"%s",buf->data);
               stringbuf_free(buf);
             }
@@ -1380,26 +839,24 @@ void df_output_dot(df_state *state, FILE *f)
   fprintf(f,"}\n");
 }
 
-void df_output_df(df_state *state, FILE *f)
+void df_output_df(df_program *program, FILE *f)
 {
   list *fl;
   stringbuf *buf = stringbuf_new();
-  for (fl = state->functions; fl; fl = fl->next) {
+  for (fl = program->functions; fl; fl = fl->next) {
     df_function *fun = (df_function*)fl->data;
     list *il;
     int i;
 
-    if (fun == state->init)
-      continue;
     fprintf(f,"function %s {\n",fun->ident.name);
     assert(NULL != fun->rtype);
     stringbuf_clear(buf);
-    df_seqtype_print_fs(buf,fun->rtype,state->schema->globals->namespaces->defs);
+    df_seqtype_print_fs(buf,fun->rtype,program->schema->globals->namespaces->defs);
     fprintf(f,"  return %s\n",buf->data);
 
     for (i = 0; i < fun->nparams; i++) {
       stringbuf_clear(buf);
-      df_seqtype_print_fs(buf,fun->params[i].seqtype,state->schema->globals->namespaces->defs);
+      df_seqtype_print_fs(buf,fun->params[i].seqtype,program->schema->globals->namespaces->defs);
       fprintf(f,"  param %d start %d type %s\n",i,fun->params[i].start->id,buf->data);
     }
 
@@ -1426,13 +883,13 @@ void df_output_df(df_state *state, FILE *f)
         assert(ITEM_ATOMIC == instr->cvalue->seqtype->item->kind);
 
         if (instr->cvalue->seqtype->item->type ==
-            state->schema->globals->string_type) {
+            program->schema->globals->string_type) {
           char *escaped = escape_str(instr->cvalue->value.s);
           fprintf(f," = \"%s\"",escaped);
           free(escaped);
         }
         else if (instr->cvalue->seqtype->item->type ==
-                 state->schema->globals->int_type) {
+                 program->schema->globals->int_type) {
           fprintf(f," = %d",instr->cvalue->value.i);
         }
         else {
