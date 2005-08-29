@@ -24,10 +24,12 @@
 #define _XSLT_XSLT_H
 
 #include "xpath.h"
+#include "xmlschema/xmlschema.h"
 #include "util/namespace.h"
 #include "util/xmlutils.h"
 #include "util/list.h"
 #include "dataflow/sequencetype.h"
+#include "dataflow/serialization.h"
 
 #define XSLT_DECLARATION                  0
 #define XSLT_IMPORT                       1
@@ -93,28 +95,14 @@
 #define FLAG_DISABLE_OUTPUT_ESCAPING      8
 #define FLAG_TERMINATE                    16
 
+typedef struct xslt_source xslt_source;
 
-
-
-
-/*
-
-Named objects:
-
-named template
-mode
-attribute set
-key
-decimal-format
-variable
-parameter
-stylesheet function
-output definition
-character map
-
-*/
-
-
+struct xslt_source {
+  xs_globals *globals;
+  xs_schema *schema;
+  xl_snode *root;
+  list *output_defs;
+};
 
 struct xl_snode {
   int type;
@@ -139,32 +127,38 @@ struct xl_snode {
   df_seqtype *seqtype;
   int gmethod;
   char *strval;
+  char **seroptions;
+  int importpred;
 
+  /* FIXME: turn this into a sourceloc */
   int defline; /* FIXME: set this during parsing */
-  char *deffilename;
+  char *deffilename; /* FIXME: set this during parsing */
 
   char *uri;
-
   nsname ident;
 
   int templateno;
   struct template *tmpl;
-
   struct df_outport *outp;
   list *templates;
 };
 
 xl_snode *xl_snode_new(int type);
 void xl_snode_free(xl_snode *sn);
-void xl_snode_set_parent(xl_snode *first, xl_snode *parent);
 int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_info *ei);
 xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname);
 void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode);
 
 int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
                     xp_expr **expr, xl_snode **sn, df_seqtype **st);
-xl_snode *xl_snode_parse(char *str, char *filename, int baseline, error_info *ei);
+xl_snode *xl_snode_parse(const char *str, const char *filename, int baseline, error_info *ei);
 void xl_snode_print_tree(xl_snode *sn, int indent);
+xl_snode *xl_first_decl(xl_snode *root);
+xl_snode *xl_next_decl(xl_snode *sn);
+
+int xslt_parse(error_info *ei, const char *uri, xslt_source **source);
+void xslt_source_free(xslt_source *source);
+df_seroptions *xslt_get_output_def(xslt_source *source, nsname ident);
 
 #ifndef _XSLT_XSLT_C
 
