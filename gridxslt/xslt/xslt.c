@@ -23,11 +23,14 @@
 #define _XSLT_XSLT_C
 
 #include "xslt.h"
+#include "parse.h"
+#include "dataflow/serialization.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 #include <math.h>
 
@@ -146,6 +149,14 @@ void xl_snode_free(xl_snode *sn)
   if (NULL != sn->seqtype)
     df_seqtype_deref(sn->seqtype);
   free(sn->strval);
+
+  if (NULL != sn->seroptions) {
+    int i;
+    for (i = 0; i < SEROPTION_COUNT; i++)
+      free(sn->seroptions[i]);
+    free(sn->seroptions);
+  }
+
   free(sn->deffilename);
   nsname_free(sn->ident);
   free(sn->uri);
@@ -154,20 +165,22 @@ void xl_snode_free(xl_snode *sn)
   free(sn);
 }
 
-void xl_snode_set_parent(xl_snode *first, xl_snode *parent)
+void xl_snode_set_parent(xl_snode *first, xl_snode *parent, int *importpred)
 {
   xl_snode *sn;
   for (sn = first; sn; sn = sn->next) {
-    sn->parent = parent;
     if (NULL != parent)
       sn->namespaces->parent = parent->namespaces;
 
-    if (sn->child)
-      xl_snode_set_parent(sn->child,sn);
+    if (sn->child) {
+      xl_snode_set_parent(sn->child,sn,importpred);
+      if (XSLT_IMPORT == sn->type)
+        (*importpred)++;
+    }
     if (sn->param)
-      xl_snode_set_parent(sn->param,sn);
+      xl_snode_set_parent(sn->param,sn,importpred);
     if (sn->sort)
-      xl_snode_set_parent(sn->sort,sn);
+      xl_snode_set_parent(sn->sort,sn,importpred);
     if (sn->select)
       xp_set_parent(sn->select,NULL,sn);
     if (sn->expr1)
@@ -177,9 +190,14 @@ void xl_snode_set_parent(xl_snode *first, xl_snode *parent)
     if (sn->name_expr)
       xp_set_parent(sn->name_expr,NULL,sn);
 
+    sn->parent = parent;
+
     if (sn->next)
       sn->next->prev = sn;
   }
+
+  for (sn = first; sn; sn = sn->next)
+    sn->importpred = *importpred;
 }
 
 static int check_duplicate_params(xl_snode *sn, error_info *ei)
@@ -217,6 +235,11 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
     assert(NULL == sn->ident.name);
     assert(NULL == sn->ident.ns);
 
+    /* @implements(xslt20:qname-11)
+       status { partial }
+       issue { need to test this for other types of objects }
+       test { xslt/parse/output_badnameprefix.test }
+       @end */
     if (!qname_isnull(sn->qn)) {
       sn->ident = qname_to_nsname(sn->namespaces,sn->qn);
       if (nsname_isnull(sn->ident))
@@ -265,6 +288,7 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
     if (sn->next)
       sn->next->prev = sn;
   }
+
   return 0;
 }
 
@@ -374,19 +398,18 @@ int parse_xl_syntax(const char *str, const char *filename, int baseline, error_i
   return r;
 }
 
-xl_snode *xl_snode_parse(char *str, char *filename, int baseline, error_info *ei)
+xl_snode *xl_snode_parse(const char *str, const char *filename, int baseline, error_info *ei)
 {
   xl_snode *sn = NULL;
   if (0 != parse_xl_syntax(str,filename,baseline,ei,NULL,&sn,NULL))
     return NULL;
   assert(NULL != sn);
-  xl_snode_set_parent(sn,NULL);
   return sn;
 }
 
 void xl_snode_print_tree(xl_snode *sn, int indent)
 {
-  print("%p %#i%s %#n\n",sn,2*indent,xslt_element_names[sn->type],sn->ident);
+  print("%p [%d] %#i%s %#n\n",sn,sn->importpred,2*indent,xslt_element_names[sn->type],sn->ident);
 
   if (sn->select)
     xp_expr_print_tree(sn->select,indent+1);
@@ -410,3 +433,298 @@ void xl_snode_print_tree(xl_snode *sn, int indent)
   if (sn->next)
     xl_snode_print_tree(sn->next,indent);
 }
+
+xl_snode *xl_first_decl(xl_snode *root)
+{
+  return root->child;
+}
+
+xl_snode *xl_next_decl(xl_snode *sn)
+{
+  if ((NULL != sn->child) &&
+      (XSLT_DECL_FUNCTION != sn->type) &&
+      (XSLT_DECL_TEMPLATE != sn->type))
+    return sn->child;
+
+  while ((NULL != sn) && (NULL == sn->next))
+    sn = sn->parent;
+
+  if (NULL != sn)
+    sn = sn->next;
+
+  return sn;
+}
+
+static int ends_with(const char *filename, const char *ext)
+{
+  return ((strlen(ext) <= strlen(filename)) &&
+          (!strcasecmp(filename+strlen(filename)-strlen(ext),ext)));
+}
+
+
+typedef struct output_defstr output_defstr;
+
+struct output_defstr {
+  nsname ident;
+  nsname method;
+  char **unpoptions;
+  xl_snode **defby;
+  df_seroptions *options;
+};
+
+static output_defstr *get_output_defstr(xslt_source *source, list **deflist, nsname ident)
+{
+  list *l;
+  output_defstr *od;
+  for (l = *deflist; l; l = l->next) {
+    od = (output_defstr*)l->data;
+    if (nsname_equals(od->ident,ident))
+      return od;
+  }
+  od = (output_defstr*)calloc(1,sizeof(output_defstr));
+  od->ident = nsname_copy(ident);
+  od->unpoptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
+  od->defby = (xl_snode**)calloc(SEROPTION_COUNT,sizeof(xl_snode*));
+  list_append(deflist,od);
+  return od;
+}
+
+static void output_defstr_free(output_defstr *od)
+{
+  int i;
+  nsname_free(od->ident);
+  nsname_free(od->method);
+  for (i = 0; i < SEROPTION_COUNT; i++)
+    free(od->unpoptions[i]);
+  free(od->unpoptions);
+  free(od->defby);
+  free(od);
+}
+
+int xslt_build_output_defs(error_info *ei, xslt_source *source)
+{
+  xl_snode *sn;
+  list *deflist = NULL;
+  list *l;
+
+  /* @implements(xslt20:serialization-9)
+     status { partial }
+     issue { need more tests }
+     test { xslt/parse/output_merge1.test }
+     @end */
+
+  /* We always have a default, unnamed output definition */
+  get_output_defstr(source,&deflist,nsname_temp(NULL,NULL));
+
+  /* First figure out the applicable method for each output definition; this affects the defaults
+     that are used */
+  for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
+    if (XSLT_DECL_OUTPUT == sn->type) {
+      output_defstr *od = get_output_defstr(source,&deflist,sn->ident);
+
+      if (NULL != sn->seroptions[SEROPTION_METHOD]) {
+        qname qn = qname_parse(sn->seroptions[SEROPTION_METHOD]);
+        od->method = qname_to_nsname(sn->namespaces,qn);
+
+        /* @implements(xslt20:serialization-15)
+           test { xslt/parse/output_badmethodprefix.test }
+           test { xslt/parse/output_badmethod.test }
+           @end */
+        if (nsname_isnull(od->method)) {
+          error(ei,sn->deffilename,sn->defline,"XTSE1570",
+                "Could not resolve namespace for prefix \"%s\"",qn.prefix);
+          qname_free(qn);
+          list_free(deflist,(void*)output_defstr_free);
+          return -1;
+        }
+        qname_free(qn);
+
+        if ((NULL == od->method.ns) &&
+            strcmp(od->method.name,"xml") &&
+            strcmp(od->method.name,"html") &&
+            strcmp(od->method.name,"xhtml") &&
+            strcmp(od->method.name,"text")) {
+          error(ei,sn->deffilename,sn->defline,"XTSE1570",
+                "If the method has a null namespace, it must be one of xml, html, xhtml, or text");
+          list_free(deflist,(void*)output_defstr_free);
+          return -1;
+        }
+      }
+    }
+  }
+
+  /* Now create the parsed options object for each output def */
+  for (l = deflist; l; l = l->next) {
+    output_defstr *od = (output_defstr*)l->data;
+    od->options = df_seroptions_new(od->method);
+    od->options->ident = nsname_copy(od->ident);
+    list_append(&source->output_defs,od->options);
+  }
+
+  /* Parse the remaining options */
+  for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
+    if (XSLT_DECL_OUTPUT == sn->type) {
+      output_defstr *od = get_output_defstr(source,&deflist,sn->ident);
+      int i;
+      for (i = 0; i < SEROPTION_COUNT; i++) {
+        /* FIXME: take into account import precedence */
+        if (NULL != sn->seroptions[i]) {
+
+          if ((SEROPTION_CDATA_SECTION_ELEMENTS == i) ||
+              (SEROPTION_USE_CHARACTER_MAPS == i)) {
+
+            /* These two options are lists of nsnames; multiple output declarations add to the
+               list instead of replacing the existing value. This is handled by
+               df_parse_seroption(); here we just have to avoid checking for conflicting values. */
+          }
+          else if (NULL == od->unpoptions[i]) {
+            od->unpoptions[i] = strdup(sn->seroptions[i]);
+            od->defby[i] = sn;
+          }
+          else if (strcmp(od->unpoptions[i],sn->seroptions[i])) {
+            /* @implements(xslt20:serialization-10)
+               test { xslt/parse/output_conflict1.test }
+               test { xslt/parse/output_conflict2.test }
+               test { xslt/parse/output_conflict3.test }
+               test { xslt/parse/output_conflict4.test }
+               test { xslt/parse/output_conflict5.test }
+               test { xslt/parse/output_conflict6.test }
+               test { xslt/parse/output_conflict7.test }
+               test { xslt/parse/output_conflict8.test }
+               @end */
+            if (od->defby[i]->importpred != sn->importpred) {
+              /* use value from declaration with higher import precedence; this should always
+                 be sn since we are traverse importees before importers */
+              assert(od->defby[i]->importpred < sn->importpred);
+              free(od->unpoptions[i]);
+              od->unpoptions[i] = strdup(sn->seroptions[i]);
+              od->defby[i] = sn;
+            }
+            else {
+              error(ei,sn->deffilename,sn->defline,"XTSE1560","Conflicting value for option %s: "
+                    "previously set to %s by another output declaration",
+                    seroption_names[i],od->unpoptions[i]);
+              list_free(deflist,(void*)output_defstr_free);
+              return -1;
+            }
+          }
+
+          if (0 != df_parse_seroption(od->options,i,ei,sn->deffilename,sn->defline,
+                                      sn->seroptions[i],sn->namespaces)) {
+            list_free(deflist,(void*)output_defstr_free);
+            return -1;
+          }
+
+        }
+      }
+    }
+  }
+
+  for (l = deflist; l; l = l->next) {
+/*     output_defstr *od = (output_defstr*)l->data; */
+  }
+
+  list_free(deflist,(void*)output_defstr_free);
+  return 0;
+}
+
+static int xslt_post_process(error_info *ei, xslt_source *source, const char *uri)
+{
+  int importpred = 1;
+  /* Note: the order of these matters! Some later processing steps rely on earlier ones */
+
+  xl_snode_set_parent(source->root,NULL,&importpred);
+
+  CHECK_CALL(xl_snode_resolve(source->root,source->schema,uri,ei))
+  CHECK_CALL(xslt_build_output_defs(ei,source))
+  return 0;
+}
+
+int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
+{
+  *source = (xslt_source*)calloc(1,sizeof(xslt_source));
+  (*source)->globals = xs_globals_new();
+  (*source)->schema = xs_schema_new((*source)->globals);
+
+  /* XSLiTe syntax */
+  if (ends_with(uri,".xl")) {
+    stringbuf *input;
+    char buf[1024];
+    int r;
+    list *l;
+    FILE *f;
+
+    if (NULL == (f = fopen(uri,"r"))) {
+      error(ei,uri,-1,NULL,"%s",strerror(errno));
+      xslt_source_free(*source);
+      *source = NULL;
+      return -1;
+    }
+
+    input = stringbuf_new();
+    while (0 < (r = fread(buf,1,1024,f)))
+      stringbuf_append(input,buf,r);
+
+    fclose(f);
+
+    if (NULL == ((*source)->root = xl_snode_parse(input->data,uri,0,ei))) {
+      stringbuf_free(input);
+      xslt_source_free(*source);
+      *source = NULL;
+      return -1;
+    }
+
+    /* add default namespaces declared in schema */
+    for (l = (*source)->schema->globals->namespaces->defs; l; l = l->next) {
+      ns_def *ns = (ns_def*)l->data;
+      ns_add_direct((*source)->root->namespaces,ns->href,ns->prefix);
+    }
+
+    /* temp - functions and operators namespace */
+    ns_add_direct((*source)->root->namespaces,FN_NAMESPACE,"fn");
+
+    stringbuf_free(input);
+  }
+  /* Standard XSLT syntax */
+  else {
+    char *realuri = get_real_uri(uri);
+    (*source)->root = xl_snode_new(XSLT_TRANSFORM);
+    if (0 != parse_xslt_relative_uri(ei,NULL,0,NULL,realuri,realuri,(*source)->root)) {
+      free(realuri);
+      xslt_source_free(*source);
+      *source = NULL;
+      return -1;
+    }
+    free(realuri);
+  }
+
+  if (0 != xslt_post_process(ei,*source,uri)) {
+    xslt_source_free(*source);
+    *source = NULL;
+    return -1;
+  }
+
+  return 0;
+}
+
+void xslt_source_free(xslt_source *source)
+{
+  list_free(source->output_defs,(void*)df_seroptions_free);
+  if (NULL != source->root)
+    xl_snode_free(source->root);
+  xs_schema_free(source->schema);
+  xs_globals_free(source->globals);
+  free(source);
+}
+
+df_seroptions *xslt_get_output_def(xslt_source *source, nsname ident)
+{
+  list *l;
+  for (l = source->output_defs; l; l = l->next) {
+    df_seroptions *options = (df_seroptions*)l->data;
+    if (nsname_equals(options->ident,ident))
+      return options;
+  }
+  return NULL;
+}
+
