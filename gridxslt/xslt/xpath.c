@@ -392,9 +392,9 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
     xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_ROOT:
-    /* only print slash if we're the only step; otherwise it will be printed in the
-       next step */
-    /* FIXME */
+    stringbuf_format(buf,"/");
+    if (NULL != e->left)
+      xp_expr_serialize(buf,e->left,1);
     break;
   case XPATH_EXPR_STRING_LITERAL:
     /* FIXME: quote ' (and other?) characters inside string */
