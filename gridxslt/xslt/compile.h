@@ -27,6 +27,6 @@
 #include "dataflow/dataflow.h"
 #include "util/xmlutils.h"
 
-int df_program_from_xl(df_state *state, xl_snode *root);
+int xslt_compile(error_info *ei, xslt_source *source, df_program **program);
 
 #endif /* _XSLT_COMPILE_H */
