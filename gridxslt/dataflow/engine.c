@@ -21,6 +21,7 @@
  */
 
 #include "engine.h"
+#include "functions.h"
 #include "serialization.h"
 #include "util/macros.h"
 #include "util/debug.h"
@@ -47,13 +48,27 @@ struct df_activity {
   int fired;
 };
 
+df_state *df_state_new(df_program *program)
+{
+  df_state *state = (df_state*)calloc(1,sizeof(df_state));
+  state->program = program;
+  state->intype = df_seqtype_new_atomic(program->schema->globals->int_type);
+  return state;
+}
+
+void df_state_free(df_state *state)
+{
+  df_seqtype_deref(state->intype);
+  free(state);
+}
+
 void free_activity(df_state *state, df_activity *a)
 {
   if (!a->fired) {
     int i;
     for (i = 0; i < a->instr->ninports; i++)
       if (NULL != a->values[i])
-        df_value_deref(state->schema->globals,a->values[i]);
+        df_value_deref(state->program->schema->globals,a->values[i]);
   }
   free(a->values);
   free(a->outports);
@@ -346,7 +361,7 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
 /*   for (l = values; l; l = l->next) { */
 /*     df_value *v = (df_value*)l->data; */
 /*     assert(SEQTYPE_ITEM == v->seqtype->type); */
-/*     debugl("  %s",df_item_types[v->seqtype->item->kind]); */
+/*     debugl("  %s",df_item_kinds[v->seqtype->item->kind]); */
 /*   } */
 
   for (l = values; l; l = l->next) {
@@ -421,7 +436,7 @@ static void add_sequence_as_child_nodes(xs_globals *g, list *values, df_node *pa
 
 int df_fire_activity(df_state *state, df_activity *a)
 {
-  xs_globals *g = state->schema->globals;
+  xs_globals *g = state->program->schema->globals;
   if (state->trace)
     df_print_actmsg("Firing",a);
 
@@ -448,7 +463,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     break;
   case OP_SPECIAL_MERGE:
     df_output_value(a,0,a->values[0]);
-    df_value_deref(state->schema->globals,a->values[1]);
+    df_value_deref(state->program->schema->globals,a->values[1]);
     break;
   case OP_SPECIAL_CALL: {
     df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
@@ -545,24 +560,33 @@ int df_fire_activity(df_state *state, df_activity *a)
     df_output_value(a,0,a->values[0]);
     break;
   case OP_SPECIAL_PRINT: {
-#if 0
-/*     printf("Program result:\n"); */
-    df_value_print(g,stdout,a->values[0]);
-    if ((SEQTYPE_ITEM != a->values[0]->seqtype->type) ||
-        (ITEM_ATOMIC == a->values[0]->seqtype->item->kind))
-      printf("\n");
 
-    debugl("OP_SPECIAL_PRINT: before dereference of a->values[0]");
+    if (SEQTYPE_EMPTY != a->values[0]->seqtype->type) {
+      stringbuf *buf = stringbuf_new();
+      df_seroptions *options = df_seroptions_new(nsname_temp(NULL,"xml"));
+
+      if (0 != df_serialize(g,a->values[0],buf,options,&state->ei)) {
+        df_value_deref(g,a->values[0]);
+        df_seroptions_free(options);
+        return -1;
+      }
+
+      printf("%s",buf->data);
+
+      stringbuf_free(buf);
+      df_seroptions_free(options);
+    }
+
     df_value_deref(g,a->values[0]);
-    debugl("OP_SPECIAL_PRINT: after dereference of a->values[0]");
-#endif
-
+    break;
+  }
+  case OP_SPECIAL_OUTPUT: {
     stringbuf *buf = stringbuf_new();
-    df_seroptions options;
+    df_value *empty;
 
-    memset(&options,0,sizeof(df_seroptions));
+    assert(NULL != a->instr->seroptions);
 
-    if (0 != df_serialize(g,a->values[0],buf,&options,&state->ei)) {
+    if (0 != df_serialize(g,a->values[0],buf,a->instr->seroptions,&state->ei)) {
       df_value_deref(g,a->values[0]);
       return -1;
     }
@@ -571,6 +595,9 @@ int df_fire_activity(df_state *state, df_activity *a)
 
     stringbuf_free(buf);
     df_value_deref(g,a->values[0]);
+
+    empty = df_list_to_sequence(g,NULL);
+    df_output_value(a,0,empty);
     break;
   }
   case OP_SPECIAL_SEQUENCE: {
@@ -625,7 +652,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     assert(0 == elemvalue->value.n->refcount);
     elemvalue->value.n->refcount++;
 
-    assert(df_check_derived_atomic_type(state,a->values[1],g->string_type));
+    assert(df_check_derived_atomic_type(a->values[1],g->string_type));
     elem->ident.name = strdup(a->values[1]->value.s);
 
     /* FIXME: namespace (should be received on an input port) - what about prefix? */
@@ -650,7 +677,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     assert(0 == attrvalue->value.n->refcount);
     attrvalue->value.n->refcount++;
 
-    assert(df_check_derived_atomic_type(state,a->values[1],g->string_type));
+    assert(df_check_derived_atomic_type(a->values[1],g->string_type));
     attr->ident.name = strdup(a->values[1]->value.s);
     attr->value = df_construct_simple_content(g,a->values[0]);
 
@@ -756,7 +783,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     int i;
     CHECK_CALL(df_execute_op(state,a->instr,a->instr->opcode,a->values,&result))
     for (i = 0; i < a->instr->ninports; i++)
-      df_value_deref(state->schema->globals,a->values[i]);
+      df_value_deref(state->program->schema->globals,a->values[i]);
     assert(NULL != result);
     df_output_value(a,0,result);
     break;
@@ -808,28 +835,38 @@ int df_execute_network(df_state *state)
   return 0;
 }
 
-int df_execute(df_state *state, int trace, error_info *ei, df_value *context)
+int df_execute(df_program *program, int trace, error_info *ei, df_value *context)
 {
   df_function *mainfun;
+  df_function *init;
   df_activity *print;
   df_activity *start;
+  df_state *state = NULL;
+  int r;
 
-  state->trace = trace;
-
-  mainfun = df_lookup_function(state,nsname_temp(GX_NAMESPACE,"main"));
+  mainfun = df_lookup_function(program,nsname_temp(GX_NAMESPACE,"main"));
   if (NULL == mainfun)
-    mainfun = df_lookup_function(state,nsname_temp(NULL,"main"));
+    mainfun = df_lookup_function(program,nsname_temp(NULL,"main"));
   if (NULL == mainfun)
-    mainfun = df_lookup_function(state,nsname_temp(NULL,"default"));
+    mainfun = df_lookup_function(program,nsname_temp(NULL,"default"));
 
   if (NULL == mainfun) {
     fprintf(stderr,"No main function defined\n");
     return -1;
   }
 
+  init = (df_function*)calloc(1,sizeof(df_function));
+  init->ident = nsname_new(NULL,"_init");
+  init->program = program;
+  init->start = df_add_instruction(program,init,OP_SPECIAL_PRINT);
+  init->rtype = df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
+
+  state = df_state_new(program);
+  state->trace = trace;
+
   print = (df_activity*)calloc(1,sizeof(df_activity));
   list_push(&state->activities,print);
-  print->instr = state->init->start;
+  print->instr = init->start;
   print->values = (df_value**)calloc(1,sizeof(df_value*));
   print->remaining = 1;
   print->refs++;
@@ -845,5 +882,11 @@ int df_execute(df_state *state, int trace, error_info *ei, df_value *context)
   }
   df_set_input(start,0,context);
 
-  return df_execute_network(state);
+  r = df_execute_network(state);
+
+  df_state_free(state);
+
+  df_free_function(init);
+
+  return r;
 }
