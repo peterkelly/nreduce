@@ -1,5 +1,5 @@
 =================================== PROGRAM ====================================
-dftest runtests.tmp/temp.xl
+gridxslt runtests.tmp/temp.xl
 ===================================== FILE =====================================
 people.xml
 <?xml version="1.0"?>
@@ -30,7 +30,7 @@ transform {
 
 }
 ==================================== OUTPUT ====================================
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <people>
   <person test="wow">
     <name>Fred</name>
