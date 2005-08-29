@@ -92,11 +92,19 @@ qname *qname_list_parse(const char *list)
   return qnames;
 }
 
+static int nullstr_equals(const char *a, const char *b)
+{
+  if ((NULL == a) && (NULL == b))
+    return 1;
+  else if ((NULL != a) && (NULL != b))
+    return !strcmp(a,b);
+  else
+    return 0;
+}
+
 int nsname_equals(const nsname nn1, const nsname nn2)
 {
-  return (!strcmp(nn1.name,nn2.name) &&
-          (((NULL == nn1.ns) && (NULL == nn2.ns)) ||
-           ((NULL != nn1.ns) && (NULL != nn2.ns) && !strcmp(nn1.ns,nn2.ns))));
+  return (nullstr_equals(nn1.ns,nn2.ns) && nullstr_equals(nn1.name,nn2.name));
 }
 
 int nsname_isnull(const nsname nn)
@@ -161,6 +169,19 @@ void nsname_free(nsname nn)
 {
   free(nn.ns);
   free(nn.name);
+}
+
+void nsname_ptr_free(nsname *nn)
+{
+  nsname_free(*nn);
+  free(nn);
+}
+
+nsname *nsname_ptr_copy(const nsname *nn)
+{
+  nsname *copy = (nsname*)malloc(sizeof(nsname));
+  *copy = nsname_copy(*nn);
+  return copy;
 }
 
 void print(const char *format, ...)
@@ -315,7 +336,8 @@ int invalid_element(xmlNodePtr n)
 int missing_attribute2(error_info *ei, const char *filename, int line, const char *errname,
                        const char *attrname)
 {
-  return error(ei,filename,line,errname,"\"%s\" attribute missing",attrname);
+/*   return error(ei,filename,line,errname,"\"%s\" attribute missing",attrname); */
+  return error(ei,filename,line,errname,"missing attribute: %s",attrname);
 }
 
 int missing_attribute(xmlNodePtr n, const char *attrname)
@@ -377,7 +399,7 @@ int parse_int_attr(error_info *ei, char *filename, xmlNodePtr n, const char *att
   if (!xmlHasProp(n,attrname))
     return missing_attribute2(ei,filename,n->line,NULL,attrname);
 
-  str = get_wscollapsed_attr(n,attrname);
+  str = get_wscollapsed_attr(n,attrname,NULL);
   cr = convert_to_nonneg_int(str,val);
   free(str);
 
@@ -404,7 +426,7 @@ int parse_boolean_attr(error_info *ei, char *filename, xmlNodePtr n, const char 
     return missing_attribute(n,attrname);
 
   /* FIXME: support 1, 0 */
-  str = get_wscollapsed_attr(n,attrname);
+  str = get_wscollapsed_attr(n,attrname,NULL);
   if (!strcmp(str,"true") || !strcmp(str,"1"))
     *val = 1;
   else if (!strcmp(str,"false") || !strcmp(str,"0"))
@@ -469,9 +491,9 @@ void collapse_whitespace(char *str)
   *end = '\0';
 }
 
-char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname)
+char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname, const char *ns)
 {
-  char *val = xmlGetProp(n,attrname);
+  char *val = xmlGetNsProp(n,attrname,ns);
   collapse_whitespace(val);
   return val;
 }
@@ -559,7 +581,7 @@ char *escape_str(const char *s)
 }
 
 int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr n,
-                               const nsname *stdattrs, ...)
+                               const char *restrictns, const nsname *stdattrs, ...)
 {
   va_list ap;
   xmlAttr *attr;
@@ -579,6 +601,8 @@ int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr 
     va_end(ap);
 
     attrnn = nsname_new(ns,attr->name);
+    if ((NULL != ns) && strcmp(restrictns,ns))
+      allowed = 1;
     for (s = stdattrs; s->name && !allowed; s++)
       if (nsname_equals(*s,attrnn))
         allowed = 1;
@@ -724,6 +748,14 @@ int retrieve_uri_element(error_info *ei, const char *filename, int line, const c
 
   parsed = xmlParseURI(full_uri);
   if (NULL != parsed->fragment) {
+    /* @implements(xslt20:embedded-1) @end
+       @implements(xslt20:embedded-2) @end
+       @implements(xslt20:embedded-3) @end
+       @implements(xslt20:embedded-4) @end
+       @implements(xslt20:embedded-5) @end
+       @implements(xslt20:embedded-6) @end
+       @implements(xslt20:embedded-7) @end
+       @implements(xslt20:embedded-8) @end */
     if (NULL == (*node = get_element_by_id(root,parsed->fragment))) {
       error(ei,full_uri,-1,errname,"No such fragment \"%s\"",parsed->fragment);
       xmlFreeDoc(*doc);
