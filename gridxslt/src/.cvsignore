@@ -14,3 +14,5 @@ runtests
 validate
 wsclient
 wsjava
+saxonclient
+SaxonServlet.class
