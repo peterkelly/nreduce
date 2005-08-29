@@ -1,0 +1,64 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:f1" as="xs:string"/>
+  <xsl:function name="f:f2" as="xs:boolean"/>
+  <xsl:function name="f:f3" as="xs:decimal"/>
+  <xsl:function name="f:f4" as="xs:double"/>
+  <xsl:function name="f:f5" as="xs:float"/>
+  <xsl:function name="f:f6" as="xs:date"/>
+  <xsl:function name="f:f7" as="xs:time"/>
+  <xsl:function name="f:f8" as="xs:dateTime"/>
+  <xsl:function name="f:f9" as="xs:duration"/>
+  <xsl:function name="f:f10" as="xs:QName"/>
+  <xsl:function name="f:f11" as="xs:anyURI"/>
+  <xsl:function name="f:f12" as="xs:gDay"/>
+  <xsl:function name="f:f13" as="xs:gMonthDay"/>
+  <xsl:function name="f:f14" as="xs:gMonth"/>
+  <xsl:function name="f:f15" as="xs:gYearMonth"/>
+  <xsl:function name="f:f16" as="xs:gYear"/>
+  <xsl:function name="f:f17" as="xs:base64Binary"/>
+  <xsl:function name="f:f18" as="xs:hexBinary"/>
+  <xsl:function name="f:f19" as="xs:QName"/>
+  <xsl:function name="f:f20" as="xs:integer"/>
+  <xsl:function name="f:f21" as="xs:anyType"/>
+  <xsl:function name="f:f22" as="xdt:yearMonthDuration"/>
+  <xsl:function name="f:f23" as="xdt:dayTimeDuration"/>
+  <xsl:function name="f:f24" as="xdt:anyAtomicType"/>
+  <xsl:function name="f:f25" as="xdt:untyped"/>
+  <xsl:function name="f:f26" as="xdt:untypedAtomic"/>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:f1" as="xs:string"/>
+  <xsl:function name="f:f2" as="xs:boolean"/>
+  <xsl:function name="f:f3" as="xs:decimal"/>
+  <xsl:function name="f:f4" as="xs:double"/>
+  <xsl:function name="f:f5" as="xs:float"/>
+  <xsl:function name="f:f6" as="xs:date"/>
+  <xsl:function name="f:f7" as="xs:time"/>
+  <xsl:function name="f:f8" as="xs:dateTime"/>
+  <xsl:function name="f:f9" as="xs:duration"/>
+  <xsl:function name="f:f10" as="xs:QName"/>
+  <xsl:function name="f:f11" as="xs:anyURI"/>
+  <xsl:function name="f:f12" as="xs:gDay"/>
+  <xsl:function name="f:f13" as="xs:gMonthDay"/>
+  <xsl:function name="f:f14" as="xs:gMonth"/>
+  <xsl:function name="f:f15" as="xs:gYearMonth"/>
+  <xsl:function name="f:f16" as="xs:gYear"/>
+  <xsl:function name="f:f17" as="xs:base64Binary"/>
+  <xsl:function name="f:f18" as="xs:hexBinary"/>
+  <xsl:function name="f:f19" as="xs:QName"/>
+  <xsl:function name="f:f20" as="xs:integer"/>
+  <xsl:function name="f:f21" as="xs:anyType"/>
+  <xsl:function name="f:f22" as="xdt:yearMonthDuration"/>
+  <xsl:function name="f:f23" as="xdt:dayTimeDuration"/>
+  <xsl:function name="f:f24" as="xdt:anyAtomicType"/>
+  <xsl:function name="f:f25" as="xdt:untyped"/>
+  <xsl:function name="f:f26" as="xdt:untypedAtomic"/>
+</xsl:transform>
+================================== RETURN CODE =================================
+0

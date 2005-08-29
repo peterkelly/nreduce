@@ -1,11 +1,17 @@
+No conflict; one output declaration has a name and the other doesn't
 =================================== PROGRAM ====================================
 testxslt
 ==================================== INPUT =====================================
 <?xml version="1.0"?>
 <xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
-  <xsl:function/>
+  <xsl:output method="xml"/>
+  <xsl:output name="foo" method="html"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: missing attribute: name
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output method="xml"/>
+  <xsl:output name="foo" method="html"/>
+</xsl:transform>
 ================================== RETURN CODE =================================
-1
+0

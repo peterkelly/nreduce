@@ -3,11 +3,9 @@ testxslt
 ==================================== INPUT =====================================
 <?xml version="1.0"?>
 <xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="http://f.org" version="2.0">
-  <xsl:function name="f:myfunc">
-    <xsl:param/>
-  </xsl:function>
+  <xsl:output x="y"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error: missing attribute: name
+runtests.tmp/input.xml:3: error: attribute "x" is not permitted on element "xsl:output"
 ================================== RETURN CODE =================================
 1

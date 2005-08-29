@@ -1,0 +1,35 @@
+=================================== PROGRAM ====================================
+testxslt -o runtests.tmp/input.xml
+===================================== FILE =====================================
+other.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output method="text"/>
+</xsl:transform>
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:import href="other.xsl"/>
+  <xsl:output method="xml"/>
+</xsl:transform>
+==================================== OUTPUT ====================================
+Output definition: (unnamed)
+  byte-order-mark = no
+  cdata-section-elements = 
+  doctype-public = (none)
+  doctype-system = (none)
+  encoding = UTF-8
+  escape-uri-attributes = yes
+  include-content-type = yes
+  indent = no
+  media-type = text/xml
+  method = xml
+  normalization-form = none
+  omit-xml-declaration = no
+  standalone = omit
+  undeclare-prefixes = no
+  use-character-maps = 
+  version = 1.0
+
+================================== RETURN CODE =================================
+0
