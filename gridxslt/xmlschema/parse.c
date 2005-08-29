@@ -110,7 +110,7 @@ int xs_init_toplevel_object(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   char *name;
   if (!xmlHasProp(n,"name"))
     return missing_attribute2(&s->ei,s->uri,n->line,NULL,"name");
-  name = get_wscollapsed_attr(n,"name");
+  name = get_wscollapsed_attr(n,"name",NULL);
 
   if (NULL != ss_lookup_local(ss,nsname_temp(ns,name))) {
     error(&s->ei,s->uri,n->line,NULL,"%s \"%s\" already declared",typestr,name);
@@ -164,7 +164,7 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
   if (!xmlHasProp(n,attrname))
     return 0;
 
-  namestr = get_wscollapsed_attr(n,attrname);
+  namestr = get_wscollapsed_attr(n,attrname,NULL);
   qn = qname_parse(namestr);
 /*   debugl("line %d: Parsing %s reference %s",n->line,ss->type,namestr); */
 
@@ -207,7 +207,7 @@ int xs_parse_form(xs_schema *s, xmlNodePtr n, int *qualified)
 {
   char *form;
   int invalid = 0;
-  if (NULL == (form = get_wscollapsed_attr(n,"form")))
+  if (NULL == (form = get_wscollapsed_attr(n,"form",NULL)))
     return 0;
 
   if (!strcmp(form,"qualified"))
@@ -846,7 +846,7 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
   else {
     if (NULL != fd->strval[facet])
       return error(&s->ei,s->uri,n->line,NULL,"facet already defined");
-    fd->strval[facet] = get_wscollapsed_attr(n,"value");
+    fd->strval[facet] = get_wscollapsed_attr(n,"value",NULL);
     fd->defline[facet] = n->line;
 
     if ((XS_FACET_MINLENGTH == facet) ||
@@ -874,7 +874,7 @@ int xs_is_builtin_type_redeclaration(xs_schema *s, char *ns, xmlNodePtr n)
 {
   if ((NULL != ns) && !strcmp(ns,XS_NAMESPACE) && xmlHasProp(n,"name")) {
     xs_type *existing;
-    char *name = get_wscollapsed_attr(n,"name");
+    char *name = get_wscollapsed_attr(n,"name",NULL);
     if ((NULL != (existing = xs_symbol_table_lookup_object(s->globals->symt,XS_OBJECT_TYPE,
                                                            nsname_temp(ns,name)))) &&
         existing->builtin) {
@@ -1658,7 +1658,7 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
     w->type = XS_WILDCARD_TYPE_ANY;
   }
   else {
-    char *namespace = get_wscollapsed_attr(n,"namespace");
+    char *namespace = get_wscollapsed_attr(n,"namespace",NULL);
 
     if (!strcmp(namespace,"##any")) {
       w->type = XS_WILDCARD_TYPE_ANY;
@@ -1798,7 +1798,7 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
     return error(&s->ei,s->uri,n->line,"src-import.1.1","A \"namespace\" attribute is required on "
                  "this import element since the enclosing schema has no target namespace defined");
 
-  schemaloc = get_wscollapsed_attr(n,"schemaLocation");
+  schemaloc = get_wscollapsed_attr(n,"schemaLocation",NULL);
 
   if (NULL == (full_uri = xmlBuildURI(schemaloc,s->uri))) {
     return error(&s->ei,s->uri,n->line,NULL,
@@ -1901,7 +1901,7 @@ int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   /* parse the "attributeFormDefault" attribute */
   if (xmlHasProp(n,"attributeFormDefault")) {
     int invalid = 0;
-    char *afd = get_wscollapsed_attr(n,"attributeFormDefault");
+    char *afd = get_wscollapsed_attr(n,"attributeFormDefault",NULL);
     if (!strcmp(afd,"qualified"))
       s->attrformq = 1;
     else if (!strcmp(afd,"unqualified"))
@@ -1916,7 +1916,7 @@ int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   /* parse the "elementFormDefault" attribute */
   if (xmlHasProp(n,"elementFormDefault")) {
     int invalid = 0;
-    char *efd = get_wscollapsed_attr(n,"elementFormDefault");
+    char *efd = get_wscollapsed_attr(n,"elementFormDefault",NULL);
     if (!strcmp(efd,"qualified"))
       s->elemformq = 1;
     else if (!strcmp(efd,"unqualified"))
