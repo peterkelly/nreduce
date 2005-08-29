@@ -2884,8 +2884,10 @@ void xs_globals_init_xdt_types(xs_globals *g)
   g->any_atomic_type = xs_new_simple_builtin(g,"anyAtomicType",XDT_NAMESPACE,g->simple_ur_type);
   g->untyped_atomic = xs_new_simple_builtin(g,"untypedAtomic",XDT_NAMESPACE,g->any_atomic_type);
   g->untyped = xs_new_simple_builtin(g,"untyped",XDT_NAMESPACE,g->complex_ur_type);
-/* FIXME: xdt:dayTimeDuration */
-/* FIXME: xdt:yearMonthDuration */
+  g->untyped = xs_new_simple_builtin(g,"dayTimeDuration",XDT_NAMESPACE,g->complex_ur_type);
+  g->untyped = xs_new_simple_builtin(g,"yearMonthDuration",XDT_NAMESPACE,g->complex_ur_type);
+  /* FIXME: dayTimeDuration and yearMonthDuration are just placeholders for now; they need
+     to be filled in with the correct type definitions. */
 }
 
 xs_globals *xs_globals_new()
