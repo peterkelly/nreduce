@@ -20,9 +20,399 @@
  *
  */
 
+#define _DATAFLOW_SERIALIZATION_C
+
 #include "serialization.h"
+#include "util/macros.h"
+#include "util/debug.h"
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+#define INDENT_SPACES 3
+
+/* @implements(xslt20:serialization-1) status { info } @end
+   @implements(xslt20:serialization-2) status { info } @end
+   @implements(xslt20:serialization-4) status { info } @end
+   @implements(xslt20:serialization-5) status { info } @end
+   @implements(xslt20:serialization-6) status { info } @end
+   @implements(xslt20:serialization-7) status { info } @end
+   @implements(xslt20:serialization-12) status { deferred } @end
+   @implements(xslt20:serialization-13) status { deferred } @end
+   @implements(xslt20:serialization-14) status { info } @end
+   @implements(xslt20:serialization-20) status { info } @end
+   @implements(xslt20:serialization-22) status { info } @end
+*/
+
+const char *seroption_names[SEROPTION_COUNT] = {
+  "byte-order-mark",
+  "cdata-section-elements",
+  "doctype-public",
+  "doctype-system",
+  "encoding",
+  "escape-uri-attributes",
+  "include-content-type",
+  "indent",
+  "media-type",
+  "method",
+  "normalization-form",
+  "omit-xml-declaration",
+  "standalone",
+  "undeclare-prefixes",
+  "use-character-maps",
+  "version",
+};
+
+static int invalid_seroption(error_info *ei, const char *filename,
+                             int line, const char *option, const char *value)
+{
+  return error(ei,filename,line,NULL,"Invalid value for %s: %s",option,value);
+}
+
+int parse_yes_no(error_info *ei, const char *filename, int line,
+                 int *val, const char *name, const char *str)
+{
+  if (NULL == str)
+    return 0;
+  if (!strcmp(str,"yes"))
+    *val = 1;
+  else if (!strcmp(str,"no"))
+    *val = 0;
+  else
+    return invalid_seroption(ei,filename,line,name,str);
+  return 0;
+}
+
+typedef int (parsefun)(df_seroptions *options, error_info *ei, const char *filename,
+                       int line, const char *value, ns_map *namespaces);
+
+static int df_parse_byte_order_mark(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->byte_order_mark,
+                          "byte-order-mark",value))
+  return 0;
+}
+
+static int df_parse_cdata_section_elements(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  int r = 0;
+  if (NULL != value) {
+    qname *qnames = qname_list_parse(value);
+    qname *qn;
+    for (qn = qnames; !qname_isnull(*qn); qn++) {
+      nsname *nn = (nsname*)malloc(sizeof(nsname));
+      *nn = qname_to_nsname(namespaces,*qn);
+      if (nsname_isnull(*nn)) {
+        error(ei,filename,line,NULL,"Cannot resolve namespace prefix: %s",qn->prefix);
+        r = 1;
+        free(nn);
+        break;
+      }
+      else {
+        list_append(&options->cdata_section_elements,nn);
+      }
+    }
+    free(qnames);
+    if (0 != r)
+      return -1;
+  }
+  return 0;
+}
+
+static int df_parse_doctype_public(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    free(options->doctype_public);
+    options->doctype_public = strdup(value);
+  }
+  return 0;
+}
+
+static int df_parse_doctype_system(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    free(options->doctype_system);
+    options->doctype_system = strdup(value);
+  }
+  return 0;
+}
+
+static int df_parse_encoding(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    free(options->encoding);
+    options->encoding = strdup(value);
+  }
+  return 0;
+}
+
+static int df_parse_escape_uri_attributes(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->escape_uri_attributes,
+                          "escape-uri-attributes",value))
+  return 0;
+}
+
+static int df_parse_include_content_type(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->include_content_type,
+                          "include-content-type",value))
+  return 0;
+}
+
+static int df_parse_indent(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->indent,
+                          "indent",value))
+  return 0;
+}
+
+static int df_parse_media_type(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    free(options->media_type);
+    options->media_type = strdup(value);
+  }
+  return 0;
+}
+
+static int df_parse_method(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    qname qn = qname_parse(value);
+    nsname nn = qname_to_nsname(namespaces,qn);
+    if (nsname_isnull(nn)) {
+      error(ei,filename,line,NULL,"Cannot resolve namespace prefix: %s",qn.prefix);
+      qname_free(qn);
+      return -1;
+    }
+    qname_free(qn);
+    if ((NULL == nn.ns) &&
+        strcmp(nn.name,"xml") &&
+        strcmp(nn.name,"xhtml") &&
+        strcmp(nn.name,"html") &&
+        strcmp(nn.name,"text")) {
+      error(ei,filename,line,NULL,"Invalid method: %#n (ethods other than xml, xhtml, html, "
+            "and text must have a namespace associated with them)",nn);
+      nsname_free(nn);
+      return -1;
+    }
+    nsname_free(options->method);
+    options->method = nn;
+  }
+  return 0;
+}
+
+static int df_parse_normalization_form(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    free(options->normalization_form);
+    options->normalization_form = strdup(value);
+  }
+  return 0;
+}
+
+static int df_parse_omit_xml_declaration(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->omit_xml_declaration,
+                          "omit-xml-declaration",value))
+  return 0;
+}
+
+static int df_parse_standalone(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  if (NULL != value) {
+    if (!strcmp(value,"yes"))
+      options->standalone = STANDALONE_YES;
+    else if (!strcmp(value,"no"))
+      options->standalone = STANDALONE_NO;
+    else if (!strcmp(value,"omit"))
+      options->standalone = STANDALONE_OMIT;
+    else
+      return invalid_seroption(ei,filename,line,"standalone",value);
+  }
+  return 0;
+}
+
+static int df_parse_undeclare_prefixes(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  CHECK_CALL(parse_yes_no(ei,filename,line,&options->undeclare_prefixes,
+                          "undeclare-prefixes",value))
+  return 0;
+}
+
+static int df_parse_use_character_maps(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  /* FIXME */
+  return 0;
+}
+
+static int df_parse_version(df_seroptions *options, error_info *ei,
+                                           const char *filename, int line,
+                                           const char *value, ns_map *namespaces)
+{
+  /* FIXME */
+  return 0;
+}
+
+parsefun *parse_functions[SEROPTION_COUNT] = {
+  &df_parse_byte_order_mark,
+  &df_parse_cdata_section_elements,
+  &df_parse_doctype_public,
+  &df_parse_doctype_system,
+  &df_parse_encoding,
+  &df_parse_escape_uri_attributes,
+  &df_parse_include_content_type,
+  &df_parse_indent,
+  &df_parse_media_type,
+  &df_parse_method,
+  &df_parse_normalization_form,
+  &df_parse_omit_xml_declaration,
+  &df_parse_standalone,
+  &df_parse_undeclare_prefixes,
+  &df_parse_use_character_maps,
+  &df_parse_version
+};
+
+int df_parse_seroption(df_seroptions *options, int option, error_info *ei,
+                       const char *filename, int line,
+                       const char *value, ns_map *namespaces)
+{
+  assert(0 <= option);
+  assert(SEROPTION_COUNT > option);
+  /* FIXME: must always ensure that the values passed in are whitespace collapsed
+     (including values that come from attribute value templates) */
+  return parse_functions[option](options,ei,filename,line,value,namespaces);
+}
+
+df_seroptions *df_seroptions_new(nsname method)
+{
+  df_seroptions *options = (df_seroptions*)calloc(1,sizeof(df_seroptions));
+
+  /* @implements(xslt20:serialization-11)
+     test { xslt/parse/output_defaults_xml.test }
+     test { xslt/parse/output_defaults_html.test }
+     test { xslt/parse/output_defaults_text.test }
+     test { xslt/parse/output_defaults_xhtml.test }
+     @end
+     @implements(xslt20:serialization-21) @end */
+
+  /* @implements(xslt20:serialization-16) status { deferred } @end */
+  /* @implements(xslt20:serialization-17) status { deferred } @end */
+  /* @implements(xslt20:serialization-18) status { deferred } @end */
+  /* @implements(xslt20:serialization-19) status { deferred } @end */
+
+  options->byte_order_mark = 0;
+  options->cdata_section_elements = NULL;
+  options->doctype_public = NULL;
+  options->doctype_system = NULL;
+  options->encoding = strdup("UTF-8");
+  options->escape_uri_attributes = 1;
+  options->include_content_type = 1;
+
+  if (!nsname_isnull(method) && (NULL == method.ns) &&
+      (!strcmp(method.name,"html") || (!strcmp(method.name,"xhtml"))))
+    options->indent = 1;
+  else
+    options->indent = 0;
+
+
+  options->media_type = NULL;
+  if (!nsname_isnull(method) && (NULL == method.ns)) {
+    if (!strcmp(method.name,"xml"))
+      options->media_type = strdup("text/xml");
+    else if (!strcmp(method.name,"html") || (!strcmp(method.name,"xhtml")))
+      options->media_type = strdup("text/html");
+    else if (!strcmp(method.name,"text"))
+      options->media_type = strdup("text/plain");
+  }
+
+  options->method = nsname_copy(method);
+  options->normalization_form = strdup("none");
+  options->omit_xml_declaration = 0;
+  options->standalone = STANDALONE_OMIT;
+  options->undeclare_prefixes = 0;
+  options->use_character_maps = NULL;
+  options->version = strdup("1.0");
+
+  return options;
+}
+
+void df_seroptions_free(df_seroptions *options)
+{
+  nsname_free(options->ident);
+  list_free(options->use_character_maps,(void*)nsname_ptr_free);
+  free(options->doctype_public);
+  free(options->doctype_system);
+  free(options->encoding);
+  free(options->media_type);
+  nsname_free(options->method);
+  free(options->normalization_form);
+  list_free(options->use_character_maps,(void*)nsname_ptr_free);
+  free(options->version);
+  free(options);
+}
+
+
+
+df_seroptions *df_seroptions_copy(df_seroptions *options)
+{
+  df_seroptions *copy = (df_seroptions*)calloc(1,sizeof(df_seroptions));
+
+  copy->ident = nsname_copy(options->ident);
+  copy->byte_order_mark = options->byte_order_mark;
+  copy->cdata_section_elements = list_copy(options->cdata_section_elements,
+                                           (list_copy_t)nsname_ptr_copy);
+  copy->doctype_public = (options->doctype_public ? strdup(options->doctype_public) : NULL);
+  copy->doctype_system = (options->doctype_system ? strdup(options->doctype_system) : NULL);
+  copy->encoding = (options->encoding ? strdup(options->encoding) : NULL);
+  copy->escape_uri_attributes = options->escape_uri_attributes;
+  copy->include_content_type = options->include_content_type;
+  copy->indent = options->indent;
+  copy->media_type = (options->media_type ? strdup(options->media_type) : NULL);
+  copy->method = nsname_copy(options->method);
+  copy->normalization_form =
+    (options->normalization_form ? strdup(options->normalization_form) : NULL);
+  copy->omit_xml_declaration = options->omit_xml_declaration;
+  copy->standalone = options->standalone;
+  copy->undeclare_prefixes = options->undeclare_prefixes;
+  copy->use_character_maps = list_copy(options->use_character_maps,
+                                       (list_copy_t)nsname_ptr_copy);
+  copy->version = (options->version ? strdup(options->version) : NULL);
+
+  return copy;
+}
 
 static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info *ei)
 {
@@ -205,6 +595,115 @@ static int serialize_stringbuf(void *context, const char * buffer, int len)
   return len;
 }
 
+static void number_node(df_node *n, int *num)
+{
+  df_node *c;
+  n->nodeno = (*num)++;
+  for (c = n->first_child; c; c = c->next)
+    number_node(c,num);
+}
+
+static void dump_tree(df_node *n, int indent)
+{
+  df_node *c;
+  if ((NULL != n->value) && !is_all_whitespace(n->value))
+    debug("%#i%d %s \"%s\"\n",2*indent,n->nodeno,df_item_kinds[n->type],n->value);
+  else
+    debug("%#i%d %s %#n\n",2*indent,n->nodeno,df_item_kinds[n->type],n->ident);
+  for (c = n->first_child; c; c = c->next)
+    dump_tree(c,indent+1);
+}
+
+static void insertws(df_node *parent, df_node *before, int have_newline, int depth)
+{
+  stringbuf *buf = stringbuf_new();
+  df_node *wsnode = df_node_new(NODE_TEXT);
+  if (!have_newline)
+    stringbuf_format(buf,"\n%#i",INDENT_SPACES*depth);
+  else
+    stringbuf_format(buf,"%#i",INDENT_SPACES*depth+1);
+  wsnode->value = strdup(buf->data);
+  df_node_insert_child(parent,wsnode,before);
+  stringbuf_free(buf);
+}
+
+static void add_indentation(df_node *node, int depth)
+{
+  df_node *c;
+  int newline = 0;
+  int column = 0;
+  int nonws = 0;
+
+  /* @implements(xslt-xquery-serialization:xml-indent-1) @end
+     @implements(xslt-xquery-serialization:xml-indent-2)
+     status { partial }
+     issue { still need to deal with xml:space attribute }
+     test { xslt/output/indent1.test }
+     test { xslt/output/indent2.test }
+     test { xslt/output/indent3.test }
+     test { xslt/output/indent4.test }
+     test { xslt/output/indent5.test }
+     test { xslt/output/indent6.test }
+     test { xslt/output/indent7.test }
+     test { xslt/output/indent8.test }
+     test { xslt/output/indent9.test }
+     test { xslt/output/indent10.test }
+     test { xslt/output/indent11.test }
+     test { xslt/output/indent12.test }
+     test { xslt/output/indent13.test }
+     @end
+     @implements(xslt-xquery-serialization:xml-indent-3) @end
+     @implements(xslt-xquery-serialization:xml-indent-4) @end */
+
+  for (c = node->first_child; c; c = c->next) {
+
+    if (NODE_ELEMENT == c->type) {
+
+      add_indentation(c,depth+1);
+
+      debug("node %d: newline = %d, column = %d, depth = %d\n",c->nodeno,newline,column,depth);
+      if ((0 < depth) && !nonws && (!newline || (INDENT_SPACES*depth >= column)))
+        insertws(node,c,newline,depth);
+
+      newline = 0;
+      column = 0;
+      nonws = 0;
+    }
+    else if (NODE_TEXT == c->type) {
+      const char *ch;
+      for (ch = c->value; '\0' != *ch; ch++) {
+        if (!isspace(*ch))
+          nonws = 1;
+        if (('\n' == *ch) || ('\r' == *ch)) {
+          newline = 1;
+          column = 0;
+        }
+        column++;
+      }
+    }
+
+    if (NULL == c->next) {
+      if ((0 < depth) && !nonws && (!newline || (INDENT_SPACES*(depth-1) >= column)))
+        insertws(node,c->next,newline,depth-1);
+    }
+  }
+}
+
+static df_node *get_indented_doc(df_node *node)
+{
+  df_node *copy = df_node_ref(df_node_deep_copy(node));
+  int num = 0;
+
+  number_node(copy,&num);
+  dump_tree(copy,0);
+
+  debug("before add_indentation\n");
+  add_indentation(copy,0);
+  debug("after add_indentation\n");
+
+  return copy;
+}
+
 int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *options,
                  error_info *ei)
 {
@@ -216,13 +715,33 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   if (NULL == normseq)
     return -1;
 
-  doc = normseq->value.n;
+  /* FIXME: when indent is disabled, saxon does not print a newline after the <?xml...?>
+     declaration. If we want to be consistent with saxon (for testing purposes) we need to do
+     this but I'm not sure if libxml supports it. */
+
+  debug("serialize: after getting normseq: value has %d refs, doc has %d refs\n",
+        normseq->refcount,normseq->value.n->refcount);
+
+  doc = df_node_ref(normseq->value.n);
+  df_value_deref(g,normseq);
+
+  debug("serialize: after getting doc: doc has %d refs\n",doc->refcount);
+
+  assert(df_check_tree(doc));
+
+  if (options->indent) {
+    df_node *olddoc = doc;
+    doc = get_indented_doc(olddoc);
+    assert(df_check_tree(doc));
+    debug("identation: new doc has %d refs\n",doc->refcount);
+    df_node_deref(olddoc);
+  }
 
   xb = xmlOutputBufferCreateIO(serialize_stringbuf,NULL,buf,NULL);
   writer = xmlNewTextWriter(xb);
 /*   xmlTextWriterSetIndent(writer,1); */
 /*   xmlTextWriterSetIndentString(writer,"  "); */
-  xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
+  xmlTextWriterStartDocument(writer,NULL,"UTF-8",NULL);
 
   df_node_print(writer,doc);
 
@@ -230,7 +749,7 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   xmlTextWriterFlush(writer);
   xmlFreeTextWriter(writer);
 
-  df_value_deref(g,normseq);
+  df_node_deref(doc);
 
   return 0;
 }
