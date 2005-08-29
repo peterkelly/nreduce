@@ -23,6 +23,7 @@
 #include "xslt/parse.h"
 #include "xslt/output.h"
 #include "xslt/xslt.h"
+#include "dataflow/serialization.h"
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
 
@@ -31,90 +32,149 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <argp.h>
 
-int ends_with(char *filename, char *ext)
+const char *argp_program_version =
+  "testxslt 0.1";
+
+static char doc[] =
+  "XSLT syntax test program";
+
+static char args_doc[] = "[INPUT] SOURCEFILE";
+
+static struct argp_option options[] = {
+  {"parse-tree",               't', NULL,    0, "Dump parse tree" },
+  {"output-defs",              'o', NULL,    0, "Dump output definitions" },
+  { 0 }
+};
+
+struct arguments {
+  char *filename;
+  int tree;
+  int output_defs;
+};
+
+error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
-  return ((strlen(ext) <= strlen(filename)) &&
-          (!strcasecmp(filename+strlen(filename)-strlen(ext),ext)));
+  struct arguments *arguments = state->input;
+
+  switch (key) {
+  case 't':
+    arguments->tree = 1;
+    break;
+  case 'o':
+    arguments->output_defs = 1;
+    break;
+  case ARGP_KEY_ARG:
+    if (1 <= state->arg_num)
+      argp_usage (state);
+    arguments->filename = arg;
+    break;
+  case ARGP_KEY_END:
+    if (1 > state->arg_num)
+      argp_usage (state);
+    break;
+  default:
+    return ARGP_ERR_UNKNOWN;
+  }
+  return 0;
+}
+
+static struct argp argp = { options, parse_opt, args_doc, doc };
+
+void dump_output_defs(xslt_source *source)
+{
+  list *l;
+  for (l = source->output_defs; l; l = l->next) {
+    df_seroptions *options = (df_seroptions*)l->data;
+    list *nl;
+    if (nsname_isnull(options->ident))
+      print("Output definition: (unnamed)\n");
+    else
+      print("Output definition: %#n\n",options->ident);
+
+      print("  byte-order-mark = %s\n",options->byte_order_mark ? "yes" : "no");
+
+      print("  cdata-section-elements = ");
+      for (nl = options->cdata_section_elements; nl; nl = nl->next) {
+        print("%#n",(nsname*)nl->data);
+        if (nl->next)
+          print("  ");
+      }
+      print("\n");
+
+      print("  doctype-public = %s\n",options->doctype_public ? options->doctype_public : "(none)");
+
+      print("  doctype-system = %s\n",options->doctype_system ? options->doctype_system : "(none)");
+
+      print("  encoding = %s\n",options->encoding ? options->encoding : "(none)");
+
+      print("  escape-uri-attributes = %s\n",options->escape_uri_attributes ? "yes" : "no");
+
+      print("  include-content-type = %s\n",options->include_content_type ? "yes" : "no");
+
+      print("  indent = %s\n",options->indent ? "yes" : "no");
+
+      print("  media-type = %s\n",options->media_type ? options->media_type : "(none)");
+
+      print("  method = %#n\n",options->method);
+
+      print("  normalization-form = %s\n",
+            options->normalization_form ? options->normalization_form : "(none)");
+
+      print("  omit-xml-declaration = %s\n",options->omit_xml_declaration ? "yes" : "no");
+
+      if (STANDALONE_YES == options->standalone)
+        print("  standalone = yes\n");
+      else if (STANDALONE_NO == options->standalone)
+        print("  standalone = no\n");
+      else
+        print("  standalone = omit\n");
+
+      print("  undeclare-prefixes = %s\n",options->undeclare_prefixes ? "yes" : "no");
+
+      print("  use-character-maps = ");
+      for (nl = options->use_character_maps; nl; nl = nl->next) {
+        print("%#n",(nsname*)nl->data);
+        if (nl->next)
+          print("  ");
+      }
+      print("\n");
+
+      print("  version = %s\n",options->version ? options->version : "(none)");
+
+
+    print("\n");
+  }
 }
 
 int main(int argc, char **argv)
 {
-  char *infilename;
-  xl_snode *tree;
+  struct arguments arguments;
   error_info ei;
-  xs_globals *globals;
-  xs_schema *schema;
   int r = 0;
+  xslt_source *source;
 
   setbuf(stdout,NULL);
   memset(&ei,0,sizeof(error_info));
 
-  if (2 > argc) {
-    fprintf(stderr,"Usage: testxslt <infilename>\n");
-    exit(1);
-  }
+  memset(&arguments,0,sizeof(arguments));
+  argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
-  infilename = argv[1];
-
-  if (ends_with(infilename,".xl")) {
-    stringbuf *input = stringbuf_new();
-    char buf[1024];
-    int r;
-    FILE *in;
-
-    if (NULL == (in = fopen(infilename,"r"))) {
-      perror(infilename);
-      exit(1);
-    }
-
-    while (0 < (r = fread(buf,1,1024,in)))
-      stringbuf_append(input,buf,r);
-
-    if (NULL == (tree = xl_snode_parse(input->data,infilename,0,&ei))) {
-      error_info_print(&ei,stderr);
-      error_info_free_vals(&ei);
-      fclose(in);
-      exit(1);
-    }
-
-    stringbuf_free(input);
-    fclose(in);
-  }
-  else if (ends_with(infilename,".xsl") ||
-           ends_with(infilename,".xslt") ||
-           ends_with(infilename,".xml")) {
-    char *uri = get_real_uri(infilename);
-    tree = xl_snode_new(XSLT_TRANSFORM);
-    if (0 != parse_xslt_relative_uri(&ei,NULL,0,NULL,uri,uri,tree)) {
-      error_info_print(&ei,stderr);
-      error_info_free_vals(&ei);
-      xl_snode_free(tree);
-      free(uri);
-      exit(1);
-    }
-    free(uri);
-  }
-  else {
-    fprintf(stderr,"Unknown file type: %s\n",infilename);
-    exit(1);
-  }
-
-  globals = xs_globals_new();
-  schema = xs_schema_new(globals);
-
-  if (0 != xl_snode_resolve(tree,schema,infilename,&ei)) {
+  if (0 != xslt_parse(&ei,arguments.filename,&source)) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
-    r = 1;
-  }
-  else {
-    output_xslt(stdout,tree);
+    return 1;
   }
 
-  xl_snode_free(tree);
-  xs_schema_free(schema);
-  xs_globals_free(globals);
+  if (arguments.tree)
+    xl_snode_print_tree(source->root,0);
+  else if (arguments.output_defs)
+    dump_output_defs(source);
+  else
+    output_xslt(stdout,source->root);
+
+  xslt_source_free(source);
 
   return r;
 }
