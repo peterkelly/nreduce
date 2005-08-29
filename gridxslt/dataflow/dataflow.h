@@ -27,8 +27,8 @@
 #include "util/stringbuf.h"
 #include "util/list.h"
 #include "sequencetype.h"
+#include "serialization.h"
 #include <stdio.h>
-#include <libxml/tree.h>
 
 #define TYPE_INVALID                  0
 
@@ -112,23 +112,23 @@
 #define OP_SPECIAL_SWALLOW            1007
 #define OP_SPECIAL_RETURN             1008
 #define OP_SPECIAL_PRINT              1009
-#define OP_SPECIAL_SEQUENCE           1010 /* not reallly special */
-#define OP_SPECIAL_GATE               1011
+#define OP_SPECIAL_OUTPUT             1010
+#define OP_SPECIAL_SEQUENCE           1011 /* not reallly special */
+#define OP_SPECIAL_GATE               1012
 
-/* not reallly special */
-#define OP_SPECIAL_DOCUMENT           1012
-#define OP_SPECIAL_ELEMENT            1013
-#define OP_SPECIAL_ATTRIBUTE          1014
-#define OP_SPECIAL_PI                 1015
-#define OP_SPECIAL_COMMENT            1016
-#define OP_SPECIAL_VALUE_OF           1017
-#define OP_SPECIAL_TEXT               1018
-#define OP_SPECIAL_NAMESPACE          1019
-#define OP_SPECIAL_SELECT             1020
-#define OP_SPECIAL_FILTER             1021
-#define OP_SPECIAL_EMPTY              1022
-#define OP_SPECIAL_CONTAINS_NODE      1023
-#define OP_SPECIAL_COUNT              24
+#define OP_SPECIAL_DOCUMENT           1013
+#define OP_SPECIAL_ELEMENT            1014
+#define OP_SPECIAL_ATTRIBUTE          1015
+#define OP_SPECIAL_PI                 1016
+#define OP_SPECIAL_COMMENT            1017
+#define OP_SPECIAL_VALUE_OF           1018
+#define OP_SPECIAL_TEXT               1019
+#define OP_SPECIAL_NAMESPACE          1020
+#define OP_SPECIAL_SELECT             1021
+#define OP_SPECIAL_FILTER             1022
+#define OP_SPECIAL_EMPTY              1023
+#define OP_SPECIAL_CONTAINS_NODE      1024
+#define OP_SPECIAL_COUNT              25
 
 #define AXIS_INVALID                  0
 #define AXIS_CHILD                    1
@@ -153,7 +153,7 @@ typedef struct df_outport df_outport;
 typedef struct df_instruction df_instruction;
 typedef struct df_parameter df_parameter;
 typedef struct df_function df_function;
-typedef struct df_state df_state;
+typedef struct df_program df_program;
 
 struct df_optype {
   int type;
@@ -206,6 +206,7 @@ struct df_instruction {
   char *nametest;
   df_seqtype *seqtypetest;
   int axis;
+  df_seroptions *seroptions;
 };
 
 struct df_parameter {
@@ -225,55 +226,41 @@ struct df_function {
   df_instruction *ret;
   int nextid;
   df_instruction *mapseq;
-  df_state *state;
+  df_program *program;
   int isapply;
   char *mode;
 };
 
 int df_compute_types(df_function *fun);
-int df_check_is_atomic_type(df_state *state, df_seqtype *st, xs_type *type);
-int df_check_derived_atomic_type(df_state *state, df_value *v, xs_type *type);
+int df_check_derived_atomic_type(df_value *v, xs_type *type);
 int df_get_op_id(char *name);
-int df_execute_op(df_state *state, df_instruction *instr, int opcode,
-                  df_value **values, df_value **result);
 
-void df_init_function(df_state *state, df_function *fun);
-df_function *df_new_function(df_state *state, const nsname ident);
-df_function *df_lookup_function(df_state *state, const nsname ident);
+void df_init_function(df_program *program, df_function *fun);
+df_function *df_new_function(df_program *program, const nsname ident);
+df_function *df_lookup_function(df_program *program, const nsname ident);
 void df_free_function(df_function *fun);
 
-df_instruction *df_add_instruction(df_state *state, df_function *fun, int opcode);
-void df_delete_instruction(df_state *state, df_function *fun, df_instruction *instr);
+df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode);
+void df_delete_instruction(df_program *program, df_function *fun, df_instruction *instr);
 void df_free_instruction_inports(df_instruction *instr);
 void df_free_instruction(df_instruction *instr);
 
-struct df_state {
+struct df_program {
   list *functions;
-  list *activities;
-  df_function *init;
-  df_function *deftmpl;
   xs_schema *schema;
-  int actno;
-  int nextanonid;
-  df_seqtype *intype;
-  int trace;
-  error_info ei;
 };
 
 const char *df_opstr(int opcode);
 
-df_node *df_node_from_xmlnode(xmlNodePtr xn);
+df_program *df_program_new(xs_schema *schema);
+void df_program_free(df_program *program);
 
-df_state *df_state_new(xs_schema *schema);
-void df_state_free(df_state *state);
-
-void df_output_dot(df_state *s, FILE *f);
-void df_output_df(df_state *s, FILE *f);
+void df_output_dot(df_program *program, FILE *f);
+void df_output_df(df_program *program, FILE *f);
 
 #ifndef _DATAFLOW_DATAFLOW_C
 extern const char *df_type_names[TYPE_COUNT];
 extern const char *df_special_op_names[OP_SPECIAL_COUNT];
-extern const char *df_item_types[ITEM_COUNT];
 extern const char *df_axis_types[AXIS_COUNT];
 #endif
 
