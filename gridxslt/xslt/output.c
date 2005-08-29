@@ -22,6 +22,7 @@
 
 #include "output.h"
 #include "parse.h"
+#include "dataflow/serialization.h"
 #include "util/namespace.h"
 #include "util/stringbuf.h"
 #include "util/macros.h"
@@ -209,7 +210,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     xslt_start_element(writer,node,"apply-templates");
     if (node->select)
       expr_attr(writer,"select",node->select,0);
-    if (node->mode.localpart)
+    if (!qname_isnull(node->mode))
       xml_write_attr(writer,"mode","%#q",node->mode);
     for (c = node->param; c; c = c->next)
       output_xslt_with_param(writer,c);
@@ -223,7 +224,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     /* FIXME: support for "type" attribute */
     /* FIXME: support for "validation" attribute */
     xslt_start_element(writer,node,"attribute");
-    if (node->qn.localpart)
+    if (!qname_isnull(node->qn))
       xml_write_attr(writer,"name","%#q",node->qn);
     else
       expr_attr(writer,"name",node->name_expr,1);
@@ -298,7 +299,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     /* FIXME: support "use-attribute-sets" */
     /* FIXME: support "type" */
     /* FIXME: support "validation" */
-    if (node->qn.localpart) {
+    if (!qname_isnull(node->qn)) {
       stringbuf *buf = stringbuf_new();
       stringbuf_format(buf,"%#q",node->qn);
       xmlTextWriterStartElement(writer,buf->data);
@@ -412,7 +413,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     break;
   case XSLT_INSTR_PROCESSING_INSTRUCTION:
     xslt_start_element(writer,node,"processing-instruction");
-    if (node->qn.localpart)
+    if (!qname_isnull(node->qn))
       xml_write_attr(writer,"name","%#q",node->qn);
     else
       expr_attr(writer,"name",node->name_expr,1);
@@ -528,8 +529,17 @@ void output_xslt(FILE *f, xl_snode *node)
       break;
     case XSLT_DECL_NAMESPACE_ALIAS:
       break;
-    case XSLT_DECL_OUTPUT:
+    case XSLT_DECL_OUTPUT: {
+      int i;
+      xslt_start_element(writer,sn,"output");
+      if (!qname_isnull(sn->qn))
+        xml_write_attr(writer,"name","%#q",sn->qn);
+      for (i = 0; i < SEROPTION_COUNT; i++)
+        if (NULL != sn->seroptions[i])
+          xml_write_attr(writer,seroption_names[i],"%s",sn->seroptions[i]);
+      xslt_end_element(writer);
       break;
+    }
     case XSLT_PARAM:
       break;
     case XSLT_DECL_PRESERVE_SPACE:
@@ -541,7 +551,7 @@ void output_xslt(FILE *f, xl_snode *node)
       /* FIXME: support "mode" */
       /* FIXME: support "as" */
       xslt_start_element(writer,sn,"template");
-      if (sn->qn.localpart)
+      if (!qname_isnull(sn->qn))
         xml_write_attr(writer,"name","%#q",sn->qn);
       if (sn->select)
         expr_attr(writer,"match",sn->select,0);
