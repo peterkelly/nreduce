@@ -26,13 +26,14 @@
 typedef struct list list;
 
 typedef void (*list_d_t)(void *a);
+typedef void* (*list_copy_t)(void *a);
 
 struct list {
   void *data;
   list *next;
 };
 
-list *copy_list(list *old);
+list *list_copy(list *orig, list_copy_t copy);
 void list_append(list **l, void *data);
 void list_push(list **l, void *data);
 void *list_pop(list **l);

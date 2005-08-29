@@ -33,16 +33,20 @@ list *list_new(void *data, list *next)
   return l;
 }
 
-list *copy_list(list *old)
+list *list_copy(list *orig, list_copy_t copy)
 {
   list *newstart = NULL;
   list **newptr = &newstart;
-  while (old) {
+  while (orig) {
     *newptr = (list*)malloc(sizeof(list));
-    (*newptr)->data = old->data;
+
+    if (copy)
+      (*newptr)->data = copy(orig->data);
+    else
+      (*newptr)->data = orig->data;
     (*newptr)->next = NULL;
     newptr = &((*newptr)->next);
-    old = old->next;
+    orig = orig->next;
   }
   return newstart;
 }
