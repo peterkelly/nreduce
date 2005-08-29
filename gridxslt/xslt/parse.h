@@ -29,7 +29,5 @@
 
 int parse_xslt_relative_uri(error_info *ei, const char *filename, int line, const char *errname,
                             const char *base_uri, const char *uri, xl_snode *sroot);
-int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
-                   const char *full_uri, xl_snode *sroot, const char *refsource);
 
 #endif /* _XSLT_PARSE_H */
