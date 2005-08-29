@@ -38,6 +38,30 @@
 #include <signal.h>
 #include <argp.h>
 
+typedef struct progsubst progsubst;
+
+struct progsubst {
+  char *name;
+  char *prog;
+};
+
+static void progsubst_free(progsubst *s)
+{
+  free(s->name);
+  free(s->prog);
+}
+
+const char *progsubst_lookup(list *substitutions, const char *name)
+{
+  list *l;
+  for (l = substitutions; l; l = l->next) {
+    progsubst *s = (progsubst*)l->data;
+    if (!strcmp(s->name,name))
+      return s->prog;
+  }
+  return NULL;
+}
+
 const char *argp_program_version =
   "runtests 0.1";
 
@@ -48,8 +72,9 @@ static char args_doc[] = "PATH";
 
 static struct argp_option options[] = {
   {"diff",                  'd', 0,      0,  "Print a diff between the expected and actual output"},
-  {"v",                     'v', "CMD",  0,  "Run tests through valgrind command CMD and report "
+  {"valgrind",              'v', "CMD",  0,  "Run tests through valgrind command CMD and report "
                                              "leaks/errors"},
+  {"substitute",            's', "NAME=PROG",0,  "Use PROG as the executable whenever a test specifies NAME"},
   { 0 }
 };
 
@@ -58,6 +83,7 @@ struct arguments {
   int valgrind;
   char *valgrind_cmd;
   int diff;
+  list *substitutions;
 };
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -72,6 +98,26 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
     arguments->valgrind = 1;
     arguments->valgrind_cmd = arg;
     break;
+  case 's': {
+    progsubst *s = (progsubst*)calloc(1,sizeof(progsubst));
+    char *equals = strchr(arg,'=');
+    int namelen;
+    int proglen;
+    if (NULL == equals) {
+      fprintf(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
+      exit(1);
+    }
+    namelen = equals-arg;
+    proglen = strlen(arg)-namelen-1;
+    s->name = (char*)malloc(namelen+1);
+    s->prog = (char*)malloc(proglen+1);
+    memcpy(s->name,arg,namelen);
+    memcpy(s->prog,equals+1,proglen);
+    s->name[namelen] = '\0';
+    s->prog[proglen] = '\0';
+    list_append(&arguments->substitutions,s);
+    break;
+  }
   case ARGP_KEY_ARG:
     if (0 == state->arg_num)
       arguments->path = arg;
@@ -175,8 +221,7 @@ int run_program(char *program, char *infilename, stringbuf *output, int *status)
     close(fds[0]);
     expand_args(program,infilename,&args);
     execvp(args[0],args);
-    execlp(program,program,infilename,NULL);
-    perror("execlp");
+    perror("execvp");
     exit(-1);
   }
   else {
@@ -320,7 +365,8 @@ char *find_program_r(char *name, char *path)
       perror(fullname);
       exit(1);
     }
-    if (S_ISDIR(statbuf.st_mode) && strcmp(entry->d_name,".") && strcmp(entry->d_name,"..")) {
+    if (S_ISDIR(statbuf.st_mode) && strcmp(entry->d_name,".") &&
+        strcmp(entry->d_name,"..") && strcmp(entry->d_name,".libs")) {
       char *n;
       if (NULL != (n = find_program_r(name,fullname))) {
         free(fullname);
@@ -392,6 +438,32 @@ char *find_program(char *cmdline)
   return newcmdline;
 }
 
+char *subst_program(const char *program, list *substitutions)
+{
+  char *name = strdup(program);
+  char *space = strchr(name,' ');
+  char *cmdline;
+  const char *realprog;
+  int arglen = 0;
+  if (NULL != space) {
+    int spacepos = space-name;
+    arglen = strlen(name)-spacepos;
+    *space = '\0';
+  }
+  realprog = progsubst_lookup(substitutions,name);
+  free(name);
+
+  if (NULL == realprog)
+    return NULL;
+
+  cmdline = (char*)malloc(strlen(realprog)+arglen+1);
+  if (NULL != space)
+    sprintf(cmdline,"%s %s",realprog,space+1);
+  else
+    sprintf(cmdline,"%s",realprog);
+  return cmdline;
+}
+
 int test_file(char *filename, char *shortname, int justrun, struct arguments *args)
 {
   char *line;
@@ -404,7 +476,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   int got_expected_rc = 0;
   int expected_rc = 0;
   int passed = 0;
-  char *program = NULL;
+  char *cmdline = NULL;
   stringbuf *indata = stringbuf_new();
   FILE *in;
   int r;
@@ -480,12 +552,14 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
           stringbuf *temp = stringbuf_new();
           char *realprog = find_program(line);
           stringbuf_format(temp,"%s --log-file="TEMP_DIR"/vglog %s",args->valgrind_cmd,realprog);
-          program = strdup(temp->data);
+          cmdline = strdup(temp->data);
           stringbuf_free(temp);
           free(realprog);
         }
         else {
-          program = find_program(line);
+          cmdline = subst_program(line,args->substitutions);
+          if (NULL == cmdline)
+            cmdline = find_program(line);
         }
         break;
       case STATE_CMDLINE:
@@ -537,16 +611,21 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
 
   fclose(input);
 
-  if ((STATE_RETURN != state) || !got_expected_rc || (NULL == program)) {
+  if ((STATE_RETURN != state) || !got_expected_rc || (NULL == cmdline)) {
     fprintf(stderr,"Invalid test file\n");
     exit(1);
   }
 
   if (NULL != output_files)
-    pid = run_program(program,NULL,output,&status);
+    pid = run_program(cmdline,NULL,output,&status);
   else
-    pid = run_program(program,tempname,output,&status);
-  free(program);
+    pid = run_program(cmdline,tempname,output,&status);
+  free(cmdline);
+
+  /* add trailing newline if necessary */
+  if ((2 <= output->size) && ('\n' != output->data[output->size-2]))
+    stringbuf_format(output,"\n");
+  
 
   if (args->valgrind)
     process_valgrind_log(args,vgoutput);
@@ -796,6 +875,7 @@ int main(int argc, char **argv)
   }
 
   list_free(program_locs,(void*)program_loc_free);
+  list_free(arguments.substitutions,(void*)progsubst_free);
 
   return r;
 }
