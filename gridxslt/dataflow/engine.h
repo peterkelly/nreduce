@@ -27,6 +27,20 @@
 #include "sequencetype.h"
 #include "util/xmlutils.h"
 
-int df_execute(df_state *state, int trace, error_info *ei, df_value *context);
+typedef struct df_state df_state;
+
+struct df_state {
+  df_program *program;
+  list *activities;
+  int actno;
+  df_seqtype *intype;
+  int trace;
+  error_info ei;
+};
+
+df_state *df_state_new(df_program *program);
+void df_state_free(df_state *state);
+
+int df_execute(df_program *program, int trace, error_info *ei, df_value *context);
 
 #endif /* _DATAFLOW_ENGINE_H */
