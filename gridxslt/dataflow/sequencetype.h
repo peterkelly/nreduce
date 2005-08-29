@@ -29,6 +29,7 @@
 #include "util/namespace.h"
 #include "util/xmlutils.h"
 #include <libxml/xmlwriter.h>
+#include <libxml/tree.h>
 
 #define ITEM_INVALID                  0
 #define ITEM_ATOMIC                   1
@@ -117,6 +118,7 @@ struct df_node {
   list *attributes;
   char *prefix;
   nsname ident;
+  char *target;
   char *value;
   int refcount;
 
@@ -125,6 +127,7 @@ struct df_node {
   df_node *first_child;
   df_node *last_child;
   df_node *parent;
+  int nodeno;
 };
 
 struct df_value {
@@ -144,6 +147,7 @@ struct df_value {
 df_itemtype *df_itemtype_new(int kind);
 df_seqtype *df_seqtype_new(int type);
 df_seqtype *df_seqtype_new_item(int kind);
+df_seqtype *df_seqtype_new_atomic(xs_type *type);
 df_seqtype *df_seqtype_ref(df_seqtype *st);
 void df_itemtype_free(df_itemtype *it);
 void df_seqtype_deref(df_seqtype *st);
@@ -169,9 +173,14 @@ void df_node_deref(df_node *n);
 df_node *df_node_deep_copy(df_node *n);
 df_node *df_node_unique(df_node *n);
 void df_node_add_child(df_node *n, df_node *c);
+void df_node_insert_child(df_node *n, df_node *c, df_node *before);
 void df_node_add_attribute(df_node *n, df_node *attr);
 df_value *df_node_to_value(df_node *n);
 df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v);
+df_node *df_node_from_xmlnode(xmlNodePtr xn);
+int df_check_tree(df_node *n);
+df_node *df_prev_node(df_node *node, df_node *subtree);
+df_node *df_next_node(df_node *node, df_node *subtree);
 
 df_value *df_value_new_string(xs_globals *g, const char *str);
 
@@ -190,5 +199,9 @@ void df_node_to_string(df_node *n, stringbuf *buf);
 char *df_value_as_string(xs_globals *g, df_value *v);
 df_value *df_atomize(xs_globals *g, df_value *v);
 df_value *df_cast(xs_globals *g, df_value *v, df_seqtype *as);
+
+#ifndef _DATAFLOW_SEQUENCETYPE_C
+extern const char *df_item_kinds[ITEM_COUNT];
+#endif
 
 #endif /* _DATAFLOW_SEQUENCETYPE_H */
