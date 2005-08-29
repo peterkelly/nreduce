@@ -23,4 +23,10 @@
 #ifndef _DATAFLOW_FUNIMPL_H
 #define _DATAFLOW_FUNIMPL_H
 
+#include "dataflow.h"
+#include "engine.h"
+
+int df_execute_op(df_state *state, df_instruction *instr, int opcode,
+                  df_value **values, df_value **result);
+
 #endif /* _DATAFLOW_FUNIMPL_H */
