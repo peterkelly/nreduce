@@ -24,6 +24,7 @@
 #include "util/namespace.h"
 #include "util/stringbuf.h"
 #include "util/macros.h"
+#include "dataflow/serialization.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -35,14 +36,17 @@
 #include <ctype.h>
 
 #define ALLOWED_ATTRIBUTES(_node,...) \
-      CHECK_CALL(enforce_allowed_attributes(ei,filename,(_node),standard_attributes, \
-                                            __VA_ARGS__,NULL))
+      CHECK_CALL(enforce_allowed_attributes(ei,filename,(_node),XSLT_NAMESPACE, \
+                                            standard_attributes,__VA_ARGS__,NULL))
 #define REQUIRED_ATTRIBUTE(_node,_name) \
       if (!xmlHasNsProp((_node),(_name),NULL)) \
         return missing_attribute2(ei,filename,(_node)->line,NULL,(_name));
 
 static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr doc,
                                        error_info *ei, const char *filename);
+
+static int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
+                          const char *full_uri, xl_snode *sroot, const char *refsource);
 
 /* FIXME: should also allow xml:id (and others, e.g. XML Schema instance?) */
 /* Should we really enforece the absence of attributes from other namespaces? Probably not
@@ -837,12 +841,14 @@ static int parse_import_include(xl_snode *parent, xmlNodePtr n, xmlDocPtr doc, e
 
 
   @implements(xslt20:include-1)
-     test { xslt/parse/include_badattr.test }
-     test { xslt/parse/include_badchildren.test }
+  test { xslt/parse/include_badattr.test }
+  test { xslt/parse/include_otherattr.test }
+  test { xslt/parse/include_badchildren.test }
   @end
   @implements(xslt20:import-1)
-     test { xslt/parse/import_badattr.test }
-     test { xslt/parse/import_badchildren.test }
+  test { xslt/parse/import_badattr.test }
+  test { xslt/parse/import_otherattr.test }
+  test { xslt/parse/import_badchildren.test }
   @end
 
   @implements(xslt20:include-2)
@@ -941,6 +947,11 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
   xl_snode *new_sn;
   xl_snode **child_ptr = &sn->child;
 
+  /* @implements(xslt20:stylesheet-element-14) status { info } @end */
+  /* @implements(xslt20:stylesheet-element-15)
+     test { xslt/parse/template_badattr.test }
+     @end */
+
   /* FIXME: parse imports here; these come before all other top-level elements */
   while (c && check_element(c,"import",XSLT_NAMESPACE)) {
     CHECK_CALL(parse_import_include(sn,c,doc,ei,filename,XSLT_IMPORT,&child_ptr))
@@ -948,7 +959,10 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
   }
 
   for (; c; xslt_next_element(&c)) {
-    if (check_element(c,"attribute-set",XSLT_NAMESPACE)) {
+    if (check_element(c,"include",XSLT_NAMESPACE)) {
+      CHECK_CALL(parse_import_include(sn,c,doc,ei,filename,XSLT_DECL_INCLUDE,&child_ptr))
+    }
+    else if (check_element(c,"attribute-set",XSLT_NAMESPACE)) {
       /* FIXME */
     }
     else if (check_element(c,"character-map",XSLT_NAMESPACE)) {
@@ -971,6 +985,7 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
          status { partial }
          issue { need to test invalid child sequences }
          test { xslt/parse/function_badattr.test }
+         test { xslt/parse/function_otherattr.test }
          @end */
       ALLOWED_ATTRIBUTES(c,"name","as","override")
 
@@ -1028,9 +1043,6 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
     else if (check_element(c,"import-schema",XSLT_NAMESPACE)) {
       /* FIXME */
     }
-    else if (check_element(c,"include",XSLT_NAMESPACE)) {
-      CHECK_CALL(parse_import_include(sn,c,doc,ei,filename,XSLT_DECL_INCLUDE,&child_ptr))
-    }
     else if (check_element(c,"key",XSLT_NAMESPACE)) {
       /* FIXME */
     }
@@ -1038,6 +1050,51 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
       /* FIXME */
     }
     else if (check_element(c,"output",XSLT_NAMESPACE)) {
+      int i;
+      xmlNodePtr c2;
+
+      /* @implements(xslt20:serialization-3)
+         test { xslt/parse/output1.test }
+         test { xslt/parse/output2.test }
+         test { xslt/parse/output3.test }
+         test { xslt/parse/output4.test }
+         test { xslt/parse/output_badattr.test }
+         test { xslt/parse/output_badchildren.test }
+         test { xslt/parse/output_otherattr.test }
+         @end */
+
+      ALLOWED_ATTRIBUTES(c,
+                         "name",
+                         "method",
+                         "byte-order-mark",
+                         "cdata-section-elements",
+                         "doctype-public",
+                         "doctype-system",
+                         "encoding",
+                         "escape-uri-attributes",
+                         "include-content-type",
+                         "indent",
+                         "media-type",
+                         "normalization-form",
+                         "omit-xml-declaration",
+                         "standalone",
+                         "undeclare-prefixes",
+                         "use-character-maps",
+                         "version")
+
+      new_sn = add_node(&child_ptr,XSLT_DECL_OUTPUT,filename,c);
+      if (xmlHasNsProp(c,"name",NULL))
+        new_sn->qn = xml_attr_qname(c,"name");
+
+      new_sn->seroptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
+      for (i = 0; i < SEROPTION_COUNT; i++)
+        if (xmlHasNsProp(c,seroption_names[i],NULL))
+          new_sn->seroptions[i] = get_wscollapsed_attr(c,seroption_names[i],NULL);
+
+      if (NULL != (c2 = xslt_first_child(c)))
+        return xslt_invalid_element(ei,filename,c2);
+    }
+    else if (check_element(c,"param",XSLT_NAMESPACE)) {
       /* FIXME */
     }
     else if (check_element(c,"preserve-space",XSLT_NAMESPACE)) {
@@ -1059,6 +1116,7 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
          status { partial }
          issue { need to test invalid child sequences }
          test { xslt/parse/template_badattr.test }
+         test { xslt/parse/function_otherattr.test }
          @end */
       ALLOWED_ATTRIBUTES(c,"match","name","priority","mode","as")
 
@@ -1099,7 +1157,12 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
       }
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
+    else if (check_element(c,"variable",XSLT_NAMESPACE)) {
+      /* FIXME */
+    }
     else if (XML_ELEMENT_NODE == c->type) {
+      xmlNodePtr post = c;
+
       /* @implements(xslt20:import-5)
          test { xslt/parse/import_notatstart.test }
          @end */
@@ -1107,8 +1170,38 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
         return error(ei,filename,n->line,"XTSE0200","The xsl:import element children must precede "
                      "all other element children of an xsl:stylesheet element, including any "
                      "xsl:include element children and any user-defined data elements.");
-      else
+
+
+      /* @implements(xslt20:user-defined-top-level-2)
+         test { xslt/parse/transform_userdatanons.test }
+         @end */
+      if (NULL == c->ns) {
+        return error(ei,filename,n->line,"XTSE0130","User-defined data elements only permitted if "
+                     "they have a non-null namespace URI");
+      }
+      else if (!strcmp(c->ns->href,XSLT_NAMESPACE))
         return xslt_invalid_element(ei,filename,c);
+
+      /* @implements(xslt20:user-defined-top-level-1)
+         test { xslt/parse/transform_userdata.test }
+         @end */
+      /* otherwise; it's a valid user-define data element; just ignore it */
+
+      /* @implements(xslt20:user-defined-top-level-3) status { info } @end */
+      /* @implements(xslt20:user-defined-top-level-4) status { info } @end */
+      /* @implements(xslt20:user-defined-top-level-5) status { info } @end */
+
+      /* @implements(xslt20:user-defined-top-level-6)
+         test { xslt/parse/transform_userdataimport.test }
+         @end */
+      xslt_next_element(&post);
+      while (post) {
+        if (check_element(post,"import",XSLT_NAMESPACE))
+          return error(ei,filename,n->line,"XTSE0140",
+                       "A user-defined data element must not precede an import element");
+        xslt_next_element(&post);
+      }
+
     }
     /* FIXME: check for other stuff that can appear here like <variable> and <param> */
     /* FIXME: support "user-defined data elements"; I think we also need to make these
@@ -1118,13 +1211,39 @@ static int parse_decls(xl_snode *sn, xmlNodePtr n, xmlDocPtr doc,
   return 0;
 }
 
-int parse_xslt_module(xl_snode *sroot, xmlNodePtr n, xmlDocPtr doc,
-                      error_info *ei, const char *uri)
+static int parse_xslt_module(xl_snode *sroot, xmlNodePtr n, xmlDocPtr doc,
+                             error_info *ei, const char *filename)
 {
-  sroot->uri = strdup(uri);
-  CHECK_CALL(parse_decls(sroot,n,doc,ei,uri))
+  sroot->uri = strdup(filename);
+
+  /* @implements(xslt20:stylesheet-element-3) @end */
+
+  /* @implements(xslt20:stylesheet-element-4)
+     test { xslt/parse/transform_noversion.test }
+     @end */
+  REQUIRED_ATTRIBUTE(n,"version")
+
+  /* @implements(xslt20:stylesheet-element-5) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-6) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-7) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-8) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-9) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-10) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-11) status { deferred } @end */
+  /* @implements(xslt20:stylesheet-element-12) status { info } @end */
+  /* @implements(xslt20:stylesheet-element-13) status { info } @end */
+  /* @implements(xslt20:stylesheet-element-16) status { info } @end */
+  /* @implements(xslt20:stylesheet-element-17) status { info } @end */
+
+  /* @implements(xslt20:default-collation-attribute-1) status { deferred } @end */
+  /* @implements(xslt20:default-collation-attribute-2) status { deferred } @end */
+  /* @implements(xslt20:default-collation-attribute-3) status { deferred } @end */
+  /* @implements(xslt20:default-collation-attribute-4) status { deferred } @end */
+  /* @implements(xslt20:default-collation-attribute-5) status { deferred } @end */
+  /* @implements(xslt20:default-collation-attribute-6) status { deferred } @end */
+
+  CHECK_CALL(parse_decls(sroot,n,doc,ei,filename))
   add_ns_defs(sroot,n);
-  xl_snode_set_parent(sroot,NULL);
   return 0;
 }
 
@@ -1146,8 +1265,8 @@ int parse_xslt_relative_uri(error_info *ei, const char *filename, int line, cons
   return 0;
 }
 
-int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
-                   const char *full_uri, xl_snode *sroot, const char *refsource)
+static int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *errname,
+                          const char *full_uri, xl_snode *sroot, const char *refsource)
 {
   xmlDocPtr doc;
   xmlNodePtr node;
@@ -1174,6 +1293,168 @@ int parse_xslt_uri(error_info *ei, const char *filename, int line, const char *e
 }
 
 /*
+  @implements(xslt20:built-in-types-1)
+  test { xslt/parse/builtintypes.test }
+  @end
+  @implements(xslt20:built-in-types-2) @end
+  @implements(xslt20:built-in-types-3) @end
+  @implements(xslt20:built-in-types-4) @end
+  @implements(xslt20:built-in-types-5) @end
+  @implements(xslt20:built-in-types-6) @end
+  @implements(xslt20:built-in-types-7) @end
+
+  @implements(xslt20:what-is-xslt-1) status { info } @end
+  @implements(xslt20:what-is-xslt-2) status { info } @end
+  @implements(xslt20:what-is-xslt-3) status { info } @end
+  @implements(xslt20:what-is-xslt-4) status { info } @end
+  @implements(xslt20:what-is-xslt-5) status { info } @end
+  @implements(xslt20:what-is-xslt-6) status { info } @end
+  @implements(xslt20:whats-new-in-xslt2-1) status { info } @end
+
+  @implements(xslt20:terminology-1) status { info } @end
+  @implements(xslt20:terminology-2) status { info } @end
+  @implements(xslt20:terminology-3) status { info } @end
+  @implements(xslt20:terminology-4) status { info } @end
+  @implements(xslt20:terminology-5) status { info } @end
+  @implements(xslt20:terminology-6) status { info } @end
+  @implements(xslt20:terminology-7) status { info } @end
+  @implements(xslt20:terminology-8) status { info } @end
+  @implements(xslt20:terminology-9) status { info } @end
+  @implements(xslt20:terminology-10) status { info } @end
+  @implements(xslt20:terminology-11) status { info } @end
+  @implements(xslt20:terminology-12) status { info } @end
+  @implements(xslt20:terminology-13) status { info } @end
+  @implements(xslt20:terminology-14) status { info } @end
+  @implements(xslt20:terminology-15) status { info } @end
+  @implements(xslt20:terminology-16) status { info } @end
+  @implements(xslt20:terminology-17) status { info } @end
+
+  @implements(xslt20:notation-1) status { info } @end
+  @implements(xslt20:notation-2) status { info } @end
+  @implements(xslt20:notation-3) status { info } @end
+  @implements(xslt20:notation-7) status { info } @end
+  @implements(xslt20:notation-8) status { info } @end
+  @implements(xslt20:notation-9) status { info } @end
+  @implements(xslt20:notation-10) status { info } @end
+
+  @implements(xslt20:xslt-namespace-1) status { info } @end
+  @implements(xslt20:xslt-namespace-2) status { info } @end
+  @implements(xslt20:xslt-namespace-3) status { info } @end
+  @implements(xslt20:xslt-namespace-4) status { info } @end
+  @implements(xslt20:xslt-namespace-5) status { info } @end
+  @implements(xslt20:xslt-namespace-6) status { info } @end
+
+  @implements(xslt20:reserved-namespaces-1) status { info } @end
+  @implements(xslt20:reserved-namespaces-2) status { info } @end
+  @implements(xslt20:reserved-namespaces-4) status { info } @end
+
+  @implements(xslt20:extension-attributes-1) status { info } @end
+  @implements(xslt20:extension-attributes-2) status { info } @end
+  @implements(xslt20:extension-attributes-3) status { info } @end
+
+  @implements(xslt20:xslt-media-type-1) status { info } @end
+  @implements(xslt20:xslt-media-type-2) status { info } @end
+  @implements(xslt20:xslt-media-type-3) status { info } @end
+
+  @implements(xslt20:backwards-1) status { deferred } @end
+  @implements(xslt20:backwards-2) status { deferred } @end
+  @implements(xslt20:backwards-3) status { deferred } @end
+  @implements(xslt20:backwards-4) status { deferred } @end
+  @implements(xslt20:backwards-5) status { deferred } @end
+  @implements(xslt20:backwards-6) status { deferred } @end
+  @implements(xslt20:backwards-7) status { deferred } @end
+  @implements(xslt20:backwards-8) status { deferred } @end
+  @implements(xslt20:backwards-9) status { deferred } @end
+  @implements(xslt20:forwards-1) status { deferred } @end
+  @implements(xslt20:forwards-2) status { deferred } @end
+  @implements(xslt20:forwards-3) status { deferred } @end
+  @implements(xslt20:forwards-4) status { deferred } @end
+  @implements(xslt20:forwards-5) status { deferred } @end
+  @implements(xslt20:forwards-6) status { deferred } @end
+  @implements(xslt20:forwards-7) status { deferred } @end
+  @implements(xslt20:forwards-8) status { deferred } @end
+  @implements(xslt20:forwards-9) status { deferred } @end
+
+  @implements(xslt20:combining-modules-1) status { info } @end
+  @implements(xslt20:combining-modules-2) status { info } @end
+
+  @implements(xslt20:conditional-inclusion-1) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-2) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-3) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-4) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-5) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-6) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-7) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-8) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-9) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-10) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-11) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-12) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-13) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-14) status { deferred } @end
+  @implements(xslt20:conditional-inclusion-15) status { deferred } @end
+
+  @implements(xslt20:import-schema-1) status { deferred } @end
+  @implements(xslt20:import-schema-2) status { deferred } @end
+  @implements(xslt20:import-schema-3) status { deferred } @end
+  @implements(xslt20:import-schema-4) status { deferred } @end
+  @implements(xslt20:import-schema-5) status { deferred } @end
+  @implements(xslt20:import-schema-6) status { deferred } @end
+  @implements(xslt20:import-schema-7) status { deferred } @end
+  @implements(xslt20:import-schema-8) status { deferred } @end
+  @implements(xslt20:import-schema-9) status { deferred } @end
+  @implements(xslt20:import-schema-10) status { deferred } @end
+  @implements(xslt20:import-schema-11) status { deferred } @end
+  @implements(xslt20:import-schema-12) status { deferred } @end
+  @implements(xslt20:import-schema-13) status { deferred } @end
+  @implements(xslt20:import-schema-14) status { deferred } @end
+  @implements(xslt20:import-schema-15) status { deferred } @end
+
+  @implements(xslt20:data-model-1) status { info } @end
+  @implements(xslt20:data-model-2) status { info } @end
+  @implements(xslt20:data-model-3) status { info } @end
+  @implements(xslt20:data-model-4) status { info } @end
+  @implements(xslt20:data-model-5) status { info } @end
+
+  @implements(xslt20:character-maps-1) status { deferred } @end
+  @implements(xslt20:character-maps-2) status { deferred } @end
+  @implements(xslt20:character-maps-3) status { deferred } @end
+  @implements(xslt20:character-maps-4) status { deferred } @end
+  @implements(xslt20:character-maps-5) status { deferred } @end
+  @implements(xslt20:character-maps-6) status { deferred } @end
+  @implements(xslt20:character-maps-7) status { deferred } @end
+  @implements(xslt20:character-maps-8) status { deferred } @end
+  @implements(xslt20:character-maps-9) status { deferred } @end
+  @implements(xslt20:character-maps-10) status { deferred } @end
+  @implements(xslt20:character-maps-11) status { deferred } @end
+  @implements(xslt20:character-maps-12) status { deferred } @end
+  @implements(xslt20:character-maps-13) status { deferred } @end
+  @implements(xslt20:character-maps-14) status { deferred } @end
+  @implements(xslt20:character-maps-15) status { deferred } @end
+  @implements(xslt20:character-maps-16) status { deferred } @end
+  @implements(xslt20:character-maps-17) status { deferred } @end
+  @implements(xslt20:character-maps-18) status { deferred } @end
+  @implements(xslt20:character-maps-19) status { deferred } @end
+  @implements(xslt20:character-maps-20) status { deferred } @end
+  @implements(xslt20:character-maps-21) status { deferred } @end
+
+  @implements(xslt20:disable-output-escaping-1) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-2) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-3) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-4) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-5) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-6) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-7) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-8) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-9) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-10) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-11) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-12) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-13) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-14) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-15) status { deferred } @end
+  @implements(xslt20:disable-output-escaping-16) status { deferred } @end
+
   @implements(xslt20:xml-versions-1) status { deferred } @end
   @implements(xslt20:xml-versions-2) status { deferred } @end
   @implements(xslt20:xml-versions-3) status { deferred } @end
