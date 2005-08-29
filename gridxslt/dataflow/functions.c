@@ -20,7 +20,481 @@
  *
  */
 
+#include "functions.h"
+#include "dataflow.h"
+#include "funops.h"
+#include "util/macros.h"
+#include "util/namespace.h"
+#include "util/debug.h"
+#include <assert.h>
+#include <string.h>
+#include <errno.h>
+#include <ctype.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 
+static int df_check_is_atomic_type(df_seqtype *st, xs_type *type)
+{
+  return ((SEQTYPE_ITEM == st->type) &&
+          (ITEM_ATOMIC == st->item->kind) &&
+          (st->item->type == type));
+}
+
+int df_execute_op(df_state *state, df_instruction *instr, int opcode,
+                  df_value **values, df_value **result)
+{
+  xs_globals *g = state->program->schema->globals;
+
+  switch (opcode) {
+
+  case FN_NODE_NAME: assert(!"not yet implemented"); break;
+  case FN_NILLED: assert(!"not yet implemented"); break;
+  case FN_STRING: assert(!"not yet implemented"); break;
+  case FN_STRING2: {
+    char *str;
+    if (SEQTYPE_EMPTY == values[0]->seqtype->type) {
+      *result = df_value_new_string(g,"");
+    }
+    else {
+      assert(SEQTYPE_ITEM == values[0]->seqtype->type);
+      str = df_value_as_string(g,values[0]);
+      *result = df_value_new_string(g,str);
+      free(str);
+    }
+    break;
+  }
+  case FN_DATA: assert(!"not yet implemented"); break;
+  case FN_BASE_URI: assert(!"not yet implemented"); break;
+  case FN_BASE_URI2: assert(!"not yet implemented"); break;
+  case FN_DOCUMENT_URI: assert(!"not yet implemented"); break;
+  case FN_ERROR: assert(!"not yet implemented"); break;
+  case FN_ERROR2: assert(!"not yet implemented"); break;
+  case FN_ERROR3: assert(!"not yet implemented"); break;
+  case FN_ERROR4: assert(!"not yet implemented"); break;
+  case FN_TRACE: assert(!"not yet implemented"); break;
+  case FN_DATETIME: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_ADD: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_SUBTRACT: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_MULTIPLY: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_MOD: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_UNARY_PLUS: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_UNARY_MINUS: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_EQUAL: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_DECIMAL_GREATER_THAN: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_ABS: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_CEILING: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_FLOOR: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_ROUND: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
+  case FN_DECIMAL_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
+  case OP_INTEGER_ADD: assert(!"not yet implemented"); break;
+  case OP_INTEGER_SUBTRACT: assert(!"not yet implemented"); break;
+  case OP_INTEGER_MULTIPLY: assert(!"not yet implemented"); break;
+  case OP_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_INTEGER_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_INTEGER_MOD: assert(!"not yet implemented"); break;
+  case OP_INTEGER_UNARY_PLUS: assert(!"not yet implemented"); break;
+  case OP_INTEGER_UNARY_MINUS: assert(!"not yet implemented"); break;
+  case OP_INTEGER_EQUAL: assert(!"not yet implemented"); break;
+  case OP_INTEGER_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_INTEGER_GREATER_THAN: assert(!"not yet implemented"); break;
+  case FN_INTEGER_ABS: assert(!"not yet implemented"); break;
+  case FN_INTEGER_CEILING: assert(!"not yet implemented"); break;
+  case FN_INTEGER_FLOOR: assert(!"not yet implemented"); break;
+  case FN_INTEGER_ROUND: assert(!"not yet implemented"); break;
+  case FN_INTEGER_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
+  case FN_INTEGER_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
+  case OP_FLOAT_ADD: assert(!"not yet implemented"); break;
+  case OP_FLOAT_SUBTRACT: assert(!"not yet implemented"); break;
+  case OP_FLOAT_MULTIPLY: assert(!"not yet implemented"); break;
+  case OP_FLOAT_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_FLOAT_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_FLOAT_MOD: assert(!"not yet implemented"); break;
+  case OP_FLOAT_UNARY_PLUS: assert(!"not yet implemented"); break;
+  case OP_FLOAT_UNARY_MINUS: assert(!"not yet implemented"); break;
+  case OP_FLOAT_EQUAL: assert(!"not yet implemented"); break;
+  case OP_FLOAT_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_FLOAT_GREATER_THAN: assert(!"not yet implemented"); break;
+  case FN_FLOAT_ABS: assert(!"not yet implemented"); break;
+  case FN_FLOAT_CEILING: assert(!"not yet implemented"); break;
+  case FN_FLOAT_FLOOR: assert(!"not yet implemented"); break;
+  case FN_FLOAT_ROUND: assert(!"not yet implemented"); break;
+  case FN_FLOAT_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
+  case FN_FLOAT_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_ADD: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_SUBTRACT: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_MULTIPLY: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_INTEGER_DIVIDE: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_MOD: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_UNARY_PLUS: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_UNARY_MINUS: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_EQUAL: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_DOUBLE_GREATER_THAN: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_ABS: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_CEILING: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_FLOOR: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_ROUND: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
+  case FN_DOUBLE_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
+
+  case OP_NUMERIC_ADD:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->int_type));
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.i = values[0]->value.i + values[1]->value.i;
+    break;
+
+  case OP_NUMERIC_SUBTRACT:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->int_type));
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.i = values[0]->value.i - values[1]->value.i;
+    break;
+
+  case OP_NUMERIC_MULTIPLY:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->int_type));
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.i = values[0]->value.i * values[1]->value.i;
+    break;
+
+  case OP_NUMERIC_DIVIDE:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->int_type));
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.i = values[0]->value.i / values[1]->value.i;
+    break;
+
+  case OP_NUMERIC_INTEGER_DIVIDE:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->int_type));
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.i = values[0]->value.i / values[1]->value.i;
+    break;
+
+  case OP_NUMERIC_MOD: assert(!"not yet implemented"); break;
+  case OP_NUMERIC_UNARY_PLUS: assert(!"not yet implemented"); break;
+  case OP_NUMERIC_UNARY_MINUS: assert(!"not yet implemented"); break;
+
+  case OP_NUMERIC_EQUAL:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->boolean_type)); 
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->boolean_type));
+
+    *result = df_value_new(instr->outports[0].seqtype);
+    if (values[0]->value.i == values[1]->value.i)
+      (*result)->value.b = 1;
+    else
+      (*result)->value.b = 0;
+    break;
+
+  case OP_NUMERIC_LESS_THAN:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->boolean_type));
+
+    *result = df_value_new(instr->outports[0].seqtype);
+    if (values[0]->value.i < values[1]->value.i)
+      (*result)->value.b = 1;
+    else
+      (*result)->value.b = 0;
+    break;
+
+  case OP_NUMERIC_GREATER_THAN:
+    /* FIXME: type promotion and use appropriate typed operator */
+    assert(df_check_derived_atomic_type(values[0],g->int_type));
+    assert(df_check_derived_atomic_type(values[1],g->int_type));
+    assert(df_check_is_atomic_type(instr->outports[0].seqtype,g->boolean_type));
+
+    *result = df_value_new(instr->outports[0].seqtype);
+    if (values[0]->value.i > values[1]->value.i)
+      (*result)->value.b = 1;
+    else
+      (*result)->value.b = 0;
+    break;
+  case FN_ABS: assert(!"not yet implemented"); break;
+  case FN_CEILING: assert(!"not yet implemented"); break;
+  case FN_FLOOR: assert(!"not yet implemented"); break;
+  case FN_ROUND: assert(!"not yet implemented"); break;
+  case FN_ROUND_HALF_TO_EVEN: assert(!"not yet implemented"); break;
+  case FN_ROUND_HALF_TO_EVEN2: assert(!"not yet implemented"); break;
+  case FN_CODEPOINTS_TO_STRING: assert(!"not yet implemented"); break;
+  case FN_STRING_TO_CODEPOINTS: assert(!"not yet implemented"); break;
+  case FN_COMPARE: assert(!"not yet implemented"); break;
+  case FN_COMPARE2: assert(!"not yet implemented"); break;
+  case FN_CODEPOINT_EQUAL: assert(!"not yet implemented"); break;
+  case FN_CONCAT: assert(!"not yet implemented"); break;
+  case FN_STRING_JOIN: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING2: assert(!"not yet implemented"); break;
+  case FN_STRING_LENGTH: assert(!"not yet implemented"); break;
+  case FN_STRING_LENGTH2: assert(!"not yet implemented"); break;
+  case FN_NORMALIZE_SPACE: assert(!"not yet implemented"); break;
+  case FN_NORMALIZE_SPACE2: assert(!"not yet implemented"); break;
+  case FN_NORMALIZE_UNICODE: assert(!"not yet implemented"); break;
+  case FN_NORMALIZE_UNICODE2: assert(!"not yet implemented"); break;
+  case FN_UPPER_CASE: assert(!"not yet implemented"); break;
+  case FN_LOWER_CASE: assert(!"not yet implemented"); break;
+  case FN_TRANSLATE: assert(!"not yet implemented"); break;
+  case FN_ESCAPE_URI: assert(!"not yet implemented"); break;
+  case FN_CONTAINS: assert(!"not yet implemented"); break;
+  case FN_CONTAINS2: assert(!"not yet implemented"); break;
+  case FN_STARTS_WITH: assert(!"not yet implemented"); break;
+  case FN_STARTS_WITH2: assert(!"not yet implemented"); break;
+  case FN_ENDS_WITH: assert(!"not yet implemented"); break;
+  case FN_ENDS_WITH2: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING_BEFORE: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING_BEFORE2: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING_AFTER: assert(!"not yet implemented"); break;
+  case FN_SUBSTRING_AFTER2: assert(!"not yet implemented"); break;
+  case FN_MATCHES: assert(!"not yet implemented"); break;
+  case FN_MATCHES2: assert(!"not yet implemented"); break;
+  case FN_REPLACE: assert(!"not yet implemented"); break;
+  case FN_REPLACE2: assert(!"not yet implemented"); break;
+  case FN_TOKENIZE: assert(!"not yet implemented"); break;
+  case FN_TOKENIZE2: assert(!"not yet implemented"); break;
+  case FN_RESOLVE_URI: assert(!"not yet implemented"); break;
+  case FN_RESOLVE_URI2: assert(!"not yet implemented"); break;
+  case FN_TRUE: assert(!"not yet implemented"); break;
+  case FN_FALSE: assert(!"not yet implemented"); break;
+  case OP_BOOLEAN_EQUAL: assert(!"not yet implemented"); break;
+  case OP_BOOLEAN_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_BOOLEAN_GREATER_THAN: assert(!"not yet implemented"); break;
+  case FN_NOT:
+    /* FIXME: we can't assume the input is a boolean! arg def is item()*; we have to reduce it
+       to a boolean ourselves */
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.b = !values[0]->value.b;
+    break;
+  case OP_YEARMONTHDURATION_EQUAL: assert(!"not yet implemented"); break;
+  case OP_YEARMONTHDURATION_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_YEARMONTHDURATION_GREATER_THAN: assert(!"not yet implemented"); break;
+  case OP_DAYTIMEDURATION_EQUAL: assert(!"not yet implemented"); break;
+  case OP_DAYTIMEDURATION_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_DAYTIMEDURATION_GREATER_THAN: assert(!"not yet implemented"); break;
+  case OP_DATETIME_EQUAL: assert(!"not yet implemented"); break;
+  case OP_DATETIME_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_DATETIME_GREATER_THAN: assert(!"not yet implemented"); break;
+  case OP_DATE_EQUAL: assert(!"not yet implemented"); break;
+  case OP_DATE_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_DATE_GREATER_THAN: assert(!"not yet implemented"); break;
+  case OP_TIME_EQUAL: assert(!"not yet implemented"); break;
+  case OP_TIME_LESS_THAN: assert(!"not yet implemented"); break;
+  case OP_TIME_GREATER_THAN: assert(!"not yet implemented"); break;
+  case OP_GYEARMONTH_EQUAL: assert(!"not yet implemented"); break;
+  case OP_GYEAR_EQUAL: assert(!"not yet implemented"); break;
+  case OP_GMONTHDAY_EQUAL: assert(!"not yet implemented"); break;
+  case OP_GMONTH_EQUAL: assert(!"not yet implemented"); break;
+  case OP_GDAY_EQUAL: assert(!"not yet implemented"); break;
+  case FN_YEARS_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_MONTHS_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_DAYS_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_HOURS_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_MINUTES_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_SECONDS_FROM_DURATION: assert(!"not yet implemented"); break;
+  case FN_YEAR_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_MONTH_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_DAY_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_HOURS_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_MINUTES_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_SECONDS_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_TIMEZONE_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case FN_YEAR_FROM_DATE: assert(!"not yet implemented"); break;
+  case FN_MONTH_FROM_DATE: assert(!"not yet implemented"); break;
+  case FN_DAY_FROM_DATE: assert(!"not yet implemented"); break;
+  case FN_TIMEZONE_FROM_DATE: assert(!"not yet implemented"); break;
+  case FN_HOURS_FROM_TIME: assert(!"not yet implemented"); break;
+  case FN_MINUTES_FROM_TIME: assert(!"not yet implemented"); break;
+  case FN_SECONDS_FROM_TIME: assert(!"not yet implemented"); break;
+  case FN_TIMEZONE_FROM_TIME: assert(!"not yet implemented"); break;
+  case OP_ADD_YEARMONTHDURATIONS: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_YEARMONTHDURATIONS: assert(!"not yet implemented"); break;
+  case OP_MULTIPLY_YEARMONTHDURATION: assert(!"not yet implemented"); break;
+  case OP_DIVIDE_YEARMONTHDURATION: assert(!"not yet implemented"); break;
+  case OP_DIVIDE_YEARMONTHDURATION_BY_YEARMONTHDURATION: assert(!"not yet implemented"); break;
+  case OP_ADD_DAYTIMEDURATIONS: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DAYTIMEDURATIONS: assert(!"not yet implemented"); break;
+  case OP_MULTIPLY_DAYTIMEDURATION: assert(!"not yet implemented"); break;
+  case OP_DIVIDE_DAYTIMEDURATION: assert(!"not yet implemented"); break;
+  case OP_DIVIDE_DAYTIMEDURATION_BY_DAYTIMEDURATION: assert(!"not yet implemented"); break;
+  case FN_ADJUST_DATETIME_TO_TIMEZONE: assert(!"not yet implemented"); break;
+  case FN_ADJUST_DATETIME_TO_TIMEZONE2: assert(!"not yet implemented"); break;
+  case FN_ADJUST_DATE_TO_TIMEZONE: assert(!"not yet implemented"); break;
+  case FN_ADJUST_DATE_TO_TIMEZONE2: assert(!"not yet implemented"); break;
+  case FN_ADJUST_TIME_TO_TIMEZONE: assert(!"not yet implemented"); break;
+  case FN_ADJUST_TIME_TO_TIMEZONE2: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DATETIMES_YIELDING_DAYTIMEDURATION: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DATES_YIELDING_DAYTIMEDURATION: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_TIMES: assert(!"not yet implemented"); break;
+  case OP_ADD_YEARMONTHDURATION_TO_DATETIME: assert(!"not yet implemented"); break;
+  case OP_ADD_DAYTIMEDURATION_TO_DATETIME: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_YEARMONTHDURATION_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DAYTIMEDURATION_FROM_DATETIME: assert(!"not yet implemented"); break;
+  case OP_ADD_YEARMONTHDURATION_TO_DATE: assert(!"not yet implemented"); break;
+  case OP_ADD_DAYTIMEDURATION_TO_DATE: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_YEARMONTHDURATION_FROM_DATE: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DAYTIMEDURATION_FROM_DATE: assert(!"not yet implemented"); break;
+  case OP_ADD_DAYTIMEDURATION_TO_TIME: assert(!"not yet implemented"); break;
+  case OP_SUBTRACT_DAYTIMEDURATION_FROM_TIME: assert(!"not yet implemented"); break;
+  case FN_RESOLVE_QNAME: assert(!"not yet implemented"); break;
+  case FN_QNAME: assert(!"not yet implemented"); break;
+  case OP_QNAME_EQUAL: assert(!"not yet implemented"); break;
+  case FN_PREFIX_FROM_QNAME: assert(!"not yet implemented"); break;
+  case FN_LOCAL_NAME_FROM_QNAME: assert(!"not yet implemented"); break;
+  case FN_NAMESPACE_URI_FROM_QNAME: assert(!"not yet implemented"); break;
+  case FN_NAMESPACE_URI_FOR_PREFIX: assert(!"not yet implemented"); break;
+  case FN_IN_SCOPE_PREFIXES: assert(!"not yet implemented"); break;
+  case OP_HEXBINARY_EQUAL: assert(!"not yet implemented"); break;
+  case OP_BASE64BINARY_EQUAL: assert(!"not yet implemented"); break;
+  case OP_NOTATION_EQUAL: assert(!"not yet implemented"); break;
+  case FN_NAME: assert(!"not yet implemented"); break;
+  case FN_NAME2: assert(!"not yet implemented"); break;
+  case FN_LOCAL_NAME: assert(!"not yet implemented"); break;
+  case FN_LOCAL_NAME2: assert(!"not yet implemented"); break;
+  case FN_NAMESPACE_URI: assert(!"not yet implemented"); break;
+  case FN_NAMESPACE_URI2: assert(!"not yet implemented"); break;
+  case FN_NUMBER: assert(!"not yet implemented"); break;
+  case FN_NUMBER2: assert(!"not yet implemented"); break;
+  case FN_LANG: assert(!"not yet implemented"); break;
+  case FN_LANG2: assert(!"not yet implemented"); break;
+  case OP_IS_SAME_NODE: assert(!"not yet implemented"); break;
+  case OP_NODE_BEFORE: assert(!"not yet implemented"); break;
+  case OP_NODE_AFTER: assert(!"not yet implemented"); break;
+  case FN_ROOT: assert(!"not yet implemented"); break;
+  case FN_ROOT2: {
+    df_node *n;
+    assert(values[0]->seqtype->type == SEQTYPE_ITEM);
+    assert(values[0]->seqtype->item->kind != ITEM_ATOMIC);
+    n = values[0]->value.n;
+    while (NULL != n->parent)
+      n = n->parent;
+
+    *result = df_node_to_value(n);
+    break;
+  }
+  case FN_BOOLEAN: assert(!"not yet implemented"); break;
+  case OP_CONCATENATE: assert(!"not yet implemented"); break;
+  case FN_INDEX_OF: assert(!"not yet implemented"); break;
+  case FN_INDEX_OF2: assert(!"not yet implemented"); break;
+  case FN_EMPTY: {
+    *result = df_value_new(instr->outports[0].seqtype);
+    (*result)->value.b = (SEQTYPE_EMPTY == values[0]->seqtype->type);
+    break;
+  }
+  case FN_EXISTS: assert(!"not yet implemented"); break;
+  case FN_DISTINCT_VALUES: assert(!"not yet implemented"); break;
+  case FN_DISTINCT_VALUES2: assert(!"not yet implemented"); break;
+  case FN_INSERT_BEFORE: assert(!"not yet implemented"); break;
+  case FN_REMOVE: assert(!"not yet implemented"); break;
+  case FN_REVERSE: assert(!"not yet implemented"); break;
+  case FN_SUBSEQUENCE: assert(!"not yet implemented"); break;
+  case FN_SUBSEQUENCE2: assert(!"not yet implemented"); break;
+  case FN_UNORDERED: assert(!"not yet implemented"); break;
+  case FN_ZERO_OR_ONE: assert(!"not yet implemented"); break;
+  case FN_ONE_OR_MORE: assert(!"not yet implemented"); break;
+  case FN_EXACTLY_ONE: assert(!"not yet implemented"); break;
+  case FN_DEEP_EQUAL: assert(!"not yet implemented"); break;
+  case FN_DEEP_EQUAL2: assert(!"not yet implemented"); break;
+  case OP_UNION: assert(!"not yet implemented"); break;
+  case OP_INTERSECT: assert(!"not yet implemented"); break;
+  case OP_EXCEPT: assert(!"not yet implemented"); break;
+  case FN_COUNT: assert(!"not yet implemented"); break;
+  case FN_AVG: assert(!"not yet implemented"); break;
+  case FN_MAX: assert(!"not yet implemented"); break;
+  case FN_MAX2: assert(!"not yet implemented"); break;
+  case FN_MIN: assert(!"not yet implemented"); break;
+  case FN_MIN2: assert(!"not yet implemented"); break;
+  case FN_SUM: assert(!"not yet implemented"); break;
+  case FN_SUM2: assert(!"not yet implemented"); break;
+  case OP_TO: assert(!"not yet implemented"); break;
+  case FN_ID: assert(!"not yet implemented"); break;
+  case FN_ID2: assert(!"not yet implemented"); break;
+  case FN_IDREF: assert(!"not yet implemented"); break;
+  case FN_IDREF2: assert(!"not yet implemented"); break;
+  case FN_DOC: {
+    char *uri;
+    FILE *f;
+    xmlDocPtr doc;
+    xmlNodePtr root;
+    df_node *docnode;
+    df_node *rootelem;
+    df_seqtype *restype;
+    assert(df_check_derived_atomic_type(values[0],g->string_type));
+    uri = values[0]->value.s;
+/*     debugl("Loading document \"%s\"...",uri); */
+
+    if (NULL == (f = fopen(uri,"r"))) {
+      fprintf(stderr,"Can't open %s: %s\n",uri,strerror(errno));
+      return -1; /* FIXME: raise an error here */
+    }
+
+    if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
+      fclose(f);
+      fprintf(stderr,"XML parse error.\n");
+      return -1; /* FIXME: raise an error here */
+    }
+    fclose(f);
+
+    if (NULL == (root = xmlDocGetRootElement(doc))) {
+      fprintf(stderr,"No root element.\n");
+      xmlFreeDoc(doc);
+      return -1; /* FIXME: raise an error here */
+    }
+
+    docnode = df_node_new(NODE_DOCUMENT);
+    rootelem = df_node_from_xmlnode(root);
+    df_node_add_child(docnode,rootelem);
+
+    xmlFreeDoc(doc);
+
+    restype = df_seqtype_new_item(ITEM_DOCUMENT);
+    *result = df_value_new(restype);
+    df_seqtype_deref(restype);
+    (*result)->value.n = docnode;
+    assert(0 == (*result)->value.n->refcount);
+    (*result)->value.n->refcount++;
+
+    break;
+  }
+  case FN_DOC_AVAILABLE: assert(!"not yet implemented"); break;
+  case FN_COLLECTION: assert(!"not yet implemented"); break;
+  case FN_COLLECTION2: assert(!"not yet implemented"); break;
+  case FN_POSITION: assert(!"not yet implemented"); break;
+  case FN_LAST: assert(!"not yet implemented"); break;
+  case FN_CURRENT_DATETIME: assert(!"not yet implemented"); break;
+  case FN_CURRENT_DATE: assert(!"not yet implemented"); break;
+  case FN_CURRENT_TIME: assert(!"not yet implemented"); break;
+  case FN_IMPLICIT_TIMEZONE: assert(!"not yet implemented"); break;
+  case FN_DEFAULT_COLLATION: assert(!"not yet implemented"); break;
+  case FN_STATIC_BASE_URI: assert(!"not yet implemented"); break;
+
+  /* Special operations: handled in df_fire_activity() */
+
+  default:
+    assert(!"invalid opcode");
+    break;
+  }
+
+  return 0;
+}
 
 
 /*
