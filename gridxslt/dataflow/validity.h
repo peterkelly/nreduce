@@ -25,7 +25,7 @@
 
 #include "dataflow.h"
 
-void df_check_portsmatch(df_state *state, df_function *fun);
+void df_check_portsmatch(df_program *program, df_function *fun);
 int df_check_function_connected(df_function *fun);
 
 #endif /* _DATAFLOW_VALIDITY_H */

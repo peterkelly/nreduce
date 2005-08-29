@@ -24,7 +24,7 @@
 #include "util/debug.h"
 #include <assert.h>
 
-void df_check_portsmatch(df_state *state, df_function *fun)
+void df_check_portsmatch(df_program *program, df_function *fun)
 {
   list *l;
   for (l = fun->instructions; l; l = l->next) {
