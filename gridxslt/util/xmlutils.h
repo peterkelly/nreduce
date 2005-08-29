@@ -81,6 +81,8 @@ nsname nsname_copy(const nsname nn);
 
 void qname_free(qname qn);
 void nsname_free(nsname nn);
+void nsname_ptr_free(nsname *nn);
+nsname *nsname_ptr_copy(const nsname *nn);
 
 
 
@@ -121,7 +123,7 @@ int parse_optional_boolean_attr(error_info *ei, char *filename,
                                 xmlNodePtr n, const char *attrname, int *val, int def);
 void replace_whitespace(char *str);
 void collapse_whitespace(char *str);
-char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname);
+char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname, const char *ns);
 
 
 void xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...);
@@ -134,7 +136,7 @@ int xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s);
 
 char *escape_str(const char *s);
 int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr n,
-                               const nsname *stdattrs, ...);
+                               const char *restrictns, const nsname *stdattrs, ...);
 int is_all_whitespace(const char *s);
 
 
