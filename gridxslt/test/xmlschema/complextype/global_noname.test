@@ -8,6 +8,6 @@ testxmlschema
   <xsd:complexType/>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: "name" attribute missing
+runtests.tmp/input.xml:3: error: missing attribute: name
 ================================== RETURN CODE =================================
 1

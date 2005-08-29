@@ -12,6 +12,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:5: error: "base" attribute missing
+runtests.tmp/input.xml:5: error: missing attribute: base
 ================================== RETURN CODE =================================
 1

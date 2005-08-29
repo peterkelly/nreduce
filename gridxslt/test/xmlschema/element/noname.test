@@ -12,6 +12,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:5: error src-element.2.1: "name" attribute missing
+runtests.tmp/input.xml:5: error src-element.2.1: missing attribute: name
 ================================== RETURN CODE =================================
 1

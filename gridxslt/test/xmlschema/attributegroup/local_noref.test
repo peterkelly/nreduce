@@ -10,6 +10,6 @@ testxmlschema
   </xsd:complexType>
 </xsd:schema>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error: "ref" attribute missing
+runtests.tmp/input.xml:4: error: missing attribute: ref
 ================================== RETURN CODE =================================
 1
