@@ -34,6 +34,20 @@
 #include <string.h>
 #include <ctype.h>
 
+#define _DATAFLOW_SEQUENCETYPE_C
+
+const char *df_item_kinds[ITEM_COUNT] = {
+  NULL,
+  "atomic",
+  "document",
+  "element",
+  "attribute",
+  "processing-instruction",
+  "comment",
+  "text",
+  "namespace",
+};
+
 static list *allocnodes = NULL;
 static list *allocvalues = NULL;
 
@@ -58,6 +72,13 @@ df_seqtype *df_seqtype_new_item(int kind)
   st->type = SEQTYPE_ITEM;
   st->item = df_itemtype_new(kind);
   st->refcount = 1;
+  return st;
+}
+
+df_seqtype *df_seqtype_new_atomic(xs_type *type)
+{
+  df_seqtype *st = df_seqtype_new_item(ITEM_ATOMIC);
+  st->item->type = type;
   return st;
 }
 
@@ -625,7 +646,7 @@ int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const c
 df_node *df_node_new(int type)
 {
   df_node *n = (df_node*)calloc(1,sizeof(df_node));
-/*   debugl("df_node_new %p %s",n,df_item_types[type]); */
+/*   debugl("df_node_new %p %s",n,df_item_kinds[type]); */
   list_append(&allocnodes,n);
   n->type = type;
   n->refcount = 0;
@@ -656,7 +677,7 @@ void df_print_remaining(xs_globals *globals)
     else if (NODE_TEXT == n->type)
       printf("remaining node %p %-10s %-10s - %-3d refs\n",n,"text",n->value,n->refcount);
     else
-      printf("remaining node %p %-10s %-10s - %-3d refs\n",n,df_item_types[n->type],"",n->refcount);
+      printf("remaining node %p %-10s %-10s - %-3d refs\n",n,df_item_kinds[n->type],"",n->refcount);
   }
   for (l = allocvalues; l; l = l->next) {
     df_value *v = (df_value*)l->data;
@@ -678,7 +699,7 @@ static void df_node_free(df_node *n)
 /*   if (NODE_ELEMENT == n->type) */
 /*     debugl("df_node_free %p element %s",n,n->name); */
 /*   else */
-/*     debugl("df_node_free %p %s",n,df_item_types[n->type]); */
+/*     debugl("df_node_free %p %s",n,df_item_kinds[n->type]); */
 
   list_remove_ptr(&allocnodes,n);
 
@@ -694,6 +715,7 @@ static void df_node_free(df_node *n)
 
   free(n->prefix);
   nsname_free(n->ident);
+  free(n->target);
   free(n->value);
   free(n);
 }
@@ -704,7 +726,7 @@ void df_node_deref(df_node *n)
   root->refcount--;
 
 /*   debugl("df_node_deref %s %p (root is %s %p), now have %d refs", */
-/*         df_item_types[n->type],n,df_item_types[root->type],root,root->refcount); */
+/*         df_item_kinds[n->type],n,df_item_kinds[root->type],root,root->refcount); */
 
   assert(0 <= root->refcount);
   if (0 == root->refcount)
@@ -716,7 +738,7 @@ df_node *df_node_deep_copy(df_node *n)
   df_node *copy = df_node_new(n->type);
   df_node *c;
   list *l;
-/*   debugl("df_node_deep_copy %s %p -> %p",df_item_types[n->type],n,copy); */
+/*   debugl("df_node_deep_copy %s %p -> %p",df_item_kinds[n->type],n,copy); */
 
   /* FIXME: namespaces */
 
@@ -728,6 +750,7 @@ df_node *df_node_deep_copy(df_node *n)
 
   copy->prefix = n->prefix ? strdup(n->prefix) : NULL;
   copy->ident = nsname_copy(n->ident);
+  copy->target = n->target ? strdup(n->target) : NULL;
   copy->value = n->value ? strdup(n->value) : NULL;
 
   for (c = n->first_child; c; c = c->next) {
@@ -745,6 +768,9 @@ void df_node_add_child(df_node *n, df_node *c)
   assert(NULL == c->next);
   assert(0 == c->refcount);
 
+  if (NULL != n->last_child)
+    n->last_child->next = n;
+
   c->prev = n->last_child;
   if (NULL == n->first_child) {
     n->first_child = c;
@@ -754,6 +780,31 @@ void df_node_add_child(df_node *n, df_node *c)
     n->last_child->next = c;
     n->last_child = c;
   }
+  c->parent = n;
+}
+
+void df_node_insert_child(df_node *n, df_node *c, df_node *before)
+{
+  assert(NULL == c->parent);
+  assert(NULL == c->prev);
+  assert(NULL == c->next);
+  assert(0 == c->refcount);
+
+  if (NULL == before) {
+    df_node_add_child(n,c);
+    return;
+  }
+
+  c->prev = before->prev;
+  before->prev = c;
+  c->next = before;
+
+  if (NULL != c->prev)
+    c->prev->next = c;
+
+  if (n->first_child == before)
+    n->first_child = c;
+
   c->parent = n;
 }
 
@@ -792,11 +843,124 @@ df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v)
   return text;
 }
 
+df_node *df_node_from_xmlnode(xmlNodePtr xn)
+{
+  df_node *n = NULL;
+  xmlNodePtr c;
+  struct _xmlAttr *aptr;
+
+  switch (xn->type) {
+  case XML_ELEMENT_NODE:
+    n = df_node_new(NODE_ELEMENT);
+    n->ident.name = strdup(xn->name);
+    /* FIXME: prefix/namespace */
+
+    for (aptr = xn->properties; aptr; aptr = aptr->next) {
+      df_node *attr = df_node_new(NODE_ATTRIBUTE);
+      stringbuf *valbuf = stringbuf_new();
+      xmlNodePtr ac;
+      attr->ident.name = strdup(aptr->name);
+
+      for (ac = aptr->children; ac; ac = ac->next) {
+        if (NULL != ac->content)
+          stringbuf_format(valbuf,"%s",ac->content);
+      }
+
+      attr->value = strdup(valbuf->data);
+      stringbuf_free(valbuf);
+      df_node_add_attribute(n,attr);
+    }
+    break;
+  case XML_ATTRIBUTE_NODE:
+    /* Should never see this in the main element tree */
+    assert(0);
+    break;
+  case XML_TEXT_NODE:
+    n = df_node_new(NODE_TEXT);
+    n->value = strdup(xn->content);
+    break;
+  case XML_PI_NODE:
+    n = df_node_new(NODE_PI);
+    n->target = strdup(xn->name);
+    n->value = xn->content ? strdup(xn->content) : NULL;
+    break;
+  case XML_COMMENT_NODE:
+    n = df_node_new(NODE_COMMENT);
+    /* FIXME: do we know that xn->content will always be non-NULL here? */
+    n->value = strdup(xn->content);
+    break;
+  case XML_DOCUMENT_NODE:
+    n = df_node_new(NODE_DOCUMENT);
+    break;
+  default:
+    /* FIXME: support other node types such as CDATA sections and entities */
+    assert(!"node type not supported");
+  }
+
+  for (c = xn->children; c; c = c->next) {
+    df_node *cn = df_node_from_xmlnode(c);
+    if (NULL != cn)
+      df_node_add_child(n,cn);
+  }
+
+  return n;
+}
+
+int df_check_tree(df_node *n)
+{
+  df_node *c;
+  df_node *prev = NULL;
+  for (c = n->first_child; c; c = c->next) {
+    if (c->prev != prev)
+      return 0;
+    if ((NULL == c->next) && (c != n->last_child))
+      return 0;
+    if (c->parent != n)
+      return 0;
+    if (!df_check_tree(c))
+      return 0;
+    prev = c;
+  }
+  return 1;
+}
+
+df_node *df_prev_node(df_node *node, df_node *subtree)
+{
+  if (NULL != node->prev) {
+    node = node->prev;
+    while (NULL != node->last_child)
+      node = node->last_child;
+    return node;
+  }
+
+  if (node->parent == subtree)
+    return NULL;
+  else
+    return node->parent;
+}
+
+df_node *df_next_node(df_node *node, df_node *subtree)
+{
+  if (NULL != node->first_child)
+    return node->first_child;
+
+  while ((NULL != node) && (NULL == node->next)) {
+    if (node->parent == subtree)
+      return NULL;
+    else
+      node = node->parent;
+  }
+
+  if (NULL != node)
+    return node->next;
+
+  return NULL;
+}
+
 df_value *df_value_new_string(xs_globals *g, const char *str)
 {
-  df_seqtype *st = df_seqtype_new_item(ITEM_ATOMIC);
+  df_seqtype *st = df_seqtype_new_atomic(g->string_type);
   df_value *v;
-  st->item->type = g->string_type;
   v = df_value_new(st);
   df_seqtype_deref(st);
   v->value.s = strdup(str);
@@ -843,10 +1007,10 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
     xmlTextWriterWriteAttribute(writer,n->ident.name,n->value);
     break;
   case NODE_PI:
-    /* FIXME */
+    xmlTextWriterWritePI(writer,n->target,n->value);
     break;
   case NODE_COMMENT:
-    /* FIXME */
+    xmlTextWriterWriteComment(writer,n->value);
     break;
   case NODE_TEXT:
 /*     debugl("df_node_print NODE_TEXT: %s",n->value); */
@@ -1092,10 +1256,9 @@ df_value *df_atomize(xs_globals *g, df_value *v)
     else {
       /* FIXME: this is just a quick and dirty implementation of node atomization... need to
          follow the rules set out in XPath 2.0 section 2.5.2 */
-      df_seqtype *strtype = df_seqtype_new_item(ITEM_ATOMIC);
+      df_seqtype *strtype = df_seqtype_new_atomic(g->string_type);
       df_value *atom = df_value_new(strtype);
       stringbuf *buf = stringbuf_new();
-      strtype->item->type = g->string_type;
       df_node_to_string(v->value.n,buf);
       atom->value.s = strdup(buf->data);
       stringbuf_free(buf);
