@@ -23,7 +23,7 @@
 #include "optimization.h"
 #include "validity.h"
 
-void df_remove_redundant(df_state *state, df_function *fun)
+void df_remove_redundant(df_program *program, df_function *fun)
 {
   while (1) {
     list *l;
@@ -57,13 +57,13 @@ void df_remove_redundant(df_state *state, df_function *fun)
         source->outports[sourcep].destp = destp;
         dest->inports[destp].source = source;
         dest->inports[destp].sourcep = sourcep;
-        df_delete_instruction(state,fun,instr);
-        df_delete_instruction(state,fun,dup);
+        df_delete_instruction(program,fun,instr);
+        df_delete_instruction(program,fun,dup);
         removed = 1;
         break;
       }
     }
-    df_check_portsmatch(state,fun);
+    df_check_portsmatch(program,fun);
     if (!removed)
       return;
   }

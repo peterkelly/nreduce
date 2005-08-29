@@ -25,6 +25,6 @@
 
 #include "dataflow.h"
 
-void df_remove_redundant(df_state *state, df_function *fun);
+void df_remove_redundant(df_program *program, df_function *fun);
 
 #endif /* _DATAFLOW_OPTIMIZATION_H */
