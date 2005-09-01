@@ -693,7 +693,7 @@ void df_print_remaining(xs_globals *globals)
   }
 }
 
-static void df_node_free(df_node *n)
+void df_node_free(df_node *n)
 {
   df_node *c;
 /*   if (NODE_ELEMENT == n->type) */
@@ -746,6 +746,12 @@ df_node *df_node_deep_copy(df_node *n)
     df_node *attr = (df_node*)l->data;
     df_node *attrcopy = df_node_deep_copy(attr);
     df_node_add_attribute(copy,attrcopy);
+  }
+
+  for (l = n->namespaces; l; l = l->next) {
+    df_node *ns = (df_node*)l->data;
+    df_node *nscopy = df_node_deep_copy(ns);
+    df_node_add_namespace(copy,nscopy);
   }
 
   copy->prefix = n->prefix ? strdup(n->prefix) : NULL;
@@ -819,6 +825,17 @@ void df_node_add_attribute(df_node *n, df_node *attr)
   attr->parent = n;
 }
 
+void df_node_add_namespace(df_node *n, df_node *ns)
+{
+  assert(NULL == ns->parent);
+  assert(NULL == ns->prev);
+  assert(NULL == ns->next);
+  assert(0 == ns->refcount);
+
+  list_append(&n->namespaces,ns);
+  ns->parent = n;
+}
+
 df_value *df_node_to_value(df_node *n)
 {
   df_seqtype *st = df_seqtype_new_item(n->type);
@@ -850,7 +867,9 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
   struct _xmlAttr *aptr;
 
   switch (xn->type) {
-  case XML_ELEMENT_NODE:
+  case XML_ELEMENT_NODE: {
+    xmlNs *ns;
+    xmlNodePtr p;
     n = df_node_new(NODE_ELEMENT);
     n->ident.name = strdup(xn->name);
     /* FIXME: prefix/namespace */
@@ -870,7 +889,19 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
       stringbuf_free(valbuf);
       df_node_add_attribute(n,attr);
     }
+
+
+    for (p = xn; p; p = p->parent) {
+      for (ns = p->nsDef; ns; ns = ns->next) {
+        df_node *nsnode = df_node_new(NODE_NAMESPACE);
+        nsnode->prefix = ns->prefix ? strdup(ns->prefix) : NULL;
+        nsnode->value = strdup(ns->href);
+        df_node_add_namespace(n,nsnode);
+      }
+    }
+
     break;
+  }
   case XML_ATTRIBUTE_NODE:
     /* Should never see this in the main element tree */
     assert(0);
@@ -967,6 +998,16 @@ df_value *df_value_new_string(xs_globals *g, const char *str)
   return v;
 }
 
+df_value *df_value_new_int(xs_globals *g, int i)
+{
+  df_seqtype *st = df_seqtype_new_atomic(g->int_type);
+  df_value *v;
+  v = df_value_new(st);
+  df_seqtype_deref(st);
+  v->value.i = i;
+  return v;
+}
+
 df_value *df_value_new(df_seqtype *seqtype)
 {
   df_value *v = (df_value*)calloc(1,sizeof(df_value));
@@ -998,6 +1039,8 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
     xmlTextWriterStartElement(writer,n->ident.name);
     for (l = n->attributes; l; l = l->next)
       df_node_print(writer,(df_node*)l->data);
+    for (l = n->namespaces; l; l = l->next)
+      df_node_print(writer,(df_node*)l->data);
     for (c = n->first_child; c; c = c->next)
       df_node_print(writer,c);
     xmlTextWriterEndElement(writer);
@@ -1016,6 +1059,38 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
 /*     debugl("df_node_print NODE_TEXT: %s",n->value); */
     xmlTextWriterWriteString(writer,n->value);
     break;
+  case NODE_NAMESPACE: {
+    df_node *elem = n->parent;
+    df_node *p;
+    int have = 0;
+
+    /* Only print it if it's not already in scope */
+    if (NULL != elem) {
+      for (p = elem->parent; p && !have; p = p->parent) {
+        list *l;
+        for (l = p->namespaces; l; l = l->next) {
+          df_node *pns = (df_node*)l->data;
+          if (nullstr_equals(pns->prefix,n->prefix) && !strcmp(pns->value,n->value)) {
+/*             debug("Namespace mapping %s=%s already exists on parent node %#n of %#n\n", */
+/*                   n->prefix,n->value,p->ident,n->ident); */
+            have = 1;
+          }
+        }
+      }
+    }
+
+    if (!have) {
+      if (NULL == n->prefix) {
+        xmlTextWriterWriteAttribute(writer,"xmlns",n->value);
+      }
+      else {
+        char *attrname = (char*)alloca(strlen("xmlns:")+strlen(n->prefix)+1);
+        sprintf(attrname,"xmlns:%s",n->prefix);
+        xmlTextWriterWriteAttribute(writer,attrname,n->value);
+      }
+    }
+    break;
+  }
   default:
     assert(!"invalid node type");
     break;
@@ -1178,9 +1253,12 @@ df_value *df_list_to_sequence(xs_globals *g, list *values)
 void df_node_to_string(df_node *n, stringbuf *buf)
 {
   switch (n->type) {
-  case NODE_DOCUMENT:
-    /* FIXME */
+  case NODE_DOCUMENT: {
+    df_node *c;
+    for (c = n->first_child; c; c = c->next)
+      df_node_to_string(c,buf);
     break;
+  }
   case NODE_ELEMENT: {
     df_node *c;
     for (c = n->first_child; c; c = c->next)
