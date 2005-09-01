@@ -4,7 +4,7 @@ gridxslt runtests.tmp/temp.xl
 people.xml
 <?xml version="1.0"?>
 <people>
-  <person test="wow">
+  <person>
     <name>Fred</name>
     <age>20</age>
     <occupation>Plumber</occupation>
@@ -30,9 +30,8 @@ transform {
 
 }
 ==================================== OUTPUT ====================================
-<?xml version="1.0" encoding="UTF-8"?>
-<people>
-  <person test="wow">
+<?xml version="1.0" encoding="UTF-8"?><people>
+  <person>
     <name>Fred</name>
     <age>20</age>
     <occupation>Plumber</occupation>
