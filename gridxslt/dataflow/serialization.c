@@ -662,7 +662,7 @@ static void add_indentation(df_node *node, int depth)
       add_indentation(c,depth+1);
 
       debug("node %d: newline = %d, column = %d, depth = %d\n",c->nodeno,newline,column,depth);
-      if ((0 < depth) && !nonws && (!newline || (INDENT_SPACES*depth >= column)))
+      if (!nonws && (!newline || (INDENT_SPACES*depth >= column)))
         insertws(node,c,newline,depth);
 
       newline = 0;
@@ -711,6 +711,9 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   df_node *doc;
   xmlOutputBuffer *xb;
   xmlTextWriter *writer;
+  char *newline;
+  int contentstart;
+  int contentlen;
 
   if (NULL == normseq)
     return -1;
@@ -739,8 +742,7 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
 
   xb = xmlOutputBufferCreateIO(serialize_stringbuf,NULL,buf,NULL);
   writer = xmlNewTextWriter(xb);
-/*   xmlTextWriterSetIndent(writer,1); */
-/*   xmlTextWriterSetIndentString(writer,"  "); */
+
   xmlTextWriterStartDocument(writer,NULL,"UTF-8",NULL);
 
   df_node_print(writer,doc);
@@ -749,8 +751,96 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   xmlTextWriterFlush(writer);
   xmlFreeTextWriter(writer);
 
+  /* Remove newline after XML declaration */
+  newline = strchr(buf->data,'\n');
+  contentstart = newline+1-buf->data;
+  contentlen = buf->size-1-contentstart;
+  assert(NULL != newline);
+  memmove(newline,newline+1,contentlen);
+  buf->size--;
+  buf->data[buf->size-1] = '\0';
+
+  /* Remove newline at end */
+  assert('\n' == buf->data[buf->size-2]);
+  buf->size--;
+  buf->data[buf->size-1] = '\0';
+
   df_node_deref(doc);
 
   return 0;
+}
+
+/* Note: this is only safe to call on a newly created tree! If there are variables that
+   reference nodes in the tree then this could result invalid references due to whitespace
+   text nodes being deleted. */
+void df_strip_spaces(df_node *n, list *space_decls)
+{
+  df_node *c = n->first_child;
+  int strip = ((NODE_ELEMENT == n->type) && !space_decl_preserve(space_decls,n->ident));
+  while (c) {
+
+    if ((NODE_TEXT == c->type) && strip && is_all_whitespace(c->value)) {
+      df_node *next = c->next;
+      if (n->first_child == c)
+        n->first_child = c->next;
+      if (n->last_child == c)
+        n->last_child = c->prev;
+      if (NULL != c->prev)
+        c->prev->next = c->next;
+      if (NULL != c->next)
+        c->next->prev = c->prev;
+      df_node_free(c);
+      c = next;
+    }
+    else {
+      df_strip_spaces(c,space_decls);
+      c = c->next;
+    }
+  }
+}
+
+void df_namespace_fixup(df_node *n)
+{
+  /* XSLT 2.0: 5.7.3 Namespace Fixup */
+}
+
+static int space_decl_better(space_decl *new, space_decl *existing)
+{
+  if (new->importpred < existing->importpred)
+    return 0;
+  if (new->priority < existing->priority)
+    return 0;
+  return 1;
+}
+
+int space_decl_preserve(list *space_decls, nsname elemname)
+{
+  space_decl *best_match = NULL;
+  list *l;
+
+  for (l = space_decls; l; l = l->next) {
+    space_decl *decl = (space_decl*)l->data;
+    if (nsnametest_matches(decl->nnt,elemname) &&
+        ((NULL == best_match) || space_decl_better(decl,best_match)))
+      best_match = decl;
+  }
+
+  return best_match ? best_match->preserve : 1;
+}
+
+space_decl *space_decl_copy(space_decl *decl)
+{
+  space_decl *copy = (space_decl*)calloc(1,sizeof(space_decl));
+  copy->nnt = nsnametest_copy(decl->nnt);
+  copy->importpred = decl->importpred;
+  copy->priority = decl->priority;
+  copy->preserve = decl->preserve;
+  return copy;
+}
+
+void space_decl_free(space_decl *decl)
+{
+  nsnametest_free(decl->nnt);
+  free(decl);
 }
 
