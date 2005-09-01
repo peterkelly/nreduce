@@ -129,7 +129,7 @@ struct xp_expr {
   xp_expr *parent;
   xl_snode *stmt;
   char occ;
-  int defline;
+  sourceloc sloc;
 
   struct df_outport *outp;
 };

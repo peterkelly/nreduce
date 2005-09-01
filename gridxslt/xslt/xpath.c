@@ -35,6 +35,7 @@
 
 extern int lex_lineno;
 extern int parse_firstline;
+extern char *parse_filename;
 
 const char *xp_expr_types[XPATH_EXPR_COUNT] = {
   "invalid",
@@ -92,7 +93,8 @@ xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right)
   xp->type = type;
   xp->left = left;
   xp->right = right;
-  xp->defline = parse_firstline+lex_lineno;
+  xp->sloc.uri = parse_filename ? strdup(parse_filename) : NULL;
+  xp->sloc.line = parse_firstline+lex_lineno;
   return xp;
 }
 
@@ -141,6 +143,7 @@ void xp_expr_free(xp_expr *xp)
   qname_free(xp->qn);
   qname_free(xp->type_qname);
   nsname_free(xp->ident);
+  sourceloc_free(xp->sloc);
   free(xp);
 }
 
@@ -167,7 +170,7 @@ int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *
   if (!qname_isnull(e->qn)) {
     e->ident = qname_to_nsname(e->stmt->namespaces,e->qn);
     if (nsname_isnull(e->ident))
-      return error(ei,filename,e->defline,"XPST0081",
+      return error(ei,e->sloc.uri,e->sloc.line,"XPST0081",
                    "Could not resolve namespace for prefix \"%s\"",e->qn.prefix);
   }
 
@@ -180,7 +183,7 @@ int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *
     CHECK_CALL(xp_expr_resolve(e->right,s,filename,ei))
 
   if (NULL != e->seqtype)
-    CHECK_CALL(df_seqtype_resolve(e->seqtype,e->stmt->namespaces,s,filename,e->defline,ei))
+    CHECK_CALL(df_seqtype_resolve(e->seqtype,e->stmt->namespaces,s,e->sloc.uri,e->sloc.line,ei))
 
   return 0;
 }
