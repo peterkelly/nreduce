@@ -451,16 +451,18 @@ char *subst_program(const char *program, list *substitutions)
     *space = '\0';
   }
   realprog = progsubst_lookup(substitutions,name);
-  free(name);
 
-  if (NULL == realprog)
+  if (NULL == realprog) {
+    free(name);
     return NULL;
+  }
 
   cmdline = (char*)malloc(strlen(realprog)+arglen+1);
   if (NULL != space)
     sprintf(cmdline,"%s %s",realprog,space+1);
   else
     sprintf(cmdline,"%s",realprog);
+  free(name);
   return cmdline;
 }
 
@@ -487,6 +489,8 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   FILE *out = NULL;
   list *output_files = NULL;
   list *l;
+  int skipsubst = 0;
+  int subst = 0;
 
   if (!justrun)
     printf("%-80s... ",filename);
@@ -514,11 +518,6 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
       end = line+strlen(line);
     oldend = *end;
     *end = '\0';
-
-
-
-
-
 
     if (!strcmp(line,PROGRAM_STR)) {
       state = STATE_PROGRAM;
@@ -548,7 +547,15 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
       case STATE_START:
         break;
       case STATE_PROGRAM:
-        if (args->valgrind) {
+
+        if (!strcmp(line,"skipsubst")) {
+          skipsubst = 1;
+        }
+        else if (NULL != cmdline) {
+          fprintf(stderr,"%s: more than one cmdline specified\n",filename);
+          exit(1);
+        }
+        else if (args->valgrind) {
           stringbuf *temp = stringbuf_new();
           char *realprog = find_program(line);
           stringbuf_format(temp,"%s --log-file="TEMP_DIR"/vglog %s",args->valgrind_cmd,realprog);
@@ -560,6 +567,8 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
           cmdline = subst_program(line,args->substitutions);
           if (NULL == cmdline)
             cmdline = find_program(line);
+          else
+            subst = 1;
         }
         break;
       case STATE_CMDLINE:
@@ -616,69 +625,77 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
     exit(1);
   }
 
-  if (NULL != output_files)
-    pid = run_program(cmdline,NULL,output,&status);
-  else
-    pid = run_program(cmdline,tempname,output,&status);
-  free(cmdline);
-
-  /* add trailing newline if necessary */
-  if ((2 <= output->size) && ('\n' != output->data[output->size-2]))
-    stringbuf_format(output,"\n");
-  
-
-  if (args->valgrind)
-    process_valgrind_log(args,vgoutput);
-
-  if (justrun) {
-
-    if (args->diff && ((expected->size != output->size) ||
-                  memcmp(expected->data,output->data,expected->size-1))) {
-      printdiff(expected,output);
-    }
-    else {
-      printf("%s",output->data);
-    }
-    if (WIFSIGNALED(status)) {
-      printf("%s\n",sys_siglist[WTERMSIG(status)]);
-    }
-    else if (!WIFEXITED(status)) {
-      printf("abnormal termination\n");
-    }
-    else {
-      printf("program exited with status %d\n",WEXITSTATUS(status));
-    }
+  if (skipsubst && subst && !justrun) {
+    printf("skipped\n");
+    passed = 1;
   }
   else {
 
-    if (WIFSIGNALED(status)) {
-      printf("%s\n",sys_siglist[WTERMSIG(status)]);
-    }
-    else if (!WIFEXITED(status)) {
-      printf("abnormal termination\n");
-    }
-    else if (WEXITSTATUS(status) != expected_rc) {
-      printf("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
-    }
-    else if ((expected->size != output->size) ||
-             memcmp(expected->data,output->data,expected->size-1)) {
-      printf("incorrect output\n");
-      if (args->diff)
+    if (NULL != output_files)
+      pid = run_program(cmdline,NULL,output,&status);
+    else
+      pid = run_program(cmdline,tempname,output,&status);
+
+    /* add trailing newline if necessary */
+    if ((2 <= output->size) && ('\n' != output->data[output->size-2]))
+      stringbuf_format(output,"\n");
+  
+
+    if (args->valgrind)
+      process_valgrind_log(args,vgoutput);
+
+    if (justrun) {
+
+      if (args->diff && ((expected->size != output->size) ||
+                    memcmp(expected->data,output->data,expected->size-1))) {
         printdiff(expected,output);
-    }
-    else if (1 != vgoutput->size) {
-      printf("valgrind errors\n");
+      }
+      else {
+        printf("%s",output->data);
+      }
+      if (WIFSIGNALED(status)) {
+        printf("%s\n",sys_siglist[WTERMSIG(status)]);
+      }
+      else if (!WIFEXITED(status)) {
+        printf("abnormal termination\n");
+      }
+      else {
+        printf("program exited with status %d\n",WEXITSTATUS(status));
+      }
     }
     else {
-      printf("passed\n");
-      passed = 1;
+
+      if (WIFSIGNALED(status)) {
+        printf("%s\n",sys_siglist[WTERMSIG(status)]);
+      }
+      else if (!WIFEXITED(status)) {
+        printf("abnormal termination\n");
+      }
+      else if (WEXITSTATUS(status) != expected_rc) {
+        printf("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
+      }
+      else if ((expected->size != output->size) ||
+               memcmp(expected->data,output->data,expected->size-1)) {
+        printf("incorrect output\n");
+        if (args->diff)
+          printdiff(expected,output);
+      }
+      else if (1 != vgoutput->size) {
+        printf("valgrind errors\n");
+      }
+      else {
+        printf("passed\n");
+        passed = 1;
+      }
+    }
+
+    if (1 != vgoutput->size) {
+      printf("%s",vgoutput->data);
     }
   }
 
-  if (1 != vgoutput->size)
-    printf("%s",vgoutput->data);
 
-
+  free(cmdline);
 
 /*   printf("got %d bytes of output\n",output->size-1); */
 /*   printf("output: (%d) ***%s***\n",output->size-1,output->data); */
