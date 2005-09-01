@@ -5,6 +5,7 @@ noinst_HEADERS = syntax_bpel.h fsm.h syntax_wsdl.h
 gridxslt_SOURCES = gridxslt.c
 gridxslt_LDFLAGS = -static
 runtests_SOURCES = runtests.c
+runtests_LDFLAGS = -static
 cbpel_SOURCES = cbpel.c
 validate_SOURCES = validate.c
 wsclient_SOURCES = wsclient.c
