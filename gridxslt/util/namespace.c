@@ -139,3 +139,19 @@ qname nsname_to_qname(ns_map *map, const nsname nn)
   return qn;
 }
 
+nsnametest *qnametest_to_nsnametest(ns_map *map, const qnametest *qt)
+{
+  nsnametest *nt = (nsnametest*)calloc(1,sizeof(nsnametest));
+  nt->wcns = qt->wcprefix;
+  nt->wcname = qt->wcname;
+  if (NULL != qt->qn.prefix) {
+    ns_def *def;
+    if (NULL == (def = ns_lookup_prefix(map,qt->qn.prefix)))
+      return NULL;
+    nt->nn.ns = strdup(def->href);
+  }
+  if (NULL != qt->qn.localpart)
+    nt->nn.name = strdup(qt->qn.localpart);
+  return nt;
+}
+

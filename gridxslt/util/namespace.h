@@ -66,4 +66,6 @@ ns_def *ns_lookup_href(ns_map *map, const char *href);
 nsname qname_to_nsname(ns_map *map, const qname qn);
 qname nsname_to_qname(ns_map *map, const nsname nn);
 
+nsnametest *qnametest_to_nsnametest(ns_map *map, const qnametest *qt);
+
 #endif /* _UTIL_NAMESPACE_H */
