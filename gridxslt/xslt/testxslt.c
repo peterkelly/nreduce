@@ -45,6 +45,7 @@ static char args_doc[] = "[INPUT] SOURCEFILE";
 static struct argp_option options[] = {
   {"parse-tree",               't', NULL,    0, "Dump parse tree" },
   {"output-defs",              'o', NULL,    0, "Dump output definitions" },
+  {"space-decls",              's', NULL,    0, "Dump strip/preserve space declarations" },
   { 0 }
 };
 
@@ -52,6 +53,7 @@ struct arguments {
   char *filename;
   int tree;
   int output_defs;
+  int space_decls;
 };
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -64,6 +66,9 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
     break;
   case 'o':
     arguments->output_defs = 1;
+    break;
+  case 's':
+    arguments->space_decls = 1;
     break;
   case ARGP_KEY_ARG:
     if (1 <= state->arg_num)
@@ -148,6 +153,32 @@ void dump_output_defs(xslt_source *source)
   }
 }
 
+void dump_space_decls(xslt_source *source)
+{
+  list *l;
+  stringbuf *buf = stringbuf_new();
+  for (l = source->space_decls; l; l = l->next) {
+    space_decl *decl = (space_decl*)l->data;
+    if (decl->nnt->wcns && decl->nnt->wcname)
+      stringbuf_format(buf,"*");
+    else if (decl->nnt->wcns)
+      stringbuf_format(buf,"*:%s",decl->nnt->nn.name);
+    else if (decl->nnt->wcname)
+      stringbuf_format(buf,"%s:*",decl->nnt->nn.ns);
+    else
+      stringbuf_format(buf,"%#n",decl->nnt->nn);
+    stringbuf_format(buf,"%#i",30-(buf->size-1));
+    if (decl->preserve)
+      stringbuf_format(buf,"preserve");
+    else
+      stringbuf_format(buf,"strip   ");
+    stringbuf_format(buf," %d %f",decl->importpred,decl->priority);
+    print("%s\n",buf->data);
+    stringbuf_clear(buf);
+  }
+  stringbuf_free(buf);
+}
+
 int main(int argc, char **argv)
 {
   struct arguments arguments;
@@ -171,6 +202,8 @@ int main(int argc, char **argv)
     xl_snode_print_tree(source->root,0);
   else if (arguments.output_defs)
     dump_output_defs(source);
+  else if (arguments.space_decls)
+    dump_space_decls(source);
   else
     output_xslt(stdout,source->root);
 
