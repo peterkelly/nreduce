@@ -35,10 +35,10 @@ struct df_state {
   int actno;
   df_seqtype *intype;
   int trace;
-  error_info ei;
+  error_info *ei;
 };
 
-df_state *df_state_new(df_program *program);
+df_state *df_state_new(df_program *program, error_info *ei);
 void df_state_free(df_state *state);
 
 int df_execute(df_program *program, int trace, error_info *ei, df_value *context);
