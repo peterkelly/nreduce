@@ -62,7 +62,7 @@ int main(int argc, char **argv)
   CURLcode cr;
   stringbuf *response = stringbuf_new();
 
-  if (3 < argc) {
+  if (3 > argc) {
     fprintf(stderr,"Usage: saxonclient <input> <source>\n");
     return 1;
   }
