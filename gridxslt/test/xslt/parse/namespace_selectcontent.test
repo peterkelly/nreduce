@@ -1,0 +1,13 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:template match="/">
+    <xsl:namespace name="foo" select="'http://foo.org'">http://foo.org</xsl:namespace>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:4: error XTSE0910: It is a static error if the select attribute of the xsl:namespace element is present when the element has content other than one or more xsl:fallback instructions, or if the select attribute is absent when the element has empty content.
+================================== RETURN CODE =================================
+1

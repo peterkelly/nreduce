@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<a xmlns:ns1="http://ns1.org">
+  <b xmlns:ns2="http://ns2.org">
+    <c xmlns:ns3="http://ns3.org">
+      <d/>
+    </c>
+  </b>
+</a>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  version="2.0">
+
+  <xsl:strip-space elements="*"/>
+  <xsl:output indent="yes"/>
+
+  <xsl:template match="/">
+    <xsl:sequence select="."/>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<a xmlns:ns1="http://ns1.org">
+   <b xmlns:ns2="http://ns2.org">
+      <c xmlns:ns3="http://ns3.org">
+         <d/>
+      </c>
+   </b>
+</a>
+================================== RETURN CODE =================================
+0

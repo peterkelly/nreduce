@@ -1,0 +1,30 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:template match="/">
+    <foo>
+      <xsl:attribute name="name" select="'hello'"/>
+      <bar/>
+      <baz>
+        <xsl:attribute name="a" select="'b'"/>
+      </baz>
+    </foo>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:template match="/">
+    <foo>
+      <xsl:attribute name="name" select="'hello'"/>
+      <bar/>
+      <baz>
+        <xsl:attribute name="a" select="'b'"/>
+      </baz>
+    </foo>
+  </xsl:template>
+</xsl:transform>
+================================== RETURN CODE =================================
+0
