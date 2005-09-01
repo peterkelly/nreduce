@@ -20,6 +20,8 @@
  *
  */
 
+#define _UTIL_XMLUTILS_C
+
 #include "xmlutils.h"
 #include "namespace.h"
 #include <libxml/xmlwriter.h>
@@ -92,7 +94,7 @@ qname *qname_list_parse(const char *list)
   return qnames;
 }
 
-static int nullstr_equals(const char *a, const char *b)
+int nullstr_equals(const char *a, const char *b)
 {
   if ((NULL == a) && (NULL == b))
     return 1;
@@ -183,6 +185,54 @@ nsname *nsname_ptr_copy(const nsname *nn)
   *copy = nsname_copy(*nn);
   return copy;
 }
+
+int nsnametest_matches(nsnametest *test, nsname nn)
+{
+  if (test->wcns && test->wcname)
+    return 1;
+  else if (test->wcns)
+    return nullstr_equals(test->nn.name,nn.name);
+  else if (test->wcname)
+    return nullstr_equals(test->nn.ns,nn.ns);
+  else
+    return nsname_equals(test->nn,nn);
+}
+
+void nsnametest_free(nsnametest *test)
+{
+  nsname_free(test->nn);
+  free(test);
+}
+
+nsnametest *nsnametest_copy(nsnametest *test)
+{
+  nsnametest *copy = (nsnametest*)calloc(1,sizeof(nsnametest));
+  copy->nn = nsname_copy(test->nn);
+  copy->wcns = test->wcns;
+  copy->wcname = test->wcname;
+  return copy;
+}
+
+void qnametest_ptr_free(qnametest *test)
+{
+  qname_free(test->qn);
+  free(test);
+}
+
+sourceloc sourceloc_copy(sourceloc sloc)
+{
+  sourceloc copy;
+  copy.uri = sloc.uri ? strdup(sloc.uri) : NULL;
+  copy.line = sloc.line;
+  return copy;
+}
+
+void sourceloc_free(sourceloc sloc)
+{
+  free(sloc.uri);
+}
+
+const sourceloc nosourceloc = { uri: NULL, line: -1 };
 
 void print(const char *format, ...)
 {

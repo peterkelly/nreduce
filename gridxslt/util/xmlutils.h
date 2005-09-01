@@ -31,6 +31,8 @@
 typedef struct error_info error_info;
 typedef struct qname qname;
 typedef struct nsname nsname;
+typedef struct qnametest qnametest;
+typedef struct nsnametest nsnametest;
 typedef struct sourceloc sourceloc;
 typedef struct definition definition;
 
@@ -53,6 +55,18 @@ struct nsname {
   char *name;
 };
 
+struct qnametest {
+  qname qn;
+  int wcprefix;
+  int wcname;
+};
+
+struct nsnametest {
+  nsname nn;
+  int wcns;
+  int wcname;
+};
+
 struct sourceloc {
   char *uri;
   int line;
@@ -66,6 +80,7 @@ struct definition {
 qname qname_parse(const char *name);
 qname *qname_list_parse(const char *list);
 
+int nullstr_equals(const char *a, const char *b);
 int nsname_equals(const nsname nn1, const nsname nn2);
 int nsname_isnull(const nsname nn);
 int qname_isnull(const qname qn);
@@ -84,7 +99,17 @@ void nsname_free(nsname nn);
 void nsname_ptr_free(nsname *nn);
 nsname *nsname_ptr_copy(const nsname *nn);
 
+int nsnametest_matches(nsnametest *test, nsname nn);
+void nsnametest_free(nsnametest *test);
+nsnametest *nsnametest_copy(nsnametest *test);
+void qnametest_ptr_free(qnametest *test);
 
+sourceloc sourceloc_copy(sourceloc sloc);
+void sourceloc_free(sourceloc sloc);
+
+#ifndef _UTIL_XMLUTILS_C
+extern const sourceloc nosourceloc;
+#endif
 
 
 void print(const char *format, ...);
