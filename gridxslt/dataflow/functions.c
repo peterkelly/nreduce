@@ -23,6 +23,7 @@
 #include "functions.h"
 #include "dataflow.h"
 #include "funops.h"
+#include "serialization.h"
 #include "util/macros.h"
 #include "util/namespace.h"
 #include "util/debug.h"
@@ -242,7 +243,29 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   case FN_COMPARE2: assert(!"not yet implemented"); break;
   case FN_CODEPOINT_EQUAL: assert(!"not yet implemented"); break;
   case FN_CONCAT: assert(!"not yet implemented"); break;
-  case FN_STRING_JOIN: assert(!"not yet implemented"); break;
+  case FN_STRING_JOIN: {
+    list *seq = df_sequence_to_list(values[0]);
+    stringbuf *buf = stringbuf_new();
+    const char *separator;
+    list *l;
+
+    assert(df_check_derived_atomic_type(values[1],g->string_type));
+    separator = values[1]->value.s;
+
+    for (l = seq; l; l = l->next) {
+      df_value *v = (df_value*)l->data;
+      assert(df_check_derived_atomic_type(v,g->string_type));
+      stringbuf_format(buf,"%s",v->value.s);
+      if (l->next)
+        stringbuf_format(buf,"%s",separator);
+    }
+
+    *result = df_value_new_string(g,buf->data);
+
+    stringbuf_free(buf);
+    list_free(seq,NULL);
+    break;
+  }
   case FN_SUBSTRING: assert(!"not yet implemented"); break;
   case FN_SUBSTRING2: assert(!"not yet implemented"); break;
   case FN_STRING_LENGTH: assert(!"not yet implemented"); break;
@@ -416,7 +439,13 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
   case OP_UNION: assert(!"not yet implemented"); break;
   case OP_INTERSECT: assert(!"not yet implemented"); break;
   case OP_EXCEPT: assert(!"not yet implemented"); break;
-  case FN_COUNT: assert(!"not yet implemented"); break;
+  case FN_COUNT: {
+    list *seq = df_sequence_to_list(values[0]);
+    int count = list_count(seq);
+    list_free(seq,NULL);
+    *result = df_value_new_int(g,count);
+    break;
+  }
   case FN_AVG: assert(!"not yet implemented"); break;
   case FN_MAX: assert(!"not yet implemented"); break;
   case FN_MAX2: assert(!"not yet implemented"); break;
@@ -461,6 +490,7 @@ int df_execute_op(df_state *state, df_instruction *instr, int opcode,
 
     docnode = df_node_new(NODE_DOCUMENT);
     rootelem = df_node_from_xmlnode(root);
+    df_strip_spaces(rootelem,state->program->space_decls);
     df_node_add_child(docnode,rootelem);
 
     xmlFreeDoc(doc);
