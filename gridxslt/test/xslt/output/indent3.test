@@ -4,7 +4,7 @@ gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 in.xml
 <?xml version="1.0"?>
 <people>
- <person test="wow">
+ <person>
   <name>Fred</name>
   <age>20</age>
   <occupation>Plumber</occupation>
@@ -32,7 +32,7 @@ test.xsl
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
 <people>
-     <person test="wow">
+     <person>
          <name>Fred</name>
          <age>20</age>
          <occupation>Plumber</occupation>

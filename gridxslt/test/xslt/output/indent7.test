@@ -3,7 +3,7 @@ gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
 <?xml version="1.0"?>
-<people><person test="wow"><name>Fred</name><age>20</age><occupation>Plumber</occupation></person>nonws<person><name>Joe</name><age>33</age><occupation>Marketing executive</occupation></person><person><name>Bob</name><age>38</age><occupation>Builder</occupation></person></people>
+<people><person><name>Fred</name><age>20</age><occupation>Plumber</occupation></person>nonws<person><name>Joe</name><age>33</age><occupation>Marketing executive</occupation></person><person><name>Bob</name><age>38</age><occupation>Builder</occupation></person></people>
 ===================================== FILE =====================================
 test.xsl
 <?xml version="1.0"?>
@@ -16,7 +16,7 @@ test.xsl
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
 <people>
-   <person test="wow">
+   <person>
       <name>Fred</name>
       <age>20</age>
       <occupation>Plumber</occupation>
