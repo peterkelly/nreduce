@@ -123,9 +123,11 @@ const char *df_special_op_names[OP_SPECIAL_COUNT] = {
   "text",
   "namespace",
   "select",
+  "selectroot",
   "filter",
   "empty",
   "contains-node",
+  "range",
 };
 
 const char *df_axis_types[AXIS_COUNT] = {
@@ -308,15 +310,26 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
     /* FIXME */
     break;
   case OP_SPECIAL_VALUE_OF:
-    /* FIXME */
+    assert(NULL == instr->outports[0].seqtype);
+    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_TEXT);
     break;
   case OP_SPECIAL_TEXT:
-    /* FIXME */
+    assert(NULL == instr->outports[0].seqtype);
+    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_TEXT);
     break;
   case OP_SPECIAL_NAMESPACE:
-    /* FIXME */
+    assert(NULL == instr->outports[0].seqtype);
+    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_NAMESPACE);
     break;
   case OP_SPECIAL_SELECT: {
+    /* type: node()* */
+    df_seqtype *nodetype = df_normalize_itemnode(0);
+    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
+    instr->outports[0].seqtype->left = nodetype;
+    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
+    break;
+  }
+  case OP_SPECIAL_SELECTROOT: {
     /* type: node()* */
     df_seqtype *nodetype = df_normalize_itemnode(0);
     instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
@@ -336,6 +349,13 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
   case OP_SPECIAL_CONTAINS_NODE:
     instr->outports[0].seqtype = df_seqtype_new_atomic(g->boolean_type);
     break;
+  case OP_SPECIAL_RANGE: {
+    df_seqtype *nodetype = df_seqtype_new_atomic(g->int_type);
+    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
+    instr->outports[0].seqtype->left = nodetype;
+    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
+    break;
+  }
   }
 
   if (OP_SPECIAL_RETURN == instr->opcode) {
@@ -433,14 +453,14 @@ int df_get_op_id(char *name)
   return -1;
 }
 
-void df_init_function(df_program *program, df_function *fun)
+void df_init_function(df_program *program, df_function *fun, sourceloc sloc)
 {
   assert(NULL == fun->ret);
   assert(NULL == fun->start);
   assert(NULL == fun->rtype);
 
-  fun->ret = df_add_instruction(program,fun,OP_SPECIAL_RETURN);
-  fun->start = df_add_instruction(program,fun,OP_SPECIAL_PASS);
+  fun->ret = df_add_instruction(program,fun,OP_SPECIAL_RETURN,sloc);
+  fun->start = df_add_instruction(program,fun,OP_SPECIAL_PASS,sloc);
   fun->start->inports[0].seqtype = df_seqtype_new_atomic(program->schema->globals->int_type);
   fun->start->outports[0].dest = fun->ret;
   fun->start->outports[0].destp = 0;
@@ -457,7 +477,7 @@ df_function *df_new_function(df_program *program, const nsname ident)
 
   /* Create sequence instruction (not actually part of the program, but used by the map operator
      to collate results of inner function calls) */
-  fun->mapseq = df_add_instruction(program,fun,OP_SPECIAL_SEQUENCE);
+  fun->mapseq = df_add_instruction(program,fun,OP_SPECIAL_SEQUENCE,nosourceloc);
   fun->mapseq->internal = 1;
   fun->mapseq->inports[0].seqtype =
     df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
@@ -487,8 +507,8 @@ void df_free_function(df_function *fun)
   list_free(fun->instructions,(void*)df_free_instruction);
 
   nsname_free(fun->ident);
-  assert(NULL != fun->rtype);
-  df_seqtype_deref(fun->rtype);
+  if (NULL != fun->rtype)
+    df_seqtype_deref(fun->rtype);
 
   for (i = 0; i < fun->nparams; i++) {
     assert(NULL != fun->params[i].seqtype);
@@ -500,7 +520,8 @@ void df_free_function(df_function *fun)
   free(fun);
 }
 
-df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode)
+df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode,
+                                   sourceloc sloc)
 {
   df_instruction *instr = (df_instruction*)calloc(1,sizeof(df_instruction));
   int i;
@@ -508,6 +529,7 @@ df_instruction *df_add_instruction(df_program *program, df_function *fun, int op
   instr->id = fun->nextid++;
   instr->opcode = opcode;
   instr->fun = fun;
+  instr->sloc = sourceloc_copy(sloc);
 
   if (FN_OP_COUNT > opcode) {
     instr->ninports = df_opdefs[opcode].nparams;
@@ -593,15 +615,22 @@ df_instruction *df_add_instruction(df_program *program, df_function *fun, int op
       /* FIXME */
       break;
     case OP_SPECIAL_VALUE_OF:
-      /* FIXME */
+      instr->ninports = 2;
+      instr->noutports = 1;
       break;
     case OP_SPECIAL_TEXT:
-      /* FIXME */
+      instr->ninports = 1;
+      instr->noutports = 1;
       break;
     case OP_SPECIAL_NAMESPACE:
-      /* FIXME */
+      instr->ninports = 2;
+      instr->noutports = 1;
       break;
     case OP_SPECIAL_SELECT:
+      instr->ninports = 1;
+      instr->noutports = 1;
+      break;
+    case OP_SPECIAL_SELECTROOT:
       instr->ninports = 1;
       instr->noutports = 1;
       break;
@@ -614,6 +643,10 @@ df_instruction *df_add_instruction(df_program *program, df_function *fun, int op
       instr->noutports = 1;
       break;
     case OP_SPECIAL_CONTAINS_NODE:
+      instr->ninports = 2;
+      instr->noutports = 1;
+      break;
+    case OP_SPECIAL_RANGE:
       instr->ninports = 2;
       instr->noutports = 1;
       break;
@@ -689,6 +722,7 @@ void df_free_instruction(df_instruction *instr)
     df_seqtype_deref(instr->seqtypetest);
   if (NULL != instr->seroptions)
     df_seroptions_free(instr->seroptions);
+  list_free(instr->nsdefs,(void*)ns_def_free);
   free(instr);
 }
 
@@ -710,6 +744,7 @@ df_program *df_program_new(xs_schema *schema)
 void df_program_free(df_program *program)
 {
   list_free(program->functions,(void*)df_free_function);
+  list_free(program->space_decls,(void*)space_decl_free);
   free(program);
 }
 

@@ -125,10 +125,12 @@
 #define OP_SPECIAL_TEXT               1019
 #define OP_SPECIAL_NAMESPACE          1020
 #define OP_SPECIAL_SELECT             1021
-#define OP_SPECIAL_FILTER             1022
-#define OP_SPECIAL_EMPTY              1023
-#define OP_SPECIAL_CONTAINS_NODE      1024
-#define OP_SPECIAL_COUNT              25
+#define OP_SPECIAL_SELECTROOT         1022
+#define OP_SPECIAL_FILTER             1023
+#define OP_SPECIAL_EMPTY              1024
+#define OP_SPECIAL_CONTAINS_NODE      1025
+#define OP_SPECIAL_RANGE              1026
+#define OP_SPECIAL_COUNT              27
 
 #define AXIS_INVALID                  0
 #define AXIS_CHILD                    1
@@ -207,6 +209,9 @@ struct df_instruction {
   df_seqtype *seqtypetest;
   int axis;
   df_seroptions *seroptions;
+  list *nsdefs;
+  char *str;
+  sourceloc sloc;
 };
 
 struct df_parameter {
@@ -235,12 +240,13 @@ int df_compute_types(df_function *fun);
 int df_check_derived_atomic_type(df_value *v, xs_type *type);
 int df_get_op_id(char *name);
 
-void df_init_function(df_program *program, df_function *fun);
+void df_init_function(df_program *program, df_function *fun, sourceloc sloc);
 df_function *df_new_function(df_program *program, const nsname ident);
 df_function *df_lookup_function(df_program *program, const nsname ident);
 void df_free_function(df_function *fun);
 
-df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode);
+df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode,
+                                   sourceloc sloc);
 void df_delete_instruction(df_program *program, df_function *fun, df_instruction *instr);
 void df_free_instruction_inports(df_instruction *instr);
 void df_free_instruction(df_instruction *instr);
@@ -248,6 +254,7 @@ void df_free_instruction(df_instruction *instr);
 struct df_program {
   list *functions;
   xs_schema *schema;
+  list *space_decls;
 };
 
 const char *df_opstr(int opcode);
