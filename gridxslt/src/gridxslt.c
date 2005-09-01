@@ -26,6 +26,7 @@
 #include "dataflow/dataflow.h"
 #include "dataflow/sequencetype.h"
 #include "dataflow/engine.h"
+#include "dataflow/serialization.h"
 #include "xslt/compile.h"
 #include <stdio.h>
 #include <assert.h>
@@ -109,7 +110,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-df_value *load_input_doc(error_info *ei, const char *filename)
+df_value *load_input_doc(error_info *ei, const char *filename, list *space_decls)
 {
   FILE *f;
   xmlDocPtr doc;
@@ -139,6 +140,7 @@ df_value *load_input_doc(error_info *ei, const char *filename)
 
   docnode = df_node_new(NODE_DOCUMENT);
   rootelem = df_node_from_xmlnode(root);
+  df_strip_spaces(rootelem,space_decls);
   df_node_add_child(docnode,rootelem);
 
   doctype = df_seqtype_new_item(ITEM_DOCUMENT);
@@ -157,7 +159,7 @@ int main(int argc, char **argv)
   int r = 0;
   error_info ei;
   xslt_source *source = NULL;
-  df_program *state = NULL;
+  df_program *program = NULL;
 
   setbuf(stdout,NULL);
   memset(&ei,0,sizeof(error_info));
@@ -177,7 +179,7 @@ int main(int argc, char **argv)
   if (arguments.print_tree)
     xl_snode_print_tree(source->root,0);
 
-  if (0 != xslt_compile(&ei,source,&state)) {
+  if (0 != xslt_compile(&ei,source,&program)) {
     error_info_print(&ei,stderr);
     error_info_free_vals(&ei);
     xslt_source_free(source);
@@ -190,31 +192,31 @@ int main(int argc, char **argv)
       perror(arguments.dot);
       exit(1);
     }
-    df_output_dot(state,dotfile);
+    df_output_dot(program,dotfile);
     fclose(dotfile);
   }
 
   if (arguments.df) {
-    df_output_df(state,stdout);
+    df_output_df(program,stdout);
   }
   else {
 
     df_value *context = NULL;
 
     if ((NULL != arguments.input) &&
-        (NULL == (context = load_input_doc(&ei,arguments.input)))) {
+        (NULL == (context = load_input_doc(&ei,arguments.input,program->space_decls)))) {
       error_info_print(&ei,stderr);
       error_info_free_vals(&ei);
       r = 1;
     }
-    else if (0 != df_execute(state,arguments.trace,&ei,context)) {
+    else if (0 != df_execute(program,arguments.trace,&ei,context)) {
       error_info_print(&ei,stderr);
       error_info_free_vals(&ei);
       r = 1;
     }
   }
 
-  df_program_free(state);
+  df_program_free(program);
   df_print_remaining(source->schema->globals);
   xslt_source_free(source);
 
