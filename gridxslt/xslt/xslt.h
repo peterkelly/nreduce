@@ -102,6 +102,7 @@ struct xslt_source {
   xs_schema *schema;
   xl_snode *root;
   list *output_defs;
+  list *space_decls;
 };
 
 struct xl_snode {
@@ -128,11 +129,17 @@ struct xl_snode {
   int gmethod;
   char *strval;
   char **seroptions;
+  list *qnametests;
   int importpred;
+  int includens;
+  int literal;
 
+#if 0
   /* FIXME: turn this into a sourceloc */
   int defline; /* FIXME: set this during parsing */
   char *deffilename; /* FIXME: set this during parsing */
+#endif
+  sourceloc sloc;
 
   char *uri;
   nsname ident;

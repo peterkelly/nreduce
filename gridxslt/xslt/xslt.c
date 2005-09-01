@@ -156,8 +156,9 @@ void xl_snode_free(xl_snode *sn)
       free(sn->seroptions[i]);
     free(sn->seroptions);
   }
+  list_free(sn->qnametests,(void*)qnametest_ptr_free);
 
-  free(sn->deffilename);
+  sourceloc_free(sn->sloc);
   nsname_free(sn->ident);
   free(sn->uri);
 
@@ -217,8 +218,8 @@ static int check_duplicate_params(xl_snode *sn, error_info *ei)
   for (p1 = sn->param; p1; p1 = p1->next) {
     for (p2 = p1->next; p2; p2 = p2->next) {
       if (nsname_equals(p1->ident,p2->ident)) {
-        return error(ei,p2->deffilename,p2->defline,"XTSE0580","Duplicate parameter: %#n",
-                     p1->ident);
+        return error(ei,p2->sloc.uri,p2->sloc.line,"XTSE0580",
+                     "Duplicate parameter: %#n",p1->ident);
       }
     }
   }
@@ -243,7 +244,7 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
     if (!qname_isnull(sn->qn)) {
       sn->ident = qname_to_nsname(sn->namespaces,sn->qn);
       if (nsname_isnull(sn->ident))
-        return error(ei,filename,sn->defline,"XTSE0280",
+        return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0280",
                      "Could not resolve namespace for prefix \"%s\"",sn->qn.prefix);
     }
 
@@ -259,7 +260,7 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
       const char **rn;
       for (rn = reserved_namespaces; *rn; rn++) {
         if (!strcmp(sn->ident.ns,*rn))
-          return error(ei,filename,sn->defline,"XTSE0740",
+          return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0740",
                        "A function cannot have a prefix that refers to a reserved namespace");
       }
     }
@@ -280,7 +281,7 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
       CHECK_CALL(xp_expr_resolve(sn->name_expr,s,filename,ei))
 
     if (NULL != sn->seqtype)
-      CHECK_CALL(df_seqtype_resolve(sn->seqtype,sn->namespaces,s,filename,sn->defline,ei))
+      CHECK_CALL(df_seqtype_resolve(sn->seqtype,sn->namespaces,s,sn->sloc.uri,sn->sloc.line,ei))
 
     if (XSLT_DECL_FUNCTION == sn->type)
       CHECK_CALL(check_duplicate_params(sn,ei))
@@ -531,7 +532,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
            test { xslt/parse/output_badmethod.test }
            @end */
         if (nsname_isnull(od->method)) {
-          error(ei,sn->deffilename,sn->defline,"XTSE1570",
+          error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
                 "Could not resolve namespace for prefix \"%s\"",qn.prefix);
           qname_free(qn);
           list_free(deflist,(void*)output_defstr_free);
@@ -544,7 +545,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
             strcmp(od->method.name,"html") &&
             strcmp(od->method.name,"xhtml") &&
             strcmp(od->method.name,"text")) {
-          error(ei,sn->deffilename,sn->defline,"XTSE1570",
+          error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
                 "If the method has a null namespace, it must be one of xml, html, xhtml, or text");
           list_free(deflist,(void*)output_defstr_free);
           return -1;
@@ -601,7 +602,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
               od->defby[i] = sn;
             }
             else {
-              error(ei,sn->deffilename,sn->defline,"XTSE1560","Conflicting value for option %s: "
+              error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1560","Conflicting value for option %s: "
                     "previously set to %s by another output declaration",
                     seroption_names[i],od->unpoptions[i]);
               list_free(deflist,(void*)output_defstr_free);
@@ -609,7 +610,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
             }
           }
 
-          if (0 != df_parse_seroption(od->options,i,ei,sn->deffilename,sn->defline,
+          if (0 != df_parse_seroption(od->options,i,ei,sn->sloc.uri,sn->sloc.line,
                                       sn->seroptions[i],sn->namespaces)) {
             list_free(deflist,(void*)output_defstr_free);
             return -1;
@@ -628,6 +629,40 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
   return 0;
 }
 
+int xslt_build_space_decls(error_info *ei, xslt_source *source)
+{
+  xl_snode *sn;
+
+  for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
+    if ((XSLT_DECL_STRIP_SPACE == sn->type) || (XSLT_DECL_PRESERVE_SPACE == sn->type)) {
+      int preserve = (XSLT_DECL_PRESERVE_SPACE == sn->type);
+      list *l;
+      for (l = sn->qnametests; l; l = l->next) {
+        qnametest *qt = (qnametest*)l->data;
+        nsnametest *nt = qnametest_to_nsnametest(sn->namespaces,qt);
+        space_decl *decl;
+        if (NULL == nt)
+          return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0280",
+                       "Could not resolve namespace for prefix \"%s\"",qt->qn.prefix);
+        decl = (space_decl*)calloc(1,sizeof(space_decl));
+        decl->nnt = nt;
+        decl->importpred = sn->importpred;
+        if (!nt->wcns && !nt->wcname)
+          decl->priority = 0;
+        else if (nt->wcns && nt->wcname)
+          decl->priority = -0.5;
+        else
+          decl->priority = -0.25;
+        decl->preserve = preserve;
+        list_append(&source->space_decls,decl);
+      }
+    }
+  }
+
+
+  return 0;
+}
+
 static int xslt_post_process(error_info *ei, xslt_source *source, const char *uri)
 {
   int importpred = 1;
@@ -637,6 +672,7 @@ static int xslt_post_process(error_info *ei, xslt_source *source, const char *ur
 
   CHECK_CALL(xl_snode_resolve(source->root,source->schema,uri,ei))
   CHECK_CALL(xslt_build_output_defs(ei,source))
+  CHECK_CALL(xslt_build_space_decls(ei,source))
   return 0;
 }
 
@@ -710,6 +746,7 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
 void xslt_source_free(xslt_source *source)
 {
   list_free(source->output_defs,(void*)df_seroptions_free);
+  list_free(source->space_decls,(void*)space_decl_free);
   if (NULL != source->root)
     xl_snode_free(source->root);
   xs_schema_free(source->schema);
