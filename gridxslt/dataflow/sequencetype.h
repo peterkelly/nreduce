@@ -169,12 +169,14 @@ df_node *df_node_new(int type);
 df_node *df_node_root(df_node *n);
 df_node *df_node_ref(df_node *n);
 void df_print_remaining(xs_globals *globals);
+void df_node_free(df_node *n);
 void df_node_deref(df_node *n);
 df_node *df_node_deep_copy(df_node *n);
 df_node *df_node_unique(df_node *n);
 void df_node_add_child(df_node *n, df_node *c);
 void df_node_insert_child(df_node *n, df_node *c, df_node *before);
 void df_node_add_attribute(df_node *n, df_node *attr);
+void df_node_add_namespace(df_node *n, df_node *ns);
 df_value *df_node_to_value(df_node *n);
 df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v);
 df_node *df_node_from_xmlnode(xmlNodePtr xn);
@@ -183,6 +185,7 @@ df_node *df_prev_node(df_node *node, df_node *subtree);
 df_node *df_next_node(df_node *node, df_node *subtree);
 
 df_value *df_value_new_string(xs_globals *g, const char *str);
+df_value *df_value_new_int(xs_globals *g, int i);
 
 df_value *df_value_new(df_seqtype *seqtype);
 df_value *df_value_ref(df_value *v);
