@@ -1,0 +1,21 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    foo
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+    foo
+  
+================================== RETURN CODE =================================
+0

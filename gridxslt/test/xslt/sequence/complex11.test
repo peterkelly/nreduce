@@ -1,0 +1,27 @@
+XSLT 2.0: 5.7.1 Constructing Complex Content
+
+The empty text node should be removed, leaving only the two elements.
+
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:template match="/">
+    <xsl:variable name="elem">
+      <output>
+        <xsl:sequence select="/empty,'',/empty"/>
+      </output>
+    </xsl:variable>
+    <xsl:sequence select="count($elem/output/node())"/>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>2
+================================== RETURN CODE =================================
+0

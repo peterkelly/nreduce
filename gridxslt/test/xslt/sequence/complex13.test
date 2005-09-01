@@ -1,0 +1,27 @@
+XSLT 2.0: 5.7.1 Constructing Complex Content
+
+Attribute after another item in the sequence
+
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+skipsubst
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    <output>
+      <xsl:sequence select="1"/>
+      <xsl:attribute name="foo">bar</xsl:attribute>
+    </output>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+runtests.tmp/test.xsl:5: error XTDE0410: Namespaces and attributes can only appear at the start of a sequence used to construct complex content
+================================== RETURN CODE =================================
+1

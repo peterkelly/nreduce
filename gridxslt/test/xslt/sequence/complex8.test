@@ -1,0 +1,43 @@
+XSLT 2.0: 5.7.1 Constructing Complex Content
+
+A mixture of text nodes and atomic values. They all end up getting merged into
+the one text node, except the atomic values are separated by spaces.
+
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<people>
+  <person>
+    <name>Fred</name>
+    <age>20</age>
+    <occupation>Plumber</occupation>
+  </person>
+  <person>
+    <name>Joe</name>
+    <age>33</age>
+    <occupation>Marketing executive</occupation>
+  </person>
+  <person>
+    <name>Bob</name>
+    <age>38</age>
+    <occupation>Builder</occupation>
+  </person>
+</people>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    <output>
+      <xsl:sequence select="'hello',/people/person/name/text(),1,2,'test',3"/>
+    </output>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<output>helloFredJoeBob1 2 test 3</output>
+================================== RETURN CODE =================================
+0

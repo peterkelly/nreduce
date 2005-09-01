@@ -1,0 +1,35 @@
+=================================== PROGRAM ====================================
+testxslt -s runtests.tmp/input.xml
+===================================== FILE =====================================
+a.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:strip-space elements="a"/>
+</xsl:transform>
+===================================== FILE =====================================
+b.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:preserve-space elements="b"/>
+  <xsl:include href="c.xsl"/>
+</xsl:transform>
+===================================== FILE =====================================
+c.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:strip-space elements="c"/>
+</xsl:transform>
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:import href="a.xsl"/>
+  <xsl:import href="b.xsl"/>
+  <xsl:preserve-space elements="d"/>
+</xsl:transform>
+==================================== OUTPUT ====================================
+a                             strip    1 0.000000
+b                             preserve 2 0.000000
+c                             strip    2 0.000000
+d                             preserve 3 0.000000
+================================== RETURN CODE =================================
+0

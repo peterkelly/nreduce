@@ -1,0 +1,32 @@
+XSLT 2.0: 5.7.1 Constructing Complex Content
+
+Multiple attributes with the same name; only the last one is kept
+
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    <xsl:variable name="x">
+      <output>
+        <xsl:attribute name="a">value1</xsl:attribute>
+        <xsl:attribute name="b">value2</xsl:attribute>
+        <xsl:attribute name="a">value3</xsl:attribute>
+        <xsl:attribute name="c">value4</xsl:attribute>
+        <xsl:attribute name="a">value5</xsl:attribute>
+      </output>
+    </xsl:variable>
+    <xsl:value-of select="$x/output/@a"/>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>value5
+================================== RETURN CODE =================================
+0

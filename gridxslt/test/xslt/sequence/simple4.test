@@ -1,0 +1,22 @@
+XSLT 2.0: 5.7.2 Constructing Simple Content
+
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:template match="/">
+    <xsl:variable name="x"><foo>some<b>text</b><test/></foo>some<bar>more</bar>text</xsl:variable>
+    <xsl:value-of select="1,2,'hello',$x,3" separator="|"/>
+  </xsl:template>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>1|2|hello|sometextsomemoretext|3
+================================== RETURN CODE =================================
+0
