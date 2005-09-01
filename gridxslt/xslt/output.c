@@ -26,6 +26,7 @@
 #include "util/namespace.h"
 #include "util/stringbuf.h"
 #include "util/macros.h"
+#include "util/debug.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -299,17 +300,29 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     /* FIXME: support "use-attribute-sets" */
     /* FIXME: support "type" */
     /* FIXME: support "validation" */
-    if (!qname_isnull(node->qn)) {
+
+    c = node->child;
+
+    if (node->literal) {
       stringbuf *buf = stringbuf_new();
       stringbuf_format(buf,"%#q",node->qn);
       xmlTextWriterStartElement(writer,buf->data);
       stringbuf_free(buf);
+
+      while (c && (XSLT_INSTR_ATTRIBUTE == c->type) && c->literal) {
+        stringbuf *qnstr = stringbuf_new();
+        stringbuf_format(qnstr,"%#q",c->qn);
+        expr_attr(writer,qnstr->data,c->select,1);
+        stringbuf_free(qnstr);
+        c = c->next;
+      }
     }
     else {
       xmlTextWriterStartElement(writer,"xsl:element");
       expr_attr(writer,"name",node->name_expr,1);
     }
-    for (c = node->child; c; c = c->next)
+
+    for (; c; c = c->next)
       output_xslt_sequence_constructor(writer,c);
     xmlTextWriterEndElement(writer);
     break;
@@ -435,9 +448,14 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
     break;
   case XSLT_INSTR_TEXT:
     /* FIXME: support "disable-output-escaping" */
-    xslt_start_element(writer,node,"text");
-    xmlTextWriterWriteFormatString(writer,"%s",node->strval);
-    xslt_end_element(writer);
+    if (node->literal) {
+      xmlTextWriterWriteFormatString(writer,"%s",node->strval);
+    }
+    else {
+      xslt_start_element(writer,node,"text");
+      xmlTextWriterWriteFormatString(writer,"%s",node->strval);
+      xslt_end_element(writer);
+    }
     break;
   case XSLT_INSTR_VALUE_OF:
     xslt_start_element(writer,node,"value-of");
@@ -453,6 +471,31 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, xl_snode *node)
   default:
     break;
   }
+}
+
+static char *qnametest_list_str(list *qnametests)
+{
+  char *str;
+  stringbuf *buf = stringbuf_new();
+  list *l;
+
+  for (l = qnametests; l; l = l->next) {
+    qnametest *qt = (qnametest*)l->data;
+    if (qt->wcprefix && qt->wcname)
+      stringbuf_format(buf,"*");
+    else if (qt->wcprefix)
+      stringbuf_format(buf,"*:%s",qt->qn.localpart);
+    else if (qt->wcname)
+      stringbuf_format(buf,"%s:*",qt->qn.prefix);
+    else
+      stringbuf_format(buf,"%#q",qt->qn);
+    if (l->next)
+      stringbuf_format(buf," ");
+  }
+
+  str = strdup(buf->data);
+  stringbuf_free(buf);
+  return str;
 }
 
 /*
@@ -542,10 +585,22 @@ void output_xslt(FILE *f, xl_snode *node)
     }
     case XSLT_PARAM:
       break;
-    case XSLT_DECL_PRESERVE_SPACE:
+    case XSLT_DECL_PRESERVE_SPACE: {
+      char *elements = qnametest_list_str(sn->qnametests);
+      xslt_start_element(writer,sn,"preserve-space");
+      xml_write_attr(writer,"elements",elements);
+      xslt_end_element(writer);
+      free(elements);
       break;
-    case XSLT_DECL_STRIP_SPACE:
+    }
+    case XSLT_DECL_STRIP_SPACE: {
+      char *elements = qnametest_list_str(sn->qnametests);
+      xslt_start_element(writer,sn,"strip-space");
+      xml_write_attr(writer,"elements",elements);
+      xslt_end_element(writer);
+      free(elements);
       break;
+    }
     case XSLT_DECL_TEMPLATE:
       /* FIXME: support "priority" */
       /* FIXME: support "mode" */
