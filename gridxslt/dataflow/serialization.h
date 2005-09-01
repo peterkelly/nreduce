@@ -65,6 +65,7 @@
 #define SEROPTION_COUNT                   16
 
 typedef struct df_seroptions df_seroptions;
+typedef struct space_decl space_decl;
 
 struct df_seroptions {
   nsname ident;
@@ -86,6 +87,13 @@ struct df_seroptions {
   char *version;
 };
 
+struct space_decl {
+  nsnametest *nnt;
+  int importpred;
+  double priority;
+  int preserve;
+};
+
 int df_parse_seroption(df_seroptions *options, int option, error_info *ei,
                        const char *filename, int line,
                        const char *value, ns_map *namespaces);
@@ -96,6 +104,13 @@ df_seroptions *df_seroptions_copy(df_seroptions *options);
 
 int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *options,
                  error_info *ei);
+
+void df_strip_spaces(df_node *n, list *space_decls);
+void df_namespace_fixup(df_node *n);
+
+int space_decl_preserve(list *space_decls, nsname elemname);
+space_decl *space_decl_copy(space_decl *decl);
+void space_decl_free(space_decl *decl);
 
 #ifndef _DATAFLOW_SERIALIZATION_C
 const char *seroption_names[SEROPTION_COUNT];
