@@ -672,10 +672,11 @@ int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr 
   return 0;
 }
 
-int is_all_whitespace(const char *s)
+int is_all_whitespace(const char *s, int len)
 {
-  for (; '\0' != *s; s++)
-    if (!isspace(*s))
+  int i;
+  for (i = 0; i < len; i++)
+    if (!isspace(s[i]))
       return 0;
   return 1;
 }

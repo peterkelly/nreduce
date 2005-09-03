@@ -87,6 +87,23 @@ const char *xp_expr_types[XPATH_EXPR_COUNT] = {
   "filter",
 };
 
+const char *xp_axis_types[AXIS_COUNT] = {
+  NULL,
+  "child",
+  "descendant",
+  "attribute",
+  "self",
+  "descendant-or-self",
+  "following-sibling",
+  "following",
+  "namespace",
+  "parent",
+  "ancestor",
+  "preceding-sibling",
+  "preceding",
+  "ancestor-or-self",
+};
+
 xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right)
 {
   xp_expr *xp = (xp_expr*)calloc(1,sizeof(xp_expr));

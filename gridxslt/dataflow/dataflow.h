@@ -30,144 +30,29 @@
 #include "serialization.h"
 #include <stdio.h>
 
-#define TYPE_INVALID                  0
+#define OP_CONST              0
+#define OP_DUP                1
+#define OP_SPLIT              2
+#define OP_MERGE              3
+#define OP_CALL               4
+#define OP_MAP                5
+#define OP_PASS               6
+#define OP_SWALLOW            7
+#define OP_RETURN             8
+#define OP_PRINT              9
+#define OP_GATE               10
+#define OP_BUILTIN            11
+#define OP_COUNT              12
 
-#define TYPE_XS_STRING                1
-#define TYPE_XS_BOOLEAN               2
-#define TYPE_XS_DECIMAL               3
-#define TYPE_XS_FLOAT                 4
-#define TYPE_XS_DOUBLE                5
-#define TYPE_XS_DURATION              6
-#define TYPE_XS_DATETIME              7
-#define TYPE_XS_TIME                  8
-#define TYPE_XS_DATE                  9
-#define TYPE_XS_GYEARMONTH            10
-#define TYPE_XS_GYEAR                 11
-#define TYPE_XS_GMONTHDAY             12
-#define TYPE_XS_GDAY                  13
-#define TYPE_XS_GMONTH                14
-#define TYPE_XS_HEXBINARY             15
-#define TYPE_XS_BASE64BINARY          16
-#define TYPE_XS_ANYURI                17
-#define TYPE_XS_QNAME                 18
-#define TYPE_XS_NOTATION              19
-
-#define TYPE_XS_NORMALIZEDSTRING      20
-#define TYPE_XS_TOKEN                 21
-#define TYPE_XS_LANGUAGE              22
-#define TYPE_XS_NMTOKEN               23
-#define TYPE_XS_NMTOKENS              24
-#define TYPE_XS_NAME                  25
-#define TYPE_XS_NCNAME                26
-#define TYPE_XS_ID                    27
-#define TYPE_XS_IDREF                 28
-#define TYPE_XS_IDREFS                29
-#define TYPE_XS_ENTITY                30
-#define TYPE_XS_ENTITIES              31
-#define TYPE_XS_INTEGER               32
-#define TYPE_XS_NONPOSITIVEINTEGER    33
-#define TYPE_XS_NEGATIVEINTEGER       34
-#define TYPE_XS_LONG                  35
-#define TYPE_XS_INT                   36
-#define TYPE_XS_SHORT                 37
-#define TYPE_XS_BYTE                  38
-#define TYPE_XS_NONNEGATIVEINTEGER    39
-#define TYPE_XS_UNSIGNEDLONG          40
-#define TYPE_XS_UNSIGNEDINT           41
-#define TYPE_XS_UNSIGNEDSHORT         42
-#define TYPE_XS_UNSIGNEDBYTE          43
-#define TYPE_XS_POSITIVEINTEGER       44
-
-#define TYPE_XDT_UNTYPED              45
-#define TYPE_XDT_UNTYPEDATOMIC        46
-#define TYPE_XDT_ANYATOMICTYPE        47
-#define TYPE_XDT_DAYTIMEDURATION      48
-#define TYPE_XDT_YEARMONTHDURATION    49
-
-#define TYPE_LAST_XMLSCHEMA_TYPE      49
-
-#define TYPE_ATTRIBUTE                50
-#define TYPE_COMMENT                  51
-#define TYPE_DOCUMENT_NODE            52
-#define TYPE_ELEMENT                  53
-#define TYPE_PROCESSING_INSTRUCTION   54
-#define TYPE_TEXT                     55
-#define TYPE_NODE                     56
-#define TYPE_ITEM                     57
-#define TYPE_NONE                     58
-
-#define TYPE_NUMERIC                  59
-
-#define TYPE_COUNT                    60
-
-#define OP_SPECIAL_BASE               1000
-
-#define OP_SPECIAL_CONST              1000
-#define OP_SPECIAL_DUP                1001
-#define OP_SPECIAL_SPLIT              1002
-#define OP_SPECIAL_MERGE              1003
-#define OP_SPECIAL_CALL               1004
-#define OP_SPECIAL_MAP                1005
-#define OP_SPECIAL_PASS               1006
-#define OP_SPECIAL_SWALLOW            1007
-#define OP_SPECIAL_RETURN             1008
-#define OP_SPECIAL_PRINT              1009
-#define OP_SPECIAL_OUTPUT             1010
-#define OP_SPECIAL_SEQUENCE           1011 /* not reallly special */
-#define OP_SPECIAL_GATE               1012
-
-#define OP_SPECIAL_DOCUMENT           1013
-#define OP_SPECIAL_ELEMENT            1014
-#define OP_SPECIAL_ATTRIBUTE          1015
-#define OP_SPECIAL_PI                 1016
-#define OP_SPECIAL_COMMENT            1017
-#define OP_SPECIAL_VALUE_OF           1018
-#define OP_SPECIAL_TEXT               1019
-#define OP_SPECIAL_NAMESPACE          1020
-#define OP_SPECIAL_SELECT             1021
-#define OP_SPECIAL_SELECTROOT         1022
-#define OP_SPECIAL_FILTER             1023
-#define OP_SPECIAL_EMPTY              1024
-#define OP_SPECIAL_CONTAINS_NODE      1025
-#define OP_SPECIAL_RANGE              1026
-#define OP_SPECIAL_COUNT              27
-
-#define AXIS_INVALID                  0
-#define AXIS_CHILD                    1
-#define AXIS_DESCENDANT               2
-#define AXIS_ATTRIBUTE                3
-#define AXIS_SELF                     4
-#define AXIS_DESCENDANT_OR_SELF       5
-#define AXIS_FOLLOWING_SIBLING        6
-#define AXIS_FOLLOWING                7
-#define AXIS_NAMESPACE                8
-#define AXIS_PARENT                   9
-#define AXIS_ANCESTOR                 10
-#define AXIS_PRECEDING_SIBLING        11
-#define AXIS_PRECEDING                12
-#define AXIS_ANCESTOR_OR_SELF         13
-#define AXIS_COUNT                    14
-
-typedef struct df_optype df_optype;
-typedef struct df_opdef df_opdef;
 typedef struct df_inport df_inport;
 typedef struct df_outport df_outport;
 typedef struct df_instruction df_instruction;
 typedef struct df_parameter df_parameter;
 typedef struct df_function df_function;
+typedef struct gxcontext gxcontext;
+typedef struct gxfunctiondef gxfunctiondef;
+typedef struct df_builtin_function df_builtin_function;
 typedef struct df_program df_program;
-
-struct df_optype {
-  int type;
-  int occurrence;
-};
-
-struct df_opdef {
-  char *name;
-  int nparams;
-  df_optype rettype;
-  df_optype paramtypes[8];
-};
 
 struct df_inport {
   df_seqtype *seqtype;
@@ -198,6 +83,7 @@ struct df_instruction {
   df_value *cvalue;
 /*   df_seqtype *ctype; */
   df_function *cfun;
+  df_builtin_function *bif;
 
   struct df_activity *act;
   df_function *fun;
@@ -237,8 +123,8 @@ struct df_function {
 };
 
 int df_compute_types(df_function *fun);
+int df_check_is_atomic_type(df_seqtype *st, xs_type *type);
 int df_check_derived_atomic_type(df_value *v, xs_type *type);
-int df_get_op_id(char *name);
 
 void df_init_function(df_program *program, df_function *fun, sourceloc sloc);
 df_function *df_new_function(df_program *program, const nsname ident);
@@ -251,24 +137,55 @@ void df_delete_instruction(df_program *program, df_function *fun, df_instruction
 void df_free_instruction_inports(df_instruction *instr);
 void df_free_instruction(df_instruction *instr);
 
+typedef gxvalue* (gxfunction)(gxcontext *ctxt, gxvalue **args);
+
+struct gxcontext {
+  gxvalue *item;
+  int position;
+  int size;
+  xs_globals *g;
+  error_info *ei;
+  sourceloc sloc;
+  list *space_decls;
+  df_instruction *instr;
+};
+
+struct gxfunctiondef {
+  gxfunction *fun;
+  char *ns;
+  char *name;
+  char *arguments;
+  char *returns;
+};
+
+struct df_builtin_function {
+  gxfunction *fun;
+  nsname ident;
+  int nargs;
+  df_seqtype **argtypes;
+  df_seqtype *rettype;
+};
+
 struct df_program {
   list *functions;
   xs_schema *schema;
   list *space_decls;
+  list *builtin_functions;
 };
 
 const char *df_opstr(int opcode);
 
-df_program *df_program_new(xs_schema *schema);
+void df_module_init(gxfunctiondef *fundefs);
+
+df_builtin_function *df_lookup_builtin_function(df_program *program, const nsname ident, int nargs);
+df_program *df_program_new(xs_schema *schema, gxfunctiondef ***modules);
 void df_program_free(df_program *program);
 
 void df_output_dot(df_program *program, FILE *f);
 void df_output_df(df_program *program, FILE *f);
 
 #ifndef _DATAFLOW_DATAFLOW_C
-extern const char *df_type_names[TYPE_COUNT];
-extern const char *df_special_op_names[OP_SPECIAL_COUNT];
-extern const char *df_axis_types[AXIS_COUNT];
+extern const char *df_special_op_names[OP_COUNT];
 #endif
 
 #endif /* _DATAFLOW_DATAFLOW_H */

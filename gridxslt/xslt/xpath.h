@@ -103,6 +103,22 @@
 #define XPATH_NODE_COMP_PRECEDES          2
 #define XPATH_NODE_COMP_FOLLOWS           3
 
+#define AXIS_INVALID                  0
+#define AXIS_CHILD                    1
+#define AXIS_DESCENDANT               2
+#define AXIS_ATTRIBUTE                3
+#define AXIS_SELF                     4
+#define AXIS_DESCENDANT_OR_SELF       5
+#define AXIS_FOLLOWING_SIBLING        6
+#define AXIS_FOLLOWING                7
+#define AXIS_NAMESPACE                8
+#define AXIS_PARENT                   9
+#define AXIS_ANCESTOR                 10
+#define AXIS_PRECEDING_SIBLING        11
+#define AXIS_PRECEDING                12
+#define AXIS_ANCESTOR_OR_SELF         13
+#define AXIS_COUNT                    14
+
 typedef struct xp_expr xp_expr;
 typedef struct xl_snode xl_snode;
 
@@ -146,6 +162,7 @@ void xp_expr_print_tree(xp_expr *e, int indent);
 
 #ifndef _XSLT_XPATH_C
 extern const char *xp_expr_types[XPATH_EXPR_COUNT];
+extern const char *xp_axis_types[AXIS_COUNT];
 #endif
 
 #endif /* _XSLT_XPATH_H */

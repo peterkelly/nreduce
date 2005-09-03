@@ -39,6 +39,7 @@
 #define SVG_NAMESPACE "http://www.w3.org/2000/svg"
 #define XML_NAMESPACE "http://www.w3.org/XML/1998/namespace"
 #define GX_NAMESPACE "http://gridxslt.sourceforge.net"
+#define SPECIAL_NAMESPACE "http://special"
 
 typedef struct ns_def ns_def;
 typedef struct ns_map ns_map;

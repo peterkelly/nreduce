@@ -22,7 +22,6 @@
 
 #define _DATAFLOW_DATAFLOW_C
 #include "dataflow.h"
-#include "funops.h"
 #include "util/macros.h"
 #include "util/namespace.h"
 #include "util/debug.h"
@@ -33,74 +32,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-const char *df_type_names[TYPE_COUNT] = {
-  "",
-  "xs:string",
-  "xs:boolean",
-  "xs:decimal",
-  "xs:float",
-  "xs:double",
-  "xs:duration",
-  "xs:dateTime",
-  "xs:time",
-  "xs:date",
-  "xs:gYearMonth",
-  "xs:gYear",
-  "xs:gMonthDay",
-  "xs:gDay",
-  "xs:gMonth",
-  "xs:hexBinary",
-  "xs:base64Binary",
-  "xs:anyURI",
-  "xs:QName",
-  "xs:NOTATION",
-
-  "xs:normalizedString",
-  "xs:token",
-  "xs:language",
-  "xs:NMTOKEN",
-  "xs:NMTOKENS",
-  "xs:Name",
-  "xs:NCName",
-  "xs:ID",
-  "xs:IDREF",
-  "xs:IDREFS",
-  "xs:ENTITY",
-  "xs:ENTITIES",
-  "xs:integer",
-  "xs:nonPositiveInteger",
-  "xs:negativeInteger",
-  "xs:long",
-  "xs:int",
-  "xs:short",
-  "xs:byte",
-  "xs:nonNegativeInteger",
-  "xs:unsignedLong",
-  "xs:unsignedInt",
-  "xs:unsignedShort",
-  "xs:unsignedByte",
-  "xs:positiveInteger",
-
-
-  "xdt:untyped",
-  "xdt:untypedAtomic",
-  "xdt:anyAtomicType",
-  "xdt:dayTimeDuration",
-  "xdt:yearMonthDuration",
-
-  "attribute()",
-  "comment()",
-  "document-node()",
-  "element()",
-  "processing-instruction()",
-  "text()",
-  "node()",
-  "item()",
-  "none",
-
-  "numeric"};
-
-const char *df_special_op_names[OP_SPECIAL_COUNT] = {
+const char *df_special_op_names[OP_COUNT] = {
   "const",
   "dup",
   "split",
@@ -111,115 +43,9 @@ const char *df_special_op_names[OP_SPECIAL_COUNT] = {
   "swallow",
   "return",
   "print",
-  "output",
-  "sequence",
   "gate",
-  "document",
-  "element",
-  "attribute",
-  "pi",
-  "comment",
-  "value_of",
-  "text",
-  "namespace",
-  "select",
-  "selectroot",
-  "filter",
-  "empty",
-  "contains-node",
-  "range",
+  "builtin",
 };
-
-const char *df_axis_types[AXIS_COUNT] = {
-  NULL,
-  "child",
-  "descendant",
-  "attribute",
-  "self",
-  "descendant-or-self",
-  "following-sibling",
-  "following",
-  "namespace",
-  "parent",
-  "ancestor",
-  "preceding-sibling",
-  "preceding",
-  "ancestor-or-self",
-};
-
-static df_seqtype *df_get_seqtype_from_optype(df_program *program, const df_optype *optype)
-{
-  df_seqtype *st = NULL;
-
-  if (TYPE_LAST_XMLSCHEMA_TYPE >= optype->type) {
-    char *colon = strchr(df_type_names[optype->type],':');
-    nsname nn;
-    assert(NULL != colon);
-
-    if (!strncmp(df_type_names[optype->type],"xs:",3))
-      nn.ns = XS_NAMESPACE;
-    else if (!strncmp(df_type_names[optype->type],"xdt:",4))
-      nn.ns = XDT_NAMESPACE;
-    else
-      assert(0);
-
-    nn.name = colon+1;
-    st = df_seqtype_new_atomic(xs_lookup_type(program->schema,nn));
-    assert(NULL != st->item->type);
-  }
-  else {
-    switch (optype->type) {
-    case TYPE_ATTRIBUTE:
-      st = df_seqtype_new_item(ITEM_ATTRIBUTE);
-      break;
-    case TYPE_COMMENT:
-      st = df_seqtype_new_item(ITEM_COMMENT);
-      break;
-    case TYPE_DOCUMENT_NODE:
-      st = df_seqtype_new_item(ITEM_DOCUMENT);
-      break;
-    case TYPE_ELEMENT:
-      st = df_seqtype_new_item(ITEM_ELEMENT);
-      break;
-    case TYPE_PROCESSING_INSTRUCTION:
-      st = df_seqtype_new_item(ITEM_PI);
-      break;
-    case TYPE_TEXT:
-      st = df_seqtype_new_item(ITEM_TEXT);
-      break;
-    case TYPE_NODE:
-      st = df_normalize_itemnode(0);
-      break;
-    case TYPE_ITEM:
-      st = df_normalize_itemnode(1);
-      break;
-    case TYPE_NONE:
-      st = df_seqtype_new(SEQTYPE_EMPTY);
-      break;
-    case TYPE_NUMERIC: {
-      /* FIXME: this should really be decimal */
-      st = df_seqtype_new_atomic(xs_lookup_type(program->schema,nsname_temp(XS_NAMESPACE,"int")));
-      assert(NULL != st->item->type);
-      break;
-    }
-    default:
-      assert(!"invalid optype->type");
-      break;
-    }
-  }
-
-  assert(NULL != st);
-
-  if (OCCURS_ONCE != optype->occurrence) {
-    df_seqtype *occ = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    occ->left = st;
-    occ->occurrence = optype->occurrence;
-    return occ;
-  }
-  else {
-    return st;
-  }
-}
 
 int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
 {
@@ -229,24 +55,24 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
 /*   debugl("df_instruction_compute_types %s:%d (%s) (%p)", */
 /*          instr->fun->name,instr->id,df_opstr(instr->opcode),instr); */
   switch (instr->opcode) {
-  case OP_SPECIAL_CONST:
+  case OP_CONST:
 /*     instr->outports[0].seqtype = df_seqtype_ref(instr->cvalue->seqtype); */
     assert(NULL != instr->outports[0].seqtype);
     break;
-  case OP_SPECIAL_DUP:
+  case OP_DUP:
     assert(NULL == instr->outports[0].seqtype);
     assert(NULL == instr->outports[1].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     instr->outports[1].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_SPLIT:
+  case OP_SPLIT:
     assert(NULL == instr->outports[0].seqtype);
     assert(NULL == instr->outports[1].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
     instr->outports[1].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
     instr->outports[2].seqtype = df_seqtype_new_atomic(g->boolean_type);
     break;
-  case OP_SPECIAL_MERGE:
+  case OP_MERGE:
 /*     if (!df_seqtype_compatible(instr->inports[0].seqtype,instr->inports[1].seqtype)) { */
 /*       fprintf(stderr,"Merge %d has incompatible input types\n",instr->id); */
 /*       return -1; */
@@ -257,108 +83,42 @@ int df_instruction_compute_types(df_instruction *instr, xs_globals *g)
 /*     assert(NULL == instr->outports[0].seqtype); */
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_CALL:
+  case OP_CALL:
+    assert(NULL != instr->cfun);
     assert(NULL != instr->cfun->rtype);
     assert(NULL == instr->outports[0].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->cfun->rtype);
     break;
-  case OP_SPECIAL_MAP:
+  case OP_MAP:
     assert(NULL == instr->outports[0].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_PASS:
+  case OP_PASS:
     assert(NULL == instr->outports[0].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_SWALLOW:
+  case OP_SWALLOW:
     /* FIXME */
     break;
-  case OP_SPECIAL_RETURN:
+  case OP_RETURN:
     assert(NULL == instr->outports[0].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_PRINT:
+  case OP_PRINT:
     break;
-  case OP_SPECIAL_OUTPUT:
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_EMPTY);
-    break;
-  case OP_SPECIAL_SEQUENCE:
-    assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_SEQUENCE);
-    instr->outports[0].seqtype->left = df_seqtype_ref(instr->inports[0].seqtype);
-    instr->outports[0].seqtype->right = df_seqtype_ref(instr->inports[1].seqtype);
-    break;
-  case OP_SPECIAL_GATE:
+  case OP_GATE:
     assert(NULL == instr->outports[0].seqtype);
     instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
     break;
-  case OP_SPECIAL_DOCUMENT:
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_DOCUMENT);
-    break;
-  case OP_SPECIAL_ELEMENT:
+  case OP_BUILTIN:
+    assert(NULL != instr->bif);
+    assert(NULL != instr->bif->rettype);
     assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_ELEMENT);
+    instr->outports[0].seqtype = df_seqtype_ref(instr->bif->rettype);
     break;
-  case OP_SPECIAL_ATTRIBUTE:
-    assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_ATTRIBUTE);
-    break;
-  case OP_SPECIAL_PI:
-    /* FIXME */
-    break;
-  case OP_SPECIAL_COMMENT:
-    /* FIXME */
-    break;
-  case OP_SPECIAL_VALUE_OF:
-    assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_TEXT);
-    break;
-  case OP_SPECIAL_TEXT:
-    assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_TEXT);
-    break;
-  case OP_SPECIAL_NAMESPACE:
-    assert(NULL == instr->outports[0].seqtype);
-    instr->outports[0].seqtype = df_seqtype_new_item(ITEM_NAMESPACE);
-    break;
-  case OP_SPECIAL_SELECT: {
-    /* type: node()* */
-    df_seqtype *nodetype = df_normalize_itemnode(0);
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    instr->outports[0].seqtype->left = nodetype;
-    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
-    break;
-  }
-  case OP_SPECIAL_SELECTROOT: {
-    /* type: node()* */
-    df_seqtype *nodetype = df_normalize_itemnode(0);
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    instr->outports[0].seqtype->left = nodetype;
-    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
-    break;
-  }
-  case OP_SPECIAL_FILTER:
-    /* FIXME: actually, we shouldn't copy the output type verbatim. The input type could be
-       a sequence with a fixed occurrence range, but the output must have a variable
-       occurrence range as not all input items will necessarily be in the output sequence */
-    instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
-    break;
-  case OP_SPECIAL_EMPTY:
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_EMPTY);
-    break;
-  case OP_SPECIAL_CONTAINS_NODE:
-    instr->outports[0].seqtype = df_seqtype_new_atomic(g->boolean_type);
-    break;
-  case OP_SPECIAL_RANGE: {
-    df_seqtype *nodetype = df_seqtype_new_atomic(g->int_type);
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    instr->outports[0].seqtype->left = nodetype;
-    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
-    break;
-  }
   }
 
-  if (OP_SPECIAL_RETURN == instr->opcode) {
+  if (OP_RETURN == instr->opcode) {
 /*     debugl("  return instruction; skipping rest"); */
     return 0;
   }
@@ -427,6 +187,13 @@ int df_compute_types(df_function *fun)
   return 0;
 }
 
+int df_check_is_atomic_type(df_seqtype *st, xs_type *type)
+{
+  return ((SEQTYPE_ITEM == st->type) &&
+          (ITEM_ATOMIC == st->item->kind) &&
+          (st->item->type == type));
+}
+
 int df_check_derived_atomic_type(df_value *v, xs_type *type)
 {
   xs_type *t1;
@@ -443,24 +210,14 @@ int df_check_derived_atomic_type(df_value *v, xs_type *type)
   return 0;
 }
 
-int df_get_op_id(char *name)
-{
-  int i;
-  for (i = 0; i < FN_OP_COUNT; i++) {
-    if (!strcmp(df_opdefs[i].name,name))
-      return i;
-  }
-  return -1;
-}
-
 void df_init_function(df_program *program, df_function *fun, sourceloc sloc)
 {
   assert(NULL == fun->ret);
   assert(NULL == fun->start);
   assert(NULL == fun->rtype);
 
-  fun->ret = df_add_instruction(program,fun,OP_SPECIAL_RETURN,sloc);
-  fun->start = df_add_instruction(program,fun,OP_SPECIAL_PASS,sloc);
+  fun->ret = df_add_instruction(program,fun,OP_RETURN,sloc);
+  fun->start = df_add_instruction(program,fun,OP_PASS,sloc);
   fun->start->inports[0].seqtype = df_seqtype_new_atomic(program->schema->globals->int_type);
   fun->start->outports[0].dest = fun->ret;
   fun->start->outports[0].destp = 0;
@@ -477,7 +234,10 @@ df_function *df_new_function(df_program *program, const nsname ident)
 
   /* Create sequence instruction (not actually part of the program, but used by the map operator
      to collate results of inner function calls) */
-  fun->mapseq = df_add_instruction(program,fun,OP_SPECIAL_SEQUENCE,nosourceloc);
+  fun->mapseq = df_add_instruction(program,fun,OP_BUILTIN,nosourceloc);
+  fun->mapseq->bif =
+    df_lookup_builtin_function(program,nsname_temp(SPECIAL_NAMESPACE,"sequence"),2);
+  assert(NULL != fun->mapseq->bif);
   fun->mapseq->internal = 1;
   fun->mapseq->inports[0].seqtype =
     df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
@@ -531,135 +291,64 @@ df_instruction *df_add_instruction(df_program *program, df_function *fun, int op
   instr->fun = fun;
   instr->sloc = sourceloc_copy(sloc);
 
-  if (FN_OP_COUNT > opcode) {
-    instr->ninports = df_opdefs[opcode].nparams;
-    instr->inports = (df_inport*)calloc(instr->ninports,sizeof(df_inport));
-    for (i = 0; i < instr->ninports; i++)
-      instr->inports[i].seqtype =
-        df_get_seqtype_from_optype(program,&df_opdefs[opcode].paramtypes[i]);
+  switch (opcode) {
+  case OP_CONST:
+    instr->ninports = 1;
     instr->noutports = 1;
-    instr->outports = (df_outport*)calloc(1,sizeof(df_outport));
-    instr->outports[0].seqtype = df_get_seqtype_from_optype(program,&df_opdefs[opcode].rettype);
+    break;
+  case OP_DUP:
+    instr->ninports = 1;
+    instr->noutports = 2;
+    break;
+  case OP_SPLIT:
+    instr->ninports = 2;
+    instr->noutports = 3;
+    break;
+  case OP_MERGE:
+    instr->ninports = 2;
+    instr->noutports = 1;
+    break;
+  case OP_CALL:
+    instr->ninports = 1;
+    instr->noutports = 1;
+    break;
+  case OP_MAP:
+    instr->ninports = 1;
+    instr->noutports = 1;
+    break;
+  case OP_PASS:
+    instr->ninports = 1;
+    instr->noutports = 1;
+    break;
+  case OP_SWALLOW:
+    instr->ninports = 1;
+    instr->noutports = 0;
+    break;
+  case OP_RETURN:
+    instr->ninports = 1;
+    instr->noutports = 1;
+    break;
+  case OP_PRINT:
+    instr->ninports = 1;
+    instr->noutports = 0;
+    break;
+  case OP_GATE:
+    instr->ninports = 2;
+    instr->noutports = 1;
+    break;
+  case OP_BUILTIN:
+    instr->ninports = 1;
+    instr->noutports = 1;
+    break;
+  default:
+    assert(!"invalid opcode");
+    break;
   }
-  else {
 
-    switch (opcode) {
-    case OP_SPECIAL_CONST:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_DUP:
-      instr->ninports = 1;
-      instr->noutports = 2;
-      break;
-    case OP_SPECIAL_SPLIT:
-      instr->ninports = 2;
-      instr->noutports = 3;
-      break;
-    case OP_SPECIAL_MERGE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_CALL:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_MAP:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_PASS:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_SWALLOW:
-      instr->ninports = 1;
-      instr->noutports = 0;
-      break;
-    case OP_SPECIAL_RETURN:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_PRINT:
-      instr->ninports = 1;
-      instr->noutports = 0;
-      break;
-    case OP_SPECIAL_OUTPUT:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_SEQUENCE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_GATE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_DOCUMENT:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_ELEMENT:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_ATTRIBUTE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_PI:
-      /* FIXME */
-      break;
-    case OP_SPECIAL_COMMENT:
-      /* FIXME */
-      break;
-    case OP_SPECIAL_VALUE_OF:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_TEXT:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_NAMESPACE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_SELECT:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_SELECTROOT:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_FILTER:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_EMPTY:
-      instr->ninports = 1;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_CONTAINS_NODE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    case OP_SPECIAL_RANGE:
-      instr->ninports = 2;
-      instr->noutports = 1;
-      break;
-    default:
-      assert(!"invalid opcode");
-      break;
-    }
-
-    if (0 != instr->ninports)
-      instr->inports = (df_inport*)calloc(instr->ninports,sizeof(df_inport));
-    if (0 != instr->noutports)
-      instr->outports = (df_outport*)calloc(instr->noutports,sizeof(df_outport));
-  }
+  if (0 != instr->ninports)
+    instr->inports = (df_inport*)calloc(instr->ninports,sizeof(df_inport));
+  if (0 != instr->noutports)
+    instr->outports = (df_outport*)calloc(instr->noutports,sizeof(df_outport));
 
   for (i = 0; i < instr->noutports; i++) {
     instr->outports[i].owner = instr;
@@ -711,7 +400,7 @@ void df_free_instruction(df_instruction *instr)
       df_seqtype_deref(instr->outports[i].seqtype);
   free(instr->outports);
 
-  if (OP_SPECIAL_CONST == instr->opcode) {
+  if (OP_CONST == instr->opcode) {
 /*     debugl("df_free_instruction CONT: instr->cvalue = %p, with %d refs (before my deref)", */
 /*           instr->cvalue,instr->cvalue->refcount); */
     df_value_deref(instr->fun->program->schema->globals,instr->cvalue);
@@ -723,18 +412,44 @@ void df_free_instruction(df_instruction *instr)
   if (NULL != instr->seroptions)
     df_seroptions_free(instr->seroptions);
   list_free(instr->nsdefs,(void*)ns_def_free);
+  free(instr->str);
+  sourceloc_free(instr->sloc);
   free(instr);
 }
 
 const char *df_opstr(int opcode)
 {
-  if (FN_OP_COUNT >= opcode)
-    return df_opdefs[opcode].name;
-  else
-    return df_special_op_names[opcode-OP_SPECIAL_BASE];
+  return df_special_op_names[opcode];
 }
 
-df_program *df_program_new(xs_schema *schema)
+void df_free_builtin_function(df_builtin_function *bif)
+{
+  int i;
+  nsname_free(bif->ident);
+  for (i = 0; i < bif->nargs; i++)
+    df_seqtype_deref(bif->argtypes[i]);
+  free(bif->argtypes);
+  df_seqtype_deref(bif->rettype);
+  free(bif);
+}
+
+df_builtin_function *df_lookup_builtin_function(df_program *program, const nsname ident, int nargs)
+{
+  list *l;
+  debug("lookup: ident %#n, nargs %d\n",ident,nargs);
+  for (l = program->builtin_functions; l; l = l->next) {
+    df_builtin_function *bif = (df_builtin_function*)l->data;
+    debug("checking: ident %#n, nargs %d\n",bif->ident,bif->nargs);
+    if (nsname_equals(bif->ident,ident) && (bif->nargs == nargs)) {
+      debug("got it: %p\n",bif);
+      return bif;
+    }
+  }
+  debug("not found\n");
+  return NULL;
+}
+
+df_program *df_program_new(xs_schema *schema, gxfunctiondef ***modules)
 {
   df_program *program = (df_program*)calloc(1,sizeof(df_program));
   program->schema = schema;
@@ -745,6 +460,7 @@ void df_program_free(df_program *program)
 {
   list_free(program->functions,(void*)df_free_function);
   list_free(program->space_decls,(void*)space_decl_free);
+  list_free(program->builtin_functions,(void*)df_free_builtin_function);
   free(program);
 }
 
@@ -791,27 +507,27 @@ void df_output_dot(df_program *program, FILE *f)
       if (fun->mapseq == instr)
         continue;
 
-      if (OP_SPECIAL_DUP == instr->opcode) {
+      if (OP_DUP == instr->opcode) {
         fprintf(f,"    %s%d [label=\"\",style=filled,height=0.2,width=0.2,"
                 "fixedsize=true,color=\"#808080\",shape=circle];\n",fun->ident.name,instr->id);
       }
-      else if (OP_SPECIAL_GATE == instr->opcode) {
+      else if (OP_GATE == instr->opcode) {
         fprintf(f,"    %s%d [label=\"\",height=0.4,width=0.4,style=solid,"
                 "fixedsize=true,color=\"#808080\",shape=triangle];\n",fun->ident.name,instr->id);
       }
       else {
 
-        if (OP_SPECIAL_CONST == instr->opcode) {
+        if (OP_CONST == instr->opcode) {
           fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
           df_value_print(g,f,instr->cvalue);
           fprintf(f,"\",fillcolor=\"#FF8080\"];\n");
         }
-        else if (OP_SPECIAL_CALL == instr->opcode) {
+        else if (OP_CALL == instr->opcode) {
           fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
           fprintf(f,"call(%s)",instr->cfun->ident.name);
           fprintf(f,"\",fillcolor=\"#C0FFC0\"];\n");
         }
-        else if (OP_SPECIAL_MAP == instr->opcode) {
+        else if (OP_MAP == instr->opcode) {
           fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
           fprintf(f,"map(%s)",instr->cfun->ident.name);
           fprintf(f,"\",fillcolor=\"#FFFFC0\"];\n");
@@ -819,7 +535,8 @@ void df_output_dot(df_program *program, FILE *f)
         else {
           fprintf(f,"    %s%d [label=\"%d|",fun->ident.name,instr->id,instr->id);
 
-          if (OP_SPECIAL_SELECT == instr->opcode) {
+          if ((OP_BUILTIN == instr->opcode) &&
+              (nsname_equals(instr->bif->ident,nsname_temp(SPECIAL_NAMESPACE,"sequence")))) {
             fprintf(f,"select: ");
             if (NULL != instr->nametest) {
               fprintf(f,"%s",instr->nametest);
@@ -831,7 +548,7 @@ void df_output_dot(df_program *program, FILE *f)
               fprintf(f,"%s",buf->data);
               stringbuf_free(buf);
             }
-            fprintf(f,"\\n[%s]",df_axis_types[instr->axis]);
+/*             fprintf(f,"\\n[%s]",df_axis_types[instr->axis]); */
           }
           else {
             fprintf(f,"%s",df_opstr(instr->opcode));
@@ -854,13 +571,13 @@ void df_output_dot(df_program *program, FILE *f)
 
           fprintf(f,"\"");
 
-          if (OP_SPECIAL_DUP == instr->outports[i].dest->opcode)
+          if (OP_DUP == instr->outports[i].dest->opcode)
             fprintf(f,",color=\"#808080\",arrowhead=none");
-          else if (OP_SPECIAL_DUP == instr->opcode)
+          else if (OP_DUP == instr->opcode)
             fprintf(f,",color=\"#808080\"");
           else if ((2 == i) &&
-                   (OP_SPECIAL_SPLIT == instr->opcode) &&
-                   (OP_SPECIAL_MERGE == instr->outports[i].dest->opcode))
+                   (OP_SPLIT == instr->opcode) &&
+                   (OP_MERGE == instr->outports[i].dest->opcode))
             fprintf(f,",style=dashed");
 
           fprintf(f,"];\n");
@@ -904,7 +621,7 @@ void df_output_df(df_program *program, FILE *f)
         continue;
 
       fprintf(f,"  %-5d %-20s",instr->id,df_opstr(instr->opcode));
-      if (OP_SPECIAL_RETURN != instr->opcode) {
+      if (OP_RETURN != instr->opcode) {
         for (i = 0; i < instr->noutports; i++) {
           if (0 < i)
             fprintf(f," ");
@@ -913,7 +630,7 @@ void df_output_df(df_program *program, FILE *f)
         }
       }
 
-      if (OP_SPECIAL_CONST == instr->opcode) {
+      if (OP_CONST == instr->opcode) {
         assert(SEQTYPE_ITEM == instr->cvalue->seqtype->type);
         assert(ITEM_ATOMIC == instr->cvalue->seqtype->item->kind);
 

@@ -489,7 +489,7 @@ static gxvalue *element(gxcontext *ctxt, gxvalue **args)
 
   /* FIXME: namespace (should be received on an input port) - what about prefix? */
 
-  debug("OP_SPECIAL_ELEMENT %p (\"%s\"): %d items in child sequence\n",
+  debug("element %p (\"%s\"): %d items in child sequence\n",
         elemvalue,elem->ident.name,list_count(values));
   if (0 != df_construct_complex_content(ctxt->ei,ctxt->sloc,ctxt->g,values,elem)) {
     vderef(elemvalue);

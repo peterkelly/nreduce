@@ -162,7 +162,7 @@ int xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s);
 char *escape_str(const char *s);
 int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr n,
                                const char *restrictns, const nsname *stdattrs, ...);
-int is_all_whitespace(const char *s);
+int is_all_whitespace(const char *s, int len);
 
 
 

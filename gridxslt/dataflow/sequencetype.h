@@ -80,6 +80,8 @@ typedef struct df_seqtype df_seqtype;
 typedef struct df_seqpair df_seqpair;
 typedef struct df_node df_node;
 typedef struct df_value df_value;
+typedef df_value gxvalue;
+typedef df_node gxnode;
 
 struct df_itemtype {
   int kind;
@@ -144,6 +146,23 @@ struct df_value {
   int refcount;
 };
 
+#define asint(_v) ((_v)->value.i)
+#define asfloat(_v) ((_v)->value.f)
+#define asdouble(_v) ((_v)->value.d)
+#define asstring(_v) ((_v)->value.s)
+#define asbool(_v) ((_v)->value.b)
+#define asnode(_v) ((_v)->value.n)
+
+#define mkint(_v) df_value_new_int(ctxt->g,_v)
+#define mkfloat(_v) df_value_new_float(ctxt->g,_v)
+#define mkdouble(_v) df_value_new_double(ctxt->g,_v)
+#define mkstring(_v) df_value_new_string(ctxt->g,_v)
+#define mkbool(_v) df_value_new_bool(ctxt->g,_v)
+#define mknode(_v) df_value_new_node(_v)
+
+#define vref(_v) df_value_ref(_v)
+#define vderef(_v) df_value_deref(ctxt->g,_v)
+
 df_itemtype *df_itemtype_new(int kind);
 df_seqtype *df_seqtype_new(int type);
 df_seqtype *df_seqtype_new_item(int kind);
@@ -177,15 +196,18 @@ void df_node_add_child(df_node *n, df_node *c);
 void df_node_insert_child(df_node *n, df_node *c, df_node *before);
 void df_node_add_attribute(df_node *n, df_node *attr);
 void df_node_add_namespace(df_node *n, df_node *ns);
-df_value *df_node_to_value(df_node *n);
 df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v);
 df_node *df_node_from_xmlnode(xmlNodePtr xn);
 int df_check_tree(df_node *n);
 df_node *df_prev_node(df_node *node, df_node *subtree);
 df_node *df_next_node(df_node *node, df_node *subtree);
 
-df_value *df_value_new_string(xs_globals *g, const char *str);
 df_value *df_value_new_int(xs_globals *g, int i);
+df_value *df_value_new_float(xs_globals *g, float f);
+df_value *df_value_new_double(xs_globals *g, double d);
+df_value *df_value_new_string(xs_globals *g, const char *str);
+df_value *df_value_new_bool(xs_globals *g, int b);
+df_value *df_value_new_node(df_node *n);
 
 df_value *df_value_new(df_seqtype *seqtype);
 df_value *df_value_ref(df_value *v);
@@ -195,6 +217,7 @@ void df_value_print(xs_globals *globals, FILE *f, df_value *v);
 void df_value_deref(xs_globals *globals, df_value *v);
 void df_value_deref_list(xs_globals *globals, list *l);
 int df_value_equals(df_value *a, df_value *b);
+df_value **df_sequence_to_array(df_value *seq);
 void df_get_sequence_values(df_value *v, list **values);
 list *df_sequence_to_list(df_value *seq);
 df_value *df_list_to_sequence(xs_globals *g, list *values);

@@ -491,7 +491,7 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
       /* must be a string; see previous step */
       df_node *n = df_node_new(NODE_TEXT);
       n->value = strdup(v->value.s);
-      list_append(&s4,df_node_to_value(n));
+      list_append(&s4,df_value_new_node(n));
     }
     else {
       list_append(&s4,df_value_ref(v));
@@ -505,7 +505,7 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
     if (ITEM_DOCUMENT == v->seqtype->item->kind) {
       df_node *c;
       for (c = v->value.n->first_child; c; c = c->next)
-        list_append(&s5,df_node_to_value(c));
+        list_append(&s5,df_value_new_node(c));
     }
     else {
       list_append(&s5,df_value_ref(v));
@@ -534,7 +534,7 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
       if (1 < buf->size) {
         df_node *text = df_node_new(NODE_TEXT);
         text->value = strdup(buf->data);
-        list_append(&s6,df_node_to_value(text));
+        list_append(&s6,df_value_new_node(text));
       }
 
       stringbuf_free(buf);
@@ -584,7 +584,7 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
   list_free(s6,NULL);
 
   if (0 == r)
-    return df_node_to_value(doc);
+    return df_value_new_node(doc);
   else
     return NULL;
 }
@@ -606,7 +606,7 @@ static void number_node(df_node *n, int *num)
 static void dump_tree(df_node *n, int indent)
 {
   df_node *c;
-  if ((NULL != n->value) && !is_all_whitespace(n->value))
+  if ((NULL != n->value) && !is_all_whitespace(n->value,strlen(n->value)))
     debug("%#i%d %s \"%s\"\n",2*indent,n->nodeno,df_item_kinds[n->type],n->value);
   else
     debug("%#i%d %s %#n\n",2*indent,n->nodeno,df_item_kinds[n->type],n->ident);
@@ -779,7 +779,7 @@ void df_strip_spaces(df_node *n, list *space_decls)
   int strip = ((NODE_ELEMENT == n->type) && !space_decl_preserve(space_decls,n->ident));
   while (c) {
 
-    if ((NODE_TEXT == c->type) && strip && is_all_whitespace(c->value)) {
+    if ((NODE_TEXT == c->type) && strip && is_all_whitespace(c->value,strlen(c->value))) {
       df_node *next = c->next;
       if (n->first_child == c)
         n->first_child = c->next;

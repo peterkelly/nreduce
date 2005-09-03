@@ -39,7 +39,7 @@ void df_check_portsmatch(df_program *program, df_function *fun)
     }
     for (i = 0; i < instr->noutports; i++) {
       if ((NULL != instr->outports[i].dest) &&
-          (OP_SPECIAL_MERGE != instr->outports[i].dest->opcode)) {
+          (OP_MERGE != instr->outports[i].dest->opcode)) {
         df_inport *inport = &instr->outports[i].dest->inports[instr->outports[i].destp];
 
 
@@ -75,7 +75,7 @@ int df_check_function_connected(df_function *fun)
 
 
       if ((NULL == instr->outports[i].dest) &&
-          (OP_SPECIAL_RETURN != instr->opcode)) {
+          (OP_RETURN != instr->opcode)) {
         fprintf(stderr,"Output port %s:%d.%d (of %p %s) is not connected\n",
                 fun->ident.name,instr->id,i,instr,df_opstr(instr->opcode));
         return -1;

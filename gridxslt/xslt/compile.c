@@ -21,10 +21,10 @@
  */
 
 #include "compile.h"
+#include "builtins.h"
 #include "util/list.h"
 #include "util/macros.h"
 #include "util/debug.h"
-#include "dataflow/funops.h"
 #include "dataflow/optimization.h"
 #include "dataflow/validity.h"
 #include <assert.h>
@@ -80,11 +80,33 @@ static void set_and_move_cursor(df_outport **cursor, df_instruction *destinstr, 
   *cursor = &newpos->outports[newdestno];
 }
 
-static int xslt_compile_binary_op(compilation *comp, df_function *fun, xp_expr *e,
-                              df_outport **cursor, int opcode)
+static df_instruction *specialop(compilation *comp, df_function *fun, char *ns, char *name,
+                                 int nargs, sourceloc sloc)
 {
-  df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,e->sloc);
-  df_instruction *binop = df_add_instruction(comp->program,fun,opcode,e->sloc);
+  df_instruction *call;
+  df_builtin_function *bif =
+    df_lookup_builtin_function(comp->program,
+                               nsname_temp(ns,name),nargs);
+  if (NULL == bif) {
+    fprintf(stderr,"FATAL: compiler attempted to use unknown function {%s}%s [%d args]\n",
+            ns,name,nargs);
+    exit(1);
+  }
+  call = df_add_instruction(comp->program,fun,OP_BUILTIN,sloc);
+  call->bif = bif;
+
+  df_free_instruction_inports(call);
+  call->ninports = nargs;
+  call->inports = (df_inport*)calloc(call->ninports,sizeof(df_inport));
+
+  return call;
+}
+
+static int xslt_compile_binary_op(compilation *comp, df_function *fun, xp_expr *e,
+                              df_outport **cursor, char *ns, char *name)
+{
+  df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,e->sloc);
+  df_instruction *binop = specialop(comp,fun,ns,name,2,e->sloc);
   df_outport *left_cursor = &dup->outports[0];
   df_outport *right_cursor = &dup->outports[1];
 
@@ -130,20 +152,20 @@ static void df_use_var(compilation *comp, df_function *fun, df_outport *outport,
   df_outport *finalout = NULL;
 
   if (need_gate) {
-    df_instruction *gate = df_add_instruction(comp->program,fun,OP_SPECIAL_GATE,sloc);
+    df_instruction *gate = df_add_instruction(comp->program,fun,OP_GATE,sloc);
     set_and_move_cursor(cursor,gate,1,gate,0);
     dest = gate;
     destp = 0;
   }
 
-  if (OP_SPECIAL_SWALLOW == outport->dest->opcode) {
+  if (OP_SWALLOW == outport->dest->opcode) {
     df_delete_instruction(comp->program,fun,outport->dest);
     outport->dest = dest;
     outport->destp = destp;
     finalout = outport;
   }
   else {
-    df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sloc);
+    df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sloc);
     dup->outports[0].dest = outport->dest;
     dup->outports[0].destp = outport->destp;
     dup->outports[1].dest = dest;
@@ -154,7 +176,7 @@ static void df_use_var(compilation *comp, df_function *fun, df_outport *outport,
   }
 
   if (!need_gate) {
-    df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SPECIAL_SWALLOW,sloc);
+    df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SWALLOW,sloc);
     (*cursor)->dest = swallow;
     (*cursor)->destp = 0;
   }
@@ -186,7 +208,7 @@ static df_outport *resolve_var_to_outport(df_function *fun, xp_expr *varref)
 static void xslt_compile_string(compilation *comp, df_function *fun, char *str,
                                 df_outport **cursor, sourceloc sloc)
 {
-  df_instruction *instr = df_add_instruction(comp->program,fun,OP_SPECIAL_CONST,sloc);
+  df_instruction *instr = df_add_instruction(comp->program,fun,OP_CONST,sloc);
   instr->outports[0].seqtype = df_seqtype_new_atomic(comp->globals->string_type);
   instr->cvalue = df_value_new(instr->outports[0].seqtype);
   instr->cvalue->value.s = strdup(str);
@@ -301,8 +323,8 @@ static void init_param_instructions(compilation *comp, df_function *fun,
   int paramno;
 
   for (paramno = 0; paramno < fun->nparams; paramno++) {
-    df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SPECIAL_SWALLOW,nosourceloc);
-    df_instruction *pass = df_add_instruction(comp->program,fun,OP_SPECIAL_PASS,nosourceloc);
+    df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SWALLOW,nosourceloc);
+    df_instruction *pass = df_add_instruction(comp->program,fun,OP_PASS,nosourceloc);
 
 
     if ((NULL != seqtypes) && (NULL != seqtypes[paramno])) {
@@ -357,7 +379,7 @@ static int xslt_compile_innerfun(compilation *comp, df_function *fun, xl_snode *
      each item in the input sequence. The number of input ports of the instruction
      corresponds to the number of parameters of the inner function, i.e. the number of
      variables and parameters from *outside* the code block that it references */
-  map = df_add_instruction(comp->program,fun,OP_SPECIAL_MAP,sloc);
+  map = df_add_instruction(comp->program,fun,OP_MAP,sloc);
   map->cfun = innerfun;
   df_free_instruction_inports(map);
   map->ninports = innerfun->nparams+1;
@@ -368,7 +390,7 @@ static int xslt_compile_innerfun(compilation *comp, df_function *fun, xl_snode *
   varno = 0;
   for (l = vars; l; l = l->next) {
     var_reference *vr = (var_reference*)l->data;
-    df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sloc);
+    df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sloc);
     df_outport *varcur = &dup->outports[1];
 
     assert(NULL != vr->top_outport);
@@ -385,8 +407,8 @@ static int xslt_compile_innerfun(compilation *comp, df_function *fun, xl_snode *
   /* FIXME: pass types for each parameter */
   init_param_instructions(comp,innerfun,NULL,NULL);
 
-  innerfun->ret = df_add_instruction(comp->program,innerfun,OP_SPECIAL_RETURN,sloc);
-  innerfun->start = df_add_instruction(comp->program,innerfun,OP_SPECIAL_PASS,sloc);
+  innerfun->ret = df_add_instruction(comp->program,innerfun,OP_RETURN,sloc);
+  innerfun->start = df_add_instruction(comp->program,innerfun,OP_PASS,sloc);
 
   /* FIXME: set correct type based on cursor's type */
   innerfun->start->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
@@ -429,9 +451,9 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     assert(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_IF: {
-    df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,e->sloc);
-    df_instruction *split = df_add_instruction(comp->program,fun,OP_SPECIAL_SPLIT,e->sloc);
-    df_instruction *merge = df_add_instruction(comp->program,fun,OP_SPECIAL_MERGE,e->sloc);
+    df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,e->sloc);
+    df_instruction *split = df_add_instruction(comp->program,fun,OP_SPLIT,e->sloc);
+    df_instruction *merge = df_add_instruction(comp->program,fun,OP_MERGE,e->sloc);
     df_outport *false_cursor = &split->outports[0];
     df_outport *true_cursor = &split->outports[1];
     df_outport *cond_cursor = &dup->outports[0];
@@ -493,25 +515,22 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
   case XPATH_EXPR_COMPARE_GENERAL:
     switch (e->compare) {
     case XPATH_GENERAL_COMP_EQ:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_EQUAL))
+      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
       break;
     case XPATH_GENERAL_COMP_NE:
       assert(!"not yet implemented"); /* FIXME */
-/*       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NE)) */
       break;
     case XPATH_GENERAL_COMP_LT:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_LESS_THAN))
+      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
       break;
     case XPATH_GENERAL_COMP_LE:
       assert(!"not yet implemented"); /* FIXME */
-/*       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_LE)) */
       break;
     case XPATH_GENERAL_COMP_GT:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_GREATER_THAN))
+      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
       break;
     case XPATH_GENERAL_COMP_GE:
       assert(!"not yet implemented"); /* FIXME */
-/*       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_GE)) */
       break;
     default:
       assert(0);
@@ -535,24 +554,24 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     }
     break;
   case XPATH_EXPR_TO:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_SPECIAL_RANGE))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,SPECIAL_NAMESPACE,"range"))
     break;
   case XPATH_EXPR_ADD:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_ADD))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-add"))
     break;
   case XPATH_EXPR_SUBTRACT:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_SUBTRACT))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-subtract"))
     break;
   case XPATH_EXPR_MULTIPLY:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_MULTIPLY))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-multiply"))
     break;
   case XPATH_EXPR_DIVIDE:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_DIVIDE))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-divide"))
     break;
   case XPATH_EXPR_IDIVIDE:
     break;
   case XPATH_EXPR_MOD:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,OP_NUMERIC_MOD))
+    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-mode"))
     break;
   case XPATH_EXPR_UNION:
     assert(!"not yet implemented"); /* FIXME */
@@ -585,7 +604,7 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     assert(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_ROOT: {
-    df_instruction *root = df_add_instruction(comp->program,fun,OP_SPECIAL_SELECTROOT,e->sloc);
+    df_instruction *root = specialop(comp,fun,SPECIAL_NAMESPACE,"select-root",1,e->sloc);
     set_and_move_cursor(cursor,root,0,root,0);
     if (NULL != e->left)
       CHECK_CALL(xslt_compile_expr(comp,fun,e->left,cursor))
@@ -596,7 +615,7 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     break;
   }
   case XPATH_EXPR_INTEGER_LITERAL: {
-    df_instruction *instr = df_add_instruction(comp->program,fun,OP_SPECIAL_CONST,e->sloc);
+    df_instruction *instr = df_add_instruction(comp->program,fun,OP_CONST,e->sloc);
     instr->outports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
     instr->cvalue = df_value_new(instr->outports[0].seqtype);
     instr->cvalue->value.i = e->ival;
@@ -633,7 +652,7 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     /* just gets passed through */
     break;
   case XPATH_EXPR_NODE_TEST: {
-    df_instruction *select = df_add_instruction(comp->program,fun,OP_SPECIAL_SELECT,e->sloc);
+    df_instruction *select = specialop(comp,fun,SPECIAL_NAMESPACE,"select",1,e->sloc);
     select->axis = e->axis;
 
     if (XPATH_NODE_TEST_NAME == e->nodetest) {
@@ -661,6 +680,10 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     char *name = NULL;
     int nparams = 0;
     int found = 0;
+    int supparam = 0;
+
+    for (p = e->left; p; p = p->right)
+      supparam++;
 
     /* FIXME: we shouldn't hard-code this prefix; it may be bound to something else, or
        there may be a different prefix bound to the functions and operators namespace. We
@@ -670,11 +693,14 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
 
 
     if ((NULL == e->qn.prefix) || !strcmp(e->qn.prefix,"fn")) {
-      int opid = df_get_op_id(e->qn.localpart);
-      if (0 <= opid) {
-        call = df_add_instruction(comp->program,fun,opid,e->sloc);
-        nparams = df_opdefs[opid].nparams;
-        name = df_opdefs[opid].name;
+      df_builtin_function *bif =
+        df_lookup_builtin_function(comp->program,
+                                   nsname_temp(FN_NAMESPACE,e->qn.localpart),supparam);
+      if (NULL != bif) {
+        call = df_add_instruction(comp->program,fun,OP_BUILTIN,e->sloc);
+        call->bif = bif;
+        nparams = supparam;
+        name = e->qn.prefix;
         found = 1;
       }
     }
@@ -688,7 +714,7 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
         return -1;
       }
 
-      call = df_add_instruction(comp->program,fun,OP_SPECIAL_CALL,e->sloc);
+      call = df_add_instruction(comp->program,fun,OP_CALL,e->sloc);
       call->cfun = cfun;
 
       nparams = call->cfun->nparams;
@@ -707,7 +733,7 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
         df_outport *param_cursor = NULL; /* FIXME */
 
         if (paramno < nparams-1) {
-          df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,e->sloc);
+          df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,e->sloc);
           source->dest = dup;
           source->destp = 0;
           source = &dup->outports[0];
@@ -748,8 +774,8 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     assert(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_SEQUENCE: {
-    df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,e->sloc);
-    df_instruction *seq = df_add_instruction(comp->program,fun,OP_SPECIAL_SEQUENCE,e->sloc);
+    df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,e->sloc);
+    df_instruction *seq = specialop(comp,fun,SPECIAL_NAMESPACE,"sequence",2,e->sloc);
     df_outport *leftcur = &dup->outports[0];
     df_outport *rightcur = &dup->outports[1];
 
@@ -792,9 +818,9 @@ static int xslt_compile_conditional(compilation *comp, df_function *fun, df_outp
                                     df_outport **condcur, df_outport **truecur,
                                     df_outport **falsecur, sourceloc sloc)
 {
-  df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sloc);
-  df_instruction *split = df_add_instruction(comp->program,fun,OP_SPECIAL_SPLIT,sloc);
-  df_instruction *merge = df_add_instruction(comp->program,fun,OP_SPECIAL_MERGE,sloc);
+  df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sloc);
+  df_instruction *split = df_add_instruction(comp->program,fun,OP_SPLIT,sloc);
+  df_instruction *merge = df_add_instruction(comp->program,fun,OP_MERGE,sloc);
 
   set_and_move_cursor(cursor,dup,0,merge,0);
 
@@ -835,7 +861,7 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
           CHECK_CALL(xslt_compile_expr(comp,fun,sn->select,cursor))
         }
         else {
-          df_instruction *select = df_add_instruction(comp->program,fun,OP_SPECIAL_SELECT,sn->sloc);
+          df_instruction *select = specialop(comp,fun,SPECIAL_NAMESPACE,"select",1,sn->sloc);
           select->axis = AXIS_CHILD;
           select->seqtypetest = df_normalize_itemnode(0);
           set_and_move_cursor(cursor,select,0,select,0);
@@ -845,8 +871,8 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
       }
       break;
     case XSLT_INSTR_ATTRIBUTE: {
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
-      df_instruction *attr = df_add_instruction(comp->program,fun,OP_SPECIAL_ATTRIBUTE,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
+      df_instruction *attr = specialop(comp,fun,SPECIAL_NAMESPACE,"attribute",2,sn->sloc);
       df_outport *namecur = &dup->outports[0];
       df_outport *childcur = &dup->outports[1];
       if (NULL != sn->name_expr) {
@@ -898,7 +924,7 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
       }
 
       if (!otherwise) {
-        df_instruction *empty = df_add_instruction(comp->program,fun,OP_SPECIAL_EMPTY,sn->sloc);
+        df_instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,sn->sloc);
         set_and_move_cursor(branchcur,empty,0,empty,0);
       }
 
@@ -911,8 +937,8 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
     case XSLT_INSTR_COPY_OF:
       break;
     case XSLT_INSTR_ELEMENT: {
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
-      df_instruction *elem = df_add_instruction(comp->program,fun,OP_SPECIAL_ELEMENT,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
+      df_instruction *elem = specialop(comp,fun,SPECIAL_NAMESPACE,"element",2,sn->sloc);
       df_outport *namecur = &dup->outports[0];
       df_outport *childcur = &dup->outports[1];
       if (NULL != sn->name_expr) {
@@ -977,8 +1003,8 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
     case XSLT_INSTR_MESSAGE:
       break;
     case XSLT_INSTR_NAMESPACE: {
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
-      df_instruction *ns = df_add_instruction(comp->program,fun,OP_SPECIAL_NAMESPACE,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
+      df_instruction *ns = specialop(comp,fun,SPECIAL_NAMESPACE,"namespace",2,sn->sloc);
       df_outport *prefixcur = &dup->outports[0];
       df_outport *hrefcur = &dup->outports[1];
 
@@ -1010,14 +1036,14 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
       CHECK_CALL(xslt_compile_expr(comp,fun,sn->select,cursor))
       break;
     case XSLT_INSTR_TEXT: {
-      df_instruction *text = df_add_instruction(comp->program,fun,OP_SPECIAL_TEXT,sn->sloc);
+      df_instruction *text = specialop(comp,fun,SPECIAL_NAMESPACE,"text",1,sn->sloc);
       text->str = strdup(sn->strval);
       set_and_move_cursor(cursor,text,0,text,0);
       break;
     }
     case XSLT_INSTR_VALUE_OF: {
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
-      df_instruction *valueof = df_add_instruction(comp->program,fun,OP_SPECIAL_VALUE_OF,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
+      df_instruction *valueof = specialop(comp,fun,SPECIAL_NAMESPACE,"value-of",2,sn->sloc);
       df_outport *valuecur = &dup->outports[0];
       df_outport *sepcur = &dup->outports[1];
 
@@ -1058,9 +1084,9 @@ static int xslt_compile_sequence(compilation *comp, df_function *fun, xl_snode *
   for (sn = parent->child; sn; sn = sn->next) {
 
     if (XSLT_VARIABLE == sn->type) {
-      df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SPECIAL_SWALLOW,sn->sloc);
-      df_instruction *pass = df_add_instruction(comp->program,fun,OP_SPECIAL_PASS,sn->sloc);
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
+      df_instruction *swallow = df_add_instruction(comp->program,fun,OP_SWALLOW,sn->sloc);
+      df_instruction *pass = df_add_instruction(comp->program,fun,OP_PASS,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
       df_outport *varcur = &dup->outports[1];
 /*       printf("variable declaration: %s\n",sn->qn.localpart); */
       set_and_move_cursor(cursor,dup,0,dup,0);
@@ -1072,7 +1098,7 @@ static int xslt_compile_sequence(compilation *comp, df_function *fun, xl_snode *
         CHECK_CALL(xslt_compile_expr(comp,fun,sn->select,&varcur))
       }
       else {
-        df_instruction *docinstr = df_add_instruction(comp->program,fun,OP_SPECIAL_DOCUMENT,sn->sloc);
+        df_instruction *docinstr = specialop(comp,fun,SPECIAL_NAMESPACE,"document",1,sn->sloc);
         docinstr->outports[0].dest = pass;
         docinstr->outports[0].destp = 0;
         varcur->dest = docinstr;
@@ -1082,8 +1108,8 @@ static int xslt_compile_sequence(compilation *comp, df_function *fun, xl_snode *
       sn->outp = &pass->outports[0];
     }
     else if (sn->next) {
-      df_instruction *dup = df_add_instruction(comp->program,fun,OP_SPECIAL_DUP,sn->sloc);
-      df_instruction *seq = df_add_instruction(comp->program,fun,OP_SPECIAL_SEQUENCE,sn->sloc);
+      df_instruction *dup = df_add_instruction(comp->program,fun,OP_DUP,sn->sloc);
+      df_instruction *seq = specialop(comp,fun,SPECIAL_NAMESPACE,"sequence",2,sn->sloc);
 
       seq->outports[0].dest = (*cursor)->dest;
       seq->outports[0].destp = (*cursor)->destp;
@@ -1108,7 +1134,7 @@ static int xslt_compile_sequence(compilation *comp, df_function *fun, xl_snode *
   }
 
   if (!havecontent) {
-    df_instruction *empty = df_add_instruction(comp->program,fun,OP_SPECIAL_EMPTY,parent->sloc);
+    df_instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,parent->sloc);
     set_and_move_cursor(cursor,empty,0,empty,0);
   }
 
@@ -1159,8 +1185,8 @@ static int xslt_compile_function(compilation *comp, xl_snode *sn, df_function *f
   }
 
   /* Add wrapper instructions */
-  fun->ret = df_add_instruction(comp->program,fun,OP_SPECIAL_RETURN,sn->sloc);
-  fun->start = df_add_instruction(comp->program,fun,OP_SPECIAL_PASS,sn->sloc);
+  fun->ret = df_add_instruction(comp->program,fun,OP_RETURN,sn->sloc);
+  fun->start = df_add_instruction(comp->program,fun,OP_PASS,sn->sloc);
   fun->start->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
 
   cursor = &fun->start->outports[0];
@@ -1199,14 +1225,13 @@ static int xslt_compile_apply_function(compilation *comp,
 
   for (l = templates; l; l = l->next) {
     template *t = (template*)l->data;
-    df_instruction *call = df_add_instruction(comp->program,innerfun,OP_SPECIAL_CALL,nosourceloc);
+    df_instruction *call = df_add_instruction(comp->program,innerfun,OP_CALL,nosourceloc);
 
-    df_instruction *dup = df_add_instruction(comp->program,innerfun,OP_SPECIAL_DUP,nosourceloc);
-    df_instruction *contains = df_add_instruction(comp->program,innerfun,OP_SPECIAL_CONTAINS_NODE,
-                                                  nosourceloc);
-    df_instruction *root = df_add_instruction(comp->program,innerfun,FN_ROOT2,nosourceloc);
-    df_instruction *select = df_add_instruction(comp->program,innerfun,OP_SPECIAL_SELECT,
-                                                nosourceloc);
+    df_instruction *dup = df_add_instruction(comp->program,innerfun,OP_DUP,nosourceloc);
+    df_instruction *contains = specialop(comp,innerfun,SPECIAL_NAMESPACE,"contains-node",2,
+                                         nosourceloc);
+    df_instruction *root = specialop(comp,innerfun,FN_NAMESPACE,"root",1,nosourceloc);
+    df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     select->axis = AXIS_DESCENDANT_OR_SELF;
     select->seqtypetest = df_normalize_itemnode(0);
 
@@ -1233,10 +1258,10 @@ static int xslt_compile_apply_function(compilation *comp,
 
   /* default template for document and element nodes */
   {
-    df_instruction *select = df_add_instruction(comp->program,innerfun,OP_SPECIAL_SELECT,nosourceloc);
-    df_instruction *isempty = df_add_instruction(comp->program,innerfun,FN_EMPTY,nosourceloc);
-    df_instruction *not = df_add_instruction(comp->program,innerfun,FN_NOT,nosourceloc);
-    df_instruction *childsel = df_add_instruction(comp->program,innerfun,OP_SPECIAL_SELECT,nosourceloc);
+    df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    df_instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
+    df_instruction *not = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    df_instruction *childsel = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     df_seqtype *doctype = df_seqtype_new_item(ITEM_DOCUMENT);
     df_seqtype *elemtype = df_seqtype_new_item(ITEM_ELEMENT);
 
@@ -1261,10 +1286,10 @@ static int xslt_compile_apply_function(compilation *comp,
 
   /* default template for text and attribute nodes */
   {
-    df_instruction *select = df_add_instruction(comp->program,innerfun,OP_SPECIAL_SELECT,nosourceloc);
-    df_instruction *isempty = df_add_instruction(comp->program,innerfun,FN_EMPTY,nosourceloc);
-    df_instruction *not = df_add_instruction(comp->program,innerfun,FN_NOT,nosourceloc);
-    df_instruction *string = df_add_instruction(comp->program,innerfun,FN_STRING2,nosourceloc);
+    df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    df_instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
+    df_instruction *not = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    df_instruction *string = specialop(comp,innerfun,FN_NAMESPACE,"string",1,nosourceloc);
     df_seqtype *texttype = df_seqtype_new_item(ITEM_TEXT);
     df_seqtype *attrtype = df_seqtype_new_item(ITEM_ATTRIBUTE);
 
@@ -1284,7 +1309,7 @@ static int xslt_compile_apply_function(compilation *comp,
     branchcur = &falsecur;
   }
 
-  empty = df_add_instruction(comp->program,innerfun,OP_SPECIAL_EMPTY,nosourceloc);
+  empty = specialop(comp,innerfun,SPECIAL_NAMESPACE,"empty",1,nosourceloc);
   set_and_move_cursor(branchcur,empty,0,empty,0);
 
   *ifout = innerfun;
@@ -1333,7 +1358,7 @@ static int xslt_compile_apply_templates(compilation *comp, df_function *fun,
     CHECK_CALL(xslt_compile_apply_function(comp,templates,&applyfun,mode))
 
   /* Add the map instruction */
-  map = df_add_instruction(comp->program,fun,OP_SPECIAL_MAP,sloc);
+  map = df_add_instruction(comp->program,fun,OP_MAP,sloc);
   map->cfun = applyfun;
   set_and_move_cursor(cursor,map,0,map,0);
 
@@ -1359,9 +1384,9 @@ static list *xslt_compile_ordered_template_list(compilation *comp)
 static int xslt_compile_default_template(compilation *comp)
 {
   df_function *fun = df_new_function(comp->program,nsname_temp(NULL,"default"));
-  df_instruction *pass = df_add_instruction(comp->program,fun,OP_SPECIAL_PASS,nosourceloc);
-  df_instruction *ret = df_add_instruction(comp->program,fun,OP_SPECIAL_RETURN,nosourceloc);
-  df_instruction *output = df_add_instruction(comp->program,fun,OP_SPECIAL_OUTPUT,nosourceloc);
+  df_instruction *pass = df_add_instruction(comp->program,fun,OP_PASS,nosourceloc);
+  df_instruction *ret = df_add_instruction(comp->program,fun,OP_RETURN,nosourceloc);
+  df_instruction *output = specialop(comp,fun,SPECIAL_NAMESPACE,"output",1,nosourceloc);
   df_outport *atcursor;
   df_seroptions *options;
 
@@ -1461,13 +1486,34 @@ static int xslt_compile2(compilation *comp)
   return 0;
 }
 
+
+extern gxfunctiondef *special_module;
+extern gxfunctiondef *string_module;
+extern gxfunctiondef *sequence_module;
+extern gxfunctiondef *node_module;
+extern gxfunctiondef *boolean_module;
+extern gxfunctiondef *numeric_module;
+extern gxfunctiondef *accessor_module;
+
+static gxfunctiondef **modules[8] = {
+  &special_module,
+  &string_module,
+  &sequence_module,
+  &node_module,
+  &boolean_module,
+  &numeric_module,
+  &accessor_module,
+  NULL
+};
+
+
 int xslt_compile(error_info *ei, xslt_source *source, df_program **program)
 {
   int r;
   compilation comp;
 
   memset(&comp,0,sizeof(comp));
-  *program = df_program_new(source->schema);
+  *program = df_program_new(source->schema,modules);
 
   comp.ei = ei;
   comp.source = source;
@@ -1475,6 +1521,8 @@ int xslt_compile(error_info *ei, xslt_source *source, df_program **program)
   comp.globals = source->globals;
   comp.schema = source->schema;
   comp.templates = xslt_compile_ordered_template_list(&comp);
+
+  df_init_builtin_functions(comp.program->schema,&comp.program->builtin_functions,modules);
 
   r = xslt_compile2(&comp);
 

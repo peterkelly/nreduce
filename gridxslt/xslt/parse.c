@@ -75,7 +75,8 @@ static void xslt_skip_others(xmlNodePtr *c)
   while ((*c) &&
          ((XML_COMMENT_NODE == (*c)->type) ||
           (XML_PI_NODE == (*c)->type) ||
-          ((XML_TEXT_NODE == (*c)->type) && is_all_whitespace((*c)->content))))
+          ((XML_TEXT_NODE == (*c)->type) &&
+           is_all_whitespace((*c)->content,strlen((*c)->content)))))
     (*c) = (*c)->next;
 }
 

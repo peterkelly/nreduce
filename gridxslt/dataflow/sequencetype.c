@@ -22,7 +22,6 @@
 
 #include "sequencetype.h"
 #include "dataflow.h"
-#include "funops.h"
 #include "util/macros.h"
 #include "util/namespace.h"
 #include "util/debug.h"
@@ -836,15 +835,6 @@ void df_node_add_namespace(df_node *n, df_node *ns)
   ns->parent = n;
 }
 
-df_value *df_node_to_value(df_node *n)
-{
-  df_seqtype *st = df_seqtype_new_item(n->type);
-  df_value *v = df_value_new(st);
-  df_seqtype_deref(st);
-  v->value.n = df_node_ref(n);
-  return v;
-}
-
 df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v)
 {
   df_node *text = df_node_new(NODE_TEXT);
@@ -988,23 +978,57 @@ df_node *df_next_node(df_node *node, df_node *subtree)
   return NULL;
 }
 
-df_value *df_value_new_string(xs_globals *g, const char *str)
+df_value *df_value_new_atomic(xs_type *t)
 {
-  df_seqtype *st = df_seqtype_new_atomic(g->string_type);
+  df_seqtype *st = df_seqtype_new_atomic(t);
   df_value *v;
   v = df_value_new(st);
   df_seqtype_deref(st);
+  return v;
+}
+
+
+df_value *df_value_new_int(xs_globals *g, int i)
+{
+  df_value *v = df_value_new_atomic(g->int_type);
+  v->value.i = i;
+  return v;
+}
+
+df_value *df_value_new_float(xs_globals *g, float f)
+{
+  df_value *v = df_value_new_atomic(g->float_type);
+  v->value.f = f;
+  return v;
+}
+
+df_value *df_value_new_double(xs_globals *g, double d)
+{
+  df_value *v = df_value_new_atomic(g->double_type);
+  v->value.d = d;
+  return v;
+}
+
+df_value *df_value_new_string(xs_globals *g, const char *str)
+{
+  df_value *v = df_value_new_atomic(g->string_type);
   v->value.s = strdup(str);
   return v;
 }
 
-df_value *df_value_new_int(xs_globals *g, int i)
+df_value *df_value_new_bool(xs_globals *g, int b)
 {
-  df_seqtype *st = df_seqtype_new_atomic(g->int_type);
-  df_value *v;
-  v = df_value_new(st);
+  df_value *v = df_value_new_atomic(g->boolean_type);
+  v->value.b = b;
+  return v;
+}
+
+df_value *df_value_new_node(df_node *n)
+{
+  df_seqtype *st = df_seqtype_new_item(n->type);
+  df_value *v = df_value_new(st);
   df_seqtype_deref(st);
-  v->value.i = i;
+  v->value.n = df_node_ref(n);
   return v;
 }
 
@@ -1197,6 +1221,44 @@ void df_value_deref_list(xs_globals *globals, list *l)
 int df_value_equals(df_value *a, df_value *b)
 {
   return 0;
+}
+
+static int df_count_sequence_values(df_value *seq)
+{
+  if (SEQTYPE_SEQUENCE == seq->seqtype->type) {
+    return df_count_sequence_values(seq->value.pair.left) +
+           df_count_sequence_values(seq->value.pair.right);
+  }
+  else if (SEQTYPE_ITEM == seq->seqtype->type) {
+    return 1;
+  }
+  else {
+    assert(SEQTYPE_EMPTY == seq->seqtype->type);
+    return 0;
+  }
+}
+
+static void df_build_sequence_array(df_value *seq, df_value ***valptr)
+{
+  if (SEQTYPE_SEQUENCE == seq->seqtype->type) {
+    df_build_sequence_array(seq->value.pair.left,valptr);
+    df_build_sequence_array(seq->value.pair.right,valptr);
+  }
+  else if (SEQTYPE_ITEM == seq->seqtype->type) {
+    *((*valptr)++) = seq;
+  }
+}
+
+df_value **df_sequence_to_array(df_value *seq)
+{
+  int count = df_count_sequence_values(seq);
+  df_value **valptr;
+  df_value **values = (df_value**)malloc((count+1)*sizeof(df_value*));
+  valptr = values;
+  df_build_sequence_array(seq,&valptr);
+  assert(valptr == values+count);
+  values[count] = NULL;
+  return values;
 }
 
 void df_get_sequence_values(df_value *v, list **values)

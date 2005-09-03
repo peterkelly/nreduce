@@ -30,9 +30,9 @@ void df_remove_redundant(df_program *program, df_function *fun)
     int removed = 0;
     for (l = fun->instructions; l; l = l->next) {
       df_instruction *instr = (df_instruction*)l->data;
-      if ((OP_SPECIAL_SWALLOW == instr->opcode) &&
+      if ((OP_SWALLOW == instr->opcode) &&
           (NULL != instr->inports[0].source) &&
-          (OP_SPECIAL_DUP == instr->inports[0].source->opcode) &&
+          (OP_DUP == instr->inports[0].source->opcode) &&
           (NULL != instr->inports[0].source->inports[0].source)) {
 
         df_instruction *dup = instr->inports[0].source;
