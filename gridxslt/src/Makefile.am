@@ -1,6 +1,6 @@
-INCLUDES = -I@top_srcdir@ @XML_CPPFLAGS@ @LIBCURL_CPPFLAGS@
+INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
 LDADD = ../libgridxslt.la libsrc.la @ALL_LIBS@
-noinst_PROGRAMS = gridxslt runtests cbpel validate wsclient fsxml saxonclient
+noinst_PROGRAMS = gridxslt runtests cbpel validate wsclient fsxml saxonclient buffertest transfer client
 noinst_HEADERS = syntax_bpel.h fsm.h syntax_wsdl.h
 gridxslt_SOURCES = gridxslt.c
 gridxslt_LDFLAGS = -static
@@ -12,6 +12,12 @@ wsclient_SOURCES = wsclient.c
 fsxml_SOURCES = fsxml.c
 saxonclient_SOURCES = saxonclient.c
 saxonclient_LDFLAGS = -static
+buffertest_SOURCES = buffertest.c
+buffertest_LDFLAGS = -static
+transfer_SOURCES = transfer.c
+transfer_LDFLAGS = -static
+client_SOURCES = client.c
+client_LDFLAGS = -static
 
 noinst_LTLIBRARIES = libsrc.la
 libsrc_la_SOURCES = syntax_bpel.c fsm.c syntax_wsdl.c
