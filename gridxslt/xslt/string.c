@@ -27,7 +27,7 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *string_join(gxcontext *ctxt, gxvalue **args)
+static gxvalue *string_join(gxenvironment *env, gxvalue **args)
 {
   gxvalue **values = df_sequence_to_array(args[0]);
   stringbuf *buf = stringbuf_new();
@@ -48,13 +48,13 @@ static gxvalue *string_join(gxcontext *ctxt, gxvalue **args)
   return res;
 }
 
-static gxvalue *substring2(gxcontext *ctxt, gxvalue **args)
+static gxvalue *substring2(gxenvironment *env, gxvalue **args)
 {
   const char *s = asstring(args[0]);
   return mkstring(s);
 }
 
-static gxvalue *substring3(gxcontext *ctxt, gxvalue **args)
+static gxvalue *substring3(gxenvironment *env, gxvalue **args)
 {
   const char *s = asstring(args[0]);
   return mkstring(s);

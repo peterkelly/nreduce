@@ -31,11 +31,11 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *not(gxcontext *ctxt, gxvalue **args)
+static gxvalue *not(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: we can't assume the input is a boolean! arg def is item()*; we have to reduce it
      to a boolean ourselves */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->boolean_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->boolean_type));
   return mkbool(!asbool(args[0]));
 }
 

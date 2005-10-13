@@ -31,12 +31,12 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *empty(gxcontext *ctxt, gxvalue **args)
+static gxvalue *empty(gxenvironment *env, gxvalue **args)
 {
   return mkbool(SEQTYPE_EMPTY == args[0]->seqtype->type);
 }
 
-static gxvalue *count(gxcontext *ctxt, gxvalue **args)
+static gxvalue *count(gxenvironment *env, gxvalue **args)
 {
   list *seq = df_sequence_to_list(args[0]);
   int count = list_count(seq);
@@ -44,7 +44,7 @@ static gxvalue *count(gxcontext *ctxt, gxvalue **args)
   return mkint(count);
 }
 
-static gxvalue *doc(gxcontext *ctxt, gxvalue **args)
+static gxvalue *doc(gxenvironment *env, gxvalue **args)
 {
   char *uri;
   FILE *f;
@@ -54,7 +54,7 @@ static gxvalue *doc(gxcontext *ctxt, gxvalue **args)
   df_node *rootelem;
   df_seqtype *restype;
   gxvalue *result;
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->string_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->string_type));
   uri = args[0]->value.s;
 /*   debugl("Loading document \"%s\"...",uri); */
 
@@ -78,7 +78,7 @@ static gxvalue *doc(gxcontext *ctxt, gxvalue **args)
 
   docnode = df_node_new(NODE_DOCUMENT);
   rootelem = df_node_from_xmlnode(root);
-  df_strip_spaces(rootelem,ctxt->space_decls);
+  df_strip_spaces(rootelem,env->space_decls);
   df_node_add_child(docnode,rootelem);
 
   xmlFreeDoc(doc);

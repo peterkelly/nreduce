@@ -192,8 +192,24 @@ void df_deref_activity(df_activity *a, int indent, df_activity *merge)
 int df_fire_activity(df_state *state, df_activity *a)
 {
   xs_globals *g = state->program->schema->globals;
+  int i;
   if (state->trace)
     df_print_actmsg("Firing",a);
+
+  for (i = 0; i < a->instr->ninports; i++) {
+    if (!df_seqtype_derived(a->instr->inports[i].seqtype,a->values[i]->seqtype)) {
+      stringbuf *buf1 = stringbuf_new();
+      stringbuf *buf2 = stringbuf_new();
+      df_seqtype_print_fs(buf1,a->values[i]->seqtype,g->namespaces);
+      df_seqtype_print_fs(buf2,a->instr->inports[i].seqtype,g->namespaces);
+      error(state->ei,a->instr->sloc.uri,a->instr->sloc.line,NULL,
+            "Instruction %#n:%d: Sequence type mismatch: %s does not match %s",
+            a->instr->fun->ident,a->instr->id,buf1->data,buf2->data);
+      stringbuf_free(buf1);
+      stringbuf_free(buf2);
+      return -1;
+    }
+  }
 
   switch (a->instr->opcode) {
   case OP_CONST:
@@ -335,20 +351,26 @@ int df_fire_activity(df_state *state, df_activity *a)
     df_value_deref(g,a->values[1]);
     break;
   case OP_BUILTIN: {
-    gxcontext ctxt;
+    gxenvironment env;
     df_value *result;
     int i;
-    memset(&ctxt,0,sizeof(gxcontext));
-    ctxt.item = a->values[0];
-    ctxt.position = 1;
-    ctxt.size = 1;
-    ctxt.g = g;
-    ctxt.ei = state->ei;
-    ctxt.sloc = a->instr->sloc;
-    ctxt.space_decls = state->program->space_decls;
-    ctxt.instr = a->instr;
-    if (NULL == (result = a->instr->bif->fun(&ctxt,a->values)))
+    memset(&env,0,sizeof(gxenvironment));
+    /* FIXME: what if a->values[0] is a sequence? */
+    env.ctxt = (gxcontext*)calloc(1,sizeof(gxcontext));
+    env.ctxt->item = a->values[0];
+    env.ctxt->position = 1;
+    env.ctxt->size = 1;
+    env.ctxt->havefocus = 1;
+    env.g = g;
+    env.ei = state->ei;
+    env.sloc = a->instr->sloc;
+    env.space_decls = state->program->space_decls;
+    env.instr = a->instr;
+    if (NULL == (result = a->instr->bif->fun(&env,a->values))) {
+      free(env.ctxt);
       return -1;
+    }
+    free(env.ctxt);
     df_output_value(a,0,result);
     for (i = 0; i < a->instr->bif->nargs; i++)
       df_value_deref(g,a->values[i]);
@@ -424,6 +446,7 @@ int df_execute(df_program *program, int trace, error_info *ei, df_value *context
   df_activity *print;
   df_activity *start;
   df_state *state = NULL;
+  df_seqtype *st;
   int r;
 
   mainfun = df_lookup_function(program,nsname_temp(GX_NAMESPACE,"main"));
@@ -441,6 +464,12 @@ int df_execute(df_program *program, int trace, error_info *ei, df_value *context
   init->ident = nsname_new(NULL,"_init");
   init->program = program;
   init->start = df_add_instruction(program,init,OP_PRINT,nosourceloc);
+
+  st = df_seqtype_new(SEQTYPE_OCCURRENCE);
+  st->occurrence = OCCURS_ZERO_OR_MORE;
+  st->left = df_normalize_itemnode(1,program->schema->globals);
+  init->start->inports[0].seqtype = st;
+
   init->rtype = df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
 
   state = df_state_new(program,ei);

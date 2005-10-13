@@ -31,7 +31,7 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *root1(gxcontext *ctxt, gxvalue **args)
+static gxvalue *root1(gxenvironment *env, gxvalue **args)
 {
   df_node *n;
   assert(args[0]->seqtype->type == SEQTYPE_ITEM);

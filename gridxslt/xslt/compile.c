@@ -83,23 +83,7 @@ static void set_and_move_cursor(df_outport **cursor, df_instruction *destinstr, 
 static df_instruction *specialop(compilation *comp, df_function *fun, char *ns, char *name,
                                  int nargs, sourceloc sloc)
 {
-  df_instruction *call;
-  df_builtin_function *bif =
-    df_lookup_builtin_function(comp->program,
-                               nsname_temp(ns,name),nargs);
-  if (NULL == bif) {
-    fprintf(stderr,"FATAL: compiler attempted to use unknown function {%s}%s [%d args]\n",
-            ns,name,nargs);
-    exit(1);
-  }
-  call = df_add_instruction(comp->program,fun,OP_BUILTIN,sloc);
-  call->bif = bif;
-
-  df_free_instruction_inports(call);
-  call->ninports = nargs;
-  call->inports = (df_inport*)calloc(call->ninports,sizeof(df_inport));
-
-  return call;
+  return df_add_builtin_instruction(comp->program,fun,nsname_temp(ns,name),nargs,sloc);
 }
 
 static int xslt_compile_binary_op(compilation *comp, df_function *fun, xp_expr *e,
@@ -215,7 +199,7 @@ static void xslt_compile_string(compilation *comp, df_function *fun, char *str,
 
   /* FIXME: this type is probably not broad enough... we should really accept sequences
      here too */
-  instr->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->complex_ur_type);
+/*   instr->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->complex_ur_type); */
   set_and_move_cursor(cursor,instr,0,instr,0);
 }
 
@@ -411,7 +395,7 @@ static int xslt_compile_innerfun(compilation *comp, df_function *fun, xl_snode *
   innerfun->start = df_add_instruction(comp->program,innerfun,OP_PASS,sloc);
 
   /* FIXME: set correct type based on cursor's type */
-  innerfun->start->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
+  innerfun->start->inports[0].seqtype = df_normalize_itemnode(1,comp->globals);
       
   innerfuncur = &innerfun->start->outports[0];
   innerfuncur->dest = innerfun->ret;
@@ -619,19 +603,28 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
     instr->outports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
     instr->cvalue = df_value_new(instr->outports[0].seqtype);
     instr->cvalue->value.i = e->ival;
-
-    /* FIXME: this type is probably not broad enough... we should really accept sequences
-       here too */
-    instr->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->complex_ur_type);
+/*     instr->inports[0].seqtype = df_normalize_itemnode(1,comp->globals); */
     set_and_move_cursor(cursor,instr,0,instr,0);
     break;
   }
-  case XPATH_EXPR_DECIMAL_LITERAL:
-    assert(!"not yet implemented"); /* FIXME */
+  case XPATH_EXPR_DECIMAL_LITERAL: {
+    df_instruction *instr = df_add_instruction(comp->program,fun,OP_CONST,e->sloc);
+    instr->outports[0].seqtype = df_seqtype_new_atomic(comp->globals->decimal_type);
+    instr->cvalue = df_value_new(instr->outports[0].seqtype);
+    instr->cvalue->value.d = e->dval;
+/*     instr->inports[0].seqtype = df_normalize_itemnode(1,comp->globals); */
+    set_and_move_cursor(cursor,instr,0,instr,0);
     break;
-  case XPATH_EXPR_DOUBLE_LITERAL:
-    assert(!"not yet implemented"); /* FIXME */
+  }
+  case XPATH_EXPR_DOUBLE_LITERAL: {
+    df_instruction *instr = df_add_instruction(comp->program,fun,OP_CONST,e->sloc);
+    instr->outports[0].seqtype = df_seqtype_new_atomic(comp->globals->double_type);
+    instr->cvalue = df_value_new(instr->outports[0].seqtype);
+    instr->cvalue->value.d = e->dval;
+/*     instr->inports[0].seqtype = df_normalize_itemnode(1,comp->globals); */
+    set_and_move_cursor(cursor,instr,0,instr,0);
     break;
+  }
   case XPATH_EXPR_VAR_REF: {
     df_outport *varoutport;
     int need_gate = expr_in_conditional(e);
@@ -693,12 +686,9 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
 
 
     if ((NULL == e->qn.prefix) || !strcmp(e->qn.prefix,"fn")) {
-      df_builtin_function *bif =
-        df_lookup_builtin_function(comp->program,
-                                   nsname_temp(FN_NAMESPACE,e->qn.localpart),supparam);
-      if (NULL != bif) {
-        call = df_add_instruction(comp->program,fun,OP_BUILTIN,e->sloc);
-        call->bif = bif;
+      call = df_add_builtin_instruction(comp->program,fun,nsname_temp(FN_NAMESPACE,e->qn.localpart),
+                                        supparam,e->sloc);
+      if (NULL != call) {
         nparams = supparam;
         name = e->qn.prefix;
         found = 1;
@@ -725,9 +715,15 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
 
     if (0 < nparams) {
       int paramno = 0;
-      df_free_instruction_inports(call);
-      call->ninports = nparams;
-      call->inports = (df_inport*)calloc(call->ninports,sizeof(df_inport));
+
+      if (OP_BUILTIN != call->opcode) {
+        int i;
+        df_free_instruction_inports(call);
+        call->ninports = nparams;
+        call->inports = (df_inport*)calloc(call->ninports,sizeof(df_inport));
+        for (i = 0; i < call->cfun->nparams; i++)
+          call->inports[i].seqtype = df_seqtype_ref(call->cfun->params[i].seqtype);
+      }
 
       for (p = e->left; p; p = p->right) {
         df_outport *param_cursor = NULL; /* FIXME */
@@ -863,7 +859,7 @@ static int xslt_compile_sequence_item(compilation *comp, df_function *fun, xl_sn
         else {
           df_instruction *select = specialop(comp,fun,SPECIAL_NAMESPACE,"select",1,sn->sloc);
           select->axis = AXIS_CHILD;
-          select->seqtypetest = df_normalize_itemnode(0);
+          select->seqtypetest = df_normalize_itemnode(0,comp->globals);
           set_and_move_cursor(cursor,select,0,select,0);
         }
 
@@ -1187,7 +1183,7 @@ static int xslt_compile_function(compilation *comp, xl_snode *sn, df_function *f
   /* Add wrapper instructions */
   fun->ret = df_add_instruction(comp->program,fun,OP_RETURN,sn->sloc);
   fun->start = df_add_instruction(comp->program,fun,OP_PASS,sn->sloc);
-  fun->start->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->int_type);
+  fun->start->inports[0].seqtype = df_normalize_itemnode(1,comp->globals);
 
   cursor = &fun->start->outports[0];
   cursor->dest = fun->ret;
@@ -1233,7 +1229,8 @@ static int xslt_compile_apply_function(compilation *comp,
     df_instruction *root = specialop(comp,innerfun,FN_NAMESPACE,"root",1,nosourceloc);
     df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     select->axis = AXIS_DESCENDANT_OR_SELF;
-    select->seqtypetest = df_normalize_itemnode(0);
+    select->seqtypetest = df_normalize_itemnode(0,comp->globals);
+    call->inports[0].seqtype = df_normalize_itemnode(1,comp->globals);
 
     xslt_compile_conditional(comp,innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
@@ -1277,7 +1274,7 @@ static int xslt_compile_apply_function(compilation *comp,
     set_and_move_cursor(&condcur,not,0,not,0);
 
     childsel->axis = AXIS_CHILD;
-    childsel->seqtypetest = df_normalize_itemnode(0);
+    childsel->seqtypetest = df_normalize_itemnode(0,comp->globals);
     set_and_move_cursor(&truecur,childsel,0,childsel,0);
     CHECK_CALL(xslt_compile_apply_templates(comp,innerfun,&truecur,templates,mode,nosourceloc))
 
@@ -1393,7 +1390,7 @@ static int xslt_compile_default_template(compilation *comp)
   pass->outports[0].dest = ret;
   pass->outports[0].destp = 0;
   fun->rtype = df_seqtype_new_atomic(comp->globals->any_atomic_type);
-  pass->inports[0].seqtype = df_seqtype_new_atomic(comp->globals->any_atomic_type);
+  pass->inports[0].seqtype = df_normalize_itemnode(1,comp->globals);
 
   options = xslt_get_output_def(comp->source,nsname_temp(NULL,NULL));
   assert(NULL != options);
@@ -1480,7 +1477,7 @@ static int xslt_compile2(compilation *comp)
     df_function *fun = (df_function*)l->data;
     CHECK_CALL(df_check_function_connected(fun))
     df_remove_redundant(comp->program,fun);
-    CHECK_CALL(df_compute_types(fun))
+    df_compute_types(fun,comp->program->schema->globals);
   }
 
   return 0;
@@ -1494,8 +1491,9 @@ extern gxfunctiondef *node_module;
 extern gxfunctiondef *boolean_module;
 extern gxfunctiondef *numeric_module;
 extern gxfunctiondef *accessor_module;
+extern gxfunctiondef *context_module;
 
-static gxfunctiondef **modules[8] = {
+static gxfunctiondef **modules[9] = {
   &special_module,
   &string_module,
   &sequence_module,
@@ -1503,6 +1501,7 @@ static gxfunctiondef **modules[8] = {
   &boolean_module,
   &numeric_module,
   &accessor_module,
+  &context_module,
   NULL
 };
 
@@ -1513,7 +1512,7 @@ int xslt_compile(error_info *ei, xslt_source *source, df_program **program)
   compilation comp;
 
   memset(&comp,0,sizeof(comp));
-  *program = df_program_new(source->schema,modules);
+  *program = df_program_new(source->schema);
 
   comp.ei = ei;
   comp.source = source;

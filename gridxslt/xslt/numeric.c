@@ -31,51 +31,51 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *numeric_add(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_add(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   return mkint(args[0]->value.i + args[1]->value.i);
 }
 
-static gxvalue *numeric_subtract(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_subtract(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   return mkint(args[0]->value.i - args[1]->value.i);
 }
 
-static gxvalue *numeric_multiply(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_multiply(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   return mkint(args[0]->value.i * args[1]->value.i);
 }
 
-static gxvalue *numeric_divide(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_divide(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   return mkint(args[0]->value.i / args[1]->value.i);
 }
 
-static gxvalue *numeric_integer_divide(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_integer_divide(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   return mkint(args[0]->value.i / args[1]->value.i);
 }
 
-static gxvalue *numeric_equal(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_equal(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
 
   if (args[0]->value.i == args[1]->value.i)
     return mkbool(1);
@@ -83,11 +83,11 @@ static gxvalue *numeric_equal(gxcontext *ctxt, gxvalue **args)
     return mkbool(0);
 }
 
-static gxvalue *numeric_less_than(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_less_than(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
 
   if (args[0]->value.i < args[1]->value.i)
     return mkbool(1);
@@ -95,11 +95,11 @@ static gxvalue *numeric_less_than(gxcontext *ctxt, gxvalue **args)
     return mkbool(0);
 }
 
-static gxvalue *numeric_greater_than(gxcontext *ctxt, gxvalue **args)
+static gxvalue *numeric_greater_than(gxenvironment *env, gxvalue **args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
 
   if (args[0]->value.i > args[1]->value.i)
     return mkbool(1);
@@ -119,11 +119,11 @@ gxfunctiondef numeric_fundefs[9] = {
   { numeric_integer_divide, FNS, "numeric-integer-divide",
     "xsd:integer,xsd:integer",       "xsd:integer" },
   { numeric_equal,          FNS, "numeric-equal",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:boolean" },
   { numeric_less_than,      FNS, "numeric-less-than",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:boolean" },
   { numeric_greater_than,   FNS, "numeric-greater-than",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:boolean" },
   { NULL },
 };
 

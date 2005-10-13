@@ -476,7 +476,7 @@ char *df_construct_simple_content(xs_globals *g, list *values, const char *separ
   return str;
 }
 
-static gxvalue *element(gxcontext *ctxt, gxvalue **args)
+static gxvalue *element(gxenvironment *env, gxvalue **args)
 {
   list *values = df_sequence_to_list(args[0]);
   gxvalue *elemvalue;
@@ -484,14 +484,14 @@ static gxvalue *element(gxcontext *ctxt, gxvalue **args)
 
   elemvalue = mknode(elem);
 
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->string_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->string_type));
   elem->ident.name = strdup(args[1]->value.s);
 
   /* FIXME: namespace (should be received on an input port) - what about prefix? */
 
   debug("element %p (\"%s\"): %d items in child sequence\n",
         elemvalue,elem->ident.name,list_count(values));
-  if (0 != df_construct_complex_content(ctxt->ei,ctxt->sloc,ctxt->g,values,elem)) {
+  if (0 != df_construct_complex_content(env->ei,env->sloc,env->g,values,elem)) {
     vderef(elemvalue);
     return NULL;
   }
@@ -501,7 +501,7 @@ static gxvalue *element(gxcontext *ctxt, gxvalue **args)
   return elemvalue;
 }
 
-static gxvalue *range(gxcontext *ctxt, gxvalue **args)
+static gxvalue *range(gxenvironment *env, gxvalue **args)
 {
   int min;
   int max;
@@ -509,8 +509,8 @@ static gxvalue *range(gxcontext *ctxt, gxvalue **args)
   gxvalue *result;
 
   /* FIXME: support empty sequences and conversion of other types when passed in */
-  assert(df_check_derived_atomic_type(args[0],ctxt->g->int_type));
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->int_type));
+  assert(df_check_derived_atomic_type(args[0],env->g->int_type));
+  assert(df_check_derived_atomic_type(args[1],env->g->int_type));
   min = args[0]->value.i;
   max = args[1]->value.i;
 
@@ -520,14 +520,14 @@ static gxvalue *range(gxcontext *ctxt, gxvalue **args)
       list_push(&range,mkint(i));
   }
 
-  result = df_list_to_sequence(ctxt->g,range);
-  df_value_deref_list(ctxt->g,range);
+  result = df_list_to_sequence(env->g,range);
+  df_value_deref_list(env->g,range);
   list_free(range,NULL);
 
   return result;
 }
 
-static gxvalue *contains_node(gxcontext *ctxt, gxvalue **args)
+static gxvalue *contains_node(gxenvironment *env, gxvalue **args)
 {
   list *nodevals = df_sequence_to_list(args[0]);
   df_node *n = args[1]->value.n;
@@ -549,7 +549,7 @@ static gxvalue *contains_node(gxcontext *ctxt, gxvalue **args)
   return mkbool(found);
 }
 
-static gxvalue *select_root(gxcontext *ctxt, gxvalue **args)
+static gxvalue *select_root(gxenvironment *env, gxvalue **args)
 {
   list *values = df_sequence_to_list(args[0]);
   list *output = NULL;
@@ -571,8 +571,8 @@ static gxvalue *select_root(gxcontext *ctxt, gxvalue **args)
   }
 
   list_free(values,NULL);
-  result = df_list_to_sequence(ctxt->g,output);
-  df_value_deref_list(ctxt->g,output);
+  result = df_list_to_sequence(env->g,output);
+  df_value_deref_list(env->g,output);
   list_free(output,NULL);
 
   return result;
@@ -707,7 +707,7 @@ static int append_matching_nodes(df_node *self, char *nametest, df_seqtype *seqt
   return 0;
 }
 
-static gxvalue *select1(gxcontext *ctxt, gxvalue **args)
+static gxvalue *select1(gxenvironment *env, gxvalue **args)
 {
   list *values = df_sequence_to_list(args[0]);
   list *output = NULL;
@@ -722,9 +722,9 @@ static gxvalue *select1(gxcontext *ctxt, gxvalue **args)
       assert(0);
     }
     if (ITEM_ATOMIC != v->seqtype->item->kind) {
-      if (0 != append_matching_nodes(v->value.n,ctxt->instr->nametest,ctxt->instr->seqtypetest,
-                                       ctxt->instr->axis,&output)) {
-        df_value_deref_list(ctxt->g,output);
+      if (0 != append_matching_nodes(v->value.n,env->instr->nametest,env->instr->seqtypetest,
+                                       env->instr->axis,&output)) {
+        df_value_deref_list(env->g,output);
         list_free(output,NULL);
         return NULL;
       }
@@ -732,14 +732,14 @@ static gxvalue *select1(gxcontext *ctxt, gxvalue **args)
   }
 
   list_free(values,NULL);
-  result = df_list_to_sequence(ctxt->g,output);
-  df_value_deref_list(ctxt->g,output);
+  result = df_list_to_sequence(env->g,output);
+  df_value_deref_list(env->g,output);
   list_free(output,NULL);
 
   return result;
 }
 
-static gxvalue *namespace(gxcontext *ctxt, gxvalue **args)
+static gxvalue *namespace(gxenvironment *env, gxvalue **args)
 {
   /* @implements(xslt20:creating-namespace-nodes-2)
      test { xslt/eval/namespace1.test }
@@ -750,7 +750,7 @@ static gxvalue *namespace(gxcontext *ctxt, gxvalue **args)
 
   df_node *nsnode = df_node_new(NODE_NAMESPACE);
   list *values = df_sequence_to_list(args[0]);
-  char *prefix = df_construct_simple_content(ctxt->g,values," ");
+  char *prefix = df_construct_simple_content(env->g,values," ");
   list_free(values,NULL);
   if (0 == strlen(prefix)) {
     nsnode->prefix = NULL;
@@ -760,20 +760,20 @@ static gxvalue *namespace(gxcontext *ctxt, gxvalue **args)
     nsnode->prefix = prefix;
   }
   values = df_sequence_to_list(args[1]);
-  nsnode->value = df_construct_simple_content(ctxt->g,values," ");
+  nsnode->value = df_construct_simple_content(env->g,values," ");
   list_free(values,NULL);
 
   return mknode(nsnode);
 }
 
-static gxvalue *text(gxcontext *ctxt, gxvalue **args)
+static gxvalue *text(gxenvironment *env, gxvalue **args)
 {
   df_node *textnode = df_node_new(NODE_TEXT);
-  textnode->value = strdup(ctxt->instr->str);
+  textnode->value = strdup(env->instr->str);
   return mknode(textnode);
 }
 
-static gxvalue *value_of(gxcontext *ctxt, gxvalue **args)
+static gxvalue *value_of(gxenvironment *env, gxvalue **args)
 {
   /* @implements(xslt20:value-of-1)
      test { xslt/eval/value-of1.test }
@@ -792,49 +792,51 @@ static gxvalue *value_of(gxcontext *ctxt, gxvalue **args)
      @implements(xslt20:value-of-10) @end */
 
   df_node *textnode = df_node_new(NODE_TEXT);
-  char *separator = df_value_as_string(ctxt->g,args[1]);
+  char *separator = df_value_as_string(env->g,args[1]);
   list *values = df_sequence_to_list(args[0]);
-  textnode->value = df_construct_simple_content(ctxt->g,values,separator);
+  textnode->value = df_construct_simple_content(env->g,values,separator);
   free(separator);
   list_free(values,NULL);
   return mknode(textnode);
 }
 
-static gxvalue *attribute2(gxcontext *ctxt, gxvalue **args)
+static gxvalue *attribute2(gxenvironment *env, gxvalue **args)
 {
   df_node *attr = df_node_new(NODE_ATTRIBUTE);
   list *values = df_sequence_to_list(args[0]);
+  list *namevals = df_sequence_to_list(args[1]);
 
   /* FIXME: support arbitraty sequence as name - used for attribute value templates in
      xsl:attribute */
   /* FIXME: support namespace */
 
-  assert(df_check_derived_atomic_type(args[1],ctxt->g->string_type));
-  attr->ident.name = strdup(asstring(args[1]));
-  attr->value = df_construct_simple_content(ctxt->g,values," ");
+  assert(df_check_derived_atomic_type(args[1],env->g->string_type));
+  attr->ident.name = df_construct_simple_content(env->g,namevals," ");
+  attr->value = df_construct_simple_content(env->g,values," ");
 
   list_free(values,NULL);
+  list_free(namevals,NULL);
 
   return mknode(attr);
 }
 
-static gxvalue *document(gxcontext *ctxt, gxvalue **args)
+static gxvalue *document(gxenvironment *env, gxvalue **args)
 {
   df_node *docnode = df_node_new(NODE_DOCUMENT);
   list *values = df_sequence_to_list(args[0]);
   df_value *docval = df_value_new_node(docnode);
 
-  if (0 != df_construct_complex_content(ctxt->ei,ctxt->instr->sloc,ctxt->g,values,docnode)) {
-    df_value_deref(ctxt->g,docval);
+  if (0 != df_construct_complex_content(env->ei,env->instr->sloc,env->g,values,docnode)) {
+    df_value_deref(env->g,docval);
     list_free(values,NULL);
     return NULL;
   }
 
   /* FIXME: i think this is already checked df_construct_complex_content()? */
   if (NULL != docnode->attributes) {
-    error(ctxt->ei,"",0,"XTDE0420",
+    error(env->ei,"",0,"XTDE0420",
           "Attribute nodes cannot be added directly as children of a document");
-    df_value_deref(ctxt->g,docval);
+    df_value_deref(env->g,docval);
     list_free(values,NULL);
     return NULL;
   }
@@ -844,10 +846,12 @@ static gxvalue *document(gxcontext *ctxt, gxvalue **args)
   return docval;
 }
 
-static gxvalue *sequence(gxcontext *ctxt, gxvalue **args)
+static gxvalue *sequence(gxenvironment *env, gxvalue **args)
 {
   df_value *pair;
   df_seqtype *st = df_seqtype_new(SEQTYPE_SEQUENCE);
+  st->left = df_seqtype_ref(args[0]->seqtype);
+  st->right = df_seqtype_ref(args[1]->seqtype);
   pair = df_value_new(st);
   df_seqtype_deref(st);
   pair->value.pair.left = vref(args[0]);
@@ -855,20 +859,20 @@ static gxvalue *sequence(gxcontext *ctxt, gxvalue **args)
   return pair;
 }
 
-static gxvalue *output(gxcontext *ctxt, gxvalue **args)
+static gxvalue *output(gxenvironment *env, gxvalue **args)
 {
   stringbuf *buf = stringbuf_new();
-  assert(NULL != ctxt->instr->seroptions);
-  if (0 != df_serialize(ctxt->g,args[0],buf,ctxt->instr->seroptions,ctxt->ei)) {
+  assert(NULL != env->instr->seroptions);
+  if (0 != df_serialize(env->g,args[0],buf,env->instr->seroptions,env->ei)) {
     stringbuf_free(buf);
     return NULL;
   }
   printf("%s",buf->data);
   stringbuf_free(buf);
-  return df_list_to_sequence(ctxt->g,NULL);
+  return df_list_to_sequence(env->g,NULL);
 }
 
-static gxvalue *filter(gxcontext *ctxt, gxvalue **args)
+static gxvalue *filter(gxenvironment *env, gxvalue **args)
 {
   assert(0);
     /* FIXME */
@@ -894,7 +898,7 @@ static gxvalue *filter(gxcontext *ctxt, gxvalue **args)
   return NULL;
 }
 
-static gxvalue *empty(gxcontext *ctxt, gxvalue **args)
+static gxvalue *empty(gxenvironment *env, gxvalue **args)
 {
   df_seqtype *st = df_seqtype_new(SEQTYPE_EMPTY);
   df_value *result = df_value_new(st);
@@ -911,7 +915,7 @@ gxfunctiondef special_fundefs[15] = {
   { namespace,     FNS, "namespace",     "item()*,item()*",           "node()"          },
   { text,          FNS, "text",          "item()*",                   "text()"          },
   { value_of,      FNS, "value-of",      "item()*,item()*",           "text()"          },
-  { attribute2,    FNS, "attribute",     "xsd:string,item()*",        "attribute()"     },
+  { attribute2,    FNS, "attribute",     "item()*,item()*",           "attribute()"     },
   { document,      FNS, "document",      "item()*",                   "document-node()" },
   { sequence,      FNS, "sequence",      "item()*,item()*",           "item()*"         },
   { output,        FNS, "output",        "item()*",                   "item()*"         },

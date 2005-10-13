@@ -164,7 +164,7 @@ int main(int argc, char **argv)
       stringbuf *buf = stringbuf_new();
       assert(XPATH_EXPR_INSTANCE_OF == expr->type);
       assert(NULL != expr->seqtype);
-      df_seqtype_print_fs(buf,expr->seqtype,s->globals->namespaces->defs);
+      df_seqtype_print_fs(buf,expr->seqtype,s->globals->namespaces);
       printf("%s\n",buf->data);
       stringbuf_free(buf);
     }

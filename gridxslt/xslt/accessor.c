@@ -31,7 +31,7 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *string1(gxcontext *ctxt, gxvalue **args)
+static gxvalue *string1(gxenvironment *env, gxvalue **args)
 {
   gxvalue *result;
   char *str;
@@ -40,7 +40,7 @@ static gxvalue *string1(gxcontext *ctxt, gxvalue **args)
   }
   else {
     assert(SEQTYPE_ITEM == args[0]->seqtype->type);
-    str = df_value_as_string(ctxt->g,args[0]);
+    str = df_value_as_string(env->g,args[0]);
     result = mkstring(str);
     free(str);
   }

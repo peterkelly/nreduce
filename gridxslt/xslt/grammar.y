@@ -540,7 +540,7 @@ XPathPathExpr:
                                   { xp_expr *dos;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
-                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->seqtype = df_normalize_itemnode(0,NULL);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL);
                                     $$->left = xp_expr_new(XPATH_EXPR_STEP,dos,$2); }
@@ -556,7 +556,7 @@ XPathRelativePathExpr:
                                     xp_expr *step1;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
-                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->seqtype = df_normalize_itemnode(0,NULL);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     step1 = xp_expr_new(XPATH_EXPR_STEP,dos,$3);
                                     $$ = xp_expr_new(XPATH_EXPR_STEP,$1,step1); }
@@ -618,7 +618,7 @@ XPathAbbrevReverseStep:
   DOTDOT                          { $$ = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     $$->axis = AXIS_PARENT;
                                     $$->nodetest = XPATH_NODE_TEST_SEQTYPE;
-                                    $$->seqtype = df_normalize_itemnode(0); }
+                                    $$->seqtype = df_normalize_itemnode(0,NULL); }
 ;
 
 XPathNodeTest:
@@ -746,7 +746,7 @@ XPathOccurrenceIndicator:
 XPathItemType:
   XPathAtomicType                 { $$ = $1; }
 | XPathKindTest                   { $$ = $1; }
-| ITEM '(' ')'                    { $$ = df_normalize_itemnode(1); }
+| ITEM '(' ')'                    { $$ = df_normalize_itemnode(1,NULL); }
 ;
 
 XPathAtomicType:
@@ -837,7 +837,7 @@ XPathTextTest:
 ;
 
 XPathAnyKindTest:
-  NODE '(' ')'                    { $$ = df_normalize_itemnode(0); }
+  NODE '(' ')'                    { $$ = df_normalize_itemnode(0,NULL); }
 ;
 
 XPathAttribNameOrWildcard:
@@ -1626,7 +1626,7 @@ XSLTPathPattern:
                                   { xp_expr *dos;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
-                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->seqtype = df_normalize_itemnode(0,NULL);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     $$ = xp_expr_new(XPATH_EXPR_ROOT,NULL,NULL);
                                     $$->left = xp_expr_new(XPATH_EXPR_STEP,dos,$2); }
@@ -1647,7 +1647,7 @@ XSLTRelativePathPattern:
                                     xp_expr *step1;
                                     dos = xp_expr_new(XPATH_EXPR_NODE_TEST,NULL,NULL);
                                     dos->nodetest = XPATH_NODE_TEST_SEQTYPE;
-                                    dos->seqtype = df_normalize_itemnode(0);
+                                    dos->seqtype = df_normalize_itemnode(0,NULL);
                                     dos->axis = AXIS_DESCENDANT_OR_SELF;
                                     step1 = xp_expr_new(XPATH_EXPR_STEP,dos,$3);
                                     $$ = xp_expr_new(XPATH_EXPR_STEP,$1,step1); }

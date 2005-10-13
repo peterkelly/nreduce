@@ -49,8 +49,6 @@
 #define SEQTYPE_SEQUENCE              4
 #define SEQTYPE_CHOICE                5
 #define SEQTYPE_EMPTY                 6
-#define SEQTYPE_NONE                  7
-#define SEQTYPE_PAREN                 8
 
 #define VALTYPE_INVALID               0
 #define VALTYPE_INT                   1
@@ -153,15 +151,15 @@ struct df_value {
 #define asbool(_v) ((_v)->value.b)
 #define asnode(_v) ((_v)->value.n)
 
-#define mkint(_v) df_value_new_int(ctxt->g,_v)
-#define mkfloat(_v) df_value_new_float(ctxt->g,_v)
-#define mkdouble(_v) df_value_new_double(ctxt->g,_v)
-#define mkstring(_v) df_value_new_string(ctxt->g,_v)
-#define mkbool(_v) df_value_new_bool(ctxt->g,_v)
+#define mkint(_v) df_value_new_int(env->g,_v)
+#define mkfloat(_v) df_value_new_float(env->g,_v)
+#define mkdouble(_v) df_value_new_double(env->g,_v)
+#define mkstring(_v) df_value_new_string(env->g,_v)
+#define mkbool(_v) df_value_new_bool(env->g,_v)
 #define mknode(_v) df_value_new_node(_v)
 
 #define vref(_v) df_value_ref(_v)
-#define vderef(_v) df_value_deref(ctxt->g,_v)
+#define vderef(_v) df_value_deref(env->g,_v)
 
 df_itemtype *df_itemtype_new(int kind);
 df_seqtype *df_seqtype_new(int type);
@@ -170,19 +168,18 @@ df_seqtype *df_seqtype_new_atomic(xs_type *type);
 df_seqtype *df_seqtype_ref(df_seqtype *st);
 void df_itemtype_free(df_itemtype *it);
 void df_seqtype_deref(df_seqtype *st);
-df_seqtype *df_normalize_itemnode(int item);
+df_seqtype *df_normalize_itemnode(int item, xs_globals *g);
 df_seqtype *df_interleave_document_content(df_seqtype *content);
 
-void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, list *namespaces);
-void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, list *namespaces);
-
-void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *namespaces);
+void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces);
 void df_seqtype_print_xpath(stringbuf *buf, df_seqtype *st, ns_map *namespaces);
 
 int df_seqtype_compatible(df_seqtype *from, df_seqtype *to);
 
 int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const char *filename,
                         int line, error_info *ei);
+void df_seqtype_to_list(df_seqtype *st, list **types);
+int df_seqtype_derived(df_seqtype *base, df_seqtype *st);
 
 df_node *df_node_new(int type);
 df_node *df_node_root(df_node *n);

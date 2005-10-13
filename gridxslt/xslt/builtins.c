@@ -165,11 +165,11 @@ void df_init_builtin_functions(xs_schema *schema, list **builtin_functions,
     int i;
     print("bif %p: fun=%p, ident=%#n nargs=%d\n",bif,bif->fun,bif->ident,bif->nargs);
     for (i = 0; i < bif->nargs; i++) {
-      df_seqtype_print_fs(buf,bif->argtypes[i],schema->globals->namespaces->defs);
+      df_seqtype_print_fs(buf,bif->argtypes[i],schema->globals->namespaces);
       print("arg %d: %s\n",i,buf->data);
       stringbuf_clear(buf);
     }
-    df_seqtype_print_fs(buf,bif->rettype,schema->globals->namespaces->defs);
+    df_seqtype_print_fs(buf,bif->rettype,schema->globals->namespaces);
     print("returns: %s\n",buf->data);
     stringbuf_clear(buf);
     print("\n");

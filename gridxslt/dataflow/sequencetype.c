@@ -125,7 +125,7 @@ df_seqtype *df_add_alternative(df_seqtype *st1, df_seqtype *st2)
   return options;
 }
 
-df_seqtype *df_normalize_itemnode(int item)
+df_seqtype *df_normalize_itemnode(int item, xs_globals *g)
 {
   df_seqtype *i1 = df_seqtype_new_item(ITEM_ELEMENT);
   df_seqtype *i2 = df_seqtype_new_item(ITEM_ATTRIBUTE);
@@ -146,6 +146,8 @@ df_seqtype *df_normalize_itemnode(int item)
        maybe mapped to a different namespace than the one we expect */
     i7->item->typeref.prefix = strdup("__xdt");
     i7->item->typeref.localpart = strdup("anyAtomicType");
+    if (NULL != g)
+      i7->item->type = g->any_atomic_type;
     choice = df_add_alternative(choice,i7);
   }
 
@@ -175,31 +177,23 @@ df_seqtype *df_interleave_document_content(df_seqtype *content)
   return all;
 }
 
-static void df_print_objname(stringbuf *buf, char *name, char *ns, list *namespaces)
+static void df_print_objname(stringbuf *buf, char *name, char *ns, ns_map *namespaces)
 {
   if (NULL != ns) {
-    char *prefix = NULL;
-    list *l;
-    for (l = namespaces; l; l = l->next) {
-      ns_def *nsdef = (ns_def*)l->data;
-      if (!strcmp(nsdef->href,ns))
-        prefix = nsdef->prefix;
-    }
-
-    assert(NULL != prefix); /* FIXME: what to do if we can't find one? */
-    stringbuf_format(buf,"%s:%s",prefix,name);
+    ns_def *def = ns_lookup_href(namespaces,ns);
+    assert(NULL != def); /* FIXME: what to do if we can't find one? */
+    stringbuf_format(buf,"%s:%s",def->prefix,name);
   }
   else {
     stringbuf_format(buf,"%s",name);
   }
 }
 
-void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, list *namespaces)
+static void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, ns_map *namespaces)
 {
   switch (it->kind) {
   case ITEM_ATOMIC:
     df_print_objname(buf,it->type->def.ident.name,it->type->def.ident.ns,namespaces);
-    /* FIXME */
     break;
   case ITEM_DOCUMENT:
     stringbuf_format(buf,"document");
@@ -271,8 +265,21 @@ void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, list *namespaces)
   }
 }
 
-void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, list *namespaces)
+void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
 {
+  /* item() and node() are not actually part of the formal semantics type syntax - however since
+     we currently use this output function for debugging purposes, it is more convenient to
+     show the condensed form from XPath syntax rather than the full expansion */
+  if (st->isitem) {
+    stringbuf_format(buf,"item()");
+    return;
+  }
+
+  if (st->isnode) {
+    stringbuf_format(buf,"node()");
+    return;
+  }
+
   switch (st->type) {
   case SEQTYPE_ITEM:
     df_itemtype_print_fs(buf,st->item,namespaces);
@@ -319,14 +326,6 @@ void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, list *namespaces)
     break;
   case SEQTYPE_EMPTY:
     stringbuf_format(buf,"empty");
-    break;
-  case SEQTYPE_NONE:
-    stringbuf_format(buf,"none");
-    break;
-  case SEQTYPE_PAREN:
-    stringbuf_format(buf,"(");
-    df_seqtype_print_fs(buf,st->left,namespaces);
-    stringbuf_format(buf,")");
     break;
   default:
     assert(!"invalid sequence type");
@@ -375,7 +374,7 @@ static void print_objname(stringbuf *buf, ns_map *namespaces, char *name, char *
   }
 }
 
-void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *namespaces)
+static void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *namespaces)
 {
   switch (it->kind) {
   case ITEM_ATOMIC:
@@ -642,6 +641,132 @@ int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const c
   return 0;
 }
 
+void df_seqtype_to_list(df_seqtype *st, list **types)
+{
+  if (SEQTYPE_SEQUENCE == st->type) {
+    df_seqtype_to_list(st->left,types);
+    df_seqtype_to_list(st->right,types);
+  }
+  else if (SEQTYPE_ITEM == st->type) {
+    list_append(types,st);
+  }
+  else {
+    assert(SEQTYPE_EMPTY == st->type);
+  }
+}
+
+static int validate_sequence_item(df_seqtype *base, df_seqtype *st)
+{
+  if (base->item->kind != st->item->kind)
+    return 0;
+
+  switch (base->item->kind) {
+  case ITEM_ATOMIC: {
+    /* FIXME: handle union and list simple types */
+    xs_type *basetype = base->item->type;
+    xs_type *derived = st->item->type;
+    while (1) {
+      if (basetype == derived)
+        return 1;
+      if (derived->base == derived)
+        return 0;
+      derived = derived->base;
+    }
+    break;
+  }
+  case ITEM_DOCUMENT:
+    /* FIXME: check further details of type */
+    return 1;
+  case ITEM_ELEMENT:
+    /* FIXME: check further details of type */
+    return 1;
+  case ITEM_ATTRIBUTE:
+    /* FIXME: check further details of type */
+    return 1;
+  case ITEM_PI:
+    return 1;
+  case ITEM_COMMENT:
+    return 1;
+  case ITEM_TEXT:
+    return 1;
+  case ITEM_NAMESPACE:
+    return 1;
+  }
+
+  assert(!"invalid item kind");
+  return 0;
+}
+
+static int validate_sequence_list(df_seqtype *base, list **lptr)
+{
+  switch (base->type) {
+  case SEQTYPE_ITEM:
+    if (NULL == *lptr)
+      return 0;
+    assert(SEQTYPE_ITEM == ((df_seqtype*)((*lptr)->data))->type);
+    if (validate_sequence_item(base,(df_seqtype*)((*lptr)->data))) {
+      *lptr = (*lptr)->next;
+      return 1;
+    }
+    return 0;
+  case SEQTYPE_OCCURRENCE: {
+    list *backup = *lptr;
+    switch (base->occurrence) {
+    case OCCURS_ONCE:
+      return validate_sequence_list(base->left,lptr);
+    case OCCURS_OPTIONAL:
+      if (validate_sequence_list(base->left,lptr))
+        return 1;
+      *lptr = backup;
+      return 1;
+    case OCCURS_ZERO_OR_MORE:
+      while (validate_sequence_list(base->left,lptr))
+        backup = *lptr;
+      *lptr = backup;
+      return 1;
+    case OCCURS_ONE_OR_MORE:
+      if (!validate_sequence_list(base->left,lptr))
+        return 0;
+      backup = *lptr;
+      while (validate_sequence_list(base->left,lptr))
+        backup = *lptr;
+      *lptr = backup;
+      return 1;
+    }
+    assert(!"invalid occurrence type");
+    break;
+  }
+  case SEQTYPE_ALL:
+    assert(!"SEQTYPE_ALL not yet supported");
+    break;
+  case SEQTYPE_SEQUENCE:
+    return (validate_sequence_list(base->left,lptr) &&
+            validate_sequence_list(base->right,lptr));
+  case SEQTYPE_CHOICE: {
+    list *backup = *lptr;
+    if (validate_sequence_list(base->left,lptr))
+      return 1;
+    *lptr = backup;
+    return validate_sequence_list(base->right,lptr);
+  }
+  case SEQTYPE_EMPTY:
+    assert(!"EMPTY is not a valid specifier type");
+    break;
+  }
+  assert(!"invalid sequence type");
+  return 0;
+}
+
+int df_seqtype_derived(df_seqtype *base, df_seqtype *st)
+{
+  list *types = NULL;
+  int r;
+  df_seqtype_to_list(st,&types);
+  r = validate_sequence_list(base,&types);
+  list_free(types,NULL);
+  return r;
+}
+
 df_node *df_node_new(int type)
 {
   df_node *n = (df_node*)calloc(1,sizeof(df_node));
@@ -682,7 +807,7 @@ void df_print_remaining(xs_globals *globals)
     df_value *v = (df_value*)l->data;
     stringbuf *stbuf = stringbuf_new();
     stringbuf *valbuf = stringbuf_new();
-    df_seqtype_print_fs(stbuf,v->seqtype,globals->namespaces->defs);
+    df_seqtype_print_fs(stbuf,v->seqtype,globals->namespaces);
     if ((SEQTYPE_ITEM == v->seqtype->type) &&
         (ITEM_ATOMIC == v->seqtype->item->kind))
       df_value_printbuf(globals,valbuf,v);
@@ -1134,6 +1259,10 @@ void df_value_printbuf(xs_globals *globals, stringbuf *buf, df_value *v)
     if (ITEM_ATOMIC == v->seqtype->item->kind) {
       if (v->seqtype->item->type == globals->int_type)
         stringbuf_format(buf,"%d",v->value.i);
+      else if (v->seqtype->item->type == globals->double_type)
+        stringbuf_format(buf,"%f",v->value.d);
+      else if (v->seqtype->item->type == globals->decimal_type)
+        stringbuf_format(buf,"%f",v->value.d);
       else if (v->seqtype->item->type == globals->string_type)
         stringbuf_format(buf,"%s",v->value.s);
       else if (v->seqtype->item->type == globals->boolean_type)

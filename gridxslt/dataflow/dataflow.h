@@ -50,6 +50,7 @@ typedef struct df_instruction df_instruction;
 typedef struct df_parameter df_parameter;
 typedef struct df_function df_function;
 typedef struct gxcontext gxcontext;
+typedef struct gxenvironment gxenvironment;
 typedef struct gxfunctiondef gxfunctiondef;
 typedef struct df_builtin_function df_builtin_function;
 typedef struct df_program df_program;
@@ -122,7 +123,7 @@ struct df_function {
   char *mode;
 };
 
-int df_compute_types(df_function *fun);
+void df_compute_types(df_function *fun, xs_globals *g);
 int df_check_is_atomic_type(df_seqtype *st, xs_type *type);
 int df_check_derived_atomic_type(df_value *v, xs_type *type);
 
@@ -133,16 +134,28 @@ void df_free_function(df_function *fun);
 
 df_instruction *df_add_instruction(df_program *program, df_function *fun, int opcode,
                                    sourceloc sloc);
+df_instruction *df_add_builtin_instruction(df_program *program, df_function *fun,
+                                           const nsname ident, int nargs, sourceloc sloc);
+
 void df_delete_instruction(df_program *program, df_function *fun, df_instruction *instr);
 void df_free_instruction_inports(df_instruction *instr);
 void df_free_instruction(df_instruction *instr);
 
-typedef gxvalue* (gxfunction)(gxcontext *ctxt, gxvalue **args);
+typedef gxvalue* (gxfunction)(gxenvironment *ctxt, gxvalue **args);
 
 struct gxcontext {
   gxvalue *item;
   int position;
   int size;
+  int havefocus;
+  df_function *template;
+  char *mode;
+  char *group;
+  char *groupkey;
+};
+
+struct gxenvironment {
+  gxcontext *ctxt;
   xs_globals *g;
   error_info *ei;
   sourceloc sloc;
@@ -177,11 +190,10 @@ const char *df_opstr(int opcode);
 
 void df_module_init(gxfunctiondef *fundefs);
 
-df_builtin_function *df_lookup_builtin_function(df_program *program, const nsname ident, int nargs);
-df_program *df_program_new(xs_schema *schema, gxfunctiondef ***modules);
+df_program *df_program_new(xs_schema *schema);
 void df_program_free(df_program *program);
 
-void df_output_dot(df_program *program, FILE *f);
+void df_output_dot(df_program *program, FILE *f, int types);
 void df_output_df(df_program *program, FILE *f);
 
 #ifndef _DATAFLOW_DATAFLOW_C
