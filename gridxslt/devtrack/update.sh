@@ -2,7 +2,7 @@
 
 . vars
 
-SOURCEFILES=`find .. -name '*.c'`
+SOURCEFILES=`find .. -name '*.c' -o -name '*.txt' | grep -v devtrack`
 
 echo '<?xml version="1.0"?>' > output/sourcefiles.xml
 echo '<sourcefiles xmlns="http://gridxslt.sourceforge.net/devtrack">' >> output/sourcefiles.xml
