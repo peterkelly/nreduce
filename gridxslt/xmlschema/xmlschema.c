@@ -2770,7 +2770,7 @@ void xs_globals_init_simple_types(xs_globals *g)
   new_primitive_type(g,"base64Binary",sizeof(IMPL_POINTER),NULL);
   new_primitive_type(g,"hexBinary",sizeof(IMPL_POINTER),NULL);
   g->float_type = new_primitive_type(g,"float",sizeof(IMPL_FLOAT),"float");
-  new_primitive_type(g,"decimal",sizeof(IMPL_POINTER),NULL);
+  g->decimal_type = new_primitive_type(g,"decimal",sizeof(IMPL_DOUBLE),NULL);
   g->double_type = new_primitive_type(g,"double",sizeof(IMPL_DOUBLE),"double");
   new_primitive_type(g,"anyURI",sizeof(IMPL_POINTER),NULL);
   new_primitive_type(g,"QName",sizeof(IMPL_POINTER),NULL);

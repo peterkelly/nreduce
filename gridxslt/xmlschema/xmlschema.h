@@ -554,6 +554,7 @@ struct xs_globals {
   xs_type *byte_type;
   xs_type *float_type;
   xs_type *double_type;
+  xs_type *decimal_type;
 
   xs_symbol_table *symt;
   xs_allocset *as;
