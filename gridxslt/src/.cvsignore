@@ -16,3 +16,6 @@ wsclient
 wsjava
 saxonclient
 SaxonServlet.class
+buffertest
+client
+transfer
