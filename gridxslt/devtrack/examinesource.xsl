@@ -47,7 +47,7 @@
     </xsl:variable>
 
     <xsl:variable name="source-info">
-      <xsl:for-each-group select="$source-info-unmerged/clause" group-by="@name">
+      <xsl:for-each-group select="$source-info-unmerged/clause" group-by="concat(@spec,':',@name)">
 
         <xsl:copy>
           <xsl:sequence select="attribute::node()"/>
