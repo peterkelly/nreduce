@@ -23,6 +23,7 @@
 #include "util/xmlutils.h"
 #include "util/macros.h"
 #include "util/debug.h"
+#include "http/http.h"
 #include "dataflow/dataflow.h"
 #include "dataflow/sequencetype.h"
 #include "dataflow/engine.h"
@@ -44,26 +45,29 @@ const char *argp_program_version =
 static char doc[] =
   "GridXSLT execution engine";
 
-static char args_doc[] = "[INPUT] SOURCEFILE";
+static char args_doc[] = "[INPUT] SOURCEFILE\n"
+                         "-s DOCROOT\n";
 
 static struct argp_option options[] = {
   {"dot",                      'd', "FILE",  0, "Output graph in dot format to FILE" },
+  {"types",                    'y', NULL,    0, "Show port types in dot output" },
   {"df",                       'f', NULL,    0, "Just print compiled dataflow graph; do not "
                                                 "execute" },
   {"trace",                    't', NULL,    0, "Enable tracing" },
-  {"parse-tree",               's', NULL,    0, "Dump parse tree" },
-  {"o",                        'o', NULL,    0, "Decompile functions" },
+  {"parse-tree",               'p', NULL,    0, "Dump parse tree" },
+  {"server",                   's', NULL,    0, "Run as HTTP server" },
   { 0 }
 };
 
 struct arguments {
   char *filename;
   char *dot;
+  int types;
   char *input;
   int df;
   int trace;
   int print_tree;
-  int decompile;
+  int server;
 };
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -74,17 +78,20 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
   case 'd':
     arguments->dot = arg;
     break;
+  case 'y':
+    arguments->types = 1;
+    break;
   case 'f':
     arguments->df = 1;
     break;
   case 't':
     arguments->trace = 1;
     break;
-  case 'o':
-    arguments->decompile = 1;
+  case 'p':
+    arguments->print_tree = 1;
     break;
   case 's':
-    arguments->print_tree = 1;
+    arguments->server = 1;
     break;
   case ARGP_KEY_ARG:
     if (0 == state->arg_num) {
@@ -167,6 +174,9 @@ int main(int argc, char **argv)
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
+  if (arguments.server)
+    return http_main(arguments.filename);
+
   if (NULL != arguments.dot)
     unlink(arguments.dot);
 
@@ -192,7 +202,7 @@ int main(int argc, char **argv)
       perror(arguments.dot);
       exit(1);
     }
-    df_output_dot(program,dotfile);
+    df_output_dot(program,dotfile,arguments.types);
     fclose(dotfile);
   }
 
