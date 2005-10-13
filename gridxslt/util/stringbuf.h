@@ -27,11 +27,19 @@
 #include <stdarg.h>
 
 typedef struct stringbuf stringbuf;
+typedef struct circbuf circbuf;
 
 struct stringbuf {
   int size;
   int allocated;
   char *data;
+};
+
+struct circbuf {
+  char *data;
+  int start;
+  int end;
+  int alloc;
 };
 
 stringbuf *stringbuf_new();
@@ -40,5 +48,14 @@ void stringbuf_format(stringbuf *buf, const char *format, ...);
 void stringbuf_append(stringbuf *buf, const char *data, int size);
 void stringbuf_clear(stringbuf *buf);
 void stringbuf_free(stringbuf *buf);
+
+circbuf *circbuf_new();
+int circbuf_size(circbuf *cb);
+int circbuf_suck(circbuf *cb, int fd, int size);
+void circbuf_append(circbuf *cb, const char *data, int size);
+int circbuf_get(circbuf *cb, char *out, int size);
+int circbuf_mvstart(circbuf *cb, int size);
+int circbuf_read(circbuf *cb, char *out, int size);
+void circbuf_free(circbuf *cb);
 
 #endif /* _UTIL_STRINGBUF_H */
