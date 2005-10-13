@@ -9,8 +9,8 @@ AM_PATH_XML2
 LIBCURL_CHECK_CONFIG
 
 ALL_LIBS="-lm $XML_LIBS $LIBCURL"
-ALL_INCLUDES="$XML_CPPFLAGS $LIBCURL_CPPFLAGS -g -Wall"
+ALL_INCLUDES="$XML_CPPFLAGS $LIBCURL_CPPFLAGS -g -Wall -O0"
 AC_SUBST(ALL_LIBS)
 AC_SUBST(ALL_INCLUDES)
 
-AC_OUTPUT(Makefile util/Makefile xmlschema/Makefile dataflow/Makefile xslt/Makefile src/Makefile)
+AC_OUTPUT(Makefile util/Makefile http/Makefile xmlschema/Makefile dataflow/Makefile xslt/Makefile src/Makefile)
