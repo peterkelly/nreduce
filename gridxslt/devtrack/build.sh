@@ -19,4 +19,6 @@ done
 
 $XSLTCMD specs/xmlschema-structures.xml examinestructures.xsl > output/xmlschema-1-details.xml
 
+./rfc2xml.pl specs/rfc2616.txt "http11" "http://www.ietf.org/rfc/rfc2616.txt" "Hypertext Transfer Protocol -- HTTP/1.1" > output/http11-details.xml
+
 ./update.sh
