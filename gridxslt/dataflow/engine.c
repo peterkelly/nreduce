@@ -222,6 +222,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     df_value_deref(g,a->values[0]);
     break;
   case OP_SPLIT:
+    assert(df_check_derived_atomic_type(a->values[0],g->boolean_type));
     if (0 == a->values[0]->value.b) {
       df_output_value(a,0,a->values[1]);
       df_deref_activity(a->outports[1].a,0,a->outports[2].a);
