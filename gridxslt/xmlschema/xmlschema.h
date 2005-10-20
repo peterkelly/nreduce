@@ -556,6 +556,8 @@ struct xs_globals {
   xs_type *double_type;
   xs_type *decimal_type;
 
+  xs_type *context_type;
+
   xs_symbol_table *symt;
   xs_allocset *as;
 
@@ -598,6 +600,7 @@ char *xs_range_str(xs_range r);
 
 void xs_get_first_elements_and_wildcards(xs_particle *p, list **first_ew);
 
+int xs_type_is_derived(xs_type *t, xs_type *from);
 int xs_facet_allowed(xs_type *t, int facet);
 int xs_wildcard_constraint_is_subset(xs_schema *s, xs_wildcard *sub, xs_wildcard *super);
 xs_wildcard *xs_wildcard_constraint_union(xs_schema *s, xs_wildcard *O1, xs_wildcard *O2,
