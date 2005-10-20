@@ -29,6 +29,7 @@
 #include "xpath.h"
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 
 #define FNS SPECIAL_NAMESPACE
 
@@ -900,13 +901,104 @@ static gxvalue *filter(gxenvironment *env, gxvalue **args)
 
 static gxvalue *empty(gxenvironment *env, gxvalue **args)
 {
+  /* FIXME: this should take 0 parameters (only context)... remember to update all code that
+     uses this function */
   df_seqtype *st = df_seqtype_new(SEQTYPE_EMPTY);
   df_value *result = df_value_new(st);
   df_seqtype_deref(st);
   return result;
 }
 
-gxfunctiondef special_fundefs[15] = {
+gxvalue *ebv(gxenvironment *env, gxvalue **args)
+{
+  /* FIXME: need to complete/test this */
+
+  /* 1. If its operand is an empty sequence, fn:boolean returns false. */
+  if (SEQTYPE_EMPTY == args[0]->seqtype->type)
+    return mkbool(0);
+
+  if (SEQTYPE_SEQUENCE != args[0]->seqtype->type) {
+    /* 3. If its operand is a singleton value of type xs:boolean or derived from xs:boolean,
+       fn:boolean returns the value of its operand unchanged. */
+    if (xs_type_is_derived(args[0]->seqtype->item->type,env->g->boolean_type))
+      return vref(args[0]);
+
+    /* 4. If its operand is a singleton value of type xs:string, xdt:untypedAtomic, or a type
+       derived from one of these, fn:boolean returns false if the operand value has zero length;
+       otherwise it returns true. */
+    if (xs_type_is_derived(args[0]->seqtype->item->type,env->g->string_type) ||
+        xs_type_is_derived(args[0]->seqtype->item->type,env->g->untyped_atomic))
+      return mkbool(0 < strlen(asstring(args[0])));
+
+    /* 5. If its operand is a singleton value of any numeric type or derived from a numeric type,
+       fn:boolean returns false if the operand value is NaN or is numerically equal to zero;
+       otherwise it returns true. */
+    if (xs_type_is_derived(args[0]->seqtype->item->type,env->g->float_type))
+      return mkbool((0.0 != asfloat(args[0])) || isnan(asfloat(args[0])));
+
+    if (xs_type_is_derived(args[0]->seqtype->item->type,env->g->double_type))
+      return mkbool((0.0 != asdouble(args[0])) || isnan(asdouble(args[0])));
+
+    if (xs_type_is_derived(args[0]->seqtype->item->type,env->g->decimal_type))
+      return mkbool((0.0 != asint(args[0])) || isnan(asint(args[0])));
+
+    /* 2. If its operand is a sequence whose first item is a node, fn:boolean returns true. */
+    if (ITEM_ATOMIC != args[0]->seqtype->item->kind)
+      return mkbool(1);
+  }
+  else {
+    df_value **values = df_sequence_to_array(args[0]);
+    if (ITEM_ATOMIC != values[0]->seqtype->item->kind) {
+      free(values);
+      return mkbool(1);
+    }
+    free(values);
+  }
+
+  /* 6. In all other cases, fn:boolean raises a type error [err:FORG0006]. */
+
+  error(env->ei,env->sloc.uri,env->sloc.line,"FORG0006",
+        "Type error: cannot convert value to a boolean");
+  return NULL;
+}
+
+static gxvalue *and(gxenvironment *env, gxvalue **args)
+{
+  gxvalue *v1;
+  gxvalue *v2;
+  int r;
+  if (NULL == (v1 = ebv(env,&args[0])))
+    return NULL;
+  if (NULL == (v2 = ebv(env,&args[1]))) {
+    vderef(v1);
+    return NULL;
+  }
+  r = (asbool(v1) && asbool(v2));
+  vderef(v1);
+  vderef(v2);
+
+  return mkbool(r);
+}
+
+static gxvalue *or(gxenvironment *env, gxvalue **args)
+{
+  gxvalue *v1;
+  gxvalue *v2;
+  int r;
+  if (NULL == (v1 = ebv(env,&args[0])))
+    return NULL;
+  if (NULL == (v2 = ebv(env,&args[1]))) {
+    vderef(v1);
+    return NULL;
+  }
+  r = (asbool(v1) || asbool(v2));
+  vderef(v1);
+  vderef(v2);
+
+  return mkbool(r);
+}
+
+gxfunctiondef special_fundefs[18] = {
   { element,       FNS, "element",       "item()*,xsd:string",        "element()"       },
   { range,         FNS, "range",         "xsd:integer?,xsd:integer?", "xsd:integer*"    },
   { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean"     },
@@ -921,6 +1013,9 @@ gxfunctiondef special_fundefs[15] = {
   { output,        FNS, "output",        "item()*",                   "item()*"         },
   { filter,        FNS, "filter",        "item()*",                   "item()*"         },
   { empty,         FNS, "empty",         "item()*",                   "item()*"         },
+  { ebv,           FNS, "ebv",           "item()*",                   "xsd:boolean"     },
+  { and,           FNS, "and",           "item()*,item()*",           "xsd:boolean"     },
+  { or,            FNS, "or",            "item()*,item()*",           "xsd:boolean"     },
   { NULL },
 };
 
