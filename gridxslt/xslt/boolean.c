@@ -23,6 +23,7 @@
 #include "dataflow/sequencetype.h"
 #include "dataflow/dataflow.h"
 #include "util/xmlutils.h"
+#include "special.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <assert.h>
@@ -33,10 +34,14 @@
 
 static gxvalue *not(gxenvironment *env, gxvalue **args)
 {
-  /* FIXME: we can't assume the input is a boolean! arg def is item()*; we have to reduce it
-     to a boolean ourselves */
-  assert(df_check_derived_atomic_type(args[0],env->g->boolean_type));
-  return mkbool(!asbool(args[0]));
+  gxvalue *v1;
+  int r;
+  if (NULL == (v1 = ebv(env,&args[0])))
+    return NULL;
+  r = !asbool(v1);
+  vderef(v1);
+
+  return mkbool(r);
 }
 
 gxfunctiondef boolean_fundefs[2] = {
