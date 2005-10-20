@@ -154,6 +154,10 @@ struct gxcontext {
   char *groupkey;
 };
 
+gxcontext *df_create_context(df_value *item, int position, int size, int havefocus,
+                              gxcontext *prev);
+void df_free_context(xs_globals *globals, gxcontext *ctxt);
+
 struct gxenvironment {
   gxcontext *ctxt;
   xs_globals *g;
