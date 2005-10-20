@@ -71,7 +71,9 @@ void df_instruction_compute_types(df_instruction *instr, xs_globals *g)
   case OP_MERGE:
     /* FIXME: merge the two input types; if you know they're both going to be ints, then the
        result of the merge can be int. */
-    instr->outports[0].seqtype = df_normalize_itemnode(1,g);
+    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
+    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
+    instr->outports[0].seqtype->left = df_normalize_itemnode(1,g);
     break;
   case OP_CALL:
     instr->outports[0].seqtype = df_seqtype_ref(instr->cfun->rtype);
@@ -361,11 +363,8 @@ df_instruction *df_add_builtin_instruction(df_program *program, df_function *fun
   df_free_instruction_inports(instr);
   instr->ninports = nargs;
   instr->inports = (df_inport*)calloc(nargs,sizeof(df_inport));
-  debug("df_add_builtin_instruction %#n: %d, fun %#n, id %d\n",ident,nargs,fun->ident,instr->id);
-  for (i = 0; i < nargs; i++) {
+  for (i = 0; i < nargs; i++)
     instr->inports[i].seqtype = df_seqtype_ref(bif->argtypes[i]);
-    debug("  inports %p arg %d: %p\n",instr->inports,i,instr->inports[i].seqtype);
-  }
 
   assert(1 == instr->noutports);
   instr->outports[0].seqtype = df_seqtype_ref(bif->rettype);
@@ -430,6 +429,34 @@ void df_free_instruction(df_instruction *instr)
   free(instr->str);
   sourceloc_free(instr->sloc);
   free(instr);
+}
+
+gxcontext *df_create_context(df_value *item, int position, int size, int havefocus,
+                              gxcontext *prev)
+{
+  gxcontext *ctxt = (gxcontext*)calloc(1,sizeof(gxcontext));
+  ctxt->item = item ? df_value_ref(item) : NULL;
+  ctxt->position = position;
+  ctxt->size = size;
+  ctxt->havefocus = havefocus;
+  if (NULL != prev) {
+    ctxt->template = prev->template;
+    ctxt->mode = prev->mode ? strdup(prev->mode) : NULL;
+    ctxt->group = prev->group ? strdup(prev->group) : NULL;
+    ctxt->groupkey = prev->groupkey ? strdup(prev->groupkey) : NULL;
+  }
+
+  return ctxt;
+}
+
+void df_free_context(xs_globals *globals, gxcontext *ctxt)
+{
+  if (ctxt->item)
+    df_value_deref(globals,ctxt->item);
+  free(ctxt->mode);
+  free(ctxt->group);
+  free(ctxt->groupkey);
+  free(ctxt);
 }
 
 const char *df_opstr(int opcode)
