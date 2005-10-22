@@ -74,6 +74,7 @@ int main(int argc, char **argv)
   url = (char*)malloc(strlen(SERVLET_URL)+strlen("?source=&input=")+strlen(input)+strlen(source)+1);
   sprintf(url,"%s?source=%s&input=%s",SERVLET_URL,source,input);
 
+#ifndef DISABLE_CURL
   curl_global_init(CURL_GLOBAL_ALL);
   h = curl_easy_init();
 
@@ -90,6 +91,7 @@ int main(int argc, char **argv)
   }
 
   curl_easy_cleanup(h);
+#endif
 
   printf("%s",response->data);
 

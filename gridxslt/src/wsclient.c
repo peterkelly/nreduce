@@ -129,6 +129,7 @@ void test()
   printf("%s",sbuf->data);
   printf("===============\n");
 
+#ifndef DISABLE_CURL
   curl_global_init(CURL_GLOBAL_ALL);
   h = curl_easy_init();
 
@@ -145,6 +146,7 @@ void test()
   curl_easy_setopt(h,CURLOPT_USERAGENT,"libcurl-agent/1.0");
   cr = curl_easy_perform(h);
   curl_easy_cleanup(h);
+#endif
 
   printf("Response:\n");
   printf("===============\n");

@@ -35,8 +35,8 @@
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 
-const char *argp_program_version =
-  "fsxml 0.1";
+/* const char *argp_program_version = */
+/*   "fsxml 0.1"; */
 
 static char doc[] =
   "Produce XML representation of a directory tree";

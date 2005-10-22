@@ -61,6 +61,7 @@ char *get_porttype(const char *wsdl, char **service_name, char **service_url)
   *service_url = NULL;
 
   /* FIXME: error handler for if it can't access the URL */
+#ifndef DISABLE_CURL
   curl_global_init(CURL_GLOBAL_ALL);
   h = curl_easy_init();
   curl_easy_setopt(h,CURLOPT_URL,wsdl);
@@ -75,6 +76,7 @@ char *get_porttype(const char *wsdl, char **service_name, char **service_url)
     stringbuf_free(buf);
     return NULL;
   }
+#endif
 
   if (NULL == (doc = xmlReadMemory(buf->data,buf->size-1,wsdl,NULL,0))) {
     fprintf(stderr,"%s: XML parse error\n",wsdl);

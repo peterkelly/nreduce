@@ -1,7 +1,7 @@
 noinst_LTLIBRARIES = libxmlschema.la
 noinst_PROGRAMS = testxmlschema genbindings binxml
 testxmlschema_SOURCES = testxmlschema.c
-libxmlschema_la_SOURCES = xmlschema.c derivation.c output.c parse.c validation.c
+libxmlschema_la_SOURCES = xmlschema.c derivation.c output.c parse.c validation.c testxmlschema_impl.c binxml_impl.c genbindings_impl.c
 genbindings_SOURCES = genbindings.c
 binxml_SOURCES = binxml.c
 gridxsltincludedir = $(includedir)/gridxslt

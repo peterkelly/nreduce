@@ -55,8 +55,8 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
                            fsm_state *start, int startid, fsm_state *end, int endid,
                            list **allocated_inputs, int userel);
 
-const char *argp_program_version =
-  "validate 0.1";
+/* const char *argp_program_version = */
+/*   "validate 0.1"; */
 
 static char doc[] =
   "XML Validator";

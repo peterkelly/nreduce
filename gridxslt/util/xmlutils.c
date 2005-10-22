@@ -854,6 +854,7 @@ int retrieve_uri(error_info *ei, const char *filename, int line, const char *err
     CURLcode cr;
     long rc = 0;
 
+#ifndef DISABLE_CURL
     h = curl_easy_init();
     curl_easy_setopt(h,CURLOPT_URL,uri);
     curl_easy_setopt(h,CURLOPT_WRITEFUNCTION,write_buf);
@@ -878,6 +879,7 @@ int retrieve_uri(error_info *ei, const char *filename, int line, const char *err
     }
 
     curl_easy_cleanup(h);
+#endif
   }
   else if (!strncasecmp(uri,"file://",7)) {
     FILE *f;

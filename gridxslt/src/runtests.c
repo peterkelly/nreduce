@@ -32,11 +32,38 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
 #include <argp.h>
+
+int binxml_main(int argc, char **argv);
+int genbindings_main(int argc, char **argv);
+int gridxslt_main(int argc, char **argv);
+int testxmlschema_main(int argc, char **argv);
+int testxpath_main(int argc, char **argv);
+int testxslt_main(int argc, char **argv);
+
+typedef int (*mainfun)(int argc, char **argv);
+
+typedef struct progmain progmain;
+
+struct progmain {
+  char *name;
+  mainfun fun;
+};
+
+progmain testprogs[7] = {
+  { "binxml", binxml_main },
+  { "genbindings", genbindings_main },
+  { "gridxslt", gridxslt_main },
+  { "testxmlschema", testxmlschema_main },
+  { "testxpath", testxpath_main },
+  { "testxslt", testxslt_main },
+  { NULL, NULL },
+};
 
 typedef struct progsubst progsubst;
 
@@ -62,8 +89,8 @@ const char *progsubst_lookup(list *substitutions, const char *name)
   return NULL;
 }
 
-const char *argp_program_version =
-  "runtests 0.1";
+/* const char *argp_program_version = */
+/*   "runtests 0.1"; */
 
 static char doc[] =
   "Perform a series of regression tests";
@@ -72,6 +99,9 @@ static char args_doc[] = "PATH";
 
 static struct argp_option options[] = {
   {"diff",                  'd', 0,      0,  "Print a diff between the expected and actual output"},
+  {"inprocess",             'i', 0,      0,  "Run all tests in-process"},
+  {"repeat",                'n', "N",    0,  "Run tests n times (dirs only)"},
+  {"hide-output",           'h', 0,      0,  "Hide status output"},
   {"valgrind",              'v', "CMD",  0,  "Run tests through valgrind command CMD and report "
                                              "leaks/errors"},
   {"substitute",            's', "NAME=PROG",0,  "Use PROG as the executable whenever a test specifies NAME"},
@@ -80,6 +110,9 @@ static struct argp_option options[] = {
 
 struct arguments {
   char *path;
+  int inprocess;
+  int n;
+  int hide_output;
   int valgrind;
   char *valgrind_cmd;
   int diff;
@@ -97,6 +130,15 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
   case 'v':
     arguments->valgrind = 1;
     arguments->valgrind_cmd = arg;
+    break;
+  case 'i':
+    arguments->inprocess = 1;
+    break;
+  case 'n':
+    arguments->n = atoi(arg);
+    break;
+  case 'h':
+    arguments->hide_output = 1;
     break;
   case 's': {
     progsubst *s = (progsubst*)calloc(1,sizeof(progsubst));
@@ -199,7 +241,74 @@ void expand_args(char *program, char *infilename, char ***args)
   free(cmdline);
 }
 
-int run_program(char *program, char *infilename, stringbuf *output, int *status)
+int run_program_inprocess(char *program, char *infilename, stringbuf *output, int *status)
+{
+  char **args;
+  int i;
+  mainfun fun = NULL;
+  int argc = 0;
+  int outfd;
+  int stdout_backup;
+  int stderr_backup;
+  char buf[1024];
+  int r;
+
+  if (0 > (outfd = open(TEMP_DIR"/output",O_WRONLY|O_CREAT|O_TRUNC,0666))) {
+    perror(TEMP_DIR"/output");
+    exit(1);
+  }
+
+  stdout_backup = dup(STDOUT_FILENO);
+  stderr_backup = dup(STDERR_FILENO);
+
+/*   close(STDIN_FILENO); */
+/*   close(STDOUT_FILENO); */
+  dup2(outfd,STDOUT_FILENO);
+  dup2(outfd,STDERR_FILENO);
+
+  expand_args(program,infilename,&args);
+
+  for (i = 0; testprogs[i].name; i++)
+    if (!strcmp(testprogs[i].name,args[0]))
+      fun = testprogs[i].fun;
+
+  if (NULL == fun) {
+    fprintf(stderr,"No internal test function for program \"%s\"\n",args[0]);
+    exit(1);
+  }
+
+  for (i = 0; args[i]; i++)
+    argc++;
+
+  *status = fun(argc,args) << 8;
+  close(outfd);
+
+/*   for (i = 0; args[i]; i++) */
+/*     free(args[i]); */
+/*   free(args); */
+
+/*   close(STDIN_FILENO); */
+/*   close(STDOUT_FILENO); */
+  dup2(stdout_backup,STDOUT_FILENO);
+  dup2(stderr_backup,STDERR_FILENO);
+  close(stdout_backup);
+  close(stderr_backup);
+
+  if (0 > (outfd = open(TEMP_DIR"/output",O_RDONLY,0666))) {
+    perror(TEMP_DIR"/output");
+    exit(1);
+  }
+
+  while (0 < (r = read(outfd,buf,1024)))
+    stringbuf_append(output,buf,r);
+
+  close(outfd);
+  unlink(TEMP_DIR"/output");
+
+  return 0;
+}
+
+int run_program_exec(char *program, char *infilename, stringbuf *output, int *status)
 {
   int fds[2];
   pid_t pid;
@@ -483,7 +592,6 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   FILE *in;
   int r;
   char buf[1024];
-  pid_t pid;
   stringbuf *vgoutput = stringbuf_new();
   char *out_filename = NULL;
   FILE *out = NULL;
@@ -492,7 +600,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   int skipsubst = 0;
   int subst = 0;
 
-  if (!justrun)
+  if (!justrun && !args->hide_output)
     printf("%-80s... ",filename);
 
   if (NULL == (in = fopen(filename,"r"))) {
@@ -563,12 +671,15 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
           stringbuf_free(temp);
           free(realprog);
         }
-        else {
+        else if (!args->inprocess) {
           cmdline = subst_program(line,args->substitutions);
           if (NULL == cmdline)
             cmdline = find_program(line);
           else
             subst = 1;
+        }
+        else {
+          cmdline = strdup(line);
         }
         break;
       case STATE_CMDLINE:
@@ -625,16 +736,17 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
     exit(1);
   }
 
-  if (skipsubst && subst && !justrun) {
+  if (skipsubst && subst && !justrun && !args->hide_output) {
     printf("skipped\n");
     passed = 1;
   }
   else {
+    char *infilename = output_files ? NULL : tempname;
 
-    if (NULL != output_files)
-      pid = run_program(cmdline,NULL,output,&status);
+    if (args->inprocess)
+      run_program_inprocess(cmdline,infilename,output,&status);
     else
-      pid = run_program(cmdline,tempname,output,&status);
+      run_program_exec(cmdline,infilename,output,&status);
 
     /* add trailing newline if necessary */
     if ((2 <= output->size) && ('\n' != output->data[output->size-2]))
@@ -665,26 +777,35 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
     }
     else {
 
+/*       printf("status = %d, WEXITSTATUS = %d\n",status,WEXITSTATUS(status)); */
+
       if (WIFSIGNALED(status)) {
-        printf("%s\n",sys_siglist[WTERMSIG(status)]);
+        if (!args->hide_output)
+          printf("%s\n",sys_siglist[WTERMSIG(status)]);
       }
       else if (!WIFEXITED(status)) {
-        printf("abnormal termination\n");
+        if (!args->hide_output)
+          printf("abnormal termination\n");
       }
       else if (WEXITSTATUS(status) != expected_rc) {
-        printf("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
+        if (!args->hide_output)
+          printf("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
       }
       else if ((expected->size != output->size) ||
                memcmp(expected->data,output->data,expected->size-1)) {
-        printf("incorrect output\n");
-        if (args->diff)
-          printdiff(expected,output);
+        if (!args->hide_output) {
+          printf("incorrect output\n");
+          if (args->diff)
+            printdiff(expected,output);
+        }
       }
       else if (1 != vgoutput->size) {
-        printf("valgrind errors\n");
+        if (!args->hide_output)
+          printf("valgrind errors\n");
       }
       else {
-        printf("passed\n");
+        if (!args->hide_output)
+          printf("passed\n");
         passed = 1;
       }
     }
@@ -807,8 +928,10 @@ int process_dir(char *testdir, struct arguments *args)
   int passes = 0;
   int failures = 0;
 
-  if (0 != process_dir_r(testdir,&passes,&failures,args))
-    return 1;
+  while (0 < args->n--) {
+    if (0 != process_dir_r(testdir,&passes,&failures,args))
+      return 1;
+  }
 
   printf("Passes: %d\n",passes);
   printf("Failures: %d\n",failures);
@@ -857,9 +980,10 @@ int main(int argc, char **argv)
   struct stat statbuf;
   struct arguments arguments;
   char *pathend;
-  int r;
+  int r = 0;
 
   memset(&arguments,0,sizeof(struct arguments));
+  arguments.n = 1;
 
   setbuf(stdout,NULL);
 
