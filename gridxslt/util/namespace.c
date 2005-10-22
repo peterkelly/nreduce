@@ -146,8 +146,10 @@ nsnametest *qnametest_to_nsnametest(ns_map *map, const qnametest *qt)
   nt->wcname = qt->wcname;
   if (NULL != qt->qn.prefix) {
     ns_def *def;
-    if (NULL == (def = ns_lookup_prefix(map,qt->qn.prefix)))
+    if (NULL == (def = ns_lookup_prefix(map,qt->qn.prefix))) {
+      free(nt);
       return NULL;
+    }
     nt->nn.ns = strdup(def->href);
   }
   if (NULL != qt->qn.localpart)

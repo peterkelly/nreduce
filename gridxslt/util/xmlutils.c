@@ -165,12 +165,16 @@ void qname_free(qname qn)
 {
   free(qn.prefix);
   free(qn.localpart);
+  qn.prefix = NULL;
+  qn.localpart = NULL;
 }
 
 void nsname_free(nsname nn)
 {
   free(nn.ns);
   free(nn.name);
+  nn.ns = NULL;
+  nn.name = NULL;
 }
 
 void nsname_ptr_free(nsname *nn)

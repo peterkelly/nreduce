@@ -525,6 +525,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
 
       if (NULL != sn->seroptions[SEROPTION_METHOD]) {
         qname qn = qname_parse(sn->seroptions[SEROPTION_METHOD]);
+        nsname_free(od->method);
         od->method = qname_to_nsname(sn->namespaces,qn);
 
         /* @implements(xslt20:serialization-15)

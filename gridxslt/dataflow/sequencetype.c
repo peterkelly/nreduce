@@ -759,9 +759,11 @@ static int validate_sequence_list(seqtype *base, list **lptr)
 int seqtype_derived(seqtype *base, seqtype *st)
 {
   list *types = NULL;
+  list *types2;
   int r;
   seqtype_to_list(st,&types);
-  r = validate_sequence_list(base,&types);
+  types2 = types;
+  r = validate_sequence_list(base,&types2);
   list_free(types,NULL);
   return r;
 }
@@ -1512,6 +1514,7 @@ value *df_atomize(value *v)
       seqtype *strtype = seqtype_new_atomic(xs_g->string_type);
       value *atom = value_new(strtype);
       stringbuf *buf = stringbuf_new();
+      seqtype_deref(strtype);
       node_to_string(v->value.n,buf);
       atom->value.s = strdup(buf->data);
       stringbuf_free(buf);

@@ -116,6 +116,7 @@ static int df_parse_cdata_section_elements(df_seroptions *options, error_info *e
       else {
         list_append(&options->cdata_section_elements,nn);
       }
+      qname_free(*qn);
     }
     free(qnames);
     if (0 != r)
@@ -381,6 +382,7 @@ void df_seroptions_free(df_seroptions *options)
   free(options->normalization_form);
   list_free(options->use_character_maps,(list_d_t)nsname_ptr_free);
   free(options->version);
+  list_free(options->cdata_section_elements,(list_d_t)nsname_ptr_free);
   free(options);
 }
 

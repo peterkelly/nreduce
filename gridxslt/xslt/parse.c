@@ -379,7 +379,7 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr
     else if (check_element(c,"attribute",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
       /* FIXME: support for "namespace" attribute */
-      char *select = xmlGetNsProp(c,"select",NULL);
+      char *select;
       /* FIXME: support for "separator" attribute */
       /* FIXME: support for "type" attribute */
       /* FIXME: support for "validation" attribute */
@@ -389,8 +389,16 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr
       if (NULL == name)
         return missing_attribute(c,"name");
       new_sn->qn = qname_parse(name);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0))))
+      free(name);
+
+
+      select = xmlGetNsProp(c,"select",NULL);
+      if ((NULL != select) &&
+          (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0)))) {
+        free(select);
         return -1;
+      }
+      free(select);
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"call-template",XSLT_NAMESPACE)) {
@@ -493,8 +501,11 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr
       new_sn = add_node(&child_ptr,XSLT_INSTR_FOR_EACH,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
-      if (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0)))
+      if (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0))) {
+        free(select);
         return -1;
+      }
+      free(select);
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"for-each-group",XSLT_NAMESPACE)) {
@@ -744,14 +755,22 @@ static int parse_sequence_constructors(xl_snode *sn, xmlNodePtr start, xmlDocPtr
     }
     else if (check_element(c,"variable",XSLT_NAMESPACE)) {
       char *name = xmlGetNsProp(c,"name",NULL);
-      char *select = xmlGetNsProp(c,"select",NULL);
+      char *select;
       /* FIXME: attribute "as" for seqtype */
       new_sn = add_node(&child_ptr,XSLT_VARIABLE,filename,c);
       if (NULL == name)
         return missing_attribute(c,"name");
       new_sn->qn = qname_parse(name);
-      if ((NULL != select) && (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0))))
+      free(name);
+
+      select = xmlGetNsProp(c,"select",NULL);
+      if ((NULL != select) &&
+          (NULL == (new_sn->select = get_expr(ei,filename,c,"select",select,0)))) {
+        free(select);
         return -1;
+      }
+      free(select);
+
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"param",XSLT_NAMESPACE)) {

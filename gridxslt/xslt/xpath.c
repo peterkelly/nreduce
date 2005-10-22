@@ -161,6 +161,7 @@ void xp_expr_free(xp_expr *xp)
   qname_free(xp->type_qname);
   nsname_free(xp->ident);
   sourceloc_free(xp->sloc);
+  free(xp->strval);
   free(xp);
 }
 

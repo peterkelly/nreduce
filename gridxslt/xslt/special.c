@@ -492,6 +492,7 @@ static value *element(gxenvironment *env, value **args)
   debug("element %p (\"%s\"): %d items in child sequence\n",
         elemvalue,elem->ident.name,list_count(values));
   if (0 != df_construct_complex_content(env->ei,env->sloc,values,elem)) {
+    list_free(values,NULL);
     value_deref(elemvalue);
     return NULL;
   }
