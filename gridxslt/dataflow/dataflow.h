@@ -56,14 +56,14 @@ typedef struct df_builtin_function df_builtin_function;
 typedef struct df_program df_program;
 
 struct df_inport {
-  df_seqtype *seqtype;
+  seqtype *st;
   df_instruction *source;
   int sourcep;
   int from_special;
 };
 
 struct df_outport {
-  df_seqtype *seqtype;
+  seqtype *st;
   df_instruction *dest;
   int destp;
 
@@ -81,8 +81,8 @@ struct df_instruction {
   int noutports;
   df_outport *outports;
 
-  df_value *cvalue;
-/*   df_seqtype *ctype; */
+  value *cvalue;
+/*   seqtype *ctype; */
   df_function *cfun;
   df_builtin_function *bif;
 
@@ -93,7 +93,7 @@ struct df_instruction {
   int computed;
 
   char *nametest;
-  df_seqtype *seqtypetest;
+  seqtype *seqtypetest;
   int axis;
   df_seroptions *seroptions;
   list *nsdefs;
@@ -102,7 +102,7 @@ struct df_instruction {
 };
 
 struct df_parameter {
-  df_seqtype *seqtype;
+  seqtype *st;
   df_instruction *start;
   df_outport *outport;
   df_outport *varsource;
@@ -113,7 +113,7 @@ struct df_function {
   list *instructions;
   int nparams;
   df_parameter *params;
-  df_seqtype *rtype;
+  seqtype *rtype;
   df_instruction *start;
   df_instruction *ret;
   int nextid;
@@ -123,9 +123,9 @@ struct df_function {
   char *mode;
 };
 
-void df_compute_types(df_function *fun, xs_globals *g);
-int df_check_is_atomic_type(df_seqtype *st, xs_type *type);
-int df_check_derived_atomic_type(df_value *v, xs_type *type);
+void df_compute_types(df_function *fun);
+int df_check_is_atomic_type(seqtype *st, xs_type *type);
+int df_check_derived_atomic_type(value *v, xs_type *type);
 
 void df_init_function(df_program *program, df_function *fun, sourceloc sloc);
 df_function *df_new_function(df_program *program, const nsname ident);
@@ -141,10 +141,10 @@ void df_delete_instruction(df_program *program, df_function *fun, df_instruction
 void df_free_instruction_inports(df_instruction *instr);
 void df_free_instruction(df_instruction *instr);
 
-typedef gxvalue* (gxfunction)(gxenvironment *ctxt, gxvalue **args);
+typedef value* (gxfunction)(gxenvironment *ctxt, value **args);
 
 struct gxcontext {
-  gxvalue *item;
+  value *item;
   int position;
   int size;
   int havefocus;
@@ -154,13 +154,12 @@ struct gxcontext {
   char *groupkey;
 };
 
-gxcontext *df_create_context(df_value *item, int position, int size, int havefocus,
+gxcontext *df_create_context(value *item, int position, int size, int havefocus,
                               gxcontext *prev);
-void df_free_context(xs_globals *globals, gxcontext *ctxt);
+void df_free_context(gxcontext *ctxt);
 
 struct gxenvironment {
   gxcontext *ctxt;
-  xs_globals *g;
   error_info *ei;
   sourceloc sloc;
   list *space_decls;
@@ -179,8 +178,8 @@ struct df_builtin_function {
   gxfunction *fun;
   nsname ident;
   int nargs;
-  df_seqtype **argtypes;
-  df_seqtype *rettype;
+  seqtype **argtypes;
+  seqtype *rettype;
 };
 
 struct df_program {

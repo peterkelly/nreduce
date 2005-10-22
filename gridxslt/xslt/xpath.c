@@ -133,11 +133,11 @@ xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, erro
   return expr;
 }
 
-df_seqtype *df_seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei)
+seqtype *seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei)
 {
   int r;
   char *source = (char*)malloc(strlen("__just_seqtype ")+strlen(str)+1);
-  df_seqtype *st = NULL;
+  seqtype *st = NULL;
   sprintf(source,"__just_seqtype %s",str);
   r = parse_xl_syntax(source,filename,baseline,ei,NULL,NULL,&st);
   free(source);
@@ -155,8 +155,8 @@ void xp_expr_free(xp_expr *xp)
     xp_expr_free(xp->left);
   if (NULL != xp->right)
     xp_expr_free(xp->right);
-  if (NULL != xp->seqtype)
-    df_seqtype_deref(xp->seqtype);
+  if (NULL != xp->st)
+    seqtype_deref(xp->st);
   qname_free(xp->qn);
   qname_free(xp->type_qname);
   nsname_free(xp->ident);
@@ -199,8 +199,8 @@ int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *
   if (NULL != e->right)
     CHECK_CALL(xp_expr_resolve(e->right,s,filename,ei))
 
-  if (NULL != e->seqtype)
-    CHECK_CALL(df_seqtype_resolve(e->seqtype,e->stmt->namespaces,s,e->sloc.uri,e->sloc.line,ei))
+  if (NULL != e->st)
+    CHECK_CALL(seqtype_resolve(e->st,e->stmt->namespaces,s,e->sloc.uri,e->sloc.line,ei))
 
   return 0;
 }
@@ -392,7 +392,7 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
   case XPATH_EXPR_INSTANCE_OF:
     xp_expr_serialize(buf,e->left,0);
     stringbuf_format(buf," instance of ");
-    df_seqtype_print_xpath(buf,e->seqtype,e->stmt->namespaces);
+    seqtype_print_xpath(buf,e->st,e->stmt->namespaces);
     break;
   case XPATH_EXPR_TREAT:
     /* FIXME */
@@ -442,7 +442,7 @@ void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets)
 
     if ((AXIS_PARENT == e->axis) &&
         (XPATH_NODE_TEST_SEQTYPE == e->nodetest) &&
-        (e->seqtype->isnode)) {
+        (e->st->isnode)) {
       /* abbreviated form .. for parent::node() */
       stringbuf_format(buf,"..");
     }

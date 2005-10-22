@@ -23,5 +23,5 @@
 #include "dataflow/sequencetype.h"
 #include "dataflow/dataflow.h"
 
-gxvalue *ebv(gxenvironment *env, gxvalue **args);
+value *ebv(gxenvironment *env, value **args);
 

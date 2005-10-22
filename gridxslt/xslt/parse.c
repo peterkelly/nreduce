@@ -187,9 +187,9 @@ static int parse_optional_as(xmlNodePtr n, xl_snode *sn, error_info *ei, const c
 {
   if (xmlHasNsProp(n,"as",NULL)) {
     char *as = xmlGetNsProp(n,"as",NULL);
-    sn->seqtype = df_seqtype_parse(as,filename,n->line,ei);
+    sn->st = seqtype_parse(as,filename,n->line,ei);
     free(as);
-    if (NULL == sn->seqtype)
+    if (NULL == sn->st)
       return -1;
   }
   return 0;

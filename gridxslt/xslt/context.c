@@ -27,24 +27,24 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *position(gxenvironment *env, gxvalue **args)
+static value *position(gxenvironment *env, value **args)
 {
   if (!env->ctxt->havefocus) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
     return NULL;
   }
 
-  return mkint(env->ctxt->position);
+  return value_new_int(env->ctxt->position);
 }
 
-static gxvalue *last(gxenvironment *env, gxvalue **args)
+static value *last(gxenvironment *env, value **args)
 {
   if (!env->ctxt->havefocus) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
     return NULL;
   }
 
-  return mkint(env->ctxt->size);
+  return value_new_int(env->ctxt->size);
 }
 
 gxfunctiondef context_fundefs[3] = {

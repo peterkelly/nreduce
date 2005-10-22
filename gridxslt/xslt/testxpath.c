@@ -96,7 +96,6 @@ int main(int argc, char **argv)
   stringbuf *exprstr;
   stringbuf *input;
   char buf[1024];
-  xs_globals *g = xs_globals_new();
   xs_schema *s = NULL;
   xl_snode *stmt = xl_snode_new(XSLT_INSTR_SEQUENCE);
   xp_expr *expr;
@@ -109,11 +108,13 @@ int main(int argc, char **argv)
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
+  xs_init();
+
   memset(&ei,0,sizeof(error_info));
 
   if (NULL == arguments.schema)
-    s = xs_schema_new(g);
-  else if (NULL == (s = parse_xmlschema_file(arguments.schema,g)))
+    s = xs_schema_new(xs_g);
+  else if (NULL == (s = parse_xmlschema_file(arguments.schema,xs_g)))
     exit(1);
 
   exprstr = stringbuf_new();
@@ -149,7 +150,7 @@ int main(int argc, char **argv)
 
   xp_set_parent(expr,NULL,stmt);
   /* add default namespaces declared in schema */
-  for (l = s->globals->namespaces->defs; l; l = l->next) {
+  for (l = xs_g->namespaces->defs; l; l = l->next) {
     ns_def *ns = (ns_def*)l->data;
     ns_add_direct(stmt->namespaces,ns->href,ns->prefix);
   }
@@ -163,8 +164,8 @@ int main(int argc, char **argv)
     if (arguments.normalized_seqtypes) {
       stringbuf *buf = stringbuf_new();
       assert(XPATH_EXPR_INSTANCE_OF == expr->type);
-      assert(NULL != expr->seqtype);
-      df_seqtype_print_fs(buf,expr->seqtype,s->globals->namespaces);
+      assert(NULL != expr->st);
+      seqtype_print_fs(buf,expr->st,xs_g->namespaces);
       printf("%s\n",buf->data);
       stringbuf_free(buf);
     }
@@ -183,7 +184,7 @@ int main(int argc, char **argv)
 
   xl_snode_free(stmt);
   xs_schema_free(s);
-  xs_globals_free(g);
+  xs_cleanup();
 
   return r;
 }

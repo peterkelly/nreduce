@@ -41,7 +41,7 @@ struct df_actdest {
 struct df_activity {
   df_instruction *instr;
   int remaining;
-  df_value **values;
+  value **values;
   df_actdest *outports;
   int actno;
   int refs;
@@ -52,7 +52,7 @@ struct df_state {
   df_program *program;
   list *activities;
   int actno;
-  df_seqtype *intype;
+  seqtype *intype;
   int trace;
   error_info *ei;
 };
@@ -61,14 +61,14 @@ df_state *df_state_new(df_program *program, error_info *ei)
 {
   df_state *state = (df_state*)calloc(1,sizeof(df_state));
   state->program = program;
-  state->intype = df_seqtype_new_atomic(program->schema->globals->int_type);
+  state->intype = seqtype_new_atomic(xs_g->int_type);
   state->ei = ei;
   return state;
 }
 
 void df_state_free(df_state *state)
 {
-  df_seqtype_deref(state->intype);
+  seqtype_deref(state->intype);
   free(state);
 }
 
@@ -78,7 +78,7 @@ void free_activity(df_state *state, df_activity *a)
     int i;
     for (i = 0; i < a->instr->ninports; i++)
       if (NULL != a->values[i])
-        df_value_deref(state->program->schema->globals,a->values[i]);
+        value_deref(a->values[i]);
   }
   free(a->values);
   free(a->outports);
@@ -127,7 +127,7 @@ df_activity *df_activate_function(df_state *state, df_function *fun,
     a = instr->act;
     a->remaining = instr->ninports;
     a->outports = (df_actdest*)calloc(a->instr->noutports,sizeof(df_actdest));
-    a->values = (df_value**)calloc(a->instr->ninports,sizeof(df_value*));
+    a->values = (value**)calloc(a->instr->ninports,sizeof(value*));
 
     if (OP_RETURN == instr->opcode) {
       a->outports[0].a = dest;
@@ -151,7 +151,7 @@ df_activity *df_activate_function(df_state *state, df_function *fun,
   return start;
 }
 
-void df_set_input(df_activity *a, int p, df_value *v)
+void df_set_input(df_activity *a, int p, value *v)
 {
   a->values[p] = v;
   a->remaining--;
@@ -160,7 +160,7 @@ void df_set_input(df_activity *a, int p, df_value *v)
   assert(0 <= a->refs);
 }
 
-void df_output_value(df_activity *source, int sourcep, df_value *v)
+void df_output_value(df_activity *source, int sourcep, value *v)
 {
   df_activity *dest = source->outports[sourcep].a;
   int destp = source->outports[sourcep].p;
@@ -191,17 +191,16 @@ void df_deref_activity(df_activity *a, int indent, df_activity *merge)
 
 int df_fire_activity(df_state *state, df_activity *a)
 {
-  xs_globals *g = state->program->schema->globals;
   int i;
   if (state->trace)
     df_print_actmsg("Firing",a);
 
   for (i = 0; i < a->instr->ninports; i++) {
-    if (!df_seqtype_derived(a->instr->inports[i].seqtype,a->values[i]->seqtype)) {
+    if (!seqtype_derived(a->instr->inports[i].st,a->values[i]->st)) {
       stringbuf *buf1 = stringbuf_new();
       stringbuf *buf2 = stringbuf_new();
-      df_seqtype_print_fs(buf1,a->values[i]->seqtype,g->namespaces);
-      df_seqtype_print_fs(buf2,a->instr->inports[i].seqtype,g->namespaces);
+      seqtype_print_fs(buf1,a->values[i]->st,xs_g->namespaces);
+      seqtype_print_fs(buf2,a->instr->inports[i].st,xs_g->namespaces);
       error(state->ei,a->instr->sloc.uri,a->instr->sloc.line,NULL,
             "Instruction %#n:%d: Sequence type mismatch: %s does not match %s",
             a->instr->fun->ident,a->instr->id,buf1->data,buf2->data);
@@ -213,16 +212,16 @@ int df_fire_activity(df_state *state, df_activity *a)
 
   switch (a->instr->opcode) {
   case OP_CONST:
-    df_output_value(a,0,df_value_ref(a->instr->cvalue));
-    df_value_deref(g,a->values[0]);
+    df_output_value(a,0,value_ref(a->instr->cvalue));
+    value_deref(a->values[0]);
     break;
   case OP_DUP:
-    df_output_value(a,0,df_value_ref(a->values[0]));
-    df_output_value(a,1,df_value_ref(a->values[0]));
-    df_value_deref(g,a->values[0]);
+    df_output_value(a,0,value_ref(a->values[0]));
+    df_output_value(a,1,value_ref(a->values[0]));
+    value_deref(a->values[0]);
     break;
   case OP_SPLIT:
-    assert(df_check_derived_atomic_type(a->values[0],g->boolean_type));
+    assert(df_check_derived_atomic_type(a->values[0],xs_g->boolean_type));
     if (0 == a->values[0]->value.b) {
       df_output_value(a,0,a->values[1]);
       df_deref_activity(a->outports[1].a,0,a->outports[2].a);
@@ -235,7 +234,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     break;
   case OP_MERGE:
     df_output_value(a,0,a->values[0]);
-    df_value_deref(state->program->schema->globals,a->values[1]);
+    value_deref(a->values[1]);
     break;
   case OP_CALL: {
     df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
@@ -253,7 +252,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     if (0 == a->instr->cfun->nparams)
       df_set_input(start,0,a->values[0]);
     else
-      df_set_input(start,0,df_value_ref(a->values[0]));
+      df_set_input(start,0,value_ref(a->values[0]));
 
     break;
   }
@@ -266,14 +265,14 @@ int df_fire_activity(df_state *state, df_activity *a)
     int ultimate_destp = a->outports[0].p;
 
     if (NULL == values) {
-      df_seqtype *empty = df_seqtype_new(SEQTYPE_EMPTY);
-      df_value *ev = df_value_new(empty);
-      df_seqtype_deref(empty);
+      seqtype *empty = seqtype_new(SEQTYPE_EMPTY);
+      value *ev = value_new(empty);
+      seqtype_deref(empty);
       df_output_value(a,0,ev);
     }
 
     for (l = values; l; l = l->next) {
-      df_value *v = (df_value*)l->data;
+      value *v = (value*)l->data;
 
       df_activity *start;
 
@@ -286,7 +285,7 @@ int df_fire_activity(df_state *state, df_activity *a)
         assert(NULL != a->instr->fun->mapseq);
         seq->instr = a->instr->fun->mapseq;
         seq->remaining = 2;
-        seq->values = (df_value**)calloc(2,sizeof(df_value*));
+        seq->values = (value**)calloc(2,sizeof(value*));
         seq->outports = (df_actdest*)calloc(1,sizeof(df_actdest));
         seq->outports[0].a = ultimate_desta;
         seq->outports[0].p = ultimate_destp;
@@ -303,16 +302,16 @@ int df_fire_activity(df_state *state, df_activity *a)
       start = df_activate_function(state,a->instr->cfun,desta,destp,
                                     acts,a->instr->cfun->nparams);
 
-      df_set_input(start,0,df_value_ref(v));
+      df_set_input(start,0,value_ref(v));
       for (i = 0; i < a->instr->cfun->nparams; i++) {
         assert(NULL != a->values[i+1]);
         assert(NULL != acts[i]);
-        df_set_input(acts[i],0,df_value_ref(a->values[i+1]));
+        df_set_input(acts[i],0,value_ref(a->values[i+1]));
       }
     }
 
     for (i = 0; i < a->instr->ninports; i++)
-      df_value_deref(g,a->values[i]);
+      value_deref(a->values[i]);
 
     list_free(values,NULL);
     break;
@@ -321,19 +320,19 @@ int df_fire_activity(df_state *state, df_activity *a)
     df_output_value(a,0,a->values[0]);
     break;
   case OP_SWALLOW:
-    df_value_deref(g,a->values[0]);
+    value_deref(a->values[0]);
     break;
   case OP_RETURN:
     df_output_value(a,0,a->values[0]);
     break;
   case OP_PRINT: {
 
-    if (SEQTYPE_EMPTY != a->values[0]->seqtype->type) {
+    if (SEQTYPE_EMPTY != a->values[0]->st->type) {
       stringbuf *buf = stringbuf_new();
       df_seroptions *options = df_seroptions_new(nsname_temp(NULL,"xml"));
 
-      if (0 != df_serialize(g,a->values[0],buf,options,state->ei)) {
-        df_value_deref(g,a->values[0]);
+      if (0 != df_serialize(a->values[0],buf,options,state->ei)) {
+        value_deref(a->values[0]);
         df_seroptions_free(options);
         return -1;
       }
@@ -344,16 +343,16 @@ int df_fire_activity(df_state *state, df_activity *a)
       df_seroptions_free(options);
     }
 
-    df_value_deref(g,a->values[0]);
+    value_deref(a->values[0]);
     break;
   }
   case OP_GATE:
     df_output_value(a,0,a->values[0]);
-    df_value_deref(g,a->values[1]);
+    value_deref(a->values[1]);
     break;
   case OP_BUILTIN: {
     gxenvironment env;
-    df_value *result;
+    value *result;
     int i;
     memset(&env,0,sizeof(gxenvironment));
     /* FIXME: what if a->values[0] is a sequence? */
@@ -362,7 +361,6 @@ int df_fire_activity(df_state *state, df_activity *a)
     env.ctxt->position = 1;
     env.ctxt->size = 1;
     env.ctxt->havefocus = 1;
-    env.g = g;
     env.ei = state->ei;
     env.sloc = a->instr->sloc;
     env.space_decls = state->program->space_decls;
@@ -374,7 +372,7 @@ int df_fire_activity(df_state *state, df_activity *a)
     free(env.ctxt);
     df_output_value(a,0,result);
     for (i = 0; i < a->instr->bif->nargs; i++)
-      df_value_deref(g,a->values[i]);
+      value_deref(a->values[i]);
     break;
   }
   default:
@@ -440,14 +438,14 @@ int df_execute_network(df_state *state)
     return 0;
 }
 
-int df_execute(df_program *program, int trace, error_info *ei, df_value *context)
+int df_execute(df_program *program, int trace, error_info *ei, value *context)
 {
   df_function *mainfun;
   df_function *init;
   df_activity *print;
   df_activity *start;
   df_state *state = NULL;
-  df_seqtype *st;
+  seqtype *st;
   int r;
 
   mainfun = df_lookup_function(program,nsname_temp(GX_NAMESPACE,"main"));
@@ -466,12 +464,12 @@ int df_execute(df_program *program, int trace, error_info *ei, df_value *context
   init->program = program;
   init->start = df_add_instruction(program,init,OP_PRINT,nosourceloc);
 
-  st = df_seqtype_new(SEQTYPE_OCCURRENCE);
+  st = seqtype_new(SEQTYPE_OCCURRENCE);
   st->occurrence = OCCURS_ZERO_OR_MORE;
-  st->left = df_normalize_itemnode(1,program->schema->globals);
-  init->start->inports[0].seqtype = st;
+  st->left = df_normalize_itemnode(1);
+  init->start->inports[0].st = st;
 
-  init->rtype = df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
+  init->rtype = seqtype_new_atomic(xs_g->complex_ur_type);
 
   state = df_state_new(program,ei);
   state->trace = trace;
@@ -479,7 +477,7 @@ int df_execute(df_program *program, int trace, error_info *ei, df_value *context
   print = (df_activity*)calloc(1,sizeof(df_activity));
   list_push(&state->activities,print);
   print->instr = init->start;
-  print->values = (df_value**)calloc(1,sizeof(df_value*));
+  print->values = (value**)calloc(1,sizeof(value*));
   print->remaining = 1;
   print->refs++;
 
@@ -489,7 +487,7 @@ int df_execute(df_program *program, int trace, error_info *ei, df_value *context
   start = df_activate_function(state,mainfun,print,0,NULL,0);
 
   if (NULL == context) {
-    context = df_value_new(state->intype);
+    context = value_new(state->intype);
     context->value.i = 0;
   }
   df_set_input(start,0,context);

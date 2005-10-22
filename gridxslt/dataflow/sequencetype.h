@@ -73,15 +73,14 @@
 #define NODE_TEXT                     ITEM_TEXT
 #define NODE_NAMESPACE                ITEM_NAMESPACE
 
-typedef struct df_itemtype df_itemtype;
-typedef struct df_seqtype df_seqtype;
+typedef struct itemtype itemtype;
+typedef struct seqtype seqtype;
 typedef struct df_seqpair df_seqpair;
-typedef struct df_node df_node;
-typedef struct df_value df_value;
-typedef df_value gxvalue;
-typedef df_node gxnode;
+typedef struct node node;
+typedef struct value value;
+typedef node gxnode;
 
-struct df_itemtype {
+struct itemtype {
   int kind;
   xs_type *type;
   xs_element *elem;
@@ -92,14 +91,14 @@ struct df_itemtype {
   qname localname;
   char *pistr;
   int nillable;
-  df_seqtype *content;
+  seqtype *content;
 };
 
-struct df_seqtype {
+struct seqtype {
   int type;
-  df_seqtype *left;
-  df_seqtype *right;
-  df_itemtype *item;
+  seqtype *left;
+  seqtype *right;
+  itemtype *item;
   int occurrence;
   int isnode;
   int isitem;
@@ -108,11 +107,11 @@ struct df_seqtype {
 };
 
 struct df_seqpair {
-  df_value *left;
-  df_value *right;
+  value *left;
+  value *right;
 };
 
-struct df_node {
+struct node {
   int type;
   list *namespaces;
   list *attributes;
@@ -122,16 +121,16 @@ struct df_node {
   char *value;
   int refcount;
 
-  df_node *next;
-  df_node *prev;
-  df_node *first_child;
-  df_node *last_child;
-  df_node *parent;
+  node *next;
+  node *prev;
+  node *first_child;
+  node *last_child;
+  node *parent;
   int nodeno;
 };
 
-struct df_value {
-  df_seqtype *seqtype;
+struct value {
+  seqtype *st;
   union {
     int i;
     float f;
@@ -139,89 +138,94 @@ struct df_value {
     char *s;
     int b;
     df_seqpair pair;
-    df_node *n;
+    node *n;
   } value;
   int refcount;
 };
 
-#define asint(_v) ((_v)->value.i)
-#define asfloat(_v) ((_v)->value.f)
-#define asdouble(_v) ((_v)->value.d)
-#define asstring(_v) ((_v)->value.s)
-#define asbool(_v) ((_v)->value.b)
-#define asnode(_v) ((_v)->value.n)
+#define checkatomic(_v,_type)                                                                \
+                        assert(SEQTYPE_ITEM == (_v)->st->type);                              \
+                        assert(ITEM_ATOMIC == (_v)->st->item->kind);                         \
+                        assert(xs_type_is_derived((_v)->st->item->type,_type));
 
-#define mkint(_v) df_value_new_int(env->g,_v)
-#define mkfloat(_v) df_value_new_float(env->g,_v)
-#define mkdouble(_v) df_value_new_double(env->g,_v)
-#define mkstring(_v) df_value_new_string(env->g,_v)
-#define mkbool(_v) df_value_new_bool(env->g,_v)
-#define mknode(_v) df_value_new_node(_v)
+#define asint(_v)    ({ checkatomic(_v,xs_g->decimal_type) (_v)->value.i;})
+#define asfloat(_v)  ({ checkatomic(_v,xs_g->float_type)   (_v)->value.f;})
+#define asdouble(_v) ({ checkatomic(_v,xs_g->double_type)  (_v)->value.d;})
+#define asstring(_v) ({ checkatomic(_v,xs_g->string_type)  (_v)->value.s;})
+#define asbool(_v)   ({ checkatomic(_v,xs_g->boolean_type) (_v)->value.b;})
+#define asnode(_v)   ({ assert(SEQTYPE_ITEM == (_v)->st->type);                              \
+                        assert(ITEM_ATOMIC != (_v)->st->item->kind);                         \
+                        (_v)->value.n;})
 
-#define vref(_v) df_value_ref(_v)
-#define vderef(_v) df_value_deref(env->g,_v)
 
-df_itemtype *df_itemtype_new(int kind);
-df_seqtype *df_seqtype_new(int type);
-df_seqtype *df_seqtype_new_item(int kind);
-df_seqtype *df_seqtype_new_atomic(xs_type *type);
-df_seqtype *df_seqtype_ref(df_seqtype *st);
-void df_itemtype_free(df_itemtype *it);
-void df_seqtype_deref(df_seqtype *st);
-df_seqtype *df_normalize_itemnode(int item, xs_globals *g);
-df_seqtype *df_interleave_document_content(df_seqtype *content);
+/* #define asint(_v) ((_v)->value.i) */
 
-void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces);
-void df_seqtype_print_xpath(stringbuf *buf, df_seqtype *st, ns_map *namespaces);
+/* #define asfloat(_v) ((_v)->value.f) */
+/* #define asdouble(_v) ((_v)->value.d) */
+/* #define asstring(_v) ((_v)->value.s) */
+/* #define asbool(_v) ((_v)->value.b) */
+/* #define asnode(_v) ((_v)->value.n) */
 
-int df_seqtype_compatible(df_seqtype *from, df_seqtype *to);
+itemtype *itemtype_new(int kind);
+seqtype *seqtype_new(int type);
+seqtype *seqtype_new_item(int kind);
+seqtype *seqtype_new_atomic(xs_type *type);
+seqtype *seqtype_ref(seqtype *st);
+void itemtype_free(itemtype *it);
+void seqtype_deref(seqtype *st);
+seqtype *df_normalize_itemnode(int item);
+seqtype *df_interleave_document_content(seqtype *content);
 
-int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const char *filename,
+void seqtype_print_fs(stringbuf *buf, seqtype *st, ns_map *namespaces);
+void seqtype_print_xpath(stringbuf *buf, seqtype *st, ns_map *namespaces);
+
+int seqtype_compatible(seqtype *from, seqtype *to);
+
+int seqtype_resolve(seqtype *st, ns_map *namespaces, xs_schema *s, const char *filename,
                         int line, error_info *ei);
-void df_seqtype_to_list(df_seqtype *st, list **types);
-int df_seqtype_derived(df_seqtype *base, df_seqtype *st);
+void seqtype_to_list(seqtype *st, list **types);
+int seqtype_derived(seqtype *base, seqtype *st);
 
-df_node *df_node_new(int type);
-df_node *df_node_root(df_node *n);
-df_node *df_node_ref(df_node *n);
-void df_print_remaining(xs_globals *globals);
-void df_node_free(df_node *n);
-void df_node_deref(df_node *n);
-df_node *df_node_deep_copy(df_node *n);
-df_node *df_node_unique(df_node *n);
-void df_node_add_child(df_node *n, df_node *c);
-void df_node_insert_child(df_node *n, df_node *c, df_node *before);
-void df_node_add_attribute(df_node *n, df_node *attr);
-void df_node_add_namespace(df_node *n, df_node *ns);
-df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v);
-df_node *df_node_from_xmlnode(xmlNodePtr xn);
-int df_check_tree(df_node *n);
-df_node *df_prev_node(df_node *node, df_node *subtree);
-df_node *df_next_node(df_node *node, df_node *subtree);
+node *node_new(int type);
+node *node_root(node *n);
+node *node_ref(node *n);
+void df_print_remaining();
+void node_free(node *n);
+void node_deref(node *n);
+node *node_deep_copy(node *n);
+node *node_unique(node *n);
+void node_add_child(node *n, node *c);
+void node_insert_child(node *n, node *c, node *before);
+void node_add_attribute(node *n, node *attr);
+void node_add_namespace(node *n, node *ns);
+node *node_from_xmlnode(xmlNodePtr xn);
+int node_check_tree(node *n);
+node *node_traverse_prev(node *n, node *subtree);
+node *node_traverse_next(node *n, node *subtree);
+void node_print(xmlTextWriter *writer, node *n);
 
-df_value *df_value_new_int(xs_globals *g, int i);
-df_value *df_value_new_float(xs_globals *g, float f);
-df_value *df_value_new_double(xs_globals *g, double d);
-df_value *df_value_new_string(xs_globals *g, const char *str);
-df_value *df_value_new_bool(xs_globals *g, int b);
-df_value *df_value_new_node(df_node *n);
+value *value_new_int(int i);
+value *value_new_float(float f);
+value *value_new_double(double d);
+value *value_new_string(const char *str);
+value *value_new_bool(int b);
+value *value_new_node(node *n);
 
-df_value *df_value_new(df_seqtype *seqtype);
-df_value *df_value_ref(df_value *v);
-void df_node_print(xmlTextWriter *writer, df_node *n);
-void df_value_printbuf(xs_globals *globals, stringbuf *buf, df_value *v);
-void df_value_print(xs_globals *globals, FILE *f, df_value *v);
-void df_value_deref(xs_globals *globals, df_value *v);
-void df_value_deref_list(xs_globals *globals, list *l);
-int df_value_equals(df_value *a, df_value *b);
-df_value **df_sequence_to_array(df_value *seq);
-void df_get_sequence_values(df_value *v, list **values);
-list *df_sequence_to_list(df_value *seq);
-df_value *df_list_to_sequence(xs_globals *g, list *values);
-void df_node_to_string(df_node *n, stringbuf *buf);
-char *df_value_as_string(xs_globals *g, df_value *v);
-df_value *df_atomize(xs_globals *g, df_value *v);
-df_value *df_cast(xs_globals *g, df_value *v, df_seqtype *as);
+value *value_new(seqtype *seqtype);
+value *value_ref(value *v);
+void value_deref(value *v);
+void value_deref_list(list *l);
+void value_printbuf(stringbuf *buf, value *v);
+void value_print(FILE *f, value *v);
+int value_equals(value *a, value *b);
+value **df_sequence_to_array(value *seq);
+void df_get_sequence_values(value *v, list **values);
+list *df_sequence_to_list(value *seq);
+value *df_list_to_sequence(list *values);
+void node_to_string(node *n, stringbuf *buf);
+char *value_as_string(value *v);
+value *df_atomize(value *v);
+value *df_cast(value *v, seqtype *as);
 
 #ifndef _DATAFLOW_SEQUENCETYPE_C
 extern const char *df_item_kinds[ITEM_COUNT];

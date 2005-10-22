@@ -98,7 +98,6 @@
 typedef struct xslt_source xslt_source;
 
 struct xslt_source {
-  xs_globals *globals;
   xs_schema *schema;
   xl_snode *root;
   list *output_defs;
@@ -125,7 +124,7 @@ struct xl_snode {
 
   qname qn;
   qname mode;
-  df_seqtype *seqtype;
+  seqtype *st;
   int gmethod;
   char *strval;
   char **seroptions;
@@ -157,7 +156,7 @@ xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname);
 void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode);
 
 int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
-                    xp_expr **expr, xl_snode **sn, df_seqtype **st);
+                    xp_expr **expr, xl_snode **sn, seqtype **st);
 xl_snode *xl_snode_parse(const char *str, const char *filename, int baseline, error_info *ei);
 void xl_snode_print_tree(xl_snode *sn, int indent);
 xl_snode *xl_first_decl(xl_snode *root);

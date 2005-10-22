@@ -50,49 +50,49 @@ const char *df_item_kinds[ITEM_COUNT] = {
 static list *allocnodes = NULL;
 static list *allocvalues = NULL;
 
-df_itemtype *df_itemtype_new(int kind)
+itemtype *itemtype_new(int kind)
 {
-  df_itemtype *st = (df_itemtype*)calloc(1,sizeof(df_itemtype));
+  itemtype *st = (itemtype*)calloc(1,sizeof(itemtype));
   st->kind = kind;
   return st;
 }
 
-df_seqtype *df_seqtype_new(int type)
+seqtype *seqtype_new(int type)
 {
-  df_seqtype *st = (df_seqtype*)calloc(1,sizeof(df_seqtype));
+  seqtype *st = (seqtype*)calloc(1,sizeof(seqtype));
   st->type = type;
   st->refcount = 1;
   return st;
 }
 
-df_seqtype *df_seqtype_new_item(int kind)
+seqtype *seqtype_new_item(int kind)
 {
-  df_seqtype *st = (df_seqtype*)calloc(1,sizeof(df_seqtype));
+  seqtype *st = (seqtype*)calloc(1,sizeof(seqtype));
   st->type = SEQTYPE_ITEM;
-  st->item = df_itemtype_new(kind);
+  st->item = itemtype_new(kind);
   st->refcount = 1;
   return st;
 }
 
-df_seqtype *df_seqtype_new_atomic(xs_type *type)
+seqtype *seqtype_new_atomic(xs_type *type)
 {
-  df_seqtype *st = df_seqtype_new_item(ITEM_ATOMIC);
+  seqtype *st = seqtype_new_item(ITEM_ATOMIC);
   st->item->type = type;
   return st;
 }
 
-df_seqtype *df_seqtype_ref(df_seqtype *st)
+seqtype *seqtype_ref(seqtype *st)
 {
   st->refcount++;
   return st;
 }
 
-void df_itemtype_free(df_itemtype *it)
+void itemtype_free(itemtype *it)
 {
   if (NULL != it->pistr)
     free(it->pistr);
   if (NULL != it->content)
-    df_seqtype_deref(it->content);
+    seqtype_deref(it->content);
   qname_free(it->typeref);
   qname_free(it->elemref);
   qname_free(it->attrref);
@@ -100,24 +100,24 @@ void df_itemtype_free(df_itemtype *it)
   free(it);
 }
 
-void df_seqtype_deref(df_seqtype *st)
+void seqtype_deref(seqtype *st)
 {
   st->refcount--;
   assert(0 <= st->refcount);
   if (0 == st->refcount) {
     if (NULL != st->item)
-      df_itemtype_free(st->item);
+      itemtype_free(st->item);
     if (NULL != st->left)
-      df_seqtype_deref(st->left);
+      seqtype_deref(st->left);
     if (NULL != st->right)
-      df_seqtype_deref(st->right);
+      seqtype_deref(st->right);
     free(st);
   }
 }
 
-df_seqtype *df_add_alternative(df_seqtype *st1, df_seqtype *st2)
+seqtype *df_add_alternative(seqtype *st1, seqtype *st2)
 {
-  df_seqtype *options = (df_seqtype*)calloc(1,sizeof(df_seqtype));
+  seqtype *options = (seqtype*)calloc(1,sizeof(seqtype));
   options->type = SEQTYPE_CHOICE;
   options->left = st1;
   options->right = st2;
@@ -125,29 +125,28 @@ df_seqtype *df_add_alternative(df_seqtype *st1, df_seqtype *st2)
   return options;
 }
 
-df_seqtype *df_normalize_itemnode(int item, xs_globals *g)
+seqtype *df_normalize_itemnode(int item)
 {
-  df_seqtype *i1 = df_seqtype_new_item(ITEM_ELEMENT);
-  df_seqtype *i2 = df_seqtype_new_item(ITEM_ATTRIBUTE);
-  df_seqtype *i3 = df_seqtype_new_item(ITEM_TEXT);
-  df_seqtype *i4 = df_seqtype_new_item(ITEM_DOCUMENT);
-  df_seqtype *i5 = df_seqtype_new_item(ITEM_COMMENT);
-  df_seqtype *i6 = df_seqtype_new_item(ITEM_PI);
+  seqtype *i1 = seqtype_new_item(ITEM_ELEMENT);
+  seqtype *i2 = seqtype_new_item(ITEM_ATTRIBUTE);
+  seqtype *i3 = seqtype_new_item(ITEM_TEXT);
+  seqtype *i4 = seqtype_new_item(ITEM_DOCUMENT);
+  seqtype *i5 = seqtype_new_item(ITEM_COMMENT);
+  seqtype *i6 = seqtype_new_item(ITEM_PI);
 
-  df_seqtype *choice = df_add_alternative(i1,i2);
+  seqtype *choice = df_add_alternative(i1,i2);
   choice = df_add_alternative(choice,i3);
   choice = df_add_alternative(choice,i4);
   choice = df_add_alternative(choice,i5);
   choice = df_add_alternative(choice,i6);
 
   if (item) {
-    df_seqtype *i7 = df_seqtype_new_item(ITEM_ATOMIC);
+    seqtype *i7 = seqtype_new_item(ITEM_ATOMIC);
     /* FIXME: don't use xdt prefix here; it may not actually be mapped in the current context, or
        maybe mapped to a different namespace than the one we expect */
     i7->item->typeref.prefix = strdup("__xdt");
     i7->item->typeref.localpart = strdup("anyAtomicType");
-    if (NULL != g)
-      i7->item->type = g->any_atomic_type;
+    i7->item->type = xs_g->any_atomic_type;
     choice = df_add_alternative(choice,i7);
   }
 
@@ -159,13 +158,13 @@ df_seqtype *df_normalize_itemnode(int item, xs_globals *g)
   return choice;
 }
 
-df_seqtype *df_interleave_document_content(df_seqtype *content)
+seqtype *df_interleave_document_content(seqtype *content)
 {
-  df_seqtype *pi = df_seqtype_new_item(ITEM_PI);
-  df_seqtype *comment = df_seqtype_new_item(ITEM_COMMENT);
-  df_seqtype *choice = df_seqtype_new(SEQTYPE_CHOICE);
-  df_seqtype *occurrence = df_seqtype_new(SEQTYPE_OCCURRENCE);
-  df_seqtype *all = df_seqtype_new(SEQTYPE_ALL);
+  seqtype *pi = seqtype_new_item(ITEM_PI);
+  seqtype *comment = seqtype_new_item(ITEM_COMMENT);
+  seqtype *choice = seqtype_new(SEQTYPE_CHOICE);
+  seqtype *occurrence = seqtype_new(SEQTYPE_OCCURRENCE);
+  seqtype *all = seqtype_new(SEQTYPE_ALL);
   choice->left = pi;
   choice->right = comment;
   occurrence->left = choice;
@@ -189,7 +188,7 @@ static void df_print_objname(stringbuf *buf, char *name, char *ns, ns_map *names
   }
 }
 
-static void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, ns_map *namespaces)
+static void itemtype_print_fs(stringbuf *buf, itemtype *it, ns_map *namespaces)
 {
   switch (it->kind) {
   case ITEM_ATOMIC:
@@ -199,7 +198,7 @@ static void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, ns_map *namesp
     stringbuf_format(buf,"document");
     if (NULL != it->content) {
       stringbuf_format(buf," { ");
-      df_seqtype_print_fs(buf,it->content,namespaces);
+      seqtype_print_fs(buf,it->content,namespaces);
       stringbuf_format(buf," }");
     }
     break;
@@ -265,7 +264,7 @@ static void df_itemtype_print_fs(stringbuf *buf, df_itemtype *it, ns_map *namesp
   }
 }
 
-void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
+void seqtype_print_fs(stringbuf *buf, seqtype *st, ns_map *namespaces)
 {
   /* item() and node() are not actually part of the formal semantics type syntax - however since
      we currently use this output function for debugging purposes, it is more convenient to
@@ -282,10 +281,10 @@ void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
 
   switch (st->type) {
   case SEQTYPE_ITEM:
-    df_itemtype_print_fs(buf,st->item,namespaces);
+    itemtype_print_fs(buf,st->item,namespaces);
     break;
   case SEQTYPE_OCCURRENCE:
-    df_seqtype_print_fs(buf,st->left,namespaces);
+    seqtype_print_fs(buf,st->left,namespaces);
     switch (st->occurrence) {
     case OCCURS_ONCE:
       break;
@@ -305,23 +304,23 @@ void df_seqtype_print_fs(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
     break;
   case SEQTYPE_ALL:
     stringbuf_format(buf,"(");
-    df_seqtype_print_fs(buf,st->left,namespaces);
+    seqtype_print_fs(buf,st->left,namespaces);
     stringbuf_format(buf," & ");
-    df_seqtype_print_fs(buf,st->right,namespaces);
+    seqtype_print_fs(buf,st->right,namespaces);
     stringbuf_format(buf,")");
     break;
   case SEQTYPE_SEQUENCE:
     stringbuf_format(buf,"(");
-    df_seqtype_print_fs(buf,st->left,namespaces);
+    seqtype_print_fs(buf,st->left,namespaces);
     stringbuf_format(buf," , ");
-    df_seqtype_print_fs(buf,st->right,namespaces);
+    seqtype_print_fs(buf,st->right,namespaces);
     stringbuf_format(buf,")");
     break;
   case SEQTYPE_CHOICE:
     stringbuf_format(buf,"(");
-    df_seqtype_print_fs(buf,st->left,namespaces);
+    seqtype_print_fs(buf,st->left,namespaces);
     stringbuf_format(buf," | ");
-    df_seqtype_print_fs(buf,st->right,namespaces);
+    seqtype_print_fs(buf,st->right,namespaces);
     stringbuf_format(buf,")");
     break;
   case SEQTYPE_EMPTY:
@@ -374,7 +373,7 @@ static void print_objname(stringbuf *buf, ns_map *namespaces, char *name, char *
   }
 }
 
-static void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *namespaces)
+static void itemtype_print_xpath(stringbuf *buf, itemtype *it, ns_map *namespaces)
 {
   switch (it->kind) {
   case ITEM_ATOMIC:
@@ -386,7 +385,7 @@ static void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *nam
       assert(SEQTYPE_ALL == it->content->type);
       assert(SEQTYPE_ITEM == it->content->left->type);
       assert(ITEM_ELEMENT == it->content->left->item->kind);
-      df_itemtype_print_xpath(buf,it->content->left->item,namespaces);
+      itemtype_print_xpath(buf,it->content->left->item,namespaces);
     }
     stringbuf_format(buf,")");
     break;
@@ -477,20 +476,20 @@ static void df_itemtype_print_xpath(stringbuf *buf, df_itemtype *it, ns_map *nam
   }
 }
 
-void df_seqtype_print_xpath(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
+void seqtype_print_xpath(stringbuf *buf, seqtype *st, ns_map *namespaces)
 {
   if (SEQTYPE_ITEM == st->type) {
-    df_itemtype_print_xpath(buf,st->item,namespaces);
+    itemtype_print_xpath(buf,st->item,namespaces);
   }
   else if (SEQTYPE_OCCURRENCE == st->type) {
     assert(SEQTYPE_ITEM == st->left->type);
     if ((ITEM_PI == st->left->item->kind) &&
         (OCCURS_OPTIONAL == st->occurrence) &&
         (NULL != st->left->item->pistr)) {
-      df_seqtype_print_xpath(buf,st->left,namespaces);
+      seqtype_print_xpath(buf,st->left,namespaces);
     }
     else {
-      df_seqtype_print_xpath(buf,st->left,namespaces);
+      seqtype_print_xpath(buf,st->left,namespaces);
       switch (st->occurrence) {
       case OCCURS_ONCE:
         break;
@@ -520,9 +519,9 @@ void df_seqtype_print_xpath(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
   }
   else if (SEQTYPE_CHOICE == st->type) {
     /* FIXME: temp - just so we cab print the select nodes of the built-in templates */
-    df_seqtype_print_xpath(buf,st->left,namespaces);
+    seqtype_print_xpath(buf,st->left,namespaces);
     stringbuf_format(buf," or ");
-    df_seqtype_print_xpath(buf,st->right,namespaces);
+    seqtype_print_xpath(buf,st->right,namespaces);
   }
   else {
     assert(!"sequencetype not expressible in xpath syntax");
@@ -546,7 +545,7 @@ void df_seqtype_print_xpath(stringbuf *buf, df_seqtype *st, ns_map *namespaces)
 
 
 
-int df_seqtype_compatible(df_seqtype *from, df_seqtype *to)
+int seqtype_compatible(seqtype *from, seqtype *to)
 {
   return 0;
 }
@@ -585,17 +584,17 @@ static int resolve_object(qname qn, ns_map *namespaces, xs_schema *s, const char
   return 0;
 }
 
-int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const char *filename,
+int seqtype_resolve(seqtype *st, ns_map *namespaces, xs_schema *s, const char *filename,
                         int line, error_info *ei)
 {
   if (NULL != st->left)
-    CHECK_CALL(df_seqtype_resolve(st->left,namespaces,s,filename,line,ei))
+    CHECK_CALL(seqtype_resolve(st->left,namespaces,s,filename,line,ei))
   if (NULL != st->right)
-    CHECK_CALL(df_seqtype_resolve(st->right,namespaces,s,filename,line,ei))
+    CHECK_CALL(seqtype_resolve(st->right,namespaces,s,filename,line,ei))
 
   if (NULL != st->item) {
     ns_def *def = NULL;
-    df_itemtype *i = st->item;
+    itemtype *i = st->item;
     char *ns = NULL;
     CHECK_CALL(resolve_object(i->typeref,namespaces,s,filename,line,ei,
                (void**)&i->type,XS_OBJECT_TYPE))
@@ -619,7 +618,7 @@ int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const c
       st->item->elem->computed_type = 1;
 
       if (NULL == st->item->elem->type) {
-        st->item->elem->type = s->globals->complex_ur_type;
+        st->item->elem->type = xs_g->complex_ur_type;
         st->item->elem->nillable = 1;
         i->nillable = 1;
       }
@@ -631,21 +630,21 @@ int df_seqtype_resolve(df_seqtype *st, ns_map *namespaces, xs_schema *s, const c
       i->type = NULL;
 
       if (NULL == st->item->attr->type)
-        st->item->attr->type = s->globals->simple_ur_type;
+        st->item->attr->type = xs_g->simple_ur_type;
     }
     else if ((ITEM_DOCUMENT == st->item->kind) && (NULL != st->item->content)) {
-      CHECK_CALL(df_seqtype_resolve(st->item->content,namespaces,s,filename,line,ei))
+      CHECK_CALL(seqtype_resolve(st->item->content,namespaces,s,filename,line,ei))
     }
   }
 
   return 0;
 }
 
-void df_seqtype_to_list(df_seqtype *st, list **types)
+void seqtype_to_list(seqtype *st, list **types)
 {
   if (SEQTYPE_SEQUENCE == st->type) {
-    df_seqtype_to_list(st->left,types);
-    df_seqtype_to_list(st->right,types);
+    seqtype_to_list(st->left,types);
+    seqtype_to_list(st->right,types);
   }
   else if (SEQTYPE_ITEM == st->type) {
     list_append(types,st);
@@ -655,7 +654,7 @@ void df_seqtype_to_list(df_seqtype *st, list **types)
   }
 }
 
-static int validate_sequence_item(df_seqtype *base, df_seqtype *st)
+static int validate_sequence_item(seqtype *base, seqtype *st)
 {
   if (base->item->kind != st->item->kind)
     return 0;
@@ -697,14 +696,14 @@ static int validate_sequence_item(df_seqtype *base, df_seqtype *st)
   return 0;
 }
 
-static int validate_sequence_list(df_seqtype *base, list **lptr)
+static int validate_sequence_list(seqtype *base, list **lptr)
 {
   switch (base->type) {
   case SEQTYPE_ITEM:
     if (NULL == *lptr)
       return 0;
-    assert(SEQTYPE_ITEM == ((df_seqtype*)((*lptr)->data))->type);
-    if (validate_sequence_item(base,(df_seqtype*)((*lptr)->data))) {
+    assert(SEQTYPE_ITEM == ((seqtype*)((*lptr)->data))->type);
+    if (validate_sequence_item(base,(seqtype*)((*lptr)->data))) {
       *lptr = (*lptr)->next;
       return 1;
     }
@@ -757,45 +756,45 @@ static int validate_sequence_list(df_seqtype *base, list **lptr)
   return 0;
 }
 
-int df_seqtype_derived(df_seqtype *base, df_seqtype *st)
+int seqtype_derived(seqtype *base, seqtype *st)
 {
   list *types = NULL;
   int r;
-  df_seqtype_to_list(st,&types);
+  seqtype_to_list(st,&types);
   r = validate_sequence_list(base,&types);
   list_free(types,NULL);
   return r;
 }
 
-df_node *df_node_new(int type)
+node *node_new(int type)
 {
-  df_node *n = (df_node*)calloc(1,sizeof(df_node));
-/*   debugl("df_node_new %p %s",n,df_item_kinds[type]); */
+  node *n = (node*)calloc(1,sizeof(node));
+/*   debugl("node_new %p %s",n,df_item_kinds[type]); */
   list_append(&allocnodes,n);
   n->type = type;
   n->refcount = 0;
   return n;
 }
 
-df_node *df_node_root(df_node *n)
+node *node_root(node *n)
 {
-  df_node *root = n;
+  node *root = n;
   while (NULL != root->parent)
     root = root->parent;
   return root;
 }
 
-df_node *df_node_ref(df_node *n)
+node *node_ref(node *n)
 {
-  df_node_root(n)->refcount++;
+  node_root(n)->refcount++;
   return n;
 }
 
-void df_print_remaining(xs_globals *globals)
+void df_print_remaining()
 {
   list *l;
   for (l = allocnodes; l; l = l->next) {
-    df_node *n = (df_node*)l->data;
+    node *n = (node*)l->data;
     if (NODE_ELEMENT == n->type)
       printf("remaining node %p %-10s %-10s - %-3d refs\n",n,"element",n->ident.name,n->refcount);
     else if (NODE_TEXT == n->type)
@@ -804,36 +803,36 @@ void df_print_remaining(xs_globals *globals)
       printf("remaining node %p %-10s %-10s - %-3d refs\n",n,df_item_kinds[n->type],"",n->refcount);
   }
   for (l = allocvalues; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
+    value *v = (value*)l->data;
     stringbuf *stbuf = stringbuf_new();
     stringbuf *valbuf = stringbuf_new();
-    df_seqtype_print_fs(stbuf,v->seqtype,globals->namespaces);
-    if ((SEQTYPE_ITEM == v->seqtype->type) &&
-        (ITEM_ATOMIC == v->seqtype->item->kind))
-      df_value_printbuf(globals,valbuf,v);
+    seqtype_print_fs(stbuf,v->st,xs_g->namespaces);
+    if ((SEQTYPE_ITEM == v->st->type) &&
+        (ITEM_ATOMIC == v->st->item->kind))
+      value_printbuf(valbuf,v);
     printf("remaining value %p %-20s - %-3d refs : %s\n",v,stbuf->data,v->refcount,valbuf->data);
     stringbuf_free(stbuf);
     stringbuf_free(valbuf);
   }
 }
 
-void df_node_free(df_node *n)
+void node_free(node *n)
 {
-  df_node *c;
+  node *c;
 /*   if (NODE_ELEMENT == n->type) */
-/*     debugl("df_node_free %p element %s",n,n->name); */
+/*     debugl("node_free %p element %s",n,n->name); */
 /*   else */
-/*     debugl("df_node_free %p %s",n,df_item_kinds[n->type]); */
+/*     debugl("node_free %p %s",n,df_item_kinds[n->type]); */
 
   list_remove_ptr(&allocnodes,n);
 
-  list_free(n->namespaces,(void*)df_node_free);
-  list_free(n->attributes,(void*)df_node_free);
+  list_free(n->namespaces,(void*)node_free);
+  list_free(n->attributes,(void*)node_free);
 
   c = n->first_child;
   while (c) {
-    df_node *next = c->next;
-    df_node_free(c);
+    node *next = c->next;
+    node_free(c);
     c = next;
   }
 
@@ -844,38 +843,38 @@ void df_node_free(df_node *n)
   free(n);
 }
 
-void df_node_deref(df_node *n)
+void node_deref(node *n)
 {
-  df_node *root = df_node_root(n);
+  node *root = node_root(n);
   root->refcount--;
 
-/*   debugl("df_node_deref %s %p (root is %s %p), now have %d refs", */
+/*   debugl("node_deref %s %p (root is %s %p), now have %d refs", */
 /*         df_item_kinds[n->type],n,df_item_kinds[root->type],root,root->refcount); */
 
   assert(0 <= root->refcount);
   if (0 == root->refcount)
-    df_node_free(root);
+    node_free(root);
 }
 
-df_node *df_node_deep_copy(df_node *n)
+node *node_deep_copy(node *n)
 {
-  df_node *copy = df_node_new(n->type);
-  df_node *c;
+  node *copy = node_new(n->type);
+  node *c;
   list *l;
-/*   debugl("df_node_deep_copy %s %p -> %p",df_item_kinds[n->type],n,copy); */
+/*   debugl("node_deep_copy %s %p -> %p",df_item_kinds[n->type],n,copy); */
 
   /* FIXME: namespaces */
 
   for (l = n->attributes; l; l = l->next) {
-    df_node *attr = (df_node*)l->data;
-    df_node *attrcopy = df_node_deep_copy(attr);
-    df_node_add_attribute(copy,attrcopy);
+    node *attr = (node*)l->data;
+    node *attrcopy = node_deep_copy(attr);
+    node_add_attribute(copy,attrcopy);
   }
 
   for (l = n->namespaces; l; l = l->next) {
-    df_node *ns = (df_node*)l->data;
-    df_node *nscopy = df_node_deep_copy(ns);
-    df_node_add_namespace(copy,nscopy);
+    node *ns = (node*)l->data;
+    node *nscopy = node_deep_copy(ns);
+    node_add_namespace(copy,nscopy);
   }
 
   copy->prefix = n->prefix ? strdup(n->prefix) : NULL;
@@ -884,14 +883,14 @@ df_node *df_node_deep_copy(df_node *n)
   copy->value = n->value ? strdup(n->value) : NULL;
 
   for (c = n->first_child; c; c = c->next) {
-    df_node *childcopy = df_node_deep_copy(c);
-    df_node_add_child(copy,childcopy);
+    node *childcopy = node_deep_copy(c);
+    node_add_child(copy,childcopy);
   }
 
   return copy;
 }
 
-void df_node_add_child(df_node *n, df_node *c)
+void node_add_child(node *n, node *c)
 {
   assert(NULL == c->parent);
   assert(NULL == c->prev);
@@ -913,7 +912,7 @@ void df_node_add_child(df_node *n, df_node *c)
   c->parent = n;
 }
 
-void df_node_insert_child(df_node *n, df_node *c, df_node *before)
+void node_insert_child(node *n, node *c, node *before)
 {
   assert(NULL == c->parent);
   assert(NULL == c->prev);
@@ -921,7 +920,7 @@ void df_node_insert_child(df_node *n, df_node *c, df_node *before)
   assert(0 == c->refcount);
 
   if (NULL == before) {
-    df_node_add_child(n,c);
+    node_add_child(n,c);
     return;
   }
 
@@ -938,7 +937,7 @@ void df_node_insert_child(df_node *n, df_node *c, df_node *before)
   c->parent = n;
 }
 
-void df_node_add_attribute(df_node *n, df_node *attr)
+void node_add_attribute(node *n, node *attr)
 {
   assert(NULL == attr->parent);
   assert(NULL == attr->prev);
@@ -949,7 +948,7 @@ void df_node_add_attribute(df_node *n, df_node *attr)
   attr->parent = n;
 }
 
-void df_node_add_namespace(df_node *n, df_node *ns)
+void node_add_namespace(node *n, node *ns)
 {
   assert(NULL == ns->parent);
   assert(NULL == ns->prev);
@@ -960,24 +959,9 @@ void df_node_add_namespace(df_node *n, df_node *ns)
   ns->parent = n;
 }
 
-df_node *df_atomic_value_to_text_node(xs_globals *g, df_value *v)
+node *node_from_xmlnode(xmlNodePtr xn)
 {
-  df_node *text = df_node_new(NODE_TEXT);
-  stringbuf *buf = stringbuf_new();
-  assert(SEQTYPE_ITEM == v->seqtype->type);
-  assert(ITEM_ATOMIC == v->seqtype->item->kind);
-  df_value_printbuf(g,buf,v);
-  /* FIXME: properly join atomic values
-     see rule 3 of 5.7.1 Constructing Complex Content */
-  stringbuf_format(buf," ");
-  text->value = strdup(buf->data);
-  stringbuf_free(buf);
-  return text;
-}
-
-df_node *df_node_from_xmlnode(xmlNodePtr xn)
-{
-  df_node *n = NULL;
+  node *n = NULL;
   xmlNodePtr c;
   struct _xmlAttr *aptr;
 
@@ -985,12 +969,12 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
   case XML_ELEMENT_NODE: {
     xmlNs *ns;
     xmlNodePtr p;
-    n = df_node_new(NODE_ELEMENT);
+    n = node_new(NODE_ELEMENT);
     n->ident.name = strdup(xn->name);
     /* FIXME: prefix/namespace */
 
     for (aptr = xn->properties; aptr; aptr = aptr->next) {
-      df_node *attr = df_node_new(NODE_ATTRIBUTE);
+      node *attr = node_new(NODE_ATTRIBUTE);
       stringbuf *valbuf = stringbuf_new();
       xmlNodePtr ac;
       attr->ident.name = strdup(aptr->name);
@@ -1002,16 +986,16 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
 
       attr->value = strdup(valbuf->data);
       stringbuf_free(valbuf);
-      df_node_add_attribute(n,attr);
+      node_add_attribute(n,attr);
     }
 
 
     for (p = xn; p; p = p->parent) {
       for (ns = p->nsDef; ns; ns = ns->next) {
-        df_node *nsnode = df_node_new(NODE_NAMESPACE);
+        node *nsnode = node_new(NODE_NAMESPACE);
         nsnode->prefix = ns->prefix ? strdup(ns->prefix) : NULL;
         nsnode->value = strdup(ns->href);
-        df_node_add_namespace(n,nsnode);
+        node_add_namespace(n,nsnode);
       }
     }
 
@@ -1022,21 +1006,21 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
     assert(0);
     break;
   case XML_TEXT_NODE:
-    n = df_node_new(NODE_TEXT);
+    n = node_new(NODE_TEXT);
     n->value = strdup(xn->content);
     break;
   case XML_PI_NODE:
-    n = df_node_new(NODE_PI);
+    n = node_new(NODE_PI);
     n->target = strdup(xn->name);
     n->value = xn->content ? strdup(xn->content) : NULL;
     break;
   case XML_COMMENT_NODE:
-    n = df_node_new(NODE_COMMENT);
+    n = node_new(NODE_COMMENT);
     /* FIXME: do we know that xn->content will always be non-NULL here? */
     n->value = strdup(xn->content);
     break;
   case XML_DOCUMENT_NODE:
-    n = df_node_new(NODE_DOCUMENT);
+    n = node_new(NODE_DOCUMENT);
     break;
   default:
     /* FIXME: support other node types such as CDATA sections and entities */
@@ -1044,18 +1028,18 @@ df_node *df_node_from_xmlnode(xmlNodePtr xn)
   }
 
   for (c = xn->children; c; c = c->next) {
-    df_node *cn = df_node_from_xmlnode(c);
+    node *cn = node_from_xmlnode(c);
     if (NULL != cn)
-      df_node_add_child(n,cn);
+      node_add_child(n,cn);
   }
 
   return n;
 }
 
-int df_check_tree(df_node *n)
+int node_check_tree(node *n)
 {
-  df_node *c;
-  df_node *prev = NULL;
+  node *c;
+  node *prev = NULL;
   for (c = n->first_child; c; c = c->next) {
     if (c->prev != prev)
       return 0;
@@ -1063,135 +1047,66 @@ int df_check_tree(df_node *n)
       return 0;
     if (c->parent != n)
       return 0;
-    if (!df_check_tree(c))
+    if (!node_check_tree(c))
       return 0;
     prev = c;
   }
   return 1;
 }
 
-df_node *df_prev_node(df_node *node, df_node *subtree)
+node *node_traverse_prev(node *n, node *subtree)
 {
-  if (NULL != node->prev) {
-    node = node->prev;
-    while (NULL != node->last_child)
-      node = node->last_child;
-    return node;
+  if (NULL != n->prev) {
+    n = n->prev;
+    while (NULL != n->last_child)
+      n = n->last_child;
+    return n;
   }
 
-  if (node->parent == subtree)
+  if (n->parent == subtree)
     return NULL;
   else
-    return node->parent;
+    return n->parent;
 }
 
-df_node *df_next_node(df_node *node, df_node *subtree)
+node *node_traverse_next(node *n, node *subtree)
 {
-  if (NULL != node->first_child)
-    return node->first_child;
+  if (NULL != n->first_child)
+    return n->first_child;
 
-  while ((NULL != node) && (NULL == node->next)) {
-    if (node->parent == subtree)
+  while ((NULL != n) && (NULL == n->next)) {
+    if (n->parent == subtree)
       return NULL;
     else
-      node = node->parent;
+      n = n->parent;
   }
 
-  if (NULL != node)
-    return node->next;
+  if (NULL != n)
+    return n->next;
 
   return NULL;
 }
 
-df_value *df_value_new_atomic(xs_type *t)
-{
-  df_seqtype *st = df_seqtype_new_atomic(t);
-  df_value *v;
-  v = df_value_new(st);
-  df_seqtype_deref(st);
-  return v;
-}
-
-
-df_value *df_value_new_int(xs_globals *g, int i)
-{
-  df_value *v = df_value_new_atomic(g->int_type);
-  v->value.i = i;
-  return v;
-}
-
-df_value *df_value_new_float(xs_globals *g, float f)
-{
-  df_value *v = df_value_new_atomic(g->float_type);
-  v->value.f = f;
-  return v;
-}
-
-df_value *df_value_new_double(xs_globals *g, double d)
-{
-  df_value *v = df_value_new_atomic(g->double_type);
-  v->value.d = d;
-  return v;
-}
-
-df_value *df_value_new_string(xs_globals *g, const char *str)
-{
-  df_value *v = df_value_new_atomic(g->string_type);
-  v->value.s = strdup(str);
-  return v;
-}
-
-df_value *df_value_new_bool(xs_globals *g, int b)
-{
-  df_value *v = df_value_new_atomic(g->boolean_type);
-  v->value.b = b;
-  return v;
-}
-
-df_value *df_value_new_node(df_node *n)
-{
-  df_seqtype *st = df_seqtype_new_item(n->type);
-  df_value *v = df_value_new(st);
-  df_seqtype_deref(st);
-  v->value.n = df_node_ref(n);
-  return v;
-}
-
-df_value *df_value_new(df_seqtype *seqtype)
-{
-  df_value *v = (df_value*)calloc(1,sizeof(df_value));
-  list_append(&allocvalues,v);
-  v->seqtype = df_seqtype_ref(seqtype);
-  v->refcount = 1;
-  return v;
-}
-
-df_value *df_value_ref(df_value *v)
-{
-  v->refcount++;
-  return v;
-}
-
-void df_node_print(xmlTextWriter *writer, df_node *n)
+void node_print(xmlTextWriter *writer, node *n)
 {
   switch (n->type) {
   case NODE_DOCUMENT: {
-    df_node *c;
+    node *c;
     for (c = n->first_child; c; c = c->next)
-      df_node_print(writer,c);
+      node_print(writer,c);
     break;
   }
   case NODE_ELEMENT: {
     list *l;
-    df_node *c;
-/*     debugl("df_node_print NODE_ELEMENT: %s",n->name); */
+    node *c;
+/*     debugl("node_print NODE_ELEMENT: %s",n->name); */
     xmlTextWriterStartElement(writer,n->ident.name);
     for (l = n->attributes; l; l = l->next)
-      df_node_print(writer,(df_node*)l->data);
+      node_print(writer,(node*)l->data);
     for (l = n->namespaces; l; l = l->next)
-      df_node_print(writer,(df_node*)l->data);
+      node_print(writer,(node*)l->data);
     for (c = n->first_child; c; c = c->next)
-      df_node_print(writer,c);
+      node_print(writer,c);
     xmlTextWriterEndElement(writer);
     break;
   }
@@ -1205,12 +1120,12 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
     xmlTextWriterWriteComment(writer,n->value);
     break;
   case NODE_TEXT:
-/*     debugl("df_node_print NODE_TEXT: %s",n->value); */
+/*     debugl("node_print NODE_TEXT: %s",n->value); */
     xmlTextWriterWriteString(writer,n->value);
     break;
   case NODE_NAMESPACE: {
-    df_node *elem = n->parent;
-    df_node *p;
+    node *elem = n->parent;
+    node *p;
     int have = 0;
 
     /* Only print it if it's not already in scope */
@@ -1218,7 +1133,7 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
       for (p = elem->parent; p && !have; p = p->parent) {
         list *l;
         for (l = p->namespaces; l; l = l->next) {
-          df_node *pns = (df_node*)l->data;
+          node *pns = (node*)l->data;
           if (nullstr_equals(pns->prefix,n->prefix) && !strcmp(pns->value,n->value)) {
 /*             debug("Namespace mapping %s=%s already exists on parent node %#n of %#n\n", */
 /*                   n->prefix,n->value,p->ident,n->ident); */
@@ -1246,75 +1161,76 @@ void df_node_print(xmlTextWriter *writer, df_node *n)
   }
 }
 
-static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
+value *value_new_atomic(xs_type *t)
 {
-  stringbuf_append((stringbuf*)context,buffer,len);
-  return len;
+  seqtype *st = seqtype_new_atomic(t);
+  value *v;
+  v = value_new(st);
+  seqtype_deref(st);
+  return v;
 }
 
-void df_value_printbuf(xs_globals *globals, stringbuf *buf, df_value *v)
+
+value *value_new_int(int i)
 {
-  if (SEQTYPE_ITEM == v->seqtype->type) {
-
-    if (ITEM_ATOMIC == v->seqtype->item->kind) {
-      if (v->seqtype->item->type == globals->int_type)
-        stringbuf_format(buf,"%d",v->value.i);
-      else if (v->seqtype->item->type == globals->double_type)
-        stringbuf_format(buf,"%f",v->value.d);
-      else if (v->seqtype->item->type == globals->decimal_type)
-        stringbuf_format(buf,"%f",v->value.d);
-      else if (v->seqtype->item->type == globals->string_type)
-        stringbuf_format(buf,"%s",v->value.s);
-      else if (v->seqtype->item->type == globals->boolean_type)
-        stringbuf_format(buf,"%s",v->value.b ? "true" : "false");
-      else
-        stringbuf_format(buf,"(atomic value)");
-    }
-    else if ((ITEM_ELEMENT == v->seqtype->item->kind) ||
-             (ITEM_DOCUMENT == v->seqtype->item->kind)) {
-      xmlOutputBuffer *xb = xmlOutputBufferCreateIO(xmlwrite_stringbuf,NULL,buf,NULL);
-      xmlTextWriter *writer = xmlNewTextWriter(xb);
-      xmlTextWriterSetIndent(writer,1);
-      xmlTextWriterSetIndentString(writer,"  ");
-      xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
-
-      df_node_print(writer,v->value.n);
-
-      xmlTextWriterEndDocument(writer);
-      xmlTextWriterFlush(writer);
-      xmlFreeTextWriter(writer);
-    }
-    else if ((ITEM_TEXT == v->seqtype->item->kind) ||
-             (ITEM_ATTRIBUTE == v->seqtype->item->kind)) {
-      stringbuf_format(buf,"%s",v->value.n->value);
-    }
-    else {
-      /* FIXME */
-      stringbuf_format(buf,"(item, kind %d)",v->seqtype->item->kind);
-    }
-  }
-  else if (SEQTYPE_SEQUENCE == v->seqtype->type) {
-    df_value_printbuf(globals,buf,v->value.pair.left);
-    stringbuf_format(buf,", ");
-    df_value_printbuf(globals,buf,v->value.pair.right);
-  }
-  else if (SEQTYPE_EMPTY == v->seqtype->type) {
-    stringbuf_format(buf,"(empty)",v->seqtype->type);
-  }
-  else {
-    stringbuf_format(buf,"(value, seqtype %d)",v->seqtype->type);
-  }
+  value *v = value_new_atomic(xs_g->int_type);
+  v->value.i = i;
+  return v;
 }
 
-void df_value_print(xs_globals *globals, FILE *f, df_value *v)
+value *value_new_float(float f)
 {
-  stringbuf *buf = stringbuf_new();
-  df_value_printbuf(globals,buf,v);
-  fprintf(f,"%s",buf->data);
-  stringbuf_free(buf);
+  value *v = value_new_atomic(xs_g->float_type);
+  v->value.f = f;
+  return v;
 }
 
-void df_value_deref(xs_globals *globals, df_value *v)
+value *value_new_double(double d)
+{
+  value *v = value_new_atomic(xs_g->double_type);
+  v->value.d = d;
+  return v;
+}
+
+value *value_new_string(const char *str)
+{
+  value *v = value_new_atomic(xs_g->string_type);
+  v->value.s = strdup(str);
+  return v;
+}
+
+value *value_new_bool(int b)
+{
+  value *v = value_new_atomic(xs_g->boolean_type);
+  v->value.b = b;
+  return v;
+}
+
+value *value_new_node(node *n)
+{
+  seqtype *st = seqtype_new_item(n->type);
+  value *v = value_new(st);
+  seqtype_deref(st);
+  v->value.n = node_ref(n);
+  return v;
+}
+
+value *value_new(seqtype *seqtype)
+{
+  value *v = (value*)calloc(1,sizeof(value));
+  list_append(&allocvalues,v);
+  v->st = seqtype_ref(seqtype);
+  v->refcount = 1;
+  return v;
+}
+
+value *value_ref(value *v)
+{
+  v->refcount++;
+  return v;
+}
+
+void value_deref(value *v)
 {
   v->refcount--;
   if (0 > v->refcount) {
@@ -1322,67 +1238,135 @@ void df_value_deref(xs_globals *globals, df_value *v)
   }
   assert(0 <= v->refcount);
   if (0 == v->refcount) {
-    if (SEQTYPE_ITEM == v->seqtype->type) {
-      if (ITEM_ATOMIC == v->seqtype->item->kind) {
-        if (v->seqtype->item->type == globals->string_type)
+    if (SEQTYPE_ITEM == v->st->type) {
+      if (ITEM_ATOMIC == v->st->item->kind) {
+        if (v->st->item->type == xs_g->string_type)
           free(v->value.s);
       }
       else if (NULL != v->value.n) {
-        df_node_deref(v->value.n);
+        node_deref(v->value.n);
       }
     }
-    else if (SEQTYPE_SEQUENCE == v->seqtype->type) {
-      df_value_deref(globals,v->value.pair.left);
-      df_value_deref(globals,v->value.pair.right);
+    else if (SEQTYPE_SEQUENCE == v->st->type) {
+      value_deref(v->value.pair.left);
+      value_deref(v->value.pair.right);
     }
-    df_seqtype_deref(v->seqtype);
+    seqtype_deref(v->st);
     free(v);
     list_remove_ptr(&allocvalues,v);
   }
 }
 
-void df_value_deref_list(xs_globals *globals, list *l)
+void value_deref_list(list *l)
 {
   for (; l; l = l->next)
-    df_value_deref(globals,(df_value*)l->data);
+    value_deref((value*)l->data);
 }
 
-int df_value_equals(df_value *a, df_value *b)
+static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
+{
+  stringbuf_append((stringbuf*)context,buffer,len);
+  return len;
+}
+
+void value_printbuf(stringbuf *buf, value *v)
+{
+  if (SEQTYPE_ITEM == v->st->type) {
+
+    if (ITEM_ATOMIC == v->st->item->kind) {
+      if (v->st->item->type == xs_g->int_type)
+        stringbuf_format(buf,"%d",v->value.i);
+      else if (v->st->item->type == xs_g->double_type)
+        stringbuf_format(buf,"%f",v->value.d);
+      else if (v->st->item->type == xs_g->decimal_type)
+        stringbuf_format(buf,"%f",v->value.d);
+      else if (v->st->item->type == xs_g->string_type)
+        stringbuf_format(buf,"%s",v->value.s);
+      else if (v->st->item->type == xs_g->boolean_type)
+        stringbuf_format(buf,"%s",v->value.b ? "true" : "false");
+      else
+        stringbuf_format(buf,"(atomic value)");
+    }
+    else if ((ITEM_ELEMENT == v->st->item->kind) ||
+             (ITEM_DOCUMENT == v->st->item->kind)) {
+      xmlOutputBuffer *xb = xmlOutputBufferCreateIO(xmlwrite_stringbuf,NULL,buf,NULL);
+      xmlTextWriter *writer = xmlNewTextWriter(xb);
+      xmlTextWriterSetIndent(writer,1);
+      xmlTextWriterSetIndentString(writer,"  ");
+      xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
+
+      node_print(writer,v->value.n);
+
+      xmlTextWriterEndDocument(writer);
+      xmlTextWriterFlush(writer);
+      xmlFreeTextWriter(writer);
+    }
+    else if ((ITEM_TEXT == v->st->item->kind) ||
+             (ITEM_ATTRIBUTE == v->st->item->kind)) {
+      stringbuf_format(buf,"%s",v->value.n->value);
+    }
+    else {
+      /* FIXME */
+      stringbuf_format(buf,"(item, kind %d)",v->st->item->kind);
+    }
+  }
+  else if (SEQTYPE_SEQUENCE == v->st->type) {
+    value_printbuf(buf,v->value.pair.left);
+    stringbuf_format(buf,", ");
+    value_printbuf(buf,v->value.pair.right);
+  }
+  else if (SEQTYPE_EMPTY == v->st->type) {
+    stringbuf_format(buf,"(empty)",v->st->type);
+  }
+  else {
+    stringbuf_format(buf,"(value, seqtype %d)",v->st->type);
+  }
+}
+
+void value_print(FILE *f, value *v)
+{
+  stringbuf *buf = stringbuf_new();
+  value_printbuf(buf,v);
+  fprintf(f,"%s",buf->data);
+  stringbuf_free(buf);
+}
+
+int value_equals(value *a, value *b)
 {
   return 0;
 }
 
-static int df_count_sequence_values(df_value *seq)
+static int df_count_sequence_values(value *seq)
 {
-  if (SEQTYPE_SEQUENCE == seq->seqtype->type) {
+  if (SEQTYPE_SEQUENCE == seq->st->type) {
     return df_count_sequence_values(seq->value.pair.left) +
            df_count_sequence_values(seq->value.pair.right);
   }
-  else if (SEQTYPE_ITEM == seq->seqtype->type) {
+  else if (SEQTYPE_ITEM == seq->st->type) {
     return 1;
   }
   else {
-    assert(SEQTYPE_EMPTY == seq->seqtype->type);
+    assert(SEQTYPE_EMPTY == seq->st->type);
     return 0;
   }
 }
 
-static void df_build_sequence_array(df_value *seq, df_value ***valptr)
+static void df_build_sequence_array(value *seq, value ***valptr)
 {
-  if (SEQTYPE_SEQUENCE == seq->seqtype->type) {
+  if (SEQTYPE_SEQUENCE == seq->st->type) {
     df_build_sequence_array(seq->value.pair.left,valptr);
     df_build_sequence_array(seq->value.pair.right,valptr);
   }
-  else if (SEQTYPE_ITEM == seq->seqtype->type) {
+  else if (SEQTYPE_ITEM == seq->st->type) {
     *((*valptr)++) = seq;
   }
 }
 
-df_value **df_sequence_to_array(df_value *seq)
+value **df_sequence_to_array(value *seq)
 {
   int count = df_count_sequence_values(seq);
-  df_value **valptr;
-  df_value **values = (df_value**)malloc((count+1)*sizeof(df_value*));
+  value **valptr;
+  value **values = (value**)malloc((count+1)*sizeof(value*));
   valptr = values;
   df_build_sequence_array(seq,&valptr);
   assert(valptr == values+count);
@@ -1390,70 +1374,70 @@ df_value **df_sequence_to_array(df_value *seq)
   return values;
 }
 
-void df_get_sequence_values(df_value *v, list **values)
+void df_get_sequence_values(value *v, list **values)
 {
-  if (SEQTYPE_SEQUENCE == v->seqtype->type) {
+  if (SEQTYPE_SEQUENCE == v->st->type) {
     df_get_sequence_values(v->value.pair.left,values);
     df_get_sequence_values(v->value.pair.right,values);
   }
-  else if (SEQTYPE_ITEM == v->seqtype->type) {
+  else if (SEQTYPE_ITEM == v->st->type) {
     list_append(values,v);
   }
   else {
-    assert(SEQTYPE_EMPTY == v->seqtype->type);
+    assert(SEQTYPE_EMPTY == v->st->type);
   }
 }
 
-list *df_sequence_to_list(df_value *seq)
+list *df_sequence_to_list(value *seq)
 {
   list *l = NULL;
   df_get_sequence_values(seq,&l);
   return l;
 }
 
-df_value *df_list_to_sequence(xs_globals *g, list *values)
+value *df_list_to_sequence(list *values)
 {
   list *l;
-  df_value *result = NULL;
+  value *result = NULL;
   if (NULL == values) {
-    df_seqtype *emptytype = df_seqtype_new(SEQTYPE_EMPTY);
-    result = df_value_new(emptytype);
-    df_seqtype_deref(emptytype);
+    seqtype *emptytype = seqtype_new(SEQTYPE_EMPTY);
+    result = value_new(emptytype);
+    seqtype_deref(emptytype);
     return result;
   }
 
   for (l = values; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
+    value *v = (value*)l->data;
     if (NULL == result) {
-      result = df_value_ref(v);
+      result = value_ref(v);
     }
     else {
-      df_seqtype *st = df_seqtype_new(SEQTYPE_SEQUENCE);
-      df_value *newresult = df_value_new(st);
-      df_seqtype_deref(st);
-      st->left = df_seqtype_ref(result->seqtype);
-      st->right = df_seqtype_ref(v->seqtype);
+      seqtype *st = seqtype_new(SEQTYPE_SEQUENCE);
+      value *newresult = value_new(st);
+      seqtype_deref(st);
+      st->left = seqtype_ref(result->st);
+      st->right = seqtype_ref(v->st);
       newresult->value.pair.left = result;
-      newresult->value.pair.right = df_value_ref(v);
+      newresult->value.pair.right = value_ref(v);
       result = newresult;
     }
   }
   return result;
 }
 
-void df_node_to_string(df_node *n, stringbuf *buf)
+void node_to_string(node *n, stringbuf *buf)
 {
   switch (n->type) {
   case NODE_DOCUMENT: {
-    df_node *c;
+    node *c;
     for (c = n->first_child; c; c = c->next)
-      df_node_to_string(c,buf);
+      node_to_string(c,buf);
     break;
   }
   case NODE_ELEMENT: {
-    df_node *c;
+    node *c;
     for (c = n->first_child; c; c = c->next)
-      df_node_to_string(c,buf);
+      node_to_string(c,buf);
     break;
   }
   case NODE_ATTRIBUTE:
@@ -1474,68 +1458,68 @@ void df_node_to_string(df_node *n, stringbuf *buf)
   }
 }
 
-char *df_value_as_string(xs_globals *g, df_value *v)
+char *value_as_string(value *v)
 {
-  df_value *atomicv;
+  value *atomicv;
   char *str;
   stringbuf *buf;
 
   /* FIXME: implement using df_cast() */
 
-  if (SEQTYPE_EMPTY == v->seqtype->type) {
+  if (SEQTYPE_EMPTY == v->st->type) {
     return strdup("");
   }
 
-  if ((SEQTYPE_ITEM != v->seqtype->type) ||
-      (ITEM_ATOMIC != v->seqtype->item->kind))
-    atomicv = df_atomize(g,v);
+  if ((SEQTYPE_ITEM != v->st->type) ||
+      (ITEM_ATOMIC != v->st->item->kind))
+    atomicv = df_atomize(v);
   else
-    atomicv = df_value_ref(v);
+    atomicv = value_ref(v);
 
   buf = stringbuf_new();
-  df_value_printbuf(g,buf,atomicv);
+  value_printbuf(buf,atomicv);
   str = strdup(buf->data);
-  df_value_deref(g,atomicv);
+  value_deref(atomicv);
   stringbuf_free(buf);
 
   return str;
 }
 
-df_value *df_atomize(xs_globals *g, df_value *v)
+value *df_atomize(value *v)
 {
-  if (SEQTYPE_SEQUENCE == v->seqtype->type) {
-    df_seqtype *atomicseq;
-    df_value *atom;
-    df_value *left = df_atomize(g,v->value.pair.left);
-    df_value *right = df_atomize(g,v->value.pair.right);
+  if (SEQTYPE_SEQUENCE == v->st->type) {
+    seqtype *atomicseq;
+    value *atom;
+    value *left = df_atomize(v->value.pair.left);
+    value *right = df_atomize(v->value.pair.right);
 
-    atomicseq = df_seqtype_new(SEQTYPE_SEQUENCE);
-    atomicseq->left = df_seqtype_ref(left->seqtype);
-    atomicseq->right = df_seqtype_ref(right->seqtype);
+    atomicseq = seqtype_new(SEQTYPE_SEQUENCE);
+    atomicseq->left = seqtype_ref(left->st);
+    atomicseq->right = seqtype_ref(right->st);
 
-    atom = df_value_new(atomicseq);
+    atom = value_new(atomicseq);
     atom->value.pair.left = left;
     atom->value.pair.right = right;
     return atom;
   }
-  else if (SEQTYPE_ITEM == v->seqtype->type) {
-    if (ITEM_ATOMIC == v->seqtype->item->kind) {
-      return df_value_ref(v);
+  else if (SEQTYPE_ITEM == v->st->type) {
+    if (ITEM_ATOMIC == v->st->item->kind) {
+      return value_ref(v);
     }
     else {
       /* FIXME: this is just a quick and dirty implementation of node atomization... need to
          follow the rules set out in XPath 2.0 section 2.5.2 */
-      df_seqtype *strtype = df_seqtype_new_atomic(g->string_type);
-      df_value *atom = df_value_new(strtype);
+      seqtype *strtype = seqtype_new_atomic(xs_g->string_type);
+      value *atom = value_new(strtype);
       stringbuf *buf = stringbuf_new();
-      df_node_to_string(v->value.n,buf);
+      node_to_string(v->value.n,buf);
       atom->value.s = strdup(buf->data);
       stringbuf_free(buf);
       return atom;
     }
   }
   else {
-    assert(SEQTYPE_EMPTY == v->seqtype->type);
+    assert(SEQTYPE_EMPTY == v->st->type);
     /* FIXME: is this safe? are there any situations in which df_atomize could be called with
        an empty sequence? */
     assert(!"can't atomize an empty sequence");
@@ -1543,7 +1527,7 @@ df_value *df_atomize(xs_globals *g, df_value *v)
   }
 }
 
-df_value *df_cast(xs_globals *g, df_value *v, df_seqtype *as)
+value *df_cast(value *v, seqtype *as)
 {
   /* FIXME */
   return NULL;

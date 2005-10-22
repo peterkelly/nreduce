@@ -28,18 +28,18 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-static df_seqtype *parse_argtype(xs_schema *schema, ns_map *namespaces, const char *str, int len)
+static seqtype *parse_argtype(xs_schema *schema, ns_map *namespaces, const char *str, int len)
 {
   error_info ei;
-  df_seqtype *st;
+  seqtype *st;
   char *argtype = strdup(str);
   argtype[len] = '\0';
 
   memset(&ei,0,sizeof(error_info));
 
-  st = df_seqtype_parse(argtype,NULL,-1,&ei);
+  st = seqtype_parse(argtype,NULL,-1,&ei);
 
-  if ((NULL == st) || (0 != df_seqtype_resolve(st,namespaces,schema,NULL,-1,&ei))) {
+  if ((NULL == st) || (0 != seqtype_resolve(st,namespaces,schema,NULL,-1,&ei))) {
     fprintf(stderr,"FATAL: internal function uses unknown type \"%s\"\n",argtype);
     exit(1);
   }
@@ -53,8 +53,8 @@ static df_seqtype *parse_argtype(xs_schema *schema, ns_map *namespaces, const ch
   char *end;
   int occurs;
   xs_type *type;
-  df_seqtype *st1;
-  df_seqtype *st2;
+  seqtype *st1;
+  seqtype *st2;
   char *occ;
 
   argtype[len] = '\0';
@@ -93,11 +93,11 @@ static df_seqtype *parse_argtype(xs_schema *schema, ns_map *namespaces, const ch
   }
   free(argtype);
 
-  st1 = df_seqtype_new_atomic(type);
+  st1 = seqtype_new_atomic(type);
   if (OCCURS_ONCE == occurs)
     return st1;
 
-  st2 = df_seqtype_new(SEQTYPE_OCCURRENCE);
+  st2 = seqtype_new(SEQTYPE_OCCURRENCE);
   st2->occurrence = occurs;
   st2->left = st1;
   return st2;
@@ -105,7 +105,7 @@ static df_seqtype *parse_argtype(xs_schema *schema, ns_map *namespaces, const ch
 }
 
 static int parse_argtype_list(xs_schema *schema, ns_map *namespaces,
-                              const char *str, df_seqtype ***types)
+                              const char *str, seqtype ***types)
 {
   const char *start = str;
   const char *c = str;
@@ -119,7 +119,7 @@ static int parse_argtype_list(xs_schema *schema, ns_map *namespaces,
   while (1) {
     if (('\0' == *c) || (',' == *c)) {
       if ((c != start) && !is_all_whitespace(start,c-start)) {
-        df_seqtype *st = parse_argtype(schema,namespaces,start,c-start);
+        seqtype *st = parse_argtype(schema,namespaces,start,c-start);
         list_append(&typelist,st);
       }
       start = c+1;
@@ -130,9 +130,9 @@ static int parse_argtype_list(xs_schema *schema, ns_map *namespaces,
   }
 
   count = list_count(typelist);
-  *types = (df_seqtype**)calloc(count,sizeof(df_seqtype*));
+  *types = (seqtype**)calloc(count,sizeof(seqtype*));
   for (l = typelist; l; l = l->next) {
-    (*types)[i++] = (df_seqtype*)l->data;
+    (*types)[i++] = (seqtype*)l->data;
   }
   list_free(typelist,NULL);
 
@@ -143,7 +143,7 @@ void df_init_builtin_functions(xs_schema *schema, list **builtin_functions,
                                gxfunctiondef ***modules)
 {
   gxfunctiondef ***modptr;
-  ns_map *namespaces = schema->globals->namespaces;
+  ns_map *namespaces = xs_g->namespaces;
 /*   list *l; */
   for (modptr = modules; *modptr; modptr++) {
     gxfunctiondef *fundef;
@@ -165,11 +165,11 @@ void df_init_builtin_functions(xs_schema *schema, list **builtin_functions,
     int i;
     print("bif %p: fun=%p, ident=%#n nargs=%d\n",bif,bif->fun,bif->ident,bif->nargs);
     for (i = 0; i < bif->nargs; i++) {
-      df_seqtype_print_fs(buf,bif->argtypes[i],schema->globals->namespaces);
+      seqtype_print_fs(buf,bif->argtypes[i],xs_g->namespaces);
       print("arg %d: %s\n",i,buf->data);
       stringbuf_clear(buf);
     }
-    df_seqtype_print_fs(buf,bif->rettype,schema->globals->namespaces);
+    seqtype_print_fs(buf,bif->rettype,xs_g->namespaces);
     print("returns: %s\n",buf->data);
     stringbuf_clear(buf);
     print("\n");

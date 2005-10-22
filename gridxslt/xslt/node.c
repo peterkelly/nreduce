@@ -31,15 +31,15 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *root1(gxenvironment *env, gxvalue **args)
+static value *root1(gxenvironment *env, value **args)
 {
-  df_node *n;
-  assert(args[0]->seqtype->type == SEQTYPE_ITEM);
-  assert(args[0]->seqtype->item->kind != ITEM_ATOMIC);
+  node *n;
+  assert(args[0]->st->type == SEQTYPE_ITEM);
+  assert(args[0]->st->item->kind != ITEM_ATOMIC);
   n = args[0]->value.n;
   while (NULL != n->parent)
     n = n->parent;
-  return mknode(n);
+  return value_new_node(n);
 }
 
 gxfunctiondef node_fundefs[2] = {

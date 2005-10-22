@@ -102,11 +102,11 @@ df_seroptions *df_seroptions_new(nsname method);
 void df_seroptions_free(df_seroptions *options);
 df_seroptions *df_seroptions_copy(df_seroptions *options);
 
-int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *options,
+int df_serialize(value *v, stringbuf *buf, df_seroptions *options,
                  error_info *ei);
 
-void df_strip_spaces(df_node *n, list *space_decls);
-void df_namespace_fixup(df_node *n);
+void df_strip_spaces(node *n, list *space_decls);
+void df_namespace_fixup(node *n);
 
 int space_decl_preserve(list *space_decls, nsname elemname);
 space_decl *space_decl_copy(space_decl *decl);

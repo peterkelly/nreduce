@@ -113,9 +113,9 @@ void output_xslt_param(xmlTextWriter *writer, xl_snode *node)
   xml_write_attr(writer,"name","%#q",node->qn);
 
   /* as */
-  if (NULL != node->seqtype) {
+  if (NULL != node->st) {
     stringbuf *buf = stringbuf_new();
-    df_seqtype_print_xpath(buf,node->seqtype,node->namespaces);
+    seqtype_print_xpath(buf,node->st,node->namespaces);
     xmlTextWriterWriteAttribute(writer,"as",buf->data);
     stringbuf_free(buf);
   }
@@ -552,9 +552,9 @@ void output_xslt(FILE *f, xl_snode *node)
       if (!(sn->flags & FLAG_OVERRIDE))
         xmlTextWriterWriteAttribute(writer,"override","no");
 
-      if (NULL != sn->seqtype) {
+      if (NULL != sn->st) {
         stringbuf *buf = stringbuf_new();
-        df_seqtype_print_xpath(buf,sn->seqtype,sn->namespaces);
+        seqtype_print_xpath(buf,sn->st,sn->namespaces);
         xmlTextWriterWriteAttribute(writer,"as",buf->data);
         stringbuf_free(buf);
       }

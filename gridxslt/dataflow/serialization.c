@@ -414,7 +414,7 @@ df_seroptions *df_seroptions_copy(df_seroptions *options)
   return copy;
 }
 
-static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info *ei)
+static value *df_normalize_sequence(value *seq, error_info *ei)
 {
   /* XSLT 2.0 and XQuery Serialization, section 2 */
   list *in = df_sequence_to_list(seq);
@@ -426,19 +426,19 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
   list *s6 = NULL;
   list *l;
   int r = 0;
-  df_node *doc = NULL;
+  node *doc = NULL;
 
   /* 1. If the sequence that is input to serialization is empty, create a sequence S1 that consists
      of a zero-length string. Otherwise, copy each item in the sequence that is input to
      serialization to create the new sequence S1. */
   if (NULL == in) {
-    list_append(&s1,df_value_new_string(g,""));
+    list_append(&s1,value_new_string(""));
   }
   else {
     for (l = in; l; l = l->next) {
-      df_value *v = (df_value*)l->data;
-      assert(SEQTYPE_ITEM == v->seqtype->type);
-      list_append(&s1,df_value_ref(v));
+      value *v = (value*)l->data;
+      assert(SEQTYPE_ITEM == v->st->type);
+      list_append(&s1,value_ref(v));
     }
   }
 
@@ -446,14 +446,14 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
      by casting it to an xs:string and copy the string representation to the new sequence;
      otherwise, copy the item, which will be a node, to the new sequence. The new sequence is S2. */
     for (l = s1; l; l = l->next) {
-      df_value *v = (df_value*)l->data;
-      if (ITEM_ATOMIC == v->seqtype->item->kind) {
-        char *str = df_value_as_string(g,v);
-        list_append(&s2,df_value_new_string(g,str));
+      value *v = (value*)l->data;
+      if (ITEM_ATOMIC == v->st->item->kind) {
+        char *str = value_as_string(v);
+        list_append(&s2,value_new_string(str));
         free(str);
       }
       else {
-        list_append(&s2,df_value_ref(v));
+        list_append(&s2,value_ref(v));
       }
     }
 
@@ -461,24 +461,24 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
      equal to the values of the strings in the subsequence concatenated in order, each separated
      by a single space. Copy all other items to the new sequence. The new sequence is S3. */
   for (l = s2; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if (ITEM_ATOMIC == v->seqtype->item->kind) {
+    value *v = (value*)l->data;
+    if (ITEM_ATOMIC == v->st->item->kind) {
       /* must be a string; see previous step */
       stringbuf *buf = stringbuf_new();
 
       stringbuf_format(buf,"%s",v->value.s);
 
-      while (l->next && (ITEM_ATOMIC == ((df_value*)l->next->data)->seqtype->item->kind)) {
+      while (l->next && (ITEM_ATOMIC == ((value*)l->next->data)->st->item->kind)) {
         l = l->next;
-        v = (df_value*)l->data;
+        v = (value*)l->data;
         stringbuf_format(buf," %s",v->value.s);
       }
 
-      list_append(&s3,df_value_new_string(g,buf->data));
+      list_append(&s3,value_new_string(buf->data));
       stringbuf_free(buf);
     }
     else {
-      list_append(&s3,df_value_ref(v));
+      list_append(&s3,value_ref(v));
     }
   }
 
@@ -486,29 +486,29 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
      string value is equal to the string; otherwise, copy the item to the new sequence. The new
      sequence is S4. */
   for (l = s3; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if (ITEM_ATOMIC == v->seqtype->item->kind) {
+    value *v = (value*)l->data;
+    if (ITEM_ATOMIC == v->st->item->kind) {
       /* must be a string; see previous step */
-      df_node *n = df_node_new(NODE_TEXT);
+      node *n = node_new(NODE_TEXT);
       n->value = strdup(v->value.s);
-      list_append(&s4,df_value_new_node(n));
+      list_append(&s4,value_new_node(n));
     }
     else {
-      list_append(&s4,df_value_ref(v));
+      list_append(&s4,value_ref(v));
     }
   }
 
   /* 5. For each item in S4, if the item is a document node, copy its children to the new sequence;
      otherwise, copy the item to the new sequence. The new sequence is S5. */
   for (l = s4; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if (ITEM_DOCUMENT == v->seqtype->item->kind) {
-      df_node *c;
+    value *v = (value*)l->data;
+    if (ITEM_DOCUMENT == v->st->item->kind) {
+      node *c;
       for (c = v->value.n->first_child; c; c = c->next)
-        list_append(&s5,df_value_new_node(c));
+        list_append(&s5,value_new_node(c));
     }
     else {
-      list_append(&s5,df_value_ref(v));
+      list_append(&s5,value_ref(v));
     }
   }
 
@@ -517,30 +517,30 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
      text nodes with values of zero length are dropped. Copy all other items to the new sequence.
      The new sequence is S6. */
   for (l = s5; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if (ITEM_TEXT == v->seqtype->item->kind) {
+    value *v = (value*)l->data;
+    if (ITEM_TEXT == v->st->item->kind) {
       stringbuf *buf = stringbuf_new();
-      df_node *oldtext = v->value.n;
+      node *oldtext = v->value.n;
 
       stringbuf_format(buf,"%s",oldtext->value);
 
-      while (l->next && (ITEM_TEXT == ((df_value*)l->next->data)->seqtype->item->kind)) {
+      while (l->next && (ITEM_TEXT == ((value*)l->next->data)->st->item->kind)) {
         l = l->next;
-        v = (df_value*)l->data;
+        v = (value*)l->data;
         oldtext = v->value.n;
         stringbuf_format(buf,"%s",oldtext->value);
       }
 
       if (1 < buf->size) {
-        df_node *text = df_node_new(NODE_TEXT);
+        node *text = node_new(NODE_TEXT);
         text->value = strdup(buf->data);
-        list_append(&s6,df_value_new_node(text));
+        list_append(&s6,value_new_node(text));
       }
 
       stringbuf_free(buf);
     }
     else {
-      list_append(&s6,df_value_ref(v));
+      list_append(&s6,value_ref(v));
     }
   }
 
@@ -549,9 +549,9 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
      node and copy all the items in the sequence, which are all nodes, as children of that
      document node. */
   for (l = s6; l; l = l->next) {
-    df_value *v = (df_value*)l->data;
-    if ((ITEM_ATTRIBUTE == v->seqtype->item->kind) ||
-        (ITEM_NAMESPACE == v->seqtype->item->kind)) {
+    value *v = (value*)l->data;
+    if ((ITEM_ATTRIBUTE == v->st->item->kind) ||
+        (ITEM_NAMESPACE == v->st->item->kind)) {
       error(ei,NULL,0,"SE0001","Output sequence cannot contain attribute or namespace nodes");
       r = 1;
       break;
@@ -559,22 +559,22 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
   }
 
   if (0 == r) {
-    doc = df_node_new(NODE_DOCUMENT);
+    doc = node_new(NODE_DOCUMENT);
     for (l = s6; l; l = l->next) {
-      df_value *v = (df_value*)l->data;
-      assert(ITEM_ATOMIC != v->seqtype->item->kind);
-      df_node_add_child(doc,df_node_deep_copy(v->value.n));
+      value *v = (value*)l->data;
+      assert(ITEM_ATOMIC != v->st->item->kind);
+      node_add_child(doc,node_deep_copy(v->value.n));
     }
   }
 
   list_free(in,NULL);
 
-  df_value_deref_list(g,s1);
-  df_value_deref_list(g,s2);
-  df_value_deref_list(g,s3);
-  df_value_deref_list(g,s4);
-  df_value_deref_list(g,s5);
-  df_value_deref_list(g,s6);
+  value_deref_list(s1);
+  value_deref_list(s2);
+  value_deref_list(s3);
+  value_deref_list(s4);
+  value_deref_list(s5);
+  value_deref_list(s6);
 
   list_free(s1,NULL);
   list_free(s2,NULL);
@@ -584,7 +584,7 @@ static df_value *df_normalize_sequence(xs_globals *g, df_value *seq, error_info 
   list_free(s6,NULL);
 
   if (0 == r)
-    return df_value_new_node(doc);
+    return value_new_node(doc);
   else
     return NULL;
 }
@@ -595,17 +595,17 @@ static int serialize_stringbuf(void *context, const char * buffer, int len)
   return len;
 }
 
-static void number_node(df_node *n, int *num)
+static void number_node(node *n, int *num)
 {
-  df_node *c;
+  node *c;
   n->nodeno = (*num)++;
   for (c = n->first_child; c; c = c->next)
     number_node(c,num);
 }
 
-static void dump_tree(df_node *n, int indent)
+static void dump_tree(node *n, int indent)
 {
-  df_node *c;
+  node *c;
   if ((NULL != n->value) && !is_all_whitespace(n->value,strlen(n->value)))
     debug("%#i%d %s \"%s\"\n",2*indent,n->nodeno,df_item_kinds[n->type],n->value);
   else
@@ -614,22 +614,22 @@ static void dump_tree(df_node *n, int indent)
     dump_tree(c,indent+1);
 }
 
-static void insertws(df_node *parent, df_node *before, int have_newline, int depth)
+static void insertws(node *parent, node *before, int have_newline, int depth)
 {
   stringbuf *buf = stringbuf_new();
-  df_node *wsnode = df_node_new(NODE_TEXT);
+  node *wsnode = node_new(NODE_TEXT);
   if (!have_newline)
     stringbuf_format(buf,"\n%#i",INDENT_SPACES*depth);
   else
     stringbuf_format(buf,"%#i",INDENT_SPACES*depth+1);
   wsnode->value = strdup(buf->data);
-  df_node_insert_child(parent,wsnode,before);
+  node_insert_child(parent,wsnode,before);
   stringbuf_free(buf);
 }
 
-static void add_indentation(df_node *node, int depth)
+static void add_indentation(node *n, int depth)
 {
-  df_node *c;
+  node *c;
   int newline = 0;
   int column = 0;
   int nonws = 0;
@@ -655,7 +655,7 @@ static void add_indentation(df_node *node, int depth)
      @implements(xslt-xquery-serialization:xml-indent-3) @end
      @implements(xslt-xquery-serialization:xml-indent-4) @end */
 
-  for (c = node->first_child; c; c = c->next) {
+  for (c = n->first_child; c; c = c->next) {
 
     if (NODE_ELEMENT == c->type) {
 
@@ -663,7 +663,7 @@ static void add_indentation(df_node *node, int depth)
 
       debug("node %d: newline = %d, column = %d, depth = %d\n",c->nodeno,newline,column,depth);
       if (!nonws && (!newline || (INDENT_SPACES*depth >= column)))
-        insertws(node,c,newline,depth);
+        insertws(n,c,newline,depth);
 
       newline = 0;
       column = 0;
@@ -684,14 +684,14 @@ static void add_indentation(df_node *node, int depth)
 
     if (NULL == c->next) {
       if ((0 < depth) && !nonws && (!newline || (INDENT_SPACES*(depth-1) >= column)))
-        insertws(node,c->next,newline,depth-1);
+        insertws(n,c->next,newline,depth-1);
     }
   }
 }
 
-static df_node *get_indented_doc(df_node *node)
+static node *get_indented_doc(node *n)
 {
-  df_node *copy = df_node_ref(df_node_deep_copy(node));
+  node *copy = node_ref(node_deep_copy(n));
   int num = 0;
 
   number_node(copy,&num);
@@ -704,11 +704,11 @@ static df_node *get_indented_doc(df_node *node)
   return copy;
 }
 
-int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *options,
+int df_serialize(value *v, stringbuf *buf, df_seroptions *options,
                  error_info *ei)
 {
-  df_value *normseq = df_normalize_sequence(g,v,ei);
-  df_node *doc;
+  value *normseq = df_normalize_sequence(v,ei);
+  node *doc;
   xmlOutputBuffer *xb;
   xmlTextWriter *writer;
   char *newline;
@@ -725,19 +725,19 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   debug("serialize: after getting normseq: value has %d refs, doc has %d refs\n",
         normseq->refcount,normseq->value.n->refcount);
 
-  doc = df_node_ref(normseq->value.n);
-  df_value_deref(g,normseq);
+  doc = node_ref(normseq->value.n);
+  value_deref(normseq);
 
   debug("serialize: after getting doc: doc has %d refs\n",doc->refcount);
 
-  assert(df_check_tree(doc));
+  assert(node_check_tree(doc));
 
   if (options->indent) {
-    df_node *olddoc = doc;
+    node *olddoc = doc;
     doc = get_indented_doc(olddoc);
-    assert(df_check_tree(doc));
+    assert(node_check_tree(doc));
     debug("identation: new doc has %d refs\n",doc->refcount);
-    df_node_deref(olddoc);
+    node_deref(olddoc);
   }
 
   xb = xmlOutputBufferCreateIO(serialize_stringbuf,NULL,buf,NULL);
@@ -745,7 +745,7 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
 
   xmlTextWriterStartDocument(writer,NULL,"UTF-8",NULL);
 
-  df_node_print(writer,doc);
+  node_print(writer,doc);
 
   xmlTextWriterEndDocument(writer);
   xmlTextWriterFlush(writer);
@@ -765,7 +765,7 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
   buf->size--;
   buf->data[buf->size-1] = '\0';
 
-  df_node_deref(doc);
+  node_deref(doc);
 
   return 0;
 }
@@ -773,14 +773,14 @@ int df_serialize(xs_globals *g, df_value *v, stringbuf *buf, df_seroptions *opti
 /* Note: this is only safe to call on a newly created tree! If there are variables that
    reference nodes in the tree then this could result invalid references due to whitespace
    text nodes being deleted. */
-void df_strip_spaces(df_node *n, list *space_decls)
+void df_strip_spaces(node *n, list *space_decls)
 {
-  df_node *c = n->first_child;
+  node *c = n->first_child;
   int strip = ((NODE_ELEMENT == n->type) && !space_decl_preserve(space_decls,n->ident));
   while (c) {
 
     if ((NODE_TEXT == c->type) && strip && is_all_whitespace(c->value,strlen(c->value))) {
-      df_node *next = c->next;
+      node *next = c->next;
       if (n->first_child == c)
         n->first_child = c->next;
       if (n->last_child == c)
@@ -789,7 +789,7 @@ void df_strip_spaces(df_node *n, list *space_decls)
         c->prev->next = c->next;
       if (NULL != c->next)
         c->next->prev = c->prev;
-      df_node_free(c);
+      node_free(c);
       c = next;
     }
     else {
@@ -799,7 +799,7 @@ void df_strip_spaces(df_node *n, list *space_decls)
   }
 }
 
-void df_namespace_fixup(df_node *n)
+void df_namespace_fixup(node *n)
 {
   /* XSLT 2.0: 5.7.3 Namespace Fixup */
 }

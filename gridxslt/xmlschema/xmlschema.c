@@ -68,6 +68,8 @@ const char *xs_object_types[7] = {
   "notation"
 };
 
+xs_globals *xs_g = NULL;
+
 typedef struct xs_type_allows_facet xs_type_allows_facet;
 
 struct xs_type_allows_facet {
@@ -162,6 +164,17 @@ int xs_visit_attribute_group(xs_schema *s, xmlDocPtr doc, void *data, xs_attribu
                              xs_visitor *v);
 int xs_visit_attribute_use(xs_schema *s, xmlDocPtr doc, void *data, xs_attribute_use *au,
                            xs_visitor *v);
+
+void xs_init()
+{
+  xs_g = xs_globals_new();
+}
+
+void xs_cleanup()
+{
+  xs_globals_free(xs_g);
+  xs_g = NULL;
+}
 
 char *xs_particle_str(xs_particle *p)
 {

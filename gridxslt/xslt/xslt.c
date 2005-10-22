@@ -55,7 +55,7 @@ void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 xl_snode *parse_tree = NULL;
 xp_expr *parse_expr = NULL;
-df_seqtype *parse_seqtype = NULL;
+seqtype *parse_seqtype = NULL;
 int parse_firstline = 0;
 char *parse_errstr = NULL;
 error_info *parse_ei = NULL;
@@ -146,8 +146,8 @@ void xl_snode_free(xl_snode *sn)
 
   qname_free(sn->qn);
   qname_free(sn->mode);
-  if (NULL != sn->seqtype)
-    df_seqtype_deref(sn->seqtype);
+  if (NULL != sn->st)
+    seqtype_deref(sn->st);
   free(sn->strval);
 
   if (NULL != sn->seroptions) {
@@ -280,8 +280,8 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
     if (sn->name_expr)
       CHECK_CALL(xp_expr_resolve(sn->name_expr,s,filename,ei))
 
-    if (NULL != sn->seqtype)
-      CHECK_CALL(df_seqtype_resolve(sn->seqtype,sn->namespaces,s,sn->sloc.uri,sn->sloc.line,ei))
+    if (NULL != sn->st)
+      CHECK_CALL(seqtype_resolve(sn->st,sn->namespaces,s,sn->sloc.uri,sn->sloc.line,ei))
 
     if (XSLT_DECL_FUNCTION == sn->type)
       CHECK_CALL(check_duplicate_params(sn,ei))
@@ -363,7 +363,7 @@ void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_sno
 }
 
 int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
-                    xp_expr **expr, xl_snode **sn, df_seqtype **st)
+                    xp_expr **expr, xl_snode **sn, seqtype **st)
 {
   YY_BUFFER_STATE *bufstate;
   int r;
@@ -679,8 +679,7 @@ static int xslt_post_process(error_info *ei, xslt_source *source, const char *ur
 int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
 {
   *source = (xslt_source*)calloc(1,sizeof(xslt_source));
-  (*source)->globals = xs_globals_new();
-  (*source)->schema = xs_schema_new((*source)->globals);
+  (*source)->schema = xs_schema_new(xs_g);
 
   /* XSLiTe syntax */
   if (ends_with(uri,".xl")) {
@@ -711,7 +710,7 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
     }
 
     /* add default namespaces declared in schema */
-    for (l = (*source)->schema->globals->namespaces->defs; l; l = l->next) {
+    for (l = xs_g->namespaces->defs; l; l = l->next) {
       ns_def *ns = (ns_def*)l->data;
       ns_add_direct((*source)->root->namespaces,ns->href,ns->prefix);
     }
@@ -750,7 +749,6 @@ void xslt_source_free(xslt_source *source)
   if (NULL != source->root)
     xl_snode_free(source->root);
   xs_schema_free(source->schema);
-  xs_globals_free(source->globals);
   free(source);
 }
 

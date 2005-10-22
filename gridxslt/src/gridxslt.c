@@ -117,15 +117,15 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-df_value *load_input_doc(error_info *ei, const char *filename, list *space_decls)
+value *load_input_doc(error_info *ei, const char *filename, list *space_decls)
 {
   FILE *f;
   xmlDocPtr doc;
   xmlNodePtr root;
-  df_node *docnode;
-  df_node *rootelem;
-  df_seqtype *doctype;
-  df_value *context;
+  node *docnode;
+  node *rootelem;
+  seqtype *doctype;
+  value *context;
 
   if (NULL == (f = fopen(filename,"r"))) {
     error(ei,filename,-1,NULL,"%s",strerror(errno));
@@ -145,14 +145,14 @@ df_value *load_input_doc(error_info *ei, const char *filename, list *space_decls
     return NULL;
   }
 
-  docnode = df_node_new(NODE_DOCUMENT);
-  rootelem = df_node_from_xmlnode(root);
+  docnode = node_new(NODE_DOCUMENT);
+  rootelem = node_from_xmlnode(root);
   df_strip_spaces(rootelem,space_decls);
-  df_node_add_child(docnode,rootelem);
+  node_add_child(docnode,rootelem);
 
-  doctype = df_seqtype_new_item(ITEM_DOCUMENT);
-  context = df_value_new(doctype);
-  df_seqtype_deref(doctype);
+  doctype = seqtype_new_item(ITEM_DOCUMENT);
+  context = value_new(doctype);
+  seqtype_deref(doctype);
   context->value.n = docnode;
   context->value.n->refcount++;
 
@@ -173,6 +173,8 @@ int main(int argc, char **argv)
 
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
+
+  xs_init();
 
   if (arguments.server)
     return http_main(arguments.filename);
@@ -211,7 +213,7 @@ int main(int argc, char **argv)
   }
   else {
 
-    df_value *context = NULL;
+    value *context = NULL;
 
     if ((NULL != arguments.input) &&
         (NULL == (context = load_input_doc(&ei,arguments.input,program->space_decls)))) {
@@ -227,8 +229,9 @@ int main(int argc, char **argv)
   }
 
   df_program_free(program);
-  df_print_remaining(source->schema->globals);
+  df_print_remaining();
   xslt_source_free(source);
+  xs_cleanup();
 
   return r;
 }

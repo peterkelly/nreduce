@@ -27,6 +27,6 @@
 #include "sequencetype.h"
 #include "util/xmlutils.h"
 
-int df_execute(df_program *program, int trace, error_info *ei, df_value *context);
+int df_execute(df_program *program, int trace, error_info *ei, value *context);
 
 #endif /* _DATAFLOW_ENGINE_H */

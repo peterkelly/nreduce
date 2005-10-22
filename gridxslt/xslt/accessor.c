@@ -31,17 +31,17 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *string1(gxenvironment *env, gxvalue **args)
+static value *string1(gxenvironment *env, value **args)
 {
-  gxvalue *result;
+  value *result;
   char *str;
-  if (SEQTYPE_EMPTY == args[0]->seqtype->type) {
-    result = mkstring("");
+  if (SEQTYPE_EMPTY == args[0]->st->type) {
+    result = value_new_string("");
   }
   else {
-    assert(SEQTYPE_ITEM == args[0]->seqtype->type);
-    str = df_value_as_string(env->g,args[0]);
-    result = mkstring(str);
+    assert(SEQTYPE_ITEM == args[0]->st->type);
+    str = value_as_string(args[0]);
+    result = value_new_string(str);
     free(str);
   }
   return result;

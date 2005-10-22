@@ -129,7 +129,7 @@ struct xp_expr {
   xp_expr *left;
   xp_expr *right;
 
-  df_seqtype *seqtype;
+  seqtype *st;
   int compare;
   int nodetest;
   char *strval;
@@ -153,7 +153,7 @@ struct xp_expr {
 xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right);
 xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei,
                        int pattern);
-df_seqtype *df_seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei);
+seqtype *seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei);
 void xp_expr_free(xp_expr *xp);
 void xp_set_parent(xp_expr *xp, xp_expr *parent, xl_snode *stmt);
 int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *ei);

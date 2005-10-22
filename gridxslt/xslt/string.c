@@ -27,11 +27,11 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *string_join(gxenvironment *env, gxvalue **args)
+static value *string_join(gxenvironment *env, value **args)
 {
-  gxvalue **values = df_sequence_to_array(args[0]);
+  value **values = df_sequence_to_array(args[0]);
   stringbuf *buf = stringbuf_new();
-  gxvalue *res;
+  value *res;
   int i;
 
   print("New string-join()\n");
@@ -42,22 +42,22 @@ static gxvalue *string_join(gxenvironment *env, gxvalue **args)
       stringbuf_format(buf,"%s",asstring(args[1]));
   }
 
-  res = mkstring(buf->data);
+  res = value_new_string(buf->data);
   stringbuf_free(buf);
   free(values);
   return res;
 }
 
-static gxvalue *substring2(gxenvironment *env, gxvalue **args)
+static value *substring2(gxenvironment *env, value **args)
 {
   const char *s = asstring(args[0]);
-  return mkstring(s);
+  return value_new_string(s);
 }
 
-static gxvalue *substring3(gxenvironment *env, gxvalue **args)
+static value *substring3(gxenvironment *env, value **args)
 {
   const char *s = asstring(args[0]);
-  return mkstring(s);
+  return value_new_string(s);
 }
 
 gxfunctiondef string_fundefs[4] = {

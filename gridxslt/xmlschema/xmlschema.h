@@ -595,6 +595,9 @@ struct xs_schema {
   list *imports;
 };
 
+void xs_init();
+void xs_cleanup();
+
 char *xs_particle_str(xs_particle *p);
 char *xs_range_str(xs_range r);
 
@@ -664,6 +667,7 @@ void xs_attribute_use_free(xs_attribute_use *au);
 #ifndef _XMLSCHEMA_XMLSCHEMA_C
 extern const char *xs_facet_names[XS_FACET_NUMFACETS];
 extern const char *xs_object_types[7];
+extern xs_globals *xs_g;
 #endif
 
 #endif /* _XMLSCHEMA_XMLSCHEMA_H */

@@ -47,7 +47,7 @@ const char *df_special_op_names[OP_COUNT] = {
   "builtin",
 };
 
-void df_instruction_compute_types(df_instruction *instr, xs_globals *g)
+void df_instruction_compute_types(df_instruction *instr)
 {
   int i;
 
@@ -60,35 +60,35 @@ void df_instruction_compute_types(df_instruction *instr, xs_globals *g)
   case OP_CONST:
     break;
   case OP_DUP:
-    instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
-    instr->outports[1].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
+    instr->outports[0].st = seqtype_ref(instr->inports[0].st);
+    instr->outports[1].st = seqtype_ref(instr->inports[0].st);
     break;
   case OP_SPLIT:
-    instr->outports[0].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
-    instr->outports[1].seqtype = df_seqtype_ref(instr->inports[1].seqtype);
-    instr->outports[2].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
+    instr->outports[0].st = seqtype_ref(instr->inports[1].st);
+    instr->outports[1].st = seqtype_ref(instr->inports[1].st);
+    instr->outports[2].st = seqtype_ref(instr->inports[0].st);
     break;
   case OP_MERGE:
     /* FIXME: merge the two input types; if you know they're both going to be ints, then the
        result of the merge can be int. */
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
-    instr->outports[0].seqtype->left = df_normalize_itemnode(1,g);
+    instr->outports[0].st = seqtype_new(SEQTYPE_OCCURRENCE);
+    instr->outports[0].st->occurrence = OCCURS_ZERO_OR_MORE;
+    instr->outports[0].st->left = df_normalize_itemnode(1);
     break;
   case OP_CALL:
-    instr->outports[0].seqtype = df_seqtype_ref(instr->cfun->rtype);
+    instr->outports[0].st = seqtype_ref(instr->cfun->rtype);
     break;
   case OP_MAP:
     /* FIXME: we can possibly be more specific here if we know the occurrence range of the
        input type, e.g. OCCURS_ONE_OR_MORE */
     /* FIXME: what if the return type of the function is a sequence type with an occurrence
        indicator, e.g. item()*? The result will be a nested occurrence indicator... is this ok? */
-    instr->outports[0].seqtype = df_seqtype_new(SEQTYPE_OCCURRENCE);
-    instr->outports[0].seqtype->occurrence = OCCURS_ZERO_OR_MORE;
-    instr->outports[0].seqtype->left = df_seqtype_ref(instr->cfun->rtype);
+    instr->outports[0].st = seqtype_new(SEQTYPE_OCCURRENCE);
+    instr->outports[0].st->occurrence = OCCURS_ZERO_OR_MORE;
+    instr->outports[0].st->left = seqtype_ref(instr->cfun->rtype);
     break;
   case OP_PASS:
-    instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
+    instr->outports[0].st = seqtype_ref(instr->inports[0].st);
     break;
   case OP_SWALLOW:
     break;
@@ -97,7 +97,7 @@ void df_instruction_compute_types(df_instruction *instr, xs_globals *g)
   case OP_PRINT:
     break;
   case OP_GATE:
-    instr->outports[0].seqtype = df_seqtype_ref(instr->inports[0].seqtype);
+    instr->outports[0].st = seqtype_ref(instr->inports[0].st);
     break;
   case OP_BUILTIN:
     break;
@@ -111,44 +111,44 @@ void df_instruction_compute_types(df_instruction *instr, xs_globals *g)
     df_inport *ip = &op->dest->inports[op->destp];
     int remaining = 0;
 
-    assert(NULL != op->seqtype);
+    assert(NULL != op->st);
 
     if ((OP_BUILTIN == op->dest->opcode) || (OP_CALL == op->dest->opcode)) {
-      if (NULL == ip->seqtype) {
+      if (NULL == ip->st) {
         printf("null sequence type!\n");
       }
-      assert(NULL != ip->seqtype);
+      assert(NULL != ip->st);
     }
     else {
       int i;
 
-      if ((OP_MERGE != op->dest->opcode) || (NULL == ip->seqtype)) {
-        if (NULL != ip->seqtype) {
+      if ((OP_MERGE != op->dest->opcode) || (NULL == ip->st)) {
+        if (NULL != ip->st) {
           debug("%#n instr %d inport %d [opcode %d] already has a type\n",
                 instr->fun->ident,op->dest->id,op->destp,op->dest->opcode);
         }
-        assert(NULL == ip->seqtype);
-        ip->seqtype = df_seqtype_ref(op->seqtype);
+        assert(NULL == ip->st);
+        ip->st = seqtype_ref(op->st);
 
         for (i = 0; i < op->dest->ninports; i++)
-          if (NULL == op->dest->inports[i].seqtype)
+          if (NULL == op->dest->inports[i].st)
             remaining++;
 
       }
     }
 
     if ((0 == remaining) && !op->dest->computed)
-      df_instruction_compute_types(op->dest,g);
+      df_instruction_compute_types(op->dest);
   }
 }
 
-void df_compute_types(df_function *fun, xs_globals *g)
+void df_compute_types(df_function *fun)
 {
   int i;
 
-  df_instruction_compute_types(fun->start,g);
+  df_instruction_compute_types(fun->start);
   for (i = 0; i < fun->nparams; i++)
-    df_instruction_compute_types(fun->params[i].start,g);
+    df_instruction_compute_types(fun->params[i].start);
 
 
 /*
@@ -159,39 +159,39 @@ void df_compute_types(df_function *fun, xs_globals *g)
     if (OP_BUILTIN != instr->opcode) {
       int i;
       for (i = 0; i < instr->ninports; i++) {
-        df_seqtype *st = df_seqtype_new(SEQTYPE_OCCURRENCE);
+        seqtype *st = seqtype_new(SEQTYPE_OCCURRENCE);
         st->occurrence = OCCURS_ZERO_OR_MORE;
-        st->left = df_normalize_itemnode(1,g);
-        instr->inports[i].seqtype = st;
+        st->left = df_normalize_itemnode(1);
+        instr->inports[i].st = st;
       }
       for (i = 0; i < instr->noutports; i++) {
-        df_seqtype *st = df_seqtype_new(SEQTYPE_OCCURRENCE);
+        seqtype *st = seqtype_new(SEQTYPE_OCCURRENCE);
         st->occurrence = OCCURS_ZERO_OR_MORE;
-        st->left = df_normalize_itemnode(1,g);
-        instr->outports[i].seqtype = st;
+        st->left = df_normalize_itemnode(1);
+        instr->outports[i].st = st;
       }
     }
   }
 */
 }
 
-int df_check_is_atomic_type(df_seqtype *st, xs_type *type)
+int df_check_is_atomic_type(seqtype *st, xs_type *type)
 {
   return ((SEQTYPE_ITEM == st->type) &&
           (ITEM_ATOMIC == st->item->kind) &&
           (st->item->type == type));
 }
 
-int df_check_derived_atomic_type(df_value *v, xs_type *type)
+int df_check_derived_atomic_type(value *v, xs_type *type)
 {
   xs_type *t1;
-  if (SEQTYPE_ITEM != v->seqtype->type)
+  if (SEQTYPE_ITEM != v->st->type)
     return 0;
 
-  if (ITEM_ATOMIC != v->seqtype->item->kind)
+  if (ITEM_ATOMIC != v->st->item->kind)
     return 0;
 
-  for (t1 = v->seqtype->item->type; t1 != t1->base; t1 = t1->base)
+  for (t1 = v->st->item->type; t1 != t1->base; t1 = t1->base)
     if (t1 == type)
       return 1;
 
@@ -206,11 +206,11 @@ void df_init_function(df_program *program, df_function *fun, sourceloc sloc)
 
   fun->ret = df_add_instruction(program,fun,OP_RETURN,sloc);
   fun->start = df_add_instruction(program,fun,OP_PASS,sloc);
-  fun->start->inports[0].seqtype = df_normalize_itemnode(1,program->schema->globals);
+  fun->start->inports[0].st = df_normalize_itemnode(1);
   fun->start->outports[0].dest = fun->ret;
   fun->start->outports[0].destp = 0;
 
-  fun->rtype = df_seqtype_new_atomic(program->schema->globals->complex_ur_type);
+  fun->rtype = seqtype_new_atomic(xs_g->complex_ur_type);
 }
 
 df_function *df_new_function(df_program *program, const nsname ident)
@@ -249,11 +249,11 @@ void df_free_function(df_function *fun)
 
   nsname_free(fun->ident);
   if (NULL != fun->rtype)
-    df_seqtype_deref(fun->rtype);
+    seqtype_deref(fun->rtype);
 
   for (i = 0; i < fun->nparams; i++) {
-    assert(NULL != fun->params[i].seqtype);
-    df_seqtype_deref(fun->params[i].seqtype);
+    assert(NULL != fun->params[i].st);
+    seqtype_deref(fun->params[i].st);
   }
 
   free(fun->params);
@@ -364,10 +364,10 @@ df_instruction *df_add_builtin_instruction(df_program *program, df_function *fun
   instr->ninports = nargs;
   instr->inports = (df_inport*)calloc(nargs,sizeof(df_inport));
   for (i = 0; i < nargs; i++)
-    instr->inports[i].seqtype = df_seqtype_ref(bif->argtypes[i]);
+    instr->inports[i].st = seqtype_ref(bif->argtypes[i]);
 
   assert(1 == instr->noutports);
-  instr->outports[0].seqtype = df_seqtype_ref(bif->rettype);
+  instr->outports[0].st = seqtype_ref(bif->rettype);
 
   return instr;
 }
@@ -400,8 +400,8 @@ void df_free_instruction_inports(df_instruction *instr)
 {
   int i;
   for (i = 0; i < instr->ninports; i++)
-    if (NULL != instr->inports[i].seqtype)
-      df_seqtype_deref(instr->inports[i].seqtype);
+    if (NULL != instr->inports[i].st)
+      seqtype_deref(instr->inports[i].st);
   free(instr->inports);
 }
 
@@ -410,19 +410,19 @@ void df_free_instruction(df_instruction *instr)
   int i;
   df_free_instruction_inports(instr);
   for (i = 0; i < instr->noutports; i++)
-    if (NULL != instr->outports[i].seqtype)
-      df_seqtype_deref(instr->outports[i].seqtype);
+    if (NULL != instr->outports[i].st)
+      seqtype_deref(instr->outports[i].st);
   free(instr->outports);
 
   if (OP_CONST == instr->opcode) {
 /*     debugl("df_free_instruction CONT: instr->cvalue = %p, with %d refs (before my deref)", */
 /*           instr->cvalue,instr->cvalue->refcount); */
-    df_value_deref(instr->fun->program->schema->globals,instr->cvalue);
+    value_deref(instr->cvalue);
   }
 
   free(instr->nametest);
   if (NULL != instr->seqtypetest)
-    df_seqtype_deref(instr->seqtypetest);
+    seqtype_deref(instr->seqtypetest);
   if (NULL != instr->seroptions)
     df_seroptions_free(instr->seroptions);
   list_free(instr->nsdefs,(void*)ns_def_free);
@@ -431,11 +431,11 @@ void df_free_instruction(df_instruction *instr)
   free(instr);
 }
 
-gxcontext *df_create_context(df_value *item, int position, int size, int havefocus,
+gxcontext *df_create_context(value *item, int position, int size, int havefocus,
                               gxcontext *prev)
 {
   gxcontext *ctxt = (gxcontext*)calloc(1,sizeof(gxcontext));
-  ctxt->item = item ? df_value_ref(item) : NULL;
+  ctxt->item = item ? value_ref(item) : NULL;
   ctxt->position = position;
   ctxt->size = size;
   ctxt->havefocus = havefocus;
@@ -449,10 +449,10 @@ gxcontext *df_create_context(df_value *item, int position, int size, int havefoc
   return ctxt;
 }
 
-void df_free_context(xs_globals *globals, gxcontext *ctxt)
+void df_free_context(gxcontext *ctxt)
 {
   if (ctxt->item)
-    df_value_deref(globals,ctxt->item);
+    value_deref(ctxt->item);
   free(ctxt->mode);
   free(ctxt->group);
   free(ctxt->groupkey);
@@ -469,9 +469,9 @@ void df_free_builtin_function(df_builtin_function *bif)
   int i;
   nsname_free(bif->ident);
   for (i = 0; i < bif->nargs; i++)
-    df_seqtype_deref(bif->argtypes[i]);
+    seqtype_deref(bif->argtypes[i]);
   free(bif->argtypes);
-  df_seqtype_deref(bif->rettype);
+  seqtype_deref(bif->rettype);
   free(bif);
 }
 
@@ -497,7 +497,6 @@ static int has_portlabels(df_instruction *instr)
 
 void df_output_dot(df_program *program, FILE *f, int types)
 {
-  xs_globals *g = program->schema->globals;
   list *l;
   fprintf(f,"digraph {\n");
 /*   fprintf(f,"  rankdir=LR;\n"); */
@@ -556,10 +555,9 @@ void df_output_dot(df_program *program, FILE *f, int types)
           fprintf(f,"{{");
 
           for (i = 0; i < instr->ninports; i++) {
-            if (NULL != instr->inports[i].seqtype) {
+            if (NULL != instr->inports[i].st) {
               stringbuf *buf = stringbuf_new();
-              df_seqtype_print_fs(buf,instr->inports[i].seqtype,
-                                  program->schema->globals->namespaces);
+              seqtype_print_fs(buf,instr->inports[i].st,xs_g->namespaces);
               if (0 < i)
                 fprintf(f,"|<i%d>%s",i,buf->data);
               else
@@ -574,7 +572,7 @@ void df_output_dot(df_program *program, FILE *f, int types)
         fprintf(f,"%d|",instr->id);
 
         if (OP_CONST == instr->opcode) {
-          df_value_print(g,f,instr->cvalue);
+          value_print(f,instr->cvalue);
           extra = ",fillcolor=\"#FF8080\"";
         }
         else if (OP_CALL == instr->opcode) {
@@ -596,7 +594,7 @@ void df_output_dot(df_program *program, FILE *f, int types)
             else {
               stringbuf *buf = stringbuf_new();
               /* FIXME: need to use the namespace map of the syntax tree node */
-              df_seqtype_print_xpath(buf,instr->seqtypetest,program->schema->globals->namespaces);
+              seqtype_print_xpath(buf,instr->seqtypetest,xs_g->namespaces);
               fprintf(f,"%s",buf->data);
               stringbuf_free(buf);
             }
@@ -615,10 +613,9 @@ void df_output_dot(df_program *program, FILE *f, int types)
           fprintf(f,"}|{");
 
           for (i = 0; i < instr->noutports; i++) {
-            if (NULL != instr->outports[i].seqtype) {
+            if (NULL != instr->outports[i].st) {
               stringbuf *buf = stringbuf_new();
-              df_seqtype_print_fs(buf,instr->outports[i].seqtype,
-                                  program->schema->globals->namespaces);
+              seqtype_print_fs(buf,instr->outports[i].st,xs_g->namespaces);
               if (0 < i)
                 fprintf(f,"|<o%d>%s",i,buf->data);
               else
@@ -689,12 +686,12 @@ void df_output_df(df_program *program, FILE *f)
     fprintf(f,"function %s {\n",fun->ident.name);
     assert(NULL != fun->rtype);
     stringbuf_clear(buf);
-    df_seqtype_print_fs(buf,fun->rtype,program->schema->globals->namespaces);
+    seqtype_print_fs(buf,fun->rtype,xs_g->namespaces);
     fprintf(f,"  return %s\n",buf->data);
 
     for (i = 0; i < fun->nparams; i++) {
       stringbuf_clear(buf);
-      df_seqtype_print_fs(buf,fun->params[i].seqtype,program->schema->globals->namespaces);
+      seqtype_print_fs(buf,fun->params[i].st,xs_g->namespaces);
       fprintf(f,"  param %d start %d type %s\n",i,fun->params[i].start->id,buf->data);
     }
 
@@ -718,17 +715,15 @@ void df_output_df(df_program *program, FILE *f)
       }
 
       if (OP_CONST == instr->opcode) {
-        assert(SEQTYPE_ITEM == instr->cvalue->seqtype->type);
-        assert(ITEM_ATOMIC == instr->cvalue->seqtype->item->kind);
+        assert(SEQTYPE_ITEM == instr->cvalue->st->type);
+        assert(ITEM_ATOMIC == instr->cvalue->st->item->kind);
 
-        if (instr->cvalue->seqtype->item->type ==
-            program->schema->globals->string_type) {
+        if (instr->cvalue->st->item->type == xs_g->string_type) {
           char *escaped = escape_str(instr->cvalue->value.s);
           fprintf(f," = \"%s\"",escaped);
           free(escaped);
         }
-        else if (instr->cvalue->seqtype->item->type ==
-                 program->schema->globals->int_type) {
+        else if (instr->cvalue->st->item->type == xs_g->int_type) {
           fprintf(f," = %d",instr->cvalue->value.i);
         }
         else {
@@ -739,26 +734,24 @@ void df_output_df(df_program *program, FILE *f)
       fprintf(f,"\n");
 
       for (i = 0; i < instr->ninports; i++) {
-        if (NULL == instr->inports[i].seqtype) {
+        if (NULL == instr->inports[i].st) {
           fprintf(f,"    in %d: none\n",i);
         }
         else {
           stringbuf *buf = stringbuf_new();
-          df_seqtype_print_fs(buf,instr->inports[i].seqtype,
-                              program->schema->globals->namespaces);
+          seqtype_print_fs(buf,instr->inports[i].st,xs_g->namespaces);
           fprintf(f,"    in %d: %s\n",i,buf->data);
           stringbuf_free(buf);
         }
       }
 
       for (i = 0; i < instr->noutports; i++) {
-        if (NULL == instr->outports[i].seqtype) {
+        if (NULL == instr->outports[i].st) {
           fprintf(f,"    out %d: none\n",i);
         }
         else {
           stringbuf *buf = stringbuf_new();
-          df_seqtype_print_fs(buf,instr->outports[i].seqtype,
-                              program->schema->globals->namespaces);
+          seqtype_print_fs(buf,instr->outports[i].st,xs_g->namespaces);
           fprintf(f,"    out %d: %s\n",i,buf->data);
           stringbuf_free(buf);
         }

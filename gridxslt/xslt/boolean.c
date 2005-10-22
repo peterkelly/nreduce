@@ -32,16 +32,16 @@
 
 #define FNS FN_NAMESPACE
 
-static gxvalue *not(gxenvironment *env, gxvalue **args)
+static value *not(gxenvironment *env, value **args)
 {
-  gxvalue *v1;
+  value *v1;
   int r;
   if (NULL == (v1 = ebv(env,&args[0])))
     return NULL;
   r = !asbool(v1);
-  vderef(v1);
+  value_deref(v1);
 
-  return mkbool(r);
+  return value_new_bool(r);
 }
 
 gxfunctiondef boolean_fundefs[2] = {
