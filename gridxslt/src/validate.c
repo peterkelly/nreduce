@@ -77,7 +77,7 @@ struct arguments {
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
-  struct arguments *arguments = state->input;
+  struct arguments *arguments = (struct arguments*)state->input;
 
   switch (key) {
   case 'd':
@@ -566,7 +566,7 @@ int build_fsm(xs_schema *s, fsm *f, FILE *dotfile)
   fsm_expand_and_determinise(f,df,dotfile);
 
   fsm_free(df);
-  list_free(allocated_inputs,free);
+  list_free(allocated_inputs,(list_d_t)free);
   return 0;
 }
 

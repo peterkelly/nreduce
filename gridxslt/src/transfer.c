@@ -58,7 +58,7 @@ int kbsec(int bytes, int ms)
 {
   double kb = ((double)bytes)/1024.0;
   double s = ((double)ms)/1000.0;
-  return kb/s;
+  return (int)(kb/s);
 }
 
 void server(const char *filename, int max)
@@ -85,7 +85,7 @@ void server(const char *filename, int max)
 
   printf("Listening\n");
 
-  if (-1 == (serverfd = accept(sock,(struct sockaddr*)&remote_addr,&sin_size))) {
+  if (-1 == (serverfd = accept(sock,(struct sockaddr*)&remote_addr,(socklen_t*)&sin_size))) {
     perror("accept");
     exit(1);
   }

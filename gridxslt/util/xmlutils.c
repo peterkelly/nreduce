@@ -232,7 +232,12 @@ void sourceloc_free(sourceloc sloc)
   free(sloc.uri);
 }
 
-const sourceloc nosourceloc = { uri: NULL, line: -1 };
+const sourceloc nosourceloc1 = { uri: NULL, line: -1 };
+
+sourceloc get_nosourceloc()
+{
+  return nosourceloc1;
+}
 
 void print(const char *format, ...)
 {
@@ -248,12 +253,12 @@ void print(const char *format, ...)
 }
 
 int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
-                           char **namespace, char **localpart)
+                           char **namespace1, char **localpart)
 {
   qname qn = qname_parse(name);
   xmlNsPtr ns = NULL;
 
-  *namespace = NULL;
+  *namespace1 = NULL;
   *localpart = NULL;
 
   /* FIXME: maybe set error info here instead of requiring thet caller to do it? */
@@ -261,7 +266,7 @@ int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
     qname_free(qn);
     return -1;
   }
-  *namespace = ns ? strdup(ns->href) : NULL;
+  *namespace1 = ns ? strdup(ns->href) : NULL;
   *localpart = qn.localpart;
   free(qn.prefix);
 
@@ -421,12 +426,12 @@ int invalid_attribute_val(error_info *ei, const char *filename, xmlNodePtr n, co
   return -1;
 }
 
-int check_element(xmlNodePtr n, const char *localname, const char *namespace)
+int check_element(xmlNodePtr n, const char *localname, const char *namespace1)
 {
   return ((XML_ELEMENT_NODE == n->type) &&
           !strcmp(n->name,localname) &&
-          (((NULL == n->ns) && (NULL == namespace)) ||
-           ((NULL != n->ns) && (NULL != namespace) && !strcmp(n->ns->href,namespace))));
+          (((NULL == n->ns) && (NULL == namespace1)) ||
+           ((NULL != n->ns) && (NULL != namespace1) && !strcmp(n->ns->href,namespace1))));
 }
 
 int convert_to_nonneg_int(const char *str, int *val)
@@ -683,7 +688,7 @@ int is_all_whitespace(const char *s, int len)
 
 static size_t write_buf(void *ptr, size_t size, size_t nmemb, void *data)
 {
-  stringbuf_append((stringbuf*)data,ptr,size*nmemb);
+  stringbuf_append((stringbuf*)data,(const char*)ptr,size*nmemb);
   return size*nmemb;
 }
 

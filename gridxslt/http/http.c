@@ -188,7 +188,7 @@ void connection_free(connection *c)
     free(c->resp.uh);
   }
 
-  list_free(c->req.headers,(void*)header_free);
+  list_free(c->req.headers,(list_d_t)header_free);
   if (NULL != c->req.cb)
     circbuf_free(c->req.cb);
   if (NULL != c->resp.mw)
@@ -366,7 +366,7 @@ int listen_read(eventman *em, fdhandler *h)
   int serverfd;
   fdhandler *httphandler;
   c->em = em;
-  if (-1 == (serverfd = accept(h->fd,(struct sockaddr*)&c->remote_addr,&sin_size))) {
+  if (-1 == (serverfd = accept(h->fd,(struct sockaddr*)&c->remote_addr,(socklen_t*)&sin_size))) {
     perror("accept");
     return -1;
   }

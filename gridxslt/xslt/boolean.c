@@ -32,7 +32,7 @@
 
 #define FNS FN_NAMESPACE
 
-static value *not(gxenvironment *env, value **args)
+static value *not1(gxenvironment *env, value **args)
 {
   value *v1;
   int r;
@@ -45,7 +45,7 @@ static value *not(gxenvironment *env, value **args)
 }
 
 gxfunctiondef boolean_fundefs[2] = {
-  { not,    FNS, "not",     "item()*",                  "xsd:boolean" },
+  { not1,    FNS, "not",     "item()*",                  "xsd:boolean" },
   { NULL },
 };
 

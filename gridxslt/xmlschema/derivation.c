@@ -1087,20 +1087,20 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
     int retry = 0;
 
     for (topos = mapping[frompos]; topos < tocount; topos++) {
-      int try = 1;
+      int attempt = 1;
       if (require_nonemptiable_unique) {
         int f;
         for (f = 0; f < frompos; f++)
           if (mapping[f] == topos)
-            try = 0;
+            attempt = 0;
       }
 
-/*       if (try) */
+/*       if (attempt) */
 /*         debugl("mapping: trying %d -> %d",frompos,topos); */
 /*       else */
 /*         debugl("mapping: NOT trying %d -> %d",frompos,topos); */
 
-      if (try &&
+      if (attempt &&
           (0 == xs_check_particle_valid_restriction(s,fromparticles[frompos],toparticles[topos]))) {
 
 /*         debugl("mapping: candidate %d -> %d",frompos,topos); */
@@ -1603,8 +1603,8 @@ xs_particle *ignore_pointless(xs_schema *s, xs_particle *p, ignore_pointless_dat
 
 void ignore_pointless_free(ignore_pointless_data *ipd)
 {
-  list_free(ipd->allocp,(void*)xs_particle_free);
-  list_free(ipd->allocmg,(void*)xs_model_group_free);
+  list_free(ipd->allocp,(list_d_t)xs_particle_free);
+  list_free(ipd->allocmg,(list_d_t)xs_model_group_free);
 }
 
 

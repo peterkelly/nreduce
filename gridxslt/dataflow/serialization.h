@@ -113,7 +113,7 @@ space_decl *space_decl_copy(space_decl *decl);
 void space_decl_free(space_decl *decl);
 
 #ifndef _DATAFLOW_SERIALIZATION_C
-const char *seroption_names[SEROPTION_COUNT];
+extern const char *seroption_names[SEROPTION_COUNT];
 #endif
 
 #endif /* _DATAFLOW_SERIALIZATION_H */

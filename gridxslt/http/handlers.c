@@ -269,7 +269,7 @@ int tree_write(urihandler *uh, msgwriter *mw)
 void tree_cleanup(urihandler *uh)
 {
   tree_data *d = (tree_data*)uh->d;
-  list_free(d->dirs,(void*)tree_node_free);
+  list_free(d->dirs,(list_d_t)tree_node_free);
   free(d);
 }
 

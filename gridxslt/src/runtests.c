@@ -88,7 +88,7 @@ struct arguments {
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
-  struct arguments *arguments = state->input;
+  struct arguments *arguments = (struct arguments*)state->input;
 
   switch (key) {
   case 'd':
@@ -425,7 +425,7 @@ char *find_program(char *cmdline)
       fprintf(stderr,"Cannot find program \"%s\"\n",name);
       exit(1);
     }
-    pl = calloc(1,sizeof(program_loc));
+    pl = (program_loc*)calloc(1,sizeof(program_loc));
     pl->name = strdup(name);
     pl->fullname = strdup(fullname);
     list_push(&program_locs,pl);
@@ -719,7 +719,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
       exit(1);
     }
   }
-  list_free(output_files,free);
+  list_free(output_files,(list_d_t)free);
 
   stringbuf_free(vgoutput);
 
@@ -891,8 +891,8 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  list_free(program_locs,(void*)program_loc_free);
-  list_free(arguments.substitutions,(void*)progsubst_free);
+  list_free(program_locs,(list_d_t)program_loc_free);
+  list_free(arguments.substitutions,(list_d_t)progsubst_free);
 
   return r;
 }

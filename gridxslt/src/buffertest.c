@@ -94,7 +94,7 @@ int main(int argc, char **argv)
       }
       struct sockaddr_in remote_addr;
       int sin_size = sizeof(struct sockaddr_in);
-      if (-1 == (serverfd = accept(listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
+      if (-1 == (serverfd = accept(listenfd,(struct sockaddr*)&remote_addr,(socklen_t*)&sin_size))) {
         perror("accept");
         return -1;
       }

@@ -69,20 +69,20 @@ int wsdl_get_message(wsdl *w, char *name, xmlNodePtr n, xmlDocPtr doc, ws_messag
 {
   /* FIXME: should also check imports here; the nsprefix may reference an imported message */
   ws_message *m;
-  char *namespace;
+  char *namespace1;
   char *localpart;
 
-  if (0 != get_ns_name_from_qname(n,doc,name,&namespace,&localpart))
+  if (0 != get_ns_name_from_qname(n,doc,name,&namespace1,&localpart))
     return -1;
 
   *mout = NULL;
   for (m = w->messages; m && (NULL == *mout); m = m->next) {
-    if (((NULL != namespace) && m->ns && !strcmp(m->ns,namespace) &&
+    if (((NULL != namespace1) && m->ns && !strcmp(m->ns,namespace1) &&
                                          !strcmp(m->name,localpart)) ||
-        ((NULL == namespace) && !m->ns && !strcmp(m->name,localpart)))
+        ((NULL == namespace1) && !m->ns && !strcmp(m->name,localpart)))
       *mout = m;
   }
-  free(namespace);
+  free(namespace1);
   free(localpart);
 
   if (NULL == *mout)
@@ -95,20 +95,20 @@ int wsdl_get_port_type(wsdl *w, char *name, xmlNodePtr n, xmlDocPtr doc, ws_port
 {
   /* FIXME: should also check imports here; the nsprefix may reference an imported message */
   ws_port_type *pt;
-  char *namespace;
+  char *namespace1;
   char *localpart;
 
-  if (0 != get_ns_name_from_qname(n,doc,name,&namespace,&localpart))
+  if (0 != get_ns_name_from_qname(n,doc,name,&namespace1,&localpart))
     return -1;
 
   *ptout = NULL;
   for (pt = w->port_types; pt && (NULL == *ptout); pt = pt->next) {
-    if (((NULL != namespace) && pt->ns && !strcmp(pt->ns,namespace) &&
+    if (((NULL != namespace1) && pt->ns && !strcmp(pt->ns,namespace1) &&
                                          !strcmp(pt->name,localpart)) ||
-        ((NULL == namespace) && !pt->ns && !strcmp(pt->name,localpart)))
+        ((NULL == namespace1) && !pt->ns && !strcmp(pt->name,localpart)))
       *ptout = pt;
   }
-  free(namespace);
+  free(namespace1);
   free(localpart);
 
   if (NULL == *ptout)
@@ -121,20 +121,20 @@ int wsdl_get_binding(wsdl *w, char *name, xmlNodePtr n, xmlDocPtr doc, ws_bindin
 {
   /* FIXME: should also check imports here; the nsprefix may reference an imported message */
   ws_binding *b;
-  char *namespace;
+  char *namespace1;
   char *localpart;
 
-  if (0 != get_ns_name_from_qname(n,doc,name,&namespace,&localpart))
+  if (0 != get_ns_name_from_qname(n,doc,name,&namespace1,&localpart))
     return -1;
 
   *bout = NULL;
   for (b = w->bindings; b && (NULL == *bout); b = b->next) {
-    if (((NULL != namespace) && b->ns && !strcmp(b->ns,namespace) &&
+    if (((NULL != namespace1) && b->ns && !strcmp(b->ns,namespace1) &&
                                          !strcmp(b->name,localpart)) ||
-        ((NULL == namespace) && !b->ns && !strcmp(b->name,localpart)))
+        ((NULL == namespace1) && !b->ns && !strcmp(b->name,localpart)))
       *bout = b;
   }
-  free(namespace);
+  free(namespace1);
   free(localpart);
 
   if (NULL == *bout)

@@ -286,7 +286,7 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 
 
 
-{INTEGER} { yylval.number = atof(yytext); return INTEGER_LITERAL; }
+{INTEGER} { yylval.inumber = atoi(yytext); return INTEGER_LITERAL; }
 {DECIMAL} { yylval.number = atof(yytext); return DECIMAL_LITERAL; }
 {DOUBLE} { yylval.number = atof(yytext); return DOUBLE_LITERAL; }
 {NCNAME} { yylval.string = strdup(yytext); return NCNAME; }

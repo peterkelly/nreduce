@@ -826,8 +826,8 @@ void node_free(node *n)
 
   list_remove_ptr(&allocnodes,n);
 
-  list_free(n->namespaces,(void*)node_free);
-  list_free(n->attributes,(void*)node_free);
+  list_free(n->namespaces,(list_d_t)node_free);
+  list_free(n->attributes,(list_d_t)node_free);
 
   c = n->first_child;
   while (c) {

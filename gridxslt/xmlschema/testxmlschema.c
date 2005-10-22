@@ -102,7 +102,7 @@ struct arguments {
 
 error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
-  struct arguments *arguments = state->input;
+  struct arguments *arguments = (struct arguments*)state->input;
 
   switch (key) {
   case 'd':
@@ -394,23 +394,23 @@ void dump_wildcard_subset(dumpinfo *di, xs_schema *s, char *typenames)
   printf("Subset: %s\n",i ? "true" : "false");
 }
 
-void print_range(xs_schema *s, char *typename)
+void print_range(xs_schema *s, char *typenam)
 {
   xs_type *t;
   xs_range r;
 
-  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typename)))) {
-    fprintf(stderr,"No such type: %s\n",typename);
+  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typenam)))) {
+    fprintf(stderr,"No such type: %s\n",typenam);
     exit(1);
   }
 
   if (!t->complex) {
-    fprintf(stderr,"Not a complex type: %s\n",typename);
+    fprintf(stderr,"Not a complex type: %s\n",typenam);
     exit(1);
   }
 
   if (NULL == t->content_type) {
-    fprintf(stderr,"No content model: %s\n",typename);
+    fprintf(stderr,"No content model: %s\n",typenam);
     exit(1);
   }
 
@@ -469,24 +469,24 @@ int test_type_derivation(xs_schema *s, char *typenames, char *final_set)
   return 0;
 }
 
-void print_non_pointless(xs_schema *s, char *typename)
+void print_non_pointless(xs_schema *s, char *typenam)
 {
   xs_type *t;
   xs_particle *p;
   ignore_pointless_data ipd;
 
-  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typename)))) {
-    fprintf(stderr,"No such type: %s\n",typename);
+  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typenam)))) {
+    fprintf(stderr,"No such type: %s\n",typenam);
     exit(1);
   }
 
   if (!t->complex) {
-    fprintf(stderr,"Not a complex type: %s\n",typename);
+    fprintf(stderr,"Not a complex type: %s\n",typenam);
     exit(1);
   }
 
   if (NULL == t->content_type) {
-    fprintf(stderr,"No content model: %s\n",typename);
+    fprintf(stderr,"No content model: %s\n",typenam);
     exit(1);
   }
 

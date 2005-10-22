@@ -209,7 +209,7 @@ void init_typeinfo_complex_type(xs_schema *s, xs_type *t, list **typestack, list
   /* attributes and attribute group references */
   init_typeinfo_attributes(t->local_attribute_uses,t->attribute_group_refs,&t->size);
 
-  t2 = list_pop(typestack);
+  t2 = (xs_type*)list_pop(typestack);
   assert(t2 == t);
 
   cs = xs_cstruct_new(s->globals->as);
@@ -324,7 +324,7 @@ void init_typeinfo_model_group(xs_schema *s, xs_model_group *mg, list **typestac
   if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor)
     mg->size += largest;
 
-  mg2 = list_pop(mgstack);
+  mg2 = (xs_model_group*)list_pop(mgstack);
   assert(mg2 == mg);
 
   cs = xs_cstruct_new(s->globals->as);
@@ -660,8 +660,8 @@ void xs_print_model_group_defs(xs_model_group *mg)
 /*   printf("model group pn %s (ct %s)\n",mg->parent_name,mg->ctype); */
   for (l = mg->particles; l; l = l->next) {
     xs_particle *p = (xs_particle*)l->data;
-    char *indent = choice ? "  " : "";
-    char *typename = "(type)";
+    const char *indent = choice ? "  " : "";
+    char *typenam = "(type)";
     char *name = "(name)";
     assert(p->typeinfo_known);
     switch (p->term_type) {
@@ -669,16 +669,16 @@ void xs_print_model_group_defs(xs_model_group *mg)
       assert(p->term.e->type);
       assert(p->term.e->type->ctype);
       assert(p->cvar);
-      typename = p->term.e->type->ctype;
+      typenam = p->term.e->type->ctype;
       name = p->cvar;
       break;
     case XS_PARTICLE_TERM_MODEL_GROUP:
       name = p->cvar;
-      typename = p->term.mg->ctype;
+      typenam = p->term.mg->ctype;
       break;
     case XS_PARTICLE_TERM_WILDCARD:
       name = p->cvar;
-      typename = "wildcard"; /* FIXME: what to do here? */
+      typenam = "wildcard"; /* FIXME: what to do here? */
       break;
     default:
       assert(!"invalid particle type");
@@ -687,18 +687,18 @@ void xs_print_model_group_defs(xs_model_group *mg)
 
     switch (p->enctype) {
     case XS_ENCODING_SINGLE:
-      printf("%s  %s %s;\n",indent,typename,name);
+      printf("%s  %s %s;\n",indent,typenam,name);
       break;
     case XS_ENCODING_ARRAY_PTR:
       printf("%s  int n%s;\n",indent,name);
-      printf("%s  %s *%s;\n",indent,typename,name);
+      printf("%s  %s *%s;\n",indent,typenam,name);
       break;
     case XS_ENCODING_FIXED_ARRAY:
-      printf("%s  %s %s[%d];\n",indent,typename,name,p->range.max_occurs);
+      printf("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
       break;
     case XS_ENCODING_MAX_ARRAY:
       printf("%s  int n%s;\n",indent,name);
-      printf("%s  %s %s[%d];\n",indent,typename,name,p->range.max_occurs);
+      printf("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
       break;
     default:
       assert(!"invalid particle encoding type");
@@ -1268,7 +1268,7 @@ int validate_element_against_particle(xs_validator *v,
     stringbuf_append(encoded,s->str,strlen(s->str)+1);
     free(s->str);
   }
-  list_free(strings,(void*)free);
+  list_free(strings,(list_d_t)free);
 
   /* Now process all of the children. */
   for (l = children; l; l = l->next) {
@@ -1279,7 +1279,7 @@ int validate_element_against_particle(xs_validator *v,
       break;
     }
   }
-  list_free(children,(void*)free);
+  list_free(children,(list_d_t)free);
 
 /*   if (XS_PARTICLE_TERM_ELEMENT == p->term_type) */
 /*     printf("validate_element_against_particle[%s]: returning %d\n",p->term.e->name,count); */

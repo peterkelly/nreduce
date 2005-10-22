@@ -144,7 +144,7 @@ struct xl_snode {
   nsname ident;
 
   int templateno;
-  struct template *tmpl;
+  struct template1 *tmpl;
   struct df_outport *outp;
   list *templates;
 };

@@ -297,13 +297,13 @@ void header_free(header *h)
 {
   free(h->name);
   free(h->value);
-  list_free(h->values,free);
+  list_free(h->values,(list_d_t)free);
   free(h);
 }
 
 void msgparser_reset(msgparser *mp)
 {
-  list_free(mp->headers,(void*)header_free);
+  list_free(mp->headers,(list_d_t)header_free);
   if (NULL != mp->cb)
     circbuf_free(mp->cb);
   memset(mp,0,sizeof(msgparser));

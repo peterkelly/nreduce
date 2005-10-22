@@ -875,7 +875,7 @@ int xs_is_builtin_type_redeclaration(xs_schema *s, char *ns, xmlNodePtr n)
   if ((NULL != ns) && !strcmp(ns,XS_NAMESPACE) && xmlHasProp(n,"name")) {
     xs_type *existing;
     char *name = get_wscollapsed_attr(n,"name",NULL);
-    if ((NULL != (existing = xs_symbol_table_lookup_object(s->globals->symt,XS_OBJECT_TYPE,
+    if ((NULL != (existing = (xs_type*)xs_symbol_table_lookup_object(s->globals->symt,XS_OBJECT_TYPE,
                                                            nsname_temp(ns,name)))) &&
         existing->builtin) {
       free(name);
@@ -1658,18 +1658,18 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
     w->type = XS_WILDCARD_TYPE_ANY;
   }
   else {
-    char *namespace = get_wscollapsed_attr(n,"namespace",NULL);
+    char *namesp = get_wscollapsed_attr(n,"namespace",NULL);
 
-    if (!strcmp(namespace,"##any")) {
+    if (!strcmp(namesp,"##any")) {
       w->type = XS_WILDCARD_TYPE_ANY;
     }
-    else if (!strcmp(namespace,"##other")) {
+    else if (!strcmp(namesp,"##other")) {
       w->type = XS_WILDCARD_TYPE_NOT;
       w->not_ns = s->ns ? strdup(s->ns) : NULL;
     }
     else {
-      char *start = namespace;
-      char *cur = namespace;
+      char *start = namesp;
+      char *cur = namesp;
 
       w->type = XS_WILDCARD_TYPE_SET;
 
@@ -1696,7 +1696,7 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
       }
     }
 
-    free(namespace);
+    free(namesp);
   }
 
   /* @implements(xmlschema-1:Wildcard{process contents})
@@ -1767,7 +1767,7 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   xmlDocPtr import_doc;
   xmlNodePtr import_elem;
   xs_schema *import_schema = NULL;
-  char *namespace;
+  char *namesp;
   char *full_uri;
   if (!xmlHasProp(n,"schemaLocation"))
     return error(&s->ei,s->uri,n->line,NULL,
@@ -1781,14 +1781,14 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
      test { xmlschema/import/nsconflict1.test }
      @end */
   if (xmlHasProp(n,"namespace") && (NULL != s->ns)) {
-    namespace = xmlGetProp(n,"namespace");
-    if (!strcmp(namespace,s->ns)) {
-      free(namespace);
+    namesp = xmlGetProp(n,"namespace");
+    if (!strcmp(namesp,s->ns)) {
+      free(namesp);
       return error(&s->ei,s->uri,n->line,"src-import.1.1","The \"namespace\" attribute for this "
                    "import must either be absent, or different to the target namespace of the "
                    "enclosing schema");
     }
-    free(namespace);
+    free(namesp);
   }
 
   /* @implements(xmlschema-1:src-import.1.2)
@@ -1858,26 +1858,26 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
      @implements(xmlschema-1:src-import.3.2)
      test { xmlschema/import/nsmismatch2.test }
      @end */
-  namespace = xmlGetProp(n,"namespace");
+  namesp = xmlGetProp(n,"namespace");
   if (NULL == import_schema->ns) {
-    if (NULL != namespace) {
+    if (NULL != namesp) {
       free(schemaloc);
-      free(namespace);
+      free(namesp);
       return error(&s->ei,s->uri,n->line,"src-import.3.1","This import element must not have a "
                    "\"namespace\" attribute, since the imported schema does not define a target "
                    "namespace");
     }
   }
   else {
-    if ((NULL == namespace) || strcmp(namespace,import_schema->ns)) {
-      free(namespace);
+    if ((NULL == namesp) || strcmp(namesp,import_schema->ns)) {
+      free(namesp);
       free(schemaloc);
       return error(&s->ei,s->uri,n->line,"src-import.3.1","This import element must its "
                    "\"namespace\" attribute set to \"%s\", which is the target namespace declared "
                    "by the imported schema",import_schema->ns);
     }
   }
-  free(namespace);
+  free(namesp);
   free(schemaloc);
   return 0;
 }

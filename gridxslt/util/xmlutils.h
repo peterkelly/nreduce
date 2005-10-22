@@ -107,10 +107,8 @@ void qnametest_ptr_free(qnametest *test);
 sourceloc sourceloc_copy(sourceloc sloc);
 void sourceloc_free(sourceloc sloc);
 
-#ifndef _UTIL_XMLUTILS_C
-extern const sourceloc nosourceloc;
-#endif
-
+#define nosourceloc get_nosourceloc()
+sourceloc get_nosourceloc();
 
 void print(const char *format, ...);
 
@@ -120,7 +118,7 @@ void print(const char *format, ...);
 
 
 int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
-                           char **namespace, char **localpart);
+                           char **namespace1, char **localpart);
 void error_info_copy(error_info *to, error_info *from);
 void error_info_print(error_info *ei, FILE *f);
 void error_info_free_vals(error_info *ei);
@@ -136,7 +134,7 @@ int attribute_not_allowed(error_info *ei, const char *filename, int line, const 
 int conflicting_attributes(error_info *ei, const char *filename, int line, const char *errname,
                            const char *conflictor, const char *conflictee);
 int invalid_attribute_val(error_info *ei, const char *filename, xmlNodePtr n, const char *attrname);
-int check_element(xmlNodePtr n, const char *localname, const char *namespace);
+int check_element(xmlNodePtr n, const char *localname, const char *namespace1);
 
 int convert_to_nonneg_int(const char *str, int *val);
 int parse_int_attr(error_info *ei, char *filename, xmlNodePtr n, const char *attrname, int *val);

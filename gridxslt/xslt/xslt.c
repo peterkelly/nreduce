@@ -48,7 +48,7 @@ extern FILE *yyin;
 extern int lex_lineno;
 int yyparse();
 
-typedef void *YY_BUFFER_STATE;
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
 YY_BUFFER_STATE yy_scan_string(const char *str);
 void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
 void yy_delete_buffer(YY_BUFFER_STATE buffer);
@@ -156,7 +156,7 @@ void xl_snode_free(xl_snode *sn)
       free(sn->seroptions[i]);
     free(sn->seroptions);
   }
-  list_free(sn->qnametests,(void*)qnametest_ptr_free);
+  list_free(sn->qnametests,(list_d_t)qnametest_ptr_free);
 
   sourceloc_free(sn->sloc);
   nsname_free(sn->ident);
@@ -365,7 +365,7 @@ void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_sno
 int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
                     xp_expr **expr, xl_snode **sn, seqtype **st)
 {
-  YY_BUFFER_STATE *bufstate;
+  YY_BUFFER_STATE bufstate;
   int r;
   parse_expr = NULL;
   parse_seqtype = NULL;
@@ -535,7 +535,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
           error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
                 "Could not resolve namespace for prefix \"%s\"",qn.prefix);
           qname_free(qn);
-          list_free(deflist,(void*)output_defstr_free);
+          list_free(deflist,(list_d_t)output_defstr_free);
           return -1;
         }
         qname_free(qn);
@@ -547,7 +547,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
             strcmp(od->method.name,"text")) {
           error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
                 "If the method has a null namespace, it must be one of xml, html, xhtml, or text");
-          list_free(deflist,(void*)output_defstr_free);
+          list_free(deflist,(list_d_t)output_defstr_free);
           return -1;
         }
       }
@@ -605,14 +605,14 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
               error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1560","Conflicting value for option %s: "
                     "previously set to %s by another output declaration",
                     seroption_names[i],od->unpoptions[i]);
-              list_free(deflist,(void*)output_defstr_free);
+              list_free(deflist,(list_d_t)output_defstr_free);
               return -1;
             }
           }
 
           if (0 != df_parse_seroption(od->options,i,ei,sn->sloc.uri,sn->sloc.line,
                                       sn->seroptions[i],sn->namespaces)) {
-            list_free(deflist,(void*)output_defstr_free);
+            list_free(deflist,(list_d_t)output_defstr_free);
             return -1;
           }
 
@@ -625,7 +625,7 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
 /*     output_defstr *od = (output_defstr*)l->data; */
   }
 
-  list_free(deflist,(void*)output_defstr_free);
+  list_free(deflist,(list_d_t)output_defstr_free);
   return 0;
 }
 
@@ -744,8 +744,8 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
 
 void xslt_source_free(xslt_source *source)
 {
-  list_free(source->output_defs,(void*)df_seroptions_free);
-  list_free(source->space_decls,(void*)space_decl_free);
+  list_free(source->output_defs,(list_d_t)df_seroptions_free);
+  list_free(source->space_decls,(list_d_t)space_decl_free);
   if (NULL != source->root)
     xl_snode_free(source->root);
   xs_schema_free(source->schema);

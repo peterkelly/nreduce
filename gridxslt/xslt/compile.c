@@ -30,7 +30,7 @@
 #include <assert.h>
 #include <string.h>
 
-typedef struct template template;
+typedef struct template1 template1;
 typedef struct compilation compilation;
 
 struct compilation {
@@ -44,13 +44,13 @@ struct compilation {
   int nextanonid;
 };
 
-struct template {
+struct template1 {
   xp_expr *pattern;
   df_function *fun;
   int builtin;
 };
 
-static void template_free(template *t)
+static void template_free(template1 *t)
 {
   if (t->builtin)
     xp_expr_free(t->pattern);
@@ -404,7 +404,7 @@ static int xslt_compile_innerfun(compilation *comp, df_function *fun, xl_snode *
   assert(NULL != innerfuncur);
 
   *mapout = map;
-  list_free(vars,free);
+  list_free(vars,(list_d_t)free);
 
   return 0;
 }
@@ -513,27 +513,27 @@ static int xslt_compile_expr(compilation *comp, df_function *fun, xp_expr *e, df
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
       break;
     case XPATH_GENERAL_COMP_NE: {
-      df_instruction *not = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
+      df_instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
-      set_and_move_cursor(cursor,not,0,not,0);
+      set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
     case XPATH_GENERAL_COMP_LT:
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
       break;
     case XPATH_GENERAL_COMP_LE: {
-      df_instruction *not = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
+      df_instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
-      set_and_move_cursor(cursor,not,0,not,0);
+      set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
     case XPATH_GENERAL_COMP_GT:
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
       break;
     case XPATH_GENERAL_COMP_GE: {
-      df_instruction *not = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
+      df_instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->sloc);
       CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
-      set_and_move_cursor(cursor,not,0,not,0);
+      set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
     default:
@@ -1221,7 +1221,7 @@ static int xslt_compile_apply_function(compilation *comp,
   cursor = &innerfun->start->outports[0];
 
   for (l = templates; l; l = l->next) {
-    template *t = (template*)l->data;
+    template1 *t = (template1*)l->data;
     df_instruction *call = df_add_instruction(comp->program,innerfun,OP_CALL,nosourceloc);
 
     df_instruction *dup = df_add_instruction(comp->program,innerfun,OP_DUP,nosourceloc);
@@ -1254,11 +1254,11 @@ static int xslt_compile_apply_function(compilation *comp,
     branchcur = &falsecur;
   }
 
-  /* default template for document and element nodes */
+  /* default template1 for document and element nodes */
   {
     df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     df_instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
-    df_instruction *not = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    df_instruction *not1 = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
     df_instruction *childsel = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     seqtype *doctype = seqtype_new_item(ITEM_DOCUMENT);
     seqtype *elemtype = seqtype_new_item(ITEM_ELEMENT);
@@ -1272,7 +1272,7 @@ static int xslt_compile_apply_function(compilation *comp,
 
     set_and_move_cursor(&condcur,select,0,select,0);
     set_and_move_cursor(&condcur,isempty,0,isempty,0);
-    set_and_move_cursor(&condcur,not,0,not,0);
+    set_and_move_cursor(&condcur,not1,0,not1,0);
 
     childsel->axis = AXIS_CHILD;
     childsel->seqtypetest = df_normalize_itemnode(0);
@@ -1282,11 +1282,11 @@ static int xslt_compile_apply_function(compilation *comp,
     branchcur = &falsecur;
   }
 
-  /* default template for text and attribute nodes */
+  /* default template1 for text and attribute nodes */
   {
     df_instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     df_instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
-    df_instruction *not = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    df_instruction *not1 = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
     df_instruction *string = specialop(comp,innerfun,FN_NAMESPACE,"string",1,nosourceloc);
     seqtype *texttype = seqtype_new_item(ITEM_TEXT);
     seqtype *attrtype = seqtype_new_item(ITEM_ATTRIBUTE);
@@ -1300,7 +1300,7 @@ static int xslt_compile_apply_function(compilation *comp,
 
     set_and_move_cursor(&condcur,select,0,select,0);
     set_and_move_cursor(&condcur,isempty,0,isempty,0);
-    set_and_move_cursor(&condcur,not,0,not,0);
+    set_and_move_cursor(&condcur,not1,0,not1,0);
 
     set_and_move_cursor(&truecur,string,0,string,0);
 
@@ -1322,7 +1322,7 @@ static int xslt_compile_apply_function(compilation *comp,
  * in turn, and makes a call to the first one that matches. The apply-templates instruction
  * then corresponds to an evaluation of the select attribute (if there is one), followed by
  * a map operator which takes the sequence returned by the select expression and applies the
- * template function to each element in the resulting sequence.
+ * template1 function to each element in the resulting sequence.
  *
  * Only one anonymous function is maintained for each mode; it will be created if it does not yet
  * exist, otherwise the existing one will be re-used.
@@ -1370,7 +1370,7 @@ static list *xslt_compile_ordered_template_list(compilation *comp)
 
   for (sn = comp->source->root->child; sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_TEMPLATE == sn->type) {
-      sn->tmpl = (template*)calloc(1,sizeof(template));
+      sn->tmpl = (template1*)calloc(1,sizeof(template1));
       sn->tmpl->pattern = sn->select;
       list_push(&templates,sn->tmpl);
     }
@@ -1524,7 +1524,7 @@ int xslt_compile(error_info *ei, xslt_source *source, df_program **program)
 
   r = xslt_compile2(&comp);
 
-  list_free(comp.templates,(void*)template_free);
+  list_free(comp.templates,(list_d_t)template_free);
 
   if (0 != r) {
     df_program_free(*program);

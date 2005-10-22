@@ -148,17 +148,17 @@ void bpel_output_scope_contents(xmlTextWriter *writer, bp_scope *scope)
   }
 
   if (scope->fh_catches || scope->fh_catchall) {
-    bp_catch *catch;
+    bp_catch *catch1;
 
     xmlTextWriterStartElement(writer,"faultHandlers");
 
-    for (catch = scope->fh_catches; catch; catch = catch->next) {
+    for (catch1 = scope->fh_catches; catch1; catch1 = catch1->next) {
       xmlTextWriterStartElement(writer,"catch");
-      if (catch->fault_name.localpart)
-        xml_write_attr(writer,"faultName","%#q",catch->fault_name);
-      if (catch->fault_variable)
-        xmlTextWriterWriteAttribute(writer,"faultVariable",catch->fault_variable);
-      bpel_output_activities(writer,catch->activities);
+      if (catch1->fault_name.localpart)
+        xml_write_attr(writer,"faultName","%#q",catch1->fault_name);
+      if (catch1->fault_variable)
+        xmlTextWriterWriteAttribute(writer,"faultVariable",catch1->fault_variable);
+      bpel_output_activities(writer,catch1->activities);
       xmlTextWriterEndElement(writer);
     }
 
@@ -649,7 +649,7 @@ int bpel_parse_correlation_sets(bp_scope *scope, xmlNodePtr n)
 
 int bpel_parse_fault_handlers(bp_scope *scope, xmlNodePtr n)
 {
-  bp_catch *catch;
+  bp_catch *catch1;
   bp_catch **catchptr = &scope->fh_catches;
   xmlNodePtr c;
   int found_catchall = 0;
@@ -679,13 +679,13 @@ int bpel_parse_fault_handlers(bp_scope *scope, xmlNodePtr n)
       fault_name = xmlGetProp(c,"faultName");
       fault_variable = xmlGetProp(c,"faultVariable");
 
-      catch = (bp_catch*)calloc(1,sizeof(bp_catch));
+      catch1 = (bp_catch*)calloc(1,sizeof(bp_catch));
       if (fault_name)
-        catch->fault_name = qname_parse(fault_name);
+        catch1->fault_name = qname_parse(fault_name);
       if (fault_variable)
-        catch->fault_variable = strdup(fault_variable);
-      *catchptr = catch;
-      catchptr = &catch->next;
+        catch1->fault_variable = strdup(fault_variable);
+      *catchptr = catch1;
+      catchptr = &catch1->next;
 
       /* FIXME: parse child elements (activities) */
 

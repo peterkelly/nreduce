@@ -43,7 +43,7 @@ void ns_map_free(ns_map *map, int free_parents)
 {
   if (free_parents)
     ns_map_free(map->parent,1);
-  list_free(map->defs,(void*)ns_def_free);
+  list_free(map->defs,(list_d_t)ns_def_free);
   free(map);
 }
 

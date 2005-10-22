@@ -148,7 +148,7 @@ struct gxcontext {
   int position;
   int size;
   int havefocus;
-  df_function *template;
+  df_function *tmpl;
   char *mode;
   char *group;
   char *groupkey;

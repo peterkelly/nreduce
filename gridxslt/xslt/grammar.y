@@ -47,6 +47,7 @@ extern char *parse_filename;
 %union {
   int axis;
   char *string;
+  int inumber;
   double number;
   xp_expr *expr;
   xl_snode *snode;
@@ -172,7 +173,7 @@ extern char *parse_filename;
 
 %token <string> NCNAME
 %token <string> STRING_LITERAL
-%token <number> INTEGER_LITERAL
+%token <inumber> INTEGER_LITERAL
 %token <number> DECIMAL_LITERAL
 %token <number> DOUBLE_LITERAL
 

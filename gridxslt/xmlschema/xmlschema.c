@@ -73,7 +73,7 @@ xs_globals *xs_g = NULL;
 typedef struct xs_type_allows_facet xs_type_allows_facet;
 
 struct xs_type_allows_facet {
-  char *typename;
+  char *typenam;
   int facets[XS_FACET_NUMFACETS+1];
 };
 
@@ -2593,8 +2593,8 @@ xs_type *new_primitive_type(xs_globals *g, char *name, int size, char *ctype)
     sprintf(t->ctype,"XS%s",name);
   }
 
-  for (i = 0; xs_allowed_facets[i].typename; i++) {
-    if (!strcmp(t->def.ident.name,xs_allowed_facets[i].typename)) {
+  for (i = 0; xs_allowed_facets[i].typenam; i++) {
+    if (!strcmp(t->def.ident.name,xs_allowed_facets[i].typenam)) {
       t->allowed_facets = xs_allowed_facets[i].facets;
       found_allowed_facets = 1;
       break;
@@ -2614,7 +2614,7 @@ xs_type *new_derived_type(xs_globals *g, char *name, char *base, int size, char 
   t->builtin = 1;
   t->variety = XS_TYPE_VARIETY_ATOMIC;
   t->stype = XS_TYPE_SIMPLE_RESTRICTION;
-  t->base = ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,base));
+  t->base = (xs_type*)ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,base));
   if (!t->base) {
     printf("no such base type %s for %s\n",base,name);
     assert(0);
@@ -2659,7 +2659,7 @@ xs_type *new_list_type(xs_globals *g, char *name, char *item_type)
   t->variety = XS_TYPE_VARIETY_LIST;
   t->stype = XS_TYPE_SIMPLE_LIST;
   t->base = g->simple_ur_type;
-  t->item_type = ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,item_type));
+  t->item_type = (xs_type*)ss_lookup_local(g->symt->ss_types,nsname_temp(XS_NAMESPACE,item_type));
   if (!t->item_type) {
     printf("no such item type %s for %s\n",item_type,name);
     assert(0);
@@ -2861,23 +2861,23 @@ xs_allocset *xs_allocset_new()
 
 void xs_allocset_free(xs_allocset *as)
 {
-  list_free(as->alloc_cstruct,(void*)xs_cstruct_free);
-  list_free(as->alloc_reference,(void*)xs_reference_free);
-  list_free(as->alloc_member_type,(void*)xs_member_type_free);
-  list_free(as->alloc_type,(void*)xs_type_free);
-  list_free(as->alloc_attribute,(void*)xs_attribute_free);
-  list_free(as->alloc_element,(void*)xs_element_free);
+  list_free(as->alloc_cstruct,(list_d_t)xs_cstruct_free);
+  list_free(as->alloc_reference,(list_d_t)xs_reference_free);
+  list_free(as->alloc_member_type,(list_d_t)xs_member_type_free);
+  list_free(as->alloc_type,(list_d_t)xs_type_free);
+  list_free(as->alloc_attribute,(list_d_t)xs_attribute_free);
+  list_free(as->alloc_element,(list_d_t)xs_element_free);
 
-  list_free(as->alloc_attribute_group_ref,(void*)xs_attribute_group_ref_free);
-  list_free(as->alloc_attribute_group,(void*)xs_attribute_group_free);
-  list_free(as->alloc_identity_constraint,(void*)xs_identity_constraint_free);
-  list_free(as->alloc_model_group_def,(void*)xs_model_group_def_free);
-  list_free(as->alloc_model_group,(void*)xs_model_group_free);
-  list_free(as->alloc_notation,(void*)xs_notation_free);
+  list_free(as->alloc_attribute_group_ref,(list_d_t)xs_attribute_group_ref_free);
+  list_free(as->alloc_attribute_group,(list_d_t)xs_attribute_group_free);
+  list_free(as->alloc_identity_constraint,(list_d_t)xs_identity_constraint_free);
+  list_free(as->alloc_model_group_def,(list_d_t)xs_model_group_def_free);
+  list_free(as->alloc_model_group,(list_d_t)xs_model_group_free);
+  list_free(as->alloc_notation,(list_d_t)xs_notation_free);
 
-  list_free(as->alloc_particle,(void*)xs_particle_free);
-  list_free(as->alloc_wildcard,(void*)xs_wildcard_free);
-  list_free(as->alloc_attribute_use,(void*)xs_attribute_use_free);
+  list_free(as->alloc_particle,(list_d_t)xs_particle_free);
+  list_free(as->alloc_wildcard,(list_d_t)xs_wildcard_free);
+  list_free(as->alloc_attribute_use,(list_d_t)xs_attribute_use_free);
   free(as);
 }
 
@@ -2941,7 +2941,7 @@ void xs_globals_free(xs_globals *g)
 {
   xs_symbol_table_free(g->symt);
   xs_allocset_free(g->as);
-  list_free(g->ctypes,(void*)free);
+  list_free(g->ctypes,(list_d_t)free);
   list_free(g->cstructs,NULL);
   ns_map_free(g->namespaces,0);
   free(g);
@@ -2967,7 +2967,7 @@ void xs_schema_free(xs_schema *s)
   free(s->block_default);
   free(s->final_default);
 
-  list_free(s->imports,(void*)xs_schema_free);
+  list_free(s->imports,(list_d_t)xs_schema_free);
 
   xs_allocset_free(s->as);
   xs_symbol_table_free(s->symt);
@@ -3023,8 +3023,8 @@ void xs_facetdata_freevals(xs_facetdata *fd)
   int facet;
   for (facet = 0; facet < XS_FACET_NUMFACETS; facet++)
     free(fd->strval[facet]);
-  list_free(fd->patterns,free);
-  list_free(fd->enumerations,free);
+  list_free(fd->patterns,(list_d_t)free);
+  list_free(fd->enumerations,(list_d_t)free);
 }
 
 void xs_type_free(xs_type *t)
@@ -3038,7 +3038,7 @@ void xs_type_free(xs_type *t)
   xs_facetdata_freevals(&t->child_facets);
   free(t->parent_name);
   free(t->parent_ns);
-  list_free(t->attribute_cvars,free);
+  list_free(t->attribute_cvars,(list_d_t)free);
   free(t->ctype);
   free(t);
 }
@@ -3098,7 +3098,7 @@ void xs_attribute_group_free(xs_attribute_group *ag)
   list_free(ag->attribute_uses,NULL);
   list_free(ag->local_attribute_uses,NULL);
   list_free(ag->attribute_group_refs,NULL);
-  list_free(ag->cvars,free);
+  list_free(ag->cvars,(list_d_t)free);
   free(ag->ctype);
   free(ag);
 }
@@ -3139,7 +3139,7 @@ void xs_model_group_free(xs_model_group *mg)
 {
   list_free(mg->particles,NULL);
   free(mg->ctype);
-  list_free(mg->cvars,free);
+  list_free(mg->cvars,(list_d_t)free);
   free(mg->parent_name);
   free(mg->parent_ns);
   free(mg);
@@ -3180,7 +3180,7 @@ xs_wildcard *xs_wildcard_new(xs_allocset *as)
 void xs_wildcard_free(xs_wildcard *w)
 {
   free(w->not_ns);
-  list_free(w->nslist,free);
+  list_free(w->nslist,(list_d_t)free);
   free(w);
 }
 

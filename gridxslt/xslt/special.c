@@ -739,10 +739,10 @@ static value *select1(gxenvironment *env, value **args)
   return result;
 }
 
-static value *namespace(gxenvironment *env, value **args)
+static value *namespace2(gxenvironment *env, value **args)
 {
   /* @implements(xslt20:creating-namespace-nodes-2)
-     test { xslt/eval/namespace1.test }
+     test { xslt/eval/namespace2.test }
      test { xslt/eval/namespace2.test }
      test { xslt/eval/namespace3.test }
      test { xslt/eval/namespace4.test }
@@ -961,7 +961,7 @@ value *ebv(gxenvironment *env, value **args)
   return NULL;
 }
 
-static value *and(gxenvironment *env, value **args)
+static value *and2(gxenvironment *env, value **args)
 {
   value *v1;
   value *v2;
@@ -979,7 +979,7 @@ static value *and(gxenvironment *env, value **args)
   return value_new_bool(r);
 }
 
-static value *or(gxenvironment *env, value **args)
+static value *or2(gxenvironment *env, value **args)
 {
   value *v1;
   value *v2;
@@ -1003,7 +1003,7 @@ gxfunctiondef special_fundefs[18] = {
   { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean"     },
   { select_root,   FNS, "select-root",   "node()",                    "node()"          },
   { select1,       FNS, "select",        "node()*",                   "node()*"         },
-  { namespace,     FNS, "namespace",     "item()*,item()*",           "node()"          },
+  { namespace2,    FNS, "namespace",     "item()*,item()*",           "node()"          },
   { text,          FNS, "text",          "item()*",                   "text()"          },
   { value_of,      FNS, "value-of",      "item()*,item()*",           "text()"          },
   { attribute2,    FNS, "attribute",     "item()*,item()*",           "attribute()"     },
@@ -1013,8 +1013,8 @@ gxfunctiondef special_fundefs[18] = {
   { filter,        FNS, "filter",        "item()*",                   "item()*"         },
   { empty,         FNS, "empty",         "item()*",                   "item()*"         },
   { ebv,           FNS, "ebv",           "item()*",                   "xsd:boolean"     },
-  { and,           FNS, "and",           "item()*,item()*",           "xsd:boolean"     },
-  { or,            FNS, "or",            "item()*,item()*",           "xsd:boolean"     },
+  { and2,          FNS, "and",           "item()*,item()*",           "xsd:boolean"     },
+  { or2,           FNS, "or",            "item()*,item()*",           "xsd:boolean"     },
   { NULL },
 };
 

@@ -35,7 +35,7 @@
 size_t write_curl(void *ptr, size_t size, size_t nmemb, void *data)
 {
   printf("WRITE_CURL %d\n",size*nmemb);
-  stringbuf_append((stringbuf*)data,ptr,size*nmemb);
+  stringbuf_append((stringbuf*)data,(const char*)ptr,size*nmemb);
   return size*nmemb;
 }
 

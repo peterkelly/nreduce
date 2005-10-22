@@ -372,14 +372,14 @@ df_seroptions *df_seroptions_new(nsname method)
 void df_seroptions_free(df_seroptions *options)
 {
   nsname_free(options->ident);
-  list_free(options->use_character_maps,(void*)nsname_ptr_free);
+  list_free(options->use_character_maps,(list_d_t)nsname_ptr_free);
   free(options->doctype_public);
   free(options->doctype_system);
   free(options->encoding);
   free(options->media_type);
   nsname_free(options->method);
   free(options->normalization_form);
-  list_free(options->use_character_maps,(void*)nsname_ptr_free);
+  list_free(options->use_character_maps,(list_d_t)nsname_ptr_free);
   free(options->version);
   free(options);
 }
@@ -804,11 +804,11 @@ void df_namespace_fixup(node *n)
   /* XSLT 2.0: 5.7.3 Namespace Fixup */
 }
 
-static int space_decl_better(space_decl *new, space_decl *existing)
+static int space_decl_better(space_decl *nw, space_decl *existing)
 {
-  if (new->importpred < existing->importpred)
+  if (nw->importpred < existing->importpred)
     return 0;
-  if (new->priority < existing->priority)
+  if (nw->priority < existing->priority)
     return 0;
   return 1;
 }

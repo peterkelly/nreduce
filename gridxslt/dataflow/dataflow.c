@@ -245,7 +245,7 @@ df_function *df_lookup_function(df_program *program, const nsname ident)
 void df_free_function(df_function *fun)
 {
   int i;
-  list_free(fun->instructions,(void*)df_free_instruction);
+  list_free(fun->instructions,(list_d_t)df_free_instruction);
 
   nsname_free(fun->ident);
   if (NULL != fun->rtype)
@@ -425,7 +425,7 @@ void df_free_instruction(df_instruction *instr)
     seqtype_deref(instr->seqtypetest);
   if (NULL != instr->seroptions)
     df_seroptions_free(instr->seroptions);
-  list_free(instr->nsdefs,(void*)ns_def_free);
+  list_free(instr->nsdefs,(list_d_t)ns_def_free);
   free(instr->str);
   sourceloc_free(instr->sloc);
   free(instr);
@@ -440,7 +440,7 @@ gxcontext *df_create_context(value *item, int position, int size, int havefocus,
   ctxt->size = size;
   ctxt->havefocus = havefocus;
   if (NULL != prev) {
-    ctxt->template = prev->template;
+    ctxt->tmpl = prev->tmpl;
     ctxt->mode = prev->mode ? strdup(prev->mode) : NULL;
     ctxt->group = prev->group ? strdup(prev->group) : NULL;
     ctxt->groupkey = prev->groupkey ? strdup(prev->groupkey) : NULL;
@@ -484,9 +484,9 @@ df_program *df_program_new(xs_schema *schema)
 
 void df_program_free(df_program *program)
 {
-  list_free(program->functions,(void*)df_free_function);
-  list_free(program->space_decls,(void*)space_decl_free);
-  list_free(program->builtin_functions,(void*)df_free_builtin_function);
+  list_free(program->functions,(list_d_t)df_free_function);
+  list_free(program->space_decls,(list_d_t)space_decl_free);
+  list_free(program->builtin_functions,(list_d_t)df_free_builtin_function);
   free(program);
 }
 

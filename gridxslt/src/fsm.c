@@ -269,14 +269,14 @@ void fsm_print(FILE *dotfile, fsm *f, int stage)
 
 void free_state(fsm_state *s)
 {
-  list_free(s->transitions,free);
+  list_free(s->transitions,(list_d_t)free);
   list_free(s->ndfsm_states,NULL);
   free(s);
 }
 
 void fsm_free(fsm *f)
 {
-  list_free(f->states,(void*)free_state);
+  list_free(f->states,(list_d_t)free_state);
   free(f);
 }
 
@@ -456,7 +456,7 @@ void add_dfsm_transitions_for_dfsm_state(fsm *df, fsm_state *from)
     if (dfsmtr->accept)
       dest_dfsm_state->accept = 1;
   }
-  list_free(dfsm_transitions,free);
+  list_free(dfsm_transitions,(list_d_t)free);
 }
 
 /**

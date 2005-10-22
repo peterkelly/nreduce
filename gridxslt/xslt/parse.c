@@ -1090,7 +1090,7 @@ static int parse_strip_preserve(xl_snode *parent, xmlNodePtr n, xmlDocPtr doc, e
     list_append(&space->qnametests,qt);
   }
 
-  list_free(unptests,free);
+  list_free(unptests,(list_d_t)free);
 
   if (NULL != (c = xslt_first_child(n)))
     return xslt_invalid_element(ei,filename,c);
