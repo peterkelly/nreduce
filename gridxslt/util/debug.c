@@ -26,6 +26,9 @@
 #include <stdarg.h>
 #include "debug.h"
 #include "stringbuf.h"
+#include "String.h"
+
+using namespace GridXSLT;
 
 void debugl(const char *format, ...)
 {
@@ -41,9 +44,9 @@ void debugl(const char *format, ...)
   stringbuf_vformat(buf,format,ap);
   va_end(ap);
 
-  printf("%s",buf->data);
+  message("%s",buf->data);
   stringbuf_free(buf);
-  printf("\n");
+  message("\n");
 #endif
 }
 
@@ -61,7 +64,7 @@ void debug(const char *format, ...)
   stringbuf_vformat(buf,format,ap);
   va_end(ap);
 
-  printf("%s",buf->data);
+  message("%s",buf->data);
   stringbuf_free(buf);
 
 #endif
@@ -75,10 +78,10 @@ void debug_indent(int indent, const char *format, ...)
   if (NULL == getenv("DEBUG"))
     return;
   for (i = 0; i < indent; i++)
-    printf("  ");
+    message("  ");
   va_start(ap,format);
   vprintf(format,ap);
   va_end(ap);
-  printf("\n");
+  message("\n");
 #endif
 }

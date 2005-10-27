@@ -36,6 +36,7 @@
 #include <sys/types.h>
 #include <libxml/xmlreader.h>
 
+using namespace GridXSLT;
 
 int trace_depth = 0;
 
@@ -45,13 +46,13 @@ void trace(int print_indent, const char *format, ...)
   va_list ap;
   if (print_indent)
     for (i = 0; i < trace_depth; i++)
-      printf("  ");
+      message("  ");
   va_start(ap,format);
   vprintf(format,ap);
   va_end(ap);
 }
 
-void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
+void build_model_group_fsm(Schema *s, ModelGroup *mg, fsm *f,
                            fsm_state *start, int startid, fsm_state *end, int endid,
                            list **allocated_inputs, int userel);
 
@@ -103,7 +104,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-int validate(xmlTextReaderPtr reader, xs_schema *s)
+int validate(xmlTextReaderPtr reader, Schema *s)
 {
   int r;
   list *type_stack = NULL;
@@ -112,14 +113,14 @@ int validate(xmlTextReaderPtr reader, xs_schema *s)
     const xmlChar *name = xmlTextReaderConstName(reader);
 /*     const xmlChar *ns = xmlTextReaderConstNamespaceUri(reader); */
     if (XML_READER_TYPE_ELEMENT == type) {
-      printf("begin element %s\n",name);
+      message("begin element %s\n",name);
       if (0 == xmlTextReaderDepth(reader)) {
       }
       if (NULL == type_stack) {
       }
     }
     else if (XML_READER_TYPE_END_ELEMENT == type) {
-      printf("end element %s\n",name);
+      message("end element %s\n",name);
     }
   }
   return 0;
@@ -136,8 +137,8 @@ int validate(xmlTextReaderPtr reader, xs_schema *s)
 typedef struct validation_input validation_input;
 
 struct validation_input {
-  xs_element *e;
-  xs_wildcard *w;
+  SchemaElement *e;
+  Wildcard *w;
 };
 
 
@@ -145,7 +146,7 @@ int validation_input_equals(void *a, void *b)
 {
   validation_input *va = (validation_input*)a;
   validation_input *vb = (validation_input*)b;
-  if (va->e && vb->e && !strcmp(va->e->def.ident.name,vb->e->def.ident.name))
+  if (va->e && vb->e && (va->e->def.ident.m_name == vb->e->def.ident.m_name))
     return 1;
   else
     return 0;
@@ -155,15 +156,15 @@ void validation_input_print(FILE *f, void *input)
 {
   validation_input *vi = (validation_input*)input;
   if (vi->e)
-    fprintf(f,"<%s>",vi->e->def.ident.name);
+    fmessage(f,"<%*>",&vi->e->def.ident.m_name);
   else
-    fprintf(f,"*");
+    fmessage(f,"*");
 }
 
 
 
 
-validation_input *new_validation_input(list **allocated, xs_element *e, xs_wildcard *w)
+validation_input *new_validation_input(list **allocated, SchemaElement *e, Wildcard *w)
 {
   validation_input *vi = (validation_input*)calloc(1,sizeof(validation_input));
   vi->e = e;
@@ -177,15 +178,15 @@ validation_input *new_validation_input(list **allocated, xs_element *e, xs_wildc
  * one occurrance of the term; i.e. if minOccurs or maxOccurs != 1 for the particle, the caller
  * must take care of the multiple occurances by calling this function appropriately.
  */
-void build_term_fsm(xs_schema *s, xs_particle *p, fsm *f,
+void build_term_fsm(Schema *s, Particle *p, fsm *f,
                     fsm_state *start, int startid, fsm_state *end, int endid,
                     list **allocated_inputs, int userel)
 {
   trace_depth++;
   switch (p->term_type) {
-  case XS_PARTICLE_TERM_ELEMENT: {
-    trace(1,"element <%s>: start %d:%d end %d:%d",
-           p->term.e->def.ident.name,start->num,startid,end->num,endid);
+  case PARTICLE_TERM_ELEMENT: {
+    trace(1,"element <%*>: start %d:%d end %d:%d",
+           &p->term.e->def.ident.m_name,start->num,startid,end->num,endid);
     if (userel) {
       trace(0," USEREL %d",userel);
     }
@@ -202,11 +203,11 @@ void build_term_fsm(xs_schema *s, xs_particle *p, fsm *f,
     }
     break;
   }
-  case XS_PARTICLE_TERM_MODEL_GROUP: {
+  case PARTICLE_TERM_MODEL_GROUP: {
     build_model_group_fsm(s,p->term.mg,f,start,startid,end,endid,allocated_inputs,userel);
     break;
   }
-  case XS_PARTICLE_TERM_WILDCARD:
+  case PARTICLE_TERM_WILDCARD:
     break;
   default:
     assert(0);
@@ -225,7 +226,7 @@ struct build_model_group_data {
  * Build the finite state machine for a single entry in the particles list of a model group. This
  * takes care of all occurrances of the entry.
  */
-void build_model_group_entry_fsm(xs_schema *s, xs_particle *p, fsm *f,
+void build_model_group_entry_fsm(Schema *s, Particle *p, fsm *f,
                                  fsm_state *start, int startid, fsm_state *end, int endid,
                                  list **allocated_inputs, int userel)
 {
@@ -239,10 +240,10 @@ void build_model_group_entry_fsm(xs_schema *s, xs_particle *p, fsm *f,
   bd = (build_model_group_data*)p->vdata;
 
   trace(1,"build entry:");
-  if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
+  if (PARTICLE_TERM_MODEL_GROUP == p->term_type)
     trace(0," ********MG");
   else
-    trace(0," <%s>",p->term.e->def.ident.name);
+    trace(0," <%*>",&p->term.e->def.ident.m_name);
   trace(0," start %d:%d end %d:%d",start->num,startid,end->num,endid);
   if (userel) {
     trace(0," USEREL %d",userel);
@@ -354,7 +355,7 @@ void build_model_group_entry_fsm(xs_schema *s, xs_particle *p, fsm *f,
 /**
  * Build the finite state machine for a model group
  */
-void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
+void build_model_group_fsm(Schema *s, ModelGroup *mg, fsm *f,
                            fsm_state *start, int startid, fsm_state *end, int endid,
                            list **allocated_inputs, int userel)
 {
@@ -362,16 +363,16 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
   build_model_group_data *bd;
 
   switch (mg->compositor) {
-  case XS_MODEL_GROUP_COMPOSITOR_ALL:
+  case MODELGROUP_COMPOSITOR_ALL:
     assert(0);
     break;
-  case XS_MODEL_GROUP_COMPOSITOR_CHOICE:
+  case MODELGROUP_COMPOSITOR_CHOICE:
     for (l = mg->particles; l; l = l->next) {
-      xs_particle *p2 = (xs_particle*)l->data;
+      Particle *p2 = (Particle*)l->data;
       build_model_group_entry_fsm(s,p2,f,start,startid,end,endid,allocated_inputs,0);
     }
     break;
-  case XS_MODEL_GROUP_COMPOSITOR_SEQUENCE:
+  case MODELGROUP_COMPOSITOR_SEQUENCE:
 
 
 
@@ -387,11 +388,11 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
       break;
 
     if (NULL == mg->particles->next) {
-      xs_particle *p = (xs_particle*)mg->particles->data;
+      Particle *p = (Particle*)mg->particles->data;
       build_model_group_entry_fsm(s,p,f,start,startid,end,endid,allocated_inputs,userel);
     }
     else {
-      xs_particle *p;
+      Particle *p;
       int pcount = 0;
       int incr;
       int mul = 1;
@@ -411,7 +412,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
       for (l = mg->particles; l && l->next; l = l->next) {
 
 
-        p = (xs_particle*)l->data;
+        p = (Particle*)l->data;
 
         if (NULL == p->seqdata)
           p->seqdata = calloc(1,sizeof(build_model_group_data));
@@ -421,18 +422,18 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
           bd->intermediate = fsm_add_state(f);
           bd->intermediate->count = 0;
           trace(1,"build sequence - item ");
-          if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
+          if (PARTICLE_TERM_MODEL_GROUP == p->term_type)
             trace(0,"MG");
           else
-            trace(0,p->term.e->def.ident.name);
+            trace(0,p->term.e->def.ident.m_name.cstring());
           trace(0,": added intermediate state %d\n",bd->intermediate->num);
           bd->intermediateid = 0;
         }
         trace(1,"build sequence - item ");
-        if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
+        if (PARTICLE_TERM_MODEL_GROUP == p->term_type)
           trace(0,"MG");
         else
-          trace(0,p->term.e->def.ident.name);
+          trace(0,p->term.e->def.ident.m_name.cstring());
         trace(0,": setting intermediate state %d count to %d + %d = %d\n",
                bd->intermediate->num,
                bd->intermediate->count,mul,
@@ -455,7 +456,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
           bd->intermediateid++;
       }
 
-      p = (xs_particle*)l->data;
+      p = (Particle*)l->data;
       build_model_group_entry_fsm(s,p,f,start,startid,end,endid,allocated_inputs,userel);
 
 
@@ -488,7 +489,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
       bd->intermediate->count += incr;
 
       for (l = mg->particles; l && l->next; l = l->next) {
-        p = (xs_particle*)l->data;
+        p = (Particle*)l->data;
         build_model_group_entry_fsm(s,p,f,start,startid,bd->intermediate,bd->intermediateid,
                                       allocated_inputs,userel);
         start = bd->intermediate;
@@ -499,7 +500,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
           bd->intermediateid++;
       }
 
-      p = (xs_particle*)l->data;
+      p = (Particle*)l->data;
       build_model_group_entry_fsm(s,p,f,start,startid,end,endid,allocated_inputs,userel);
 #endif
 
@@ -507,7 +508,7 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
 
 #if 0
     for (l = mg->particles; l; l = l->next) {
-      xs_particle *p = (xs_particle*)l->data;
+      Particle *p = (Particle*)l->data;
       if (l->next) {
         fsm_state *intermediate = fsm_add_state(f);
         int intermediateid = 0;
@@ -535,23 +536,23 @@ void build_model_group_fsm(xs_schema *s, xs_model_group *mg, fsm *f,
 
 
 
-int build_fsm(xs_schema *s, fsm *f, FILE *dotfile)
+int build_fsm(Schema *s, fsm *f, FILE *dotfile)
 {
   list *allocated_inputs = NULL;
-  xs_type *t = xs_lookup_type(s,nsname_temp(NULL,"root"));
+  Type *t = s->getType(NSName(String::null(),"root"));
   fsm_state *start = f->start = fsm_add_state(f);
   int startid = 0;
   fsm *df = fsm_new(validation_input_equals,validation_input_print);
   if (NULL == t) {
-    fprintf(stderr,"no \"root\" type\n");
+    fmessage(stderr,"no \"root\" type\n");
     return 1;
   }
   if (NULL == t->content_type) {
-    fprintf(stderr,"no content model\n");
+    fmessage(stderr,"no content model\n");
     return 1;
   }
-  if (XS_PARTICLE_TERM_MODEL_GROUP != t->content_type->term_type) {
-    fprintf(stderr,"content type must be a term!\n");
+  if (PARTICLE_TERM_MODEL_GROUP != t->content_type->term_type) {
+    fmessage(stderr,"content type must be a term!\n");
     return 1;
   }
 
@@ -572,8 +573,8 @@ int build_fsm(xs_schema *s, fsm *f, FILE *dotfile)
 
 int main(int argc, char **argv)
 {
-  xs_schema *s;
-  xs_globals *g = xs_globals_new();
+  Schema *s;
+  BuiltinTypes *g = new BuiltinTypes();
   struct arguments arguments = { dump: 0, schemafilename: NULL, dotfilename: NULL };
   int r;
 /*   xmlTextReaderPtr reader; */
@@ -599,8 +600,8 @@ int main(int argc, char **argv)
   fclose(dotfile);
 
 /*   xmlFreeTextReader(reader); */
-  xs_schema_free(s);
-  xs_globals_free(g);
+  delete s;
+  delete g;
 
   return r;
 }

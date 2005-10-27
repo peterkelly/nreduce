@@ -51,7 +51,7 @@ int main()
         c[i][k] += a[i][j]*b[j][k];
 
   for (i = 0; i < 3; i++)
-    printf("%4d %4d %4d      %4d %4d %4d      %4d %4d %4d\n",
+    message("%4d %4d %4d      %4d %4d %4d      %4d %4d %4d\n",
            a[i][0],a[i][1],a[i][2],b[i][0],b[i][1],b[i][2],c[i][0],c[i][1],c[i][2]);
 
   return 0;

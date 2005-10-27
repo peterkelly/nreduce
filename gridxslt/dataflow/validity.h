@@ -23,9 +23,9 @@
 #ifndef _DATAFLOW_VALIDITY_H
 #define _DATAFLOW_VALIDITY_H
 
-#include "dataflow.h"
+#include "Program.h"
 
-void df_check_portsmatch(df_program *program, df_function *fun);
-int df_check_function_connected(df_function *fun);
+void df_check_portsmatch(GridXSLT::Program *program, GridXSLT::Function *fun);
+int df_check_function_connected(GridXSLT::Function *fun);
 
 #endif /* _DATAFLOW_VALIDITY_H */

@@ -35,9 +35,11 @@
 #include <ctype.h>
 #include <errno.h>
 
-int check_facet_valid_restriction(xs_schema *s, xs_type *D, xs_type *B, int facet)
+using namespace GridXSLT;
+
+int check_facet_valid_restriction(Schema *s, Type *D, Type *B, int facet)
 {
-  xs_type *b2;
+  Type *b2;
 
   if (NULL == D->facets.strval[facet])
     return 0;
@@ -64,7 +66,7 @@ int check_facet_valid_restriction(xs_schema *s, xs_type *D, xs_type *B, int face
 }
 
 
-int xs_check_simple_type_derivation_valid_atomic(xs_schema *s, xs_type *t)
+int xs_check_simple_type_derivation_valid_atomic(Schema *s, Type *t)
 {
   int facet;
   /* 3.14.6 Schema Component Constraint: Derivation Valid (Restriction, Simple) */
@@ -82,9 +84,9 @@ int xs_check_simple_type_derivation_valid_atomic(xs_schema *s, xs_type *t)
   /* @implements(xmlschema-1:cos-st-restricts.1.1) @end */
   /* 1.1 The {base type definition} must be an atomic simple type definition or a built-in
      primitive datatype. */
-  assert(XS_TYPE_VARIETY_INVALID != t->base->variety);
+  assert(TYPE_VARIETY_INVALID != t->base->variety);
   /* note: not sure if we can test this; i think this stuff is already checked previously */
-  if (t->base->complex || ((XS_TYPE_VARIETY_ATOMIC != t->base->variety) && !t->base->builtin)) {
+  if (t->base->complex || ((TYPE_VARIETY_ATOMIC != t->base->variety) && !t->base->builtin)) {
     return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.1.1","For atomic simple types, "
                  "the base type definition must be an atomic simple type definition or a "
                  "built-in primitive datatype");
@@ -104,10 +106,10 @@ int xs_check_simple_type_derivation_valid_atomic(xs_schema *s, xs_type *t)
          @end */
       /* 1.3.1 DF must be an allowed constraining facet for the {primitive type definition}, as
          specified in the appropriate subsection of 3.2 Primitive datatypes. */
-      if (!xs_facet_allowed(t,facet))
+      if (!t->facetAllowed(facet))
         return error(&s->ei,s->uri,t->facets.defline[facet],"cos-st-restricts.1.3.1",
-                     "Facet %s not allowed on types derived from %#n",
-                     xs_facet_names[facet],t->primitive_type->def.ident);
+                     "Facet %s not allowed on types derived from %*",
+                     xs_facet_names[facet],&t->primitive_type->def.ident);
 
       /* @implements(xmlschema-1:cos-st-restricts.1.3.2)
          test { simpletype_restriction_okfacetrestriction.test }
@@ -123,7 +125,7 @@ int xs_check_simple_type_derivation_valid_atomic(xs_schema *s, xs_type *t)
   return 0;
 }
 
-int xs_check_simple_type_derivation_valid_list(xs_schema *s, xs_type *t)
+int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
 {
   int facet;
   /* 3.14.6 Schema Component Constraint: Derivation Valid (Restriction, Simple) */
@@ -141,15 +143,15 @@ int xs_check_simple_type_derivation_valid_list(xs_schema *s, xs_type *t)
      @end */
   /* 2.1 The {item type definition} must have a {variety} of atomic or union (in which case all
          the {member type definitions} must be atomic). */
-  if (t->item_type->complex || (XS_TYPE_VARIETY_LIST == t->item_type->variety))
+  if (t->item_type->complex || (TYPE_VARIETY_LIST == t->item_type->variety))
     return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.1",
                  "<list> can only have its item type set to an atomic or union type");
-  if (XS_TYPE_VARIETY_UNION == t->item_type->variety) {
+  if (TYPE_VARIETY_UNION == t->item_type->variety) {
     list *l;
     for (l = t->item_type->members; l; l = l->next) {
-      xs_member_type *mt = (xs_member_type*)l->data;
+      MemberType *mt = (MemberType*)l->data;
       assert(mt->type);
-      if (mt->type->complex || (XS_TYPE_VARIETY_ATOMIC != mt->type->variety))
+      if (mt->type->complex || (TYPE_VARIETY_ATOMIC != mt->type->variety))
         return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.1","If <list> has an item "
                      "type that is a union, then all member types of the union must be atomic");
     }
@@ -172,7 +174,7 @@ int xs_check_simple_type_derivation_valid_list(xs_schema *s, xs_type *t)
 
     if (t->item_type->final_list)
       return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.1.1",
-                   "Item type %#n disallows use in lists",t->item_type->def.ident);
+                   "Item type %* disallows use in lists",&t->item_type->def.ident);
 
     /* @implements(xmlschema-1:cos-st-restricts.2.3.1.2) @end */
     /* 2.3.1.2 The {facets} must only contain the whiteSpace facet component. */
@@ -192,7 +194,7 @@ int xs_check_simple_type_derivation_valid_list(xs_schema *s, xs_type *t)
     /* @implements(xmlschema-1:cos-st-restricts.2.3.2.1) @end */
     /* 2.3.2.1 The {base type definition} must have a {variety} of list. */
     /* Can't really test this, it's enforced by the parser */
-    if (t->base->complex || (XS_TYPE_VARIETY_LIST != t->base->variety))
+    if (t->base->complex || (TYPE_VARIETY_LIST != t->base->variety))
       return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.2.1","Simple types with a "
                    "variety of list must have a base type which is also a list");
 
@@ -245,7 +247,7 @@ int xs_check_simple_type_derivation_valid_list(xs_schema *s, xs_type *t)
   return 0;
 }
 
-int xs_check_simple_type_derivation_valid_union(xs_schema *s, xs_type *t)
+int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
 {
   list *l;
   int facet;
@@ -261,10 +263,10 @@ int xs_check_simple_type_derivation_valid_union(xs_schema *s, xs_type *t)
      @end */
   /* 3.1 The {member type definitions} must all have {variety} of atomic or list. */
   for (l = t->members; l; l = l->next) {
-    xs_member_type *mt = (xs_member_type*)l->data;
+    MemberType *mt = (MemberType*)l->data;
     assert(mt->type);
-    assert(mt->type->complex || (XS_TYPE_VARIETY_INVALID != mt->type->variety));
-    if (mt->type->complex || (XS_TYPE_VARIETY_UNION == mt->type->variety))
+    assert(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
+    if (mt->type->complex || (TYPE_VARIETY_UNION == mt->type->variety))
       return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.1",
                    "All member types of a union must be atomic or list types");
   }
@@ -286,10 +288,10 @@ int xs_check_simple_type_derivation_valid_union(xs_schema *s, xs_type *t)
     /* 3.3.1.1 All of the {member type definitions} must have a {final} which does not contain
                union. */
     for (l = t->members; l; l = l->next) {
-      xs_member_type *mt = (xs_member_type*)l->data;
+      MemberType *mt = (MemberType*)l->data;
       if (mt->type->final_union)
         return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.3.1.1",
-                     "Member type %#n disallows use inside <union>",mt->type->def.ident);
+                     "Member type %* disallows use inside <union>",&mt->type->def.ident);
     }
 
     /* @implements(xmlschema-1:cos-st-restricts.3.3.1.2) @end */
@@ -308,7 +310,7 @@ int xs_check_simple_type_derivation_valid_union(xs_schema *s, xs_type *t)
     /* @implements(xmlschema-1:cos-st-restricts.3.3.2.1) @end */
     /* 3.3.2.1 The {base type definition} must have a {variety} of union. */
     /* Can't really test this, it's enforced by the parser */
-    if (t->base->complex || (XS_TYPE_VARIETY_UNION != t->base->variety))
+    if (t->base->complex || (TYPE_VARIETY_UNION != t->base->variety))
       return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.3.2.1","Simple types with a "
                    "variety of union must have a base type which is also a union");
 
@@ -355,35 +357,35 @@ int xs_check_simple_type_derivation_valid_union(xs_schema *s, xs_type *t)
   return 0;
 }
 
-int xs_check_simple_type_derivation_valid(xs_schema *s, xs_type *t)
+int GridXSLT::xs_check_simple_type_derivation_valid(Schema *s, Type *t)
 {
   /* 3.14.6 Schema Component Constraint: Derivation Valid (Restriction, Simple) */
   /* Note: we return 0 here on success, and -1 on error (and set error info) */
   assert(!t->complex);
-  assert(XS_TYPE_VARIETY_INVALID != t->variety);
+  assert(TYPE_VARIETY_INVALID != t->variety);
 
-  if (XS_TYPE_VARIETY_ATOMIC == t->variety) {
+  if (TYPE_VARIETY_ATOMIC == t->variety) {
     CHECK_CALL(xs_check_simple_type_derivation_valid_atomic(s,t))
   }
-  else if (XS_TYPE_VARIETY_LIST == t->variety) {
+  else if (TYPE_VARIETY_LIST == t->variety) {
     CHECK_CALL(xs_check_simple_type_derivation_valid_list(s,t))
   }
   else {
-    assert(XS_TYPE_VARIETY_UNION == t->variety);
+    assert(TYPE_VARIETY_UNION == t->variety);
     CHECK_CALL(xs_check_simple_type_derivation_valid_union(s,t))
   }
 
   return 0; /* success */
 }
 
-int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
+int GridXSLT::xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
                                     int final_extension, int final_restriction,
                                     int final_list, int final_union)
 {
   /* 3.14.6 Schema Component Constraint: Type Derivation OK (Simple) */
   /* Note: we return 0 here on success, and -1 on error (and set error info) */
   assert(!D->complex);
-  assert(XS_TYPE_VARIETY_INVALID != D->variety);
+  assert(TYPE_VARIETY_INVALID != D->variety);
 
   /* For a simple type definition (call it D, for derived) to be validly derived from a type
      definition (call this B, for base) given a subset of {extension, restriction, list, union}
@@ -405,7 +407,7 @@ int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
   /* Note: base type case is already taken care of by 3.14.6-1-3 */
   if (final_restriction)
     return error(&s->ei,s->uri,D->def.loc.line,"cos-st-derived-ok.2.1",
-                 "Restriction disallowed when deriving from %#n",B->def.ident);
+                 "Restriction disallowed when deriving from %*",&B->def.ident);
 
   /* @implements(xmlschema-1:cos-st-derived-ok.2.2) @end */
   /* 2.2 One of the following must be true: */
@@ -421,7 +423,7 @@ int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
      test { simpletype_derivationok4.test }
      @end */
   /* 2.2.3 D's {variety} is list or union and B is the simple ur-type definition. */
-  if (((XS_TYPE_VARIETY_LIST == D->variety) || (XS_TYPE_VARIETY_UNION == D->variety)) &&
+  if (((TYPE_VARIETY_LIST == D->variety) || (TYPE_VARIETY_UNION == D->variety)) &&
       (B == s->globals->simple_ur_type))
     return 0;
 
@@ -430,10 +432,10 @@ int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
      @end */
   /* 2.2.4 B's {variety} is union and D is validly derived from a type definition in B's {member
            type definitions} given the subset, as defined by this constraint. */
-  if (!B->complex && (XS_TYPE_VARIETY_UNION == B->variety)) {
+  if (!B->complex && (TYPE_VARIETY_UNION == B->variety)) {
     list *l;
     for (l = B->members; l; l = l->next) {
-      xs_member_type *mt = (xs_member_type*)l->data;
+      MemberType *mt = (MemberType*)l->data;
       assert(mt->type);
       if (0 == xs_check_simple_type_derivation_ok(s,D,mt->type,final_extension,final_restriction,
                                                   final_list,final_union))
@@ -453,13 +455,13 @@ int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
       (0 != xs_check_simple_type_derivation_ok(s,D->base,B,final_extension,final_restriction,
                                                 final_list,final_union)))
     return error(&s->ei,s->uri,D->def.loc.line,"cos-st-derived-ok.2.2.2",
-                 "%#n cannot be derived from %#n",D->def.ident,B->def.ident);
+                 "%* cannot be derived from %*",&D->def.ident,&B->def.ident);
 
   return 0;
 }
 
-int xs_create_simple_type_restriction(xs_schema *s, xs_type *base, int defline,
-                                      xs_facetdata *facets, xs_type **restriction)
+int GridXSLT::xs_create_simple_type_restriction(Schema *s, Type *base, int defline,
+                                      xs_facetdata *facets, Type **restriction)
 {
   /* @implements(xmlschema-1:st-restrict-facets.1) @end
      @implements(xmlschema-1:st-restrict-facets.2) @end
@@ -476,10 +478,10 @@ int xs_create_simple_type_restriction(xs_schema *s, xs_type *base, int defline,
      test { complextype_sc_d_content8.test }
      @end */
   int facet;
-  xs_type *t = xs_type_new(s->as);
+  Type *t = new Type(s->as);
   list *l;
   t->def.loc.line = defline;
-  t->stype = XS_TYPE_SIMPLE_RESTRICTION;
+  t->stype = TYPE_SIMPLE_RESTRICTION;
   t->base = base;
   t->variety = t->base->variety; /* FIXME: make sure this is set properly! */
 
@@ -500,24 +502,24 @@ int xs_create_simple_type_restriction(xs_schema *s, xs_type *base, int defline,
   return 0;
 }
 
-xs_range xs_particle_effective_total_range(xs_particle *p)
+Range GridXSLT::Particle_effective_total_range(Particle *p)
 {
   list *l;
-  xs_range r;
+  Range r;
 
   /* FIXME: check that this can only be called _after_ recursive group references have been
      checked */
 
-  if ((XS_PARTICLE_TERM_ELEMENT == p->term_type) ||
-      (XS_PARTICLE_TERM_WILDCARD == p->term_type)) {
+  if ((PARTICLE_TERM_ELEMENT == p->term_type) ||
+      (PARTICLE_TERM_WILDCARD == p->term_type)) {
     r.min_occurs = p->range.min_occurs;
     r.max_occurs = p->range.max_occurs;
   }
   else {
-    assert(XS_PARTICLE_TERM_MODEL_GROUP == p->term_type);
+    assert(PARTICLE_TERM_MODEL_GROUP == p->term_type);
 
-    if ((XS_MODEL_GROUP_COMPOSITOR_ALL == p->term.mg->compositor) ||
-        (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor)) {
+    if ((MODELGROUP_COMPOSITOR_ALL == p->term.mg->compositor) ||
+        (MODELGROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor)) {
       /* @implements(xmlschema-1:cos-seq-range)
          test { particle_range_all1.test }
          test { particle_range_all2.test }
@@ -540,8 +542,8 @@ xs_range xs_particle_effective_total_range(xs_particle *p)
       r.min_occurs = 0;
       r.max_occurs = 0;
       for (l = p->term.mg->particles; l; l = l->next) {
-        xs_particle *p2 = (xs_particle*)l->data;
-        xs_range r2 = xs_particle_effective_total_range(p2);
+        Particle *p2 = (Particle*)l->data;
+        Range r2 = Particle_effective_total_range(p2);
         r.min_occurs += r2.min_occurs;
         if ((0 > r2.max_occurs) || (0 > p->range.max_occurs))
           r.max_occurs = -1;
@@ -562,10 +564,10 @@ xs_range xs_particle_effective_total_range(xs_particle *p)
          @end */
       r.min_occurs = -1;
       r.max_occurs = 0;
-      assert(XS_MODEL_GROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
+      assert(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
       for (l = p->term.mg->particles; l; l = l->next) {
-        xs_particle *p2 = (xs_particle*)l->data;
-        xs_range r2 = xs_particle_effective_total_range(p2);
+        Particle *p2 = (Particle*)l->data;
+        Range r2 = Particle_effective_total_range(p2);
 
         if ((0 > r.min_occurs) || (r.min_occurs > r2.min_occurs))
           r.min_occurs = r2.min_occurs;
@@ -589,7 +591,7 @@ void particle_debug(char *str)
 /*   debugl("%s",str); */
 }
 
-int xs_check_particle_valid_extension(xs_schema *s, xs_particle *E, xs_particle *B)
+int GridXSLT::xs_check_particle_valid_extension(Schema *s, Particle *E, Particle *B)
 {
   /* 3.9.6 Schema Component Constraint: Particle Valid (Extension) */
 
@@ -619,8 +621,8 @@ int xs_check_particle_valid_extension(xs_schema *s, xs_particle *E, xs_particle 
   if ((1 != E->range.min_occurs) || (1 != E->range.max_occurs))
     return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2","Particle range is not 1-1");
 
-  if ((XS_PARTICLE_TERM_MODEL_GROUP != E->term_type) ||
-      (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE != E->term.mg->compositor))
+  if ((PARTICLE_TERM_MODEL_GROUP != E->term_type) ||
+      (MODELGROUP_COMPOSITOR_SEQUENCE != E->term.mg->compositor))
     return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2",
                  "Particle is not a sequence group");
 
@@ -633,14 +635,14 @@ int xs_check_particle_valid_extension(xs_schema *s, xs_particle *E, xs_particle 
      used for checking if a complex type is a valid extension of another, and rule 2 is
      exactly what is done when constructing a derived type, comparing to see if they are
      the same object is sufficient. */
-  if ((xs_particle*)E->term.mg->particles->data != B)
+  if ((Particle*)E->term.mg->particles->data != B)
     return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2",
                  "First particle in the sequence is not equal to base");
 
   return 0; /* success */
 }
 
-int occurrence_range_restriction_ok(xs_range R, xs_range B)
+int occurrence_range_restriction_ok(Range R, Range B)
 {
   /* @implements(xmlschema-1:range-ok.1) @end */
   /* @implements(xmlschema-1:range-ok.2) @end */
@@ -665,37 +667,34 @@ int occurrence_range_restriction_ok(xs_range R, xs_range B)
     return 0;
 }
 
-int xs_check_range_restriction_ok(xs_schema *s, xs_particle *R, xs_particle *B, char *constraint)
+int xs_check_range_restriction_ok(Schema *s, Particle *R, Particle *B, char *constraint)
 {
   if (!occurrence_range_restriction_ok(R->range,B->range)) {
-    char *rrangestr = xs_range_str(R->range);
-    char *brangestr = xs_range_str(B->range);
-    char *bstr = xs_particle_str(B);
-    error(&s->ei,s->uri,R->defline,constraint,"Occurrence range %s is not a valid restriction of "
-          "the range %s, declared on the corresponding %s of the base type",
-          rrangestr,brangestr,bstr);
-    free(rrangestr);
-    free(brangestr);
-    free(bstr);
+    String rrangestr = R->range.toString();
+    String brangestr = B->range.toString();
+    String bstr = B->toString();
+    return error(&s->ei,s->uri,R->defline,constraint,"Occurrence range %* is not a valid "
+                 "restriction of the range %*, declared on the corresponding %* of the base type",
+                 &rrangestr,&brangestr,&bstr);
     return -1;
   }
   return 0;
 }
 
-int ns_valid_wrt_wildcard(xs_schema *s, char *ns, xs_wildcard *w)
+int ns_valid_wrt_wildcard(Schema *s, char *ns, Wildcard *w)
 {
   /* 3.10.4: Validation Rule: Wildcard allows Namespace Name */
-  return ((XS_WILDCARD_TYPE_ANY == w->type) ||               /* 1 */
-          ((XS_WILDCARD_TYPE_NOT == w->type) &&
+  return ((WILDCARD_TYPE_ANY == w->type) ||               /* 1 */
+          ((WILDCARD_TYPE_NOT == w->type) &&
            (NULL != ns) &&
            ((NULL == w->not_ns) || strcmp(ns,w->not_ns))) || /* 2 */
-          ((XS_WILDCARD_TYPE_SET == w->type) &&
+          ((WILDCARD_TYPE_SET == w->type) &&
            list_contains_string(w->nslist,ns)));             /* 3 */
 }
 
-int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, xs_range Rrange,
+int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, Range Rrange,
                                                   int Rdefline,
-                                                  xs_element *B, xs_range Brange,
+                                                  SchemaElement *B, Range Brange,
                                                   int Bdefline)
 {
   /* 3.9.6 Schema Component Constraint: Particle Restriction OK (Elt:Elt -- NameAndTypeOK) */
@@ -709,9 +708,9 @@ int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, x
      test { particle_restriction_ee_name.test }
      @end */
   /* 1 The declarations' {name}s and {target namespace}s are the same. */
-  if (!nsname_equals(R->def.ident,B->def.ident))
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.1","Element %#n does not match "
-                 "corresponding element %#n on base type",R->def.ident,B->def.ident);
+  if (R->def.ident != B->def.ident)
+    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.1","Element %* does not match "
+                 "corresponding element %* on base type",&R->def.ident,&B->def.ident);
 
   /* @implements(xmlschema-1:rcase-NameAndTypeOK.2)
      test { particle_restriction_ee_range1.test }
@@ -720,14 +719,11 @@ int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, x
   /* 2 R's occurrence range is a valid restriction of B's occurrence range as defined by
      Occurrence Range OK (3.9.6). */
   if (!occurrence_range_restriction_ok(Rrange,Brange)) {
-    char *rrangestr = xs_range_str(Rrange);
-    char *brangestr = xs_range_str(Brange);
-    error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.2","Occurrence range %s is not a valid "
-          "restriction of the range %s, declared on the corresponding %#n element on the base type",
-          rrangestr,brangestr,B->def.ident);
-    free(rrangestr);
-    free(brangestr);
-    return -1;
+    String rrangestr = Rrange.toString();
+    String brangestr = Brange.toString();
+    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.2","Occurrence range %* is not a "
+                 "valid restriction of the range %*, declared on the corresponding %* element on "
+                 "the base type",&rrangestr,&brangestr,&B->def.ident);
   }
 
   /* @implements(xmlschema-1:rcase-NameAndTypeOK.3) @end */
@@ -764,8 +760,8 @@ int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, x
      @end */
   /* 3.2.2 either B's declaration's {value constraint} is absent, or is not fixed, or R's
            declaration's {value constraint} is fixed with the same value. */
-  if ((XS_VALUE_CONSTRAINT_FIXED == B->vc.type) &&
-      ((XS_VALUE_CONSTRAINT_FIXED != R->vc.type) ||
+  if ((VALUECONSTRAINT_FIXED == B->vc.type) &&
+      ((VALUECONSTRAINT_FIXED != R->vc.type) ||
        strcmp(B->vc.value,R->vc.value)))
     return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.2","This element must be declared "
                  "with a fixed value of \"%s\", as is required by the corresponding element "
@@ -814,9 +810,9 @@ int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, x
   if ((R->type->complex && (0 != xs_check_complex_type_derivation_ok(s,R->type,B->type,1,0))) ||
       (!R->type->complex && (0 != xs_check_simple_type_derivation_ok(s,R->type,B->type,1,0,1,1)))) {
 
-    if (B->type->def.ident.name)
+    if (!B->type->def.ident.m_name.isNull())
       error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.5",
-            "Element type must be a valid derivation of %#n",B->type->def.ident);
+            "Element type must be a valid derivation of %*",&B->type->def.ident);
     else
       error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.5","Element type must be a valid "
             "derivation of the type declared for the corresponding element on the base type");
@@ -831,10 +827,10 @@ int particle_restriction_ok_elt_elt_nameandtypeok(xs_schema *s, xs_element *R, x
   return 0;
 }
 
-int particle_derivation_ok_elt_any_nscompat(xs_schema *s, xs_particle *R, xs_particle *B)
+int particle_derivation_ok_elt_any_nscompat(Schema *s, Particle *R, Particle *B)
 {
-  assert(XS_PARTICLE_TERM_ELEMENT == R->term_type);
-  assert(XS_PARTICLE_TERM_WILDCARD == B->term_type);
+  assert(PARTICLE_TERM_ELEMENT == R->term_type);
+  assert(PARTICLE_TERM_WILDCARD == B->term_type);
 
   particle_debug("particle_derivation_ok_elt_any_nscompat");
 
@@ -853,14 +849,12 @@ int particle_derivation_ok_elt_any_nscompat(xs_schema *s, xs_particle *R, xs_par
      @end */
   /* 1 The element declaration's {target namespace} is valid with respect to the wildcard's
        {namespace constraint} as defined by Wildcard allows Namespace Name (3.10.4). */
-  if (!ns_valid_wrt_wildcard(s,R->term.e->def.ident.ns,B->term.w)) {
-    char *rstr = xs_particle_str(R);
-    char *bstr = xs_particle_str(B);
-    error(&s->ei,s->uri,R->defline,"rcase-NSCompat.1","Element %s is not a valid restriction of "
-          "the corresponding %s in the base type, because it is not valid with respect to the "
-          "namespace constraint",rstr,bstr);
-    free(rstr);
-    free(bstr);
+  if (!ns_valid_wrt_wildcard(s,R->term.e->def.ident.m_ns.cstring(),B->term.w)) {
+    String rstr = R->toString();
+    String bstr = B->toString();
+    error(&s->ei,s->uri,R->defline,"rcase-NSCompat.1","Element %* is not a valid restriction of "
+          "the corresponding %* in the base type, because it is not valid with respect to the "
+          "namespace constraint",&rstr,&bstr);
     return -1;
   }
 
@@ -876,17 +870,14 @@ int particle_derivation_ok_elt_any_nscompat(xs_schema *s, xs_particle *R, xs_par
   return 0;
 }
 
-int particle_derivation_ok_all_choice_sequence_recurseasifgroup(xs_schema *s,
-                                                                xs_particle *R, xs_particle *B)
+int particle_derivation_ok_all_choice_sequence_recurseasifgroup(Schema *s,
+                                                                Particle *R, Particle *B)
 {
-  xs_particle tp;
-  xs_model_group tmg;
-  list tl;
-  assert(XS_PARTICLE_TERM_ELEMENT == R->term_type);
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  Particle *tp = new Particle(s->as);
+  ModelGroup *tmg = new ModelGroup(s->as);
+  assert(PARTICLE_TERM_ELEMENT == R->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
   particle_debug("particle_derivation_ok_all_choice_sequence_recurseasifgroup");
-
-/*   debugl("B is %s",xs_particle_str(B)); */
 
   /* @implements(xmlschema-1:rcase-RecurseAsIfGroup)
      test { particle_restriction_recurseasifgroup1.test }
@@ -912,26 +903,22 @@ int particle_derivation_ok_all_choice_sequence_recurseasifgroup(xs_schema *s,
      depending on whether the group is all, choice or sequence.
   */
 
-  memset(&tp,0,sizeof(xs_particle));
-  memset(&tmg,0,sizeof(xs_model_group));
-  memset(&tl,0,sizeof(list));
-  tp.range.min_occurs = 1;
-  tp.range.max_occurs = 1;
-  tp.term_type = XS_PARTICLE_TERM_MODEL_GROUP;
-  tp.term.mg = &tmg;
-  tp.defline = R->defline;
-  tmg.compositor = B->term.mg->compositor;
-  tmg.particles = &tl;
-  tmg.defline = R->defline;
-  tl.data = R;
+  tp->range.min_occurs = 1;
+  tp->range.max_occurs = 1;
+  tp->term_type = PARTICLE_TERM_MODEL_GROUP;
+  tp->term.mg = tmg;
+  tp->defline = R->defline;
+  tmg->compositor = B->term.mg->compositor;
+  list_append(&tmg->particles,R);
+  tmg->defline = R->defline;
 
-  return xs_check_particle_valid_restriction(s,&tp,B);
+  return xs_check_particle_valid_restriction(s,tp,B);
 }
 
-int particle_derivation_ok_any_any_nssubset(xs_schema *s, xs_particle *R, xs_particle *B)
+int particle_derivation_ok_any_any_nssubset(Schema *s, Particle *R, Particle *B)
 {
-  assert(XS_PARTICLE_TERM_WILDCARD == R->term_type);
-  assert(XS_PARTICLE_TERM_WILDCARD == B->term_type);
+  assert(PARTICLE_TERM_WILDCARD == R->term_type);
+  assert(PARTICLE_TERM_WILDCARD == B->term_type);
   particle_debug("particle_derivation_ok_any_any_nssubset");
   /* Schema Component Constraint: Particle Derivation OK (Any:Any -- NSSubset)
 
@@ -956,7 +943,7 @@ int particle_derivation_ok_any_any_nssubset(xs_schema *s, xs_particle *R, xs_par
      @end */
   /* 2 R's {namespace constraint} must be an intensional subset of B's {namespace constraint} as
        defined by Wildcard Subset (3.10.6). */
-  if (!xs_wildcard_constraint_is_subset(s,R->term.w,B->term.w)) {
+  if (!Wildcard_constraint_is_subset(s,R->term.w,B->term.w)) {
     return error(&s->ei,s->uri,R->defline,"rcase-NSSubset.2","Element wildcard is not a valid "
                  "restriction of the corresponding wildcard in the base type, because its "
                  "namespace constraint is not an intensional subset of the base wildcard's");
@@ -983,14 +970,14 @@ int particle_derivation_ok_any_any_nssubset(xs_schema *s, xs_particle *R, xs_par
   return 0;
 }
 
-int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(xs_schema *s,
-                                                                             xs_particle *R,
-                                                                             xs_particle *B)
+int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(Schema *s,
+                                                                             Particle *R,
+                                                                             Particle *B)
 {
   list *l;
-  xs_range etr;
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(XS_PARTICLE_TERM_WILDCARD == B->term_type);
+  Range etr;
+  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  assert(PARTICLE_TERM_WILDCARD == B->term_type);
   particle_debug("particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality");
 
   /* Schema Component Constraint: Particle Derivation OK
@@ -1005,7 +992,7 @@ int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(xs_
   /* 1 Every member of the {particles} of the group is a valid restriction of the wildcard as
        defined by Particle Valid (Restriction) (3.9.6). */
   for (l = R->term.mg->particles; l; l = l->next) {
-    xs_particle *p = (xs_particle*)l->data;
+    Particle *p = (Particle*)l->data;
     CHECK_CALL(xs_check_particle_valid_restriction(s,p,B))
   }
 
@@ -1021,24 +1008,20 @@ int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(xs_
        (3.8.6) (if it is choice) is a valid restriction of B's occurrence range as defined by
        Occurrence Range OK (3.9.6). */
 
-  etr = xs_particle_effective_total_range(R);
+  etr = Particle_effective_total_range(R);
   if (!occurrence_range_restriction_ok(etr,B->range)) {
-    char *rstr = xs_particle_str(R);
-    char *etrstr = xs_range_str(etr);
-    char *brangestr = xs_range_str(B->range);
-    error(&s->ei,s->uri,R->defline,"rcase-NSRecurseCheckCardinality.2","%s effective total range "
-          "(%s) is not a valid restriction of the range %s declared for the corresponding <any> "
-          "within the base type",rstr,etrstr,brangestr);
-    free(rstr);
-    free(etrstr);
-    free(brangestr);
-    return -1;
+    String rstr = R->toString();
+    String etrstr = etr.toString();
+    String brangestr = B->range.toString();
+    return error(&s->ei,s->uri,R->defline,"rcase-NSRecurseCheckCardinality.2","%* effective total "
+                 "range (%*) is not a valid restriction of the range %* declared for the "
+                 "corresponding <any> within the base type",&rstr,&etrstr,&brangestr);
   }
 
   return 0;
 }
 
-int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to,
+int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
                                 int order_preserving,
                                 int require_nonemptiable_unique,
                                 int require_nonemptiable_mapped,
@@ -1050,14 +1033,13 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
   int topos;
   list *l;
   int i;
-  error_info first_error;
+  Error first_error;
 
-  xs_particle **fromparticles = (xs_particle**)alloca(fromcount*sizeof(xs_particle*));
-  xs_particle **toparticles = (xs_particle**)alloca(tocount*sizeof(xs_particle*));
+  Particle **fromparticles = (Particle**)alloca(fromcount*sizeof(Particle*));
+  Particle **toparticles = (Particle**)alloca(tocount*sizeof(Particle*));
   int *mapping = (int*)alloca(fromcount*sizeof(int));
   int *tomapped = (int*)alloca(tocount*sizeof(int));
   memset(tomapped,0,tocount*sizeof(int));
-  memset(&first_error,0,sizeof(error_info));
 
   /* See calling functions for the testcases and constraint ids relevant to this function */
 
@@ -1070,12 +1052,12 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
 
   frompos = 0;
   for (l = from->term.mg->particles; l; l = l->next)
-    fromparticles[frompos++] = (xs_particle*)l->data;
+    fromparticles[frompos++] = (Particle*)l->data;
   assert(frompos == fromcount);
 
   topos = 0;
   for (l = to->term.mg->particles; l; l = l->next)
-    toparticles[topos++] = (xs_particle*)l->data;
+    toparticles[topos++] = (Particle*)l->data;
   assert(topos == tocount);
 
 /*   debugl("mapping: fromcount=%d, tocount=%d",fromcount,tocount); */
@@ -1116,8 +1098,8 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
         break;
       }
       else if (!particle_emptiable(s,toparticles[topos]) && order_preserving) {
-        if (NULL == first_error.message)
-          error_info_copy(&first_error,&s->ei);
+        if (first_error.m_message.isNull())
+          first_error = s->ei;
         if (require_nonemptiable_mapped) {
           if (0 < frompos) {
             frompos--;
@@ -1136,26 +1118,24 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
     if (!found && !retry) {
 /*       debugl("mapping: failed"); */
       if (!order_preserving && !require_nonemptiable_unique) {
-        char *fpstr = xs_particle_str(fromparticles[frompos]);
+        String fpstr = fromparticles[frompos]->toString();
         error(&s->ei,s->uri,fromparticles[frompos]->defline,constraint,
-              "A match for %s does not exist in the base type",fpstr);
-        free(fpstr);
+              "A match for %* does not exist in the base type",&fpstr);
       }
-      else if (NULL != first_error.message) {
-        error_info_free_vals(&s->ei);
-        error_info_copy(&s->ei,&first_error);
+      else if (!first_error.m_message.isNull()) {
+        s->ei.clear();
+        s->ei = first_error;
       }
-      else if (NULL == s->ei.message) {
+      else if (s->ei.m_message.isNull()) {
         /* No error yet; this means that xs_check_particle_valid_restriction() has not found
            any problems, from which we can deduce that the reason for the failure was that the
            particle we are looking for actually does not exist in the base at all. */
-        char *fpstr = xs_particle_str(fromparticles[frompos]);
-        error(&s->ei,s->uri,fromparticles[frompos]->defline,constraint,"%s does not exist in the "
+        String fpstr = fromparticles[frompos]->toString();
+        error(&s->ei,s->uri,fromparticles[frompos]->defline,constraint,"%* does not exist in the "
               "base type, or does not reside at the same position in the base type as it does here",
-              fpstr);
-        free(fpstr);
+              &fpstr);
       }
-      error_info_free_vals(&first_error);
+      first_error.clear();
       return -1;
     }
   }
@@ -1173,9 +1153,9 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
   if (require_nonemptiable_mapped) {
     for (i = 0; i < tocount; i++)
       if (!particle_emptiable(s,toparticles[i]) && (0 == tomapped[i])) {
-        char *tpstr = xs_particle_str(toparticles[i]);
+        String tpstr = toparticles[i]->toString();
         int previous;
-        xs_particle *prev = NULL;
+        Particle *prev = NULL;
         for (previous = i-1; (0 <= previous) && (NULL == prev); previous--) {
           for (frompos = 0; (frompos < fromcount) && (NULL == prev); frompos++)
             if (mapping[frompos] == previous)
@@ -1183,35 +1163,32 @@ int xs_compute_particle_mapping(xs_schema *s, xs_particle *from, xs_particle *to
         }
 
         if ((NULL != prev) && order_preserving) {
-          char *prevstr = xs_particle_str(prev);
-          error(&s->ei,s->uri,prev->defline,constraint,"Expected %s to appear after %s, as it is "
-                "present in the base type with a minOccurs value greater than 0",tpstr,prevstr);
-          free(prevstr);
+          String prevstr = prev->toString();
+          error(&s->ei,s->uri,prev->defline,constraint,"Expected %* to appear after %*, as it is "
+                "present in the base type with a minOccurs value greater than 0",&tpstr,&prevstr);
         }
         else {
-          char *fromstr = xs_particle_str(from);
-          error(&s->ei,s->uri,from->defline,constraint,"Expected %s to appear within this %s, as "
+          String fromstr = from->toString();
+          error(&s->ei,s->uri,from->defline,constraint,"Expected %* to appear within this %*, as "
                 "it is present in the base type with a minOccurs value greater than 0",
-                tpstr,fromstr);
-          free(fromstr);
+                &tpstr,&fromstr);
         }
 
-        free(tpstr);
-        error_info_free_vals(&first_error);
+        first_error.clear();
         return -1;
       }
   }
 
-  error_info_free_vals(&first_error);
+  first_error.clear();
   return 0;
 }
 
-int particle_derivation_ok_all_all_sequence_sequence_recurse(xs_schema *s, xs_particle *R,
-                                                             xs_particle *B)
+int particle_derivation_ok_all_all_sequence_sequence_recurse(Schema *s, Particle *R,
+                                                             Particle *B)
 {
 
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
   particle_debug("particle_derivation_ok_all_all_sequence_sequence_recurse");
 
   /* Schema Component Constraint: Particle Derivation OK (All:All,Sequence:Sequence -- Recurse)
@@ -1279,7 +1256,7 @@ int particle_derivation_ok_all_all_sequence_sequence_recurse(xs_schema *s, xs_pa
   return 0;
 }
 
-int particle_derivation_ok_choice_choice_recurselax(xs_schema *s, xs_particle *R, xs_particle *B)
+int particle_derivation_ok_choice_choice_recurselax(Schema *s, Particle *R, Particle *B)
 {
   particle_debug("particle_derivation_ok_choice_choice_recurselax");
 
@@ -1326,8 +1303,8 @@ int particle_derivation_ok_choice_choice_recurselax(xs_schema *s, xs_particle *R
   return 0;
 }
 
-int particle_derivation_ok_sequence_all_recurseunordered(xs_schema *s, xs_particle *R,
-                                                         xs_particle *B)
+int particle_derivation_ok_sequence_all_recurseunordered(Schema *s, Particle *R,
+                                                         Particle *B)
 {
 
   particle_debug("particle_derivation_ok_sequence_all_recurseunordered");
@@ -1378,14 +1355,14 @@ int particle_derivation_ok_sequence_all_recurseunordered(xs_schema *s, xs_partic
   return 0;
 }
 
-int particle_derivation_ok_sequence_choice_mapandsum(xs_schema *s, xs_particle *R, xs_particle *B)
+int particle_derivation_ok_sequence_choice_mapandsum(Schema *s, Particle *R, Particle *B)
 {
-  xs_range Rrange2;
+  Range Rrange2;
   particle_debug("particle_derivation_ok_sequence_choice_mapandsum");
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == B->term_type);
-  assert(XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor);
-  assert(XS_MODEL_GROUP_COMPOSITOR_CHOICE == B->term.mg->compositor);
+  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  assert(MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor);
+  assert(MODELGROUP_COMPOSITOR_CHOICE == B->term.mg->compositor);
   /* Schema Component Constraint: Particle Derivation OK (Sequence:Choice -- MapAndSum)
 
      For a sequence group particle to be a valid restriction of a choice group particle all of the
@@ -1432,22 +1409,18 @@ int particle_derivation_ok_sequence_choice_mapandsum(xs_schema *s, xs_particle *
     Rrange2.max_occurs = R->range.max_occurs*list_count(R->term.mg->particles);
 
   if (!occurrence_range_restriction_ok(Rrange2,B->range)) {
-    char *rrange2str = xs_range_str(Rrange2);
-    char *brangestr = xs_range_str(B->range);
-    char *bstr = xs_particle_str(B);
-    error(&s->ei,s->uri,R->defline,"rcase-MapAndSum.2","Total occurrence range %s is not a valid "
-          "restriction of the range %s, declared on the corresponding %s of the base type",
-          rrange2str,brangestr,bstr);
-    free(rrange2str);
-    free(brangestr);
-    free(bstr);
-    return -1;
+    String rrange2str = Rrange2.toString();
+    String brangestr = B->range.toString();
+    String bstr = B->toString();
+    return error(&s->ei,s->uri,R->defline,"rcase-MapAndSum.2","Total occurrence range %* is not a "
+                 "valid restriction of the range %*, declared on the corresponding %* of the base "
+                 "type",&rrange2str,&brangestr,&bstr);
   }
 
   return 0;
 }
 
-int particle_emptiable(xs_schema *s, xs_particle *p)
+int GridXSLT::particle_emptiable(Schema *s, Particle *p)
 {
   /* @implements(xmlschema-1:cos-group-emptiable.1) @end */
   /* @implements(xmlschema-1:cos-group-emptiable.2) @end */
@@ -1459,22 +1432,20 @@ int particle_emptiable(xs_schema *s, xs_particle *p)
        defined by Effective Total Range (all and sequence) (3.8.6) (if the group is all or
        sequence) or Effective Total Range (choice) (3.8.6) (if it is choice), is 0.
   */
-  return (0 == xs_particle_effective_total_range(p).min_occurs);
+  return (0 == Particle_effective_total_range(p).min_occurs);
 }
 
 
 
 
 
-xs_particle *new_empty_group_particle(xs_particle *orig, list **allocp, list **allocmg)
+Particle *new_empty_group_particle(Particle *orig, xs_allocset *as)
 {
-  xs_particle *newp = (xs_particle*)calloc(1,sizeof(xs_particle));
-  list_append(allocp,newp);
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == orig->term_type);
+  Particle *newp = new Particle(as);
+  assert(PARTICLE_TERM_MODEL_GROUP == orig->term_type);
   newp->range = orig->range;
-  newp->term_type = XS_PARTICLE_TERM_MODEL_GROUP;
-  newp->term.mg = (xs_model_group*)calloc(1,sizeof(xs_model_group));
-  list_append(allocmg,newp->term.mg);
+  newp->term_type = PARTICLE_TERM_MODEL_GROUP;
+  newp->term.mg = new ModelGroup(as);
   newp->defline = orig->defline;
 
   newp->term.mg->compositor = orig->term.mg->compositor;
@@ -1482,14 +1453,14 @@ xs_particle *new_empty_group_particle(xs_particle *orig, list **allocp, list **a
   return newp;
 }
 
-int add_nonpointless_particles(xs_particle *in, xs_particle *parent, list **allocp, list **allocmg)
+int add_nonpointless_particles(Particle *in, Particle *parent, xs_allocset *as)
 {
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == parent->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == parent->term_type);
 
-  if (XS_PARTICLE_TERM_MODEL_GROUP != in->term_type) {
+  if (PARTICLE_TERM_MODEL_GROUP != in->term_type) {
     list_append(&parent->term.mg->particles,in);
   }
-  else if (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == in->term.mg->compositor) {
+  else if (MODELGROUP_COMPOSITOR_SEQUENCE == in->term.mg->compositor) {
     /* <sequence>
        One of the following must be true:
        2.2.1 {particles} is empty.
@@ -1506,22 +1477,22 @@ int add_nonpointless_particles(xs_particle *in, xs_particle *parent, list **allo
     }
     else if (((1 == in->range.min_occurs) && (1 == in->range.max_occurs)) &&
         ((NULL == in->term.mg->particles->next) ||
-         (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == parent->term.mg->compositor))) {
+         (MODELGROUP_COMPOSITOR_SEQUENCE == parent->term.mg->compositor))) {
       /* pointless; just add the child particles directly into the parent sequence's list */
       list *l;
       for (l = in->term.mg->particles; l; l = l->next)
-        add_nonpointless_particles((xs_particle*)l->data,parent,allocp,allocmg);
+        add_nonpointless_particles((Particle*)l->data,parent,as);
     }
     else {
       /* non-pointless; create a new sequence and add non-pointless particles recursively */
-      xs_particle *newp = new_empty_group_particle(in,allocp,allocmg);
+      Particle *newp = new_empty_group_particle(in,as);
       list *l;
       for (l = in->term.mg->particles; l; l = l->next)
-        add_nonpointless_particles((xs_particle*)l->data,newp,allocp,allocmg);
+        add_nonpointless_particles((Particle*)l->data,newp,as);
       list_append(&parent->term.mg->particles,newp);
     }
   }
-  else if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == in->term.mg->compositor) {
+  else if (MODELGROUP_COMPOSITOR_CHOICE == in->term.mg->compositor) {
     /* <choice>
        One of the following must be true:
        2.2.1 {particles} is empty and the particle within which this <choice> appears has
@@ -1539,18 +1510,18 @@ int add_nonpointless_particles(xs_particle *in, xs_particle *parent, list **allo
     }
     else if (((1 == in->range.min_occurs) && (1 == in->range.max_occurs)) &&
         (((NULL != in->term.mg->particles) && (NULL == in->term.mg->particles->next)) ||
-         (XS_MODEL_GROUP_COMPOSITOR_CHOICE == parent->term.mg->compositor))) {
+         (MODELGROUP_COMPOSITOR_CHOICE == parent->term.mg->compositor))) {
       /* pointless; just add the child particles directly into the parent choice's list */
       list *l;
       for (l = in->term.mg->particles; l; l = l->next)
-        add_nonpointless_particles((xs_particle*)l->data,parent,allocp,allocmg);
+        add_nonpointless_particles((Particle*)l->data,parent,as);
     }
     else {
       /* non-pointless; create a new choice and add non-pointless particles recursively */
-      xs_particle *newp = new_empty_group_particle(in,allocp,allocmg);
+      Particle *newp = new_empty_group_particle(in,as);
       list *l;
       for (l = in->term.mg->particles; l; l = l->next)
-        add_nonpointless_particles((xs_particle*)l->data,newp,allocp,allocmg);
+        add_nonpointless_particles((Particle*)l->data,newp,as);
       list_append(&parent->term.mg->particles,newp);
     }
   }
@@ -1568,14 +1539,14 @@ int add_nonpointless_particles(xs_particle *in, xs_particle *parent, list **allo
     else if (((1 == in->range.min_occurs) && (1 == in->range.max_occurs)) &&
              (NULL == in->term.mg->particles->next)) {
       /* pointless; only one member - just add it */
-      add_nonpointless_particles((xs_particle*)in->term.mg->particles->data,parent,allocp,allocmg);
+      add_nonpointless_particles((Particle*)in->term.mg->particles->data,parent,as);
     }
     else {
       /* non-pointless; create a new all and add non-pointless particles recursively */
-      xs_particle *newp = new_empty_group_particle(in,allocp,allocmg);
+      Particle *newp = new_empty_group_particle(in,as);
       list *l;
       for (l = in->term.mg->particles; l; l = l->next)
-        add_nonpointless_particles((xs_particle*)l->data,newp,allocp,allocmg);
+        add_nonpointless_particles((Particle*)l->data,newp,as);
       list_append(&parent->term.mg->particles,newp);
     }
   }
@@ -1583,74 +1554,65 @@ int add_nonpointless_particles(xs_particle *in, xs_particle *parent, list **allo
   return 0;
 }
 
-xs_particle *ignore_pointless(xs_schema *s, xs_particle *p, ignore_pointless_data *ipd)
+Particle *GridXSLT::ignore_pointless(Schema *s, Particle *p, xs_allocset *as)
 {
-  xs_particle *newp;
+  Particle *newp;
   list *l;
-  ipd->allocp = NULL;
-  ipd->allocmg = NULL;
-  if (XS_PARTICLE_TERM_MODEL_GROUP != p->term_type)
+  if (PARTICLE_TERM_MODEL_GROUP != p->term_type)
     return p;
 
-  newp = new_empty_group_particle(p,&ipd->allocp,&ipd->allocmg);
+  newp = new_empty_group_particle(p,as);
 
   for (l = p->term.mg->particles; l; l = l->next)
-    add_nonpointless_particles((xs_particle*)l->data,newp,&ipd->allocp,&ipd->allocmg);
+    add_nonpointless_particles((Particle*)l->data,newp,as);
 
 
   return newp;
 }
 
-void ignore_pointless_free(ignore_pointless_data *ipd)
-{
-  list_free(ipd->allocp,(list_d_t)xs_particle_free);
-  list_free(ipd->allocmg,(list_d_t)xs_model_group_free);
-}
 
 
 
 
 
 
-
-
-int xs_check_particle_valid_restriction2(xs_schema *s, xs_particle *R, xs_particle *B)
+int xs_check_particle_valid_restriction2(Schema *s, Particle *R, Particle *B)
 {
   /* 3.9.6 Schema Component Constraint: Particle Valid (Restriction) */
   /* [Definition:]  For a particle (call it R, for restriction) to be a valid restriction of
      another particle (call it B, for base) one of the following must be true: */
 /*   int pointless = 0; */
-  xs_particle *p = R;
+  Particle *p = R;
   char *btypestr = NULL;
   char *rtypestr = NULL;
 
-  if (XS_PARTICLE_TERM_ELEMENT == R->term_type) {
+  if (PARTICLE_TERM_ELEMENT == R->term_type) {
     rtypestr = "element";
   }
-  else if (XS_PARTICLE_TERM_WILDCARD == R->term_type) {
+  else if (PARTICLE_TERM_WILDCARD == R->term_type) {
     rtypestr = "any";
   }
-  else if (XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) {
-    if (XS_MODEL_GROUP_COMPOSITOR_ALL == R->term.mg->compositor)
+  else if (PARTICLE_TERM_MODEL_GROUP == R->term_type) {
+    if (MODELGROUP_COMPOSITOR_ALL == R->term.mg->compositor)
       rtypestr = "all";
-    else if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == R->term.mg->compositor)
+    else if (MODELGROUP_COMPOSITOR_CHOICE == R->term.mg->compositor)
       rtypestr = "choice";
-    else if (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor)
+    else if (MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor)
       rtypestr = "sequence";
   }
 
-  if (XS_PARTICLE_TERM_ELEMENT == B->term_type) {
+  if (PARTICLE_TERM_ELEMENT == B->term_type) {
     btypestr = "element";
   }
-  else if (XS_PARTICLE_TERM_WILDCARD == B->term_type) {
+  else if (PARTICLE_TERM_WILDCARD == B->term_type) {
     btypestr = "any";
   }
-  else if (XS_PARTICLE_TERM_MODEL_GROUP == B->term_type) {
-    if (XS_MODEL_GROUP_COMPOSITOR_ALL == B->term.mg->compositor)
+  else if (PARTICLE_TERM_MODEL_GROUP == B->term_type) {
+    if (MODELGROUP_COMPOSITOR_ALL == B->term.mg->compositor)
       btypestr = "all";
-    else if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == B->term.mg->compositor)
+    else if (MODELGROUP_COMPOSITOR_CHOICE == B->term.mg->compositor)
       btypestr = "choice";
-    else if (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == B->term.mg->compositor)
+    else if (MODELGROUP_COMPOSITOR_SEQUENCE == B->term.mg->compositor)
       btypestr = "sequence";
   }
 
@@ -1716,82 +1678,82 @@ int xs_check_particle_valid_restriction2(xs_schema *s, xs_particle *R, xs_partic
   /* 2.2 Any pointless occurrences of <sequence>, <choice> or <all> are ignored, where
      pointlessness is understood as follows: */
 
-  if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type) {
-    if (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor) {
+  if (PARTICLE_TERM_MODEL_GROUP == p->term_type) {
+    if (MODELGROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor) {
 
 
     }
-    else if (XS_MODEL_GROUP_COMPOSITOR_ALL == p->term.mg->compositor) {
+    else if (MODELGROUP_COMPOSITOR_ALL == p->term.mg->compositor) {
 
     }
     else {
-      assert(XS_MODEL_GROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
+      assert(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
 
     }
   }
 
   /* Base particle: element */
-  if (XS_PARTICLE_TERM_ELEMENT == B->term_type) {
+  if (PARTICLE_TERM_ELEMENT == B->term_type) {
 
     btypestr = "element";
 
-    if (XS_PARTICLE_TERM_ELEMENT == R->term_type)
+    if (PARTICLE_TERM_ELEMENT == R->term_type)
       return particle_restriction_ok_elt_elt_nameandtypeok(s,R->term.e,R->range,R->defline,
                                                            B->term.e,B->range,B->defline);
 
   }
   /* Base particle: any */
-  else if (XS_PARTICLE_TERM_WILDCARD == B->term_type) {
+  else if (PARTICLE_TERM_WILDCARD == B->term_type) {
 
     btypestr = "any";
 
-    if (XS_PARTICLE_TERM_ELEMENT == R->term_type)
+    if (PARTICLE_TERM_ELEMENT == R->term_type)
       return particle_derivation_ok_elt_any_nscompat(s,R,B);
-    else if (XS_PARTICLE_TERM_WILDCARD == R->term_type)
+    else if (PARTICLE_TERM_WILDCARD == R->term_type)
       return particle_derivation_ok_any_any_nssubset(s,R,B);
-    else if (XS_PARTICLE_TERM_MODEL_GROUP == R->term_type)
+    else if (PARTICLE_TERM_MODEL_GROUP == R->term_type)
       return particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(s,R,B);
 
   }
   /* Base particle: all, choice, or sequence */
-  else if (XS_PARTICLE_TERM_MODEL_GROUP == B->term_type) {
+  else if (PARTICLE_TERM_MODEL_GROUP == B->term_type) {
 
-    if (XS_PARTICLE_TERM_ELEMENT == R->term_type)
+    if (PARTICLE_TERM_ELEMENT == R->term_type)
       return particle_derivation_ok_all_choice_sequence_recurseasifgroup(s,R,B);
 
     /* Base particle: all */
-    if (XS_MODEL_GROUP_COMPOSITOR_ALL == B->term.mg->compositor) {
+    if (MODELGROUP_COMPOSITOR_ALL == B->term.mg->compositor) {
 
       btypestr = "all";
 
-      if ((XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
-          (XS_MODEL_GROUP_COMPOSITOR_ALL == R->term.mg->compositor))
+      if ((PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
+          (MODELGROUP_COMPOSITOR_ALL == R->term.mg->compositor))
         return particle_derivation_ok_all_all_sequence_sequence_recurse(s,R,B);
-      else if ((XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
-               (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
+      else if ((PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
+               (MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
         return particle_derivation_ok_sequence_all_recurseunordered(s,R,B);
 
     }
     /* Base particle: choice */
-    else if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == B->term.mg->compositor) {
+    else if (MODELGROUP_COMPOSITOR_CHOICE == B->term.mg->compositor) {
 
       btypestr = "choice";
 
-      if ((XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
-          (XS_MODEL_GROUP_COMPOSITOR_CHOICE == R->term.mg->compositor))
+      if ((PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
+          (MODELGROUP_COMPOSITOR_CHOICE == R->term.mg->compositor))
         return particle_derivation_ok_choice_choice_recurselax(s,R,B);
-      else if ((XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
-               (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
+      else if ((PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
+               (MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
         return particle_derivation_ok_sequence_choice_mapandsum(s,R,B);
 
     }
     /* Base particle: sequence */
-    else if (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == B->term.mg->compositor) {
+    else if (MODELGROUP_COMPOSITOR_SEQUENCE == B->term.mg->compositor) {
 
       btypestr = "sequence";
 
-      if ((XS_PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
-          (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
+      if ((PARTICLE_TERM_MODEL_GROUP == R->term_type) &&
+          (MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor))
         return particle_derivation_ok_all_all_sequence_sequence_recurse(s,R,B);
 
     }
@@ -1801,7 +1763,7 @@ int xs_check_particle_valid_restriction2(xs_schema *s, xs_particle *R, xs_partic
                "Invalid particle restriction: %s cannot restrict %s",rtypestr,btypestr);
 }
 
-int xs_check_particle_valid_restriction(xs_schema *s, xs_particle *R, xs_particle *B)
+int GridXSLT::xs_check_particle_valid_restriction(Schema *s, Particle *R, Particle *B)
 {
   /* First we try it without removing pointless particles. If and only if this fails, we then
      try again with pointless particles removed. This is necessary because it is possible for
@@ -1811,32 +1773,29 @@ int xs_check_particle_valid_restriction(xs_schema *s, xs_particle *R, xs_particl
      the derived type.
      If an error occurs in both cases, we return the first error, not the second. */
   if (0 != xs_check_particle_valid_restriction2(s,R,B)) {
-    error_info first_error;
+    Error first_error;
     int r;
-    ignore_pointless_data ipd1;
-    ignore_pointless_data ipd2;
-    memset(&first_error,0,sizeof(error_info));
-    error_info_copy(&first_error,&s->ei);
-    R = ignore_pointless(s,R,&ipd1);
-    B = ignore_pointless(s,B,&ipd2);
+    xs_allocset *as = new xs_allocset();
+    first_error = s->ei;
+    R = ignore_pointless(s,R,as);
+    B = ignore_pointless(s,B,as);
 
     r = xs_check_particle_valid_restriction2(s,R,B);
 
-    ignore_pointless_free(&ipd1);
-    ignore_pointless_free(&ipd2);
+    delete as;
 
     if (0 != r) {
-      error_info_copy(&s->ei,&first_error);
-      error_info_free_vals(&first_error);
+      s->ei = first_error;
+      first_error.clear();
       return -1;
     }
-    error_info_free_vals(&first_error);
+    first_error.clear();
     return 0;
   }
   return 0;
 }
 
-int xs_check_complex_restriction_rule1(xs_schema *s, xs_type *t)
+int xs_check_complex_restriction_rule1(Schema *s, Type *t)
 {
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Restriction, Complex) */
 
@@ -1863,7 +1822,7 @@ int xs_check_complex_restriction_rule1(xs_schema *s, xs_type *t)
 }
 
 
-int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
+int xs_check_complex_restriction_rule2(Schema *s, Type *t)
 {
   list *l;
 
@@ -1875,13 +1834,13 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
   /* 2 For each attribute use (call this R) in the {attribute uses}  the appropriate case among the
        following must be true: */
   for (l = t->attribute_uses; l; l = l->next) {
-    xs_attribute_use *R = (xs_attribute_use*)l->data;
-    xs_attribute_use *B = NULL;
+    AttributeUse *R = (AttributeUse*)l->data;
+    AttributeUse *B = NULL;
     list *bl;
 
     for (bl = t->base->attribute_uses; bl && !B; bl = bl->next) {
-      xs_attribute_use *au2 = (xs_attribute_use*)bl->data;
-      if (nsname_equals(R->attribute->def.ident,au2->attribute->def.ident))
+      AttributeUse *au2 = (AttributeUse*)bl->data;
+      if (R->attribute->def.ident == au2->attribute->def.ident)
         B = au2;
     }
 
@@ -1890,8 +1849,8 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
            (call this B) whose {attribute declaration} has the same {name} and {target namespace},
            then all of the following must be true: */
     if (NULL != B) {
-      xs_value_constraint Revc;
-      xs_value_constraint Bevc;
+      ValueConstraint *Revc = NULL;
+      ValueConstraint *Bevc = NULL;
 
       /* @implements(xmlschema-1:derivation-ok-restriction.2.1.1)
          test { complextype_cc_restriction_attribute_required1.test }
@@ -1905,9 +1864,9 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
          2.1.1.1 B's {required} is false.
          2.1.1.2 R's {required} is true. */
       if (B->required && !R->required)
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.1","Attribute %#n "
-                     "must be marked as required, because it is required by base type %#n",
-                     R->attribute->def.ident,t->base->def.ident);
+        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.1","Attribute %* "
+                     "must be marked as required, because it is required by base type %*",
+                     &R->attribute->def.ident,&t->base->def.ident);
 
       /* @implements(xmlschema-1:derivation-ok-restriction.2.1.2)
          test { complextype_cc_restriction_attribute_typederiv1.test }
@@ -1920,10 +1879,10 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
       assert(B->attribute->type);
       if (0 != xs_check_simple_type_derivation_ok(s,R->attribute->type,B->attribute->type,
                                                   0,0,0,0))
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.2","Attribute %#n "
-                     "must have a type that is a valid derivation of type %#n, used on the "
-                     "corresponding attribute in base type %#n",
-                     R->attribute->def.ident,B->attribute->type->def.ident,t->base->def.ident);
+        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.2","Attribute %* "
+                     "must have a type that is a valid derivation of type %*, used on the "
+                     "corresponding attribute in base type %*",
+                     &R->attribute->def.ident,&B->attribute->type->def.ident,&t->base->def.ident);
 
       /* @implements(xmlschema-1:derivation-ok-restriction.2.1.3)
          test { complextype_cc_restriction_valueconstraint1.test }
@@ -1937,28 +1896,28 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
       /* 2.1.3 [Definition:]  Let the effective value constraint of an attribute use be its {value
                constraint}, if present, otherwise its {attribute declaration}'s {value
                constraint}. */
-      if (XS_VALUE_CONSTRAINT_NONE != R->vc.type)
-        Revc = R->vc;
+      if (VALUECONSTRAINT_NONE != R->vc.type)
+        Revc = &R->vc;
       else
-        Revc = R->attribute->vc;
+        Revc = &R->attribute->vc;
 
-      if (XS_VALUE_CONSTRAINT_NONE != B->vc.type)
-        Bevc = B->vc;
+      if (VALUECONSTRAINT_NONE != B->vc.type)
+        Bevc = &B->vc;
       else
-        Bevc = B->attribute->vc;
+        Bevc = &B->attribute->vc;
 
       /* @implements(xmlschema-1:derivation-ok-restriction.2.1.3.1) @end */
       /* @implements(xmlschema-1:derivation-ok-restriction.2.1.3.2) @end */
       /* Then one of the following must be true:
          2.1.3.1 B's effective value constraint is absent or default.
          2.1.3.2 R's effective value constraint is fixed with the same string as B's. */
-      if ((XS_VALUE_CONSTRAINT_FIXED == Bevc.type) &&
-          ((XS_VALUE_CONSTRAINT_FIXED != Revc.type) ||
-           strcmp(Revc.value,Bevc.value)))
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.3","Attribute %#n "
+      if ((VALUECONSTRAINT_FIXED == Bevc->type) &&
+          ((VALUECONSTRAINT_FIXED != Revc->type) ||
+           strcmp(Revc->value,Bevc->value)))
+        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.3","Attribute %* "
                      "must have a fixed value of \"%s\", because this fixed value is set on the "
-                     "corresponding attribute declaration in base type %#n",
-                     R->attribute->def.ident,Bevc.value,t->base->def.ident);
+                     "corresponding attribute declaration in base type %*",
+                     &R->attribute->def.ident,Bevc->value,&t->base->def.ident);
     }
 #if 0
     /* Wait until we have all the other restriction stuff implemented... this causes problems
@@ -1970,14 +1929,15 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
        as defined in Wildcard allows Namespace Name (3.10.4). */
     else {
       if ((NULL == t->base->attribute_wildcard) ||
-          !ns_valid_wrt_wildcard(s,R->attribute->def.ident.ns,t->base->attribute_wildcard)) {
-        debugl("t->name = %#n\n",t->def.ident);
-        debugl("t->base->name = %#n\n",t->base->def.ident);
-        debugl("R->attribute->name = %#n\n",R->attribute->def.ident);
-        return error(&s->ei,s->uri,R->defline,"structures-3.4.6","Declaration of attribute %#n is "
-                     "invalid because base type %#n does not have an attribute wildcard that "
+          !ns_valid_wrt_wildcard(s,R->attribute->def.ident.m_ns.cstring(),
+          t->base->attribute_wildcard)) {
+        debugl("t->name = %*\n",&t->def.ident);
+        debugl("t->base->name = %*\n",&t->base->def.ident);
+        debugl("R->attribute->name = %*\n",&R->attribute->def.ident);
+        return error(&s->ei,s->uri,R->defline,"structures-3.4.6","Declaration of attribute %* is "
+                     "invalid because base type %* does not have an attribute wildcard that "
                      "permits attributes from this namespace",
-                     R->attribute->def.ident,t->base->def.ident);
+                     &R->attribute->def.ident,&t->base->def.ident);
       }
     }
 #endif
@@ -1986,7 +1946,7 @@ int xs_check_complex_restriction_rule2(xs_schema *s, xs_type *t)
   return 0; /* success */
 }
 
-int xs_check_complex_restriction_rule3(xs_schema *s, xs_type *t)
+int xs_check_complex_restriction_rule3(Schema *s, Type *t)
 {
   list *l;
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Restriction, Complex) */
@@ -2001,14 +1961,14 @@ int xs_check_complex_restriction_rule3(xs_schema *s, xs_type *t)
        and {target namespace} as its {attribute declaration} in the {attribute uses} of the complex
        type definition itself whose {required} is true. */
   for (l = t->base->attribute_uses; l; l = l->next) {
-    xs_attribute_use *B = (xs_attribute_use*)l->data;
+    AttributeUse *B = (AttributeUse*)l->data;
     if (B->required) {
       int found = 0;
       list *l2;
 
       for (l2 = t->attribute_uses; l2 && !found; l2 = l2->next) {
-        xs_attribute_use *R = (xs_attribute_use*)l->data;
-        if (nsname_equals(R->attribute->def.ident,B->attribute->def.ident)) {
+        AttributeUse *R = (AttributeUse*)l->data;
+        if (R->attribute->def.ident == B->attribute->def.ident) {
           found = 1;
           /* Note: we don't need to check R->required here, because this has already been taken
              care of by constraint derivation-ok-restriction.2.1.1 above */
@@ -2016,16 +1976,16 @@ int xs_check_complex_restriction_rule3(xs_schema *s, xs_type *t)
       }
 
       if (!found)
-        return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.3","Attribute %#n "
+        return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.3","Attribute %* "
                      "cannot be declared as prohibited, because it is declared as required by base "
-                     "type %#n",B->attribute->def.ident,t->base->def.ident);
+                     "type %*",&B->attribute->def.ident,&t->base->def.ident);
     }
   }
 
   return 0; /* success */
 }
 
-int xs_check_complex_restriction_rule4(xs_schema *s, xs_type *t)
+int xs_check_complex_restriction_rule4(Schema *s, Type *t)
 {
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Restriction, Complex) */
 
@@ -2051,7 +2011,7 @@ int xs_check_complex_restriction_rule4(xs_schema *s, xs_type *t)
   /* 4.2 The complex type definition's {attribute wildcard}'s {namespace constraint} must be a 
          subset of the {base type definition}'s {attribute wildcard}'s {namespace constraint}, as
          defined by Wildcard Subset (3.10.6). */
-  if (!xs_wildcard_constraint_is_subset(s,t->attribute_wildcard,t->base->attribute_wildcard)) {
+  if (!Wildcard_constraint_is_subset(s,t->attribute_wildcard,t->base->attribute_wildcard)) {
     return error(&s->ei,s->uri,t->local_wildcard->defline,"derivation-ok-restriction.4.2",
                  "Attribute wildcard must be a valid subset of the base type's");
   }
@@ -2081,7 +2041,7 @@ int xs_check_complex_restriction_rule4(xs_schema *s, xs_type *t)
   return 0; /* success */
 }
 
-int xs_check_complex_restriction_rule5(xs_schema *s, xs_type *t)
+int xs_check_complex_restriction_rule5(Schema *s, Type *t)
 {
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Restriction, Complex) */
 
@@ -2120,8 +2080,8 @@ int xs_check_complex_restriction_rule5(xs_schema *s, xs_type *t)
       else {
         return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.5.2.2.1",
                      "Invalid derivation for complex type with simple content; the simple type "
-                     "that is declared within %#n is not a valid derivation of the simple type "
-                     "declared within %#n",t->def.ident,t->base->def.ident);
+                     "that is declared within %* is not a valid derivation of the simple type "
+                     "declared within %*",&t->def.ident,&t->base->def.ident);
       }
     }
     /* @implements(xmlschema-1:derivation-ok-restriction.5.2.2.2) @end */
@@ -2219,9 +2179,9 @@ int xs_check_complex_restriction_rule5(xs_schema *s, xs_type *t)
   return 0; /* success */
 }
 
-int xs_check_complex_restriction(xs_schema *s, xs_type *t)
+int GridXSLT::xs_check_complex_restriction(Schema *s, Type *t)
 {
-/*   printf("*** xs_check_complex_restriction %s\n",t->name); */
+/*   message("*** xs_check_complex_restriction %s\n",t->name); */
 
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Restriction, Complex) */
 
@@ -2240,7 +2200,7 @@ int xs_check_complex_restriction(xs_schema *s, xs_type *t)
 
 
 
-int xs_check_complex_extension_rule14(xs_schema *s, xs_type *t)
+int xs_check_complex_extension_rule14(Schema *s, Type *t)
 {
   /* @implements(xmlschema-1:cos-ct-extends.1.4) @end */
   /* 1.4 One of the following must be true: */
@@ -2304,7 +2264,7 @@ int xs_check_complex_extension_rule14(xs_schema *s, xs_type *t)
 }
 
 
-int xs_check_complex_extension(xs_schema *s, xs_type *t)
+int GridXSLT::xs_check_complex_extension(Schema *s, Type *t)
 {
   /* 3.4.6 Schema Component Constraint: Derivation Valid (Extension) */
 
@@ -2394,7 +2354,7 @@ int xs_check_complex_extension(xs_schema *s, xs_type *t)
   return 0;
 }
 
-int xs_check_complex_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
+int GridXSLT::xs_check_complex_type_derivation_ok(Schema *s, Type *D, Type *B,
                                         int final_extension, int final_restriction)
 {
   /* 3.4.6 Schema Component Constraint: Type Derivation OK (Complex) */
@@ -2411,15 +2371,15 @@ int xs_check_complex_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
   /* 1 If B and D are not the same type definition, then the {derivation method} of D must not be
      in the subset. */
   if (B != D) {
-    if ((XS_TYPE_DERIVATION_EXTENSION == D->derivation_method) && final_extension)
-      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%#n is not a valid "
-                   "extension of %#n; extension is disallowed for the latter",
-                   D->def.ident,B->def.ident);
+    if ((TYPE_DERIVATION_EXTENSION == D->derivation_method) && final_extension)
+      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
+                   "extension of %*; extension is disallowed for the latter",
+                   &D->def.ident,&B->def.ident);
 
-    if ((XS_TYPE_DERIVATION_RESTRICTION == D->derivation_method) && final_restriction)
-      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%#n is not a valid "
-                   "restriction of %#n; restriction is disallowed for the latter",
-                   D->def.ident,B->def.ident);
+    if ((TYPE_DERIVATION_RESTRICTION == D->derivation_method) && final_restriction)
+      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
+                   "restriction of %*; restriction is disallowed for the latter",
+                   &D->def.ident,&B->def.ident);
   }
 
   /* @implements(xmlschema-1:cos-ct-derived-ok.2) @end */
@@ -2462,7 +2422,7 @@ int xs_check_complex_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
       (!D->complex && (0 != xs_check_simple_type_derivation_ok(s,D->base,B,final_extension,
                                                                final_restriction,0,0))))
     return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.2.3",
-                 "%#n cannot be derived from %#n",D->def.ident,B->def.ident);
+                 "%* cannot be derived from %*",&D->def.ident,&B->def.ident);
 
   /* Note: This constraint is used to check that when someone uses a type in a context where
      another type was expected (either via xsi:type or substitution groups), that the type used is

@@ -20,8 +20,8 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 #include "util/xmlutils.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -29,85 +29,87 @@
 #include <string.h>
 #include <errno.h>
 
+using namespace GridXSLT;
+
 #define FNS FN_NAMESPACE
 
-static value *numeric_add(gxenvironment *env, value **args)
+static Value numeric_add(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
-  return value_new_int(args[0]->value.i + args[1]->value.i);
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
+  return Value(args[0].asInt() + args[1].asInt());
 }
 
-static value *numeric_subtract(gxenvironment *env, value **args)
+static Value numeric_subtract(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
-  return value_new_int(args[0]->value.i - args[1]->value.i);
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
+  return Value(args[0].asInt() - args[1].asInt());
 }
 
-static value *numeric_multiply(gxenvironment *env, value **args)
+static Value numeric_multiply(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
-  return value_new_int(args[0]->value.i * args[1]->value.i);
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
+  return Value(args[0].asInt() * args[1].asInt());
 }
 
-static value *numeric_divide(gxenvironment *env, value **args)
+static Value numeric_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
-  return value_new_int(args[0]->value.i / args[1]->value.i);
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
+  return Value(args[0].asInt() / args[1].asInt());
 }
 
-static value *numeric_integer_divide(gxenvironment *env, value **args)
+static Value numeric_integer_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
-  return value_new_int(args[0]->value.i / args[1]->value.i);
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
+  return Value(args[0].asInt() / args[1].asInt());
 }
 
-static value *numeric_equal(gxenvironment *env, value **args)
+static Value numeric_equal(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
 
-  if (args[0]->value.i == args[1]->value.i)
-    return value_new_bool(1);
+  if (args[0].asInt() == args[1].asInt())
+    return Value(true);
   else
-    return value_new_bool(0);
+    return Value(false);
 }
 
-static value *numeric_less_than(gxenvironment *env, value **args)
+static Value numeric_less_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
 
-  if (args[0]->value.i < args[1]->value.i)
-    return value_new_bool(1);
+  if (args[0].asInt() < args[1].asInt())
+    return Value(true);
   else
-    return value_new_bool(0);
+    return Value(false);
 }
 
-static value *numeric_greater_than(gxenvironment *env, value **args)
+static Value numeric_greater_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(df_check_derived_atomic_type(args[0],xs_g->int_type));
-  assert(df_check_derived_atomic_type(args[1],xs_g->int_type));
+  assert(args[0].isDerivedFrom(xs_g->int_type));
+  assert(args[1].isDerivedFrom(xs_g->int_type));
 
-  if (args[0]->value.i > args[1]->value.i)
-    return value_new_bool(1);
+  if (args[0].asInt() > args[1].asInt())
+    return Value(true);
   else
-    return value_new_bool(0);
+    return Value(false);
 }
 
-gxfunctiondef numeric_fundefs[9] = {
+FunctionDefinition numeric_fundefs[9] = {
   { numeric_add,            FNS, "numeric-add",
     "xsd:integer,xsd:integer",       "xsd:integer" },
   { numeric_subtract,       FNS, "numeric-subtract",
@@ -127,4 +129,4 @@ gxfunctiondef numeric_fundefs[9] = {
   { NULL },
 };
 
-gxfunctiondef *numeric_module = numeric_fundefs;
+FunctionDefinition *numeric_module = numeric_fundefs;

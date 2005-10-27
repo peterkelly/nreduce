@@ -34,6 +34,8 @@
 #include <sys/types.h>
 #include <libxml/tree.h>
 
+using namespace GridXSLT;
+
 /* static const char *argp_program_version = */
 /*   "genbindings 0.1"; */
 
@@ -80,8 +82,8 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 
 int genbindings_main(int argc, char **argv)
 {
-  xs_schema *s;
-  xs_globals *g = xs_globals_new();
+  Schema *s;
+  BuiltinTypes *g = new BuiltinTypes();
   struct arguments arguments;
   xs_validator *v;
 
@@ -95,8 +97,8 @@ int genbindings_main(int argc, char **argv)
   xs_print_defs(s);
 
   xs_validator_free(v);
-  xs_schema_free(s);
-  xs_globals_free(g);
+  delete s;
+  delete g;
 
   return 0;
 }

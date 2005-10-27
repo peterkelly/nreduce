@@ -22,7 +22,7 @@
 
 #include "xslt/parse.h"
 #include "xslt/output.h"
-#include "xslt/xslt.h"
+#include "xslt/Statement.h"
 #include "dataflow/serialization.h"
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
@@ -33,6 +33,8 @@
 #include <math.h>
 #include <string.h>
 #include <argp.h>
+
+using namespace GridXSLT;
 
 /* static const char *argp_program_version = */
 /*   "testxslt 0.1"; */
@@ -93,63 +95,84 @@ static void dump_output_defs(xslt_source *source)
   for (l = source->output_defs; l; l = l->next) {
     df_seroptions *options = (df_seroptions*)l->data;
     list *nl;
-    if (nsname_isnull(options->ident))
-      print("Output definition: (unnamed)\n");
+    if (options->m_ident.isNull())
+      message("Output definition: (unnamed)\n");
     else
-      print("Output definition: %#n\n",options->ident);
+      message("Output definition: %*\n",&options->m_ident);
 
-      print("  byte-order-mark = %s\n",options->byte_order_mark ? "yes" : "no");
+      message("  byte-order-mark = %s\n",options->m_byte_order_mark ? "yes" : "no");
 
-      print("  cdata-section-elements = ");
-      for (nl = options->cdata_section_elements; nl; nl = nl->next) {
-        print("%#n",(nsname*)nl->data);
+      message("  cdata-section-elements = ");
+      Iterator<NSName> cdsit;
+      for (cdsit = options->m_cdata_section_elements; cdsit.haveCurrent(); cdsit++) {
+        NSName nn = *cdsit;
+        message("%*",&nn);
         if (nl->next)
-          print("  ");
+          message("  ");
       }
-      print("\n");
+      message("\n");
 
-      print("  doctype-public = %s\n",options->doctype_public ? options->doctype_public : "(none)");
-
-      print("  doctype-system = %s\n",options->doctype_system ? options->doctype_system : "(none)");
-
-      print("  encoding = %s\n",options->encoding ? options->encoding : "(none)");
-
-      print("  escape-uri-attributes = %s\n",options->escape_uri_attributes ? "yes" : "no");
-
-      print("  include-content-type = %s\n",options->include_content_type ? "yes" : "no");
-
-      print("  indent = %s\n",options->indent ? "yes" : "no");
-
-      print("  media-type = %s\n",options->media_type ? options->media_type : "(none)");
-
-      print("  method = %#n\n",options->method);
-
-      print("  normalization-form = %s\n",
-            options->normalization_form ? options->normalization_form : "(none)");
-
-      print("  omit-xml-declaration = %s\n",options->omit_xml_declaration ? "yes" : "no");
-
-      if (STANDALONE_YES == options->standalone)
-        print("  standalone = yes\n");
-      else if (STANDALONE_NO == options->standalone)
-        print("  standalone = no\n");
+      if (options->m_doctype_public.isNull())
+        message("  doctype-public = (none)\n");
       else
-        print("  standalone = omit\n");
+        message("  doctype-public = %*\n",&options->m_doctype_public);
 
-      print("  undeclare-prefixes = %s\n",options->undeclare_prefixes ? "yes" : "no");
+      if (options->m_doctype_system.isNull())
+        message("  doctype-system = (none)\n");
+      else
+        message("  doctype-system = %*\n",&options->m_doctype_system);
 
-      print("  use-character-maps = ");
-      for (nl = options->use_character_maps; nl; nl = nl->next) {
-        print("%#n",(nsname*)nl->data);
+      if (options->m_encoding.isNull())
+        message("  encoding = (none)\n");
+      else
+        message("  encoding = %*\n",&options->m_encoding);
+
+      message("  escape-uri-attributes = %s\n",options->m_escape_uri_attributes ? "yes" : "no");
+
+      message("  include-content-type = %s\n",options->m_include_content_type ? "yes" : "no");
+
+      message("  indent = %s\n",options->m_indent ? "yes" : "no");
+
+      if (options->m_media_type.isNull())
+        message("  media-type = (none)\n");
+      else
+        message("  media-type = %*\n",&options->m_media_type);
+
+      message("  method = %*\n",&options->m_method);
+
+      if (options->m_normalization_form.isNull())
+        message("  normalization-form = (none)\n");
+      else
+        message("  normalization-form = %*\n",&options->m_normalization_form);
+
+      message("  omit-xml-declaration = %s\n",options->m_omit_xml_declaration ? "yes" : "no");
+
+      if (STANDALONE_YES == options->m_standalone)
+        message("  standalone = yes\n");
+      else if (STANDALONE_NO == options->m_standalone)
+        message("  standalone = no\n");
+      else
+        message("  standalone = omit\n");
+
+      message("  undeclare-prefixes = %s\n",options->m_undeclare_prefixes ? "yes" : "no");
+
+      message("  use-character-maps = ");
+      Iterator<NSName> ucmit;
+      for (ucmit = options->m_use_character_maps; ucmit.haveCurrent(); ucmit++) {
+        NSName nn = *ucmit;
+        message("%*",&nn);
         if (nl->next)
-          print("  ");
+          message("  ");
       }
-      print("\n");
+      message("\n");
 
-      print("  version = %s\n",options->version ? options->version : "(none)");
+      if (options->m_version.isNull())
+        message("  version = (none)\n");
+      else
+        message("  version = %*\n",&options->m_version);
 
 
-    print("\n");
+    message("\n");
   }
 }
 
@@ -162,18 +185,18 @@ static void dump_space_decls(xslt_source *source)
     if (decl->nnt->wcns && decl->nnt->wcname)
       stringbuf_format(buf,"*");
     else if (decl->nnt->wcns)
-      stringbuf_format(buf,"*:%s",decl->nnt->nn.name);
+      stringbuf_format(buf,"*:%*",&decl->nnt->nn.m_name);
     else if (decl->nnt->wcname)
-      stringbuf_format(buf,"%s:*",decl->nnt->nn.ns);
+      stringbuf_format(buf,"%*:*",&decl->nnt->nn.m_ns);
     else
-      stringbuf_format(buf,"%#n",decl->nnt->nn);
+      stringbuf_format(buf,"%*",&decl->nnt->nn);
     stringbuf_format(buf,"%#i",30-(buf->size-1));
     if (decl->preserve)
       stringbuf_format(buf,"preserve");
     else
       stringbuf_format(buf,"strip   ");
     stringbuf_format(buf," %d %f",decl->importpred,decl->priority);
-    print("%s\n",buf->data);
+    message("%s\n",buf->data);
     stringbuf_clear(buf);
   }
   stringbuf_free(buf);
@@ -182,24 +205,23 @@ static void dump_space_decls(xslt_source *source)
 int testxslt_main(int argc, char **argv)
 {
   struct arguments arguments;
-  error_info ei;
+  Error ei;
   int r = 0;
   xslt_source *source;
 
   setbuf(stdout,NULL);
-  memset(&ei,0,sizeof(error_info));
 
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
   if (0 != xslt_parse(&ei,arguments.filename,&source)) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
+    ei.fprint(stderr);
+    ei.clear();
     return 1;
   }
 
   if (arguments.tree)
-    xl_snode_print_tree(source->root,0);
+    source->root->printTree(0);
   else if (arguments.output_defs)
     dump_output_defs(source);
   else if (arguments.space_decls)

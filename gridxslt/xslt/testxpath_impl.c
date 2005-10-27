@@ -23,13 +23,15 @@
 #include "util/stringbuf.h"
 #include "util/namespace.h"
 #include "xmlschema/xmlschema.h"
-#include "xpath.h"
-#include "xslt.h"
+#include "Expression.h"
+#include "Statement.h"
 #include <stdio.h>
 #include <argp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+
+using namespace GridXSLT;
 
 /* static const char *argp_program_version = */
 /*   "testxpath 0.1"; */
@@ -96,10 +98,10 @@ int testxpath_main(int argc, char **argv)
   stringbuf *exprstr;
   stringbuf *input;
   char buf[1024];
-  xs_schema *s = NULL;
-  xl_snode *stmt = xl_snode_new(XSLT_INSTR_SEQUENCE);
-  xp_expr *expr;
-  error_info ei;
+  Schema *s = NULL;
+  Statement *stmt = new Statement(XSLT_INSTR_SEQUENCE);
+  Expression *expr;
+  Error ei;
   list *l;
   int r = 0;
 
@@ -110,10 +112,8 @@ int testxpath_main(int argc, char **argv)
 
   xs_init();
 
-  memset(&ei,0,sizeof(error_info));
-
   if (NULL == arguments.schema)
-    s = xs_schema_new(xs_g);
+    s = new Schema(xs_g);
   else if (NULL == (s = parse_xmlschema_file(arguments.schema,xs_g)))
     return 1;
 
@@ -142,48 +142,47 @@ int testxpath_main(int argc, char **argv)
     stringbuf_format(input,"%s",arguments.expr);
   }
 
-  if (NULL == (expr = xp_expr_parse(input->data,arguments.filename,1,&ei,0))) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
+  if (NULL == (expr = Expression_parse(input->data,arguments.filename,1,&ei,0))) {
+    ei.fprint(stderr);
+    ei.clear();
     return 1;
   }
 
-  xp_set_parent(expr,NULL,stmt);
+  expr->setParent(NULL,stmt);
   /* add default namespaces declared in schema */
   for (l = xs_g->namespaces->defs; l; l = l->next) {
     ns_def *ns = (ns_def*)l->data;
-    ns_add_direct(stmt->namespaces,ns->href,ns->prefix);
+    stmt->m_namespaces->add_direct(ns->href,ns->prefix);
   }
 
-  if (0 != xp_expr_resolve(expr,s,arguments.filename,&ei)) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
+  if (0 != expr->resolve(s,arguments.filename,&ei)) {
+    ei.fprint(stderr);
+    ei.clear();
     r = 1;
   }
   else {
     if (arguments.normalized_seqtypes) {
-      stringbuf *buf = stringbuf_new();
-      assert(XPATH_EXPR_INSTANCE_OF == expr->type);
-      assert(NULL != expr->st);
-      seqtype_print_fs(buf,expr->st,xs_g->namespaces);
-      printf("%s\n",buf->data);
-      stringbuf_free(buf);
+      StringBuffer buf;
+      assert(XPATH_EXPR_INSTANCE_OF == expr->m_type);
+      assert(!expr->m_st.isNull());
+      expr->m_st.printFS(buf,xs_g->namespaces);
+      message("%*\n",&buf);
     }
     else {
-      xp_expr_serialize(exprstr,expr,0);
-      printf("%s\n",exprstr->data);
+      expr->serialize(exprstr,0);
+      message("%s\n",exprstr->data);
     }
 
     if (arguments.tree)
-      xp_expr_print_tree(expr,0);
+      expr->printTree(0);
   }
 
-  xp_expr_free(expr);
+  delete expr;
   stringbuf_free(exprstr);
   stringbuf_free(input);
 
-  xl_snode_free(stmt);
-  xs_schema_free(s);
+  delete stmt;
+  delete s;
   xs_cleanup();
 
   return r;

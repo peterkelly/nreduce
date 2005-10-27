@@ -39,6 +39,8 @@
 #include <signal.h>
 #include <argp.h>
 
+using namespace GridXSLT;
+
 int binxml_main(int argc, char **argv);
 int genbindings_main(int argc, char **argv);
 int gridxslt_main(int argc, char **argv);
@@ -146,7 +148,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state)
     int namelen;
     int proglen;
     if (NULL == equals) {
-      fprintf(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
+      fmessage(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
       exit(1);
     }
     namelen = equals-arg;
@@ -235,36 +237,37 @@ void expand_args(char *program, char *infilename, char ***args)
       break;
     cur++;
   }
-  (*args)[argno++] = infilename;
+  (*args)[argno++] = infilename ? strdup(infilename) : infilename;
   (*args)[argno] = NULL;
 
   free(cmdline);
 }
 
-int run_program_inprocess(char *program, char *infilename, stringbuf *output, int *status)
+int run_program_inprocess(char *program, char *infilename, stringbuf *output,
+                          int justrun, int *status)
 {
   char **args;
   int i;
   mainfun fun = NULL;
   int argc = 0;
-  int outfd;
-  int stdout_backup;
-  int stderr_backup;
+  int outfd = -1;
+  int stdout_backup = -1;
+  int stderr_backup = -1;
   char buf[1024];
   int r;
 
-  if (0 > (outfd = open(TEMP_DIR"/output",O_WRONLY|O_CREAT|O_TRUNC,0666))) {
-    perror(TEMP_DIR"/output");
-    exit(1);
+  if (!justrun) {
+    if (0 > (outfd = open(TEMP_DIR"/output",O_WRONLY|O_CREAT|O_TRUNC,0666))) {
+      perror(TEMP_DIR"/output");
+      exit(1);
+    }
+
+    stdout_backup = dup(STDOUT_FILENO);
+    stderr_backup = dup(STDERR_FILENO);
+
+    dup2(outfd,STDOUT_FILENO);
+    dup2(outfd,STDERR_FILENO);
   }
-
-  stdout_backup = dup(STDOUT_FILENO);
-  stderr_backup = dup(STDERR_FILENO);
-
-/*   close(STDIN_FILENO); */
-/*   close(STDOUT_FILENO); */
-  dup2(outfd,STDOUT_FILENO);
-  dup2(outfd,STDERR_FILENO);
 
   expand_args(program,infilename,&args);
 
@@ -273,7 +276,7 @@ int run_program_inprocess(char *program, char *infilename, stringbuf *output, in
       fun = testprogs[i].fun;
 
   if (NULL == fun) {
-    fprintf(stderr,"No internal test function for program \"%s\"\n",args[0]);
+    fmessage(stderr,"No internal test function for program \"%s\"\n",args[0]);
     exit(1);
   }
 
@@ -281,29 +284,30 @@ int run_program_inprocess(char *program, char *infilename, stringbuf *output, in
     argc++;
 
   *status = fun(argc,args) << 8;
-  close(outfd);
+  if (!justrun)
+    close(outfd);
 
-/*   for (i = 0; args[i]; i++) */
-/*     free(args[i]); */
-/*   free(args); */
+  for (i = 0; args[i]; i++)
+    free(args[i]);
+  free(args);
 
-/*   close(STDIN_FILENO); */
-/*   close(STDOUT_FILENO); */
-  dup2(stdout_backup,STDOUT_FILENO);
-  dup2(stderr_backup,STDERR_FILENO);
-  close(stdout_backup);
-  close(stderr_backup);
+  if (!justrun) {
+    dup2(stdout_backup,STDOUT_FILENO);
+    dup2(stderr_backup,STDERR_FILENO);
+    close(stdout_backup);
+    close(stderr_backup);
 
-  if (0 > (outfd = open(TEMP_DIR"/output",O_RDONLY,0666))) {
-    perror(TEMP_DIR"/output");
-    exit(1);
+    if (0 > (outfd = open(TEMP_DIR"/output",O_RDONLY,0666))) {
+      perror(TEMP_DIR"/output");
+      exit(1);
+    }
+
+    while (0 < (r = read(outfd,buf,1024)))
+      stringbuf_append(output,buf,r);
+
+    close(outfd);
+    unlink(TEMP_DIR"/output");
   }
-
-  while (0 < (r = read(outfd,buf,1024)))
-    stringbuf_append(output,buf,r);
-
-  close(outfd);
-  unlink(TEMP_DIR"/output");
 
   return 0;
 }
@@ -358,31 +362,31 @@ void printdiff(stringbuf *expected, stringbuf *actual)
   FILE *f;
 
   if (NULL == (f = fopen(TEMP_DIR"/expected","w"))) {
-    fprintf(stderr,"Can't write to "TEMP_DIR"/expected: %s\n",strerror(errno));
+    fmessage(stderr,"Can't write to "TEMP_DIR"/expected: %s\n",strerror(errno));
     exit(1);
   }
   fwrite(expected->data,1,expected->size-1,f);
   fclose(f);
 
   if (NULL == (f = fopen(TEMP_DIR"/actual","w"))) {
-    fprintf(stderr,"Can't write to "TEMP_DIR"/actual: %s\n",strerror(errno));
+    fmessage(stderr,"Can't write to "TEMP_DIR"/actual: %s\n",strerror(errno));
     exit(1);
   }
   fwrite(actual->data,1,actual->size-1,f);
   fclose(f);
 
   if (-1 == system("diff -up "TEMP_DIR"/expected "TEMP_DIR"/actual")) {
-    fprintf(stderr,"system() failed\n");
+    fmessage(stderr,"system() failed\n");
     exit(1);
   }
 
   if (0 != unlink(TEMP_DIR"/expected")) {
-    fprintf(stderr,"Can't delete "TEMP_DIR"/expected: %s\n",strerror(errno));
+    fmessage(stderr,"Can't delete "TEMP_DIR"/expected: %s\n",strerror(errno));
     exit(1);
   }
 
   if (0 != unlink(TEMP_DIR"/actual")) {
-    fprintf(stderr,"Can't delete "TEMP_DIR"/actual: %s\n",strerror(errno));
+    fmessage(stderr,"Can't delete "TEMP_DIR"/actual: %s\n",strerror(errno));
     exit(1);
   }
 }
@@ -398,7 +402,7 @@ void process_valgrind_log(struct arguments *args, stringbuf *output)
   int r;
   char *line;
   if (NULL == (dir = opendir(TEMP_DIR))) {
-    fprintf(stderr,"Can't open directory %s: %s\n",TEMP_DIR,strerror(errno));
+    fmessage(stderr,"Can't open directory %s: %s\n",TEMP_DIR,strerror(errno));
     exit(1);
   }
   while (NULL != (entry = readdir(dir))) {
@@ -409,11 +413,11 @@ void process_valgrind_log(struct arguments *args, stringbuf *output)
   }
   closedir(dir);
   if (NULL == vglog) {
-    fprintf(stderr,"Could not find valgrind log file in %s\n",TEMP_DIR);
+    fmessage(stderr,"Could not find valgrind log file in %s\n",TEMP_DIR);
     exit(1);
   }
   if (NULL == (vgf = fopen(vglog,"r"))) {
-    fprintf(stderr,"Can't open valgrind log file %s: %s\n",vglog,strerror(errno));
+    fmessage(stderr,"Can't open valgrind log file %s: %s\n",vglog,strerror(errno));
     exit(1);
   }
 
@@ -422,7 +426,7 @@ void process_valgrind_log(struct arguments *args, stringbuf *output)
 
   fclose(vgf);
   if (0 != unlink(vglog)) {
-    fprintf(stderr,"Could not delete valgrind log file %s: %s\n",vglog,strerror(errno));
+    fmessage(stderr,"Could not delete valgrind log file %s: %s\n",vglog,strerror(errno));
     exit(1);
   }
   free(vglog);
@@ -531,7 +535,7 @@ char *find_program(char *cmdline)
   if (NULL == fullname) {
     program_loc *pl;
     if (NULL == (fullname = find_program_r(name,"."))) {
-      fprintf(stderr,"Cannot find program \"%s\"\n",name);
+      fmessage(stderr,"Cannot find program \"%s\"\n",name);
       exit(1);
     }
     pl = (program_loc*)calloc(1,sizeof(program_loc));
@@ -601,7 +605,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   int subst = 0;
 
   if (!justrun && !args->hide_output)
-    printf("%-80s... ",filename);
+    message("%-80s... ",filename);
 
   if (NULL == (in = fopen(filename,"r"))) {
     perror(filename);
@@ -660,7 +664,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
           skipsubst = 1;
         }
         else if (NULL != cmdline) {
-          fprintf(stderr,"%s: more than one cmdline specified\n",filename);
+          fmessage(stderr,"%s: more than one cmdline specified\n",filename);
           exit(1);
         }
         else if (args->valgrind) {
@@ -686,27 +690,27 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
         break;
       case STATE_FILE:
         if (NULL != out) {
-          fprintf(out,"%s\n",line);
+          fmessage(out,"%s\n",line);
         }
         else {
           filename = (char*)malloc(strlen(TEMP_DIR)+1+strlen(line)+1);
           sprintf(filename,"%s/%s",TEMP_DIR,line);
           if (NULL == (out = fopen(filename,"w"))) {
-            fprintf(stderr,"Can't write to %s: %s\n",filename,strerror(errno));
+            fmessage(stderr,"Can't write to %s: %s\n",filename,strerror(errno));
             exit(1);
           }
           list_append(&output_files,filename);
         }
         break;
       case STATE_INPUT:
-        fprintf(input,"%s\n",line);
+        fmessage(input,"%s\n",line);
         break;
       case STATE_OUTPUT:
         stringbuf_format(expected,"%s\n",line);
         break;
       case STATE_RETURN:
         if (got_expected_rc) {
-          fprintf(stderr,"Invalid test file: already got expected return code\n");
+          fmessage(stderr,"Invalid test file: already got expected return code\n");
           exit(1);
         }
         expected_rc = atoi(line);
@@ -732,19 +736,19 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   fclose(input);
 
   if ((STATE_RETURN != state) || !got_expected_rc || (NULL == cmdline)) {
-    fprintf(stderr,"Invalid test file\n");
+    fmessage(stderr,"Invalid test file\n");
     exit(1);
   }
 
   if (skipsubst && subst && !justrun && !args->hide_output) {
-    printf("skipped\n");
+    message("skipped\n");
     passed = 1;
   }
   else {
     char *infilename = output_files ? NULL : tempname;
 
     if (args->inprocess)
-      run_program_inprocess(cmdline,infilename,output,&status);
+      run_program_inprocess(cmdline,infilename,output,justrun,&status);
     else
       run_program_exec(cmdline,infilename,output,&status);
 
@@ -763,64 +767,64 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
         printdiff(expected,output);
       }
       else {
-        printf("%s",output->data);
+        message("%s",output->data);
       }
       if (WIFSIGNALED(status)) {
-        printf("%s\n",sys_siglist[WTERMSIG(status)]);
+        message("%s\n",sys_siglist[WTERMSIG(status)]);
       }
       else if (!WIFEXITED(status)) {
-        printf("abnormal termination\n");
+        message("abnormal termination\n");
       }
       else {
-        printf("program exited with status %d\n",WEXITSTATUS(status));
+        message("program exited with status %d\n",WEXITSTATUS(status));
       }
     }
     else {
 
-/*       printf("status = %d, WEXITSTATUS = %d\n",status,WEXITSTATUS(status)); */
+/*       message("status = %d, WEXITSTATUS = %d\n",status,WEXITSTATUS(status)); */
 
       if (WIFSIGNALED(status)) {
         if (!args->hide_output)
-          printf("%s\n",sys_siglist[WTERMSIG(status)]);
+          message("%s\n",sys_siglist[WTERMSIG(status)]);
       }
       else if (!WIFEXITED(status)) {
         if (!args->hide_output)
-          printf("abnormal termination\n");
+          message("abnormal termination\n");
       }
       else if (WEXITSTATUS(status) != expected_rc) {
         if (!args->hide_output)
-          printf("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
+          message("incorrect exit status %d (expected %d)\n",WEXITSTATUS(status),expected_rc);
       }
       else if ((expected->size != output->size) ||
                memcmp(expected->data,output->data,expected->size-1)) {
         if (!args->hide_output) {
-          printf("incorrect output\n");
+          message("incorrect output\n");
           if (args->diff)
             printdiff(expected,output);
         }
       }
       else if (1 != vgoutput->size) {
         if (!args->hide_output)
-          printf("valgrind errors\n");
+          message("valgrind errors\n");
       }
       else {
         if (!args->hide_output)
-          printf("passed\n");
+          message("passed\n");
         passed = 1;
       }
     }
 
     if (1 != vgoutput->size) {
-      printf("%s",vgoutput->data);
+      message("%s",vgoutput->data);
     }
   }
 
 
   free(cmdline);
 
-/*   printf("got %d bytes of output\n",output->size-1); */
-/*   printf("output: (%d) ***%s***\n",output->size-1,output->data); */
-/*   printf("expected: (%d) ***%s***\n",expected->size-1,expected->data); */
+/*   message("got %d bytes of output\n",output->size-1); */
+/*   message("output: (%d) ***%s***\n",output->size-1,output->data); */
+/*   message("expected: (%d) ***%s***\n",expected->size-1,expected->data); */
 
 
   stringbuf_free(output);
@@ -829,14 +833,14 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
   stringbuf_free(indata);
 
   if (0 != unlink(tempname)) {
-    fprintf(stderr,"Can't delete %s: %s\n",tempname,strerror(errno));
+    fmessage(stderr,"Can't delete %s: %s\n",tempname,strerror(errno));
     exit(1);
   }
 
   for (l = output_files; l; l = l->next) {
     out_filename = (char*)l->data;
     if (0 != unlink(out_filename)) {
-      fprintf(stderr,"Can't delete %s: %s\n",out_filename,strerror(errno));
+      fmessage(stderr,"Can't delete %s: %s\n",out_filename,strerror(errno));
       exit(1);
     }
   }
@@ -933,8 +937,8 @@ int process_dir(char *testdir, struct arguments *args)
       return 1;
   }
 
-  printf("Passes: %d\n",passes);
-  printf("Failures: %d\n",failures);
+  message("Passes: %d\n",passes);
+  message("Failures: %d\n",failures);
 
   if (0 == failures)
     return 0;
@@ -955,12 +959,12 @@ void clear_tempdir()
     char *path = (char*)malloc(strlen(TEMP_DIR)+1+strlen(entry->d_name)+1);
     sprintf(path,"%s/%s",TEMP_DIR,entry->d_name);
     if (0 != stat(path,&statbuf)) {
-      fprintf(stderr,"Can't stat %s: %s\n",path,strerror(errno));
+      fmessage(stderr,"Can't stat %s: %s\n",path,strerror(errno));
       exit(1);
     }
     if (S_ISREG(statbuf.st_mode)) {
       if (0 != unlink(path)) {
-        fprintf(stderr,"Can't delete %s: %s\n",path,strerror(errno));
+        fmessage(stderr,"Can't delete %s: %s\n",path,strerror(errno));
         exit(1);
       }
     }
@@ -970,7 +974,7 @@ void clear_tempdir()
   closedir(dir);
 
   if (0 != rmdir(TEMP_DIR)) {
-    fprintf(stderr,"Can't remove directory %s: %s\n",TEMP_DIR,strerror(errno));
+    fmessage(stderr,"Can't remove directory %s: %s\n",TEMP_DIR,strerror(errno));
     exit(1);
   }
 }
@@ -1001,7 +1005,7 @@ int main(int argc, char **argv)
   clear_tempdir();
 
   if (0 != mkdir(TEMP_DIR,0770)) {
-    fprintf(stderr,"Can't create directory %s: %s\n",TEMP_DIR,strerror(errno));
+    fmessage(stderr,"Can't create directory %s: %s\n",TEMP_DIR,strerror(errno));
     exit(1);
   }
 
@@ -1011,7 +1015,7 @@ int main(int argc, char **argv)
     r = process_dir(arguments.path,&arguments);
 
   if (0 != rmdir(TEMP_DIR)) {
-    fprintf(stderr,"Can't remove directory %s: %s\n",TEMP_DIR,strerror(errno));
+    fmessage(stderr,"Can't remove directory %s: %s\n",TEMP_DIR,strerror(errno));
     exit(1);
   }
 

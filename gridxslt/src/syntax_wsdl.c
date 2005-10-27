@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+using namespace GridXSLT;
+
 void wsdl_skip_others_strict(xmlNodePtr *c)
 {
   while ((*c) && (XML_ELEMENT_NODE != (*c)->type))
@@ -48,7 +50,7 @@ void wsdl_skip_others(xmlNodePtr *c)
   while ((*c) &&
          ((XML_ELEMENT_NODE != (*c)->type) ||
            (NULL == (*c)->ns) ||
-           (strcmp((*c)->ns->href,WSDL_NAMESPACE)))) {
+           ((*c)->ns->href != WSDL_NAMESPACE))) {
     (*c) = (*c)->next;
   }
 }
@@ -158,7 +160,7 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   while (*mptr)
     mptr = &((*mptr)->next);
 
-  name = xmlGetProp(n,"name");
+  name = XMLGetProp(n,"name");
   if (NULL == name)
     return missing_attribute(n,"name");
 
@@ -181,9 +183,9 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c) {
-    char *name = xmlGetProp(c,"name");
-    char *element = xmlGetProp(c,"element");
-    char *type = xmlGetProp(c,"type");
+    char *name = XMLGetProp(c,"name");
+    char *element = XMLGetProp(c,"element");
+    char *type = XMLGetProp(c,"type");
     ws_part *p;
 
     if (!check_element(c,"part",WSDL_NAMESPACE))
@@ -221,8 +223,8 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 
 int wsdl_parse_param(wsdl *w, xmlNodePtr c2, xmlDocPtr doc, ws_param **p, int req_name)
 {
-  char *name = xmlGetProp(c2,"name");
-  char *message = xmlGetProp(c2,"message");
+  char *name = XMLGetProp(c2,"name");
+  char *message = XMLGetProp(c2,"message");
   ws_message *m;
   *p = NULL;
   if (NULL == message)
@@ -251,7 +253,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   while (*ptptr)
     ptptr = &((*ptptr)->next);
 
-  name = xmlGetProp(n,"name");
+  name = XMLGetProp(n,"name");
   if (NULL == name)
     return missing_attribute(n,"name");
 
@@ -274,7 +276,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c) {
-    char *name = xmlGetProp(c,"name");
+    char *name = XMLGetProp(c,"name");
     ws_operation *o;
     ws_param **fptr;
     xmlNodePtr c2;
@@ -332,7 +334,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 int wsdl_parse_bindparam(wsdl *w, ws_operation *o, xmlNodePtr c2, xmlDocPtr doc,
                          ws_bindparam **p, int fault)
 {
-  char *name = xmlGetProp(c2,"name");
+  char *name = XMLGetProp(c2,"name");
   *p = NULL;
   if (fault && (NULL == name))
     return missing_attribute(c2,"name");
@@ -355,8 +357,8 @@ int wsdl_parse_bindparam(wsdl *w, ws_operation *o, xmlNodePtr c2, xmlDocPtr doc,
 
 int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
-  char *name = xmlGetProp(n,"name");
-  char *type = xmlGetProp(n,"type");
+  char *name = XMLGetProp(n,"name");
+  char *type = XMLGetProp(n,"type");
   ws_port_type *pt;
   ws_binding *b;
   xmlNodePtr c;
@@ -395,7 +397,7 @@ int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   wsdl_skip_others(&c); /* this allows extensibility elements */
 
   while (c) {
-    char *name = xmlGetProp(c,"name");
+    char *name = XMLGetProp(c,"name");
     ws_bindop *bo;
     ws_bindparam **fptr;
     xmlNodePtr c2;
@@ -463,7 +465,7 @@ int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 
 int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
-  char *name = xmlGetProp(n,"name");
+  char *name = XMLGetProp(n,"name");
   ws_service *s;
   ws_service **sptr = &w->services;
   ws_port **pptr;
@@ -489,8 +491,8 @@ int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c && check_element(c,"port",WSDL_NAMESPACE)) {
-    char *name = xmlGetProp(c,"name");
-    char *binding = xmlGetProp(c,"binding");
+    char *name = XMLGetProp(c,"name");
+    char *binding = XMLGetProp(c,"binding");
     ws_port *p;
     xmlNodePtr c2;
     ws_binding *b;
@@ -531,8 +533,8 @@ int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 int wsdl_parse_definitions(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
   xmlNodePtr c;
-  char *name = xmlGetProp(n,"name");
-  char *target_ns = xmlGetProp(n,"targetNamespace");
+  char *name = XMLGetProp(n,"name");
+  char *target_ns = XMLGetProp(n,"targetNamespace");
 
   if (NULL != name)
     w->name = strdup(name);
@@ -612,18 +614,18 @@ wsdl *parse_wsdl(FILE *f)
   wsdl *w;
 
   if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
-    fprintf(stderr,"XML parse error.\n");
+    fmessage(stderr,"XML parse error.\n");
     return NULL;
   }
 
   if (NULL == (root = xmlDocGetRootElement(doc))) {
-    fprintf(stderr,"No root element.\n");
+    fmessage(stderr,"No root element.\n");
     xmlFreeDoc(doc);
     return NULL;
   }
 
   if (!check_element(root,"definitions",WSDL_NAMESPACE)) {
-    printf("Invalid element at root: %s\n",root->name);
+    message("Invalid element at root: %s\n",root->name);
     xmlFreeDoc(doc);
     return NULL;
   }

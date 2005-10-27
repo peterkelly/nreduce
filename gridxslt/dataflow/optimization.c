@@ -23,42 +23,44 @@
 #include "optimization.h"
 #include "validity.h"
 
-void df_remove_redundant(df_program *program, df_function *fun)
+using namespace GridXSLT;
+
+void df_remove_redundant(Program *program, Function *fun)
 {
   while (1) {
-    list *l;
     int removed = 0;
-    for (l = fun->instructions; l; l = l->next) {
-      df_instruction *instr = (df_instruction*)l->data;
-      if ((OP_SWALLOW == instr->opcode) &&
-          (NULL != instr->inports[0].source) &&
-          (OP_DUP == instr->inports[0].source->opcode) &&
-          (NULL != instr->inports[0].source->inports[0].source)) {
+    Iterator<Instruction*> it;
+    for (it = fun->m_instructions; it.haveCurrent(); it++) {
+      Instruction *instr = *it;
+      if ((OP_SWALLOW == instr->m_opcode) &&
+          (NULL != instr->m_inports[0].source) &&
+          (OP_DUP == instr->m_inports[0].source->m_opcode) &&
+          (NULL != instr->m_inports[0].source->m_inports[0].source)) {
 
-        df_instruction *dup = instr->inports[0].source;
-        df_instruction *source = dup->inports[0].source;
-        int sourcep = dup->inports[0].sourcep;
-        df_instruction *dest;
+        Instruction *dup = instr->m_inports[0].source;
+        Instruction *source = dup->m_inports[0].source;
+        int sourcep = dup->m_inports[0].sourcep;
+        Instruction *dest;
         int destp;
 
 /*         debugl("Redundant: swallow %s:%d, dup %s:%d", */
-/*                fun->name,instr->id,fun->name,dup->id); */
+/*                fun->name,instr->m_id,fun->name,dup->id); */
 
-        if (0 == instr->inports[0].sourcep) {
-          dest = dup->outports[1].dest;
-          destp = dup->outports[1].destp;
+        if (0 == instr->m_inports[0].sourcep) {
+          dest = dup->m_outports[1].dest;
+          destp = dup->m_outports[1].destp;
         }
         else {
-          dest = dup->outports[0].dest;
-          destp = dup->outports[0].destp;
+          dest = dup->m_outports[0].dest;
+          destp = dup->m_outports[0].destp;
         }
 
-        source->outports[sourcep].dest = dest;
-        source->outports[sourcep].destp = destp;
-        dest->inports[destp].source = source;
-        dest->inports[destp].sourcep = sourcep;
-        df_delete_instruction(program,fun,instr);
-        df_delete_instruction(program,fun,dup);
+        source->m_outports[sourcep].dest = dest;
+        source->m_outports[sourcep].destp = destp;
+        dest->m_inports[destp].source = source;
+        dest->m_inports[destp].sourcep = sourcep;
+        fun->deleteInstruction(instr);
+        fun->deleteInstruction(dup);
         removed = 1;
         break;
       }

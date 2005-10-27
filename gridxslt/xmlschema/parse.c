@@ -36,12 +36,14 @@
 #include <assert.h>
 #include <ctype.h>
 
-int xs_check_attribute_type(xs_schema *s, xs_reference *r)
+using namespace GridXSLT;
+
+int xs_check_attribute_type(Schema *s, Reference *r)
 {
-  xs_attribute *a = (xs_attribute*)r->source;
+  SchemaAttribute *a = (SchemaAttribute*)r->source;
   assert(a->type);
   if (a->type->complex)
-    return error(&s->ei,s->uri,r->def.loc.line,NULL,"Attributes can only use simple types");
+    return error(&s->ei,s->uri,r->def.loc.line,String::null(),"Attributes can only use simple types");
   return 0;
 }
 
@@ -71,12 +73,12 @@ xmlNodePtr xs_first_non_annotation_child(xmlNodePtr n)
   return c;
 }
 
-int xs_parse_max_occurs(xs_schema *s, xmlNodePtr n, int *val)
+int xs_parse_max_occurs(Schema *s, xmlNodePtr n, int *val)
 {
   /* FIXME: what to do if minOccurs > maxOccurs? should we set maxOccurs to the higher value,
      or signal an error? */
   char *str;
-  if ((NULL != (str = xmlGetProp(n,"maxOccurs"))) && !strcmp(str,"unbounded")) {
+  if ((NULL != (str = XMLGetProp(n,"maxOccurs"))) && !strcmp(str,"unbounded")) {
     *val = -1;
     free(str);
     return 0;
@@ -85,10 +87,10 @@ int xs_parse_max_occurs(xs_schema *s, xmlNodePtr n, int *val)
   return parse_optional_int_attr(&s->ei,s->uri,n,"maxOccurs",val,1);
 }
 
-int xs_check_sgheadref(xs_schema *s, xs_reference *r)
+int xs_check_sgheadref(Schema *s, Reference *r)
 {
-  xs_element *source = (xs_element*)r->source;
-  xs_element *head = (xs_element*)r->target;
+  SchemaElement *source = (SchemaElement*)r->source;
+  SchemaElement *head = (SchemaElement*)r->target;
 /*   debugl("resolved sghead for %s: %s\n",source->name,head->name); */
 /*   debugl("head->exclude_extension = %d\n",head->exclude_extension); */
 /*   debugl("head->exclude_restriction = %d\n",head->exclude_restriction); */
@@ -96,76 +98,74 @@ int xs_check_sgheadref(xs_schema *s, xs_reference *r)
   return 0;
 }
 
-int xs_check_forbidden_attribute(xs_schema *s, xmlNodePtr n, char *attrname)
+int xs_check_forbidden_attribute(Schema *s, xmlNodePtr n, char *attrname)
 {
-  if (xmlHasProp(n,attrname))
+  if (XMLHasProp(n,attrname))
     return attribute_not_allowed(&s->ei,s->uri,n->line,attrname);
   return 0;
 }
 
-int xs_init_toplevel_object(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                            symbol_space *ss, void *obj, char **obj_name,
-                            char **obj_ns, char *typestr)
+int xs_init_toplevel_object(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                            symbol_space *ss, void *obj, NSName *ident, char *typestr)
 {
   char *name;
-  if (!xmlHasProp(n,"name"))
-    return missing_attribute2(&s->ei,s->uri,n->line,NULL,"name");
-  name = get_wscollapsed_attr(n,"name",NULL);
+  if (!XMLHasProp(n,"name"))
+    return missing_attribute2(&s->ei,s->uri,n->line,String::null(),"name");
+  name = get_wscollapsed_attr(n,"name",String::null());
 
-  if (NULL != ss_lookup_local(ss,nsname_temp(ns,name))) {
-    error(&s->ei,s->uri,n->line,NULL,"%s \"%s\" already declared",typestr,name);
+  if (NULL != ss_lookup_local(ss,NSName(ns,name))) {
+    error(&s->ei,s->uri,n->line,String::null(),"%s \"%s\" already declared",typestr,name);
     free(name);
     return -1;
   }
-  ss_add(ss,nsname_temp(ns,name),obj);
 
-  *obj_name = name;
-  if (ns)
-    *obj_ns = strdup(ns);
+  *ident = NSName(ns,name);
+
+  ss_add(ss,*ident,obj);
 
   return 0;
 }
 
-int xs_check_conflicting_attributes(xs_schema *s, xmlNodePtr n, const char *attrname1,
+int xs_check_conflicting_attributes(Schema *s, xmlNodePtr n, const char *attrname1,
                                     const char *attrname2, const char *errname)
 {
-  if (xmlHasProp(n,attrname1) && xmlHasProp(n,attrname2))
+  if (XMLHasProp(n,attrname1) && XMLHasProp(n,attrname2))
     return conflicting_attributes(&s->ei,s->uri,n->line,errname,attrname1,attrname2);
   return 0;
 }
 
-int xs_parse_value_constraint(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_value_constraint *vc,
+int GridXSLT::xs_parse_value_constraint(Schema *s, xmlNodePtr n, xmlDocPtr doc, ValueConstraint *vc,
                               const char *errname)
 {
-  vc->type = XS_VALUE_CONSTRAINT_NONE;
+  vc->type = VALUECONSTRAINT_NONE;
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"default","fixed",errname))
-  if (xmlHasProp(n,"default")) {
-    vc->value = xmlGetProp(n,"default");
-    vc->type = XS_VALUE_CONSTRAINT_DEFAULT;
+  if (XMLHasProp(n,"default")) {
+    vc->value = XMLGetProp(n,"default");
+    vc->type = VALUECONSTRAINT_DEFAULT;
   }
-  else if (xmlHasProp(n,"fixed")) {
-    vc->value = xmlGetProp(n,"fixed");
-    vc->type = XS_VALUE_CONSTRAINT_FIXED;
+  else if (XMLHasProp(n,"fixed")) {
+    vc->value = XMLGetProp(n,"fixed");
+    vc->type = VALUECONSTRAINT_FIXED;
   }
   return 0;
 }
 
-int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int type,
-                 void **obj, xs_reference **refptr)
+int GridXSLT::xs_parse_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int type,
+                 void **obj, Reference **refptr)
 {
   char *namestr;
   char *name = NULL;
   char *ns = NULL;
-  xs_reference *r;
-  qname qn;
+  Reference *r;
+  QName qn;
 
   *refptr = NULL;
 
-  if (!xmlHasProp(n,attrname))
+  if (!XMLHasProp(n,attrname))
     return 0;
 
-  namestr = get_wscollapsed_attr(n,attrname,NULL);
-  qn = qname_parse(namestr);
+  namestr = get_wscollapsed_attr(n,attrname,String::null());
+  qn = QName::parse(namestr);
 /*   debugl("line %d: Parsing %s reference %s",n->line,ss->type,namestr); */
 
   /* @implements(xmlschema-1:src-qname.1) @end
@@ -180,20 +180,18 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
      @implements(xmlschema-1:src-qname.2.2.2) @end */
   if (0 != get_ns_name_from_qname(n,doc,namestr,&ns,&name)) {
     error(&s->ei,s->uri,n->line,"src-qname.1.1",
-          "Could not resolve namespace for prefix \"%s\"",qn.prefix);
-    qname_free(qn);
+          "Could not resolve namespace for prefix \"%*\"",&qn.m_prefix);
     free(namestr);
     return -1;
   }
 
   if (NULL != ns)
-    ns_add_preferred(s->globals->namespaces,ns,qn.prefix);
-  qname_free(qn);
+    s->globals->namespaces->add_preferred(ns,qn.m_prefix);
   free(namestr);
 
-  *refptr = r = xs_reference_new(s->as);
+  *refptr = r = new Reference(s->as);
   r->s = s;
-  r->def.ident = nsname_new(ns,name);
+  r->def.ident = NSName(ns,name);
   r->def.loc.line = n->line;
   r->type = type;
   r->obj = obj;
@@ -203,11 +201,11 @@ int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int 
   return 0;
 }
 
-int xs_parse_form(xs_schema *s, xmlNodePtr n, int *qualified)
+int GridXSLT::xs_parse_form(Schema *s, xmlNodePtr n, int *qualified)
 {
   char *form;
   int invalid = 0;
-  if (NULL == (form = get_wscollapsed_attr(n,"form",NULL)))
+  if (NULL == (form = get_wscollapsed_attr(n,"form",String::null())))
     return 0;
 
   if (!strcmp(form,"qualified"))
@@ -223,7 +221,7 @@ int xs_parse_form(xs_schema *s, xmlNodePtr n, int *qualified)
     return 0;
 }
 
-int xs_parse_block_final(const char *str, int *extension, int *restriction,
+int GridXSLT::xs_parse_block_final(const char *str, int *extension, int *restriction,
                          int *substitution, int *list, int *union1)
 {
   char *val = strdup(str);
@@ -282,15 +280,15 @@ int xs_parse_block_final(const char *str, int *extension, int *restriction,
   return 0;
 }
 
-int xs_parse_block_final_attr(xs_schema *s, xmlNodePtr n, const char *attrname,
+int xs_parse_block_final_attr(Schema *s, xmlNodePtr n, const char *attrname,
                               const char *defaultval, int *extension, int *restriction,
                               int *substitution, int *list, int *union1)
 {
   char *val;
   int r;
 
-  if (xmlHasProp(n,attrname))
-    val = xmlGetProp(n,attrname);
+  if (XMLHasProp(n,attrname))
+    val = XMLGetProp(n,attrname);
   else if (NULL != defaultval)
     val = strdup(defaultval);
   else
@@ -303,9 +301,9 @@ int xs_parse_block_final_attr(xs_schema *s, xmlNodePtr n, const char *attrname,
 
 /* possible parents: <schema> <complexType> <group> */
 
-int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list **particles_list)
+int GridXSLT::xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s, list **particles_list)
 {
-  xs_element *e;
+  SchemaElement *e;
   xmlNodePtr c;
 
   /* @implements(xmlschema-1:src-element.4) @end
@@ -340,10 +338,9 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
 
   /* case 1: parent is <schema> */
   if (NULL == particles_list) {
-    e = xs_element_new(s->as);
+    e = new SchemaElement(s->as);
     e->def.loc.line = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_elements,e,
-               &e->def.ident.name,&e->def.ident.ns,"element"))
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_elements,e,&e->def.ident,"element"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"form"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"minOccurs"))
@@ -374,8 +371,8 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
     /* FIXME: if minOccurs=maxOccurs=0 we should not create anything */
 
     /* case 2: has ancestor of <complexType> or <group> and #ref is absent */
-    if (!xmlHasProp(n,"ref")) {
-      xs_particle *p;
+    if (!XMLHasProp(n,"ref")) {
+      Particle *p;
       int qualified = s->elemformq;
 
       /* @implements(xmlschema-1:Element Declaration{target namespace})
@@ -394,33 +391,33 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
       /* @implements(xmlschema-1:src-element.2.1)
          test { element_noname.test }
          @end */
-      if (!xmlHasProp(n,"name"))
+      if (!XMLHasProp(n,"name"))
         return missing_attribute2(&s->ei,s->uri,n->line,"src-element.2.1","name");
 
-      e = xs_element_new(s->as);
+      e = new SchemaElement(s->as);
       e->def.loc.line = n->line;
-      p = xs_particle_new(s->as);
+      p = new Particle(s->as);
       p->range.min_occurs = min_occurs_val;
       p->range.max_occurs = max_occurs_val;
       p->term.e = e;
-      p->term_type = XS_PARTICLE_TERM_ELEMENT;
+      p->term_type = PARTICLE_TERM_ELEMENT;
       p->defline = e->def.loc.line;
       list_append(particles_list,p);
 
       /* FIXME: testcases for form */
-      e->def.ident.name = xmlGetProp(n,"name");
+      e->def.ident.m_name = XMLGetProp(n,"name");
       if (ns && qualified)
-        e->def.ident.ns = strdup(ns);
+        e->def.ident.m_ns = ns;
     }
 
     /* case 3: has ancestor of <complexType> or <group> and #ref is present */
     else {
       xmlNodePtr c;
-      xs_particle *p = xs_particle_new(s->as);
+      Particle *p = new Particle(s->as);
       p->range.min_occurs = min_occurs_val;
       p->range.max_occurs = max_occurs_val;
       p->term.e = NULL; /* will be resolved later */
-      p->term_type = XS_PARTICLE_TERM_ELEMENT;
+      p->term_type = PARTICLE_TERM_ELEMENT;
       p->defline = n->line;
       list_append(particles_list,p);
 
@@ -508,7 +505,7 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
        test { element_type_complextype.test }
        test { element_type_simpletype.test }
        @end */
-    if (xmlHasProp(n,"type"))
+    if (XMLHasProp(n,"type"))
       return error(&s->ei,s->uri,n->line,"src-element.3","\"type\" attribute must not be specified "
                    "if a <simpleType> or <complexType> child is present");
 
@@ -517,12 +514,13 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
       xs_next_element(&c);
     }
     else { /* complexType */
-      CHECK_CALL(xs_parse_complex_type(s,c,doc,ns,0,&e->type,e->def.ident.name,e->def.ident.ns))
+      CHECK_CALL(xs_parse_complex_type(s,c,doc,ns,0,
+                 &e->type,e->def.ident.m_name.cstring(),e->def.ident.m_ns.cstring()))
       assert(e->type);
       xs_next_element(&c);
     }
   }
-  else if (xmlHasProp(n,"type")) {
+  else if (XMLHasProp(n,"type")) {
     CHECK_CALL(xs_parse_ref(s,n,doc,"type",XS_OBJECT_TYPE,(void**)&e->type,&e->typeref))
 
   }
@@ -548,22 +546,22 @@ int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s, list *
   return 0;
 }
 
-int xs_parse_attribute_use(xs_schema *s, xmlNodePtr n, int *use)
+int GridXSLT::xs_parse_attribute_use(Schema *s, xmlNodePtr n, int *use)
 {
   char *str;
   int invalid = 0;
 
-  *use = XS_ATTRIBUTE_USE_OPTIONAL;
+  *use = ATTRIBUTEUSE_OPTIONAL;
 
-  if (NULL == (str = xmlGetProp(n,"use")))
+  if (NULL == (str = XMLGetProp(n,"use")))
     return 0;
 
   if (!strcmp(str,"optional"))
-    *use = XS_ATTRIBUTE_USE_OPTIONAL;
+    *use = ATTRIBUTEUSE_OPTIONAL;
   else if (!strcmp(str,"prohibited"))
-    *use = XS_ATTRIBUTE_USE_PROHIBITED;
+    *use = ATTRIBUTEUSE_PROHIBITED;
   else if (!strcmp(str,"required"))
-    *use = XS_ATTRIBUTE_USE_REQUIRED;
+    *use = ATTRIBUTEUSE_REQUIRED;
   else
     invalid = 1;
   free(str);
@@ -572,14 +570,14 @@ int xs_parse_attribute_use(xs_schema *s, xmlNodePtr n, int *use)
   return 0;
 }
 
-int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int GridXSLT::xs_parse_attribute(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                        int toplevel, list **aulist)
 {
-  xs_attribute_use *au = NULL;
-  xs_attribute *a = NULL;
+  AttributeUse *au = NULL;
+  SchemaAttribute *a = NULL;
   xmlNodePtr c;
-  int use = XS_ATTRIBUTE_USE_OPTIONAL;
-  xs_value_constraint *vcptr;
+  int use = ATTRIBUTEUSE_OPTIONAL;
+  ValueConstraint *vcptr;
 
   /* @implements(xmlschema-1:src-attribute.5) @end
      @implements(xmlschema-1:a-props-correct.1) @end
@@ -608,10 +606,10 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
 
   if (toplevel) {
     /* top-level attribute declaration */
-    a = xs_attribute_new(s->as);
+    a = new SchemaAttribute(s->as);
     a->def.loc.line = n->line;
     CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attributes,a,
-               &a->def.ident.name,&a->def.ident.ns,"attribute"))
+               &a->def.ident,"attribute"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"form"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"use"))
@@ -619,7 +617,7 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     vcptr = &a->vc;
     a->toplevel = 1;
   }
-  else if (xmlHasProp(n,"ref")) {
+  else if (XMLHasProp(n,"ref")) {
     /* local attribute reference */
     CHECK_CALL(xs_parse_attribute_use(s,n,&use))
 
@@ -632,10 +630,10 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     CHECK_CALL(xs_check_conflicting_attributes(s,n,"form","ref","src-attribute.3.2"))
     CHECK_CALL(xs_check_conflicting_attributes(s,n,"type","ref","src-attribute.3.2"))
 
-    au = xs_attribute_use_new(s->as);
+    au = new AttributeUse(s->as);
     au->defline = n->line;
-    au->required = (XS_ATTRIBUTE_USE_REQUIRED == use);
-    au->prohibited = (XS_ATTRIBUTE_USE_PROHIBITED == use);
+    au->required = (ATTRIBUTEUSE_REQUIRED == use);
+    au->prohibited = (ATTRIBUTEUSE_PROHIBITED == use);
     CHECK_CALL(xs_parse_ref(s,n,doc,"ref",XS_OBJECT_ATTRIBUTE,(void**)&au->attribute,&au->ref))
     vcptr = &au->vc;
     list_append(aulist,au);
@@ -658,21 +656,21 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     /* local attribute declaration */
     CHECK_CALL(xs_parse_attribute_use(s,n,&use))
 
-    a = xs_attribute_new(s->as);
+    a = new SchemaAttribute(s->as);
     a->def.loc.line = n->line;
-    au = xs_attribute_use_new(s->as);
+    au = new AttributeUse(s->as);
     au->defline = n->line;
 
     /* @implements(xmlschema-1:src-attribute.3.1)
        test { attribute_local_noname.test }
        @end */
-    if (!xmlHasProp(n,"name"))
+    if (!XMLHasProp(n,"name"))
       return missing_attribute2(&s->ei,s->uri,n->line,"src-attribute.3.1","name");
-    a->def.ident.name = xmlGetProp(n,"name");
+    a->def.ident.m_name = XMLGetProp(n,"name");
     if (ns && qualified)
-      a->def.ident.ns = strdup(ns);
-    au->required = (XS_ATTRIBUTE_USE_REQUIRED == use);
-    au->prohibited = (XS_ATTRIBUTE_USE_PROHIBITED == use);
+      a->def.ident.m_ns = ns;
+    au->required = (ATTRIBUTEUSE_REQUIRED == use);
+    au->prohibited = (ATTRIBUTEUSE_PROHIBITED == use);
     au->attribute = a;
 
     vcptr = &au->vc;
@@ -685,7 +683,7 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      @end */
   /* FIXME: when form is implemented, make sure attrs can be declared with the schema having
      a targetNamespace of XSI_NAMESPACE when the attr doesn't inherit this namespace } */
-  if (a && !strcmp(a->def.ident.name,"xmlns"))
+  if (a && (a->def.ident.m_name == "xmlns"))
     return error(&s->ei,s->uri,n->line,"no-xmlns","\"xmlns\" cannot be used as an attribute name");
 
   if (au && a) {
@@ -697,9 +695,9 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      test { attribute_tl_xsi.test }
      test { attribute_local_xsi.test }
      @end */
-  if (a && a->def.ident.ns && !strcmp(a->def.ident.ns,XSI_NAMESPACE))
+  if (a && (a->def.ident.m_ns == XSI_NAMESPACE))
     return error(&s->ei,s->uri,n->line,"no-xsi",
-                 "attributes cannot be declared with a target namespace of \"%s\"",XSI_NAMESPACE);
+                 "attributes cannot be declared with a target namespace of \"%*\"",&XSI_NAMESPACE);
   /* FIXME: need to add the 4 built-in types in section 3.2.7 by default */
 
   /* @implements(xmlschema-1:src-attribute.1)
@@ -720,11 +718,11 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
      test { attribute_local_ref_default_use2.test }
      test { attribute_local_ref_default_use3.test }
      @end */
-  if (xmlHasProp(n,"default") && (XS_ATTRIBUTE_USE_OPTIONAL != use))
+  if (XMLHasProp(n,"default") && (ATTRIBUTEUSE_OPTIONAL != use))
     return error(&s->ei,s->uri,n->line,"src-attribute.2",
                  "\"use\" must be \"optional\" when default value specified");
 
-  if (!xmlHasProp(n,"ref")) {
+  if (!XMLHasProp(n,"ref")) {
     CHECK_CALL(xs_parse_ref(s,n,doc,"type",XS_OBJECT_TYPE,(void**)&a->type,&a->typeref))
     if (a->typeref) {
       a->typeref->check = xs_check_attribute_type;
@@ -738,7 +736,7 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
 
     /* @implements(xmlschema-1:src-attribute.3) @end
        @implements(xmlschema-1:src-attribute.3.1) test { attribute_local_ref_simpletype.test } @end */
-    if (xmlHasProp(n,"ref"))
+    if (XMLHasProp(n,"ref"))
       return error(&s->ei,s->uri,c->line,"src-attribute.3.1",
                    "<simpleType> not allowed here when \"ref\" is set on <attribute>");
 
@@ -750,16 +748,16 @@ int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     assert(NULL != a->type);
   }
 
-  if (!xmlHasProp(n,"ref") && (NULL == a->type) && (NULL == a->typeref))
+  if (!XMLHasProp(n,"ref") && (NULL == a->type) && (NULL == a->typeref))
     a->type = s->globals->simple_ur_type;
 
   return 0;
 }
 
-int xs_parse_attribute_group_def(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns)
+int GridXSLT::xs_parse_attribute_group_def(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns)
 {
   xmlNodePtr c;
-  xs_attribute_group *ag = xs_attribute_group_new(s->as);
+  AttributeGroup *ag = new AttributeGroup(s->as);
 
   /* @implements(xmlschema-1:src-attribute_group.1) @end
      @implements(xmlschema-1:ag-props-correct.1) @end
@@ -771,7 +769,7 @@ int xs_parse_attribute_group_def(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char
    */
 
   CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_attribute_groups,ag,
-                                     &ag->def.ident.name,&ag->def.ident.ns,"attribute group"))
+                                     &ag->def.ident,"attribute group"))
   ag->def.loc.line = n->line;
   CHECK_CALL(xs_check_forbidden_attribute(s,n,"ref"))
 
@@ -798,14 +796,14 @@ int xs_parse_attribute_group_def(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char
   return 0;
 }
 
-int xs_parse_attribute_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int GridXSLT::xs_parse_attribute_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                                  list **reflist)
 {
-  xs_attribute_group_ref *agr = xs_attribute_group_ref_new(s->as);
+  AttributeGroupRef *agr = new AttributeGroupRef(s->as);
   CHECK_CALL(xs_check_forbidden_attribute(s,n,"name"))
 
-  if (!xmlHasProp(n,"ref"))
-    return missing_attribute2(&s->ei,s->uri,n->line,NULL,"ref");
+  if (!XMLHasProp(n,"ref"))
+    return missing_attribute2(&s->ei,s->uri,n->line,String::null(),"ref");
   CHECK_CALL(xs_parse_ref(s,n,doc,"ref",XS_OBJECT_ATTRIBUTE_GROUP,(void**)&agr->ag,&agr->ref))
   assert(agr->ref);
 
@@ -824,7 +822,7 @@ int xs_facet_num(const char *str)
   assert(0);
 }
 
-int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
+int xs_parse_facet(Schema *s, xmlNodePtr n, xs_facetdata *fd)
 {
   int facet = xs_facet_num(n->name);
 
@@ -834,19 +832,19 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
      test { simpletype_list_facet.test }
      test { simpletype_union_facets.test }
      @end */
-  if (!xmlHasProp(n,"value"))
-    return missing_attribute2(&s->ei,s->uri,n->line,NULL,"value");
+  if (!XMLHasProp(n,"value"))
+    return missing_attribute2(&s->ei,s->uri,n->line,String::null(),"value");
 
   if (XS_FACET_PATTERN == facet) {
-    list_append(&fd->patterns,xmlGetProp(n,"value"));
+    list_append(&fd->patterns,XMLGetProp(n,"value"));
   }
   else if (XS_FACET_ENUMERATION == facet) {
-    list_append(&fd->enumerations,xmlGetProp(n,"value"));
+    list_append(&fd->enumerations,XMLGetProp(n,"value"));
   }
   else {
     if (NULL != fd->strval[facet])
-      return error(&s->ei,s->uri,n->line,NULL,"facet already defined");
-    fd->strval[facet] = get_wscollapsed_attr(n,"value",NULL);
+      return error(&s->ei,s->uri,n->line,String::null(),"facet already defined");
+    fd->strval[facet] = get_wscollapsed_attr(n,"value",String::null());
     fd->defline[facet] = n->line;
 
     if ((XS_FACET_MINLENGTH == facet) ||
@@ -855,13 +853,13 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
         (XS_FACET_TOTALDIGITS == facet) ||
         (XS_FACET_FRACTIONDIGITS == facet)) {
       if (0 != convert_to_nonneg_int(fd->strval[facet],&fd->intval[facet]))
-        return error(&s->ei,s->uri,n->line,NULL,
+        return error(&s->ei,s->uri,n->line,String::null(),
                      "Invalid value for facet %s: must be a non-negative integer",n->name);
     }
     else if (XS_FACET_TOTALDIGITS == facet) {
       if ((0 != convert_to_nonneg_int(fd->strval[facet],&fd->intval[facet])) ||
           (0 == fd->intval[facet]))
-        return error(&s->ei,s->uri,n->line,NULL,
+        return error(&s->ei,s->uri,n->line,String::null(),
                      "Invalid value for facet %s: must be a positive integer",n->name);
     }
 
@@ -870,13 +868,13 @@ int xs_parse_facet(xs_schema *s, xmlNodePtr n, xs_facetdata *fd)
   return 0;
 }
 
-int xs_is_builtin_type_redeclaration(xs_schema *s, char *ns, xmlNodePtr n)
+int xs_is_builtin_type_redeclaration(Schema *s, char *ns, xmlNodePtr n)
 {
-  if ((NULL != ns) && !strcmp(ns,XS_NAMESPACE) && xmlHasProp(n,"name")) {
-    xs_type *existing;
-    char *name = get_wscollapsed_attr(n,"name",NULL);
-    if ((NULL != (existing = (xs_type*)xs_symbol_table_lookup_object(s->globals->symt,XS_OBJECT_TYPE,
-                                                           nsname_temp(ns,name)))) &&
+  if ((NULL != ns) && (ns == XS_NAMESPACE) && XMLHasProp(n,"name")) {
+    Type *existing;
+    char *name = get_wscollapsed_attr(n,"name",String::null());
+    if ((NULL != (existing = (Type*)s->globals->symt->lookup(XS_OBJECT_TYPE,
+                                                           NSName(ns,name)))) &&
         existing->builtin) {
       free(name);
       return 1;
@@ -886,10 +884,10 @@ int xs_is_builtin_type_redeclaration(xs_schema *s, char *ns, xmlNodePtr n)
   return 0;
 }
 
-int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                         int toplevel, xs_type **tout)
+int GridXSLT::xs_parse_simple_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                         int toplevel, Type **tout)
 {
-  xs_type *t;
+  Type *t;
   xmlNodePtr c;
 
   /* @implements(xmlschema-1:Simple Type Definition{name}) @end
@@ -912,10 +910,9 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     if (xs_is_builtin_type_redeclaration(s,ns,n))
       return 0;
 
-    t = xs_type_new(s->as);
+    t = new Type(s->as);
     t->def.loc.line = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,
-               &t->def.ident.name,&t->def.ident.ns,"type"))
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,&t->def.ident,"type"))
 
     /* @implements(xmlschema-1:Simple Type Definition{final})
        test { simpletype_final1.test }
@@ -934,26 +931,26 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                &t->final_list,&t->final_union));
   }
   else {
-    t = xs_type_new(s->as);
+    t = new Type(s->as);
     t->def.loc.line = n->line;
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"name"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"final"))
   }
 
-  t->variety = XS_TYPE_VARIETY_INVALID;
+  t->variety = TYPE_VARIETY_INVALID;
   if (tout)
     *tout = t;
 
   c = xs_first_non_annotation_child(n);
 
   if (!c)
-    return error(&s->ei,s->uri,n->line,NULL,
+    return error(&s->ei,s->uri,n->line,String::null(),
                  "<simpleType> requires a <restriction>, <list>, or <union>");
 
   if (check_element(c,"restriction",XS_NAMESPACE)) {
     xmlNodePtr c2 = xs_first_non_annotation_child(c);
 
-    t->stype = XS_TYPE_SIMPLE_RESTRICTION;
+    t->stype = TYPE_SIMPLE_RESTRICTION;
     CHECK_CALL(xs_parse_ref(s,c,doc,"base",XS_OBJECT_TYPE,(void**)&t->base,&t->baseref))
 
     /* @implements(xmlschema-1:src-simple-type.2)
@@ -1036,15 +1033,15 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     if (c2)
       return invalid_element2(&s->ei,s->uri,c2);
 
-    t->variety = XS_TYPE_VARIETY_LIST;
-    t->stype = XS_TYPE_SIMPLE_LIST;
+    t->variety = TYPE_VARIETY_LIST;
+    t->stype = TYPE_SIMPLE_LIST;
 
     /* FIXME */
     xs_next_element(&c);
   }
   else if (check_element(c,"union",XS_NAMESPACE)) {
     xmlNodePtr c2 = xs_first_non_annotation_child(c);
-    char *member_types = xmlGetProp(c,"memberTypes");
+    char *member_types = XMLGetProp(c,"memberTypes");
 
     t->base = s->globals->simple_ur_type;
 
@@ -1057,7 +1054,7 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
           int endc = *cur;
           *cur = '\0';
           if (cur != start) {
-            xs_member_type *mt;
+            MemberType *mt;
             char *ref_name;
             char *ref_ns;
 
@@ -1068,11 +1065,11 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
 
             /* FIXME!: make sure member types are handled property with namespaces */
 /*             debugl("line %d: Parsing union member type %s",c->line,start); */
-            mt = xs_member_type_new(s->as);
+            mt = new MemberType(s->as);
             list_append(&t->members,mt);
-            mt->ref = xs_reference_new(s->as);
+            mt->ref = new Reference(s->as);
             mt->ref->s = s;
-            mt->ref->def.ident = nsname_temp(ref_ns,ref_name);
+            mt->ref->def.ident = NSName(ref_ns,ref_name);
             mt->ref->def.loc.line = c->line;
             mt->ref->type = XS_OBJECT_TYPE;
             mt->ref->obj = (void**)&mt->type;
@@ -1089,11 +1086,11 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     }
 
     while (c2) {
-      xs_member_type *mt;
+      MemberType *mt;
       if (!check_element(c2,"simpleType",XS_NAMESPACE))
         return invalid_element2(&s->ei,s->uri,c2);
 
-      mt = xs_member_type_new(s->as);
+      mt = new MemberType(s->as);
       CHECK_CALL(xs_parse_simple_type(s,c2,doc,ns,0,&mt->type));
       assert(NULL != mt->type);
       list_append(&t->members,mt);
@@ -1102,10 +1099,10 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     }
 
     if (NULL == t->members)
-      return error(&s->ei,s->uri,c->line,NULL,"<union> requires one or more member types");
+      return error(&s->ei,s->uri,c->line,String::null(),"<union> requires one or more member types");
 
-    t->variety = XS_TYPE_VARIETY_UNION;
-    t->stype = XS_TYPE_SIMPLE_UNION;
+    t->variety = TYPE_VARIETY_UNION;
+    t->stype = TYPE_SIMPLE_UNION;
     xs_next_element(&c);
   }
 
@@ -1115,8 +1112,8 @@ int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   return 0;
 }
 
-int xs_parse_complex_type_attributes(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     xs_type *t, xmlNodePtr c)
+int GridXSLT::xs_parse_complex_type_attributes(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                                     Type *t, xmlNodePtr c)
 {
   for (; c; xs_next_element(&c)) {
     /* FIXME: the attribute_uses of a type should also contain all of the attribute uses contained
@@ -1144,10 +1141,10 @@ int xs_parse_complex_type_attributes(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, 
   return 0;
 }
 
-int xs_parse_simple_content_children(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     xs_type *t, xmlNodePtr c)
+int GridXSLT::xs_parse_simple_content_children(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                                     Type *t, xmlNodePtr c)
 {
-  if (XS_TYPE_DERIVATION_RESTRICTION == t->derivation_method) {
+  if (TYPE_DERIVATION_RESTRICTION == t->derivation_method) {
 
     if (c && check_element(c,"simpleType",XS_NAMESPACE)) {
       CHECK_CALL(xs_parse_simple_type(s,c,doc,ns,0,&t->child_type));
@@ -1174,9 +1171,9 @@ int xs_parse_simple_content_children(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, 
   return xs_parse_complex_type_attributes(s,n,doc,ns,t,c);
 }
 
-int xs_parse_complex_content_children(xs_schema *s,
+int GridXSLT::xs_parse_complex_content_children(Schema *s,
                                    xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                   xs_type *t, xmlNodePtr c, int effective_mixed)
+                                   Type *t, xmlNodePtr c, int effective_mixed)
 {
   /* Section 3.4.2 - Complex type definition with complex content */
 
@@ -1200,7 +1197,7 @@ int xs_parse_complex_content_children(xs_schema *s,
                  (0 == (convr = parse_optional_int_attr(&s->ei,s->uri,c,"minOccurs",
                                                         &min_occurs_val,1))) &&
                  (0 == min_occurs_val));
-  xs_particle *effective_content = NULL;
+  Particle *effective_content = NULL;
 
   if (0 != convr) /* FIXME: set error info here! */
     return -1;
@@ -1208,12 +1205,12 @@ int xs_parse_complex_content_children(xs_schema *s,
   if (test211 || test212 || test213) {
     /* 2.1.4, 2.1.5 */
     if (effective_mixed) {
-      xs_particle *p = xs_particle_new(s->as);
+      Particle *p = new Particle(s->as);
       p->range.min_occurs = 1;
       p->range.max_occurs = 1;
-      p->term_type = XS_PARTICLE_TERM_MODEL_GROUP;
-      p->term.mg = xs_model_group_new(s->as);
-      p->term.mg->compositor = XS_MODEL_GROUP_COMPOSITOR_SEQUENCE;
+      p->term_type = PARTICLE_TERM_MODEL_GROUP;
+      p->term.mg = new ModelGroup(s->as);
+      p->term.mg->compositor = MODELGROUP_COMPOSITOR_SEQUENCE;
       p->term.mg->defline = c ? c->line : n->line;
       p->term.mg->content_model_of = t;
       p->defline = n->line;
@@ -1230,9 +1227,9 @@ int xs_parse_complex_content_children(xs_schema *s,
     }
     else { /* must be <all>, <choice> or <sequence> - otherwise test211 would be true */
       CHECK_CALL(xs_parse_all_choice_sequence(s,c,ns,doc,NULL,&effective_content,
-                 t->def.ident.name,t->def.ident.ns))
+                 t->def.ident.m_name.cstring(),t->def.ident.m_ns.cstring()))
       assert(effective_content);
-      assert(XS_PARTICLE_TERM_MODEL_GROUP == effective_content->term_type);
+      assert(PARTICLE_TERM_MODEL_GROUP == effective_content->term_type);
       assert(effective_content->term.mg);
       effective_content->term.mg->content_model_of = t;
     }
@@ -1251,11 +1248,11 @@ int xs_parse_complex_content_children(xs_schema *s,
   return xs_parse_complex_type_attributes(s,n,doc,ns,t,c);
 }
 
-int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                          int toplevel, xs_type **tout,
+int GridXSLT::xs_parse_complex_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                          int toplevel, Type **tout,
                           char *container_name, char *container_ns)
 {
-  xs_type *t;
+  Type *t;
   xmlNodePtr c;
   int effective_mixed = 0;
 
@@ -1274,10 +1271,9 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     if (xs_is_builtin_type_redeclaration(s,ns,n))
       return 0;
 
-    t = xs_type_new(s->as);
+    t = new Type(s->as);
     t->def.loc.line = n->line;
-    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,
-               &t->def.ident.name,&t->def.ident.ns,"type"))
+    CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_types,t,&t->def.ident,"type"))
 
     /* @implements(xmlschema-1:Complex Type Definition{prohibited substitutions})
        test { complextype_cc_extension_block.test }
@@ -1302,7 +1298,7 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                &t->final_extension,&t->final_restriction,NULL,NULL,NULL));
   }
   else {
-    t = xs_type_new(s->as);
+    t = new Type(s->as);
     t->def.loc.line = n->line;
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"name"))
     CHECK_CALL(xs_check_forbidden_attribute(s,n,"abstract"))
@@ -1329,13 +1325,13 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     xmlNodePtr rest;
 
     if (NULL == (c2 = xs_first_non_annotation_child(c)))
-      return error(&s->ei,s->uri,c->line,NULL,"expected <restriction> or <extension>");
+      return error(&s->ei,s->uri,c->line,String::null(),"expected <restriction> or <extension>");
 
     /* @implements(xmlschema-1:Complex Type Definition{derivation method}) @end */
     if (check_element(c2,"restriction",XS_NAMESPACE))
-      t->derivation_method = XS_TYPE_DERIVATION_RESTRICTION;
+      t->derivation_method = TYPE_DERIVATION_RESTRICTION;
     else if (check_element(c2,"extension",XS_NAMESPACE))
-      t->derivation_method = XS_TYPE_DERIVATION_EXTENSION;
+      t->derivation_method = TYPE_DERIVATION_EXTENSION;
     else
       return invalid_element2(&s->ei,s->uri,c2);
 
@@ -1346,8 +1342,8 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
       return invalid_element2(&s->ei,s->uri,rest);
 
     /* @implements(xmlschema-1:Complex Type Definition{base type definition}) @end */
-    if (!xmlHasProp(c2,"base"))
-      return missing_attribute2(&s->ei,s->uri,c2->line,NULL,"base");
+    if (!XMLHasProp(c2,"base"))
+      return missing_attribute2(&s->ei,s->uri,c2->line,String::null(),"base");
     CHECK_CALL(xs_parse_ref(s,c2,doc,"base",XS_OBJECT_TYPE,(void**)&t->base,&t->baseref))
 
     if (check_element(c,"simpleContent",XS_NAMESPACE)) {
@@ -1378,7 +1374,7 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
     /* <complexContent> omitted - this is shorthand for complex content restricting ur-type.
        Parse the remaining children of n as if they were inside the <restriction> element */
     t->base = s->globals->complex_ur_type;
-    t->derivation_method = XS_TYPE_DERIVATION_RESTRICTION;
+    t->derivation_method = TYPE_DERIVATION_RESTRICTION;
     t->complex_content = 1;
     return xs_parse_complex_content_children(s,n,doc,ns,t,c,effective_mixed);
   }
@@ -1386,10 +1382,10 @@ int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
   return 0;
 }
 
-int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
+int GridXSLT::xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s)
 {
   /* parent is a <schema> or <redifine> */
-  xs_model_group_def *mgd;
+  ModelGroupDef *mgd;
   xmlNodePtr c;
 
   /* @implements(xmlschema-1:src-model_group_defn) @end
@@ -1403,10 +1399,10 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
      @implements(xmlschema-1:Schema{model group definitions}) @end
    */
 
-  mgd = xs_model_group_def_new(s->as);
+  mgd = new ModelGroupDef(s->as);
   mgd->def.loc.line = n->line;
   CHECK_CALL(xs_init_toplevel_object(s,n,doc,ns,s->symt->ss_model_group_defs,mgd,
-                                     &mgd->def.ident.name,&mgd->def.ident.ns,"group"))
+                                     &mgd->def.ident,"group"))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"ref","name",NULL))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"minOccurs","name",NULL))
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"maxOccurs","name",NULL))
@@ -1416,7 +1412,7 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
   /* FIXME: handle the case of <redefine> */
 
   if (NULL == (c = xs_first_non_annotation_child(n)))
-    return error(&s->ei,s->uri,n->line,NULL,
+    return error(&s->ei,s->uri,n->line,String::null(),
                  "Model group definition requires an <all>, <choice> or <sequence> child element");
 
   if (!check_element(c,"all",XS_NAMESPACE) &&
@@ -1424,7 +1420,8 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
       !check_element(c,"sequence",XS_NAMESPACE))
     return invalid_element2(&s->ei,s->uri,c);
 
-  CHECK_CALL(xs_parse_model_group(s,c,ns,doc,&mgd->model_group,mgd->def.ident.name,mgd->def.ident.ns))
+  CHECK_CALL(xs_parse_model_group(s,c,ns,doc,&mgd->model_group,mgd->def.ident.m_name.cstring(),
+             mgd->def.ident.m_ns.cstring()))
   assert(mgd->model_group);
   mgd->model_group->mgd = mgd;
 
@@ -1435,15 +1432,15 @@ int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s)
   return 0;
 }
 
-int xs_parse_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
-                       xs_particle **pout)
+int GridXSLT::xs_parse_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
+                       Particle **pout)
 {
   int max_occurs_val = 1;
   int min_occurs_val = 1;
-  xs_particle *p;
+  Particle *p;
 
-  if (!xmlHasProp(n,"ref"))
-    return error(&s->ei,s->uri,n->line,NULL,
+  if (!XMLHasProp(n,"ref"))
+    return error(&s->ei,s->uri,n->line,String::null(),
                  "<group> can only be used as a group reference here");
 
   CHECK_CALL(xs_check_conflicting_attributes(s,n,"name","ref",NULL))
@@ -1453,11 +1450,11 @@ int xs_parse_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particl
   if ((0 == min_occurs_val) && (0 == max_occurs_val))
     return 0; /* do not create a schema component */
 
-  p = xs_particle_new(s->as);
+  p = new Particle(s->as);
   p->range.min_occurs = min_occurs_val;
   p->range.max_occurs = max_occurs_val;
   p->term.mg = NULL; /* will be resolved later */
-  p->term_type = XS_PARTICLE_TERM_MODEL_GROUP;
+  p->term_type = PARTICLE_TERM_MODEL_GROUP;
   p->defline = n->line;
   if (particles_list)
     list_append(particles_list,p);
@@ -1472,11 +1469,11 @@ int xs_parse_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particl
   return 0;
 }
 
-int xs_parse_model_group(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                         xs_model_group **mgout, char *container_name, char *container_ns)
+int GridXSLT::xs_parse_model_group(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+                         ModelGroup **mgout, char *container_name, char *container_ns)
 {
   /* <all>, <choice>, or <sequence> */
-  xs_model_group *mg;
+  ModelGroup *mg;
   xmlNodePtr c;
   int allow_gcsa = 0;
 
@@ -1487,15 +1484,15 @@ int xs_parse_model_group(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
   /* Create the particle and model group schema components. Because the particle is added
      to the supplied list, and the model is referenced from the particle, these will both
      be freed up eventually even if we return with this function with an error. */
-  mg = xs_model_group_new(s->as);
+  mg = new ModelGroup(s->as);
   mg->defline = n->line;
 
   if (check_element(n,"all",XS_NAMESPACE))
-    mg->compositor = XS_MODEL_GROUP_COMPOSITOR_ALL;
+    mg->compositor = MODELGROUP_COMPOSITOR_ALL;
   else if (check_element(n,"choice",XS_NAMESPACE))
-    mg->compositor = XS_MODEL_GROUP_COMPOSITOR_CHOICE;
+    mg->compositor = MODELGROUP_COMPOSITOR_CHOICE;
   else if (check_element(n,"sequence",XS_NAMESPACE))
-    mg->compositor = XS_MODEL_GROUP_COMPOSITOR_SEQUENCE;
+    mg->compositor = MODELGROUP_COMPOSITOR_SEQUENCE;
   else
     assert(0);
 
@@ -1508,8 +1505,8 @@ int xs_parse_model_group(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
      <choice> and <sequence> can have the following children: element, group, choice, sequence, any
      <all> can only have children of type element
      In all cases we allow an annotation element as the first child. */
-  allow_gcsa = (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor) ||
-               (XS_MODEL_GROUP_COMPOSITOR_SEQUENCE == mg->compositor);
+  allow_gcsa = (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor) ||
+               (MODELGROUP_COMPOSITOR_SEQUENCE == mg->compositor);
 
   c = xs_first_non_annotation_child(n);
 
@@ -1536,12 +1533,12 @@ int xs_parse_model_group(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
   return 0;
 }
 
-int xs_parse_all_choice_sequence(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                                 list **particles_list, xs_particle **pout,
+int GridXSLT::xs_parse_all_choice_sequence(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+                                 list **particles_list, Particle **pout,
                                  char *container_name, char *container_ns)
 {
-  xs_particle *p;
-  xs_model_group *mg;
+  Particle *p;
+  ModelGroup *mg;
 
   int max_occurs_val = 1;
   int min_occurs_val = 1;
@@ -1574,9 +1571,9 @@ int xs_parse_all_choice_sequence(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr
   CHECK_CALL(xs_parse_model_group(s,n,ns,doc,&mg,container_name,container_ns))
   assert(mg);
 
-  p = xs_particle_new(s->as);
+  p = new Particle(s->as);
   p->term.mg = mg;
-  p->term_type = XS_PARTICLE_TERM_MODEL_GROUP;
+  p->term_type = PARTICLE_TERM_MODEL_GROUP;
   p->range.max_occurs = max_occurs_val;
   p->range.min_occurs = min_occurs_val;
   p->defline = n->line;
@@ -1588,12 +1585,12 @@ int xs_parse_all_choice_sequence(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr
   return 0;
 }
 
-int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **wout)
+int GridXSLT::xs_parse_wildcard(Schema *s, xmlNodePtr n, xmlDocPtr doc, Wildcard **wout)
 {
-  xs_wildcard *w;
+  Wildcard *w;
   xmlNodePtr c;
 
-  *wout = w = xs_wildcard_new(s->as);
+  *wout = w = new Wildcard(s->as);
   w->defline = n->line;
 
   /* @implements(xmlschema-1:src-wildcard) @end
@@ -1654,24 +1651,24 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
      test { anyattribute_no_namespace.test }
      @end
    */
-  if (!xmlHasProp(n,"namespace")) {
-    w->type = XS_WILDCARD_TYPE_ANY;
+  if (!XMLHasProp(n,"namespace")) {
+    w->type = WILDCARD_TYPE_ANY;
   }
   else {
-    char *namesp = get_wscollapsed_attr(n,"namespace",NULL);
+    char *namesp = get_wscollapsed_attr(n,"namespace",String::null());
 
     if (!strcmp(namesp,"##any")) {
-      w->type = XS_WILDCARD_TYPE_ANY;
+      w->type = WILDCARD_TYPE_ANY;
     }
     else if (!strcmp(namesp,"##other")) {
-      w->type = XS_WILDCARD_TYPE_NOT;
+      w->type = WILDCARD_TYPE_NOT;
       w->not_ns = s->ns ? strdup(s->ns) : NULL;
     }
     else {
       char *start = namesp;
       char *cur = namesp;
 
-      w->type = XS_WILDCARD_TYPE_SET;
+      w->type = WILDCARD_TYPE_SET;
 
       while (1) {
         if ('\0' == *cur || isspace(*cur)) {
@@ -1710,18 +1707,18 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
      test { any_processcontents_strict.test }
      @end
   */
-  if (!xmlHasProp(n,"processContents")) {
-    w->process_contents = XS_WILDCARD_PROCESS_CONTENTS_STRICT;
+  if (!XMLHasProp(n,"processContents")) {
+    w->process_contents = WILDCARD_PROCESS_CONTENTS_STRICT;
   }
   else {
-    char *process_contents = xmlGetProp(n,"processContents");
+    char *process_contents = XMLGetProp(n,"processContents");
     int invalid = 0;
     if (!strcmp(process_contents,"strict"))
-      w->process_contents = XS_WILDCARD_PROCESS_CONTENTS_STRICT;
+      w->process_contents = WILDCARD_PROCESS_CONTENTS_STRICT;
     else if (!strcmp(process_contents,"lax"))
-      w->process_contents = XS_WILDCARD_PROCESS_CONTENTS_LAX;
+      w->process_contents = WILDCARD_PROCESS_CONTENTS_LAX;
     else if (!strcmp(process_contents,"skip"))
-      w->process_contents = XS_WILDCARD_PROCESS_CONTENTS_SKIP;
+      w->process_contents = WILDCARD_PROCESS_CONTENTS_SKIP;
     else
       invalid = 1;
     free(process_contents);
@@ -1736,11 +1733,11 @@ int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **w
   return 0;
 }
 
-int xs_parse_any(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list)
+int GridXSLT::xs_parse_any(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list)
 {
   int max_occurs_val = 1;
   int min_occurs_val = 1;
-  xs_particle *p;
+  Particle *p;
 
   if ((0 == min_occurs_val) && (0 == max_occurs_val))
     return 0; /* do not create a schema component */
@@ -1748,9 +1745,9 @@ int xs_parse_any(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_lis
   CHECK_CALL(xs_parse_max_occurs(s,n,&max_occurs_val))
   CHECK_CALL(parse_optional_int_attr(&s->ei,s->uri,n,"minOccurs",&min_occurs_val,1))
 
-  p = xs_particle_new(s->as);
+  p = new Particle(s->as);
   list_append(particles_list,p);
-  p->term_type = XS_PARTICLE_TERM_WILDCARD;
+  p->term_type = PARTICLE_TERM_WILDCARD;
   p->range.max_occurs = max_occurs_val;
   p->range.min_occurs = min_occurs_val;
   p->defline = n->line;
@@ -1760,17 +1757,17 @@ int xs_parse_any(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_lis
   return 0;
 }
 
-int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
+int xs_parse_import(Schema *s, xmlNodePtr n, xmlDocPtr doc)
 {
   char *schemaloc;
 /*   stringbuf *src = stringbuf_new(); */
   xmlDocPtr import_doc;
   xmlNodePtr import_elem;
-  xs_schema *import_schema = NULL;
+  Schema *import_schema = NULL;
   char *namesp;
   char *full_uri;
-  if (!xmlHasProp(n,"schemaLocation"))
-    return error(&s->ei,s->uri,n->line,NULL,
+  if (!XMLHasProp(n,"schemaLocation"))
+    return error(&s->ei,s->uri,n->line,String::null(),
                  "No schemaLocation specified; don't know what to import here");
 
   /* FIXME: test with bad and nonexistant uris, like with xsl:import */
@@ -1780,8 +1777,8 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   /* @implements(xmlschema-1:src-import.1.1)
      test { xmlschema/import/nsconflict1.test }
      @end */
-  if (xmlHasProp(n,"namespace") && (NULL != s->ns)) {
-    namesp = xmlGetProp(n,"namespace");
+  if (XMLHasProp(n,"namespace") && (NULL != s->ns)) {
+    namesp = XMLGetProp(n,"namespace");
     if (!strcmp(namesp,s->ns)) {
       free(namesp);
       return error(&s->ei,s->uri,n->line,"src-import.1.1","The \"namespace\" attribute for this "
@@ -1794,18 +1791,18 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   /* @implements(xmlschema-1:src-import.1.2)
      test { xmlschema/import/nsconflict2.test }
      @end */
-  if (!xmlHasProp(n,"namespace") && (NULL == s->ns))
+  if (!XMLHasProp(n,"namespace") && (NULL == s->ns))
     return error(&s->ei,s->uri,n->line,"src-import.1.1","A \"namespace\" attribute is required on "
                  "this import element since the enclosing schema has no target namespace defined");
 
-  schemaloc = get_wscollapsed_attr(n,"schemaLocation",NULL);
+  schemaloc = get_wscollapsed_attr(n,"schemaLocation",String::null());
 
   if (NULL == (full_uri = xmlBuildURI(schemaloc,s->uri))) {
-    return error(&s->ei,s->uri,n->line,NULL,
+    return error(&s->ei,s->uri,n->line,String::null(),
                  "\"%s\" is not a valid relative or absolute URI",schemaloc);
   }
 
-  if (0 != retrieve_uri_element(&s->ei,s->uri,n->line,NULL,full_uri,
+  if (0 != retrieve_uri_element(&s->ei,s->uri,n->line,String::null(),full_uri,
                                 &import_doc,&import_elem,s->uri)) {
     /* FIXME: not sure if we're really supposed to signal an error here... see note
        in import2.test */
@@ -1829,7 +1826,8 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
     char *hash;
     if (NULL != (hash = strchr(justdoc,'#')))
       *hash = '\0';
-    error(&s->ei,justdoc,import_elem->line,NULL,"Expected element {%s}%s",XS_NAMESPACE,"schema");
+    error(&s->ei,justdoc,import_elem->line,String::null(),"Expected element {%*}%s",
+          &XS_NAMESPACE,"schema");
     free(justdoc);
     free(schemaloc);
     free(full_uri);
@@ -1858,7 +1856,7 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
      @implements(xmlschema-1:src-import.3.2)
      test { xmlschema/import/nsmismatch2.test }
      @end */
-  namesp = xmlGetProp(n,"namespace");
+  namesp = XMLGetProp(n,"namespace");
   if (NULL == import_schema->ns) {
     if (NULL != namesp) {
       free(schemaloc);
@@ -1882,7 +1880,7 @@ int xs_parse_import(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   return 0;
 }
 
-int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
+int GridXSLT::xs_parse_schema(Schema *s, xmlNodePtr n, xmlDocPtr doc)
 {
   xmlNodePtr c;
 
@@ -1896,12 +1894,12 @@ int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   */
 
   /* FIXME: parse the other attributes */
-  s->ns = xmlGetProp(n,"targetNamespace");
+  s->ns = XMLGetProp(n,"targetNamespace");
 
   /* parse the "attributeFormDefault" attribute */
-  if (xmlHasProp(n,"attributeFormDefault")) {
+  if (XMLHasProp(n,"attributeFormDefault")) {
     int invalid = 0;
-    char *afd = get_wscollapsed_attr(n,"attributeFormDefault",NULL);
+    char *afd = get_wscollapsed_attr(n,"attributeFormDefault",String::null());
     if (!strcmp(afd,"qualified"))
       s->attrformq = 1;
     else if (!strcmp(afd,"unqualified"))
@@ -1914,9 +1912,9 @@ int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
   }
 
   /* parse the "elementFormDefault" attribute */
-  if (xmlHasProp(n,"elementFormDefault")) {
+  if (XMLHasProp(n,"elementFormDefault")) {
     int invalid = 0;
-    char *efd = get_wscollapsed_attr(n,"elementFormDefault",NULL);
+    char *efd = get_wscollapsed_attr(n,"elementFormDefault",String::null());
     if (!strcmp(efd,"qualified"))
       s->elemformq = 1;
     else if (!strcmp(efd,"unqualified"))
@@ -1928,8 +1926,8 @@ int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc)
       return invalid_attribute_val(&s->ei,s->uri,n,"elementFormDefault");
   }
 
-  s->block_default = xmlGetProp(n,"blockDefault");
-  s->final_default = xmlGetProp(n,"finalDefault");
+  s->block_default = XMLGetProp(n,"blockDefault");
+  s->final_default = XMLGetProp(n,"finalDefault");
 
   c = n->children;
   xs_skip_others(&c);

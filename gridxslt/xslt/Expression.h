@@ -25,8 +25,8 @@
 
 #include "util/stringbuf.h"
 #include "util/xmlutils.h"
-#include "dataflow/dataflow.h"
-#include "dataflow/sequencetype.h"
+#include "dataflow/Program.h"
+#include "dataflow/SequenceType.h"
 
 #define XPATH_EXPR_INVALID                0
 #define XPATH_EXPR_FOR                    1
@@ -80,7 +80,7 @@
 
 #define XPATH_NODE_TEST_INVALID           0
 #define XPATH_NODE_TEST_NAME              1
-#define XPATH_NODE_TEST_SEQTYPE           2
+#define XPATH_NODE_TEST_SEQUENCETYPE           2
 
 #define XPATH_GENERAL_COMP_INVALID        0
 #define XPATH_GENERAL_COMP_EQ             1
@@ -119,49 +119,56 @@
 #define AXIS_ANCESTOR_OR_SELF         13
 #define AXIS_COUNT                    14
 
-typedef struct xp_expr xp_expr;
-typedef struct xl_snode xl_snode;
+namespace GridXSLT {
 
-struct xp_expr {
-  int type;
+class Statement;
 
-  xp_expr *conditional;
-  xp_expr *left;
-  xp_expr *right;
+class Expression {
+public:
+  Expression(int _type, Expression *_left, Expression *_right);
+  ~Expression();
 
-  seqtype *st;
-  int compare;
-  int nodetest;
-  char *strval;
-  int ival;
-  double dval;
-  qname qn;
-  qname type_qname;
-  int nillable;
-  int axis;
+  void setParent(Expression *parent, Statement *stmt);
+  int resolve(Schema *s, const char *filename, GridXSLT::Error *ei);
+  void serialize(stringbuf *buf, int brackets);
+  void printBinaryExpr(stringbuf *buf, char *op);
+  void printTree(int indent);
 
-  nsname ident;
+  int m_type;
 
-  xp_expr *parent;
-  xl_snode *stmt;
-  char occ;
-  sourceloc sloc;
+  Expression *m_conditional;
+  Expression *m_left;
+  Expression *m_right;
 
-  struct df_outport *outp;
+  GridXSLT::SequenceType m_st;
+  int m_compare;
+  int m_nodetest;
+  GridXSLT::String m_strval;
+  int m_ival;
+  double m_dval;
+  QName m_qn;
+  QName m_type_qname;
+  int m_nillable;
+  int m_axis;
+
+  NSName m_ident;
+
+  Expression *m_parent;
+  Statement *m_stmt;
+  char m_occ;
+  sourceloc m_sloc;
+
+  class GridXSLT::OutputPort *m_outp;
 };
 
-xp_expr *xp_expr_new(int type, xp_expr *left, xp_expr *right);
-xp_expr *xp_expr_parse(const char *str, const char *filename, int baseline, error_info *ei,
+Expression *Expression_parse(const char *str, const char *filename, int baseline, Error *ei,
                        int pattern);
-seqtype *seqtype_parse(const char *str, const char *filename, int baseline, error_info *ei);
-void xp_expr_free(xp_expr *xp);
-void xp_set_parent(xp_expr *xp, xp_expr *parent, xl_snode *stmt);
-int xp_expr_resolve(xp_expr *e, xs_schema *s, const char *filename, error_info *ei);
-void xp_expr_serialize(stringbuf *buf, xp_expr *e, int brackets);
-void xp_expr_print_tree(xp_expr *e, int indent);
+SequenceType seqtype_parse(const char *str, const char *filename, int baseline, Error *ei);
+
+};
 
 #ifndef _XSLT_XPATH_C
-extern const char *xp_expr_types[XPATH_EXPR_COUNT];
+extern const char *Expression_types[XPATH_EXPR_COUNT];
 extern const char *xp_axis_types[AXIS_COUNT];
 #endif
 

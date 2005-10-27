@@ -23,10 +23,11 @@
 #ifndef _DATAFLOW_ENGINE_H
 #define _DATAFLOW_ENGINE_H
 
-#include "dataflow.h"
-#include "sequencetype.h"
+#include "Program.h"
+#include "SequenceType.h"
 #include "util/xmlutils.h"
 
-int df_execute(df_program *program, int trace, error_info *ei, value *context);
+int df_execute(GridXSLT::Program *program, int trace, GridXSLT::Error *ei,
+               const GridXSLT::Value &context);
 
 #endif /* _DATAFLOW_ENGINE_H */

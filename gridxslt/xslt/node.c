@@ -20,8 +20,8 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 #include "util/xmlutils.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -29,22 +29,24 @@
 #include <string.h>
 #include <errno.h>
 
+using namespace GridXSLT;
+
 #define FNS FN_NAMESPACE
 
-static value *root1(gxenvironment *env, value **args)
+static Value root1(Environment *env, List<Value> &args)
 {
-  node *n;
-  assert(args[0]->st->type == SEQTYPE_ITEM);
-  assert(args[0]->st->item->kind != ITEM_ATOMIC);
-  n = args[0]->value.n;
-  while (NULL != n->parent)
-    n = n->parent;
-  return value_new_node(n);
+  Node *n;
+  assert(args[0].type().type() == SEQTYPE_ITEM);
+  assert(args[0].type().itemType()->m_kind != ITEM_ATOMIC);
+  n = args[0].asNode();
+  while (NULL != n->m_parent)
+    n = n->m_parent;
+  return Value(n);
 }
 
-gxfunctiondef node_fundefs[2] = {
+FunctionDefinition node_fundefs[2] = {
   { root1,    FNS, "root",     "node()?",                  "node()?" },
   { NULL },
 };
 
-gxfunctiondef *node_module = node_fundefs;
+FunctionDefinition *node_module = node_fundefs;

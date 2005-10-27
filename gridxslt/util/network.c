@@ -31,6 +31,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
+using namespace GridXSLT;
+
 #define BACKLOG 10
 
 void fdhandler_free(eventman *em, fdhandler *h)

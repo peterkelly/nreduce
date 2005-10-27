@@ -26,34 +26,61 @@
 #include <string.h>
 #include <stdio.h>
 
-void ns_def_free(ns_def *def)
+using namespace GridXSLT;
+
+String Namespaces::XSLT = "http://www.w3.org/1999/XSL/Transform";
+String Namespaces::XHTML = "http://www.w3.org/1999/xhtml";
+String Namespaces::WSDL = "http://schemas.xmlsoap.org/wsdl/";
+String Namespaces::SOAP = "http://schemas.xmlsoap.org/wsdl/soap/";
+String Namespaces::BPEL = "http://schemas.xmlsoap.org/ws/2003/03/business-process/";
+String Namespaces::XS = "http://www.w3.org/2001/XMLSchema";
+String Namespaces::XDT = "http://www.w3.org/2005/04/xpath-datatypes";
+String Namespaces::FN = "http://www.w3.org/2005/04/xpath-functions";
+String Namespaces::ERR = "http://www.w3.org/2004/07/xqt-errors";
+String Namespaces::XSI = "http://www.w3.org/2001/XMLSchema-instance";
+String Namespaces::SVG = "http://www.w3.org/2000/svg";
+String Namespaces::XML = "http://www.w3.org/XML/1998/namespace";
+String Namespaces::GX = "http://gridxslt.sourceforge.net";
+String Namespaces::SPECIAL = "http://special";
+
+void GridXSLT::ns_def_free(ns_def *def)
 {
   free(def->prefix);
   free(def->href);
   free(def);
 }
 
-ns_map *ns_map_new()
+NamespaceMap::NamespaceMap()
+  : defs(NULL), parent(NULL)
 {
-  ns_map *map = (ns_map*)calloc(1,sizeof(ns_map));
-  return map;
 }
 
-void ns_map_free(ns_map *map, int free_parents)
+NamespaceMap::~NamespaceMap()
+{
+  list_free(defs,(list_d_t)ns_def_free);
+}
+
+NamespaceMap *GridXSLT::NamespaceMap_new()
+{
+  return new NamespaceMap();
+}
+
+void GridXSLT::NamespaceMap_free(NamespaceMap *map, int free_parents)
 {
   if (free_parents)
-    ns_map_free(map->parent,1);
-  list_free(map->defs,(list_d_t)ns_def_free);
-  free(map);
+    NamespaceMap_free(map->parent,1);
+  delete map;
 }
 
-void ns_add_preferred(ns_map *map, const char *href, const char *preferred_prefix)
+void NamespaceMap::add_preferred(const String &href1, const String &preferred_prefix1)
 {
+  char *href = href1.cstring();
+  char *preferred_prefix = preferred_prefix1.cstring();
   ns_def *ns;
   char *prefix;
   int number = 1;
 
-  if (NULL != ns_lookup_href(map,href))
+  if (NULL != lookup_href(href))
     return;
 
   if (NULL != preferred_prefix) {
@@ -65,95 +92,95 @@ void ns_add_preferred(ns_map *map, const char *href, const char *preferred_prefi
     prefix = (char*)malloc(100);
     sprintf(prefix,"ns0");
   }
-  while (NULL != ns_lookup_prefix(map,prefix))
+  while (NULL != lookup_prefix(prefix))
     sprintf(prefix,"%s%d",preferred_prefix,number++);
   ns = (ns_def*)calloc(1,sizeof(ns_def));
   ns->prefix = prefix;
   ns->href = strdup(href);
-  list_append(&map->defs,ns);
+  list_append(&defs,ns);
 }
 
-void ns_add_direct(ns_map *map, const char *href, const char *prefix)
+void NamespaceMap::add_direct(const String &href1, const String &prefix1)
 {
+  char *href = href1.cstring();
+  char *prefix = prefix1.cstring();
   ns_def *ns = (ns_def*)calloc(1,sizeof(ns_def));
   ns->prefix = strdup(prefix);
   ns->href = strdup(href);
-  list_append(&map->defs,ns);
+  list_append(&defs,ns);
 }
 
-ns_def *ns_lookup_prefix(ns_map *map, const char *prefix)
+ns_def *NamespaceMap::lookup_prefix(const String &prefix1)
 {
+  char *prefix = prefix1.cstring();
   list *l;
-  for (l = map->defs; l; l = l->next) {
+  for (l = defs; l; l = l->next) {
     ns_def *ns = (ns_def*)l->data;
     if (!strcmp(ns->prefix,prefix))
       return ns;
   }
-  if (NULL != map->parent)
-    return ns_lookup_prefix(map->parent,prefix);
+  if (NULL != parent)
+    return parent->lookup_prefix(prefix);
   else
     return NULL;
 }
 
-ns_def *ns_lookup_href(ns_map *map, const char *href)
+ns_def *NamespaceMap::lookup_href(const String &href1)
 {
+  char *href = href1.cstring();
   list *l;
-  for (l = map->defs; l; l = l->next) {
+  for (l = defs; l; l = l->next) {
     ns_def *ns = (ns_def*)l->data;
     if (!strcmp(ns->href,href))
       return ns;
   }
-  if (NULL != map->parent)
-    return ns_lookup_href(map->parent,href);
+  if (NULL != parent)
+    return parent->lookup_href(href);
   else
     return NULL;
 }
 
-nsname qname_to_nsname(ns_map *map, const qname qn)
+NSName GridXSLT::qname_to_nsname(NamespaceMap *map, const QName &qn)
 {
-  nsname nn;
+  NSName nn;
   ns_def *def;
-  nn.ns = NULL;
-  nn.name = NULL;
-  if (NULL != qn.prefix) {
-    if (NULL == (def = ns_lookup_prefix(map,qn.prefix)))
+  if (!qn.m_prefix.isNull()) {
+    if (NULL == (def = map->lookup_prefix(qn.m_prefix)))
       return nn;
-    nn.ns = strdup(def->href);
+    nn.m_ns = strdup(def->href);
   }
-  nn.name = strdup(qn.localpart);
+  nn.m_name = qn.m_localPart.cstring();
   return nn;
 }
 
-qname nsname_to_qname(ns_map *map, const nsname nn)
+QName GridXSLT::nsname_to_qname(NamespaceMap *map, const NSName &nn)
 {
-  qname qn;
+  QName qn;
   ns_def *def;
-  qn.prefix = NULL;
-  qn.localpart = NULL;
-  if (NULL != nn.ns) {
-    if (NULL == (def = ns_lookup_href(map,nn.ns)))
+  if (!nn.m_ns.isNull()) {
+    if (NULL == (def = map->lookup_href(nn.m_ns)))
       return qn;
-    qn.prefix = strdup(def->prefix);
+    qn.m_prefix = strdup(def->prefix);
   }
-  qn.localpart = strdup(nn.name);
+  qn.m_localPart = nn.m_name;
   return qn;
 }
 
-nsnametest *qnametest_to_nsnametest(ns_map *map, const qnametest *qt)
+NSNameTest *GridXSLT::QNameTest_to_NSNameTest(NamespaceMap *map, const QNameTest *qt)
 {
-  nsnametest *nt = (nsnametest*)calloc(1,sizeof(nsnametest));
+  NSNameTest *nt = new NSNameTest();
   nt->wcns = qt->wcprefix;
   nt->wcname = qt->wcname;
-  if (NULL != qt->qn.prefix) {
+  if (!qt->qn.m_prefix.isNull()) {
     ns_def *def;
-    if (NULL == (def = ns_lookup_prefix(map,qt->qn.prefix))) {
-      free(nt);
+    if (NULL == (def = map->lookup_prefix(qt->qn.m_prefix))) {
+      delete nt;
       return NULL;
     }
-    nt->nn.ns = strdup(def->href);
+    nt->nn.m_ns = def->href;
   }
-  if (NULL != qt->qn.localpart)
-    nt->nn.name = strdup(qt->qn.localpart);
+  if (!qt->qn.m_localPart.isNull())
+    nt->nn.m_name = qt->qn.m_localPart;
   return nt;
 }
 

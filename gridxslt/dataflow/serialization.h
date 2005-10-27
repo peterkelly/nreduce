@@ -26,7 +26,7 @@
 #include "util/stringbuf.h"
 #include "util/xmlutils.h"
 #include "util/namespace.h"
-#include "sequencetype.h"
+#include "SequenceType.h"
 
 #define SERMETHOD_XML                     0
 #define SERMETHOD_HTML                    1
@@ -64,56 +64,61 @@
 
 #define SEROPTION_COUNT                   16
 
-typedef struct df_seroptions df_seroptions;
-typedef struct space_decl space_decl;
+namespace GridXSLT {
 
-struct df_seroptions {
-  nsname ident;
-  int byte_order_mark;
-  list *cdata_section_elements;
-  char *doctype_public;
-  char *doctype_system;
-  char *encoding;
-  int escape_uri_attributes;
-  int include_content_type;
-  int indent;
-  char *media_type;
-  nsname method;
-  char *normalization_form;
-  int omit_xml_declaration;
-  int standalone;
-  int undeclare_prefixes;
-  list *use_character_maps;
-  char *version;
+class df_seroptions {
+public:
+  df_seroptions(const NSName &method);
+  ~df_seroptions();
+
+  df_seroptions(const df_seroptions &other) { initFrom(other); }
+
+  int parseOption(int option, GridXSLT::Error *ei,
+                  const char *filename, int line,
+                  const GridXSLT::String &value, NamespaceMap *namespaces);
+
+
+  NSName m_ident;
+  int m_byte_order_mark;
+  List<NSName> m_cdata_section_elements;
+  String m_doctype_public;
+  String m_doctype_system;
+  String m_encoding;
+  int m_escape_uri_attributes;
+  int m_include_content_type;
+  int m_indent;
+  String m_media_type;
+  NSName m_method;
+  String m_normalization_form;
+  int m_omit_xml_declaration;
+  int m_standalone;
+  int m_undeclare_prefixes;
+  List<NSName> m_use_character_maps;
+  String m_version;
+
+  static const char *seroption_names[SEROPTION_COUNT];
+
+private:
+  void initFrom(const df_seroptions &other);
+
 };
 
 struct space_decl {
-  nsnametest *nnt;
+  NSNameTest *nnt;
   int importpred;
   double priority;
   int preserve;
 };
 
-int df_parse_seroption(df_seroptions *options, int option, error_info *ei,
-                       const char *filename, int line,
-                       const char *value, ns_map *namespaces);
+int df_serialize(Value &v, stringbuf *buf, df_seroptions *options, Error *ei);
 
-df_seroptions *df_seroptions_new(nsname method);
-void df_seroptions_free(df_seroptions *options);
-df_seroptions *df_seroptions_copy(df_seroptions *options);
+void df_strip_spaces(Node *n, list *space_decls);
+void df_namespace_fixup(Node *n);
 
-int df_serialize(value *v, stringbuf *buf, df_seroptions *options,
-                 error_info *ei);
-
-void df_strip_spaces(node *n, list *space_decls);
-void df_namespace_fixup(node *n);
-
-int space_decl_preserve(list *space_decls, nsname elemname);
+int space_decl_preserve(list *space_decls, const NSName &elemname);
 space_decl *space_decl_copy(space_decl *decl);
 void space_decl_free(space_decl *decl);
 
-#ifndef _DATAFLOW_SERIALIZATION_C
-extern const char *seroption_names[SEROPTION_COUNT];
-#endif
+};
 
 #endif /* _DATAFLOW_SERIALIZATION_H */

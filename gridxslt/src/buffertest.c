@@ -21,6 +21,7 @@
 #include "util/list.h"
 #include "util/stringbuf.h"
 #include "util/network.h"
+#include "util/String.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -35,6 +36,8 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
+
+using namespace GridXSLT;
 
 #define WRITESIZE 1024
 #define READSIZE 64
@@ -53,11 +56,11 @@ int main(int argc, char **argv)
   if (0 > (listenfd = start_server(1080)))
     exit(1);
 
-  printf("listenfd = %d\n",listenfd);
+  message("listenfd = %d\n",listenfd);
 
-  printf("before connect\n");
+  message("before connect\n");
   clientfd = connect_host("localhost",1080);
-  printf("after connect, clientfd = %d\n",clientfd);
+  message("after connect, clientfd = %d\n",clientfd);
   fcntl(clientfd,F_SETFL,fcntl(clientfd,F_GETFL)|O_NONBLOCK);
 
   while (1) {
@@ -89,7 +92,7 @@ int main(int argc, char **argv)
 
     if (FD_ISSET(listenfd,&readfds)) {
       if (0 <= serverfd) {
-        fprintf(stderr,"Already have a connection\n");
+        fmessage(stderr,"Already have a connection\n");
         exit(1);
       }
       struct sockaddr_in remote_addr;
@@ -100,27 +103,27 @@ int main(int argc, char **argv)
       }
       fcntl(serverfd,F_SETFL,fcntl(serverfd,F_GETFL)|O_NONBLOCK);
 
-      printf("Got connection\n");
+      message("Got connection\n");
     }
 
     if (FD_ISSET(serverfd,&writefds)) {
       char buf[WRITESIZE];
       int wr = write(serverfd,buf,WRITESIZE);
       wtotal += wr;
-/*       printf("Wrote %d bytes, wtotal = %d, difference = %d\n",wr,wtotal,wtotal-rtotal); */
-      printf("%d %d\n",index++,wtotal-rtotal);
+/*       message("Wrote %d bytes, wtotal = %d, difference = %d\n",wr,wtotal,wtotal-rtotal); */
+      message("%d %d\n",index++,wtotal-rtotal);
     }
 
     if (FD_ISSET(clientfd,&readfds)) {
       char buf[READSIZE];
       int rr = read(clientfd,buf,READSIZE);
       rtotal += rr;
-      printf("%d %d\n",index++,wtotal-rtotal);
+      message("%d %d\n",index++,wtotal-rtotal);
 /*       if (0 > rr) { */
-/*         printf("client read: %d %s (EAGAIN=%d)\n",errno,strerror(errno),EAGAIN); */
+/*         message("client read: %d %s (EAGAIN=%d)\n",errno,strerror(errno),EAGAIN); */
 /*       } */
 /*       else { */
-/*         printf("Read %d bytes, rtotal = %d, difference = %d\n",rr,rtotal,wtotal-rtotal); */
+/*         message("Read %d bytes, rtotal = %d, difference = %d\n",rr,rtotal,wtotal-rtotal); */
 /*       } */
     }
 

@@ -20,37 +20,39 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 #include "util/xmlutils.h"
 #include <assert.h>
 
 #define FNS FN_NAMESPACE
 
-static value *position(gxenvironment *env, value **args)
+using namespace GridXSLT;
+
+static Value position(Environment *env, List<Value> &args)
 {
   if (!env->ctxt->havefocus) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
-    return NULL;
+    return Value::null();
   }
 
-  return value_new_int(env->ctxt->position);
+  return Value(env->ctxt->position);
 }
 
-static value *last(gxenvironment *env, value **args)
+static Value last(Environment *env, List<Value> &args)
 {
   if (!env->ctxt->havefocus) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
-    return NULL;
+    return Value::null();
   }
 
-  return value_new_int(env->ctxt->size);
+  return Value(env->ctxt->size);
 }
 
-gxfunctiondef context_fundefs[3] = {
+FunctionDefinition context_fundefs[3] = {
   { position,    FNS, "position",    "",                                    "xsd:integer" },
   { last,        FNS, "last",        "",                                    "xsd:integer" },
   { NULL },
 };
 
-gxfunctiondef *context_module = context_fundefs;
+FunctionDefinition *context_module = context_fundefs;

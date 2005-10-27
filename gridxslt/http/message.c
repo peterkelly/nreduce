@@ -22,12 +22,15 @@
 #include "http.h"
 #include "util/debug.h"
 #include "util/network.h"
+#include "util/String.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+
+using namespace GridXSLT;
 
 msgwriter *msgwriter_new(int fd)
 {
@@ -543,12 +546,12 @@ int msgparser_readavail(msgparser *mp, int fd)
       return 0;
     }
     else {
-      fprintf(stderr,"Error reading from client: %s\n",strerror(errno));
+      fmessage(stderr,"Error reading from client: %s\n",strerror(errno));
       return 1;
     }
   }
   else if (0 == r) {
-    fprintf(stderr,"Client closed connection\n");
+    fmessage(stderr,"Client closed connection\n");
     return 1;
   }
 

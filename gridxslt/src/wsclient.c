@@ -22,6 +22,8 @@
 
 #include "util/list.h"
 #include "util/stringbuf.h"
+#include "util/String.h"
+#include "util/xmlutils.h"
 #include "syntax_wsdl.h"
 #include <stdio.h>
 #include <libxml/xmlwriter.h>
@@ -32,9 +34,11 @@
 #include <curl/types.h>
 #include <curl/easy.h>
 
+using namespace GridXSLT;
+
 size_t write_curl(void *ptr, size_t size, size_t nmemb, void *data)
 {
-  printf("WRITE_CURL %d\n",size*nmemb);
+  message("WRITE_CURL %d\n",size*nmemb);
   stringbuf_append((stringbuf*)data,(const char*)ptr,size*nmemb);
   return size*nmemb;
 }
@@ -42,14 +46,14 @@ size_t write_curl(void *ptr, size_t size, size_t nmemb, void *data)
 
 int	writefn(void *context, const char *buffer, int len)
 {
-/*   printf("WRITE %d\n",len); */
+/*   message("WRITE %d\n",len); */
   stringbuf_append((stringbuf*)context,buffer,len);
   return len;
 }
 
 int	closefn(void *context)
 {
-/*   printf("CLOSE\n"); */
+/*   message("CLOSE\n"); */
   return 0;
 }
 
@@ -69,12 +73,12 @@ void test()
   xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
   xmlTextWriterStartElement(writer,"env:Envelope");
 
-  xmlTextWriterWriteAttribute(writer,"xmlns:env","http://schemas.xmlsoap.org/soap/envelope/");
-  xmlTextWriterWriteAttribute(writer,"xmlns:xsd","http://www.w3.org/2001/XMLSchema");
-  xmlTextWriterWriteAttribute(writer,"xmlns:xsi","http://www.w3.org/2001/XMLSchema-instance");
-  xmlTextWriterWriteAttribute(writer,"xmlns:enc","http://schemas.xmlsoap.org/soap/encoding/");
-  xmlTextWriterWriteAttribute(writer,"xmlns:ns0","urn:Foo");
-  xmlTextWriterWriteAttribute(writer,"env:encodingStyle","http://schemas.xmlsoap.org/soap/encoding/");
+  XMLWriter::attribute(writer,"xmlns:env","http://schemas.xmlsoap.org/soap/envelope/");
+  XMLWriter::attribute(writer,"xmlns:xsd","http://www.w3.org/2001/XMLSchema");
+  XMLWriter::attribute(writer,"xmlns:xsi","http://www.w3.org/2001/XMLSchema-instance");
+  XMLWriter::attribute(writer,"xmlns:enc","http://schemas.xmlsoap.org/soap/encoding/");
+  XMLWriter::attribute(writer,"xmlns:ns0","urn:Foo");
+  XMLWriter::attribute(writer,"env:encodingStyle","http://schemas.xmlsoap.org/soap/encoding/");
 
   xmlTextWriterStartElement(writer,"env:Body");
 
@@ -84,13 +88,13 @@ void test()
 /*   xmlTextWriterStartElement(writer,"ns0:sayHello2"); */
 
 /*   xmlTextWriterStartElement(writer,"String_1"); */
-/*   xmlTextWriterWriteAttribute(writer,"xsi:type","xsd:string"); */
-/*   xmlTextWriterWriteRaw(writer,"Fred"); */
+/*   XMLWriter::attribute(writer,"xsi:type","xsd:string"); */
+/*   XMLWriter::raw(writer,"Fred"); */
 /*   xmlTextWriterEndElement(writer); */
 
 /*   xmlTextWriterStartElement(writer,"String_2"); */
-/*   xmlTextWriterWriteAttribute(writer,"xsi:type","xsd:string"); */
-/*   xmlTextWriterWriteRaw(writer,"Peter"); */
+/*   XMLWriter::attribute(writer,"xsi:type","xsd:string"); */
+/*   XMLWriter::raw(writer,"Peter"); */
 /*   xmlTextWriterEndElement(writer); */
 
 /*   xmlTextWriterEndElement(writer); */
@@ -99,8 +103,8 @@ void test()
 /*   xmlTextWriterStartElement(writer,"ns0:listFiles"); */
 
 /*   xmlTextWriterStartElement(writer,"String_1"); */
-/*   xmlTextWriterWriteAttribute(writer,"xsi:type","xsd:string"); */
-/*   xmlTextWriterWriteRaw(writer,"/etc"); */
+/*   XMLWriter::attribute(writer,"xsi:type","xsd:string"); */
+/*   XMLWriter::raw(writer,"/etc"); */
 /*   xmlTextWriterEndElement(writer); */
 
 /*   xmlTextWriterEndElement(writer); */
@@ -124,10 +128,10 @@ void test()
   xmlTextWriterFlush(writer);
   xmlFreeTextWriter(writer);
 
-  printf("XML file:\n");
-  printf("===============\n");
-  printf("%s",sbuf->data);
-  printf("===============\n");
+  message("XML file:\n");
+  message("===============\n");
+  message("%s",sbuf->data);
+  message("===============\n");
 
 #ifndef DISABLE_CURL
   curl_global_init(CURL_GLOBAL_ALL);
@@ -148,10 +152,10 @@ void test()
   curl_easy_cleanup(h);
 #endif
 
-  printf("Response:\n");
-  printf("===============\n");
-  printf("%s\n",response->data);
-  printf("===============\n");
+  message("Response:\n");
+  message("===============\n");
+  message("%s\n",response->data);
+  message("===============\n");
 
 
   stringbuf_free(sbuf);
@@ -169,7 +173,7 @@ int main(int argc, char **argv)
   exit(0);
 
   if (2 > argc) {
-    fprintf(stderr,"Usage: wsclient <wsdl_file>\n");
+    fmessage(stderr,"Usage: wsclient <wsdl_file>\n");
     exit(1);
   }
 
@@ -190,54 +194,54 @@ int main(int argc, char **argv)
     ws_binding *b;
     ws_service *s;
 
-    printf("Parsed WSDL file:\n");
+    message("Parsed WSDL file:\n");
 
     for (m = w->messages; m; m = m->next) {
       ws_part *p;
-      printf("  message \"%s\"\n",m->name);
+      message("  message \"%s\"\n",m->name);
       for (p = m->parts; p; p = p->next) {
         if (p->element)
-          printf("    part \"%s\" (element %s)\n",p->name,p->element);
+          message("    part \"%s\" (element %s)\n",p->name,p->element);
         else
-          printf("    part \"%s\" (type %s)\n",p->name,p->type);
+          message("    part \"%s\" (type %s)\n",p->name,p->type);
       }
     }
 
     for (pt = w->port_types; pt; pt = pt->next) {
       ws_operation *o;
       ws_param *p;
-      printf("  port type \"%s\"\n",pt->name);
+      message("  port type \"%s\"\n",pt->name);
       for (o = pt->operations; o; o = o->next) {
-        printf("    operation \"%s\"\n",o->name);
+        message("    operation \"%s\"\n",o->name);
         if (o->input)
-          printf("      input message \"%s\"\n",o->input->message);
+          message("      input message \"%s\"\n",o->input->message);
         if (o->output)
-          printf("      output message \"%s\"\n",o->output->message);
+          message("      output message \"%s\"\n",o->output->message);
         for (p = o->faults; p; p = p->next)
-          printf("      fault message \"%s\"\n",p->message);
+          message("      fault message \"%s\"\n",p->message);
       }
     }
 
     for (b = w->bindings; b; b = b->next) {
       ws_bindop *bo;
-      printf("  binding \"%s\" for port type \"%s\"\n",b->name,b->type);
+      message("  binding \"%s\" for port type \"%s\"\n",b->name,b->type);
       for (bo = b->operations; bo; bo = bo->next) {
         ws_bindparam *bp;
-        printf("    bindop \"%s\"\n",bo->name);
+        message("    bindop \"%s\"\n",bo->name);
         if (bo->input)
-          printf("      input\n");
+          message("      input\n");
         if (bo->output)
-          printf("      output\n");
+          message("      output\n");
         for (bp = bo->faults; bp; bp = bp->next)
-          printf("      fault \"%s\"\n",bp->name);
+          message("      fault \"%s\"\n",bp->name);
       }
     }
 
     for (s = w->services; s; s = s->next) {
       ws_port *p;
-      printf("  service \"%s\"\n",s->name);
+      message("  service \"%s\"\n",s->name);
       for (p = s->ports; p; p = p->next) {
-        printf("    port \"%s\" binding \"%s\"\n",p->name,p->binding);
+        message("    port \"%s\" binding \"%s\"\n",p->name,p->binding);
       }
     }
 

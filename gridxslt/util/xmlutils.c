@@ -42,47 +42,52 @@
 #include <limits.h>
 #include <stdlib.h>
 
-qname qname_parse(const char *name)
+using namespace GridXSLT;
+
+QName::QName()
 {
-  qname qn;
-  qn.localpart = xmlSplitQName2(name,((xmlChar**)&qn.prefix));
-  if (NULL == qn.localpart)
-    qn.localpart = strdup(name);
+}
+
+QName::QName(String prefix, String localPart)
+  : m_prefix(prefix), m_localPart(localPart)
+{
+}
+
+QName::QName(const parse_qname &qn)
+  : m_prefix(qn.prefix), m_localPart(qn.localpart)
+{
+}
+
+QName QName::null()
+{
+  return QName(String::null(),String::null());
+}
+
+QName QName::parse(const char *name)
+{
+  char *prefix;
+  char *localPart = xmlSplitQName2(name,&prefix);
+  if (NULL == localPart)
+    localPart = strdup(name);
+  QName qn(prefix,localPart);
+  free(prefix);
+  free(localPart);
   return qn;
 }
 
-qname *qname_list_parse(const char *list)
+List<QName> QName::parseList(const char *list)
 {
-  const char *start;
-  const char *c;
-  int count = 0;
-  int pos = 0;
-  qname *qnames;
+  List<QName> qnames;
+  const char *start = list;
+  const char *c = list;
 
-  start = list;
-  c = list;
-  while (1) {
-    if ('\0' == *c || isspace(*c)) {
-      if (c != start)
-        count++;
-      start = c+1;
-    }
-    if ('\0' == *c)
-      break;
-    c++;
-  }
-
-  qnames = (qname*)calloc(count+1,sizeof(qname));
-
-  start = list;
-  c = list;
   while (1) {
     if ('\0' == *c || isspace(*c)) {
       if (c != start) {
         char *str = (char*)malloc(c-start+1);
         memcpy(str,start,c-start);
         str[c-start] = '\0';
-        qnames[pos++] = qname_parse(str);
+        qnames.append(QName::parse(str));
         free(str);
       }
       start = c+1;
@@ -94,7 +99,244 @@ qname *qname_list_parse(const char *list)
   return qnames;
 }
 
-int nullstr_equals(const char *a, const char *b)
+void QName::print(StringBuffer &buf)
+{
+  if (isNull())
+    return;
+  else if (!m_prefix.isNull())
+    buf.format("%*:%*",&m_prefix,&m_localPart);
+  else
+    buf.format("%*",&m_localPart);
+}
+
+bool GridXSLT::operator==(const QName &a, const QName &b)
+{
+  return ((a.m_prefix == b.m_prefix) && (a.m_localPart == b.m_localPart));
+}
+
+NSName::NSName()
+{
+}
+
+NSName::NSName(String ns, String name)
+  : m_ns(ns), m_name(name)
+{
+}
+
+NSName NSName::null()
+{
+  return NSName(String::null(),String::null());
+}
+
+void NSName::print(StringBuffer &buf)
+{
+  if (isNull())
+    return;
+  else if (!m_ns.isNull())
+    buf.format("{%*}%*",&m_ns,&m_name);
+  else
+    buf.format("%*",&m_name);
+}
+
+bool GridXSLT::operator==(const NSName &a, const NSName &b)
+{
+  return ((a.m_ns == b.m_ns) && (a.m_name == b.m_name));
+}
+
+QNameTest::QNameTest()
+  : wcprefix(0), wcname(0)
+{
+}
+
+QNameTest::~QNameTest()
+{
+}
+
+NSNameTest::NSNameTest()
+  : wcns(0), wcname(0)
+{
+}
+
+NSNameTest::~NSNameTest()
+{
+}
+
+bool NSNameTest::matches(const NSName &nn1)
+{
+  if (wcns && wcname)
+    return 1;
+  else if (wcns)
+    return (nn.m_name == nn1.m_name);
+  else if (wcname)
+    return (nn.m_ns == nn1.m_ns);
+  else
+    return (nn == nn1);
+}
+
+definition::definition()
+{
+  memset(&loc,0,sizeof(sourceloc));
+}
+
+definition::~definition()
+{
+}
+
+void XMLWriter::attribute(xmlTextWriterPtr writer, const String &name, const String &content)
+{
+  char *namestr = name.cstring();
+  char *contentstr = content.cstring();
+  xmlTextWriterWriteAttribute(writer,namestr,contentstr);
+  free(namestr);
+  free(contentstr);
+}
+
+void XMLWriter::comment(xmlTextWriterPtr writer, const String &content)
+{
+  char *contentstr = content.cstring();
+  xmlTextWriterWriteComment(writer,contentstr);
+  free(contentstr);
+}
+
+void XMLWriter::formatAttribute(xmlTextWriterPtr writer, const String &name,
+                                const char *format, ...)
+{
+  StringBuffer buf;
+  va_list ap;
+  va_start(ap,format);
+  buf.vformat(format,ap);
+  va_end(ap);
+  attribute(writer,name,buf.contents());
+}
+
+void XMLWriter::formatString(xmlTextWriterPtr writer, const char *format, ...)
+{
+  StringBuffer buf;
+  va_list ap;
+  va_start(ap,format);
+  buf.vformat(format,ap);
+  va_end(ap);
+  string(writer,buf.contents());
+}
+
+void XMLWriter::pi(xmlTextWriterPtr writer, const String &target, const String &content)
+{
+  char *targetstr = target.cstring();
+  char *contentstr = content.isNull() ? NULL : content.cstring();
+  xmlTextWriterWritePI(writer,targetstr,contentstr);
+  free(targetstr);
+  free(contentstr);
+}
+
+void XMLWriter::raw(xmlTextWriterPtr writer, const String &content)
+{
+  char *contentstr = content.cstring();
+  xmlTextWriterWriteRaw(writer,contentstr);
+  free(contentstr);
+}
+
+void XMLWriter::string(xmlTextWriterPtr writer, const String &content)
+{
+  char *contentstr = content.cstring();
+  xmlTextWriterWriteString(writer,contentstr);
+  free(contentstr);
+}
+
+Error::Error()
+  : m_line(0)
+{
+}
+
+Error::~Error()
+{
+}
+
+void Error::fprint(FILE *f)
+{
+  if (!m_filename.isNull()) {
+    char *rel;
+
+    if (0 <= m_filename.indexOf(":")) {
+      char *cwduri;
+      char cwd[PATH_MAX];
+      getcwd(cwd,PATH_MAX);
+      cwduri = (char*)malloc(strlen("file://")+strlen(cwd)+2);
+      sprintf(cwduri,"file://%s/",cwd);
+      char *s = m_filename.cstring();
+      rel = xmlBuildRelativeURI(s,cwduri);
+      free(s);
+      free(cwduri);
+    }
+    else {
+      rel = m_filename.cstring();
+    }
+
+    if (0 <= m_line)
+      fmessage(stderr,"%s:%d: ",rel,m_line);
+    else
+      fmessage(stderr,"%s: ",rel);
+    free(rel);
+  }
+
+  if (!m_spec.isNull() && !m_section.isNull())
+    fmessage(stderr,"error: %* (%*, section %*)\n",&m_message,&m_spec,&m_section);
+  else if (!m_errname.isNull())
+    fmessage(stderr,"error %*: %*\n",&m_errname,&m_message);
+  else
+    fmessage(stderr,"error: %*\n",&m_message);
+}
+
+void Error::clear()
+{
+  m_filename = String::null();
+  m_line = 0;
+  m_message = String::null();
+  m_spec = String::null();
+  m_section = String::null();
+  m_errname = String::null();
+}
+
+int GridXSLT::XMLHasProp(xmlNodePtr n, const String &name)
+{
+  int r;
+  char *namestr = name.cstring();
+  r = (0 != xmlHasProp(n,namestr));
+  free(namestr);
+  return r;
+}
+
+int GridXSLT::XMLHasNsProp(xmlNodePtr n, const String &name, const String &ns)
+{
+  int r;
+  char *namestr = name.cstring();
+  char *nsstr = ns.isNull() ? NULL : ns.cstring();
+  r = (0 != xmlHasNsProp(n,namestr,nsstr));
+  free(namestr);
+  free(nsstr);
+  return r;
+}
+
+char *GridXSLT::XMLGetProp(xmlNodePtr n, const String &name)
+{
+  char *r;
+  char *namestr = name.cstring();
+  r = xmlGetProp(n,namestr);
+  free(namestr);
+  return r;
+}
+
+char *GridXSLT::XMLGetNsProp(xmlNodePtr n, const String &name, const String &ns)
+{
+  char *r;
+  char *namestr = name.cstring();
+  char *nsstr = ns.isNull() ? NULL : ns.cstring();
+  r = xmlGetNsProp(n,namestr,nsstr);
+  free(namestr);
+  free(nsstr);
+  return r;
+}
+
+int GridXSLT::nullstr_equals(const char *a, const char *b)
 {
   if ((NULL == a) && (NULL == b))
     return 1;
@@ -104,126 +346,14 @@ int nullstr_equals(const char *a, const char *b)
     return 0;
 }
 
-int nsname_equals(const nsname nn1, const nsname nn2)
+NSNameTest *GridXSLT::NSNameTest_copy(NSNameTest *test)
 {
-  return (nullstr_equals(nn1.ns,nn2.ns) && nullstr_equals(nn1.name,nn2.name));
-}
-
-int nsname_isnull(const nsname nn)
-{
-  return (NULL == nn.name);
-}
-
-int qname_isnull(const qname qn)
-{
-  return (NULL == qn.localpart);
-}
-
-qname qname_temp(char *prefix, char *localpart)
-{
-  qname qn;
-  qn.prefix = prefix;
-  qn.localpart = localpart;
-  return qn;
-}
-
-nsname nsname_temp(char *ns, char *name)
-{
-  nsname nn;
-  nn.ns = ns;
-  nn.name = name;
-  return nn;
-}
-
-qname qname_new(const char *prefix, const char *localpart)
-{
-  qname qn;
-  qn.prefix = prefix ? strdup(prefix) : NULL;
-  qn.localpart = localpart ? strdup(localpart) : NULL;
-  return qn;
-}
-
-nsname nsname_new(const char *ns, const char *name)
-{
-  nsname nn;
-  nn.ns = ns ? strdup(ns) : NULL;
-  nn.name = name ? strdup(name) : NULL;
-  return nn;
-}
-
-qname qname_copy(const qname qn)
-{
-  return qname_new(qn.prefix,qn.localpart);
-}
-
-nsname nsname_copy(const nsname nn)
-{
-  return nsname_new(nn.ns,nn.name);
-}
-
-void qname_free(qname qn)
-{
-  free(qn.prefix);
-  free(qn.localpart);
-  qn.prefix = NULL;
-  qn.localpart = NULL;
-}
-
-void nsname_free(nsname nn)
-{
-  free(nn.ns);
-  free(nn.name);
-  nn.ns = NULL;
-  nn.name = NULL;
-}
-
-void nsname_ptr_free(nsname *nn)
-{
-  nsname_free(*nn);
-  free(nn);
-}
-
-nsname *nsname_ptr_copy(const nsname *nn)
-{
-  nsname *copy = (nsname*)malloc(sizeof(nsname));
-  *copy = nsname_copy(*nn);
+  NSNameTest *copy = new NSNameTest();
+  *copy = *test;
   return copy;
 }
 
-int nsnametest_matches(nsnametest *test, nsname nn)
-{
-  if (test->wcns && test->wcname)
-    return 1;
-  else if (test->wcns)
-    return nullstr_equals(test->nn.name,nn.name);
-  else if (test->wcname)
-    return nullstr_equals(test->nn.ns,nn.ns);
-  else
-    return nsname_equals(test->nn,nn);
-}
-
-void nsnametest_free(nsnametest *test)
-{
-  nsname_free(test->nn);
-  free(test);
-}
-
-nsnametest *nsnametest_copy(nsnametest *test)
-{
-  nsnametest *copy = (nsnametest*)calloc(1,sizeof(nsnametest));
-  copy->nn = nsname_copy(test->nn);
-  copy->wcns = test->wcns;
-  copy->wcname = test->wcname;
-  return copy;
-}
-
-void qnametest_ptr_free(qnametest *test)
-{
-  qname_free(test->qn);
-  free(test);
-}
-
-sourceloc sourceloc_copy(sourceloc sloc)
+sourceloc GridXSLT::sourceloc_copy(sourceloc sloc)
 {
   sourceloc copy;
   copy.uri = sloc.uri ? strdup(sloc.uri) : NULL;
@@ -231,236 +361,180 @@ sourceloc sourceloc_copy(sourceloc sloc)
   return copy;
 }
 
-void sourceloc_free(sourceloc sloc)
+void GridXSLT::sourceloc_free(sourceloc sloc)
 {
   free(sloc.uri);
 }
 
 const sourceloc nosourceloc1 = { uri: NULL, line: -1 };
 
-sourceloc get_nosourceloc()
+sourceloc GridXSLT::get_nosourceloc()
 {
   return nosourceloc1;
 }
 
-void print(const char *format, ...)
-{
-  va_list ap;
-  stringbuf *buf = stringbuf_new();
-
-  va_start(ap,format);
-  stringbuf_vformat(buf,format,ap);
-  va_end(ap);
-
-  printf("%s",buf->data);
-  stringbuf_free(buf);
-}
-
-int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
+int GridXSLT::get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
                            char **namespace1, char **localpart)
 {
-  qname qn = qname_parse(name);
+  QName qn = QName::parse(name);
   xmlNsPtr ns = NULL;
 
   *namespace1 = NULL;
   *localpart = NULL;
 
   /* FIXME: maybe set error info here instead of requiring thet caller to do it? */
-  if ((NULL == (ns = xmlSearchNs(doc,n,qn.prefix))) && (NULL != qn.prefix)) {
-    qname_free(qn);
+  char *prefix = qn.m_prefix.cstring();
+  if ((NULL == (ns = xmlSearchNs(doc,n,prefix))) && (NULL != prefix)) {
+    free(prefix);
     return -1;
   }
+  free(prefix);
   *namespace1 = ns ? strdup(ns->href) : NULL;
-  *localpart = qn.localpart;
-  free(qn.prefix);
+  *localpart = qn.m_localPart.cstring();
 
   return 0;
 }
 
-void error_info_copy(error_info *to, error_info *from)
-{
-  assert(NULL != from->filename);
-  assert(NULL != from->message);
-  error_info_free_vals(to);
-  to->filename = strdup(from->filename);
-  to->line = from->line;
-  to->message = strdup(from->message);
-  to->spec = from->spec ? strdup(from->spec) : NULL;
-  to->section = from->section ? strdup(from->section) : NULL;
-  to->errname = from->errname ? strdup(from->errname) : NULL;
-}
-
-void error_info_print(error_info *ei, FILE *f)
-{
-  if (NULL != ei->filename) {
-    char *rel;
-
-    if (NULL != strchr(ei->filename,':')) {
-      char *cwduri;
-      char cwd[PATH_MAX];
-      getcwd(cwd,PATH_MAX);
-      cwduri = (char*)malloc(strlen("file://")+strlen(cwd)+2);
-      sprintf(cwduri,"file://%s/",cwd);
-      rel = xmlBuildRelativeURI(ei->filename,cwduri);
-      free(cwduri);
-    }
-    else {
-      rel = strdup(ei->filename);
-    }
-
-    if (0 <= ei->line)
-      fprintf(stderr,"%s:%d: ",rel,ei->line);
-    else
-      fprintf(stderr,"%s: ",rel);
-    free(rel);
-  }
-
-  if (ei->spec && ei->section)
-    fprintf(stderr,"error: %s (%s, section %s)\n",ei->message,ei->spec,ei->section);
-  else if (ei->errname)
-    fprintf(stderr,"error %s: %s\n",ei->errname,ei->message);
-  else
-    fprintf(stderr,"error: %s\n",ei->message);
-
-}
-
-void error_info_free_vals(error_info *ei)
-{
-  free(ei->filename);
-  free(ei->message);
-  free(ei->spec);
-  free(ei->section);
-  free(ei->errname);
-  memset(ei,0,sizeof(error_info));
-}
-
-int error(error_info *ei, const char *filename, int line,
-          const char *errname, const char *format, ...)
+int GridXSLT::error(Error *ei, const String &filename, int line,
+          const String &errname, const char *format, ...)
 {
   va_list ap;
-  stringbuf *buf;
+  StringBuffer buf;
 
-  error_info_free_vals(ei);
+  ei->clear();
 
   va_start(ap,format);
-  buf = stringbuf_new();
-  stringbuf_vformat(buf,format,ap);
-  ei->message = strdup(buf->data);
-  stringbuf_free(buf);
+  buf.vformat(format,ap);
+  ei->m_message = buf.contents();
   va_end(ap);
 
-  ei->filename = filename ? strdup(filename) : NULL;
-  ei->line = line;
-  ei->errname = errname ? strdup(errname) : NULL;
+  ei->m_filename = filename;
+  ei->m_line = line;
+  ei->m_errname = errname;
 
   return -1;
 }
 
-int parse_error(xmlNodePtr n, const char *format, ...)
+int GridXSLT::parse_error(xmlNodePtr n, const char *format, ...)
 {
   va_list ap;
   
-  fprintf(stderr,"Parse error at line %d: ",n->line);
+  fmessage(stderr,"Parse error at line %d: ",n->line);
 
   va_start(ap,format);
   vfprintf(stderr,format,ap);
   va_end(ap);
 
   if (n->ns && n->ns->prefix)
-    fprintf(stderr," (%s:%s)",n->ns->prefix,n->name);
+    fmessage(stderr," (%s:%s)",n->ns->prefix,n->name);
   else
-    fprintf(stderr," (%s)",n->name);
-  fprintf(stderr,"\n");
+    fmessage(stderr," (%s)",n->name);
+  fmessage(stderr,"\n");
   return -1;
 }
 
-int invalid_element2(error_info *ei, const char *filename, xmlNodePtr n)
+int GridXSLT::invalid_element2(Error *ei, const String &filename, xmlNodePtr n)
 {
   if (n->ns && n->ns->href)
-    return error(ei,filename,n->line,NULL,"Element {%s}%s is not valid here",n->ns->href,n->name);
+    return error(ei,filename,n->line,String::null(),"Element {%s}%s is not valid here",n->ns->href,n->name);
   else
-    return error(ei,filename,n->line,NULL,"Element %s is not valid here",n->name);
+    return error(ei,filename,n->line,String::null(),"Element %s is not valid here",n->name);
   return -1;
 }
 
-int invalid_element(xmlNodePtr n)
+int GridXSLT::invalid_element(xmlNodePtr n)
 {
   if (n->ns && n->ns->prefix)
-    fprintf(stderr,"%d: Element <%s:%s> is not valid here\n",n->line,n->ns->prefix,n->name);
+    fmessage(stderr,"%d: Element <%s:%s> is not valid here\n",n->line,n->ns->prefix,n->name);
   else
-    fprintf(stderr,"%d: Element <%s> is not valid here\n",n->line,n->name);
+    fmessage(stderr,"%d: Element <%s> is not valid here\n",n->line,n->name);
   return -1;
 }
 
-int missing_attribute2(error_info *ei, const char *filename, int line, const char *errname,
-                       const char *attrname)
+int GridXSLT::missing_attribute2(Error *ei, const String &filename, int line,
+                       const String &errname,
+                       const String &attrname)
 {
 /*   return error(ei,filename,line,errname,"\"%s\" attribute missing",attrname); */
-  return error(ei,filename,line,errname,"missing attribute: %s",attrname);
-}
-
-int missing_attribute(xmlNodePtr n, const char *attrname)
-{
-  if (n->ns && n->ns->prefix)
-    fprintf(stderr,"%d: No \"%s\" attribute specified on <%s:%s>\n",
-            n->line,attrname,n->ns->prefix,n->name);
-  else
-    fprintf(stderr,"%d: No \"%s\" attribute specified on <%s>\n",
-            n->line,attrname,n->name);
+  char *err = errname.isNull() ? NULL : errname.cstring();
+  error(ei,filename,line,err,"missing attribute: %*",&attrname);
+  free(err);
   return -1;
 }
 
-int attribute_not_allowed(error_info *ei, const char *filename, int line, const char *attrname)
+int GridXSLT::missing_attribute(xmlNodePtr n, const String &attrname)
 {
-  return error(ei,filename,line,NULL,"\"%s\" attribute not allowed here",attrname);
+  if (n->ns && n->ns->prefix)
+    fmessage(stderr,"%d: No \"%*\" attribute specified on <%s:%s>\n",
+            n->line,&attrname,n->ns->prefix,n->name);
+  else
+    fmessage(stderr,"%d: No \"%*\" attribute specified on <%s>\n",
+            n->line,&attrname,n->name);
+  return -1;
 }
 
-int conflicting_attributes(error_info *ei, const char *filename, int line, const char *errname,
-                           const char *conflictor, const char *conflictee)
+int GridXSLT::attribute_not_allowed(Error *ei, const String &filename, int line, const char *attrname)
 {
-  return error(ei,filename,line,errname,"\"%s\" attribute cannot be used in conjunction "
-               "with \"%s\" here",conflictor,conflictee);
+  return error(ei,filename,line,String::null(),"\"%s\" attribute not allowed here",attrname);
 }
 
-int invalid_attribute_val(error_info *ei, const char *filename, xmlNodePtr n, const char *attrname)
+int GridXSLT::conflicting_attributes(Error *ei, const String &filename, int line, const String &errname,
+                           const String &conflictor, const String &conflictee)
 {
-  char *val = xmlGetProp(n,attrname);
-  error(ei,filename,n->line,NULL,"Invalid value \"%s\" for attribute \"%s\"",val,attrname);
+  return error(ei,filename,line,errname,"\"%*\" attribute cannot be used in conjunction "
+               "with \"%*\" here",&conflictor,&conflictee);
+}
+
+int GridXSLT::invalid_attribute_val(Error *ei, const String &filename, xmlNodePtr n,
+                          const String &attrname)
+{
+  char *namestr = attrname.cstring();
+  char *val = XMLGetProp(n,namestr);
+  free(namestr);
+  error(ei,filename,n->line,String::null(),"Invalid value \"%s\" for attribute \"%*\"",val,&attrname);
   free(val);
   return -1;
 }
 
-int check_element(xmlNodePtr n, const char *localname, const char *namespace1)
+int GridXSLT::check_element(xmlNodePtr n, const String &localname, const String &namespace1)
 {
   return ((XML_ELEMENT_NODE == n->type) &&
-          !strcmp(n->name,localname) &&
-          (((NULL == n->ns) && (NULL == namespace1)) ||
-           ((NULL != n->ns) && (NULL != namespace1) && !strcmp(n->ns->href,namespace1))));
+          (n->name == localname) &&
+          (((NULL == n->ns) && (namespace1.isNull())) ||
+           ((NULL != n->ns) && (!namespace1.isNull()) && (n->ns->href == namespace1))));
 }
 
-int convert_to_nonneg_int(const char *str, int *val)
+int GridXSLT::convert_to_nonneg_int(const String &str, int *val)
 {
+  char *tmp = str.cstring();
   char *end = NULL;
-  int l = strtol(str,&end,10);
-  if (('\0' != *str) && ('\0' == *end) && (0 <= l)) {
+  int l = strtol(tmp,&end,10);
+  if (('\0' != *tmp) && ('\0' == *end) && (0 <= l)) {
     *val = l;
+    free(tmp);
     return 0;
   }
   else {
+    free(tmp);
     return 1;
   }
 }
 
-int parse_int_attr(error_info *ei, char *filename, xmlNodePtr n, const char *attrname, int *val)
+int GridXSLT::parse_int_attr(Error *ei, char *filename, xmlNodePtr n, const String &attrname, int *val)
 {
   char *str;
+  char *tmp = attrname.cstring();
   int cr;
-  if (!xmlHasProp(n,attrname))
-    return missing_attribute2(ei,filename,n->line,NULL,attrname);
+  if (!XMLHasProp(n,tmp)) {
+    missing_attribute2(ei,filename,n->line,String::null(),tmp);
+    free(tmp);
+    return -1;
+  }
 
-  str = get_wscollapsed_attr(n,attrname,NULL);
+  str = get_wscollapsed_attr(n,tmp,String::null());
   cr = convert_to_nonneg_int(str,val);
   free(str);
+  free(tmp);
 
   if (0 != cr)
     return invalid_attribute_val(ei,filename,n,attrname);
@@ -468,24 +542,29 @@ int parse_int_attr(error_info *ei, char *filename, xmlNodePtr n, const char *att
     return 0;
 }
 
-int parse_optional_int_attr(error_info *ei, char *filename, xmlNodePtr n,
-                            const char *attrname, int *val, int def)
+int GridXSLT::parse_optional_int_attr(Error *ei, char *filename, xmlNodePtr n,
+                            const GridXSLT::String &attrname, int *val, int def)
 {
-  if (xmlHasProp(n,attrname))
+  char *tmp = attrname.cstring();
+  if (XMLHasProp(n,tmp)) {
+    free(tmp);
     return parse_int_attr(ei,filename,n,attrname,val);
+  }
+  free(tmp);
   *val = def;
   return 0;
 }
 
-int parse_boolean_attr(error_info *ei, char *filename, xmlNodePtr n, const char *attrname, int *val)
+int GridXSLT::parse_boolean_attr(Error *ei, char *filename, xmlNodePtr n,
+                       const String &attrname, int *val)
 {
   char *str;
   int invalid = 0;
-  if (!xmlHasProp(n,attrname))
+  if (!XMLHasProp(n,attrname))
     return missing_attribute(n,attrname);
 
   /* FIXME: support 1, 0 */
-  str = get_wscollapsed_attr(n,attrname,NULL);
+  str = get_wscollapsed_attr(n,attrname,String::null());
   if (!strcmp(str,"true") || !strcmp(str,"1"))
     *val = 1;
   else if (!strcmp(str,"false") || !strcmp(str,"0"))
@@ -500,16 +579,16 @@ int parse_boolean_attr(error_info *ei, char *filename, xmlNodePtr n, const char 
     return 0;
 }
 
-int parse_optional_boolean_attr(error_info *ei, char *filename, xmlNodePtr n,
-                                const char *attrname, int *val, int def)
+int GridXSLT::parse_optional_boolean_attr(Error *ei, char *filename, xmlNodePtr n,
+                                const GridXSLT::String &attrname, int *val, int def)
 {
-  if (xmlHasProp(n,attrname))
+  if (XMLHasProp(n,attrname))
     return parse_boolean_attr(ei,filename,n,attrname,val);
   *val = def;
   return 0;
 }
 
-void replace_whitespace(char *str)
+void GridXSLT::replace_whitespace(char *str)
 {
   char *c;
   if (NULL == str)
@@ -521,7 +600,7 @@ void replace_whitespace(char *str)
       *c = ' ';
 }
 
-void collapse_whitespace(char *str)
+void GridXSLT::collapse_whitespace(char *str)
 {
   char *c;
   char *w;
@@ -550,14 +629,14 @@ void collapse_whitespace(char *str)
   *end = '\0';
 }
 
-char *get_wscollapsed_attr(xmlNodePtr n, const char *attrname, const char *ns)
+char *GridXSLT::get_wscollapsed_attr(xmlNodePtr n, const String &attrname, const String &ns)
 {
-  char *val = xmlGetNsProp(n,attrname,ns);
+  char *val = XMLGetNsProp(n,attrname,ns);
   collapse_whitespace(val);
   return val;
 }
 
-void xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...)
+void GridXSLT::xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...)
 {
   va_list ap;
   stringbuf *buf = stringbuf_new();
@@ -566,32 +645,35 @@ void xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *for
   stringbuf_vformat(buf,format,ap);
   va_end(ap);
 
-  xmlTextWriterWriteAttribute(writer,attrname,buf->data);
+  XMLWriter::attribute(writer,attrname,buf->data);
 
   stringbuf_free(buf);
 }
 
-qname xml_attr_qname(xmlNodePtr n, const char *attrname)
+QName GridXSLT::xml_attr_qname(xmlNodePtr n, const char *attrname)
 {
-  char *name = xmlGetNsProp(n,attrname,NULL);
-  qname qn = qname_parse(name);
+  char *name = XMLGetNsProp(n,attrname,String::null());
+  QName qn = QName::parse(name);
   free(name);
   return qn;
 }
 
-int xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s)
+int GridXSLT::xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s)
 {
-  char *val = xmlGetNsProp(n,attrname,NULL);
+  char *val = XMLGetNsProp(n,attrname,String::null());
   int r;
   r = strcmp(val,s);
   free(val);
   return r;
 }
 
-char *escape_str(const char *s)
+String GridXSLT::escape_str(const String &ss)
 {
-  char *q = (char*)malloc(2*strlen(s)+1);
+  /* FIXME: implement using proper string mechanisms! */
+  char *q = (char*)malloc(2*ss.length()+1);
   char *qp = q;
+  char *str = ss.cstring();
+  char *s = str;
   while ('\0' != *s) {
     switch (*s) {
     case '\n':
@@ -636,44 +718,47 @@ char *escape_str(const char *s)
     }
   }
   *qp = '\0';
-  return q;
+  free(str);
+  String res(q);
+  free(q);
+  return res;
 }
 
-int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr n,
-                               const char *restrictns, const nsname *stdattrs, ...)
+int GridXSLT::enforce_allowed_attributes(Error *ei, const String &filename, xmlNodePtr n,
+                               const String &restrictns, List<NSName> &stdattrs, int xx, ...)
 {
   va_list ap;
   xmlAttr *attr;
 
   for (attr = n->properties; attr; attr = attr->next) {
     int allowed = 0;
-    char *cur;
-    const nsname *s;
+    String *cur;
     const char *ns = attr->ns ? attr->ns->href : NULL;
-    nsname attrnn;
+    NSName attrnn;
+    String attrName = attr->name;
 
-    va_start(ap,stdattrs);
-    while ((NULL != (cur = va_arg(ap,char*))) && !allowed) {
-      if (!strcmp(cur,attr->name))
+    va_start(ap,xx);
+    while ((NULL != (cur = va_arg(ap,String*))) && !allowed) {
+      if (*cur == attrName)
         allowed = 1;
     }
     va_end(ap);
 
-    attrnn = nsname_new(ns,attr->name);
-    if ((NULL != ns) && strcmp(restrictns,ns))
+    attrnn = NSName(ns,attr->name);
+    if ((NULL != ns) && (restrictns != ns))
       allowed = 1;
-    for (s = stdattrs; s->name && !allowed; s++)
-      if (nsname_equals(*s,attrnn))
+
+    Iterator<NSName> it;
+    for (it = stdattrs; it.haveCurrent() && !allowed; it++)
+      if (*it == attrnn)
         allowed = 1;
-    nsname_free(attrnn);
 
     if (!allowed) {
-      qname attrqn = qname_new(attr->ns ? attr->ns->prefix : NULL,attr->name);
-      qname nodeqn = qname_new(n->ns ? n->ns->prefix : NULL,n->name);
-      error(ei,filename,n->line,NULL,"attribute \"%#q\" is not permitted on element \"%#q\"",
-            attrqn,nodeqn);
-      qname_free(attrqn);
-      qname_free(nodeqn);
+      QName attrqn = QName(attr->ns ? attr->ns->prefix : NULL,attr->name);
+      QName nodeqn = QName(n->ns ? n->ns->prefix : NULL,n->name);
+      error(ei,filename,n->line,String::null(),
+            "attribute \"%*\" is not permitted on element \"%*\"",
+            &attrqn,&nodeqn);
       return -1;
     }
   }
@@ -681,7 +766,7 @@ int enforce_allowed_attributes(error_info *ei, const char *filename, xmlNodePtr 
   return 0;
 }
 
-int is_all_whitespace(const char *s, int len)
+int GridXSLT::is_all_whitespace(const char *s, int len)
 {
   int i;
   for (i = 0; i < len; i++)
@@ -696,36 +781,39 @@ static size_t write_buf(void *ptr, size_t size, size_t nmemb, void *data)
   return size*nmemb;
 }
 
-char *get_real_uri(const char *filename)
+char *GridXSLT::get_real_uri(const String &filename)
 {
   char *real;
-  if (NULL != strstr(filename,"://")) {
+  char *fnstr = filename.cstring();
+  if (NULL != strstr(fnstr,"://")) {
     /* full uri */
-    return strdup(filename);
+    free(fnstr);
+    return filename.cstring();
   }
   else {
     char path[PATH_MAX];
-    if ('/' == filename[0]) {
+    if ('/' == fnstr[0]) {
       /* absolute filename */
-      realpath(filename,path);
+      realpath(fnstr,path);
     }
     else {
       /* relative filename */
       char *full;
       char cwd[PATH_MAX];
       getcwd(cwd,PATH_MAX);
-      full = (char*)malloc(strlen(cwd)+1+strlen(filename)+1);
-      sprintf(full,"%s/%s",cwd,filename);
+      full = (char*)malloc(strlen(cwd)+1+strlen(fnstr)+1);
+      sprintf(full,"%s/%s",cwd,fnstr);
       realpath(full,path);
       free(full);
     }
     real = (char*)malloc(strlen("file://")+strlen(path)+1);
     sprintf(real,"file://%s",path);
+    free(fnstr);
     return real;
   }
 }
 
-char *get_relative_uri(const char *uri, const char *base)
+char *GridXSLT::get_relative_uri(const char *uri, const char *base)
 {
   char *relfilename = xmlBuildRelativeURI(uri,base);
   char *rel;
@@ -744,11 +832,11 @@ char *get_relative_uri(const char *uri, const char *base)
   return rel;
 }
 
-xmlNodePtr get_element_by_id(xmlNodePtr n, const char *id)
+xmlNodePtr GridXSLT::get_element_by_id(xmlNodePtr n, const char *id)
 {
   xmlNodePtr c;
-  if (xmlHasNsProp(n,"id",XML_NAMESPACE)) {
-    char *nid = xmlGetNsProp(n,"id",XML_NAMESPACE);
+  if (XMLHasNsProp(n,"id",XML_NAMESPACE)) {
+    char *nid = XMLGetNsProp(n,"id",XML_NAMESPACE);
     int equal;
     collapse_whitespace(nid);
     equal = !strcmp(nid,id);
@@ -764,7 +852,7 @@ xmlNodePtr get_element_by_id(xmlNodePtr n, const char *id)
   return NULL;
 }
 
-int retrieve_uri_element(error_info *ei, const char *filename, int line, const char *errname,
+int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, const String &errname,
                          const char *full_uri, xmlDocPtr *doc, xmlNodePtr *node,
                          const char *refsource)
 {
@@ -833,7 +921,7 @@ int retrieve_uri_element(error_info *ei, const char *filename, int line, const c
   return 0;
 }
 
-int retrieve_uri(error_info *ei, const char *filename, int line, const char *errname,
+int GridXSLT::retrieve_uri(Error *ei, const String &filename, int line, const String &errname,
                  const char *full_uri1, stringbuf *buf, const char *refsource)
 {
   char *colon;
@@ -920,7 +1008,16 @@ int retrieve_uri(error_info *ei, const char *filename, int line, const char *err
   return 0;
 }
 
-symbol_space *ss_new(symbol_space *fallback, const char *type)
+symbol_space_entry::symbol_space_entry()
+  : object(NULL), next(NULL)
+{
+}
+
+symbol_space_entry::~symbol_space_entry()
+{
+}
+
+symbol_space *GridXSLT::ss_new(symbol_space *fallback, const char *type)
 {
   symbol_space *ss = (symbol_space*)calloc(1,sizeof(symbol_space));
   ss->fallback = fallback;
@@ -928,16 +1025,16 @@ symbol_space *ss_new(symbol_space *fallback, const char *type)
   return ss;
 }
 
-void *ss_lookup_local(symbol_space *ss, const nsname ident)
+void *GridXSLT::ss_lookup_local(symbol_space *ss, const NSName &ident)
 {
   symbol_space_entry *sse;
   for (sse = ss->entries; sse; sse = sse->next)
-    if (nsname_equals(sse->ident,ident))
+    if (sse->ident == ident)
       return sse->object;
   return NULL;
 }
 
-void *ss_lookup(symbol_space *ss, const nsname ident)
+void *GridXSLT::ss_lookup(symbol_space *ss, const NSName &ident)
 {
   void *object;
   if (NULL != (object = ss_lookup_local(ss,ident)))
@@ -948,7 +1045,7 @@ void *ss_lookup(symbol_space *ss, const nsname ident)
     return NULL;
 }
 
-int ss_add(symbol_space *ss, const nsname ident, void *object)
+int GridXSLT::ss_add(symbol_space *ss, const NSName &ident, void *object)
 {
   symbol_space_entry **sptr = &ss->entries;
 
@@ -958,20 +1055,19 @@ int ss_add(symbol_space *ss, const nsname ident, void *object)
   while (*sptr)
     sptr = &((*sptr)->next);
 
-  *sptr = (symbol_space_entry*)calloc(1,sizeof(symbol_space_entry));
-  (*sptr)->ident = nsname_copy(ident);
+  *sptr = new symbol_space_entry();
+  (*sptr)->ident = ident;
   (*sptr)->object = object;
 
   return 0;
 }
 
-void ss_free(symbol_space *ss)
+void GridXSLT::ss_free(symbol_space *ss)
 {
   symbol_space_entry *sse = ss->entries;
   while (sse) {
     symbol_space_entry *next = sse->next;
-    nsname_free(sse->ident);
-    free(sse);
+    delete sse;
     sse = next;
   }
   free(ss->type);

@@ -25,43 +25,47 @@
 
 #include "xmlschema.h"
 
-int xs_parse_value_constraint(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_value_constraint *vc,
+namespace GridXSLT {
+
+int xs_parse_value_constraint(Schema *s, xmlNodePtr n, xmlDocPtr doc, ValueConstraint *vc,
                               const char *errname);
-int xs_parse_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int type,
-                 void **obj, xs_reference **refptr);
-int xs_parse_form(xs_schema *s, xmlNodePtr n, int *qualified);
+int xs_parse_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int type,
+                 void **obj, Reference **refptr);
+int xs_parse_form(Schema *s, xmlNodePtr n, int *qualified);
 int xs_parse_block_final(const char *str, int *extension, int *restriction,
                          int *substitution, int *list, int *union1);
 int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns,
-                     xs_schema *s, list **particles_list);
-int xs_parse_attribute_use(xs_schema *s, xmlNodePtr n, int *use);
-int xs_parse_attribute(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                     Schema *s, list **particles_list);
+int xs_parse_attribute_use(Schema *s, xmlNodePtr n, int *use);
+int xs_parse_attribute(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                        int toplevel, list **aulist);
-int xs_parse_attribute_group_def(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns);
-int xs_parse_attribute_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int xs_parse_attribute_group_def(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns);
+int xs_parse_attribute_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
                                  list **reflist);
-int xs_parse_simple_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                         int toplevel, xs_type **tout);
-int xs_parse_complex_type_attributes(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     xs_type *t, xmlNodePtr c);
-int xs_parse_simple_content_children(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     xs_type *t, xmlNodePtr c);
-int xs_parse_complex_content_children(xs_schema *s,
+int xs_parse_simple_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                         int toplevel, Type **tout);
+int xs_parse_complex_type_attributes(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                                     Type *t, xmlNodePtr c);
+int xs_parse_simple_content_children(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                                     Type *t, xmlNodePtr c);
+int xs_parse_complex_content_children(Schema *s,
                                    xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                   xs_type *t, xmlNodePtr c, int effective_mixed);
-int xs_parse_complex_type(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                          int toplevel, xs_type **tout,
+                                   Type *t, xmlNodePtr c, int effective_mixed);
+int xs_parse_complex_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                          int toplevel, Type **tout,
                           char *container_name, char *container_ns);
-int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, xs_schema *s);
-int xs_parse_group_ref(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
-                       xs_particle **pout);
-int xs_parse_model_group(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                         xs_model_group **mgout, char *container_name, char *container_ns);
-int xs_parse_all_choice_sequence(xs_schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                                 list **particles_list, xs_particle **pout,
+int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s);
+int xs_parse_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
+                       Particle **pout);
+int xs_parse_model_group(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+                         ModelGroup **mgout, char *container_name, char *container_ns);
+int xs_parse_all_choice_sequence(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+                                 list **particles_list, Particle **pout,
                                  char *container_name, char *container_ns);
-int xs_parse_wildcard(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, xs_wildcard **wout);
-int xs_parse_any(xs_schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list);
-int xs_parse_schema(xs_schema *s, xmlNodePtr n, xmlDocPtr doc);
+int xs_parse_wildcard(Schema *s, xmlNodePtr n, xmlDocPtr doc, Wildcard **wout);
+int xs_parse_any(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list);
+int xs_parse_schema(Schema *s, xmlNodePtr n, xmlDocPtr doc);
+
+};
 
 #endif /* _XMLSCHEMA_PARSE_H */

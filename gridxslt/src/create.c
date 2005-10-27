@@ -27,6 +27,8 @@
 
 #define HASH_SIZE 16
 
+using namespace GridXSLT;
+
 typedef struct attr_indexes attr_indexes;
 typedef struct attr_index attr_index;
 typedef struct attrvalue_index attrvalue_index;
@@ -163,7 +165,7 @@ int main(int argc, char **argv)
   xmldb *db = xmldb_new();
 
   if (3 > argc) {
-    fprintf(stderr,"Usage: create <infile> <outfile>\n");
+    fmessage(stderr,"Usage: create <infile> <outfile>\n");
     exit(1);
   }
 
@@ -190,7 +192,7 @@ int main(int argc, char **argv)
     }
     if (XML_READER_TYPE_ELEMENT == type) {
       eid_t eid;
-      printf("depth %d, type %d, name \"%s\", empty %d, has value %d attrs %d, "
+      message("depth %d, type %d, name \"%s\", empty %d, has value %d attrs %d, "
              "nattrs %d, value \"%s\"\n",
              xmlTextReaderDepth(reader),
              xmlTextReaderNodeType(reader),
@@ -202,10 +204,10 @@ int main(int argc, char **argv)
              val);
       eid = xmldb_lookup_emapping(db,xmlTextReaderNamespaceUri(reader),
                                   xmlTextReaderConstName(reader));
-      printf("eid = %d\n",eid);
+      message("eid = %d\n",eid);
       if (1 == xmlTextReaderMoveToFirstAttribute(reader)) {
         while (1) {
-          printf("  %s=%s\n",xmlTextReaderConstName(reader),xmlTextReaderConstValue(reader));
+          message("  %s=%s\n",xmlTextReaderConstName(reader),xmlTextReaderConstValue(reader));
           if (1 != xmlTextReaderMoveToNextAttribute(reader))
             break;
         }
@@ -216,7 +218,7 @@ int main(int argc, char **argv)
   xmlFreeTextReader(reader);
   xmldb_free(db);
   if (0 != r) {
-    fprintf(stderr,"Parse error\n");
+    fmessage(stderr,"Parse error\n");
     exit(1);
   }
 

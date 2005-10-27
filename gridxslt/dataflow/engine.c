@@ -29,129 +29,140 @@
 #include <string.h>
 #include <assert.h>
 
-typedef struct df_activity df_activity;
-typedef struct df_actdest df_actdest;
-typedef struct df_state df_state;
+namespace GridXSLT {
+
+class Activity;
 
 struct df_actdest {
-  df_activity *a;
+  Activity *a;
   int p;
 };
 
-struct df_activity {
-  df_instruction *instr;
+class Activity {
+public:
+  Activity();
+  ~Activity();
+
+  Instruction *instr;
   int remaining;
-  value **values;
+  Value *values;
   df_actdest *outports;
   int actno;
   int refs;
   int fired;
 };
 
-struct df_state {
-  df_program *program;
-  list *activities;
+class ExecutionState {
+public:
+  ExecutionState(Program *_program, Error *_ei);
+  ~ExecutionState();
+
+  Program *program;
+  List<Activity*> activities;
   int actno;
-  seqtype *intype;
+  SequenceType intype;
   int trace;
-  error_info *ei;
+  Error *ei;
 };
 
-df_state *df_state_new(df_program *program, error_info *ei)
+};
+
+using namespace GridXSLT;
+
+Activity::Activity()
+  : instr(NULL),
+    remaining(0),
+    values(NULL),
+    outports(NULL),
+    actno(0),
+    refs(0),
+    fired(0)
 {
-  df_state *state = (df_state*)calloc(1,sizeof(df_state));
-  state->program = program;
-  state->intype = seqtype_new_atomic(xs_g->int_type);
-  state->ei = ei;
-  return state;
 }
 
-void df_state_free(df_state *state)
+Activity::~Activity()
 {
-  seqtype_deref(state->intype);
-  free(state);
+  delete [] values;
+  free(outports);
 }
 
-void free_activity(df_state *state, df_activity *a)
+ExecutionState::ExecutionState(Program *_program, Error *_ei)
+  : program(_program), actno(0), trace(0), ei(_ei)
 {
-  if (!a->fired) {
-    int i;
-    for (i = 0; i < a->instr->ninports; i++)
-      if (NULL != a->values[i])
-        value_deref(a->values[i]);
-  }
-  free(a->values);
-  free(a->outports);
-  free(a);
+  intype = SequenceType(xs_g->int_type);
 }
 
-df_activity *df_activate_function(df_state *state, df_function *fun,
-                                    df_activity *dest, int destp,
-                                    df_activity **starts, int startslen)
+ExecutionState::~ExecutionState()
 {
-  list *l;
-  df_activity *start = NULL;
+}
+
+Activity *df_activate_function(ExecutionState *state, Function *fun,
+                                    Activity *dest, int destp,
+                                    Activity **starts, int startslen)
+{
+  Activity *start = NULL;
   int actno = state->actno++;
   int i;
-  for (l = fun->instructions; l; l = l->next) {
-    df_instruction *instr = (df_instruction*)l->data;
-    df_activity *a;
+  Iterator<Instruction*> it;
+  for (it = fun->m_instructions; it.haveCurrent(); it++) {
+    Instruction *instr = *it;
+    Activity *a;
 
-    if (instr->internal)
+    if (instr->m_internal)
       continue;
 
-    a = (df_activity*)calloc(1,sizeof(df_activity));
+    a = new Activity();
 
     a->actno = actno;
     a->instr = instr;
-    instr->act = a;
-    list_push(&state->activities,a);
+    instr->m_act = a;
+    state->activities.push(a);
   }
-  start = fun->start->act;
+  start = fun->m_start->m_act;
   start->refs++;
 
-  assert(startslen == fun->nparams);
-  for (i = 0; i < fun->nparams; i++) {
-    starts[i] = fun->params[i].start->act;
+  assert(startslen == fun->m_nparams);
+  for (i = 0; i < fun->m_nparams; i++) {
+    starts[i] = fun->m_params[i].start->m_act;
     starts[i]->refs++;
   }
 
-  for (l = fun->instructions; l; l = l->next) {
-    df_instruction *instr = (df_instruction*)l->data;
-    df_activity *a;
+  for (it = fun->m_instructions; it.haveCurrent(); it++) {
+    Instruction *instr = *it;
+    Activity *a;
     int i;
 
-    if (instr->internal)
+    if (instr->m_internal)
       continue;
 
-    a = instr->act;
-    a->remaining = instr->ninports;
-    a->outports = (df_actdest*)calloc(a->instr->noutports,sizeof(df_actdest));
-    a->values = (value**)calloc(a->instr->ninports,sizeof(value*));
+    a = instr->m_act;
+    a->remaining = instr->m_ninports;
+    a->outports = (df_actdest*)calloc(a->instr->m_noutports,sizeof(df_actdest));
+    a->values = new Value[a->instr->m_ninports];
 
-    if (OP_RETURN == instr->opcode) {
+    if (OP_RETURN == instr->m_opcode) {
       a->outports[0].a = dest;
       a->outports[0].p = destp;
     }
     else {
-      for (i = 0; i < instr->noutports; i++) {
-        if (NULL == instr->outports[i].dest) {
-          fprintf(stderr,"Instruction %s:%d has no destination assigned to output port %d\n",
-                  fun->ident.name,instr->id,i);
+      for (i = 0; i < instr->m_noutports; i++) {
+        if (NULL == instr->m_outports[i].dest) {
+          fmessage(stderr,"Instruction %*:%d has no destination assigned to output port %d\n",
+                  &fun->m_ident.m_name,instr->m_id,i);
         }
-        assert(NULL != instr->outports[i].dest);
-        a->outports[i].a = instr->outports[i].dest->act;
+        assert(NULL != instr->m_outports[i].dest);
+        a->outports[i].a = instr->m_outports[i].dest->m_act;
         a->outports[i].a->refs++;
-        a->outports[i].p = instr->outports[i].destp;
+        a->outports[i].p = instr->m_outports[i].destp;
       }
     }
   }
-  for (l = fun->instructions; l; l = l->next)
-    ((df_instruction*)l->data)->act = NULL;
+  for (it = fun->m_instructions; it.haveCurrent(); it++)
+    (*it)->m_act = NULL;
   return start;
 }
 
-void df_set_input(df_activity *a, int p, value *v)
+void df_set_input(Activity *a, int p, const Value &v)
 {
   a->values[p] = v;
   a->remaining--;
@@ -160,69 +171,65 @@ void df_set_input(df_activity *a, int p, value *v)
   assert(0 <= a->refs);
 }
 
-void df_output_value(df_activity *source, int sourcep, value *v)
+void df_output_value(Activity *source, int sourcep, const Value &v)
 {
-  df_activity *dest = source->outports[sourcep].a;
+  Activity *dest = source->outports[sourcep].a;
   int destp = source->outports[sourcep].p;
-  assert(NULL == dest->values[destp]);
+  assert(dest->values[destp].isNull());
   df_set_input(dest,destp,v);
 }
 
-void df_print_actmsg(const char *prefix, df_activity *a)
+void df_print_actmsg(const char *prefix, Activity *a)
 {
-  printf("%s [%d] %s.%d - %s\n",prefix,
-         a->actno,a->instr->fun->ident.name,a->instr->id,df_opstr(a->instr->opcode));
+  message("%s [%d] %*.%d - %s\n",prefix,
+         a->actno,&a->instr->m_fun->m_ident.m_name,a->instr->m_id,OpCodeNames[a->instr->m_opcode]);
 }
 
-void df_deref_activity(df_activity *a, int indent, df_activity *merge)
+void df_deref_activity(Activity *a, int indent, Activity *merge)
 {
   int i;
   a->refs--;
   assert(0 <= a->refs);
-  assert(OP_MERGE == merge->instr->opcode);
-  if ((OP_RETURN == a->instr->opcode) || (merge == a))
+  assert(OP_MERGE == merge->instr->m_opcode);
+  if ((OP_RETURN == a->instr->m_opcode) || (merge == a))
     return;
   if (0 == a->refs) {
-    for (i = 0; i < a->instr->noutports; i++)
+    for (i = 0; i < a->instr->m_noutports; i++)
       df_deref_activity(a->outports[i].a,indent+1,merge);
   }
 }
 
 
-int df_fire_activity(df_state *state, df_activity *a)
+int df_fire_activity(ExecutionState *state, Activity *a)
 {
   int i;
   if (state->trace)
     df_print_actmsg("Firing",a);
 
-  for (i = 0; i < a->instr->ninports; i++) {
-    if (!seqtype_derived(a->instr->inports[i].st,a->values[i]->st)) {
-      stringbuf *buf1 = stringbuf_new();
-      stringbuf *buf2 = stringbuf_new();
-      seqtype_print_fs(buf1,a->values[i]->st,xs_g->namespaces);
-      seqtype_print_fs(buf2,a->instr->inports[i].st,xs_g->namespaces);
-      error(state->ei,a->instr->sloc.uri,a->instr->sloc.line,NULL,
-            "Instruction %#n:%d: Sequence type mismatch: %s does not match %s",
-            a->instr->fun->ident,a->instr->id,buf1->data,buf2->data);
-      stringbuf_free(buf1);
-      stringbuf_free(buf2);
+  for (i = 0; i < a->instr->m_ninports; i++) {
+    if (!a->values[i].type().isDerivedFrom(a->instr->m_inports[i].st)) {
+      StringBuffer buf1;
+      StringBuffer buf2;
+      a->values[i].type().printFS(buf1,xs_g->namespaces);
+      a->instr->m_inports[i].st.printFS(buf2,xs_g->namespaces);
+      error(state->ei,a->instr->m_sloc.uri,a->instr->m_sloc.line,String::null(),
+            "Instruction %*:%d: Sequence type mismatch: %* does not match %*",
+            &a->instr->m_fun->m_ident,a->instr->m_id,&buf1,&buf2);
       return -1;
     }
   }
 
-  switch (a->instr->opcode) {
+  switch (a->instr->m_opcode) {
   case OP_CONST:
-    df_output_value(a,0,value_ref(a->instr->cvalue));
-    value_deref(a->values[0]);
+    df_output_value(a,0,a->instr->m_cvalue);
     break;
   case OP_DUP:
-    df_output_value(a,0,value_ref(a->values[0]));
-    df_output_value(a,1,value_ref(a->values[0]));
-    value_deref(a->values[0]);
+    df_output_value(a,0,a->values[0]);
+    df_output_value(a,1,a->values[0]);
     break;
   case OP_SPLIT:
-    assert(df_check_derived_atomic_type(a->values[0],xs_g->boolean_type));
-    if (0 == a->values[0]->value.b) {
+    assert(a->values[0].isDerivedFrom(xs_g->boolean_type));
+    if (!a->values[0].asBool()) {
       df_output_value(a,0,a->values[1]);
       df_deref_activity(a->outports[1].a,0,a->outports[2].a);
     }
@@ -234,58 +241,55 @@ int df_fire_activity(df_state *state, df_activity *a)
     break;
   case OP_MERGE:
     df_output_value(a,0,a->values[0]);
-    value_deref(a->values[1]);
     break;
   case OP_CALL: {
-    df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
-    df_activity *start;
+    Activity **acts = (Activity**)alloca(a->instr->m_cfun->m_nparams*sizeof(Activity*));
+    Activity *start;
     int i;
-    memset(acts,0,a->instr->cfun->nparams*sizeof(df_activity*));
-    start = df_activate_function(state,a->instr->cfun,a->outports[0].a,a->outports[0].p,
-                                  acts,a->instr->cfun->nparams);
-    for (i = 0; i < a->instr->cfun->nparams; i++) {
-      assert(NULL != a->values[i]);
+    memset(acts,0,a->instr->m_cfun->m_nparams*sizeof(Activity*));
+    start = df_activate_function(state,a->instr->m_cfun,a->outports[0].a,a->outports[0].p,
+                                  acts,a->instr->m_cfun->m_nparams);
+    for (i = 0; i < a->instr->m_cfun->m_nparams; i++) {
+      assert(!a->values[i].isNull());
       assert(NULL != acts[i]);
       df_set_input(acts[i],0,a->values[i]);
     }
 
-    if (0 == a->instr->cfun->nparams)
+    if (0 == a->instr->m_cfun->m_nparams)
       df_set_input(start,0,a->values[0]);
     else
-      df_set_input(start,0,value_ref(a->values[0]));
+      df_set_input(start,0,a->values[0]);
 
     break;
   }
   case OP_MAP: {
-    df_activity **acts = (df_activity**)alloca(a->instr->cfun->nparams*sizeof(df_activity*));
-    list *values = df_sequence_to_list(a->values[0]);
-    list *l;
+    Activity **acts = (Activity**)alloca(a->instr->m_cfun->m_nparams*sizeof(Activity*));
+    List<Value> values = a->values[0].sequenceToList();
     int i;
-    df_activity *ultimate_desta = a->outports[0].a;
+    Activity *ultimate_desta = a->outports[0].a;
     int ultimate_destp = a->outports[0].p;
 
-    if (NULL == values) {
-      seqtype *empty = seqtype_new(SEQTYPE_EMPTY);
-      value *ev = value_new(empty);
-      seqtype_deref(empty);
-      df_output_value(a,0,ev);
+    if (values.isEmpty()) {
+      SequenceType empty = SequenceType(SEQTYPE_EMPTY);
+      df_output_value(a,0,Value(empty));
     }
 
-    for (l = values; l; l = l->next) {
-      value *v = (value*)l->data;
+    Iterator<Value> it;
+    for (it = values; it.haveCurrent(); it++) {
+      Value v = *it;
 
-      df_activity *start;
+      Activity *start;
 
-      df_activity *desta = ultimate_desta;
+      Activity *desta = ultimate_desta;
       int destp = ultimate_destp;
 
-      if (l->next) {
-        df_activity *seq = (df_activity*)calloc(1,sizeof(df_activity));
-        list_push(&state->activities,seq);
-        assert(NULL != a->instr->fun->mapseq);
-        seq->instr = a->instr->fun->mapseq;
+      if (it.haveNext()) {
+        Activity *seq = new Activity();
+        state->activities.push(seq);
+        assert(NULL != a->instr->m_fun->m_mapseq);
+        seq->instr = a->instr->m_fun->m_mapseq;
         seq->remaining = 2;
-        seq->values = (value**)calloc(2,sizeof(value*));
+        seq->values = new Value[2];
         seq->outports = (df_actdest*)calloc(1,sizeof(df_actdest));
         seq->outports[0].a = ultimate_desta;
         seq->outports[0].p = ultimate_destp;
@@ -298,81 +302,73 @@ int df_fire_activity(df_state *state, df_activity *a)
         ultimate_destp = 1;
       }
 
-      memset(acts,0,a->instr->cfun->nparams*sizeof(df_activity*));
-      start = df_activate_function(state,a->instr->cfun,desta,destp,
-                                    acts,a->instr->cfun->nparams);
+      memset(acts,0,a->instr->m_cfun->m_nparams*sizeof(Activity*));
+      start = df_activate_function(state,a->instr->m_cfun,desta,destp,
+                                    acts,a->instr->m_cfun->m_nparams);
 
-      df_set_input(start,0,value_ref(v));
-      for (i = 0; i < a->instr->cfun->nparams; i++) {
-        assert(NULL != a->values[i+1]);
+      df_set_input(start,0,v);
+      for (i = 0; i < a->instr->m_cfun->m_nparams; i++) {
+        assert(!a->values[i+1].isNull());
         assert(NULL != acts[i]);
-        df_set_input(acts[i],0,value_ref(a->values[i+1]));
+        df_set_input(acts[i],0,a->values[i+1]);
       }
     }
 
-    for (i = 0; i < a->instr->ninports; i++)
-      value_deref(a->values[i]);
-
-    list_free(values,NULL);
     break;
   }
   case OP_PASS:
     df_output_value(a,0,a->values[0]);
     break;
   case OP_SWALLOW:
-    value_deref(a->values[0]);
     break;
   case OP_RETURN:
     df_output_value(a,0,a->values[0]);
     break;
   case OP_PRINT: {
 
-    if (SEQTYPE_EMPTY != a->values[0]->st->type) {
+    if (SEQTYPE_EMPTY != a->values[0].type().type()) {
       stringbuf *buf = stringbuf_new();
-      df_seroptions *options = df_seroptions_new(nsname_temp(NULL,"xml"));
+      df_seroptions *options = new df_seroptions(NSName(String::null(),"xml"));
 
       if (0 != df_serialize(a->values[0],buf,options,state->ei)) {
-        value_deref(a->values[0]);
-        df_seroptions_free(options);
+        delete options;
         return -1;
       }
 
-      printf("%s",buf->data);
+      message("%s",buf->data);
 
       stringbuf_free(buf);
-      df_seroptions_free(options);
+      delete options;
     }
 
-    value_deref(a->values[0]);
     break;
   }
   case OP_GATE:
     df_output_value(a,0,a->values[0]);
-    value_deref(a->values[1]);
     break;
   case OP_BUILTIN: {
-    gxenvironment env;
-    value *result;
+    Environment env;
+    Value result;
     int i;
-    memset(&env,0,sizeof(gxenvironment));
     /* FIXME: what if a->values[0] is a sequence? */
-    env.ctxt = (gxcontext*)calloc(1,sizeof(gxcontext));
+    env.ctxt = new Context();
     env.ctxt->item = a->values[0];
     env.ctxt->position = 1;
     env.ctxt->size = 1;
     env.ctxt->havefocus = 1;
     env.ei = state->ei;
-    env.sloc = a->instr->sloc;
-    env.space_decls = state->program->space_decls;
+    env.sloc = a->instr->m_sloc;
+    env.space_decls = state->program->m_space_decls;
     env.instr = a->instr;
-    if (NULL == (result = a->instr->bif->fun(&env,a->values))) {
-      free(env.ctxt);
+
+    List<Value> values;
+    for (i = 0; i < a->instr->m_ninports; i++)
+      values.append(a->values[i]);
+
+    result = a->instr->m_bif->m_fun(&env,values);
+    if (result.isNull())
       return -1;
-    }
-    free(env.ctxt);
     df_output_value(a,0,result);
-    for (i = 0; i < a->instr->bif->nargs; i++)
-      value_deref(a->values[i]);
     break;
   }
   default:
@@ -383,16 +379,16 @@ int df_fire_activity(df_state *state, df_activity *a)
   return 0;
 }
 
-int df_execute_network(df_state *state)
+int df_execute_network(ExecutionState *state)
 {
   int found;
   int err = 0;
+  Iterator<Activity*> it;
   do {
-    list **listptr = &state->activities;
+    it = state->activities;
     found = 0;
-    while (NULL != *listptr) {
-      list *l = *listptr;
-      df_activity *a = (df_activity*)((*listptr)->data);
+    while (it.haveCurrent()) {
+      Activity *a = *it;
 
       if ((0 == a->remaining) && !a->fired) {
         if (0 != df_fire_activity(state,a))
@@ -404,31 +400,26 @@ int df_execute_network(df_state *state)
 
       else if (0 == a->refs) {
         /* just remove it */
-        *listptr = (*listptr)->next;
         found = 1;
-        free_activity(state,a);
-        free(l);
+        delete a;
+        it.remove();
         break;
       }
-      listptr = &(*listptr)->next;
+      it++;
     }
   } while (found && !err);
 
   if (err) {
-    list *l;
-    for (l = state->activities; l; l = l->next) {
-      df_activity *a = (df_activity*)l->data;
-      free_activity(state,a);
-    }
-    list_free(state->activities,NULL);
+    for (it = state->activities; it.haveCurrent(); it++)
+      delete *it;
   }
-  else if (NULL != state->activities) {
-    list *l;
-    fprintf(stderr,"The following activities remain outstanding:\n");
-    for (l = state->activities; l; l = l->next) {
-      df_activity *a = (df_activity*)l->data;
-      fprintf(stderr,"[%d] %s.%d - %s\n",
-             a->actno,a->instr->fun->ident.name,a->instr->id,df_opstr(a->instr->opcode));
+  else if (!state->activities.isEmpty()) {
+    fmessage(stderr,"The following activities remain outstanding:\n");
+    for (it = state->activities; it.haveCurrent(); it++) {
+      Activity *a = *it;
+      fmessage(stderr,"[%d] %*.%d - %s\n",
+             a->actno,&a->instr->m_fun->m_ident.m_name,
+             a->instr->m_id,OpCodeNames[a->instr->m_opcode]);
     }
   }
 
@@ -438,65 +429,62 @@ int df_execute_network(df_state *state)
     return 0;
 }
 
-int df_execute(df_program *program, int trace, error_info *ei, value *context)
+int df_execute(Program *program, int trace, Error *ei, const Value &context)
 {
-  df_function *mainfun;
-  df_function *init;
-  df_activity *print;
-  df_activity *start;
-  df_state *state = NULL;
-  seqtype *st;
+  Function *mainfun;
+  Function *init;
+  Activity *print;
+  Activity *start;
+  ExecutionState *state = NULL;
+  SequenceType st;
   int r;
 
-  mainfun = df_lookup_function(program,nsname_temp(GX_NAMESPACE,"main"));
+  mainfun = program->getFunction(NSName(GX_NAMESPACE,"main"));
   if (NULL == mainfun)
-    mainfun = df_lookup_function(program,nsname_temp(NULL,"main"));
+    mainfun = program->getFunction(NSName(String::null(),"main"));
   if (NULL == mainfun)
-    mainfun = df_lookup_function(program,nsname_temp(NULL,"default"));
+    mainfun = program->getFunction(NSName(String::null(),"default"));
 
   if (NULL == mainfun) {
-    fprintf(stderr,"No main function defined\n");
+    fmessage(stderr,"No main function defined\n");
     return -1;
   }
 
-  init = (df_function*)calloc(1,sizeof(df_function));
-  init->ident = nsname_new(NULL,"_init");
-  init->program = program;
-  init->start = df_add_instruction(program,init,OP_PRINT,nosourceloc);
+  init = new Function();
+  init->m_ident = NSName(String::null(),"_init");
+  init->m_program = program;
+  init->m_start = init->addInstruction(OP_PRINT,nosourceloc);
 
-  st = seqtype_new(SEQTYPE_OCCURRENCE);
-  st->occurrence = OCCURS_ZERO_OR_MORE;
-  st->left = df_normalize_itemnode(1);
-  init->start->inports[0].st = st;
+  SequenceType item = SequenceType::item();
+  st = SequenceType::occurrence(item,OCCURS_ZERO_OR_MORE);
+  init->m_start->m_inports[0].st = st;
 
-  init->rtype = seqtype_new_atomic(xs_g->complex_ur_type);
+  init->m_rtype = SequenceType(xs_g->complex_ur_type);
 
-  state = df_state_new(program,ei);
+  state = new ExecutionState(program,ei);
   state->trace = trace;
 
-  print = (df_activity*)calloc(1,sizeof(df_activity));
-  list_push(&state->activities,print);
-  print->instr = init->start;
-  print->values = (value**)calloc(1,sizeof(value*));
+  print = new Activity();
+  state->activities.push(print);
+  print->instr = init->m_start;
+  print->values = new Value[1];
   print->remaining = 1;
   print->refs++;
 
   /* FIXME: support main functions with >0 params (where do we get the values of these from?) */
-  assert(0 == mainfun->nparams);
+  assert(0 == mainfun->m_nparams);
 
   start = df_activate_function(state,mainfun,print,0,NULL,0);
 
-  if (NULL == context) {
-    context = value_new(state->intype);
-    context->value.i = 0;
-  }
-  df_set_input(start,0,context);
+  if (context.isNull())
+    df_set_input(start,0,Value(0));
+  else
+    df_set_input(start,0,context);
 
   r = df_execute_network(state);
 
-  df_state_free(state);
-
-  df_free_function(init);
+  delete state;
+  delete init;
 
   return r;
 }

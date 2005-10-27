@@ -22,6 +22,7 @@
 #include "util/stringbuf.h"
 #include "util/debug.h"
 #include "util/network.h"
+#include "util/String.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -40,6 +41,8 @@
 #include <time.h>
 #include <netinet/tcp.h>
 #include <libxml/uri.h>
+
+using namespace GridXSLT;
 
 int timediff(struct timeval start, struct timeval end)
 {
@@ -83,21 +86,21 @@ void server(const char *filename, int max)
   if (0 > (sock = start_server(1080)))
     exit(1);
 
-  printf("Listening\n");
+  message("Listening\n");
 
   if (-1 == (serverfd = accept(sock,(struct sockaddr*)&remote_addr,(socklen_t*)&sin_size))) {
     perror("accept");
     exit(1);
   }
 
-  printf("Got connection\n");
+  message("Got connection\n");
 
   gettimeofday(&start,NULL);
 
   while (0 < (r = read(fd,buf,BUFSIZE))) {
     write(serverfd,buf,r);
     bytes += r;
-/*     printf("%dkb\n",bytes/1024); */
+/*     message("%dkb\n",bytes/1024); */
     if ((0 <= max) && (bytes >= max*1024*1024))
       break;
   }
@@ -105,7 +108,7 @@ void server(const char *filename, int max)
   gettimeofday(&end,NULL);
 
   ms = timediff(start,end);
-  printf("Sent %d bytes in %dms, transfer rate = %dkb/sec\n",bytes,ms,kbsec(bytes,ms));
+  message("Sent %d bytes in %dms, transfer rate = %dkb/sec\n",bytes,ms,kbsec(bytes,ms));
 
   close(serverfd);
   close(fd);
@@ -130,19 +133,19 @@ void client(const char *filename)
   if (0 > (clientfd = connect_host("localhost",1080)))
     exit(1);
 
-  printf("Got connection\n");
+  message("Got connection\n");
 
   gettimeofday(&start,NULL);
 
   while (0 < (r = read(clientfd,buf,BUFSIZE))) {
     write(fd,buf,r);
     bytes += r;
-/*     printf("%dkb\n",bytes/1024); */
+/*     message("%dkb\n",bytes/1024); */
   }
   gettimeofday(&end,NULL);
 
   ms = timediff(start,end);
-  printf("Received %d bytes in %dms, transfer rate = %dkb/sec\n",bytes,ms,kbsec(bytes,ms));
+  message("Received %d bytes in %dms, transfer rate = %dkb/sec\n",bytes,ms,kbsec(bytes,ms));
 
   close(clientfd);
   close(fd);
@@ -154,7 +157,7 @@ int main(int argc, char **argv)
   setbuf(stdout,NULL);
 
   if (3 > argc) {
-    fprintf(stderr,"Usage: transfer <c|s> filename\n");
+    fmessage(stderr,"Usage: transfer <c|s> filename\n");
     exit(1);
   }
 
@@ -168,7 +171,7 @@ int main(int argc, char **argv)
     client(argv[2]);
   }
   else {
-    fprintf(stderr,"Must specify client or server!\n");
+    fmessage(stderr,"Must specify client or server!\n");
     exit(1);
   }
 

@@ -27,6 +27,9 @@
 #include "util/network.h"
 #include "http/http.h"
 #include "http/message.h"
+#include "util/String.h"
+
+using namespace GridXSLT;
 
 typedef struct client_data client_data;
 
@@ -42,12 +45,12 @@ int client_read(eventman *em, fdhandler *h)
     return 0;
   }
   else if (0 > r) {
-    fprintf(stderr,"Error reading from server: %s\n",strerror(errno));
+    fmessage(stderr,"Error reading from server: %s\n",strerror(errno));
     return 1;
   }
   else {
     buf[r] = '\0';
-    printf("%s",buf);
+    message("%s",buf);
   }
   return (0 == r);
 }
@@ -57,7 +60,7 @@ int client_write(eventman *em, fdhandler *h)
   client_data *cd = (client_data*)h->data;
 
   if (0 != cd->mw->write_error) {
-    printf("Error writing to server: %s\n",strerror(cd->mw->write_error));
+    message("Error writing to server: %s\n",strerror(cd->mw->write_error));
     return 1;
   }
 
@@ -136,7 +139,7 @@ int main(int argc, char **argv)
   client_handler->data = &cd;
   eventman_add_handler(&em,client_handler);
 
-  printf("Waiting\n");
+  message("Waiting\n");
   eventman_loop(&em);
   eventman_clear(&em);
 

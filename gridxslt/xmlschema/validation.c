@@ -32,10 +32,12 @@
 #include <sys/types.h>
 #include <libxml/tree.h>
 
+using namespace GridXSLT;
+
 typedef struct childencinfo childencinfo;
 struct childencinfo {
   xmlNodePtr n;
-  xs_type *type;
+  Type *type;
   int datapos;
 };
 
@@ -45,15 +47,15 @@ struct stringencinfo {
   int datapos;
 };
 
-void init_typeinfo_particle(xs_schema *s, xs_particle *p, list **typestack, list **mgstack,
+void init_typeinfo_particle(Schema *s, Particle *p, list **typestack, list **mgstack,
                             int pos, int *size);
-void init_typeinfo_model_group(xs_schema *s, xs_model_group *mg, list **typestack, list **mgstack);
+void init_typeinfo_model_group(Schema *s, ModelGroup *mg, list **typestack, list **mgstack);
 
 int validate_element_against_particle(xs_validator *v,
-                                      xmlNodePtr *n, int *lineno, xs_particle *p,
+                                      xmlNodePtr *n, int *lineno, Particle *p,
                                       stringbuf *encoded, int pos);
 
-char *xs_alloc_cname(xs_globals *g, int useprefix, list **cnames, list **cnames2,
+char *xs_alloc_cname(BuiltinTypes *g, int useprefix, list **cnames, list **cnames2,
                      const char *name, const char *ns)
 {
   char *cname;
@@ -112,7 +114,7 @@ void init_typeinfo_attributes(list *attribute_uses, list *attribute_group_refs, 
 {
   list *l;
   for (l = attribute_uses; l; l = l->next) {
-    xs_attribute_use *au = (xs_attribute_use*)l->data;
+    AttributeUse *au = (AttributeUse*)l->data;
     assert(!au->typeinfo_known);
     assert(au->attribute->type);
     assert(au->attribute->type->typeinfo_known);
@@ -122,7 +124,7 @@ void init_typeinfo_attributes(list *attribute_uses, list *attribute_group_refs, 
   }
 
   for (l = attribute_group_refs; l; l = l->next) {
-    xs_attribute_group_ref *agr = (xs_attribute_group_ref*)l->data;
+    AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     assert(!agr->typeinfo_known);
     assert(agr->ag);
     assert(agr->ag->typeinfo_known);
@@ -133,15 +135,15 @@ void init_typeinfo_attributes(list *attribute_uses, list *attribute_group_refs, 
 
 }
 
-void init_typeinfo_attribute_group(xs_schema *s, xs_attribute_group *ag)
+void init_typeinfo_attribute_group(Schema *s, AttributeGroup *ag)
 {
   list *l;
-  xs_cstruct *cs;
+  CStruct *cs;
   if (ag->typeinfo_known)
     return;
 
   for (l = ag->attribute_group_refs; l; l = l->next) {
-    xs_attribute_group_ref *agr = (xs_attribute_group_ref*)l->data;
+    AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     if (!agr->ag->typeinfo_known)
       init_typeinfo_attribute_group(s,agr->ag);
   }
@@ -150,15 +152,15 @@ void init_typeinfo_attribute_group(xs_schema *s, xs_attribute_group *ag)
 
   init_typeinfo_attributes(ag->local_attribute_uses,ag->attribute_group_refs,&ag->size);
 
-  cs = xs_cstruct_new(s->globals->as);
-  cs->type = XS_CSTRUCT_ATTRIBUTE_GROUP;
+  cs = new CStruct(s->globals->as);
+  cs->type = CSTRUCT_ATTRIBUTE_GROUP;
   cs->object.ag = ag;
   list_append(&s->globals->cstructs,cs);
 
   ag->typeinfo_known = 1;
 }
 
-void init_typeinfo_simple_type(xs_schema *s, xs_type *t)
+void init_typeinfo_simple_type(Schema *s, Type *t)
 {
   assert(!t->complex);
   if (t->typeinfo_known)
@@ -173,10 +175,10 @@ void init_typeinfo_simple_type(xs_schema *s, xs_type *t)
   t->typeinfo_known = 1;
 }
 
-void init_typeinfo_complex_type(xs_schema *s, xs_type *t, list **typestack, list **mgstack)
+void init_typeinfo_complex_type(Schema *s, Type *t, list **typestack, list **mgstack)
 {
-  xs_type *t2;
-  xs_cstruct *cs;
+  Type *t2;
+  CStruct *cs;
   if (t->typeinfo_known || t->builtin)
     return;
   assert(t->complex);
@@ -184,7 +186,7 @@ void init_typeinfo_complex_type(xs_schema *s, xs_type *t, list **typestack, list
   assert(!list_contains_ptr(*typestack,t));
   list_push(typestack,t);
 
-/*   printf("init_typeinfo_complex_type %p %s (%s)\n",t,t->name,t->ctype); */
+/*   message("init_typeinfo_complex_type %p %s (%s)\n",t,t->name,t->ctype); */
 
   t->size = 0;
 
@@ -209,25 +211,25 @@ void init_typeinfo_complex_type(xs_schema *s, xs_type *t, list **typestack, list
   /* attributes and attribute group references */
   init_typeinfo_attributes(t->local_attribute_uses,t->attribute_group_refs,&t->size);
 
-  t2 = (xs_type*)list_pop(typestack);
+  t2 = (Type*)list_pop(typestack);
   assert(t2 == t);
 
-  cs = xs_cstruct_new(s->globals->as);
-  cs->type = XS_CSTRUCT_TYPE;
+  cs = new CStruct(s->globals->as);
+  cs->type = CSTRUCT_TYPE;
   cs->object.t = t;
   list_append(&s->globals->cstructs,cs);
 
   t->typeinfo_known = 1;
 }
 
-void init_typeinfo_particle(xs_schema *s, xs_particle *p, list **typestack, list **mgstack,
+void init_typeinfo_particle(Schema *s, Particle *p, list **typestack, list **mgstack,
                             int pos, int *size)
 {
   int force_ptr = 0;
   assert(!p->typeinfo_known);
   p->base_size = 0;
   switch (p->term_type) {
-  case XS_PARTICLE_TERM_ELEMENT:
+  case PARTICLE_TERM_ELEMENT:
     if (!p->term.e->type->typeinfo_known) {
       if (list_contains_ptr(*typestack,p->term.e->type))
         force_ptr = 1;
@@ -237,7 +239,7 @@ void init_typeinfo_particle(xs_schema *s, xs_particle *p, list **typestack, list
 
     p->base_size = p->term.e->type->size;
     break;
-  case XS_PARTICLE_TERM_MODEL_GROUP:
+  case PARTICLE_TERM_MODEL_GROUP:
     if (list_contains_ptr(*mgstack,p->term.mg)) {
       force_ptr = 1;
       p->base_size = 0;
@@ -248,7 +250,7 @@ void init_typeinfo_particle(xs_schema *s, xs_particle *p, list **typestack, list
       p->base_size = p->term.mg->size;
     }
     break;
-  case XS_PARTICLE_TERM_WILDCARD:
+  case PARTICLE_TERM_WILDCARD:
     /* FIXME: what to do here? */
     break;
   default:
@@ -286,11 +288,11 @@ void init_typeinfo_particle(xs_schema *s, xs_particle *p, list **typestack, list
   *size = p->size;
 }
 
-void init_typeinfo_model_group(xs_schema *s, xs_model_group *mg, list **typestack, list **mgstack)
+void init_typeinfo_model_group(Schema *s, ModelGroup *mg, list **typestack, list **mgstack)
 {
   list *l;
-  xs_model_group *mg2;
-  xs_cstruct *cs;
+  ModelGroup *mg2;
+  CStruct *cs;
   int largest = 0;
   if (mg->typeinfo_known)
     return;
@@ -300,18 +302,18 @@ void init_typeinfo_model_group(xs_schema *s, xs_model_group *mg, list **typestac
 
   mg->size = 0;
 
-  if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor) {
+  if (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor) {
     /* extra int at the start indicating which option is selected */
     mg->size += sizeof(IMPL_INT);
   }
 
-/*   printf("init_typeinfo_model_group %p pn %s (ct %s)\n",mg,mg->parent_name,mg->ctype); */
+/*   message("init_typeinfo_model_group %p pn %s (ct %s)\n",mg,mg->parent_name,mg->ctype); */
   for (l = mg->particles; l; l = l->next) {
-    xs_particle *p = (xs_particle*)l->data;
+    Particle *p = (Particle*)l->data;
     int psize;
     init_typeinfo_particle(s,p,typestack,mgstack,mg->size,&psize);
 
-    if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor) {
+    if (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor) {
       if (largest < p->size)
         largest = psize;
     }
@@ -321,37 +323,38 @@ void init_typeinfo_model_group(xs_schema *s, xs_model_group *mg, list **typestac
 
   }
 
-  if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor)
+  if (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor)
     mg->size += largest;
 
-  mg2 = (xs_model_group*)list_pop(mgstack);
+  mg2 = (ModelGroup*)list_pop(mgstack);
   assert(mg2 == mg);
 
-  cs = xs_cstruct_new(s->globals->as);
-  cs->type = XS_CSTRUCT_MODEL_GROUP;
+  cs = new CStruct(s->globals->as);
+  cs->type = CSTRUCT_MODEL_GROUP;
   cs->object.mg = mg;
   list_append(&s->globals->cstructs,cs);
 
   mg->typeinfo_known = 1;
 }
 
-void xs_init_cnames_mg(xs_schema *s, xs_model_group *mg, int indent)
+void xs_init_cnames_mg(Schema *s, ModelGroup *mg, int indent)
 {
   list *l;
   assert(NULL != mg->ctype);
   assert(NULL != mg->parent_name);
   for (l = mg->particles; l; l = l->next) {
-    xs_particle *p = (xs_particle*)l->data;
+    Particle *p = (Particle*)l->data;
     assert(NULL == p->cvar);
     switch (p->term_type) {
-    case XS_PARTICLE_TERM_ELEMENT:
+    case PARTICLE_TERM_ELEMENT:
       p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,
-                               p->term.e->def.ident.name,p->term.e->def.ident.ns);
+                               p->term.e->def.ident.m_name.cstring(),
+                               p->term.e->def.ident.m_ns.cstring());
       break;
-    case XS_PARTICLE_TERM_WILDCARD:
+    case PARTICLE_TERM_WILDCARD:
       p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,"any",NULL);
       break;
-    case XS_PARTICLE_TERM_MODEL_GROUP:
+    case PARTICLE_TERM_MODEL_GROUP:
       if (p->ref) {
         assert(NULL != p->term.mg->parent_name);
         p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,
@@ -359,13 +362,13 @@ void xs_init_cnames_mg(xs_schema *s, xs_model_group *mg, int indent)
       }
       else {
         switch (p->term.mg->compositor) {
-        case XS_MODEL_GROUP_COMPOSITOR_ALL:
+        case MODELGROUP_COMPOSITOR_ALL:
           p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,"all",NULL);
           break;
-        case XS_MODEL_GROUP_COMPOSITOR_CHOICE:
+        case MODELGROUP_COMPOSITOR_CHOICE:
           p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,"choice",NULL);
           break;
-        case XS_MODEL_GROUP_COMPOSITOR_SEQUENCE:
+        case MODELGROUP_COMPOSITOR_SEQUENCE:
           p->cvar = xs_alloc_cname(s->globals,0,&mg->cvars,NULL,"sequence",NULL);
           break;
         default:
@@ -376,7 +379,7 @@ void xs_init_cnames_mg(xs_schema *s, xs_model_group *mg, int indent)
         assert(NULL == p->term.mg->parent_name);
         p->term.mg->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
                                            mg->parent_name,mg->parent_ns);
-/*         printf("model group %s\n",p->term.mg->cname); */
+/*         message("model group %s\n",p->term.mg->cname); */
         p->term.mg->parent_name = strdup(mg->parent_name);
         p->term.mg->parent_ns = mg->parent_ns ? strdup(mg->parent_ns) : NULL;
         xs_init_cnames_mg(s,p->term.mg,indent+1);
@@ -389,39 +392,42 @@ void xs_init_cnames_mg(xs_schema *s, xs_model_group *mg, int indent)
   }
 }
 
-void xs_init_attribute_cnames(xs_schema *s, list *attribute_uses, list *attribute_group_refs,
+void xs_init_attribute_cnames(Schema *s, list *attribute_uses, list *attribute_group_refs,
                               list **cnames, list **cnames2)
 {
   list *l;
   for (l = attribute_uses; l; l = l->next) {
-    xs_attribute_use *au = (xs_attribute_use*)l->data;
+    AttributeUse *au = (AttributeUse*)l->data;
     assert(NULL == au->cvar);
     au->cvar = xs_alloc_cname(s->globals,0,cnames,cnames2,
-                              au->attribute->def.ident.name,au->attribute->def.ident.ns);
+                              au->attribute->def.ident.m_name.cstring(),
+                              au->attribute->def.ident.m_ns.cstring());
   }
 
   for (l = attribute_group_refs; l; l = l->next) {
-    xs_attribute_group_ref *agr = (xs_attribute_group_ref*)l->data;
+    AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     assert(NULL == agr->cvar);
     agr->cvar = xs_alloc_cname(s->globals,0,cnames,cnames2,
-                               agr->ag->def.ident.name,agr->ag->def.ident.ns);
+                               agr->ag->def.ident.m_name.cstring(),
+                               agr->ag->def.ident.m_ns.cstring());
   }
 }
 
-void xs_init_cnames(xs_schema *s)
+void xs_init_cnames(Schema *s)
 {
   list *l;
   symbol_space_entry *sse;
 
   for (l = s->imports; l; l = l->next)
-    xs_init_cnames((xs_schema*)l->data);
+    xs_init_cnames((Schema*)l->data);
 
   /* Objects that must have cnames assigned: model groups, types, particles */
 
   /* Inbuilt types: These all have the prefix "XSD" and then the type name */
   /* FIXME: set these when we create the actual builtin types */
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  Iterator<Type*> tit;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     /* should already be allocated... */
     if (t->builtin) {
       assert(t->ctype);
@@ -430,57 +436,59 @@ void xs_init_cnames(xs_schema *s)
 
   /* Attribute groups (these are always top-level */
   for (sse = s->symt->ss_attribute_groups->entries; sse; sse = sse->next) {
-    xs_attribute_group *ag = (xs_attribute_group*)sse->object;
+    AttributeGroup *ag = (AttributeGroup*)sse->object;
     ag->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                               ag->def.ident.name,ag->def.ident.ns);
+                               ag->def.ident.m_name.cstring(),ag->def.ident.m_ns.cstring());
   }
 
   /* Top-level model groups: use the name of the model group definition */
   for (sse = s->symt->ss_model_group_defs->entries; sse; sse = sse->next) {
-    xs_model_group_def *mgd = (xs_model_group_def*)sse->object;
+    ModelGroupDef *mgd = (ModelGroupDef*)sse->object;
     mgd->model_group->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                                             mgd->def.ident.name,mgd->def.ident.ns);
-    mgd->model_group->parent_name = strdup(mgd->def.ident.name);
-    mgd->model_group->parent_ns = mgd->def.ident.ns ? strdup(mgd->def.ident.ns) : NULL;
+                                             mgd->def.ident.m_name.cstring(),
+                                             mgd->def.ident.m_ns.cstring());
+    mgd->model_group->parent_name = mgd->def.ident.m_name.cstring();
+    mgd->model_group->parent_ns = !mgd->def.ident.m_ns.isNull() ? mgd->def.ident.m_ns.cstring() : NULL;
   }
 
   /* Top-level type declarations: use the name of the type, or the base custom cname for simple
      types (if there is one) */
   for (sse = s->symt->ss_types->entries; sse; sse = sse->next) {
-    xs_type *t = (xs_type*)sse->object;
+    Type *t = (Type*)sse->object;
     if (!t->complex && t->base->custom_ctype)
       t->ctype = strdup(t->base->ctype);
     else if (t->builtin)
       t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                                t->def.ident.name,t->def.ident.ns);
+                                t->def.ident.m_name.cstring(),t->def.ident.m_ns.cstring());
     else
       t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                                t->def.ident.name,t->def.ident.ns);
-    t->parent_name = strdup(t->def.ident.name);
-    t->parent_ns = t->def.ident.ns ? strdup(t->def.ident.ns) : NULL;
+                                t->def.ident.m_name.cstring(),t->def.ident.m_ns.cstring());
+    t->parent_name = t->def.ident.m_name.cstring();
+    t->parent_ns = !t->def.ident.m_ns.isNull() ? t->def.ident.m_ns.cstring() : NULL;
   }
 
   /* Anonymous type declarations inside <element>: use the name of the element */
-  for (l = s->as->alloc_element; l; l = l->next) {
-    xs_element *e = (xs_element*)l->data;
+  Iterator<SchemaElement*> eit;
+  for (eit = s->as->alloc_element; eit.haveCurrent(); eit++) {
+    SchemaElement *e = *eit;
     if ((NULL == e->typeref) && ((NULL == e->sghead) || (e->type != e->sghead->type)))  {
       if (NULL != e->type->ctype) {
-        printf("type cname already set! %s (name=%s,element=%s)\n",
-               e->type->ctype,e->type->def.ident.name,e->def.ident.name);
+        message("type cname already set! %s (name=%*,element=%*)\n",
+               e->type->ctype,&e->type->def.ident.m_name,&e->def.ident.m_name);
       }
       assert(NULL == e->type->ctype);
       assert(NULL == e->type->parent_name);
       e->type->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,
-                                      e->def.ident.name,e->def.ident.ns);
-      e->type->parent_name = strdup(e->def.ident.name);
-      e->type->parent_ns = e->def.ident.ns ? strdup(e->def.ident.ns) : NULL;
+                                      e->def.ident.m_name.cstring(),e->def.ident.m_ns.cstring());
+      e->type->parent_name = e->def.ident.m_name.cstring();
+      e->type->parent_ns = !e->def.ident.m_ns.isNull() ? e->def.ident.m_ns.cstring() : NULL;
     }
   }
 
   /* Simple type declarations within a <simpleType> (i.e. all types which have not yet been assigned
      a name) - generate numerically */
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     if (NULL == t->ctype) {
       assert(!t->complex);
       t->ctype = xs_alloc_cname(s->globals,1,&s->globals->ctypes,NULL,NULL,NULL);
@@ -489,12 +497,12 @@ void xs_init_cnames(xs_schema *s)
 
   /* Model group definitions that are the content model of a type declaration - these take the
      name of the type */
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     if (t->complex && t->content_type) {
       assert(NULL != t->ctype);
       assert(NULL != t->parent_name); /* FIXME: this is not set for anon simpletypes */
-      assert(XS_PARTICLE_TERM_MODEL_GROUP == t->content_type->term_type);
+      assert(PARTICLE_TERM_MODEL_GROUP == t->content_type->term_type);
 
       t->content_type->cvar = strdup("(content model)");
       if (NULL == t->content_type->ref) {
@@ -508,7 +516,7 @@ void xs_init_cnames(xs_schema *s)
 
       if ((NULL != t->effective_content) && 
           (t->effective_content != t->content_type)) {
-        assert(XS_PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
+        assert(PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
         t->effective_content->cvar = strdup("(content model)");
         if (NULL == t->effective_content->ref) {
           /* effective content model is an anonymous group; assign it a cname */
@@ -528,21 +536,21 @@ void xs_init_cnames(xs_schema *s)
   /* Particles - must be done recursively from model groups and type declarations. Anonymous groups
      may reside within these; these inherit their names from the parent model group or type */
   for (sse = s->symt->ss_model_group_defs->entries; sse; sse = sse->next) {
-    xs_model_group_def *mgd = (xs_model_group_def*)sse->object;
+    ModelGroupDef *mgd = (ModelGroupDef*)sse->object;
     xs_init_cnames_mg(s,mgd->model_group,1);
   }
 
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     if (t->complex && t->effective_content) {
-      assert(XS_PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
+      assert(PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
       if (NULL == t->effective_content->ref)
         xs_init_cnames_mg(s,t->effective_content->term.mg,1);
     }
     if (t->complex) {
       list **cnames2 = NULL;
       if (NULL != t->effective_content) {
-        assert(XS_PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
+        assert(PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
         cnames2 = &t->effective_content->term.mg->cvars;
       }
 
@@ -552,64 +560,69 @@ void xs_init_cnames(xs_schema *s)
   }
 
   /* Attribute groups */
-  for (l = s->as->alloc_attribute_group; l; l = l->next) {
-    xs_attribute_group *ag = (xs_attribute_group*)l->data;
+  Iterator<AttributeGroup*> agit;
+  for (agit = s->as->alloc_attribute_group; agit.haveCurrent(); agit++) {
+    AttributeGroup *ag = *agit;
     xs_init_attribute_cnames(s,ag->local_attribute_uses,ag->attribute_group_refs,&ag->cvars,NULL);
   }
 
-  for (l = s->as->alloc_type; l; l = l->next)
-    assert(NULL != ((xs_type*)l->data)->ctype);
-  for (l = s->as->alloc_model_group; l; l = l->next)
-    assert(NULL != ((xs_model_group*)l->data)->ctype);
-  for (l = s->as->alloc_particle; l; l = l->next)
-    assert(NULL != ((xs_particle*)l->data)->cvar);
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++)
+    assert(NULL != (*tit)->ctype);
+  Iterator<ModelGroup*> mgit;
+  for (mgit = s->as->alloc_model_group; mgit.haveCurrent(); mgit++)
+    assert(NULL != (*mgit)->ctype);
+  Iterator<Particle*> pit;
+  for (pit = s->as->alloc_particle; pit.haveCurrent(); pit++)
+    assert(NULL != (*pit)->cvar);
 }
 
 
 
 
 
-void xs_init_typeinfo_simpletypes(xs_schema *s)
+void xs_init_typeinfo_simpletypes(Schema *s)
 {
   list *l;
 
   for (l = s->imports; l; l = l->next)
-    xs_init_typeinfo_simpletypes((xs_schema*)l->data);
+    xs_init_typeinfo_simpletypes((Schema*)l->data);
 
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  Iterator<Type*> tit;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     if (!t->complex)
       init_typeinfo_simple_type(s,t);
   }
 }
 
 
-void xs_init_typeinfo_attribute_groups(xs_schema *s)
+void xs_init_typeinfo_attribute_groups(Schema *s)
 {
   list *l;
 
   for (l = s->imports; l; l = l->next)
-    xs_init_typeinfo_attribute_groups((xs_schema*)l->data);
+    xs_init_typeinfo_attribute_groups((Schema*)l->data);
 
-  for (l = s->as->alloc_attribute_group; l; l = l->next) {
-    xs_attribute_group *ag = (xs_attribute_group*)l->data;
+  Iterator<AttributeGroup*> agit;
+  for (agit = s->as->alloc_attribute_group; agit.haveCurrent(); agit++) {
+    AttributeGroup *ag = *agit;
     init_typeinfo_attribute_group(s,ag);
   }
 }
 
 
 
-void xs_init_typeinfo_others(xs_schema *s)
+void xs_init_typeinfo_others(Schema *s)
 {
   list *l;
   symbol_space_entry *sse;
 
   for (l = s->imports; l; l = l->next)
-    xs_init_typeinfo_others((xs_schema*)l->data);
+    xs_init_typeinfo_others((Schema*)l->data);
 
   /* top-level model groups */
   for (sse = s->symt->ss_model_group_defs->entries; sse; sse = sse->next) {
-    xs_model_group_def *mgd = (xs_model_group_def*)sse->object;
+    ModelGroupDef *mgd = (ModelGroupDef*)sse->object;
     list *typestack = NULL;
     list *mgstack = NULL;
     if (!mgd->model_group->typeinfo_known)
@@ -617,8 +630,9 @@ void xs_init_typeinfo_others(xs_schema *s)
   }
 
   /* complex types */
-  for (l = s->as->alloc_type; l; l = l->next) {
-    xs_type *t = (xs_type*)l->data;
+  Iterator<Type*> tit;
+  for (tit = s->as->alloc_type; tit.haveCurrent(); tit++) {
+    Type *t = *tit;
     list *typestack = NULL;
     list *mgstack = NULL;
     if (t->complex && !t->typeinfo_known)
@@ -628,14 +642,14 @@ void xs_init_typeinfo_others(xs_schema *s)
 
 }
 
-void xs_init_typeinfo(xs_schema *s)
+void GridXSLT::xs_init_typeinfo(Schema *s)
 {
   xs_init_typeinfo_simpletypes(s);
   xs_init_typeinfo_attribute_groups(s);
   xs_init_typeinfo_others(s);
 }
 
-xs_validator *xs_validator_new(xs_schema *s)
+xs_validator *GridXSLT::xs_validator_new(Schema *s)
 {
   xs_validator *v = (xs_validator*)calloc(1,sizeof(xs_validator));
   v->s = s;
@@ -646,37 +660,37 @@ xs_validator *xs_validator_new(xs_schema *s)
   return v;
 }
 
-void xs_print_model_group_defs(xs_model_group *mg)
+void xs_print_model_group_defs(ModelGroup *mg)
 {
-  int choice = (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor);
+  int choice = (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor);
   list *l;
 
   assert(mg->typeinfo_known);
   if (choice) {
-    printf("  int valtype;\n");
-    printf("  union {\n");
+    message("  int valtype;\n");
+    message("  union {\n");
   }
 
-/*   printf("model group pn %s (ct %s)\n",mg->parent_name,mg->ctype); */
+/*   message("model group pn %s (ct %s)\n",mg->parent_name,mg->ctype); */
   for (l = mg->particles; l; l = l->next) {
-    xs_particle *p = (xs_particle*)l->data;
+    Particle *p = (Particle*)l->data;
     const char *indent = choice ? "  " : "";
     char *typenam = "(type)";
     char *name = "(name)";
     assert(p->typeinfo_known);
     switch (p->term_type) {
-    case XS_PARTICLE_TERM_ELEMENT:
+    case PARTICLE_TERM_ELEMENT:
       assert(p->term.e->type);
       assert(p->term.e->type->ctype);
       assert(p->cvar);
       typenam = p->term.e->type->ctype;
       name = p->cvar;
       break;
-    case XS_PARTICLE_TERM_MODEL_GROUP:
+    case PARTICLE_TERM_MODEL_GROUP:
       name = p->cvar;
       typenam = p->term.mg->ctype;
       break;
-    case XS_PARTICLE_TERM_WILDCARD:
+    case PARTICLE_TERM_WILDCARD:
       name = p->cvar;
       typenam = "wildcard"; /* FIXME: what to do here? */
       break;
@@ -687,18 +701,18 @@ void xs_print_model_group_defs(xs_model_group *mg)
 
     switch (p->enctype) {
     case XS_ENCODING_SINGLE:
-      printf("%s  %s %s;\n",indent,typenam,name);
+      message("%s  %s %s;\n",indent,typenam,name);
       break;
     case XS_ENCODING_ARRAY_PTR:
-      printf("%s  int n%s;\n",indent,name);
-      printf("%s  %s *%s;\n",indent,typenam,name);
+      message("%s  int n%s;\n",indent,name);
+      message("%s  %s *%s;\n",indent,typenam,name);
       break;
     case XS_ENCODING_FIXED_ARRAY:
-      printf("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
+      message("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
       break;
     case XS_ENCODING_MAX_ARRAY:
-      printf("%s  int n%s;\n",indent,name);
-      printf("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
+      message("%s  int n%s;\n",indent,name);
+      message("%s  %s %s[%d];\n",indent,typenam,name,p->range.max_occurs);
       break;
     default:
       assert(!"invalid particle encoding type");
@@ -706,7 +720,7 @@ void xs_print_model_group_defs(xs_model_group *mg)
     }
   }
   if (choice) {
-    printf("  } val;\n");
+    message("  } val;\n");
   }
 }
 
@@ -714,52 +728,52 @@ void xs_print_attribute_defs(list *attribute_uses, list *attribute_group_refs)
 {
   list *l;
   for (l = attribute_uses; l; l = l->next) {
-    xs_attribute_use *au = (xs_attribute_use*)l->data;
+    AttributeUse *au = (AttributeUse*)l->data;
     assert(au->cvar);
     assert(au->attribute->type->ctype);
-    printf("  %s %s;\n",au->attribute->type->ctype,au->cvar);
+    message("  %s %s;\n",au->attribute->type->ctype,au->cvar);
   }
 
   for (l = attribute_group_refs; l; l = l->next) {
-    xs_attribute_group_ref *agr = (xs_attribute_group_ref*)l->data;
+    AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     assert(agr->cvar);
-    printf("  %s %s;\n",agr->ag->ctype,agr->cvar);
+    message("  %s %s;\n",agr->ag->ctype,agr->cvar);
   }
 }
 
-void xs_print_mg_choices(xs_model_group *mg, char *ctype)
+void xs_print_mg_choices(ModelGroup *mg, char *ctype)
 {
-  if (XS_MODEL_GROUP_COMPOSITOR_CHOICE == mg->compositor) {
+  if (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor) {
     list *first_ew = NULL;
     list *l;
     int choice = 1;
     for (l = mg->particles; l; l = l->next) {
-      xs_particle *p = (xs_particle*)l->data;
+      Particle *p = (Particle*)l->data;
       xs_get_first_elements_and_wildcards(p,&first_ew);
       assert(p->cvar);
-      printf("#define %s_%s %d\n",ctype,p->cvar,choice++);
+      message("#define %s_%s %d\n",ctype,p->cvar,choice++);
     }
     list_free(first_ew,NULL);
-    printf("\n");
+    message("\n");
   }
 }
 
-void xs_print_defs(xs_schema *s)
+void GridXSLT::xs_print_defs(Schema *s)
 {
   list *l;
 
   for (l = s->globals->cstructs; l; l = l->next) {
-    xs_cstruct *cs = (xs_cstruct*)l->data;
+    CStruct *cs = (CStruct*)l->data;
     switch (cs->type) {
-    case XS_CSTRUCT_TYPE:
-      printf("typedef struct %s %s;\n",cs->object.t->ctype,cs->object.t->ctype);
+    case CSTRUCT_TYPE:
+      message("typedef struct %s %s;\n",cs->object.t->ctype,cs->object.t->ctype);
       break;
-    case XS_CSTRUCT_MODEL_GROUP:
+    case CSTRUCT_MODEL_GROUP:
       if (NULL == cs->object.mg->content_model_of)
-        printf("typedef struct %s %s;\n",cs->object.mg->ctype,cs->object.mg->ctype);
+        message("typedef struct %s %s;\n",cs->object.mg->ctype,cs->object.mg->ctype);
       break;
-    case XS_CSTRUCT_ATTRIBUTE_GROUP:
-      printf("typedef struct %s %s;\n",cs->object.ag->ctype,cs->object.ag->ctype);
+    case CSTRUCT_ATTRIBUTE_GROUP:
+      message("typedef struct %s %s;\n",cs->object.ag->ctype,cs->object.ag->ctype);
       break;
     default:
       assert(!"invalid cstruct type");
@@ -767,52 +781,52 @@ void xs_print_defs(xs_schema *s)
     }
   }
 
-  printf("\n");
+  message("\n");
 
   for (l = s->globals->cstructs; l; l = l->next) {
-    xs_cstruct *cs = (xs_cstruct*)l->data;
+    CStruct *cs = (CStruct*)l->data;
     switch (cs->type) {
-    case XS_CSTRUCT_TYPE:
+    case CSTRUCT_TYPE:
       if (cs->object.t->complex) {
-        xs_type *t = cs->object.t;
+        Type *t = cs->object.t;
         if (NULL != t->effective_content) {
-          assert(XS_PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
+          assert(PARTICLE_TERM_MODEL_GROUP == t->effective_content->term_type);
           xs_print_mg_choices(t->effective_content->term.mg,t->ctype);
         }
 
-        printf("struct %s {\n",t->ctype);
+        message("struct %s {\n",t->ctype);
         if ((t->base != s->globals->complex_ur_type) &&
             t->base->complex) {
-          printf("  %s base;\n",t->base->ctype);
+          message("  %s base;\n",t->base->ctype);
         }
 
         if (NULL != t->effective_content)
           xs_print_model_group_defs(t->effective_content->term.mg);
 
         xs_print_attribute_defs(t->local_attribute_uses,t->attribute_group_refs);
-        printf("} __attribute__((__packed__));\n");
-        printf("/* complex type - %d bytes */\n",t->size);
-        printf("\n");
+        message("} __attribute__((__packed__));\n");
+        message("/* complex type - %d bytes */\n",t->size);
+        message("\n");
       }
       break;
-    case XS_CSTRUCT_MODEL_GROUP:
+    case CSTRUCT_MODEL_GROUP:
       if (NULL == cs->object.mg->content_model_of) {
-        xs_model_group *mg = cs->object.mg;
+        ModelGroup *mg = cs->object.mg;
         xs_print_mg_choices(mg,mg->ctype);
-        printf("struct %s {\n",mg->ctype);
+        message("struct %s {\n",mg->ctype);
         xs_print_model_group_defs(mg);
-        printf("} __attribute__((__packed__));\n");
-        printf("/* model group - %d bytes */\n",mg->size);
-        printf("\n");
+        message("} __attribute__((__packed__));\n");
+        message("/* model group - %d bytes */\n",mg->size);
+        message("\n");
       }
       break;
-    case XS_CSTRUCT_ATTRIBUTE_GROUP: {
-      xs_attribute_group *ag = cs->object.ag;
-      printf("struct %s {\n",ag->ctype);
+    case CSTRUCT_ATTRIBUTE_GROUP: {
+      AttributeGroup *ag = cs->object.ag;
+      message("struct %s {\n",ag->ctype);
       xs_print_attribute_defs(ag->local_attribute_uses,ag->attribute_group_refs);
-      printf("} __attribute__((__packed__));\n");
-      printf("/* attribute group - %d bytes */\n",ag->size);
-      printf("\n");
+      message("} __attribute__((__packed__));\n");
+      message("/* attribute group - %d bytes */\n",ag->size);
+      message("\n");
       break;
     }
     default:
@@ -822,9 +836,9 @@ void xs_print_defs(xs_schema *s)
   }
 }
 
-void xs_validator_free(xs_validator *v)
+void GridXSLT::xs_validator_free(xs_validator *v)
 {
-  error_info_free_vals(&v->ei);
+  v->ei.clear();
   free(v);
 }
 
@@ -870,31 +884,31 @@ void next_element(xmlNodePtr *n)
 
 
 
-void get_particle_pattern(stringbuf *buf, xs_particle *p)
+void get_particle_pattern(stringbuf *buf, Particle *p)
 {
   int inbrackets = 0;
   if (((1 != p->range.min_occurs) || (1 != p->range.max_occurs)) &&
-      (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)) {
+      (PARTICLE_TERM_MODEL_GROUP == p->term_type)) {
     stringbuf_format(buf,"(");
     inbrackets = 1;
   }
 
   switch (p->term_type) {
-  case XS_PARTICLE_TERM_ELEMENT: {
-    stringbuf_format(buf,"%s",p->term.e->def.ident.name);
+  case PARTICLE_TERM_ELEMENT: {
+    stringbuf_format(buf,"%s",p->term.e->def.ident.m_name.cstring());
     break;
   }
-  case XS_PARTICLE_TERM_MODEL_GROUP:
+  case PARTICLE_TERM_MODEL_GROUP:
     switch (p->term.mg->compositor) {
-    case XS_MODEL_GROUP_COMPOSITOR_ALL:
+    case MODELGROUP_COMPOSITOR_ALL:
       assert(!"not implemented");
       break;
-    case XS_MODEL_GROUP_COMPOSITOR_CHOICE: {
+    case MODELGROUP_COMPOSITOR_CHOICE: {
       list *l;
       if (!inbrackets)
         stringbuf_format(buf,"(");
       for (l = p->term.mg->particles; l; l = l ->next) {
-        xs_particle *p2 = (xs_particle*)l->data;
+        Particle *p2 = (Particle*)l->data;
         get_particle_pattern(buf,p2);
         if (l->next)
           stringbuf_format(buf,"|");
@@ -903,10 +917,10 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
         stringbuf_format(buf,")");
       break;
     }
-    case XS_MODEL_GROUP_COMPOSITOR_SEQUENCE: {
+    case MODELGROUP_COMPOSITOR_SEQUENCE: {
       list *l;
       for (l = p->term.mg->particles; l; l = l ->next) {
-        xs_particle *p2 = (xs_particle*)l->data;
+        Particle *p2 = (Particle*)l->data;
         get_particle_pattern(buf,p2);
         if (l->next)
           stringbuf_format(buf," ");
@@ -918,7 +932,7 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
       break;
     }
     break;
-  case XS_PARTICLE_TERM_WILDCARD:
+  case PARTICLE_TERM_WILDCARD:
     assert(!"not yet implemented");
     break;
   default:
@@ -926,7 +940,7 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
     break;
   }
   if ((1 != p->range.min_occurs) || (1 != p->range.max_occurs)) {
-    if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type)
+    if (PARTICLE_TERM_MODEL_GROUP == p->term_type)
       stringbuf_format(buf,")");
 
     if (p->range.min_occurs == p->range.max_occurs)
@@ -970,7 +984,7 @@ void get_particle_pattern(stringbuf *buf, xs_particle *p)
  *                    according to the validation error
  */
 int validate_element_children(xs_validator *v, xmlNodePtr n, stringbuf *encoded,
-                              xs_type *t, int *lineno, int pos)
+                              Type *t, int *lineno, int pos)
 {
   xmlNodePtr c;
   int r;
@@ -981,7 +995,7 @@ int validate_element_children(xs_validator *v, xmlNodePtr n, stringbuf *encoded,
     *lineno = c->line;
 
   r = validate_element_against_particle(v,&c,lineno,t->content_type,encoded,pos);
-/*   printf("validating children of %s: r = %d\n",n->name,r); */
+/*   message("validating children of %s: r = %d\n",n->name,r); */
   if (1 != r) {
     return -1;
   }
@@ -1023,7 +1037,7 @@ int validate_element_children(xs_validator *v, xmlNodePtr n, stringbuf *encoded,
  *                    value will be no more than p->range.max_occurs.
  */
 int validate_element_against_particle(xs_validator *v,
-                                      xmlNodePtr *n, int *lineno, xs_particle *p,
+                                      xmlNodePtr *n, int *lineno, Particle *p,
                                       stringbuf *encoded, int posinparent)
 {
   list *l;
@@ -1035,8 +1049,8 @@ int validate_element_against_particle(xs_validator *v,
   int datapos = 0;
 
   if (!p->typeinfo_known) {
-    printf("typeinfo of particle %p is not known\n",p);
-    printf("p->extension_for = %p\n",p->extension_for);
+    message("typeinfo of particle %p is not known\n",p);
+    message("p->extension_for = %p\n",p->extension_for);
   }
 
   assert(p->typeinfo_known);
@@ -1084,7 +1098,7 @@ int validate_element_against_particle(xs_validator *v,
   while (!finished && ((0 > p->range.max_occurs) || (count < p->range.max_occurs))) {
 
     switch (p->term_type) {
-    case XS_PARTICLE_TERM_ELEMENT: {
+    case PARTICLE_TERM_ELEMENT: {
       /* Do we have an element here? */
       if (NULL == *n) {
         v->inv_type = XS_VALIDATOR_INV_MISSING_ELEMENT;
@@ -1097,7 +1111,8 @@ int validate_element_against_particle(xs_validator *v,
       }
 
       /* Is it the right element? */
-      if (!check_element(*n,p->term.e->def.ident.name,p->term.e->def.ident.ns)) {
+      if (!check_element(*n,p->term.e->def.ident.m_name.cstring(),
+                         p->term.e->def.ident.m_ns.cstring())) {
         v->inv_type = XS_VALIDATOR_INV_WRONG_ELEMENT;
         v->inv_p = p;
         v->inv_e = p->term.e;
@@ -1121,7 +1136,7 @@ int validate_element_against_particle(xs_validator *v,
         /* We need to allocate some more memory for this instance here */
         IMPL_ARRAYSIZE count2 = count+1;
         memcpy(encoded->data+posinparent,&count2,sizeof(IMPL_ARRAYSIZE));
-/*         printf("allocating data 0x%02x-0x%02x for item %d\n", */
+/*         message("allocating data 0x%02x-0x%02x for item %d\n", */
 /*                encoded->size-1,encoded->size-1+p->term.e->type->size,count); */
         stringbuf_append(encoded,NULL,p->term.e->type->size);
         break;
@@ -1204,18 +1219,18 @@ int validate_element_against_particle(xs_validator *v,
       datapos += p->term.e->type->size;
       break;
     }
-    case XS_PARTICLE_TERM_MODEL_GROUP:
+    case PARTICLE_TERM_MODEL_GROUP:
       switch (p->term.mg->compositor) {
-      case XS_MODEL_GROUP_COMPOSITOR_ALL:
+      case MODELGROUP_COMPOSITOR_ALL:
         assert(!"not yet implemented");
         break;
-      case XS_MODEL_GROUP_COMPOSITOR_CHOICE: {
+      case MODELGROUP_COMPOSITOR_CHOICE: {
         xmlNodePtr nstart = *n;
         int foundvalid = 0;
         if (NULL != *n)
            *lineno = (*n)->line;
         for (l = p->term.mg->particles; l && !foundvalid; l = l->next) {
-          xs_particle *p2 = (xs_particle*)l->data;
+          Particle *p2 = (Particle*)l->data;
           *n = nstart;
           if (validate_element_against_particle(v,n,lineno,
                                                 p2,encoded,datapos) >= p2->range.min_occurs)
@@ -1225,9 +1240,9 @@ int validate_element_against_particle(xs_validator *v,
           finished = 1;
         break;
       }
-      case XS_MODEL_GROUP_COMPOSITOR_SEQUENCE: {
+      case MODELGROUP_COMPOSITOR_SEQUENCE: {
         for (l = p->term.mg->particles; l; l = l->next) {
-          xs_particle *p2 = (xs_particle*)l->data;
+          Particle *p2 = (Particle*)l->data;
           if (NULL != *n)
              *lineno = (*n)->line;
           if (validate_element_against_particle(v,n,lineno,
@@ -1243,7 +1258,7 @@ int validate_element_against_particle(xs_validator *v,
         break;
       }
       break;
-    case XS_PARTICLE_TERM_WILDCARD:
+    case PARTICLE_TERM_WILDCARD:
       assert(!"not yet implemented");
       break;
     default:
@@ -1255,16 +1270,16 @@ int validate_element_against_particle(xs_validator *v,
       break;
 
     count++;
-/*     printf("set count = %d\n",count); */
+/*     message("set count = %d\n",count); */
   }
 
   for (l = strings; l; l = l->next) {
     stringencinfo *s = (stringencinfo*)l->data;
     IMPL_INT spos = encoded->size-1-s->datapos;
     s = (stringencinfo*)l->data;
-/*     printf("string value: %s, datapos=%d, spos=%d\n",s->str,s->datapos,spos); */
+/*     message("string value: %s, datapos=%d, spos=%d\n",s->str,s->datapos,spos); */
     memcpy(encoded->data+s->datapos,&spos,sizeof(IMPL_INT));
-/*     printf("string relpos 0x%02x (abspos 0x%02x) value \"%s\"\n",spos,encoded->size-1,s->str); */
+/*     message("string relpos 0x%02x (abspos 0x%02x) value \"%s\"\n",spos,encoded->size-1,s->str); */
     stringbuf_append(encoded,s->str,strlen(s->str)+1);
     free(s->str);
   }
@@ -1281,10 +1296,10 @@ int validate_element_against_particle(xs_validator *v,
   }
   list_free(children,(list_d_t)free);
 
-/*   if (XS_PARTICLE_TERM_ELEMENT == p->term_type) */
-/*     printf("validate_element_against_particle[%s]: returning %d\n",p->term.e->name,count); */
+/*   if (PARTICLE_TERM_ELEMENT == p->term_type) */
+/*     message("validate_element_against_particle[%s]: returning %d\n",p->term.e->name,count); */
 /*   else */
-/*     printf("validate_element_against_particle[MG %p]: returning %d\n",p->term.mg,count); */
+/*     message("validate_element_against_particle[MG %p]: returning %d\n",p->term.mg,count); */
 
   return count;
 }
@@ -1296,24 +1311,24 @@ void set_inv_error(xs_validator *v, char *filename)
     break;
   case XS_VALIDATOR_INV_MISSING_ELEMENT: {
     if (0 < v->inv_count)
-      error(&v->ei,filename,v->inv_lineno,NULL,
-            "Expected another %#n element; found %d instance(s) but require at least %d",
-            v->inv_p->term.e->def.ident,v->inv_count,v->inv_p->range.min_occurs);
+      error(&v->ei,filename,v->inv_lineno,String::null(),
+            "Expected another %* element; found %d instance(s) but require at least %d",
+            &v->inv_p->term.e->def.ident,v->inv_count,v->inv_p->range.min_occurs);
     else
-      error(&v->ei,filename,v->inv_lineno,NULL,"Expected element %#n",v->inv_p->term.e->def.ident);
+      error(&v->ei,filename,v->inv_lineno,String::null(),
+            "Expected element %*",&v->inv_p->term.e->def.ident);
     break;
   }
   case XS_VALIDATOR_INV_WRONG_ELEMENT: {
-    nsname fn2;
-    fn2.ns = (v->inv_n->ns ? strdup(v->inv_n->ns->href) : NULL);
-    fn2.name = strdup(v->inv_n->name);
-    error(&v->ei,filename,v->inv_lineno,NULL,"Expected element %#n, but found %#n",
-          v->inv_p->term.e->def.ident,fn2);
-    nsname_free(fn2);
+    NSName fn2;
+    fn2.m_ns = (v->inv_n->ns ? v->inv_n->ns->href : NULL);
+    fn2.m_name = v->inv_n->name;
+    error(&v->ei,filename,v->inv_lineno,String::null(),"Expected element %*, but found %*",
+          &v->inv_p->term.e->def.ident,&fn2);
     break;
   }
   case XS_VALIDATOR_INV_NOTHING_MORE_ALLOWED:
-    error(&v->ei,filename,v->inv_lineno,NULL,"No more elements allowed here");
+    error(&v->ei,filename,v->inv_lineno,String::null(),"No more elements allowed here");
     break;
   default:
     assert(!"invalid inv_type");
@@ -1321,36 +1336,32 @@ void set_inv_error(xs_validator *v, char *filename)
   }
 }
 
-int validate_root(xs_validator *v, char *filename, xmlNodePtr n, stringbuf *encoded)
+int GridXSLT::validate_root(xs_validator *v, char *filename, xmlNodePtr n, stringbuf *encoded)
 {
-  xs_type *t;
+  Type *t;
   int lineno = n->line;
   int pos = encoded->size-1;
 
   if (XML_ELEMENT_NODE != n->type)
-    return error(&v->ei,filename,n->line,NULL,"Element expected\n");
+    return error(&v->ei,filename,n->line,String::null(),"Element expected\n");
   if (n->ns) {
-    nsname nn = nsname_new(n->ns->href,n->name);
-    if (NULL == (t = xs_lookup_type(v->s,nn))) {
-      nsname_free(nn);
-      return error(&v->ei,filename,n->line,NULL,"No type definition for element {%s}%s",
+    NSName nn = NSName(n->ns->href,n->name);
+    if (NULL == (t = v->s->getType(nn))) {
+      return error(&v->ei,filename,n->line,String::null(),"No type definition for element {%s}%s",
                    n->ns->href,n->name);
     }
-    nsname_free(nn);
   }
   else {
-    nsname nn = nsname_new(NULL,n->name);
-    if (NULL == (t = xs_lookup_type(v->s,nn))) {
-      nsname_free(nn);
-      return error(&v->ei,filename,n->line,NULL,"No type definition for element %s",n->name);
+    NSName nn = NSName(String::null(),n->name);
+    if (NULL == (t = v->s->getType(nn))) {
+      return error(&v->ei,filename,n->line,String::null(),"No type definition for element %s",n->name);
     }
-    nsname_free(nn);
   }
 
   /* FIXME: what if root is a simple type (i.e. not a model group)? */
-  assert(XS_PARTICLE_TERM_MODEL_GROUP == t->content_type->term_type);
+  assert(PARTICLE_TERM_MODEL_GROUP == t->content_type->term_type);
   stringbuf_append(encoded,NULL,t->content_type->term.mg->size);
-/*   printf("root element: allocated %d bytes\n",encoded->size-1); */
+/*   message("root element: allocated %d bytes\n",encoded->size-1); */
 
   if (0 != validate_element_children(v,n,encoded,t,&lineno,pos)) {
     set_inv_error(v,filename);
@@ -1359,51 +1370,51 @@ int validate_root(xs_validator *v, char *filename, xmlNodePtr n, stringbuf *enco
   return 0;
 }
 
-int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, xs_particle *p, stringbuf *encoded, int pos)
+int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, Particle *p, stringbuf *encoded, int pos)
 {
-/*   printf("xs_decode_particle pos 0x%02x particle %s (enctype %d)\n",pos,p->cvar,p->enctype); */
-  if (XS_PARTICLE_TERM_ELEMENT == p->term_type) {
-    xs_element *e = p->term.e;
-    xmlTextWriterStartElement(writer,e->def.ident.name);
+/*   message("xs_decode_particle pos 0x%02x particle %s (enctype %d)\n",pos,p->cvar,p->enctype); */
+  if (PARTICLE_TERM_ELEMENT == p->term_type) {
+    SchemaElement *e = p->term.e;
+    xmlTextWriterStartElement(writer,e->def.ident.m_name.cstring());
     if (!e->type->complex) {
       if (v->s->globals->boolean_type == e->type) {
         IMPL_BOOLEAN val = *(IMPL_BOOLEAN*)(encoded->data+pos);
-        xmlTextWriterWriteFormatString(writer,"%s",val ? "true" : "false");
+        XMLWriter::formatString(writer,"%s",val ? "true" : "false");
       }
       else if (v->s->globals->long_type == p->term.e->type) {
         IMPL_LONG val = *(IMPL_LONG*)(encoded->data+pos);
-        xmlTextWriterWriteFormatString(writer,"%ld",val);
+        XMLWriter::formatString(writer,"%ld",val);
       }
       else if (v->s->globals->int_type == p->term.e->type) {
         IMPL_INT val = *(IMPL_INT*)(encoded->data+pos);
-        xmlTextWriterWriteFormatString(writer,"%d",val);
+        XMLWriter::formatString(writer,"%d",val);
       }
       else if (v->s->globals->short_type == p->term.e->type) {
         IMPL_SHORT val = *(IMPL_SHORT*)(encoded->data+pos);
-        xmlTextWriterWriteFormatString(writer,"%hd",val);
+        XMLWriter::formatString(writer,"%hd",val);
       }
       else if (v->s->globals->byte_type == p->term.e->type) {
         IMPL_BYTE val = *(IMPL_BYTE*)(encoded->data+pos);
         int val2 = val;
-        xmlTextWriterWriteFormatString(writer,"%d",val2);
+        XMLWriter::formatString(writer,"%d",val2);
       }
       else if (v->s->globals->float_type == p->term.e->type) {
         IMPL_FLOAT val = *(IMPL_FLOAT*)(encoded->data+pos);
         double val2 = val;
-        xmlTextWriterWriteFormatString(writer,"%f",val2);
+        XMLWriter::formatString(writer,"%f",val2);
       }
       else if (v->s->globals->double_type == p->term.e->type) {
         IMPL_DOUBLE val = *(IMPL_DOUBLE*)(encoded->data+pos);
-        xmlTextWriterWriteFormatString(writer,"%f",val);
+        XMLWriter::formatString(writer,"%f",val);
       }
       else {
         IMPL_POINTER val = *(IMPL_POINTER*)(encoded->data+pos);
         val += pos;
         if (val >= encoded->size-1) {
-          fprintf(stderr,"Pointer goes beyond end of data (pos: %d, target: %d)\n",pos,val);
+          fmessage(stderr,"Pointer goes beyond end of data (pos: %d, target: %d)\n",pos,val);
           return -1;
         }
-        xmlTextWriterWriteFormatString(writer,"%s",(char*)(encoded->data+val));
+        XMLWriter::formatString(writer,"%s",(char*)(encoded->data+val));
       }
     }
     else if (e->type->content_type) {
@@ -1412,13 +1423,13 @@ int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, xs_particle *p, s
     }
     xmlTextWriterEndElement(writer);
   }
-  else if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type) {
-    xs_model_group *mg = p->term.mg;
+  else if (PARTICLE_TERM_MODEL_GROUP == p->term_type) {
+    ModelGroup *mg = p->term.mg;
     list *l;
     int basepos = pos;
 
     for (l = mg->particles; l; l = l->next) {
-      xs_particle *p2 = (xs_particle*)l->data;
+      Particle *p2 = (Particle*)l->data;
       pos = basepos + p2->pos;
 
       switch (p2->enctype) {
@@ -1470,12 +1481,12 @@ int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, xs_particle *p, s
   return 0;
 }
 
-int xs_decode(xs_validator *v, xmlTextWriter *writer, xs_type *t, stringbuf *encoded, int pos)
+int GridXSLT::xs_decode(xs_validator *v, xmlTextWriter *writer, Type *t, stringbuf *encoded, int pos)
 {
   int r;
   assert(t->content_type);
-  assert(t->def.ident.name);
-  xmlTextWriterStartElement(writer,t->def.ident.name);
+  assert(!t->def.ident.isNull());
+  xmlTextWriterStartElement(writer,t->def.ident.m_name.cstring());
   r = xs_decode_particle(v,writer,t->content_type,encoded,pos);
   xmlTextWriterEndElement(writer);
   return r;

@@ -71,43 +71,43 @@ Helper components
 #define IMPL_FLOAT float
 #define IMPL_DOUBLE double
 
-#define XS_VALUE_CONSTRAINT_NONE            0
-#define XS_VALUE_CONSTRAINT_DEFAULT         1
-#define XS_VALUE_CONSTRAINT_FIXED           2
+#define VALUECONSTRAINT_NONE            0
+#define VALUECONSTRAINT_DEFAULT         1
+#define VALUECONSTRAINT_FIXED           2
 
-#define XS_TYPE_DERIVATION_EXTENSION        0
-#define XS_TYPE_DERIVATION_RESTRICTION      1
+#define TYPE_DERIVATION_EXTENSION        0
+#define TYPE_DERIVATION_RESTRICTION      1
 
-#define XS_TYPE_VARIETY_INVALID             0
-#define XS_TYPE_VARIETY_ATOMIC              1
-#define XS_TYPE_VARIETY_LIST                2
-#define XS_TYPE_VARIETY_UNION               3
+#define TYPE_VARIETY_INVALID             0
+#define TYPE_VARIETY_ATOMIC              1
+#define TYPE_VARIETY_LIST                2
+#define TYPE_VARIETY_UNION               3
 
-#define XS_TYPE_SIMPLE_BUILTIN              0
-#define XS_TYPE_SIMPLE_RESTRICTION          1
-#define XS_TYPE_SIMPLE_LIST                 2
-#define XS_TYPE_SIMPLE_UNION                3
+#define TYPE_SIMPLE_BUILTIN              0
+#define TYPE_SIMPLE_RESTRICTION          1
+#define TYPE_SIMPLE_LIST                 2
+#define TYPE_SIMPLE_UNION                3
 
-#define XS_ATTRIBUTE_USE_OPTIONAL           0
-#define XS_ATTRIBUTE_USE_PROHIBITED         1
-#define XS_ATTRIBUTE_USE_REQUIRED           2
+#define ATTRIBUTEUSE_OPTIONAL           0
+#define ATTRIBUTEUSE_PROHIBITED         1
+#define ATTRIBUTEUSE_REQUIRED           2
 
-#define XS_MODEL_GROUP_COMPOSITOR_ALL       0
-#define XS_MODEL_GROUP_COMPOSITOR_CHOICE    1
-#define XS_MODEL_GROUP_COMPOSITOR_SEQUENCE  2
+#define MODELGROUP_COMPOSITOR_ALL       0
+#define MODELGROUP_COMPOSITOR_CHOICE    1
+#define MODELGROUP_COMPOSITOR_SEQUENCE  2
 
-#define XS_PARTICLE_TERM_INVALID            0
-#define XS_PARTICLE_TERM_ELEMENT            1
-#define XS_PARTICLE_TERM_MODEL_GROUP        2
-#define XS_PARTICLE_TERM_WILDCARD           3
+#define PARTICLE_TERM_INVALID            0
+#define PARTICLE_TERM_ELEMENT            1
+#define PARTICLE_TERM_MODEL_GROUP        2
+#define PARTICLE_TERM_WILDCARD           3
 
-#define XS_WILDCARD_TYPE_ANY                0
-#define XS_WILDCARD_TYPE_NOT                1
-#define XS_WILDCARD_TYPE_SET                2
+#define WILDCARD_TYPE_ANY                0
+#define WILDCARD_TYPE_NOT                1
+#define WILDCARD_TYPE_SET                2
 
-#define XS_WILDCARD_PROCESS_CONTENTS_SKIP   0
-#define XS_WILDCARD_PROCESS_CONTENTS_LAX    1
-#define XS_WILDCARD_PROCESS_CONTENTS_STRICT 2
+#define WILDCARD_PROCESS_CONTENTS_SKIP   0
+#define WILDCARD_PROCESS_CONTENTS_LAX    1
+#define WILDCARD_PROCESS_CONTENTS_STRICT 2
 
 #define XS_FACET_EQUAL                      0
 #define XS_FACET_ORDERED                    1
@@ -144,112 +144,117 @@ Helper components
 #define XS_ENCODING_FIXED_ARRAY             3
 #define XS_ENCODING_MAX_ARRAY               4
 
-#define XS_CSTRUCT_INVALID                  0
-#define XS_CSTRUCT_TYPE                     1
-#define XS_CSTRUCT_MODEL_GROUP              2
-#define XS_CSTRUCT_ATTRIBUTE_GROUP          3
+#define CSTRUCT_INVALID                  0
+#define CSTRUCT_TYPE                     1
+#define CSTRUCT_MODEL_GROUP              2
+#define CSTRUCT_ATTRIBUTE_GROUP          3
 
-typedef struct xs_range xs_range;
-typedef struct xs_value_constraint xs_value_constraint;
-typedef struct xs_reference xs_reference;
-typedef struct xs_member_type xs_member_type;
+namespace GridXSLT {
+
+class Type;
+class SchemaAttribute;
+class SchemaElement;
+class AttributeGroupRef;
+class AttributeGroup;
+class ModelGroupDef;
+class ModelGroup;
+class Particle;
+class Wildcard;
+class AttributeUse;
+class BuiltinTypes;
+class Schema;
+
+typedef struct Range Range;
+typedef struct ValueConstraint ValueConstraint;
+typedef struct Reference Reference;
+typedef struct MemberType MemberType;
 typedef struct xs_facetdata xs_facetdata;
-typedef struct xs_type xs_type;
-typedef struct xs_attribute xs_attribute;
-typedef struct xs_element xs_element;
+typedef struct IdentityConstraint IdentityConstraint;
+typedef struct Notation Notation;
 
-typedef struct xs_attribute_group_ref xs_attribute_group_ref;
-typedef struct xs_attribute_group xs_attribute_group;
-typedef struct xs_identity_constraint xs_identity_constraint;
-typedef struct xs_model_group_def xs_model_group_def;
-typedef struct xs_model_group xs_model_group;
-typedef struct xs_notation xs_notation;
 
-typedef struct xs_particle xs_particle;
-typedef struct xs_wildcard xs_wildcard;
-typedef struct xs_attribute_use xs_attribute_use;
-
-typedef struct xs_cstruct xs_cstruct;
+typedef struct CStruct CStruct;
 typedef struct xs_allocset xs_allocset;
 typedef struct xs_symbol_table xs_symbol_table;
-typedef struct xs_globals xs_globals;
-typedef struct xs_schema xs_schema;
 
-typedef struct xs_visitor xs_visitor;
+class SchemaVisitor {
+  DISABLE_COPY(SchemaVisitor)
+public:
+  SchemaVisitor() : once_each(0) { }
+  virtual ~SchemaVisitor() { }
 
+  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t) { return 0; }
+  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a) { return 0; }
+  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e) { return 0; }
+  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag) { return 0; }
+  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+                                AttributeGroupRef *agr) { return 0; }
+  virtual int identityConstraint(Schema *s, xmlDocPtr doc, int post,
+                         IdentityConstraint *ic) { return 0; }
+  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd) { return 0; }
+  virtual int modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg) { return 0; }
+  virtual int notation(Schema *s, xmlDocPtr doc, int post, Notation *n) { return 0; }
+  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p) { return 0; }
+  virtual int wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w) { return 0; }
+  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au) { return 0; }
+  virtual int schema(Schema *s, xmlDocPtr doc, int post, Schema *s2) { return 0; }
 
-typedef int (*type_visitor)                (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_type *t);
-typedef int (*attribute_visitor)           (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_attribute *a);
-typedef int (*element_visitor)             (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_element *e);
-
-typedef int (*attribute_group_visitor)     (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_attribute_group *ag);
-typedef int (*attribute_group_ref_visitor) (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_attribute_group_ref *agr);
-typedef int (*identity_constraint_visitor) (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_identity_constraint *ic);
-typedef int (*model_group_def_visitor)     (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_model_group_def *mgd);
-typedef int (*model_group_visitor)         (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_model_group *mg);
-typedef int (*notation_visitor)            (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_notation *n);
-
-typedef int (*particle_visitor)            (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_particle *p);
-typedef int (*wildcard_visitor)            (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_wildcard *w);
-typedef int (*attribute_use_visitor)       (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_attribute_use *au);
-
-typedef int (*schema_visitor)              (xs_schema *s, xmlDocPtr doc, void *data, int post,
-                                            xs_schema *s2);
-
-struct xs_visitor {
-  type_visitor visit_type;
-  attribute_visitor visit_attribute;
-  element_visitor visit_element;
-  attribute_group_visitor visit_attribute_group;
-  attribute_group_ref_visitor visit_attribute_group_ref;
-  identity_constraint_visitor visit_identity_constraint;
-  model_group_def_visitor visit_model_group_def;
-  model_group_visitor visit_model_group;
-  notation_visitor visit_notation;
-  particle_visitor visit_particle;
-  wildcard_visitor visit_wildcard;
-  attribute_use_visitor visit_attribute_use;
-  schema_visitor visit_schema;
   int once_each;
 };
 
-struct xs_range {
+
+
+
+
+
+
+
+
+
+
+class Range {
+public:
+  Range() : min_occurs(0), max_occurs(0) {}
+  GridXSLT::String toString();
   int min_occurs;
   int max_occurs;
 };
 
-struct xs_value_constraint {
+class ValueConstraint {
+  DISABLE_COPY(ValueConstraint)
+public:
+  ValueConstraint();
+  ~ValueConstraint();
+
   char *value;
   int type;
 };
 
-struct xs_reference {
+class Reference {
+  DISABLE_COPY(Reference)
+public:
+  Reference(xs_allocset *as);
+  ~Reference();
+
   definition def;
-  xs_schema *s;
+  Schema *s;
   int type;
   void **obj;
   int resolved;
   int builtin;
-  int (*check)(xs_schema *s, xs_reference *r);
+  int (*check)(Schema *s, Reference *r);
   void *source;
   void *target;
 };
 
-struct xs_member_type {
-  xs_type *type;
-  xs_reference *ref;
+class MemberType {
+  DISABLE_COPY(MemberType)
+public:
+  MemberType(xs_allocset *as);
+  ~MemberType();
+
+  Type *type;
+  Reference *ref;
 };
 
 struct xs_facetdata {
@@ -260,13 +265,21 @@ struct xs_facetdata {
   list *enumerations;
 };
 
-struct xs_type {
+class Type {
+  DISABLE_COPY(Type)
+public:
+  Type(xs_allocset *as);
+  ~Type();
+
+  int isDerived(Type *from);
+  int facetAllowed(int facet);
+
   definition def;                  /* {name} and {target namespace} */
 
   int complex;
 
-  xs_type *base;                   /* {base type definition} */
-  xs_reference *baseref;
+  Type *base;                   /* {base type definition} */
+  Reference *baseref;
 
   int final_extension;             /* {final} */
   int final_restriction;           /* {final} */
@@ -281,32 +294,32 @@ struct xs_type {
   int abstract;                    /* {abstract} */
   list *attribute_uses;            /* {attribute uses} */
   list *local_attribute_uses;
-  xs_wildcard *local_wildcard;     /* {attribute wildcard} */
-  xs_wildcard *attribute_wildcard; /* {attribute wildcard} */
-  xs_particle *content_type;       /* {content type} - content model */
-  xs_type *simple_content_type;    /* {content type} - simple type definition */
+  Wildcard *local_wildcard;     /* {attribute wildcard} */
+  Wildcard *attribute_wildcard; /* {attribute wildcard} */
+  Particle *content_type;       /* {content type} - content model */
+  Type *simple_content_type;    /* {content type} - simple type definition */
   int mixed;                       /* {content type} - mixed or element-only */
   int prohibited_extension;        /* {prohibited substitutions} */
   int prohibited_restriction;      /* {prohibited substitutions} */
 
-  list *attribute_group_refs;      /* list of xs_reference */
+  list *attribute_group_refs;      /* list of Reference */
 
   /* properties specific to simple types */
   xs_facetdata facets;             /* {facets} */
   void *fundamental_facets;        /* {fundamental facets} */
   int variety;                     /* {variety} */
-  xs_type *primitive_type;         /* {primitive type definition} - atomic types only */
-  xs_type *item_type;              /* {item type definition} - list types only */
-  xs_reference *item_typeref;      /* {item type definition} - list types only */
+  Type *primitive_type;         /* {primitive type definition} - atomic types only */
+  Type *item_type;              /* {item type definition} - list types only */
+  Reference *item_typeref;      /* {item type definition} - list types only */
   list *members;                   /* {member type definitions} - union types only */
   int stype;                       /* restriction, list or union */
   int *allowed_facets; /* primitive types only */
   xs_facetdata child_facets;
-  xs_type *child_type;
+  Type *child_type;
 
   int complex_content;
 
-  xs_particle *effective_content;
+  Particle *effective_content;
   int effective_mixed;
 
   int primitive;
@@ -325,29 +338,39 @@ struct xs_type {
   list *attribute_cvars;
 };
 
-struct xs_attribute {
+class SchemaAttribute {
+  DISABLE_COPY(SchemaAttribute)
+public:
+  SchemaAttribute(xs_allocset *as);
+  ~SchemaAttribute();
+
   definition def;                        /* {name} and {target namespace} */
 
-  xs_type *type;                         /* {type definition} */
-  xs_reference *typeref;
+  Type *type;                         /* {type definition} */
+  Reference *typeref;
                                          /* {scope} (nothing corresponds to this) */
-  xs_value_constraint vc;                /* {value constraint} */
+  ValueConstraint vc;                /* {value constraint} */
   void *annotation;                      /* {annotation} */
   int toplevel;
 };
 
-struct xs_element {
+struct SchemaElement {
+  DISABLE_COPY(SchemaElement)
+public:
+  SchemaElement(xs_allocset *as);
+  ~SchemaElement();
+
   definition def;                        /* {name} and {target namespace} */
 
-  xs_type *type;                         /* {type definition} */
-  xs_reference *typeref;
+  Type *type;                         /* {type definition} */
+  Reference *typeref;
                                          /* {scope} (nothing corresponds to this) */
-  xs_value_constraint vc;                /* {value constraint} */
+  ValueConstraint vc;                /* {value constraint} */
   int nillable;                          /* {nillable} */
   void *identity_constraint_definitions; /* {identity-constraint definitions} */
 
-  xs_element *sghead;                    /* {substitution group affiliation} */
-  xs_reference *sgheadref;
+  SchemaElement *sghead;                    /* {substitution group affiliation} */
+  Reference *sgheadref;
   list *sgmembers;
 
   int exclude_extension;                 /* {substitution group exclusions} */
@@ -363,9 +386,14 @@ struct xs_element {
   int computed_type;
 };
 
-struct xs_attribute_group_ref {
-  xs_attribute_group *ag;
-  xs_reference *ref;
+class AttributeGroupRef {
+  DISABLE_COPY(AttributeGroupRef)
+public:
+  AttributeGroupRef(xs_allocset *as);
+  ~AttributeGroupRef();
+
+  AttributeGroup *ag;
+  Reference *ref;
 
   int typeinfo_known;
   int size;
@@ -373,15 +401,20 @@ struct xs_attribute_group_ref {
   char *cvar;
 };
 
-struct xs_attribute_group {
+class AttributeGroup {
+  DISABLE_COPY(AttributeGroup)
+public:
+  AttributeGroup(xs_allocset *as);
+  ~AttributeGroup();
+
   definition def;                        /* {name} and {target namespace} */
 
   list *attribute_uses;                  /* {attribute uses} */
   list *local_attribute_uses;
-  xs_wildcard *attribute_wildcard;       /* {attribute wildcard} */
-  xs_wildcard *local_wildcard;
+  Wildcard *attribute_wildcard;       /* {attribute wildcard} */
+  Wildcard *local_wildcard;
   void *annotation;                      /* {annotation} */
-  list *attribute_group_refs;            /* list of xs_reference */
+  list *attribute_group_refs;            /* list of Reference */
 
   int computed_wildcard;
   int computed_attribute_uses;
@@ -393,49 +426,75 @@ struct xs_attribute_group {
   list *cvars;
 };
 
-struct xs_identity_constraint {
+class IdentityConstraint {
+  DISABLE_COPY(IdentityConstraint)
+public:
+  IdentityConstraint(xs_allocset *as);
+  ~IdentityConstraint();
+
 };
 
-struct xs_model_group_def {
+class ModelGroupDef {
+  DISABLE_COPY(ModelGroupDef)
+public:
+  ModelGroupDef(xs_allocset *as);
+  ~ModelGroupDef();
+
   definition def;
-  xs_model_group *model_group;
+  ModelGroup *model_group;
   void *annotation;
 };
 
-struct xs_model_group {
+class ModelGroup {
+  DISABLE_COPY(ModelGroup)
+public:
+  ModelGroup(xs_allocset *as);
+  ~ModelGroup();
+
   int compositor;
   list *particles;
   void *annotation;
-  xs_model_group_def *mgd;
+  ModelGroupDef *mgd;
   void *vdata;
   int defline;
-/*   void *typeinfo; */
 
-  xs_type *content_model_of;
+  Type *content_model_of;
 
   int typeinfo_known;
   int size;
   char *ctype;
-  xs_element *defe;
+  SchemaElement *defe;
   char *parent_name;
   char *parent_ns;
   list *cvars;
 };
 
-struct xs_notation {
+class Notation {
+  DISABLE_COPY(Notation)
+public:
+  Notation(xs_allocset *as);
+  ~Notation();
+
 };
 
-struct xs_particle {
-  xs_range range;
+class Particle {
+  DISABLE_COPY(Particle)
+public:
+  Particle(xs_allocset *as);
+  ~Particle();
+
+  GridXSLT::String toString();
+
+  Range range;
 
   union {
-    xs_element *e;
-    xs_model_group *mg;
-    xs_wildcard *w;
+    SchemaElement *e;
+    ModelGroup *mg;
+    Wildcard *w;
   } term;
   int term_type;
 
-  xs_reference *ref;
+  Reference *ref;
   int defline;
   void *vdata;
   void *seqdata;
@@ -448,17 +507,20 @@ struct xs_particle {
   int enctype;
 
   /* FIXME: temp */
-  xs_type *effective_content_of;
-  xs_type *empty_content_of;
-  xs_type *extension_for;
+  Type *effective_content_of;
+  Type *empty_content_of;
+  Type *extension_for;
   int in_anyType;
   int from_mgd;
-
-
 };
 
 
-struct xs_wildcard {
+class Wildcard {
+  DISABLE_COPY(Wildcard)
+public:
+  Wildcard(xs_allocset *as);
+  ~Wildcard();
+
   int type;                                /* {namespace constraint} */
   char *not_ns;                            /* {namespace constraint} */
   list *nslist;                            /* {namespace constraint} */
@@ -467,11 +529,16 @@ struct xs_wildcard {
   int defline;
 };
 
-struct xs_attribute_use {
+class AttributeUse {
+  DISABLE_COPY(AttributeUse)
+public:
+  AttributeUse(xs_allocset *as);
+  ~AttributeUse();
+
   int required;                            /* {required} */
-  xs_attribute *attribute;                 /* {attribute declaration} */
-  xs_value_constraint vc;                  /* {value constraint} */
-  xs_reference *ref;
+  SchemaAttribute *attribute;                 /* {attribute declaration} */
+  ValueConstraint vc;                  /* {value constraint} */
+  Reference *ref;
   int defline;
   int prohibited;
 
@@ -481,49 +548,53 @@ struct xs_attribute_use {
   char *cvar;
 };
 
-void *xs_symbol_table_lookup_object(xs_symbol_table *symt, int type, const nsname ident);
-void *xs_lookup_object(xs_schema *s, int type, const nsname ident);
-xs_type *xs_lookup_type(xs_schema *s, const nsname ident);
-xs_attribute *xs_lookup_attribute(xs_schema *s, const nsname ident);
-xs_element *xs_lookup_element(xs_schema *s, const nsname ident);
-xs_attribute_group *xs_lookup_attribute_group(xs_schema *s, const nsname ident);
-xs_identity_constraint *xs_lookup_identity_constraint(xs_schema *s, const nsname ident);
-xs_model_group_def *xs_lookup_model_group_def(xs_schema *s, const nsname ident);
-xs_notation *xs_lookup_notation(xs_schema *s, const nsname ident);
+class CStruct {
+  DISABLE_COPY(CStruct)
+public:
+  CStruct(xs_allocset *as);
+  ~CStruct();
 
-struct xs_cstruct {
   int type;
   union {
-    xs_type *t;
-    xs_model_group *mg;
-    xs_attribute_group *ag;
+    Type *t;
+    ModelGroup *mg;
+    AttributeGroup *ag;
   } object;
 };
 
-struct xs_allocset {
-  list *alloc_cstruct;
-  list *alloc_reference;
-  list *alloc_member_type;
-  list *alloc_type;
-  list *alloc_attribute;
-  list *alloc_element;
+class xs_allocset {
+  DISABLE_COPY(xs_allocset)
+public:
+  xs_allocset();
+  ~xs_allocset();
 
-  list *alloc_attribute_group_ref;
-  list *alloc_attribute_group;
-  list *alloc_identity_constraint;
-  list *alloc_model_group_def;
-  list *alloc_model_group;
-  list *alloc_notation;
+  GridXSLT::ManagedPtrList<CStruct*> alloc_cstruct;
+  GridXSLT::ManagedPtrList<Reference*> alloc_reference;
+  GridXSLT::ManagedPtrList<MemberType*> alloc_member_type;
+  GridXSLT::ManagedPtrList<Type*> alloc_type;
+  GridXSLT::ManagedPtrList<SchemaAttribute*> alloc_attribute;
+  GridXSLT::ManagedPtrList<SchemaElement*> alloc_element;
 
-  list *alloc_particle;
-  list *alloc_wildcard;
-  list *alloc_attribute_use;
+  GridXSLT::ManagedPtrList<AttributeGroupRef*> alloc_attribute_group_ref;
+  GridXSLT::ManagedPtrList<AttributeGroup*> alloc_attribute_group;
+  GridXSLT::ManagedPtrList<IdentityConstraint*> alloc_identity_constraint;
+  GridXSLT::ManagedPtrList<ModelGroupDef*> alloc_model_group_def;
+  GridXSLT::ManagedPtrList<ModelGroup*> alloc_model_group;
+  GridXSLT::ManagedPtrList<Notation*> alloc_notation;
+
+  GridXSLT::ManagedPtrList<Particle*> alloc_particle;
+  GridXSLT::ManagedPtrList<Wildcard*> alloc_wildcard;
+  GridXSLT::ManagedPtrList<AttributeUse*> alloc_attribute_use;
 };
 
-xs_allocset *xs_allocset_new();
-void xs_allocset_free(xs_allocset *as);
+class xs_symbol_table {
+  DISABLE_COPY(xs_symbol_table)
+public:
+  xs_symbol_table();
+  ~xs_symbol_table();
 
-struct xs_symbol_table {
+  void *lookup(int type, const NSName &ident);
+
   symbol_space *ss_types;                  /* {type definitions} */
   symbol_space *ss_attributes;             /* {attribute declarations} */
   symbol_space *ss_elements;               /* {element declarations} */
@@ -533,53 +604,68 @@ struct xs_symbol_table {
   symbol_space *ss_notations;              /* {notation declarations} */
 };
 
-xs_symbol_table *xs_symbol_table_new();
-void xs_symbol_table_free(xs_symbol_table *symt);
+class BuiltinTypes {
+  DISABLE_COPY(BuiltinTypes)
+public:
+  BuiltinTypes();
+  ~BuiltinTypes();
 
-struct xs_globals {
-  xs_type *complex_ur_type;
-  xs_wildcard *complex_ur_type_element_wildcard;
-  xs_type *simple_ur_type;
+  Type *complex_ur_type;
+  Wildcard *complex_ur_type_element_wildcard;
+  Type *simple_ur_type;
 
-  xs_type *untyped;
-  xs_type *untyped_atomic;
-  xs_type *any_atomic_type;
+  Type *untyped;
+  Type *untyped_atomic;
+  Type *any_atomic_type;
 
-  xs_type *id_type;
-  xs_type *boolean_type;
-  xs_type *string_type;
-  xs_type *long_type;
-  xs_type *int_type;
-  xs_type *short_type;
-  xs_type *byte_type;
-  xs_type *float_type;
-  xs_type *double_type;
-  xs_type *decimal_type;
+  Type *id_type;
+  Type *boolean_type;
+  Type *string_type;
+  Type *long_type;
+  Type *int_type;
+  Type *short_type;
+  Type *byte_type;
+  Type *float_type;
+  Type *double_type;
+  Type *decimal_type;
 
-  xs_type *context_type;
+  Type *context_type;
 
   xs_symbol_table *symt;
   xs_allocset *as;
 
   list *ctypes;
   list *cstructs;
-  ns_map *namespaces;
+  NamespaceMap *namespaces;
 };
 
-xs_globals *xs_globals_new();
-void xs_globals_free(xs_globals *g);
+class Schema {
+  DISABLE_COPY(Schema)
+public:
+  Schema(BuiltinTypes *g);
+  ~Schema();
 
-struct xs_schema {
-  xs_type *type_definitions;
+  Type *getType(const NSName &ident);
+  SchemaAttribute *getAttribute(const NSName &ident);
+  SchemaElement *getElement(const NSName &ident);
+  AttributeGroup *getAttributeGroup(const NSName &ident);
+  IdentityConstraint *getIdentityConstraint(const NSName &ident);
+  ModelGroupDef *getModelGroupDef(const NSName &ident);
+  Notation *getNotation(const NSName &ident);
+  void *getObject(int type, const NSName &ident);
+
+  int visit(xmlDocPtr doc, SchemaVisitor *v);
+
+  Type *type_definitions;
   void *attribute_declarations;
   void *attribute_grop_definitions;
   void *notation_declarations;
 
   char *uri;
   char *ns;
-  error_info ei;
+  GridXSLT::Error ei;
 
-  xs_globals *globals;
+  BuiltinTypes *globals;
   xs_allocset *as;
   xs_symbol_table *symt;
 
@@ -598,76 +684,25 @@ struct xs_schema {
 void xs_init();
 void xs_cleanup();
 
-char *xs_particle_str(xs_particle *p);
-char *xs_range_str(xs_range r);
+void xs_get_first_elements_and_wildcards(Particle *p, list **first_ew);
 
-void xs_get_first_elements_and_wildcards(xs_particle *p, list **first_ew);
-
-int xs_type_is_derived(xs_type *t, xs_type *from);
-int xs_facet_allowed(xs_type *t, int facet);
-int xs_wildcard_constraint_is_subset(xs_schema *s, xs_wildcard *sub, xs_wildcard *super);
-xs_wildcard *xs_wildcard_constraint_union(xs_schema *s, xs_wildcard *O1, xs_wildcard *O2,
+int Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *super);
+Wildcard *Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard *O2,
                                           int process_contents);
-xs_wildcard *xs_wildcard_constraint_intersection(xs_schema *s, xs_wildcard *a, xs_wildcard *b,
+Wildcard *Wildcard_constraint_intersection(Schema *s, Wildcard *a, Wildcard *b,
                                                  int process_contents);
 
 int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const char *uri, const char *sourceloc,
-                            xs_schema **sout, error_info *ei, xs_globals *g);
+                            Schema **sout, GridXSLT::Error *ei, BuiltinTypes *g);
 
-xs_schema *parse_xmlschema_file(char *filename, xs_globals *g);
-int xs_visit_schema(xs_schema *s, xmlDocPtr doc, void *data, xs_visitor *v);
-xs_schema *xs_schema_new(xs_globals *g);
-void xs_schema_free(xs_schema *s);
+Schema *parse_xmlschema_file(char *filename, BuiltinTypes *g);
 
-xs_cstruct *xs_cstruct_new(xs_allocset *as);
-void xs_cstruct_free(xs_cstruct *cs);
-
-xs_reference *xs_reference_new(xs_allocset *as);
-void xs_reference_free(xs_reference *r);
-
-xs_member_type *xs_member_type_new(xs_allocset *as);
-void xs_member_type_free(xs_member_type *mt);
-
-xs_type *xs_type_new(xs_allocset *as);
-void xs_type_free(xs_type *t);
-
-xs_attribute *xs_attribute_new(xs_allocset *as);
-void xs_attribute_free(xs_attribute *a);
-
-xs_element *xs_element_new(xs_allocset *as);
-void xs_element_free(xs_element *e);
-
-xs_attribute_group_ref *xs_attribute_group_ref_new(xs_allocset *as);
-void xs_attribute_group_ref_free(xs_attribute_group_ref *agr);
-
-xs_attribute_group *xs_attribute_group_new(xs_allocset *as);
-void xs_attribute_group_free(xs_attribute_group *ag);
-
-xs_identity_constraint *xs_identity_constraint_new(xs_allocset *as);
-void xs_identity_constraint_free(xs_identity_constraint *ic);
-
-xs_model_group_def *xs_model_group_def_new(xs_allocset *as);
-void xs_model_group_def_free(xs_model_group_def *mgd);
-
-xs_model_group *xs_model_group_new(xs_allocset *as);
-void xs_model_group_free(xs_model_group *mg);
-
-xs_notation *xs_notation_new(xs_allocset *as);
-void xs_notation_free(xs_notation *n);
-
-xs_particle *xs_particle_new(xs_allocset *as);
-void xs_particle_free(xs_particle *p);
-
-xs_wildcard *xs_wildcard_new(xs_allocset *as);
-void xs_wildcard_free(xs_wildcard *w);
-
-xs_attribute_use *xs_attribute_use_new(xs_allocset *as);
-void xs_attribute_use_free(xs_attribute_use *au);
+};
 
 #ifndef _XMLSCHEMA_XMLSCHEMA_C
 extern const char *xs_facet_names[XS_FACET_NUMFACETS];
 extern const char *xs_object_types[7];
-extern xs_globals *xs_g;
+extern GridXSLT::BuiltinTypes *xs_g;
 #endif
 
 #endif /* _XMLSCHEMA_XMLSCHEMA_H */

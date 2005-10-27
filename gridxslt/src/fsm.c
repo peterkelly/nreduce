@@ -21,6 +21,7 @@
  */
 
 #include "fsm.h"
+#include "util/String.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -30,6 +31,8 @@
 #include <unistd.h>
 #include <argp.h>
 #include <sys/types.h>
+
+using namespace GridXSLT;
 
 typedef struct dfsm_transition dfsm_transition;
 
@@ -87,9 +90,9 @@ void print_statelist(FILE *f, list *l)
 {
   list *nl;
   for (nl = l; nl; nl = nl->next) {
-    fprintf(f,"%d",((fsm_state*)nl->data)->num);
+    fmessage(f,"%d",((fsm_state*)nl->data)->num);
     if (nl->next)
-      fprintf(f,",");
+      fmessage(f,",");
   }
 }
 
@@ -112,7 +115,7 @@ void fsm_optimize_transitions(fsm *f)
             (tr->min == tr->max) && (0 <= tr->toid)) {
           int rel = tr->toid - tr->min;
           if (rel == trnext->toidrel) {
-            printf("state %d: merging transitions %d and %d\n",st->num,trno,trno+1);
+            message("state %d: merging transitions %d and %d\n",st->num,trno,trno+1);
             tr->max = trnext->max;
             tr->toid = -1;
             tr->toidrel = rel;
@@ -134,26 +137,26 @@ void fsm_dump(fsm *f)
     fsm_state *st = (fsm_state*)sl->data;
     list *tl;
 
-    printf("state %d: %d-%d\n",st->num,0,st->count-1);
+    message("state %d: %d-%d\n",st->num,0,st->count-1);
     for (tl = st->transitions; tl; tl = tl->next) {
       fsm_transition *tr = (fsm_transition*)tl->data;
 
-      printf("  transition ");
+      message("  transition ");
 
       if (tr->input)
         f->input_print(stdout,tr->input);
       else
-        fprintf(stdout," ? ");
+        fmessage(stdout," ? ");
 
       if (tr->min == tr->max)
-        printf(" %d   ",tr->min);
+        message(" %d   ",tr->min);
       else
-        printf(" %d-%d ",tr->min,tr->max);
+        message(" %d-%d ",tr->min,tr->max);
 
       if (0 > tr->toid)
-        printf("-> %d:+%d\n",tr->to->num,tr->toidrel);
+        message("-> %d:+%d\n",tr->to->num,tr->toidrel);
       else
-        printf("-> %d:%d\n",tr->to->num,tr->toid);
+        message("-> %d:%d\n",tr->to->num,tr->toid);
     }
   }
 }
@@ -161,21 +164,21 @@ void fsm_dump(fsm *f)
 void fsm_print_simple(FILE *dotfile, fsm *f)
 {
   list *sl;
-  fprintf(dotfile,"  subgraph clustercomp {\n");
-  fprintf(dotfile,"    label=\"Compressed form\";\n");
+  fmessage(dotfile,"  subgraph clustercomp {\n");
+  fmessage(dotfile,"    label=\"Compressed form\";\n");
 
   for (sl = f->states; sl; sl = sl->next) {
     fsm_state *st = (fsm_state*)sl->data;
     list *tl;
-    fprintf(dotfile,"    comp%d [label=\"%d\"];\n",st->num,st->num);
+    fmessage(dotfile,"    comp%d [label=\"%d\"];\n",st->num,st->num);
 
     for (tl = st->transitions; tl; tl = tl->next) {
       fsm_transition *tr = (fsm_transition*)tl->data;
-      fprintf(dotfile,"    comp%d -> comp%d [label=\"",st->num,tr->to->num);
+      fmessage(dotfile,"    comp%d -> comp%d [label=\"",st->num,tr->to->num);
 
       
       if (tr->epsilon) {
-/*         fprintf(dotfile,"?"); */
+/*         fmessage(dotfile,"?"); */
       }
       else {
         f->input_print(dotfile,tr->input);
@@ -184,41 +187,41 @@ void fsm_print_simple(FILE *dotfile, fsm *f)
       if (NULL != st->transitions->next) {
         /* Multiple transitions; print details */
         if (tr->min == tr->max)
-          fprintf(dotfile,"\\ns = %d",tr->min);
+          fmessage(dotfile,"\\ns = %d",tr->min);
         else
-          fprintf(dotfile,"\\n%d <= s <= %d",tr->min,tr->max);
+          fmessage(dotfile,"\\n%d <= s <= %d",tr->min,tr->max);
 
         if (0 <= tr->toid) {
           if ((tr->min != tr->max) || (tr->toid != tr->min))
-            fprintf(dotfile,"\\ns := %d",tr->toid);
+            fmessage(dotfile,"\\ns := %d",tr->toid);
         }
         else if (0 < tr->toidrel) {
-          fprintf(dotfile,"\\ns := s + %d",tr->toidrel);
+          fmessage(dotfile,"\\ns := s + %d",tr->toidrel);
         }
         else if (0 > tr->toidrel) {
-          fprintf(dotfile,"\\ns := s - %d",-tr->toidrel);
+          fmessage(dotfile,"\\ns := s - %d",-tr->toidrel);
         }
 
       }
 
-      fprintf(dotfile,"\"");
+      fmessage(dotfile,"\"");
 
       if (tr->epsilon)
-        fprintf(dotfile,",style=dashed];\n");
+        fmessage(dotfile,",style=dashed];\n");
       else
-        fprintf(dotfile,"];\n");
+        fmessage(dotfile,"];\n");
     }
 
   }
 
-  fprintf(dotfile,"  }\n");
+  fmessage(dotfile,"  }\n");
 }
 
 void fsm_print(FILE *dotfile, fsm *f, int stage)
 {
   list *sl;
-  fprintf(dotfile,"  subgraph cluster%d {\n",stage);
-  fprintf(dotfile,"    label=\"Stage %d\";\n",stage);
+  fmessage(dotfile,"  subgraph cluster%d {\n",stage);
+  fmessage(dotfile,"    label=\"Stage %d\";\n",stage);
   for (sl = f->states; sl; sl = sl->next) {
     fsm_state *st = (fsm_state*)sl->data;
     list *tl;
@@ -227,16 +230,16 @@ void fsm_print(FILE *dotfile, fsm *f, int stage)
     for (id = 0; id < st->count; id++) {
 
       if (st->ndfsm_states) {
-        fprintf(dotfile,"    sx%dx%dx%d [label=\"",stage,st->num,id);
+        fmessage(dotfile,"    sx%dx%dx%d [label=\"",stage,st->num,id);
         print_statelist(dotfile,st->ndfsm_states);
       }
       else {
-        fprintf(dotfile,"    sx%dx%dx%d [label=\"%d:%d",stage,st->num,id,st->num,id);
+        fmessage(dotfile,"    sx%dx%dx%d [label=\"%d:%d",stage,st->num,id,st->num,id);
       }
-      fprintf(dotfile,"\"");
+      fmessage(dotfile,"\"");
       if (st->accept)
-        fprintf(dotfile,"color=red");
-      fprintf(dotfile,"];\n");
+        fmessage(dotfile,"color=red");
+      fmessage(dotfile,"];\n");
 
       for (tl = st->transitions; tl; tl = tl->next) {
         fsm_transition *tr = (fsm_transition*)tl->data;
@@ -247,24 +250,24 @@ void fsm_print(FILE *dotfile, fsm *f, int stage)
           if (0 > destid)
             destid = id + tr->toidrel;
 
-          fprintf(dotfile,"    sx%dx%dx%d -> sx%dx%dx%d [label=\"",
+          fmessage(dotfile,"    sx%dx%dx%d -> sx%dx%dx%d [label=\"",
                  stage,st->num,id,stage,tr->to->num,destid);
 
           if (tr->epsilon) {
-    /*         fprintf(dotfile,"?"); */
+    /*         fmessage(dotfile,"?"); */
           }
           else {
             f->input_print(dotfile,tr->input);
           }
           if (tr->epsilon)
-            fprintf(dotfile,"\",style=dashed];\n");
+            fmessage(dotfile,"\",style=dashed];\n");
           else
-            fprintf(dotfile,"\"];\n");
+            fmessage(dotfile,"\"];\n");
         }
       }
     }
   }
-  fprintf(dotfile,"  }\n");
+  fmessage(dotfile,"  }\n");
 }
 
 void free_state(fsm_state *s)
@@ -496,14 +499,14 @@ void fsm_determinise(fsm *f, fsm *df)
 void fsm_expand_and_determinise(fsm *f, fsm *df, FILE *outfile)
 {
   if (outfile) {
-    fprintf(outfile,"digraph {\n");
-/*     fprintf(outfile,"  nodesep=2.0;\n"); */
-    fprintf(outfile,"  rankdir=\"LR\";\n");
+    fmessage(outfile,"digraph {\n");
+/*     fmessage(outfile,"  nodesep=2.0;\n"); */
+    fmessage(outfile,"  rankdir=\"LR\";\n");
 
-    printf("============= BEFORE TRANSITION OPTIMIZATION =============\n");
+    message("============= BEFORE TRANSITION OPTIMIZATION =============\n");
     fsm_dump(f);
     fsm_optimize_transitions(f);
-    printf("============= AFTER TRANSITION OPTIMIZATION ==============\n");
+    message("============= AFTER TRANSITION OPTIMIZATION ==============\n");
     fsm_dump(f);
 
     fsm_print_simple(outfile,f);
@@ -515,6 +518,6 @@ void fsm_expand_and_determinise(fsm *f, fsm *df, FILE *outfile)
 /*   fsm_determinise(f,df); */
   if (outfile) {
 /*     fsm_print(outfile,df,3); */
-    fprintf(outfile,"}\n");
+    fmessage(outfile,"}\n");
   }
 }

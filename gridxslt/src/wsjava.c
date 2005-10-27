@@ -36,6 +36,8 @@
 #include <curl/types.h>
 #include <curl/easy.h>
 
+using namespace GridXSLT;
+
 #define WSCOMPILE_CONFIG_NAMESPACE "http://java.sun.com/xml/ns/jax-rpc/ri/config"
 
 size_t write_wsdl(void *ptr, size_t size, size_t nmemb, void *data)
@@ -72,45 +74,45 @@ char *get_porttype(const char *wsdl, char **service_name, char **service_url)
   curl_easy_cleanup(h);
 
   if (0 != cr) {
-    fprintf(stderr,"%s: %s\n",wsdl,curl_easy_strerror(cr));
+    fmessage(stderr,"%s: %s\n",wsdl,curl_easy_strerror(cr));
     stringbuf_free(buf);
     return NULL;
   }
 #endif
 
   if (NULL == (doc = xmlReadMemory(buf->data,buf->size-1,wsdl,NULL,0))) {
-    fprintf(stderr,"%s: XML parse error\n",wsdl);
+    fmessage(stderr,"%s: XML parse error\n",wsdl);
   }
   else if (NULL == (root = xmlDocGetRootElement(doc))) {
-    fprintf(stderr,"%s: No root element\n",wsdl);
+    fmessage(stderr,"%s: No root element\n",wsdl);
   }
   else if (!check_element(root,"definitions",WSDL_NAMESPACE)) {
-    fprintf(stderr,"%s: Invalid root element\n",wsdl);
+    fmessage(stderr,"%s: Invalid root element\n",wsdl);
   }
   else {
     for (c = root->children; c; c = c->next) {
       if (check_element(c,"portType",WSDL_NAMESPACE)) {
-        if (NULL == (porttype = xmlGetProp(c,"name"))) {
-          fprintf(stderr,"%s: no \"name\" attribute in <portType> element\n",wsdl);
+        if (NULL == (porttype = XMLGetProp(c,"name"))) {
+          fmessage(stderr,"%s: no \"name\" attribute in <portType> element\n",wsdl);
           break;
         }
         porttype = strdup(porttype);
         found = 1;
       }
       else if (check_element(c,"service",WSDL_NAMESPACE)) {
-        if (NULL == xmlGetProp(c,"name")) {
-          fprintf(stderr,"%s: no \"name\" attribute in <service> element\n",wsdl);
+        if (NULL == XMLGetProp(c,"name")) {
+          fmessage(stderr,"%s: no \"name\" attribute in <service> element\n",wsdl);
           free(porttype);
           porttype = NULL;
           break;
         }
-        *service_name = strdup(xmlGetProp(c,"name"));
+        *service_name = strdup(XMLGetProp(c,"name"));
         for (c2 = c->children; c2; c2 = c2->next) {
           if (check_element(c2,"port",WSDL_NAMESPACE)) {
             for (c3 = c2->children; c3; c3 = c3->next) {
               if (check_element(c3,"address",SOAP_NAMESPACE) &&
-                  (NULL != xmlGetProp(c3,"location"))) {
-                *service_url = strdup(xmlGetProp(c3,"location"));
+                  (NULL != XMLGetProp(c3,"location"))) {
+                *service_url = strdup(XMLGetProp(c3,"location"));
               }
             }
           }
@@ -121,10 +123,10 @@ char *get_porttype(const char *wsdl, char **service_name, char **service_url)
 
 
   if (!found) {
-    fprintf(stderr,"%s: no port type found\n",wsdl);
+    fmessage(stderr,"%s: no port type found\n",wsdl);
   }
   else if (NULL == *service_url) {
-    fprintf(stderr,"%s: no SOAP binding found\n",wsdl);
+    fmessage(stderr,"%s: no SOAP binding found\n",wsdl);
     free(porttype);
     porttype = NULL;
   }
@@ -143,7 +145,7 @@ int gen_java_bindings(const char *wsdl, const char *pkgname)
   char *fn = strdup("/tmp/wsjavaXXXXXX");
   pid_t pid;
 
-  printf("Generating bindings for %s...",wsdl);
+  message("Generating bindings for %s...",wsdl);
 
   /* create config file for wscompile */
   if (0 > (fd = mkstemp(fn))) {
@@ -159,11 +161,11 @@ int gen_java_bindings(const char *wsdl, const char *pkgname)
   xmlTextWriterSetIndentString(writer,"  ");
   xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
   xmlTextWriterStartElement(writer,"configuration");
-  xmlTextWriterWriteAttribute(writer,"xmlns",WSCOMPILE_CONFIG_NAMESPACE);
+  XMLWriter::attribute(writer,"xmlns",WSCOMPILE_CONFIG_NAMESPACE);
   xmlTextWriterStartElement(writer,"wsdl");
 
-  xmlTextWriterWriteAttribute(writer,"location",wsdl);
-  xmlTextWriterWriteAttribute(writer,"packageName",pkgname);
+  XMLWriter::attribute(writer,"location",wsdl);
+  XMLWriter::attribute(writer,"packageName",pkgname);
 
   xmlTextWriterEndElement(writer);
   xmlTextWriterEndElement(writer);
@@ -193,10 +195,10 @@ int gen_java_bindings(const char *wsdl, const char *pkgname)
       return -1;
     }
     if (!WIFEXITED(status) || (0 != WEXITSTATUS(status))) {
-      fprintf(stderr,"Running wscompile failed.\n");
+      fmessage(stderr,"Running wscompile failed.\n");
       return -1;
     }
-    printf("done\n");
+    message("done\n");
   }
 
   return 0;
@@ -206,7 +208,7 @@ int compile_java_source(char *sourcepath)
 {
   pid_t pid;
 
-  printf("Compiling %s...",sourcepath);
+  message("Compiling %s...",sourcepath);
 
   if (0 > (pid = fork())) {
     perror("fork");
@@ -226,10 +228,10 @@ int compile_java_source(char *sourcepath)
       return -1;
     }
     if (!WIFEXITED(status) || (0 != WEXITSTATUS(status))) {
-      fprintf(stderr,"Running javac failed.\n");
+      fmessage(stderr,"Running javac failed.\n");
       return -1;
     }
-    printf("done\n");
+    message("done\n");
   }
 
   return 0;
@@ -243,7 +245,7 @@ int main2(int argc, char **argv)
   setbuf(stdout,NULL);
 
   if (3 > argc) {
-    fprintf(stderr,"Usage: wsjava <wsdl> <pkgname>\n");
+    fmessage(stderr,"Usage: wsjava <wsdl> <pkgname>\n");
     exit(1);
   }
 
@@ -256,7 +258,7 @@ int main2(int argc, char **argv)
   return 0;
 }
 
-void fix_expr_function_calls(xp_expr *e)
+void fix_expr_function_calls(Expression *e)
 {
   if (e->left)
     fix_expr_function_calls(e->left);
@@ -268,8 +270,8 @@ void fix_expr_function_calls(xp_expr *e)
   if (XPATH_EXPR_FUNCTION_CALL == e->type) {
 /* FIXME */
 #if 0
-    xp_expr *stubcall = xp_expr_new(XPATH_EXPR_FUNCTION_CALL,NULL,NULL);
-    xp_expr *stubparam = xp_expr_new(XPATH_EXPR_ACTUAL_PARAM,NULL,NULL);
+    Expression *stubcall = new Expression(XPATH_EXPR_FUNCTION_CALL,NULL,NULL);
+    Expression *stubparam = new Expression(XPATH_EXPR_ACTUAL_PARAM,NULL,NULL);
     stubcall->qn.prefix = (char*)malloc(strlen(e->qn.prefix)+strlen("stub")+1);
     sprintf(stubcall->qn.prefix,"%sstub",e->qn.prefix);
     stubcall->qn.localpart = strdup("getStub");
@@ -281,28 +283,28 @@ void fix_expr_function_calls(xp_expr *e)
 
 }
 
-void fix_stmt_function_calls(xl_snode *sn)
+void fix_stmt_function_calls(Statement *sn)
 {
-  xl_snode *c;
+  Statement *c;
 
-  if (sn->select)
-    fix_expr_function_calls(sn->select);
-  if (sn->expr1)
-    fix_expr_function_calls(sn->expr1);
-  if (sn->expr2)
-    fix_expr_function_calls(sn->expr2);
-  if (sn->name_expr)
-    fix_expr_function_calls(sn->name_expr);
+  if (sn->m_select)
+    fix_expr_function_calls(sn->m_select);
+  if (sn->m_expr1)
+    fix_expr_function_calls(sn->m_expr1);
+  if (sn->m_expr2)
+    fix_expr_function_calls(sn->m_expr2);
+  if (sn->m_name_expr)
+    fix_expr_function_calls(sn->m_name_expr);
 
-  for (c = sn->param; c; c = c->next)
+  for (c = sn->m_param; c; c = c->next)
     fix_stmt_function_calls(c);
-  for (c = sn->sort; c; c = c->next)
+  for (c = sn->m_sort; c; c = c->next)
     fix_stmt_function_calls(c);
-  for (c = sn->child; c; c = c->next)
+  for (c = sn->m_child; c; c = c->next)
     fix_stmt_function_calls(c);
 }
 
-int process_xslt(xl_snode *sroot)
+int process_xslt(Statement *sroot)
 {
   ns_def *def;
   int r = 0;
@@ -343,11 +345,11 @@ int process_xslt(xl_snode *sroot)
     char *sourcepath = (char*)malloc(strlen(prefix)+strlen("wsbinding//XSLTStub.java")+1);
     sprintf(sourcepath,"wsbinding/%s/XSLTStub.java",prefix);
 
-    printf("Generating %s...",sourcepath);
+    message("Generating %s...",sourcepath);
 
     sprintf(stubprefix,"%sstub",prefix);
     sprintf(stubhref,"java:wsbinding.%s.XSLTStub",prefix);
-    ns_add_direct(sroot->namespaces,stubhref,stubprefix);
+    sroot->namespaces->add_direct(stubhref,stubprefix);
     free(stubprefix);
     free(stubhref);
 
@@ -368,29 +370,29 @@ int process_xslt(xl_snode *sroot)
         r = -1;
       }
       else {
-        fprintf(f,"package wsbinding.%s;\n",prefix);
-        fprintf(f,"\n");
-        fprintf(f,"import javax.xml.rpc.Stub;\n");
-        fprintf(f,"\n");
-        fprintf(f,"public class XSLTStub\n");
-        fprintf(f,"{\n");
-        fprintf(f,"  private static %s instance = null;\n",porttype);
-        fprintf(f,"  private static final String URL =\n");
-        fprintf(f,"    \"%s\";\n",service_url);
-        fprintf(f,"\n");
-        fprintf(f,"  public static %s getStub()\n",porttype);
-        fprintf(f,"  {\n");
-        fprintf(f,"    if (instance == null) {\n");
-        fprintf(f,"      Stub stub = (Stub)(new %s_Impl().get%sPort());\n",service_name,porttype);
-        fprintf(f,"      stub._setProperty(javax.xml.rpc.Stub.ENDPOINT_ADDRESS_PROPERTY,URL);\n");
-        fprintf(f,"      instance = (%s)stub;\n",porttype);
-        fprintf(f,"    }\n");
-        fprintf(f,"    return instance;\n");
-        fprintf(f,"  }\n");
-        fprintf(f,"}\n");
+        fmessage(f,"package wsbinding.%s;\n",prefix);
+        fmessage(f,"\n");
+        fmessage(f,"import javax.xml.rpc.Stub;\n");
+        fmessage(f,"\n");
+        fmessage(f,"public class XSLTStub\n");
+        fmessage(f,"{\n");
+        fmessage(f,"  private static %s instance = null;\n",porttype);
+        fmessage(f,"  private static final String URL =\n");
+        fmessage(f,"    \"%s\";\n",service_url);
+        fmessage(f,"\n");
+        fmessage(f,"  public static %s getStub()\n",porttype);
+        fmessage(f,"  {\n");
+        fmessage(f,"    if (instance == null) {\n");
+        fmessage(f,"      Stub stub = (Stub)(new %s_Impl().get%sPort());\n",service_name,porttype);
+        fmessage(f,"      stub._setProperty(javax.xml.rpc.Stub.ENDPOINT_ADDRESS_PROPERTY,URL);\n");
+        fmessage(f,"      instance = (%s)stub;\n",porttype);
+        fmessage(f,"    }\n");
+        fmessage(f,"    return instance;\n");
+        fmessage(f,"  }\n");
+        fmessage(f,"}\n");
 
         fclose(f);
-        printf("done\n");
+        message("done\n");
 
         if (0 != compile_java_source(sourcepath))
           r = -1;
@@ -414,29 +416,27 @@ int main(int argc, char **argv)
   char *xsltin;
   char *xsltout;
   FILE *out;
-  xl_snode *sroot;
+  Statement *sroot;
   int r = 0;
-  error_info ei;
+  Error ei;
   char *uri;
 
   setbuf(stdout,NULL);
 
   if (3 > argc) {
-    fprintf(stderr,"Usage: wsjava <xsltin> <xsltout>\n");
+    fmessage(stderr,"Usage: wsjava <xsltin> <xsltout>\n");
     exit(1);
   }
 
   xsltin = argv[1];
   xsltout = argv[2];
 
-  memset(&ei,0,sizeof(error_info));
-
   uri = get_real_uri(xsltin);
-  sroot = xl_snode_new(XSLT_TRANSFORM);
+  sroot = new Statement(XSLT_TRANSFORM);
   if (0 != parse_xslt_relative_uri(&ei,NULL,0,NULL,uri,uri,sroot)) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
-    xl_snode_free(sroot);
+    ei.fprint(stderr);
+    ei.clear();
+    delete sroot;
     free(uri);
     exit(1);
   }

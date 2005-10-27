@@ -37,6 +37,8 @@
 #include <argp.h>
 #include <sys/types.h>
 
+using namespace GridXSLT;
+
 /* static const char *argp_program_version = */
 /*   "testxmlschema 0.1"; */
 
@@ -183,87 +185,87 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-static int print_hierarchy(FILE *f, xs_schema *s)
+static int print_hierarchy(FILE *f, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_types(dumpinfo *di, xs_schema *s)
+static int dump_all_types(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_attributes(dumpinfo *di, xs_schema *s)
+static int dump_all_attributes(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_elements(dumpinfo *di, xs_schema *s)
+static int dump_all_elements(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_attribute_groups(dumpinfo *di, xs_schema *s)
+static int dump_all_attribute_groups(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_identity_constraints(dumpinfo *di, xs_schema *s)
+static int dump_all_identity_constraints(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_model_groups(dumpinfo *di, xs_schema *s)
+static int dump_all_model_groups(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int dump_all_notations(dumpinfo *di, xs_schema *s)
+static int dump_all_notations(DumpVisitor *di, Schema *s)
 {
-  fprintf(stderr,"Not yet implemented!\n");
+  fmessage(stderr,"Not yet implemented!\n");
   return 1;
 }
 
-static int get_element_wildcards(xs_particle *p, list **wildcards)
+static int get_element_wildcards(Particle *p, list **wildcards)
 {
-  if (XS_PARTICLE_TERM_MODEL_GROUP == p->term_type) {
+  if (PARTICLE_TERM_MODEL_GROUP == p->term_type) {
     list *l;
     for (l = p->term.mg->particles; l; l = l->next)
-      get_element_wildcards((xs_particle*)l->data,wildcards);
+      get_element_wildcards((Particle*)l->data,wildcards);
   }
-  else if (XS_PARTICLE_TERM_WILDCARD == p->term_type) {
+  else if (PARTICLE_TERM_WILDCARD == p->term_type) {
     list_append(wildcards,p->term.w);
   }
   return 0;
 }
 
-static int dump_all_wildcards(dumpinfo *di, xs_schema *s)
+static int dump_all_wildcards(DumpVisitor *di, Schema *s)
 {
   symbol_space_entry *sse;
   int prevline = 0;
 
   for (sse = s->symt->ss_types->entries; sse; sse = sse->next) {
-    xs_type *t = (xs_type*)sse->object;
+    Type *t = (Type*)sse->object;
     if (!t->builtin) {
       if (prevline)
-        printf("\n");
-      if (t->def.ident.ns)
-        printf("Attribute wildcard for type {%s}%s:\n",t->def.ident.ns,t->def.ident.name);
+        message("\n");
+      if (!t->def.ident.m_ns.isNull())
+        message("Attribute wildcard for type {%*}%*:\n",&t->def.ident.m_ns,&t->def.ident.m_name);
       else
-        printf("Attribute wildcard for type %s:\n",t->def.ident.name);
+        message("Attribute wildcard for type %*:\n",&t->def.ident.m_name);
       if (t->attribute_wildcard) {
-        dump_wildcard(s,NULL,di,0,t->attribute_wildcard);
-        dump_wildcard(s,NULL,di,1,t->attribute_wildcard);
+        di->wildcard(s,NULL,0,t->attribute_wildcard);
+        di->wildcard(s,NULL,1,t->attribute_wildcard);
       }
       else {
-        printf("(none)\n");
+        message("(none)\n");
       }
       prevline = 1;
     }
@@ -272,15 +274,15 @@ static int dump_all_wildcards(dumpinfo *di, xs_schema *s)
       list *l;
       get_element_wildcards(t->content_type,&element_wildcards);
       for (l = element_wildcards; l; l = l->next) {
-        xs_wildcard *w = (xs_wildcard*)l->data;
+        Wildcard *w = (Wildcard*)l->data;
         if (prevline)
-          printf("\n");
-        if (t->def.ident.ns)
-          printf("Element wildcard within type {%s}%s:\n",t->def.ident.ns,t->def.ident.name);
+          message("\n");
+        if (!t->def.ident.m_ns.isNull())
+          message("Element wildcard within type {%*}%*:\n",&t->def.ident.m_ns,&t->def.ident.m_name);
         else
-          printf("Element wildcard within type %s:\n",t->def.ident.name);
-        dump_wildcard(s,NULL,di,0,w);
-        dump_wildcard(s,NULL,di,1,w);
+          message("Element wildcard within type %*:\n",&t->def.ident.m_name);
+        di->wildcard(s,NULL,0,w);
+        di->wildcard(s,NULL,1,w);
         prevline = 1;
       }
       list_free(element_wildcards,NULL);
@@ -288,48 +290,48 @@ static int dump_all_wildcards(dumpinfo *di, xs_schema *s)
   }
 
   for (sse = s->symt->ss_attribute_groups->entries; sse; sse = sse->next) {
-    xs_attribute_group *ag = (xs_attribute_group*)sse->object;
+    AttributeGroup *ag = (AttributeGroup*)sse->object;
     if (prevline)
-      printf("\n");
-    if (ag->def.ident.ns)
-      printf("Attribute wildcard for attribute group {%s}%s:\n",ag->def.ident.ns,ag->def.ident.name);
+      message("\n");
+    if (!ag->def.ident.m_ns.isNull())
+      message("Attribute wildcard for attribute group {%*}%*:\n",&ag->def.ident.m_ns,&ag->def.ident.m_name);
     else
-      printf("Attribute wildcard for attribute group %s:\n",ag->def.ident.name);
+      message("Attribute wildcard for attribute group %*:\n",&ag->def.ident.m_name);
     if (ag->attribute_wildcard) {
-      dump_wildcard(s,NULL,di,0,ag->attribute_wildcard);
-      dump_wildcard(s,NULL,di,1,ag->attribute_wildcard);
+      di->wildcard(s,NULL,0,ag->attribute_wildcard);
+      di->wildcard(s,NULL,1,ag->attribute_wildcard);
     }
     else {
-        printf("(none)\n");
+        message("(none)\n");
     }
     prevline = 1;
   }
   return 0;
 }
 
-static int get_types(xs_schema *s, char *typenames, xs_type **t1, xs_type **t2)
+static int get_types(Schema *s, char *typenames, Type **t1, Type **t2)
 {
   char *comma;
   char *name1 = strdup(typenames);
   char *name2;
 
   if (NULL == (comma = strchr(name1,','))) {
-    fprintf(stderr,"Two type names must be specified");
+    fmessage(stderr,"Two type names must be specified");
     return 1;
   }
 
   name2 = strdup(comma+1);
   *comma = '\0';
 
-  if ((NULL == (*t1 = xs_lookup_type(s,nsname_temp(s->ns,name1)))) &&
-      (NULL == (*t1 = xs_lookup_type(s,nsname_temp(XS_NAMESPACE,name1))))) {
-    fprintf(stderr,"No such type: %s\n",name1);
+  if ((NULL == (*t1 = s->getType(NSName(s->ns,name1)))) &&
+      (NULL == (*t1 = s->getType(NSName(XS_NAMESPACE,name1))))) {
+    fmessage(stderr,"No such type: %s\n",name1);
     return 1;
   }
 
-  if ((NULL == (*t2 = xs_lookup_type(s,nsname_temp(s->ns,name2)))) &&
-      (NULL == (*t2 = xs_lookup_type(s,nsname_temp(XS_NAMESPACE,name2))))) {
-    fprintf(stderr,"No such type: %s\n",name2);
+  if ((NULL == (*t2 = s->getType(NSName(s->ns,name2)))) &&
+      (NULL == (*t2 = s->getType(NSName(XS_NAMESPACE,name2))))) {
+    fmessage(stderr,"No such type: %s\n",name2);
     return 1;
   }
 
@@ -337,109 +339,109 @@ static int get_types(xs_schema *s, char *typenames, xs_type **t1, xs_type **t2)
   free(name2);
   return 0;
 }
-static int get_type_wildcards(xs_schema *s, char *typenames, xs_wildcard **O1, xs_wildcard **O2)
+static int get_type_wildcards(Schema *s, char *typenames, Wildcard **O1, Wildcard **O2)
 {
-  xs_type *t1;
-  xs_type *t2;
+  Type *t1;
+  Type *t2;
 
   get_types(s,typenames,&t1,&t2);
 
   if (NULL == (*O1 = t1->attribute_wildcard)) {
-    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t1->def.ident.name);
+    fmessage(stderr,"Type %* does not have an attribute wildcard\n",&t1->def.ident.m_name);
     return 1;
   }
 
   if (NULL == (*O2 = t2->attribute_wildcard)) {
-    fprintf(stderr,"Type %s does not have an attribute wildcard\n",t2->def.ident.name);
+    fmessage(stderr,"Type %* does not have an attribute wildcard\n",&t2->def.ident.m_name);
     return 1;
   }
   return 0;
 }
 
-static int dump_wildcard_union(dumpinfo *di, xs_schema *s, char *typenames)
+static int dump_wildcard_union(DumpVisitor *di, Schema *s, char *typenames)
 {
-  xs_wildcard *O1;
-  xs_wildcard *O2;
-  xs_wildcard *u;
+  Wildcard *O1;
+  Wildcard *O2;
+  Wildcard *u;
   get_type_wildcards(s,typenames,&O1,&O2);
-  u = xs_wildcard_constraint_union(s,O1,O2,XS_WILDCARD_PROCESS_CONTENTS_SKIP);
+  u = Wildcard_constraint_union(s,O1,O2,WILDCARD_PROCESS_CONTENTS_SKIP);
   if (NULL != u) {
-    dump_wildcard(s,NULL,di,0,u);
-    dump_wildcard(s,NULL,di,1,u);
+    di->wildcard(s,NULL,0,u);
+    di->wildcard(s,NULL,1,u);
   }
   else {
-    printf("Union is not expressible\n");
+    message("Union is not expressible\n");
   }
   return 0;
 }
 
-static int dump_wildcard_intersection(dumpinfo *di, xs_schema *s, char *typenames)
+static int dump_wildcard_intersection(DumpVisitor *di, Schema *s, char *typenames)
 {
-  xs_wildcard *O1;
-  xs_wildcard *O2;
-  xs_wildcard *i;
+  Wildcard *O1;
+  Wildcard *O2;
+  Wildcard *i;
   get_type_wildcards(s,typenames,&O1,&O2);
-  i = xs_wildcard_constraint_intersection(s,O1,O2,XS_WILDCARD_PROCESS_CONTENTS_SKIP);
+  i = Wildcard_constraint_intersection(s,O1,O2,WILDCARD_PROCESS_CONTENTS_SKIP);
   if (NULL != i) {
-    dump_wildcard(s,NULL,di,0,i);
-    dump_wildcard(s,NULL,di,1,i);
+    di->wildcard(s,NULL,0,i);
+    di->wildcard(s,NULL,1,i);
   }
   else {
-    printf("Intersection is not expressible\n");
+    message("Intersection is not expressible\n");
   }
   return 0;
 }
 
-static int dump_wildcard_subset(dumpinfo *di, xs_schema *s, char *typenames)
+static int dump_wildcard_subset(DumpVisitor *di, Schema *s, char *typenames)
 {
-  xs_wildcard *sub;
-  xs_wildcard *super;
+  Wildcard *sub;
+  Wildcard *super;
   int i;
   get_type_wildcards(s,typenames,&sub,&super);
-  i = xs_wildcard_constraint_is_subset(s,sub,super);
-  printf("Subset: %s\n",i ? "true" : "false");
+  i = Wildcard_constraint_is_subset(s,sub,super);
+  message("Subset: %s\n",i ? "true" : "false");
   return 0;
 }
 
-static int print_range(xs_schema *s, char *typenam)
+static int print_range(Schema *s, char *typenam)
 {
-  xs_type *t;
-  xs_range r;
+  Type *t;
+  Range r;
 
-  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typenam)))) {
-    fprintf(stderr,"No such type: %s\n",typenam);
+  if (NULL == (t = s->getType(NSName(s->ns,typenam)))) {
+    fmessage(stderr,"No such type: %s\n",typenam);
     return 1;
   }
 
   if (!t->complex) {
-    fprintf(stderr,"Not a complex type: %s\n",typenam);
+    fmessage(stderr,"Not a complex type: %s\n",typenam);
     return 1;
   }
 
   if (NULL == t->content_type) {
-    fprintf(stderr,"No content model: %s\n",typenam);
+    fmessage(stderr,"No content model: %s\n",typenam);
     return 1;
   }
 
-  r = xs_particle_effective_total_range(t->content_type);
-  printf("Min: %d\n",r.min_occurs);
+  r = Particle_effective_total_range(t->content_type);
+  message("Min: %d\n",r.min_occurs);
   if (0 > r.max_occurs)
-    printf("Max: unbounded\n");
+    message("Max: unbounded\n");
   else
-    printf("Max: %d\n",r.max_occurs);
+    message("Max: %d\n",r.max_occurs);
   return 0;
 }
 
-static int test_particle_derivation(xs_schema *s, char *typenames, char *final_set)
+static int test_particle_derivation(Schema *s, char *typenames, char *final_set)
 {
-  fprintf(stderr,"Not yet implemented\n");
+  fmessage(stderr,"Not yet implemented\n");
   return 1;
 }
 
-static int test_type_derivation(xs_schema *s, char *typenames, char *final_set)
+static int test_type_derivation(Schema *s, char *typenames, char *final_set)
 {
-  xs_type *t1;
-  xs_type *t2;
+  Type *t1;
+  Type *t2;
   int final_extension = 0;
   int final_restriction = 0;
   int final_list = 0;
@@ -460,62 +462,61 @@ static int test_type_derivation(xs_schema *s, char *typenames, char *final_set)
 
   if (t1->complex) {
     if (0 != xs_check_complex_type_derivation_ok(s,t1,t2,final_extension,final_restriction)) {
-      error_info_print(&s->ei,stderr);
+      s->ei.fprint(stderr);
       return 1;
     }
   }
   else {
     if (0 != xs_check_simple_type_derivation_ok(s,t1,t2,final_extension,final_restriction,
                                                final_list,final_union)) {
-      error_info_print(&s->ei,stderr);
+      s->ei.fprint(stderr);
       return 1;
     }
   }
 
 
-  printf("Type derivation ok\n");
+  message("Type derivation ok\n");
   return 0;
 }
 
-static int print_non_pointless(xs_schema *s, char *typenam)
+static int print_non_pointless(Schema *s, char *typenam)
 {
-  xs_type *t;
-  xs_particle *p;
-  ignore_pointless_data ipd;
+  Type *t;
+  Particle *p;
+  xs_allocset *as = new xs_allocset();
 
-  if (NULL == (t = xs_lookup_type(s,nsname_temp(s->ns,typenam)))) {
-    fprintf(stderr,"No such type: %s\n",typenam);
+  if (NULL == (t = s->getType(NSName(s->ns,typenam)))) {
+    fmessage(stderr,"No such type: %s\n",typenam);
     return 1;
   }
 
   if (!t->complex) {
-    fprintf(stderr,"Not a complex type: %s\n",typenam);
+    fmessage(stderr,"Not a complex type: %s\n",typenam);
     return 1;
   }
 
   if (NULL == t->content_type) {
-    fprintf(stderr,"No content model: %s\n",typenam);
+    fmessage(stderr,"No content model: %s\n",typenam);
     return 1;
   }
 
-  p = ignore_pointless(s,t->content_type,&ipd);
+  p = ignore_pointless(s,t->content_type,as);
   t->effective_content = p;
   output_xmlschema(stdout,s);
-  ignore_pointless_free(&ipd);
+  delete as;
   return 0;
 }
 
 int testxmlschema_main(int argc, char **argv)
 {
-  xs_schema *s;
-  xs_globals *g = xs_globals_new();
+  Schema *s;
+  BuiltinTypes *g = new BuiltinTypes();
   struct arguments arguments;
-  struct dumpinfo di;
   int r = 0;
+  DumpVisitor di;
 
   setbuf(stdout,NULL);
 
-  memset(&di,0,sizeof(dumpinfo));
   di.f = stdout;
   di.found_non_builtin = 1;
 
@@ -523,7 +524,7 @@ int testxmlschema_main(int argc, char **argv)
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
   if (NULL == (s = parse_xmlschema_file(arguments.filename,g))) {
-    xs_globals_free(g);
+    delete g;
     return 1;
   }
 
@@ -564,8 +565,8 @@ int testxmlschema_main(int argc, char **argv)
   else
     output_xmlschema(stdout,s);
 
-  xs_schema_free(s);
-  xs_globals_free(g);
+  delete s;
+  delete g;
 
   return r;
 }

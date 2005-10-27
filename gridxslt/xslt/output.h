@@ -23,10 +23,10 @@
 #ifndef _XSLT_OUTPUT_H
 #define _XSLT_OUTPUT_H
 
-#include "xslt.h"
+#include "Statement.h"
 #include "util/xmlutils.h"
 #include <stdio.h>
 
-void output_xslt(FILE *f, xl_snode *node);
+void output_xslt(FILE *f, GridXSLT::Statement *node);
 
 #endif /* _XSLT_OUTPUT_H */

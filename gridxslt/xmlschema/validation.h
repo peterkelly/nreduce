@@ -28,32 +28,34 @@
 #include <libxml/tree.h>
 #include <libxml/xmlwriter.h>
 
-typedef struct xs_validator xs_validator;
-
 #define XS_VALIDATOR_INV_NONE                 0
 #define XS_VALIDATOR_INV_MISSING_ELEMENT      1
 #define XS_VALIDATOR_INV_WRONG_ELEMENT        2
 #define XS_VALIDATOR_INV_NOTHING_MORE_ALLOWED 3
 
+namespace GridXSLT {
+
 struct xs_validator {
-  xs_schema *s;
-  error_info ei;
+  Schema *s;
+  GridXSLT::Error ei;
 
   int inv_type;
-  xs_particle *inv_p;
-  xs_element *inv_e;
+  Particle *inv_p;
+  SchemaElement *inv_e;
   xmlNodePtr inv_n;
   int inv_lineno;
   int inv_count;
 };
 
-void xs_init_typeinfo(xs_schema *s);
+void xs_init_typeinfo(Schema *s);
 
-xs_validator *xs_validator_new(xs_schema *s);
-void xs_print_defs(xs_schema *s);
+xs_validator *xs_validator_new(Schema *s);
+void xs_print_defs(Schema *s);
 void xs_validator_free(xs_validator *v);
 
 int validate_root(xs_validator *v, char *filename, xmlNodePtr n, stringbuf *encoded);
-int xs_decode(xs_validator *v, xmlTextWriter *writer, xs_type *t, stringbuf *encoded, int pos);
+int xs_decode(xs_validator *v, xmlTextWriter *writer, Type *t, stringbuf *encoded, int pos);
+
+};
 
 #endif /* _XMLSCHEMA_VALIDATION_H */

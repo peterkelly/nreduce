@@ -23,11 +23,11 @@
 #ifndef _XSLT_PARSE_H
 #define _XSLT_PARSE_H
 
-#include "xslt.h"
+#include "Statement.h"
 #include "util/xmlutils.h"
 #include <stdio.h>
 
-int parse_xslt_relative_uri(error_info *ei, const char *filename, int line, const char *errname,
-                            const char *base_uri, const char *uri, xl_snode *sroot);
+int parse_xslt_relative_uri(GridXSLT::Error *ei, const char *filename, int line, const char *errname,
+                            const char *base_uri, const char *uri, GridXSLT::Statement *sroot);
 
 #endif /* _XSLT_PARSE_H */

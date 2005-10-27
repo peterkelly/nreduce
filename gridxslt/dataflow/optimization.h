@@ -23,8 +23,8 @@
 #ifndef _DATAFLOW_OPTIMIZATION_H
 #define _DATAFLOW_OPTIMIZATION_H
 
-#include "dataflow.h"
+#include "Program.h"
 
-void df_remove_redundant(df_program *program, df_function *fun);
+void df_remove_redundant(GridXSLT::Program *program, GridXSLT::Function *fun);
 
 #endif /* _DATAFLOW_OPTIMIZATION_H */

@@ -23,12 +23,12 @@
 #ifndef _XSLT_XSLT_H
 #define _XSLT_XSLT_H
 
-#include "xpath.h"
+#include "Expression.h"
 #include "xmlschema/xmlschema.h"
 #include "util/namespace.h"
 #include "util/xmlutils.h"
 #include "util/list.h"
-#include "dataflow/sequencetype.h"
+#include "dataflow/SequenceType.h"
 #include "dataflow/serialization.h"
 
 #define XSLT_DECLARATION                  0
@@ -95,76 +95,78 @@
 #define FLAG_DISABLE_OUTPUT_ESCAPING      8
 #define FLAG_TERMINATE                    16
 
-typedef struct xslt_source xslt_source;
+namespace GridXSLT {
+
+class Statement;
 
 struct xslt_source {
-  xs_schema *schema;
-  xl_snode *root;
+  Schema *schema;
+  Statement *root;
   list *output_defs;
   list *space_decls;
 };
 
-struct xl_snode {
-  int type;
-  int flags;
-  xl_snode *parent;
-  xl_snode *prev;
+class Statement {
+public:
+  Statement(int type);
+  ~Statement();
 
-  xl_snode *child;
-  xl_snode *next;
-  xl_snode *param;
-  xl_snode *sort;
+  void printTree(int indent);
 
-  xp_expr *select;
-  xp_expr *expr1;
-  xp_expr *expr2;
-  xp_expr *name_expr;
+  int m_type;
+  int m_flags;
+  Statement *m_parent;
+  Statement *m_prev;
 
-  ns_map *namespaces;
+  Statement *m_child;
+  Statement *m_next;
+  Statement *m_param;
+  Statement *m_sort;
 
-  qname qn;
-  qname mode;
-  seqtype *st;
-  int gmethod;
-  char *strval;
-  char **seroptions;
-  list *qnametests;
-  int importpred;
-  int includens;
-  int literal;
+  Expression *m_select;
+  Expression *m_expr1;
+  Expression *m_expr2;
+  Expression *m_name_expr;
 
-#if 0
-  /* FIXME: turn this into a sourceloc */
-  int defline; /* FIXME: set this during parsing */
-  char *deffilename; /* FIXME: set this during parsing */
-#endif
-  sourceloc sloc;
+  NamespaceMap *m_namespaces;
 
-  char *uri;
-  nsname ident;
+  QName m_qn;
+  QName m_mode;
+  GridXSLT::SequenceType m_st;
+  int m_gmethod;
+  GridXSLT::String m_strval;
+  char **m_seroptions;
+  List<QNameTest*> m_QNameTests;
+  int m_importpred;
+  int m_includens;
+  int m_literal;
 
-  int templateno;
-  struct template1 *tmpl;
-  struct df_outport *outp;
-  list *templates;
+  sourceloc m_sloc;  /* FIXME: make sure this gets set during parsing */
+
+  char *m_uri;
+  NSName m_ident;
+
+  int m_templateno;
+  struct template1 *m_tmpl;
+  class GridXSLT::OutputPort *m_outp;
+  list *m_templates;
 };
 
-xl_snode *xl_snode_new(int type);
-void xl_snode_free(xl_snode *sn);
-int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_info *ei);
-xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname);
-void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode);
+int Statement_resolve(Statement *first, Schema *s, const char *filename, GridXSLT::Error *ei);
+Statement *Statement_resolve_var(Statement *from, const QName &varname);
+void Expression_resolve_var(Expression *from, const QName &varname, Expression **defexpr, Statement **defnode);
 
-int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
-                    xp_expr **expr, xl_snode **sn, seqtype **st);
-xl_snode *xl_snode_parse(const char *str, const char *filename, int baseline, error_info *ei);
-void xl_snode_print_tree(xl_snode *sn, int indent);
-xl_snode *xl_first_decl(xl_snode *root);
-xl_snode *xl_next_decl(xl_snode *sn);
+int parse_xl_syntax(const char *str, const char *filename, int baseline, GridXSLT::Error *ei,
+                    Expression **expr, Statement **sn, GridXSLT::SequenceTypeImpl **st);
+Statement *Statement_parse(const char *str, const char *filename, int baseline, GridXSLT::Error *ei);
+Statement *xl_first_decl(Statement *root);
+Statement *xl_next_decl(Statement *sn);
 
-int xslt_parse(error_info *ei, const char *uri, xslt_source **source);
+int xslt_parse(GridXSLT::Error *ei, const char *uri, xslt_source **source);
 void xslt_source_free(xslt_source *source);
-df_seroptions *xslt_get_output_def(xslt_source *source, nsname ident);
+GridXSLT::df_seroptions *xslt_get_output_def(xslt_source *source, const NSName &ident);
+
+};
 
 #ifndef _XSLT_XSLT_C
 

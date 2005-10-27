@@ -25,6 +25,8 @@
 #include <string.h>
 #include <assert.h>
 
+using namespace GridXSLT;
+
 list *list_new(void *data, list *next)
 {
   list *l = (list*)malloc(sizeof(list));

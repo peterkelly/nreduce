@@ -26,6 +26,62 @@
 #include "xmlschema.h"
 #include <stdio.h>
 
+namespace GridXSLT {
+
+class OutputVisitor : public SchemaVisitor {
+  DISABLE_COPY(OutputVisitor)
+public:
+  OutputVisitor(xmlTextWriter *_writer) : SchemaVisitor(), writer(_writer) { }
+  virtual ~OutputVisitor() { }
+
+  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t);
+  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a);
+  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e);
+
+  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag);
+  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+                                AttributeGroupRef *agr);
+  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd);
+  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p);
+  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au);
+
+  xmlTextWriter *writer;
+};
+
+class DumpVisitor : public SchemaVisitor {
+  DISABLE_COPY(DumpVisitor)
+public:
+  DumpVisitor() : SchemaVisitor(), f(NULL), indent(0), in_builtin_type(0), found_non_builtin(0) { }
+  virtual ~DumpVisitor() { }
+
+  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t);
+  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a);
+  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e);
+  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag);
+  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+                                AttributeGroupRef *agr);
+  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd);
+  virtual int modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg);
+  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p);
+  virtual int wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w);
+  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au);
+  virtual int schema(Schema *s, xmlDocPtr doc, int post, Schema *s2);
+
+  void incIndent();
+  void decIndent();
+  void dump_printf(const char *format, ...);
+  void dump_reference(char *type, Reference *r);
+  void dump_enum_val(const char **enumvals, char *name, int val);
+  void dump_value_constraint(ValueConstraint *vc);
+
+  FILE *f;
+  int indent;
+  int in_builtin_type;
+  int found_non_builtin;
+};
+
+};
+
 typedef struct dumpinfo dumpinfo;
 
 struct dumpinfo {
@@ -35,16 +91,7 @@ struct dumpinfo {
   int found_non_builtin;
 };
 
-int dump_type(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_type *t);
-int dump_model_group(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_model_group *mg);
-int dump_wildcard(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_wildcard *w);
-int dump_particle(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_particle *p);
-int dump_model_group_def(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_model_group_def *mgd);
-int dump_element(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_element *e);
-int dump_attribute(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_attribute *a);
-int dump_attribute_use(xs_schema *s, xmlDocPtr doc, void *data, int post, xs_attribute_use *au);
-
-void output_xmlschema(FILE *f, xs_schema *s);
-void dump_xmlschema(FILE *f, xs_schema *s);
+void output_xmlschema(FILE *f, GridXSLT::Schema *s);
+void dump_xmlschema(FILE *f, GridXSLT::Schema *s);
 
 #endif /* _XMLSCHEMA_OUTPUT_H */

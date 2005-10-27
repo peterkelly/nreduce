@@ -43,12 +43,12 @@ int main()
 {
   fp *fptr;
   setbuf(stdout,NULL);
-  printf("start\n");
+  message("start\n");
 
   fptr = (fp*)data;
   fptr("This is a test",7);
 
-  printf("end\n");
+  message("end\n");
 
   return 0;
 }

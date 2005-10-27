@@ -24,32 +24,34 @@
 #include "util/debug.h"
 #include <assert.h>
 
-void df_check_portsmatch(df_program *program, df_function *fun)
+using namespace GridXSLT;
+
+void df_check_portsmatch(Program *program, Function *fun)
 {
-  list *l;
-  for (l = fun->instructions; l; l = l->next) {
-    df_instruction *instr = (df_instruction*)l->data;
+  Iterator<Instruction*> it;
+  for (it = fun->m_instructions; it.haveCurrent(); it++) {
+    Instruction *instr = *it;
     int i;
-    for (i = 0; i < instr->ninports; i++) {
-      if (NULL != instr->inports[i].source) {
-        df_outport *outport = &instr->inports[i].source->outports[instr->inports[i].sourcep];
+    for (i = 0; i < instr->m_ninports; i++) {
+      if (NULL != instr->m_inports[i].source) {
+        OutputPort *outport = &instr->m_inports[i].source->m_outports[instr->m_inports[i].sourcep];
         assert(outport->dest == instr);
         assert(outport->destp == i);
       }
     }
-    for (i = 0; i < instr->noutports; i++) {
-      if ((NULL != instr->outports[i].dest) &&
-          (OP_MERGE != instr->outports[i].dest->opcode)) {
-        df_inport *inport = &instr->outports[i].dest->inports[instr->outports[i].destp];
+    for (i = 0; i < instr->m_noutports; i++) {
+      if ((NULL != instr->m_outports[i].dest) &&
+          (OP_MERGE != instr->m_outports[i].dest->m_opcode)) {
+        InputPort *inport = &instr->m_outports[i].dest->m_inports[instr->m_outports[i].destp];
 
 
 /*         if (inport->source != instr) { */
 /*           debugl("%s:%d.%d (%s) points to %s:%d.%d (%s), but the destination points back to " */
 /*                  "%s:%d.%d (%s)", */
-/*                  fun->name,instr->id,i,df_opstr(instr->opcode), */
-/*                  fun->name,instr->outports[i].dest->id,instr->outports[i].destp, */
-/*                  df_opstr(instr->outports[i].dest->opcode), */
-/*                  fun->name,inport->source->id,inport->sourcep,df_opstr(inport->source->opcode)); */
+/*                  fun->name,instr->m_id,i,OpCodeNames[instr->m_opcode], */
+/*                  fun->name,instr->m_outports[i].dest->id,instr->m_outports[i].destp, */
+/*                  OpCodeNames[instr->m_outports[i].dest->opcode], */
+/*                  fun->name,inport->source->id,inport->sourcep,OpCodeNames[inport->source->opcode]); */
 /*         } */
 
         assert(inport->source == instr);
@@ -59,55 +61,54 @@ void df_check_portsmatch(df_program *program, df_function *fun)
   }
 }
 
-int df_check_function_connected(df_function *fun)
+int df_check_function_connected(Function *fun)
 {
-  list *l;
-
 /*   debug("df_check_function_connected: %s\n",fun->ident.name); */
 
   /* Check output ports first and set the source of the input ports they point to */
-  for (l = fun->instructions; l; l = l->next) {
-    df_instruction *instr = (df_instruction*)l->data;
+  Iterator<Instruction*> it;
+  for (it = fun->m_instructions; it.haveCurrent(); it++) {
+    Instruction *instr = *it;
     int i;
-    if (instr->internal)
+    if (instr->m_internal)
       continue;
-    for (i = 0; i < instr->noutports; i++) {
+    for (i = 0; i < instr->m_noutports; i++) {
 
 
-      if ((NULL == instr->outports[i].dest) &&
-          (OP_RETURN != instr->opcode)) {
-        fprintf(stderr,"Output port %s:%d.%d (of %p %s) is not connected\n",
-                fun->ident.name,instr->id,i,instr,df_opstr(instr->opcode));
+      if ((NULL == instr->m_outports[i].dest) &&
+          (OP_RETURN != instr->m_opcode)) {
+        fmessage(stderr,"Output port %*:%d.%d (of %p %s) is not connected\n",
+                &fun->m_ident.m_name,instr->m_id,i,instr,OpCodeNames[instr->m_opcode]);
         return -1;
       }
-      if (NULL != instr->outports[i].dest) {
-        df_instruction *dest = instr->outports[i].dest;
-        int destp = instr->outports[i].destp;
+      if (NULL != instr->m_outports[i].dest) {
+        Instruction *dest = instr->m_outports[i].dest;
+        int destp = instr->m_outports[i].destp;
 
 
 /*         debug("Output port %s:%d.%d (of %p %s) -> input port %s:%d.%d (of %p %s)\n", */
-/*               fun->ident.name,instr->id,i,instr,df_opstr(instr->opcode),fun->ident.name, */
-/*               dest->id,destp,dest,df_opstr(dest->opcode)); */
+/*               fun->ident.name,instr->m_id,i,instr,OpCodeNames[instr->m_opcode],fun->ident.name, */
+/*               dest->id,destp,dest,OpCodeNames[dest->opcode]); */
 
 
-        if (instr->outports[i].dest->fun != instr->fun) {
-          fprintf(stderr,"Output port %s:%d.%d (of %p %s) is connected to different function: "
-                  "input port %s:%d.%d (of %p %s)\n",fun->ident.name,instr->id,i,instr,
-                  df_opstr(instr->opcode),dest->fun->ident.name,dest->id,destp,dest,
-                  df_opstr(dest->opcode));
+        if (instr->m_outports[i].dest->m_fun != instr->m_fun) {
+          fmessage(stderr,"Output port %*:%d.%d (of %p %s) is connected to different function: "
+                  "input port %*:%d.%d (of %p %s)\n",&fun->m_ident.m_name,instr->m_id,i,instr,
+                  OpCodeNames[instr->m_opcode],&dest->m_fun->m_ident.m_name,dest->m_id,destp,dest,
+                  OpCodeNames[dest->m_opcode]);
           return -1;
         }
 
 
-        if (destp >= dest->ninports) {
-          fprintf(stderr,"Output port %s:%d.%d (of %p %s) is connected to non-existant "
-                  "input port %s:%d.%d (of %p %s)\n",fun->ident.name,instr->id,i,instr,
-                  df_opstr(instr->opcode),dest->fun->ident.name,dest->id,destp,dest,
-                  df_opstr(dest->opcode));
+        if (destp >= dest->m_ninports) {
+          fmessage(stderr,"Output port %*:%d.%d (of %p %s) is connected to non-existant "
+                  "input port %*:%d.%d (of %p %s)\n",&fun->m_ident.m_name,instr->m_id,i,instr,
+                  OpCodeNames[instr->m_opcode],&dest->m_fun->m_ident.m_name,dest->m_id,destp,dest,
+                  OpCodeNames[dest->m_opcode]);
           return -1;
         }
         else {
-          df_inport *inport = &dest->inports[destp];
+          InputPort *inport = &dest->m_inports[destp];
           inport->source = instr;
           inport->sourcep = i;
         }
@@ -116,28 +117,28 @@ int df_check_function_connected(df_function *fun)
   }
 
   /* Now check input ports */
-  for (l = fun->instructions; l; l = l->next) {
-    df_instruction *instr = (df_instruction*)l->data;
+  for (it = fun->m_instructions; it.haveCurrent(); it++) {
+    Instruction *instr = *it;
     int i;
 
     /* don't check inputs for parameters or start instruction */
     int isparam = 0;
 
-    if (instr->internal)
+    if (instr->m_internal)
       continue;
 
-    if (instr == fun->start)
+    if (instr == fun->m_start)
       continue;
-    for (i = 0; i < fun->nparams; i++)
-      if (instr == fun->params[i].start)
+    for (i = 0; i < fun->m_nparams; i++)
+      if (instr == fun->m_params[i].start)
         isparam = 1;
     if (isparam)
       continue;
 
-    for (i = 0; i < instr->ninports; i++) {
-      if ((NULL == instr->inports[i].source) && !instr->inports[i].from_special) {
-        fprintf(stderr,"Input port %s:%d.%d (of %p %s) is not connected\n",
-                fun->ident.name,instr->id,i,instr,df_opstr(instr->opcode));
+    for (i = 0; i < instr->m_ninports; i++) {
+      if ((NULL == instr->m_inports[i].source) && !instr->m_inports[i].from_special) {
+        fmessage(stderr,"Input port %*:%d.%d (of %p %s) is not connected\n",
+                &fun->m_ident.m_name,instr->m_id,i,instr,OpCodeNames[instr->m_opcode]);
         return -1;
       }
     }

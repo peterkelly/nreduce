@@ -26,47 +26,70 @@
 #include "list.h"
 #include "xmlutils.h"
 
-#define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
-#define XHTML_NAMESPACE "http://www.w3.org/1999/xhtml"
-#define WSDL_NAMESPACE "http://schemas.xmlsoap.org/wsdl/"
-#define SOAP_NAMESPACE "http://schemas.xmlsoap.org/wsdl/soap/"
-#define BPEL_NAMESPACE "http://schemas.xmlsoap.org/ws/2003/03/business-process/"
-#define XS_NAMESPACE "http://www.w3.org/2001/XMLSchema"
-#define XDT_NAMESPACE "http://www.w3.org/2005/04/xpath-datatypes"
-#define FN_NAMESPACE "http://www.w3.org/2005/04/xpath-functions"
-#define ERR_NAMESPACE "http://www.w3.org/2004/07/xqt-errors"
-#define XSI_NAMESPACE "http://www.w3.org/2001/XMLSchema-instance"
-#define SVG_NAMESPACE "http://www.w3.org/2000/svg"
-#define XML_NAMESPACE "http://www.w3.org/XML/1998/namespace"
-#define GX_NAMESPACE "http://gridxslt.sourceforge.net"
-#define SPECIAL_NAMESPACE "http://special"
+#define XSLT_NAMESPACE Namespaces::XSLT
+#define XHTML_NAMESPACE Namespaces::XHTML
+#define WSDL_NAMESPACE Namespaces::WSDL
+#define SOAP_NAMESPACE Namespaces::SOAP
+#define BPEL_NAMESPACE Namespaces::BPEL
+#define XS_NAMESPACE Namespaces::XS
+#define XDT_NAMESPACE Namespaces::XDT
+#define FN_NAMESPACE Namespaces::FN
+#define ERR_NAMESPACE Namespaces::ERR
+#define XSI_NAMESPACE Namespaces::XSI
+#define SVG_NAMESPACE Namespaces::SVG
+#define XML_NAMESPACE Namespaces::XML
+#define GX_NAMESPACE Namespaces::GX
+#define SPECIAL_NAMESPACE Namespaces::SPECIAL
 
-typedef struct ns_def ns_def;
-typedef struct ns_map ns_map;
+namespace GridXSLT {
+
+class Namespaces {
+public:
+  static String XSLT;
+  static String XHTML;
+  static String WSDL;
+  static String SOAP;
+  static String BPEL;
+  static String XS;
+  static String XDT;
+  static String FN;
+  static String ERR;
+  static String XSI;
+  static String SVG;
+  static String XML;
+  static String GX;
+  static String SPECIAL;
+};
 
 struct ns_def {
   char *prefix;
   char *href;
 };
 
-struct ns_map {
+class NamespaceMap {
+public:
+  NamespaceMap();
+  ~NamespaceMap();
+
+  void add_preferred(const String &href1, const String &preferred_prefix1);
+  void add_direct(const String &href1, const String &prefix1);
+  ns_def *lookup_prefix(const String &prefix1);
+  ns_def *lookup_href(const String &href1);
+
   list *defs;
-  ns_map *parent;
+  NamespaceMap *parent;
 };
 
 void ns_def_free(ns_def *def);
 
-ns_map *ns_map_new();
-void ns_map_free(ns_map *map, int free_parents);
+NamespaceMap *NamespaceMap_new();
+void NamespaceMap_free(NamespaceMap *map, int free_parents);
 
-void ns_add_preferred(ns_map *map, const char *href, const char *preferred_prefix);
-void ns_add_direct(ns_map *map, const char *href, const char *prefix);
-ns_def *ns_lookup_prefix(ns_map *map, const char *prefix);
-ns_def *ns_lookup_href(ns_map *map, const char *href);
+NSName qname_to_nsname(NamespaceMap *map, const QName &qn);
+QName nsname_to_qname(NamespaceMap *map, const NSName &nn);
 
-nsname qname_to_nsname(ns_map *map, const qname qn);
-qname nsname_to_qname(ns_map *map, const nsname nn);
+NSNameTest *QNameTest_to_NSNameTest(NamespaceMap *map, const QNameTest *qt);
 
-nsnametest *qnametest_to_nsnametest(ns_map *map, const qnametest *qt);
+};
 
 #endif /* _UTIL_NAMESPACE_H */

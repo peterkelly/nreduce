@@ -20,8 +20,8 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 #include "util/xmlutils.h"
 #include "special.h"
 #include <libxml/parser.h>
@@ -30,23 +30,25 @@
 #include <string.h>
 #include <errno.h>
 
+using namespace GridXSLT;
+
 #define FNS FN_NAMESPACE
 
-static value *not1(gxenvironment *env, value **args)
+static Value not1(Environment *env, List<Value> &args)
 {
-  value *v1;
-  int r;
-  if (NULL == (v1 = ebv(env,&args[0])))
-    return NULL;
-  r = !asbool(v1);
-  value_deref(v1);
+  Value v1;
+  List<Value> arg0;
+  arg0.append(args[0]);
+  v1 = ebv(env,arg0);
+  if (v1.isNull())
+    return Value::null();
 
-  return value_new_bool(r);
+  return Value(!v1.asBool());
 }
 
-gxfunctiondef boolean_fundefs[2] = {
+FunctionDefinition boolean_fundefs[2] = {
   { not1,    FNS, "not",     "item()*",                  "xsd:boolean" },
   { NULL },
 };
 
-gxfunctiondef *boolean_module = boolean_fundefs;
+FunctionDefinition *boolean_module = boolean_fundefs;

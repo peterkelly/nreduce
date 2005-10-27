@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #include <libxml/tree.h>
 
+using namespace GridXSLT;
+
 /* static const char *argp_program_version = */
 /*   "binxml 0.1"; */
 
@@ -94,14 +96,13 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-
+#if 0
 static int decode(FILE *out, xs_validator *v, xmlNodePtr n, stringbuf *encoded)
 {
   xmlOutputBuffer *buf = xmlOutputBufferCreateFile(out,NULL);
   xmlTextWriter *writer = xmlNewTextWriter(buf);
-  nsname nn = nsname_new(NULL,n->name);
-  xs_type *t = xs_lookup_type(v->s,nn);
-  nsname_free(nn);
+  NSName nn = NSName(String::null(),n->name);
+  Type *t = xs_lookup_type(v->s,nn);
   assert(t);
 
   xmlTextWriterSetIndent(writer,1);
@@ -109,7 +110,7 @@ static int decode(FILE *out, xs_validator *v, xmlNodePtr n, stringbuf *encoded)
   xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
 
   if (0 != xs_decode(v,writer,t,encoded,0)) {
-    fprintf(stderr,"decoding failed!\n");
+    fmessage(stderr,"decoding failed!\n");
     return 1;
   }
 
@@ -118,6 +119,7 @@ static int decode(FILE *out, xs_validator *v, xmlNodePtr n, stringbuf *encoded)
   xmlFreeTextWriter(writer);
   return 0;
 }
+#endif
 
 static void print_hex(FILE *f, stringbuf *buf)
 {
@@ -125,24 +127,24 @@ static void print_hex(FILE *f, stringbuf *buf)
 
   for (pos = 0; pos < buf->size-1; pos += 16) {
     int p;
-    fprintf(f,"%08x  ",pos);
+    fmessage(f,"%08x  ",pos);
     for (p = pos; (p < pos+16); p++) {
       if (p < buf->size-1)
-        fprintf(f,"%02hhx ",buf->data[p]);
+        fmessage(f,"%02hhx ",buf->data[p]);
       else
-        fprintf(f,"   ");
+        fmessage(f,"   ");
       if (7 == p % 8)
-        fprintf(f," ");
+        fmessage(f," ");
     }
-    fprintf(f,"|");
+    fmessage(f,"|");
     for (p = pos; (p < pos+16) && (p < buf->size-1); p++) {
-      fprintf(f,"%c",isprint(buf->data[p]) ? buf->data[p] : '.');
+      fmessage(f,"%c",isprint(buf->data[p]) ? buf->data[p] : '.');
     }
-    fprintf(f,"|");
-    fprintf(f,"\n");
+    fmessage(f,"|");
+    fmessage(f,"\n");
   }
   if (0 < buf->size-1)
-    fprintf(f,"%08x\n",buf->size-1);
+    fmessage(f,"%08x\n",buf->size-1);
 }
 
 static xmlDocPtr encode(xs_validator *v, char *filename, stringbuf *encoded)
@@ -158,25 +160,25 @@ static xmlDocPtr encode(xs_validator *v, char *filename, stringbuf *encoded)
 
   if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
     fclose(f);
-    fprintf(stderr,"XML parse error.\n");
+    fmessage(stderr,"XML parse error.\n");
     return NULL;
   }
   fclose(f);
 
   if (NULL == (root = xmlDocGetRootElement(doc))) {
-    fprintf(stderr,"No root element.\n");
+    fmessage(stderr,"No root element.\n");
     return NULL;
   }
 
   if (0 == validate_root(v,filename,root,encoded)) {
-/*     printf("Document valid!\n"); */
+/*     message("Document valid!\n"); */
   }
   else {
-    error_info_print(&v->ei,stderr);
+    v->ei.fprint(stderr);
     return NULL;
   }
 
-/*   printf("encoded: %d bytes\n",encoded->size-1); */
+/*   message("encoded: %d bytes\n",encoded->size-1); */
   return doc;
 }
 
@@ -184,8 +186,8 @@ static xmlDocPtr encode(xs_validator *v, char *filename, stringbuf *encoded)
 
 int binxml_main(int argc, char **argv)
 {
-  xs_schema *s;
-  xs_globals *g = xs_globals_new();
+  Schema *s;
+  BuiltinTypes *g = new BuiltinTypes();
   struct arguments arguments;
   xs_validator *v;
   stringbuf *encoded = stringbuf_new();
@@ -244,8 +246,8 @@ int binxml_main(int argc, char **argv)
   stringbuf_free(encoded);
   stringbuf_free(decoded);
 
-  xs_schema_free(s);
-  xs_globals_free(g);
+  delete s;
+  delete g;
   xs_validator_free(v);
 
   return 0;

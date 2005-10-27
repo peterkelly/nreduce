@@ -21,6 +21,7 @@
  */
 
 #include "util/stringbuf.h"
+#include "util/String.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
@@ -31,6 +32,8 @@
 #include <curl/easy.h>
 
 #define SERVLET_URL "http://localhost:8080/saxon/servlet/SaxonServlet"
+
+using namespace GridXSLT;
 
 char *get_abs_filename(char *rel)
 {
@@ -64,7 +67,7 @@ int main(int argc, char **argv)
   stringbuf *response = stringbuf_new();
 
   if (3 > argc) {
-    fprintf(stderr,"Usage: saxonclient <input> <source>\n");
+    fmessage(stderr,"Usage: saxonclient <input> <source>\n");
     return 1;
   }
 
@@ -86,14 +89,14 @@ int main(int argc, char **argv)
   cr = curl_easy_perform(h);
 
   if (0 != cr) {
-    fprintf(stderr,"%s",curl_easy_strerror(cr));
+    fmessage(stderr,"%s",curl_easy_strerror(cr));
     exit(1);
   }
 
   curl_easy_cleanup(h);
 #endif
 
-  printf("%s",response->data);
+  message("%s",response->data);
 
   free(input);
   free(source);

@@ -20,8 +20,7 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 
-value *ebv(gxenvironment *env, value **args);
-
+GridXSLT::Value ebv(GridXSLT::Environment *ctxt, GridXSLT::List<GridXSLT::Value> &args);

@@ -23,6 +23,7 @@
 #include "http.h"
 #include "util/network.h"
 #include "util/debug.h"
+#include "util/String.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -33,6 +34,8 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+using namespace GridXSLT;
 
 typedef struct file_data file_data;
 typedef struct entryinfo entryinfo;
@@ -75,7 +78,7 @@ urihandler *handle_file(const char *uri, msgwriter *mw, int size)
     urihandler *uh = (urihandler*)calloc(1,sizeof(urihandler));
     file_data *d = (file_data*)calloc(1,sizeof(file_data));
 
-    printf("FILE: %s\n",uri);
+    message("FILE: %s\n",uri);
 
     d->fd = fd;
     uh->d = d;
@@ -185,7 +188,7 @@ urihandler *handle_dir(const char *uri, msgwriter *mw)
     error_response(mw,500,"Could not open directory %s",uri);
   }
   else {
-    printf("DIR: %s\n",uri);
+    message("DIR: %s\n",uri);
 
     msgwriter_response(mw,200,-1);
     add_connection_header(mw);
@@ -284,7 +287,7 @@ urihandler *handle_tree(const char *uri, msgwriter *mw)
     tree_data *d = (tree_data*)calloc(1,sizeof(tree_data));
     tree_node *tn = (tree_node*)calloc(1,sizeof(tree_node));
     urihandler *uh = (urihandler*)calloc(1,sizeof(urihandler));
-    printf("TREE: %s\n",uri);
+    message("TREE: %s\n",uri);
     tn->fullpath = strdup(uri);
     tn->fullpath[strlen(tn->fullpath)-1] = '\0';
     tn->dir = dir;

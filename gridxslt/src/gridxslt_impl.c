@@ -19,13 +19,13 @@
  */
 
 #include "xslt/parse.h"
-#include "xslt/xslt.h"
+#include "xslt/Statement.h"
 #include "util/xmlutils.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include "http/http.h"
-#include "dataflow/dataflow.h"
-#include "dataflow/sequencetype.h"
+#include "dataflow/Program.h"
+#include "dataflow/SequenceType.h"
 #include "dataflow/engine.h"
 #include "dataflow/serialization.h"
 #include "xslt/compile.h"
@@ -34,6 +34,8 @@
 #include <string.h>
 #include <argp.h>
 #include <unistd.h>
+
+using namespace GridXSLT;
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -117,59 +119,52 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
-static value *load_input_doc(error_info *ei, const char *filename, list *space_decls)
+static Value load_input_doc(Error *ei, const char *filename, list *space_decls)
 {
   FILE *f;
   xmlDocPtr doc;
   xmlNodePtr root;
-  node *docnode;
-  node *rootelem;
-  seqtype *doctype;
-  value *context;
+  Node *docnode;
+  Node *rootelem;
+  SequenceType doctype;
+  Value context;
 
   if (NULL == (f = fopen(filename,"r"))) {
-    error(ei,filename,-1,NULL,"%s",strerror(errno));
-    return NULL;
+    error(ei,filename,-1,String::null(),"%s",strerror(errno));
+    return Value::null();
   }
 
   if (NULL == (doc = xmlReadFd(fileno(f),NULL,NULL,0))) {
     fclose(f);
-    error(ei,filename,-1,NULL,"XML parse error");
-    return NULL;
+    error(ei,filename,-1,String::null(),"XML parse error");
+    return Value::null();
   }
   fclose(f);
 
   if (NULL == (root = xmlDocGetRootElement(doc))) {
-    error(ei,filename,-1,NULL,"No root element");
+    error(ei,filename,-1,String::null(),"No root element");
     xmlFreeDoc(doc);
-    return NULL;
+    return Value::null();
   }
 
-  docnode = node_new(NODE_DOCUMENT);
-  rootelem = node_from_xmlnode(root);
+  docnode = new Node(NODE_DOCUMENT);
+  rootelem = Node::fromXMLNode(root);
   df_strip_spaces(rootelem,space_decls);
-  node_add_child(docnode,rootelem);
-
-  doctype = seqtype_new_item(ITEM_DOCUMENT);
-  context = value_new(doctype);
-  seqtype_deref(doctype);
-  context->value.n = docnode;
-  context->value.n->refcount++;
+  docnode->addChild(rootelem);
 
   xmlFreeDoc(doc);
-  return context;
+  return Value(docnode);
 }
 
 int gridxslt_main(int argc, char **argv)
 {
   struct arguments arguments;
   int r = 0;
-  error_info ei;
+  Error ei;
   xslt_source *source = NULL;
-  df_program *program = NULL;
+  Program *program = NULL;
 
   setbuf(stdout,NULL);
-  memset(&ei,0,sizeof(error_info));
 
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
@@ -183,17 +178,17 @@ int gridxslt_main(int argc, char **argv)
     unlink(arguments.dot);
 
   if (0 != xslt_parse(&ei,arguments.filename,&source)) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
+    ei.fprint(stderr);
+    ei.clear();
     return 1;
   }
 
   if (arguments.print_tree)
-    xl_snode_print_tree(source->root,0);
+    source->root->printTree(0);
 
   if (0 != xslt_compile(&ei,source,&program)) {
-    error_info_print(&ei,stderr);
-    error_info_free_vals(&ei);
+    ei.fprint(stderr);
+    ei.clear();
     xslt_source_free(source);
     return 1;
   }
@@ -204,33 +199,33 @@ int gridxslt_main(int argc, char **argv)
       perror(arguments.dot);
       return 1;
     }
-    df_output_dot(program,dotfile,arguments.types);
+    program->outputDot(dotfile,arguments.types);
     fclose(dotfile);
   }
 
   if (arguments.df) {
-    df_output_df(program,stdout);
+    program->outputDF(stdout);
   }
   else {
 
-    value *context = NULL;
+    Value context;
 
     if ((NULL != arguments.input) &&
-        (NULL == (context = load_input_doc(&ei,arguments.input,program->space_decls)))) {
-      error_info_print(&ei,stderr);
-      error_info_free_vals(&ei);
+        ((context = load_input_doc(&ei,arguments.input,program->m_space_decls)).isNull())) {
+      ei.fprint(stderr);
+      ei.clear();
       r = 1;
     }
     else if (0 != df_execute(program,arguments.trace,&ei,context)) {
-      error_info_print(&ei,stderr);
-      error_info_free_vals(&ei);
+      ei.fprint(stderr);
+      ei.clear();
       r = 1;
     }
   }
 
-  df_program_free(program);
-  df_print_remaining();
+  delete program;
   xslt_source_free(source);
+  ValueImpl::printRemaining();
   xs_cleanup();
 
   return r;

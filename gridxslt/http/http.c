@@ -27,6 +27,7 @@
 #include "util/stringbuf.h"
 #include "util/debug.h"
 #include "util/network.h"
+#include "util/String.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -47,6 +48,8 @@
 #include <netinet/tcp.h>
 #include <signal.h>
 #include <libxml/uri.h>
+
+using namespace GridXSLT;
 
 const char *list_headers[8] = {
   "Connection",
@@ -273,7 +276,7 @@ int server_headers(msghandler *mh, list *hl)
   filename = xmlURIUnescapeString(uri,strlen(uri),NULL);
 
   if (0 != stat(filename,&statbuf)) {
-    printf("Not found: %s (%s)\n",filename,strerror(errno));
+    message("Not found: %s (%s)\n",filename,strerror(errno));
     error_response(c->resp.mw,404,"The url %s was not found on this server",filename);
   }
   else {
@@ -330,7 +333,7 @@ int http_write(eventman *em, fdhandler *h)
   connection *c = (connection*)h->data;
 
   if (0 != c->resp.mw->write_error) {
-    printf("Error writing to client: %s\n",strerror(c->resp.mw->write_error));
+    message("Error writing to client: %s\n",strerror(c->resp.mw->write_error));
     return 1;
   }
 
@@ -373,7 +376,7 @@ int listen_read(eventman *em, fdhandler *h)
   c->resp.mw = msgwriter_new(serverfd);
   fcntl(serverfd,F_SETFL,fcntl(serverfd,F_GETFL)|O_NONBLOCK);
 
-  printf("Accepted connection\n");
+  message("Accepted connection\n");
 
   httphandler = (fdhandler*)calloc(1,sizeof(fdhandler));
   httphandler->fd = serverfd;
@@ -423,7 +426,7 @@ int http_main(const char *docroot)
   eventman_add_handler(&em,stdinhandler);
 
 
-  printf("Listening on port %d, press a key to exit...\n",PORT);
+  message("Listening on port %d, press a key to exit...\n",PORT);
 
   eventman_loop(&em);
   eventman_clear(&em);

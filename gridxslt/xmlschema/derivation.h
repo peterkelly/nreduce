@@ -25,33 +25,29 @@
 
 #include "xmlschema.h"
 
-typedef struct ignore_pointless_data ignore_pointless_data;
+namespace GridXSLT {
 
-struct ignore_pointless_data {
-  list *allocp;
-  list *allocmg;
-};
-
-int xs_check_simple_type_derivation_valid(xs_schema *s, xs_type *t);
-int xs_check_simple_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
+int xs_check_simple_type_derivation_valid(Schema *s, Type *t);
+int xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
                                     int final_extension, int final_restriction,
                                     int final_list, int final_union);
-int xs_create_simple_type_restriction(xs_schema *s, xs_type *base, int defline,
-                                      xs_facetdata *facets, xs_type **restriction);
+int xs_create_simple_type_restriction(Schema *s, Type *base, int defline,
+                                      xs_facetdata *facets, Type **restriction);
 
-xs_range xs_particle_effective_total_range(xs_particle *p);
+Range Particle_effective_total_range(Particle *p);
 
-int xs_check_complex_restriction(xs_schema *s, xs_type *t);
-int xs_check_complex_extension(xs_schema *s, xs_type *t);
-int xs_check_complex_type_derivation_ok(xs_schema *s, xs_type *D, xs_type *B,
+int xs_check_complex_restriction(Schema *s, Type *t);
+int xs_check_complex_extension(Schema *s, Type *t);
+int xs_check_complex_type_derivation_ok(Schema *s, Type *D, Type *B,
                                         int final_extension, int final_restriction);
 
-int particle_emptiable(xs_schema *s, xs_particle *p);
-int xs_check_particle_valid_extension(xs_schema *s, xs_particle *E, xs_particle *B);
+int particle_emptiable(Schema *s, Particle *p);
+int xs_check_particle_valid_extension(Schema *s, Particle *E, Particle *B);
 
-xs_particle *ignore_pointless(xs_schema *s, xs_particle *p, ignore_pointless_data *ipd);
-void ignore_pointless_free(ignore_pointless_data *ipd);
+Particle *ignore_pointless(Schema *s, Particle *p, xs_allocset *as);
 
-int xs_check_particle_valid_restriction(xs_schema *s, xs_particle *R, xs_particle *B);
+int xs_check_particle_valid_restriction(Schema *s, Particle *R, Particle *B);
+
+};
 
 #endif /* _XMLSCHEMA_DERIVATION_H */

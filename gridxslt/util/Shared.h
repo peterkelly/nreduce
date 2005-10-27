@@ -20,13 +20,45 @@
  *
  */
 
-#ifndef _XSLT_COMPILE_H
-#define _XSLT_COMPILE_H
+#ifndef _UTIL_SHARED_H
+#define _UTIL_SHARED_H
 
-#include "Statement.h"
-#include "dataflow/Program.h"
-#include "util/xmlutils.h"
+//#define NDEBUG
 
-int xslt_compile(GridXSLT::Error *ei, GridXSLT::xslt_source *source, GridXSLT::Program **program);
+#define DISABLE_COPY(classname)           \
+private:                                  \
+  classname(const classname&);            \
+  classname &operator=(const classname&);
 
-#endif /* _XSLT_COMPILE_H */
+namespace GridXSLT {
+
+template <class type> class Shared {
+
+public:
+  Shared()
+  {
+    m_refCount = 0;
+  }
+
+  inline type* ref()
+  {
+    m_refCount++;
+    return static_cast<type*>(this);
+  }
+
+  inline void deref()
+  {
+    if (0 == --m_refCount) {
+      delete static_cast<type*>(this);
+    }
+  }
+
+  inline int refCount() const { return m_refCount; }
+
+private:
+  int m_refCount;
+};
+
+};
+
+#endif // _UTIL_SHARED_H

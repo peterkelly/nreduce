@@ -25,6 +25,9 @@
 
 #define DEBUG
 
+namespace GridXSLT {
+};
+
 void debugl(const char *format, ...);
 void debug(const char *format, ...);
 void debug_indent(int indent, const char *format, ...);

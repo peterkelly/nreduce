@@ -20,51 +20,49 @@
  *
  */
 
-#include "dataflow/sequencetype.h"
-#include "dataflow/dataflow.h"
+#include "dataflow/SequenceType.h"
+#include "dataflow/Program.h"
 #include "util/xmlutils.h"
 #include <assert.h>
 
+using namespace GridXSLT;
+
 #define FNS FN_NAMESPACE
 
-static value *string_join(gxenvironment *env, value **args)
+static Value string_join(Environment *env, List<Value> &args)
 {
-  value **values = df_sequence_to_array(args[0]);
-  stringbuf *buf = stringbuf_new();
-  value *res;
-  int i;
+  List<Value> values = args[0].sequenceToList();
+  StringBuffer buf;
+  Value res;
 
-  print("New string-join()\n");
-
-  for (i = 0; values[i]; i++) {
-    stringbuf_format(buf,"%s",asstring(values[i]));
-    if (values[i+1])
-      stringbuf_format(buf,"%s",asstring(args[1]));
+  for (Iterator<Value> it = values; it.haveCurrent(); it++) {
+    buf.append((*it).asString());
+    if (it.haveNext())
+      buf.append((*it).asString());
   }
 
-  res = value_new_string(buf->data);
-  stringbuf_free(buf);
-  free(values);
-  return res;
+  return Value(buf.contents());
 }
 
-static value *substring2(gxenvironment *env, value **args)
+static Value substring2(Environment *env, List<Value> &args)
 {
-  const char *s = asstring(args[0]);
-  return value_new_string(s);
+  /* FIXME */
+  String s = args[0].asString();
+  return Value(s);
 }
 
-static value *substring3(gxenvironment *env, value **args)
+static Value substring3(Environment *env, List<Value> &args)
 {
-  const char *s = asstring(args[0]);
-  return value_new_string(s);
+  String s = args[0].asString();
+  /* FIXME */
+  return Value(s);
 }
 
-gxfunctiondef string_fundefs[4] = {
+FunctionDefinition string_fundefs[4] = {
   { string_join, FNS, "string-join", "xsd:string*,xsd:string",              "xsd:string" },
   { substring2,  FNS, "substring",   "xsd:string?,xsd:double",              "xsd:string" },
   { substring3,  FNS, "substring",   "xsd:string?,xsd:double,xsd:double ",  "xsd:string" },
   { NULL },
 };
 
-gxfunctiondef *string_module = string_fundefs;
+FunctionDefinition *string_module = string_fundefs;

@@ -47,10 +47,13 @@ FIXME: add support for comments (: ... :)
 */
 
 
-#include "xslt.h"
+#include "Statement.h"
+#include "util/String.h"
 #include "grammar.tab.h"
 #include <string.h>
 #include <stdlib.h>
+
+using namespace GridXSLT;
 
 #define MAX_STR_CONST 1024
 
@@ -294,7 +297,7 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 " "
 "\t"
 "\n" { lex_lineno++; }
-. { printf("Unrecognised string: \"%s\"\n",yytext); return -1;
+. { message("Unrecognised string: \"%s\"\n",yytext); return -1;
 if (0); yyunput(0,0); /* hide warning about yyunput not being used */  }
 
 

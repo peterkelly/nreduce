@@ -22,7 +22,7 @@
 
 #define _XSLT_XSLT_C
 
-#include "xslt.h"
+#include "Statement.h"
 #include "parse.h"
 #include "dataflow/serialization.h"
 #include "util/macros.h"
@@ -34,15 +34,21 @@
 #include <assert.h>
 #include <math.h>
 
-static const char *reserved_namespaces[7] = {
-  XSLT_NAMESPACE,
-  FN_NAMESPACE,
-  XML_NAMESPACE,
-  XS_NAMESPACE,
-  XDT_NAMESPACE,
-  XSI_NAMESPACE,
-  NULL
-};
+using namespace GridXSLT;
+
+List<String> get_reserved_namespaces()
+{
+  List<String> lst;
+  lst.append(XSLT_NAMESPACE);
+  lst.append(FN_NAMESPACE);
+  lst.append(XML_NAMESPACE);
+  lst.append(XS_NAMESPACE);
+  lst.append(XDT_NAMESPACE);
+  lst.append(XSI_NAMESPACE);
+  return lst;
+}
+
+static List<String> reserved_namespaces = get_reserved_namespaces();
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -52,13 +58,14 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
 YY_BUFFER_STATE yy_scan_string(const char *str);
 void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
 void yy_delete_buffer(YY_BUFFER_STATE buffer);
+int yylex_destroy(void);
 
-xl_snode *parse_tree = NULL;
-xp_expr *parse_expr = NULL;
-seqtype *parse_seqtype = NULL;
+Statement *parse_tree = NULL;
+Expression *parse_expr = NULL;
+SequenceTypeImpl *parse_SequenceTypeImpl = NULL;
 int parse_firstline = 0;
 char *parse_errstr = NULL;
-error_info *parse_ei = NULL;
+Error *parse_ei = NULL;
 const char *parse_filename = NULL;
 
 const char *xslt_element_names[] = {
@@ -116,95 +123,134 @@ const char *xslt_element_names[] = {
   "value-of"
 };
 
-xl_snode *xl_snode_new(int type)
+Statement::Statement(int type)
+  : m_type(type),
+    m_flags(0),
+    m_parent(NULL),
+    m_prev(NULL),
+    m_child(NULL),
+    m_next(NULL),
+    m_param(NULL),
+    m_sort(NULL),
+    m_select(NULL),
+    m_expr1(NULL),
+    m_expr2(NULL),
+    m_name_expr(NULL),
+    m_namespaces(NamespaceMap_new()),
+    m_gmethod(0),
+    m_seroptions(NULL),
+    m_importpred(0),
+    m_includens(0),
+    m_literal(0),
+    m_uri(NULL),
+    m_templateno(0),
+    m_tmpl(NULL),
+    m_outp(NULL),
+    m_templates(NULL)
 {
-  xl_snode *sn = (xl_snode*)calloc(1,sizeof(xl_snode));
-  sn->type = type;
-  sn->namespaces = ns_map_new();
-  return sn;
+  m_sloc.uri = NULL;
+  m_sloc.line = 0;
 }
 
-void xl_snode_free(xl_snode *sn)
+Statement::~Statement()
 {
-  if (sn->child)
-    xl_snode_free(sn->child);
-  if (sn->next)
-    xl_snode_free(sn->next);
-  if (sn->param)
-    xl_snode_free(sn->param);
-  if (sn->sort)
-    xl_snode_free(sn->sort);
+  if (m_child)
+    delete m_child;
+  if (m_next)
+    delete m_next;
+  if (m_param)
+    delete m_param;
+  if (m_sort)
+    delete m_sort;
 
-  if (sn->select)
-    xp_expr_free(sn->select);
-  if (sn->expr1)
-    xp_expr_free(sn->expr1);
-  if (sn->expr2)
-    xp_expr_free(sn->expr2);
-  if (sn->name_expr)
-    xp_expr_free(sn->name_expr);
+  if (m_select)
+    delete m_select;
+  if (m_expr1)
+    delete m_expr1;
+  if (m_expr2)
+    delete m_expr2;
+  if (m_name_expr)
+    delete m_name_expr;
 
-  qname_free(sn->qn);
-  qname_free(sn->mode);
-  if (NULL != sn->st)
-    seqtype_deref(sn->st);
-  free(sn->strval);
-
-  if (NULL != sn->seroptions) {
+  if (NULL != m_seroptions) {
     int i;
     for (i = 0; i < SEROPTION_COUNT; i++)
-      free(sn->seroptions[i]);
-    free(sn->seroptions);
+      free(m_seroptions[i]);
+    free(m_seroptions);
   }
-  list_free(sn->qnametests,(list_d_t)qnametest_ptr_free);
 
-  sourceloc_free(sn->sloc);
-  nsname_free(sn->ident);
-  free(sn->uri);
+  sourceloc_free(m_sloc);
+  free(m_uri);
 
-  ns_map_free(sn->namespaces,0);
-  free(sn);
+  NamespaceMap_free(m_namespaces,0);
 }
 
-void xl_snode_set_parent(xl_snode *first, xl_snode *parent, int *importpred)
+void Statement::printTree(int indent)
 {
-  xl_snode *sn;
-  for (sn = first; sn; sn = sn->next) {
-    if (NULL != parent)
-      sn->namespaces->parent = parent->namespaces;
+  message("%p [%d] %#i%s %*\n",this,m_importpred,2*indent,xslt_element_names[m_type],&m_ident);
 
-    if (sn->child) {
-      xl_snode_set_parent(sn->child,sn,importpred);
-      if (XSLT_IMPORT == sn->type)
+  if (m_select)
+    m_select->printTree(indent+1);
+  if (m_expr1)
+    m_expr1->printTree(indent+1);
+  if (m_expr2)
+    m_expr2->printTree(indent+1);
+  if (m_name_expr)
+    m_name_expr->printTree(indent+1);
+
+  if (m_param) {
+    message("%#i[param]\n",2*(indent+1));
+    m_param->printTree(indent+1);
+  }
+  if (m_sort) {
+    message("%#i[sort]\n",2*(indent+1));
+    m_sort->printTree(indent+1);
+  }
+  if (m_child)
+    m_child->printTree(indent+1);
+  if (m_next)
+    m_next->printTree(indent);
+}
+
+void Statement_set_parent(Statement *first, Statement *parent, int *importpred)
+{
+  Statement *sn;
+  for (sn = first; sn; sn = sn->m_next) {
+    if (NULL != parent)
+      sn->m_namespaces->parent = parent->m_namespaces;
+
+    if (sn->m_child) {
+      Statement_set_parent(sn->m_child,sn,importpred);
+      if (XSLT_IMPORT == sn->m_type)
         (*importpred)++;
     }
-    if (sn->param)
-      xl_snode_set_parent(sn->param,sn,importpred);
-    if (sn->sort)
-      xl_snode_set_parent(sn->sort,sn,importpred);
-    if (sn->select)
-      xp_set_parent(sn->select,NULL,sn);
-    if (sn->expr1)
-      xp_set_parent(sn->expr1,NULL,sn);
-    if (sn->expr2)
-      xp_set_parent(sn->expr2,NULL,sn);
-    if (sn->name_expr)
-      xp_set_parent(sn->name_expr,NULL,sn);
+    if (sn->m_param)
+      Statement_set_parent(sn->m_param,sn,importpred);
+    if (sn->m_sort)
+      Statement_set_parent(sn->m_sort,sn,importpred);
+    if (sn->m_select)
+      sn->m_select->setParent(NULL,sn);
+    if (sn->m_expr1)
+      sn->m_expr1->setParent(NULL,sn);
+    if (sn->m_expr2)
+      sn->m_expr2->setParent(NULL,sn);
+    if (sn->m_name_expr)
+      sn->m_name_expr->setParent(NULL,sn);
 
-    sn->parent = parent;
+    sn->m_parent = parent;
 
-    if (sn->next)
-      sn->next->prev = sn;
+    if (sn->m_next)
+      sn->m_next->m_prev = sn;
   }
 
-  for (sn = first; sn; sn = sn->next)
-    sn->importpred = *importpred;
+  for (sn = first; sn; sn = sn->m_next)
+    sn->m_importpred = *importpred;
 }
 
-static int check_duplicate_params(xl_snode *sn, error_info *ei)
+static int check_duplicate_params(Statement *sn, Error *ei)
 {
-  xl_snode *p1;
-  xl_snode *p2;
+  Statement *p1;
+  Statement *p2;
 
   /* @implements(xslt20:parameters-4)
      status { partial }
@@ -215,11 +261,11 @@ static int check_duplicate_params(xl_snode *sn, error_info *ei)
      issue { need to test with templates as well (not just functions) - also stylsheets? }
      @end */
 
-  for (p1 = sn->param; p1; p1 = p1->next) {
-    for (p2 = p1->next; p2; p2 = p2->next) {
-      if (nsname_equals(p1->ident,p2->ident)) {
-        return error(ei,p2->sloc.uri,p2->sloc.line,"XTSE0580",
-                     "Duplicate parameter: %#n",p1->ident);
+  for (p1 = sn->m_param; p1; p1 = p1->m_next) {
+    for (p2 = p1->m_next; p2; p2 = p2->m_next) {
+      if (p1->m_ident == p2->m_ident) {
+        return error(ei,p2->m_sloc.uri,p2->m_sloc.line,"XTSE0580",
+                     "Duplicate parameter: %*",&p1->m_ident);
       }
     }
   }
@@ -227,28 +273,28 @@ static int check_duplicate_params(xl_snode *sn, error_info *ei)
   return 0;
 }
 
-int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_info *ei)
+int GridXSLT::Statement_resolve(Statement *first, Schema *s, const char *filename, Error *ei)
 {
-  xl_snode *sn;
+  Statement *sn;
 
-  for (sn = first; sn; sn = sn->next) {
+  for (sn = first; sn; sn = sn->m_next) {
 
-    assert(NULL == sn->ident.name);
-    assert(NULL == sn->ident.ns);
+    assert(sn->m_ident.m_name.isNull());
+    assert(sn->m_ident.m_ns.isNull());
 
     /* @implements(xslt20:qname-11)
        status { partial }
        issue { need to test this for other types of objects }
        test { xslt/parse/output_badnameprefix.test }
        @end */
-    if (!qname_isnull(sn->qn)) {
-      sn->ident = qname_to_nsname(sn->namespaces,sn->qn);
-      if (nsname_isnull(sn->ident))
-        return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0280",
-                     "Could not resolve namespace for prefix \"%s\"",sn->qn.prefix);
+    if (!sn->m_qn.isNull()) {
+      sn->m_ident = qname_to_nsname(sn->m_namespaces,sn->m_qn);
+      if (sn->m_ident.isNull())
+        return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE0280",
+                     "Could not resolve namespace for prefix \"%*\"",&sn->m_qn.m_prefix);
     }
 
-    if ((XSLT_DECL_FUNCTION == sn->type) && (NULL != sn->ident.ns)) {
+    if ((XSLT_DECL_FUNCTION == sn->m_type) && (!sn->m_ident.m_ns.isNull())) {
       /* @implements(xslt20:stylesheet-functions-5)
          test { xslt/parse/function_name4.test }
          test { xslt/parse/function_name5.test }
@@ -257,94 +303,94 @@ int xl_snode_resolve(xl_snode *first, xs_schema *s, const char *filename, error_
          test { xslt/parse/function_name8.test }
          test { xslt/parse/function_name9.test }
          @end */
-      const char **rn;
-      for (rn = reserved_namespaces; *rn; rn++) {
-        if (!strcmp(sn->ident.ns,*rn))
-          return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0740",
+      for (Iterator<String> it = reserved_namespaces; it.haveCurrent(); it++) {
+        if ((sn->m_ident.m_ns == *it))
+          return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE0740",
                        "A function cannot have a prefix that refers to a reserved namespace");
       }
     }
 
-    if (sn->child)
-      CHECK_CALL(xl_snode_resolve(sn->child,s,filename,ei))
-    if (sn->param)
-      CHECK_CALL(xl_snode_resolve(sn->param,s,filename,ei))
-    if (sn->sort)
-      CHECK_CALL(xl_snode_resolve(sn->sort,s,filename,ei))
-    if (sn->select)
-      CHECK_CALL(xp_expr_resolve(sn->select,s,filename,ei))
-    if (sn->expr1)
-      CHECK_CALL(xp_expr_resolve(sn->expr1,s,filename,ei))
-    if (sn->expr2)
-      CHECK_CALL(xp_expr_resolve(sn->expr2,s,filename,ei))
-    if (sn->name_expr)
-      CHECK_CALL(xp_expr_resolve(sn->name_expr,s,filename,ei))
+    if (sn->m_child)
+      CHECK_CALL(Statement_resolve(sn->m_child,s,filename,ei))
+    if (sn->m_param)
+      CHECK_CALL(Statement_resolve(sn->m_param,s,filename,ei))
+    if (sn->m_sort)
+      CHECK_CALL(Statement_resolve(sn->m_sort,s,filename,ei))
+    if (sn->m_select)
+      CHECK_CALL(sn->m_select->resolve(s,filename,ei))
+    if (sn->m_expr1)
+      CHECK_CALL(sn->m_expr1->resolve(s,filename,ei))
+    if (sn->m_expr2)
+      CHECK_CALL(sn->m_expr2->resolve(s,filename,ei))
+    if (sn->m_name_expr)
+      CHECK_CALL(sn->m_name_expr->resolve(s,filename,ei))
 
-    if (NULL != sn->st)
-      CHECK_CALL(seqtype_resolve(sn->st,sn->namespaces,s,sn->sloc.uri,sn->sloc.line,ei))
+    if (!sn->m_st.isNull())
+      CHECK_CALL(sn->m_st.resolve(sn->m_namespaces,s,sn->m_sloc.uri,sn->m_sloc.line,ei))
 
-    if (XSLT_DECL_FUNCTION == sn->type)
+    if (XSLT_DECL_FUNCTION == sn->m_type)
       CHECK_CALL(check_duplicate_params(sn,ei))
 
-    if (sn->next)
-      sn->next->prev = sn;
+    if (sn->m_next)
+      sn->m_next->m_prev = sn;
   }
 
   return 0;
 }
 
-xl_snode *xl_snode_resolve_var(xl_snode *from, qname varname)
+Statement *GridXSLT::Statement_resolve_var(Statement *from, const QName &varname)
 {
   /* FIXME: support for namespaces (note that variables with different prefixes could
      potentially have the same namespace href */
-  xl_snode *sn = from;
+  Statement *sn = from;
 
   /* Note, we only look for variable definitions _prior_ to the current node (in document order).
      XSLT only allows variables to be referenced from nodes _following_ the declarations. */
   while (1) {
-    while (sn && !sn->prev) {
-      sn = sn->parent;
+    while (sn && !sn->m_prev) {
+      sn = sn->m_parent;
 
-      if (sn && (XSLT_DECL_FUNCTION == sn->type)) {
-        xl_snode *p;
-        for (p = sn->param; p; p = p->next)
-          if (!strcmp(p->qn.localpart,varname.localpart))
+      if (sn && (XSLT_DECL_FUNCTION == sn->m_type)) {
+        Statement *p;
+        for (p = sn->m_param; p; p = p->m_next)
+          if (p->m_qn.m_localPart == varname.m_localPart)
             return p;
       }
 
     }
     if (sn)
-      sn = sn->prev;
+      sn = sn->m_prev;
     if (!sn)
       break;
-/*     printf("xl_snode_resolve_var: checking %s\n",xslt_element_names[sn->type]); */
+/*     message("Statement_resolve_var: checking %s\n",xslt_element_names[sn->m_type]); */
     /* FIXME: comparison needs to be namespace aware (keep in mind prefix mappings could differ) */
-    if ((XSLT_VARIABLE == sn->type) && !strcmp(sn->qn.localpart,varname.localpart))
+    if ((XSLT_VARIABLE == sn->m_type) && (sn->m_qn.m_localPart == varname.m_localPart))
       return sn;
   }
 
   return NULL;
 }
 
-void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_snode **defnode)
+void GridXSLT::Expression_resolve_var(Expression *from, const QName &varname,
+                                      Expression **defexpr, Statement **defnode)
 {
-  xp_expr *e;
+  Expression *e;
 
   *defexpr = NULL;
   *defnode = NULL;
 
-/*   debugl("xp_expr_resolve_var: varname \"%s\"",varname.localpart); */
-/*   debugl("xp_expr_resolve_var: from = %s",xp_expr_types[from->type]); */
+/*   debugl("Expression_resolve_var: varname \"%s\"",varname.localpart); */
+/*   debugl("Expression_resolve_var: from = %s",Expression_types[from->type]); */
   /* First try to find a declaration of the variable in the XPath expression tree */
-  for (e = from->parent; e; e = e->parent) {
-/*     debugl("xp_expr_resolve_var: checking parent %s",xp_expr_types[from->type]); */
-    if (XPATH_EXPR_FOR == e->type) {
-      xp_expr *ve = e->conditional;
-/*         debugl("xp_expr_resolve_var: for var: %s",ve->qn.localpart); */
+  for (e = from->m_parent; e; e = e->m_parent) {
+/*     debugl("Expression_resolve_var: checking parent %s",Expression_types[from->type]); */
+    if (XPATH_EXPR_FOR == e->m_type) {
+      Expression *ve = e->m_conditional;
+/*         debugl("Expression_resolve_var: for var: %s",ve->qn.localpart); */
         /* FIXME: comparison needs to be namespace aware (keep in mind prefix mappings
            could differ) */
-        if (!strcmp(varname.localpart,ve->qn.localpart)) {
-/*           debugl("xp_expr_resolve_var: found it!"); */
+        if (varname.m_localPart == ve->m_qn.m_localPart) {
+/*           debugl("Expression_resolve_var: found it!"); */
           *defexpr = ve;
           return;
         }
@@ -352,23 +398,23 @@ void xp_expr_resolve_var(xp_expr *from, qname varname, xp_expr **defexpr, xl_sno
   }
 
   /* If not found, look in the XSLT syntax tree */
-/*   debugl("xp_expr_resolve_var: looking in XSLT tree"); */
-  if (NULL == (*defnode = xl_snode_resolve_var(from->stmt,varname))) {
-/*     debugl("xp_expr_resolve_var: not found"); */
+/*   debugl("Expression_resolve_var: looking in XSLT tree"); */
+  if (NULL == (*defnode = Statement_resolve_var(from->m_stmt,varname))) {
+/*     debugl("Expression_resolve_var: not found"); */
   }
   else {
-/*     debugl("xp_expr_resolve_var: found - XSLT def"); */
+/*     debugl("Expression_resolve_var: found - XSLT def"); */
   }
   return;
 }
 
-int parse_xl_syntax(const char *str, const char *filename, int baseline, error_info *ei,
-                    xp_expr **expr, xl_snode **sn, seqtype **st)
+int GridXSLT::parse_xl_syntax(const char *str, const char *filename, int baseline, Error *ei,
+                    Expression **expr, Statement **sn, SequenceTypeImpl **st)
 {
   YY_BUFFER_STATE bufstate;
   int r;
   parse_expr = NULL;
-  parse_seqtype = NULL;
+  parse_SequenceTypeImpl = NULL;
   parse_tree = NULL;
   parse_ei = ei;
   parse_filename = filename;
@@ -381,15 +427,17 @@ int parse_xl_syntax(const char *str, const char *filename, int baseline, error_i
   r = yyparse();
 
   yy_delete_buffer(bufstate);
+  yylex_destroy();
 
   if (NULL != expr)
     *expr = parse_expr;
   if (NULL != sn)
     *sn = parse_tree;
   if (NULL != st)
-    *st = parse_seqtype;
+    *st = parse_SequenceTypeImpl;
+
   parse_expr = NULL;
-  parse_seqtype = NULL;
+  parse_SequenceTypeImpl = NULL;
   parse_tree = NULL;
   parse_ei = NULL;
   parse_filename = NULL;
@@ -399,59 +447,32 @@ int parse_xl_syntax(const char *str, const char *filename, int baseline, error_i
   return r;
 }
 
-xl_snode *xl_snode_parse(const char *str, const char *filename, int baseline, error_info *ei)
+Statement *GridXSLT::Statement_parse(const char *str, const char *filename, int baseline, Error *ei)
 {
-  xl_snode *sn = NULL;
+  Statement *sn = NULL;
   if (0 != parse_xl_syntax(str,filename,baseline,ei,NULL,&sn,NULL))
     return NULL;
   assert(NULL != sn);
   return sn;
 }
 
-void xl_snode_print_tree(xl_snode *sn, int indent)
+Statement *GridXSLT::xl_first_decl(Statement *root)
 {
-  print("%p [%d] %#i%s %#n\n",sn,sn->importpred,2*indent,xslt_element_names[sn->type],sn->ident);
-
-  if (sn->select)
-    xp_expr_print_tree(sn->select,indent+1);
-  if (sn->expr1)
-    xp_expr_print_tree(sn->expr1,indent+1);
-  if (sn->expr2)
-    xp_expr_print_tree(sn->expr2,indent+1);
-  if (sn->name_expr)
-    xp_expr_print_tree(sn->name_expr,indent+1);
-
-  if (sn->param) {
-    print("%#i[param]\n",2*(indent+1));
-    xl_snode_print_tree(sn->param,indent+1);
-  }
-  if (sn->sort) {
-    print("%#i[sort]\n",2*(indent+1));
-    xl_snode_print_tree(sn->sort,indent+1);
-  }
-  if (sn->child)
-    xl_snode_print_tree(sn->child,indent+1);
-  if (sn->next)
-    xl_snode_print_tree(sn->next,indent);
+  return root->m_child;
 }
 
-xl_snode *xl_first_decl(xl_snode *root)
+Statement *GridXSLT::xl_next_decl(Statement *sn)
 {
-  return root->child;
-}
+  if ((NULL != sn->m_child) &&
+      (XSLT_DECL_FUNCTION != sn->m_type) &&
+      (XSLT_DECL_TEMPLATE != sn->m_type))
+    return sn->m_child;
 
-xl_snode *xl_next_decl(xl_snode *sn)
-{
-  if ((NULL != sn->child) &&
-      (XSLT_DECL_FUNCTION != sn->type) &&
-      (XSLT_DECL_TEMPLATE != sn->type))
-    return sn->child;
-
-  while ((NULL != sn) && (NULL == sn->next))
-    sn = sn->parent;
+  while ((NULL != sn) && (NULL == sn->m_next))
+    sn = sn->m_parent;
 
   if (NULL != sn)
-    sn = sn->next;
+    sn = sn->m_next;
 
   return sn;
 }
@@ -466,26 +487,26 @@ static int ends_with(const char *filename, const char *ext)
 typedef struct output_defstr output_defstr;
 
 struct output_defstr {
-  nsname ident;
-  nsname method;
+  NSName ident;
+  NSName method;
   char **unpoptions;
-  xl_snode **defby;
+  Statement **defby;
   df_seroptions *options;
 };
 
-static output_defstr *get_output_defstr(xslt_source *source, list **deflist, nsname ident)
+static output_defstr *get_output_defstr(xslt_source *source, list **deflist, const NSName &ident)
 {
   list *l;
   output_defstr *od;
   for (l = *deflist; l; l = l->next) {
     od = (output_defstr*)l->data;
-    if (nsname_equals(od->ident,ident))
+    if (od->ident == ident)
       return od;
   }
   od = (output_defstr*)calloc(1,sizeof(output_defstr));
-  od->ident = nsname_copy(ident);
+  od->ident = ident;
   od->unpoptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
-  od->defby = (xl_snode**)calloc(SEROPTION_COUNT,sizeof(xl_snode*));
+  od->defby = (Statement**)calloc(SEROPTION_COUNT,sizeof(Statement*));
   list_append(deflist,od);
   return od;
 }
@@ -493,8 +514,6 @@ static output_defstr *get_output_defstr(xslt_source *source, list **deflist, nsn
 static void output_defstr_free(output_defstr *od)
 {
   int i;
-  nsname_free(od->ident);
-  nsname_free(od->method);
   for (i = 0; i < SEROPTION_COUNT; i++)
     free(od->unpoptions[i]);
   free(od->unpoptions);
@@ -502,9 +521,9 @@ static void output_defstr_free(output_defstr *od)
   free(od);
 }
 
-int xslt_build_output_defs(error_info *ei, xslt_source *source)
+int xslt_build_output_defs(Error *ei, xslt_source *source)
 {
-  xl_snode *sn;
+  Statement *sn;
   list *deflist = NULL;
   list *l;
 
@@ -515,38 +534,35 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
      @end */
 
   /* We always have a default, unnamed output definition */
-  get_output_defstr(source,&deflist,nsname_temp(NULL,NULL));
+  get_output_defstr(source,&deflist,NSName::null());
 
   /* First figure out the applicable method for each output definition; this affects the defaults
      that are used */
   for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
-    if (XSLT_DECL_OUTPUT == sn->type) {
-      output_defstr *od = get_output_defstr(source,&deflist,sn->ident);
+    if (XSLT_DECL_OUTPUT == sn->m_type) {
+      output_defstr *od = get_output_defstr(source,&deflist,sn->m_ident);
 
-      if (NULL != sn->seroptions[SEROPTION_METHOD]) {
-        qname qn = qname_parse(sn->seroptions[SEROPTION_METHOD]);
-        nsname_free(od->method);
-        od->method = qname_to_nsname(sn->namespaces,qn);
+      if (NULL != sn->m_seroptions[SEROPTION_METHOD]) {
+        QName qn = QName::parse(sn->m_seroptions[SEROPTION_METHOD]);
+        od->method = qname_to_nsname(sn->m_namespaces,qn);
 
         /* @implements(xslt20:serialization-15)
            test { xslt/parse/output_badmethodprefix.test }
            test { xslt/parse/output_badmethod.test }
            @end */
-        if (nsname_isnull(od->method)) {
-          error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
-                "Could not resolve namespace for prefix \"%s\"",qn.prefix);
-          qname_free(qn);
+        if (od->method.isNull()) {
+          error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570",
+                "Could not resolve namespace for prefix \"%*\"",&qn.m_prefix);
           list_free(deflist,(list_d_t)output_defstr_free);
           return -1;
         }
-        qname_free(qn);
 
-        if ((NULL == od->method.ns) &&
-            strcmp(od->method.name,"xml") &&
-            strcmp(od->method.name,"html") &&
-            strcmp(od->method.name,"xhtml") &&
-            strcmp(od->method.name,"text")) {
-          error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1570",
+        if ((od->method.m_ns.isNull()) &&
+            (od->method.m_name != "xml") &&
+            (od->method.m_name != "html") &&
+            (od->method.m_name != "xhtml") &&
+            (od->method.m_name != "text")) {
+          error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570",
                 "If the method has a null namespace, it must be one of xml, html, xhtml, or text");
           list_free(deflist,(list_d_t)output_defstr_free);
           return -1;
@@ -558,32 +574,32 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
   /* Now create the parsed options object for each output def */
   for (l = deflist; l; l = l->next) {
     output_defstr *od = (output_defstr*)l->data;
-    od->options = df_seroptions_new(od->method);
-    od->options->ident = nsname_copy(od->ident);
+    od->options = new df_seroptions(od->method);
+    od->options->m_ident = od->ident;
     list_append(&source->output_defs,od->options);
   }
 
   /* Parse the remaining options */
   for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
-    if (XSLT_DECL_OUTPUT == sn->type) {
-      output_defstr *od = get_output_defstr(source,&deflist,sn->ident);
+    if (XSLT_DECL_OUTPUT == sn->m_type) {
+      output_defstr *od = get_output_defstr(source,&deflist,sn->m_ident);
       int i;
       for (i = 0; i < SEROPTION_COUNT; i++) {
         /* FIXME: take into account import precedence */
-        if (NULL != sn->seroptions[i]) {
+        if (NULL != sn->m_seroptions[i]) {
 
           if ((SEROPTION_CDATA_SECTION_ELEMENTS == i) ||
               (SEROPTION_USE_CHARACTER_MAPS == i)) {
 
             /* These two options are lists of nsnames; multiple output declarations add to the
                list instead of replacing the existing value. This is handled by
-               df_parse_seroption(); here we just have to avoid checking for conflicting values. */
+               parseOption(); here we just have to avoid checking for conflicting values. */
           }
           else if (NULL == od->unpoptions[i]) {
-            od->unpoptions[i] = strdup(sn->seroptions[i]);
+            od->unpoptions[i] = strdup(sn->m_seroptions[i]);
             od->defby[i] = sn;
           }
-          else if (strcmp(od->unpoptions[i],sn->seroptions[i])) {
+          else if (strcmp(od->unpoptions[i],sn->m_seroptions[i])) {
             /* @implements(xslt20:serialization-10)
                test { xslt/parse/output_conflict1.test }
                test { xslt/parse/output_conflict2.test }
@@ -594,25 +610,25 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
                test { xslt/parse/output_conflict7.test }
                test { xslt/parse/output_conflict8.test }
                @end */
-            if (od->defby[i]->importpred != sn->importpred) {
+            if (od->defby[i]->m_importpred != sn->m_importpred) {
               /* use value from declaration with higher import precedence; this should always
                  be sn since we are traverse importees before importers */
-              assert(od->defby[i]->importpred < sn->importpred);
+              assert(od->defby[i]->m_importpred < sn->m_importpred);
               free(od->unpoptions[i]);
-              od->unpoptions[i] = strdup(sn->seroptions[i]);
+              od->unpoptions[i] = strdup(sn->m_seroptions[i]);
               od->defby[i] = sn;
             }
             else {
-              error(ei,sn->sloc.uri,sn->sloc.line,"XTSE1560","Conflicting value for option %s: "
+              error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1560","Conflicting value for option %s: "
                     "previously set to %s by another output declaration",
-                    seroption_names[i],od->unpoptions[i]);
+                    df_seroptions::seroption_names[i],od->unpoptions[i]);
               list_free(deflist,(list_d_t)output_defstr_free);
               return -1;
             }
           }
 
-          if (0 != df_parse_seroption(od->options,i,ei,sn->sloc.uri,sn->sloc.line,
-                                      sn->seroptions[i],sn->namespaces)) {
+          if (0 != od->options->parseOption(i,ei,sn->m_sloc.uri,sn->m_sloc.line,
+                                      sn->m_seroptions[i],sn->m_namespaces)) {
             list_free(deflist,(list_d_t)output_defstr_free);
             return -1;
           }
@@ -630,24 +646,23 @@ int xslt_build_output_defs(error_info *ei, xslt_source *source)
   return 0;
 }
 
-int xslt_build_space_decls(error_info *ei, xslt_source *source)
+int xslt_build_space_decls(Error *ei, xslt_source *source)
 {
-  xl_snode *sn;
+  Statement *sn;
 
   for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
-    if ((XSLT_DECL_STRIP_SPACE == sn->type) || (XSLT_DECL_PRESERVE_SPACE == sn->type)) {
-      int preserve = (XSLT_DECL_PRESERVE_SPACE == sn->type);
-      list *l;
-      for (l = sn->qnametests; l; l = l->next) {
-        qnametest *qt = (qnametest*)l->data;
-        nsnametest *nt = qnametest_to_nsnametest(sn->namespaces,qt);
+    if ((XSLT_DECL_STRIP_SPACE == sn->m_type) || (XSLT_DECL_PRESERVE_SPACE == sn->m_type)) {
+      int preserve = (XSLT_DECL_PRESERVE_SPACE == sn->m_type);
+      for (Iterator<QNameTest*> it = sn->m_QNameTests; it.haveCurrent(); it++) {
+        QNameTest *qt = *it;
+        NSNameTest *nt = QNameTest_to_NSNameTest(sn->m_namespaces,qt);
         space_decl *decl;
         if (NULL == nt)
-          return error(ei,sn->sloc.uri,sn->sloc.line,"XTSE0280",
-                       "Could not resolve namespace for prefix \"%s\"",qt->qn.prefix);
+          return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE0280",
+                       "Could not resolve namespace for prefix \"%*\"",&qt->qn.m_prefix);
         decl = (space_decl*)calloc(1,sizeof(space_decl));
         decl->nnt = nt;
-        decl->importpred = sn->importpred;
+        decl->importpred = sn->m_importpred;
         if (!nt->wcns && !nt->wcname)
           decl->priority = 0;
         else if (nt->wcns && nt->wcname)
@@ -664,23 +679,23 @@ int xslt_build_space_decls(error_info *ei, xslt_source *source)
   return 0;
 }
 
-static int xslt_post_process(error_info *ei, xslt_source *source, const char *uri)
+static int xslt_post_process(Error *ei, xslt_source *source, const char *uri)
 {
   int importpred = 1;
   /* Note: the order of these matters! Some later processing steps rely on earlier ones */
 
-  xl_snode_set_parent(source->root,NULL,&importpred);
+  Statement_set_parent(source->root,NULL,&importpred);
 
-  CHECK_CALL(xl_snode_resolve(source->root,source->schema,uri,ei))
+  CHECK_CALL(Statement_resolve(source->root,source->schema,uri,ei))
   CHECK_CALL(xslt_build_output_defs(ei,source))
   CHECK_CALL(xslt_build_space_decls(ei,source))
   return 0;
 }
 
-int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
+int GridXSLT::xslt_parse(Error *ei, const char *uri, xslt_source **source)
 {
   *source = (xslt_source*)calloc(1,sizeof(xslt_source));
-  (*source)->schema = xs_schema_new(xs_g);
+  (*source)->schema = new Schema(xs_g);
 
   /* XSLiTe syntax */
   if (ends_with(uri,".xl")) {
@@ -691,7 +706,7 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
     FILE *f;
 
     if (NULL == (f = fopen(uri,"r"))) {
-      error(ei,uri,-1,NULL,"%s",strerror(errno));
+      error(ei,uri,-1,String::null(),"%s",strerror(errno));
       xslt_source_free(*source);
       *source = NULL;
       return -1;
@@ -703,7 +718,7 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
 
     fclose(f);
 
-    if (NULL == ((*source)->root = xl_snode_parse(input->data,uri,0,ei))) {
+    if (NULL == ((*source)->root = Statement_parse(input->data,uri,0,ei))) {
       stringbuf_free(input);
       xslt_source_free(*source);
       *source = NULL;
@@ -713,18 +728,18 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
     /* add default namespaces declared in schema */
     for (l = xs_g->namespaces->defs; l; l = l->next) {
       ns_def *ns = (ns_def*)l->data;
-      ns_add_direct((*source)->root->namespaces,ns->href,ns->prefix);
+      (*source)->root->m_namespaces->add_direct(ns->href,ns->prefix);
     }
 
     /* temp - functions and operators namespace */
-    ns_add_direct((*source)->root->namespaces,FN_NAMESPACE,"fn");
+    (*source)->root->m_namespaces->add_direct(FN_NAMESPACE,"fn");
 
     stringbuf_free(input);
   }
   /* Standard XSLT syntax */
   else {
     char *realuri = get_real_uri(uri);
-    (*source)->root = xl_snode_new(XSLT_TRANSFORM);
+    (*source)->root = new Statement(XSLT_TRANSFORM);
     if (0 != parse_xslt_relative_uri(ei,NULL,0,NULL,realuri,realuri,(*source)->root)) {
       free(realuri);
       xslt_source_free(*source);
@@ -743,22 +758,25 @@ int xslt_parse(error_info *ei, const char *uri, xslt_source **source)
   return 0;
 }
 
-void xslt_source_free(xslt_source *source)
+void GridXSLT::xslt_source_free(xslt_source *source)
 {
-  list_free(source->output_defs,(list_d_t)df_seroptions_free);
+  list *l;
+  for (l = source->output_defs; l; l = l->next)
+    delete static_cast<df_seroptions*>(l->data);
+  list_free(source->output_defs,NULL);
   list_free(source->space_decls,(list_d_t)space_decl_free);
   if (NULL != source->root)
-    xl_snode_free(source->root);
-  xs_schema_free(source->schema);
+    delete source->root;
+  delete source->schema;
   free(source);
 }
 
-df_seroptions *xslt_get_output_def(xslt_source *source, nsname ident)
+df_seroptions *GridXSLT::xslt_get_output_def(xslt_source *source, const NSName &ident)
 {
   list *l;
   for (l = source->output_defs; l; l = l->next) {
     df_seroptions *options = (df_seroptions*)l->data;
-    if (nsname_equals(options->ident,ident))
+    if (options->m_ident == ident)
       return options;
   }
   return NULL;

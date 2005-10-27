@@ -23,12 +23,16 @@
 #ifndef _XSLT_BUILTINS_H
 #define _XSLT_BUILTINS_H
 
-#include "dataflow/dataflow.h"
-#include "dataflow/sequencetype.h"
+#include "dataflow/Program.h"
+#include "dataflow/SequenceType.h"
 #include "xmlschema/xmlschema.h"
 #include "util/list.h"
 
-void df_init_builtin_functions(xs_schema *schema, list **builtin_functions,
-                               gxfunctiondef ***modules);
+namespace GridXSLT {
+
+void df_init_builtin_functions(Schema *schema, List<BuiltinFunction*> &builtin_functions,
+                               GridXSLT::FunctionDefinition ***modules);
+
+};
 
 #endif /* _XSLT_BUILTINS_H */

@@ -34,6 +34,9 @@
 #include <sys/stat.h>
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
+#include "util/xmlutils.h"
+
+using namespace GridXSLT;
 
 /* const char *argp_program_version = */
 /*   "fsxml 0.1"; */
@@ -102,8 +105,8 @@ void process_dir(xmlTextWriter *writer, char *path, int perms)
           if (0 <= (destlen = readlink(fullname,dest,PATH_MAX))) {
             dest[destlen] = '\0';
             xmlTextWriterStartElement(writer,"link");
-            xmlTextWriterWriteFormatAttribute(writer,"name","%s",entry->d_name);
-            xmlTextWriterWriteFormatAttribute(writer,"dest","%s",dest);
+            XMLWriter::formatAttribute(writer,"name","%s",entry->d_name);
+            XMLWriter::formatAttribute(writer,"dest","%s",dest);
             xmlTextWriterEndElement(writer);
           }
           else if (EACCES != errno) {  /* skip links we can't access */
@@ -120,12 +123,12 @@ void process_dir(xmlTextWriter *writer, char *path, int perms)
             xmlTextWriterStartElement(writer,"file");
           }
 
-          xmlTextWriterWriteFormatAttribute(writer,"name","%s",entry->d_name);
+          XMLWriter::formatAttribute(writer,"name","%s",entry->d_name);
 
           if (S_ISREG(statbuf.st_mode))
-            xmlTextWriterWriteFormatAttribute(writer,"size","%d",statbuf.st_size);
+            XMLWriter::formatAttribute(writer,"size","%d",statbuf.st_size);
 
-          xmlTextWriterWriteFormatAttribute(writer,"mtime","%d",statbuf.st_mtime);
+          XMLWriter::formatAttribute(writer,"mtime","%d",statbuf.st_mtime);
 
           if (perms) {
             struct passwd *user;
@@ -141,9 +144,9 @@ void process_dir(xmlTextWriter *writer, char *path, int perms)
               exit(1);
             }
             if (NULL == user)
-              xmlTextWriterWriteFormatAttribute(writer,"uid","%d",statbuf.st_uid);
+              XMLWriter::formatAttribute(writer,"uid","%d",statbuf.st_uid);
             else
-              xmlTextWriterWriteFormatAttribute(writer,"uid","%s",user->pw_name);
+              XMLWriter::formatAttribute(writer,"uid","%s",user->pw_name);
 
             errno = 0;
             group = getgrgid(statbuf.st_gid);
@@ -152,38 +155,38 @@ void process_dir(xmlTextWriter *writer, char *path, int perms)
               exit(1);
             }
             if (NULL == group)
-              xmlTextWriterWriteFormatAttribute(writer,"gid","%d",statbuf.st_gid);
+              XMLWriter::formatAttribute(writer,"gid","%d",statbuf.st_gid);
             else
-              xmlTextWriterWriteFormatAttribute(writer,"gid","%s",group->gr_name);
+              XMLWriter::formatAttribute(writer,"gid","%s",group->gr_name);
 
 
 
 
             xmlTextWriterStartElement(writer,"user");
-            xmlTextWriterWriteFormatAttribute(writer,"read","%d",
+            XMLWriter::formatAttribute(writer,"read","%d",
                                               statbuf.st_mode & S_IRUSR ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"write","%d",
+            XMLWriter::formatAttribute(writer,"write","%d",
                                               statbuf.st_mode & S_IWUSR ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"execute","%d",
+            XMLWriter::formatAttribute(writer,"execute","%d",
                                               statbuf.st_mode & S_IXUSR ? 1 : 0);
             xmlTextWriterEndElement(writer);
 
 
             xmlTextWriterStartElement(writer,"group");
-            xmlTextWriterWriteFormatAttribute(writer,"read","%d",
+            XMLWriter::formatAttribute(writer,"read","%d",
                                               statbuf.st_mode & S_IRGRP ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"write","%d",
+            XMLWriter::formatAttribute(writer,"write","%d",
                                               statbuf.st_mode & S_IWGRP ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"execute","%d",
+            XMLWriter::formatAttribute(writer,"execute","%d",
                                               statbuf.st_mode & S_IXGRP ? 1 : 0);
             xmlTextWriterEndElement(writer);
 
             xmlTextWriterStartElement(writer,"others");
-            xmlTextWriterWriteFormatAttribute(writer,"read","%d",
+            XMLWriter::formatAttribute(writer,"read","%d",
                                               statbuf.st_mode & S_IROTH ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"write","%d",
+            XMLWriter::formatAttribute(writer,"write","%d",
                                               statbuf.st_mode & S_IWOTH ? 1 : 0);
-            xmlTextWriterWriteFormatAttribute(writer,"execute","%d",
+            XMLWriter::formatAttribute(writer,"execute","%d",
                                               statbuf.st_mode & S_IXOTH ? 1 : 0);
             xmlTextWriterEndElement(writer);
 
