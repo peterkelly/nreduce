@@ -32,15 +32,70 @@
 
 namespace GridXSLT {
 
-struct compilation {
-  Error *ei;
-  xslt_source *source;
-  Program *program;
+class Compilation;
 
-  Schema *schema;
+class Compilation {
+  DISABLE_COPY(Compilation)
+public:
+  Compilation();
+  ~Compilation();
 
-  list *templates;
-  int nextanonid;
+  void set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int destp,
+                                Instruction *newpos, int newdestno);
+
+  Instruction *specialop(Function *fun, const String &ns,
+                              const String &name, int nargs, sourceloc sloc);
+  int compileBinaryOp(Function *fun, Expression *e,
+                              OutputPort **cursor, const String &ns, const String &name);
+  int stmtInConditional(Statement *stmt);
+  int exprInConditional(Expression *e);
+  void useVar(Function *fun, OutputPort *outport,
+                       OutputPort **cursor, int need_gate, sourceloc sloc);
+  OutputPort *resolveVar(Function *fun, Expression *varref);
+  void compileString(Function *fun, const String &str,
+                                OutputPort **cursor, sourceloc sloc);
+  int stmtBelow(Statement *sn, Statement *below);
+  int haveVarReference(list *l, OutputPort *top_outport);
+  int findReferencedVarsExpr(Function *fun, Expression *e,
+                                     Statement *below, list **vars);
+  int findReferencedVarsStmt(Function *fun, Statement *sn,
+                                Statement *below, list **vars);
+  void initParamInstructions(Function *fun,
+                                    List<SequenceType> &seqtypes, OutputPort **outports);
+  int compileInnerFunction(Function *fun, Statement *sn,
+                                 Instruction **mapout, OutputPort **cursor, sourceloc sloc);
+  void compileConditional(Function *fun, OutputPort **cursor,
+                                    OutputPort **condcur, OutputPort **truecur,
+                                    OutputPort **falsecur, sourceloc sloc);
+  int compileExpr(Function *fun, Expression *e, OutputPort **cursor);
+  int compileSequenceItem(Function *fun, Statement *sn,
+                                  OutputPort **cursor);
+  int compileSequence(Function *fun, Statement *parent,
+                             OutputPort **cursor);
+  int compileFunctionContents(Function *fun, Statement *parent,
+                                OutputPort **cursor);
+  int compileFunction(Statement *sn, Function *fun);
+  int compileApplyFunction(list *templates, Function **ifout, const char *mode);
+  int compileApplyTemplates(Function *fun,
+                                    OutputPort **cursor,
+                                    list *templates, const char *mode, sourceloc sloc);
+  list *compileOrderedTemplateList();
+  int compileDefaultTemplate();
+  int compile2();
+
+
+
+
+
+
+  Error *m_ei;
+  xslt_source *m_source;
+  Program *m_program;
+
+  Schema *m_schema;
+
+  list *m_templates;
+  int m_nextanonid;
 };
 
 struct template1 {
@@ -60,19 +115,46 @@ static void template_free(template1 *t)
   free(t);
 }
 
+
+
+Compilation::Compilation()
+  : m_ei(NULL),
+    m_source(NULL),
+    m_program(NULL),
+    m_schema(NULL),
+    m_templates(NULL),
+    m_nextanonid(0)
+{
+}
+
+Compilation::~Compilation()
+{
+  list_free(m_templates,(list_d_t)template_free);
+}
+
+
+
+
+
+
+
+
 #define ANON_TEMPLATE_NAMESPACE "http://gridxslt.sourceforge.net/anon-template"
 
-static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e,
+/*
+static int compileExpr(Function *fun, Expression *e,
                   GridXSLT::OutputPort **cursor);
-static int xslt_compile_sequence(compilation *comp, Function *fun, Statement *parent,
+static int compileSequence(Function *fun, Statement *parent,
                        GridXSLT::OutputPort **cursor);
-static int xslt_compile_funcontents(compilation *comp, Function *fun, Statement *parent,
+static int compileFunctionContents(Function *fun, Statement *parent,
                                 GridXSLT::OutputPort **cursor);
-static int xslt_compile_apply_templates(compilation *comp, Function *fun,
+static int compileApplyTemplates(Function *fun,
                                     GridXSLT::OutputPort **cursor,
                                     list *templates, const char *mode, sourceloc sloc);
+*/
 
-static void set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int destp,
+
+void Compilation::set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int destp,
                                 Instruction *newpos, int newdestno)
 {
   newpos->m_outports[newdestno].dest = (*cursor)->dest;
@@ -82,17 +164,17 @@ static void set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int
   *cursor = &newpos->m_outports[newdestno];
 }
 
-static Instruction *specialop(compilation *comp, Function *fun, const String &ns,
+Instruction *Compilation::specialop(Function *fun, const String &ns,
                               const String &name, int nargs, sourceloc sloc)
 {
   return fun->addBuiltinInstruction(NSName(ns,name),nargs,sloc);
 }
 
-static int xslt_compile_binary_op(compilation *comp, Function *fun, Expression *e,
+int Compilation::compileBinaryOp(Function *fun, Expression *e,
                               OutputPort **cursor, const String &ns, const String &name)
 {
   Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
-  Instruction *binop = specialop(comp,fun,ns,name,2,e->m_sloc);
+  Instruction *binop = specialop(fun,ns,name,2,e->m_sloc);
   OutputPort *left_cursor = &dup->m_outports[0];
   OutputPort *right_cursor = &dup->m_outports[1];
 
@@ -102,13 +184,13 @@ static int xslt_compile_binary_op(compilation *comp, Function *fun, Expression *
   right_cursor->destp = 1;
   set_and_move_cursor(cursor,dup,0,binop,0);
 
-  CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,&left_cursor))
-  CHECK_CALL(xslt_compile_expr(comp,fun,e->m_right,&right_cursor))
+  CHECK_CALL(compileExpr(fun,e->m_left,&left_cursor))
+  CHECK_CALL(compileExpr(fun,e->m_right,&right_cursor))
 
   return 0;
 }
 
-static int stmt_in_conditional(Statement *stmt)
+int Compilation::stmtInConditional(Statement *stmt)
 {
   Statement *sn;
   for (sn = stmt->m_parent; sn; sn = sn->m_parent)
@@ -118,7 +200,7 @@ static int stmt_in_conditional(Statement *stmt)
   return 0;
 }
 
-static int expr_in_conditional(Expression *e)
+int Compilation::exprInConditional(Expression *e)
 {
   Expression *p;
   Expression *prev = e;
@@ -127,10 +209,10 @@ static int expr_in_conditional(Expression *e)
       return 1;
     prev = p;
   }
-  return stmt_in_conditional(e->m_stmt);
+  return stmtInConditional(e->m_stmt);
 }
 
-static void df_use_var(compilation *comp, Function *fun, OutputPort *outport,
+void Compilation::useVar(Function *fun, OutputPort *outport,
                        OutputPort **cursor, int need_gate, sourceloc sloc)
 {
   Instruction *dest = (*cursor)->dest;
@@ -169,7 +251,7 @@ static void df_use_var(compilation *comp, Function *fun, OutputPort *outport,
   *cursor = finalout;
 }
 
-static OutputPort *resolve_var_to_outport(Function *fun, Expression *varref)
+OutputPort *Compilation::resolveVar(Function *fun, Expression *varref)
 {
   Expression *defexpr = NULL;
   Statement *defnode = NULL;
@@ -191,7 +273,7 @@ static OutputPort *resolve_var_to_outport(Function *fun, Expression *varref)
   return outport;
 }
 
-static void xslt_compile_string(compilation *comp, Function *fun, const String &str,
+void Compilation::compileString(Function *fun, const String &str,
                                 OutputPort **cursor, sourceloc sloc)
 {
   Instruction *instr = fun->addInstruction(OP_CONST,sloc);
@@ -204,7 +286,7 @@ static void xslt_compile_string(compilation *comp, Function *fun, const String &
   set_and_move_cursor(cursor,instr,0,instr,0);
 }
 
-static int stmt_below(Statement *sn, Statement *below)
+int Compilation::stmtBelow(Statement *sn, Statement *below)
 {
   Statement *p;
   for (p = sn; p; p = p->m_parent)
@@ -223,7 +305,7 @@ struct var_reference {
   OutputPort *local_outport;
 };
 
-static int have_var_reference(list *l, OutputPort *top_outport)
+int Compilation::haveVarReference(list *l, OutputPort *top_outport)
 {
   for (; l; l = l->next) {
     var_reference *vr = (var_reference*)l->data;
@@ -233,7 +315,7 @@ static int have_var_reference(list *l, OutputPort *top_outport)
   return 0;
 }
 
-static int find_referenced_vars_expr(Function *fun, Expression *e,
+int Compilation::findReferencedVarsExpr(Function *fun, Expression *e,
                                      Statement *below, list **vars)
 {
   if (NULL == e)
@@ -247,11 +329,11 @@ static int find_referenced_vars_expr(Function *fun, Expression *e,
 
     Expression_resolve_var(e,e->m_qn,&defexpr,&defnode);
     if (NULL != defexpr) {
-      if (!stmt_below(defexpr->m_stmt,below))
+      if (!stmtBelow(defexpr->m_stmt,below))
         outport = defexpr->m_outp;
     }
     else if (NULL != defnode) {
-      if (!stmt_below(defnode,below))
+      if (!stmtBelow(defnode,below))
         outport = defnode->m_outp;
     }
     else {
@@ -261,11 +343,11 @@ static int find_referenced_vars_expr(Function *fun, Expression *e,
 
     if (NULL != outport) {
 
-      if (!have_var_reference(*vars,outport)) {
+      if (!haveVarReference(*vars,outport)) {
         var_reference *vr = (var_reference*)calloc(1,sizeof(var_reference));
         OutputPort *local_outport;
 
-        local_outport = resolve_var_to_outport(fun,e); /* get the local version */
+        local_outport = resolveVar(fun,e); /* get the local version */
         assert(NULL != local_outport);
 
         vr->ref = e;
@@ -279,30 +361,30 @@ static int find_referenced_vars_expr(Function *fun, Expression *e,
     }
   }
 
-  CHECK_CALL(find_referenced_vars_expr(fun,e->m_conditional,below,vars))
-  CHECK_CALL(find_referenced_vars_expr(fun,e->m_left,below,vars))
-  CHECK_CALL(find_referenced_vars_expr(fun,e->m_right,below,vars))
+  CHECK_CALL(findReferencedVarsExpr(fun,e->m_conditional,below,vars))
+  CHECK_CALL(findReferencedVarsExpr(fun,e->m_left,below,vars))
+  CHECK_CALL(findReferencedVarsExpr(fun,e->m_right,below,vars))
 
   return 0;
 }
 
-static int find_referenced_vars(Function *fun, Statement *sn,
+int Compilation::findReferencedVarsStmt(Function *fun, Statement *sn,
                                 Statement *below, list **vars)
 {
   for (; sn; sn = sn->m_next) {
-    CHECK_CALL(find_referenced_vars_expr(fun,sn->m_select,below,vars))
-    CHECK_CALL(find_referenced_vars_expr(fun,sn->m_expr1,below,vars))
-    CHECK_CALL(find_referenced_vars_expr(fun,sn->m_expr2,below,vars))
-    CHECK_CALL(find_referenced_vars_expr(fun,sn->m_name_expr,below,vars))
-    CHECK_CALL(find_referenced_vars(fun,sn->m_child,below,vars))
-    CHECK_CALL(find_referenced_vars(fun,sn->m_param,below,vars))
-    CHECK_CALL(find_referenced_vars(fun,sn->m_sort,below,vars))
+    CHECK_CALL(findReferencedVarsExpr(fun,sn->m_select,below,vars))
+    CHECK_CALL(findReferencedVarsExpr(fun,sn->m_expr1,below,vars))
+    CHECK_CALL(findReferencedVarsExpr(fun,sn->m_expr2,below,vars))
+    CHECK_CALL(findReferencedVarsExpr(fun,sn->m_name_expr,below,vars))
+    CHECK_CALL(findReferencedVarsStmt(fun,sn->m_child,below,vars))
+    CHECK_CALL(findReferencedVarsStmt(fun,sn->m_param,below,vars))
+    CHECK_CALL(findReferencedVarsStmt(fun,sn->m_sort,below,vars))
   }
 
   return 0;
 }
 
-static void init_param_instructions(compilation *comp, Function *fun,
+void Compilation::initParamInstructions(Function *fun,
                                     List<SequenceType> &seqtypes, OutputPort **outports)
 {
   int paramno;
@@ -329,21 +411,21 @@ static void init_param_instructions(compilation *comp, Function *fun,
   }
 }
 
-static int xslt_compile_innerfun(compilation *comp, Function *fun, Statement *sn,
+int Compilation::compileInnerFunction(Function *fun, Statement *sn,
                                  Instruction **mapout, OutputPort **cursor, sourceloc sloc)
 {
   char name[100];
   Function *innerfun;
   int varno;
-  int need_gate = stmt_in_conditional(sn);
+  int need_gate = stmtInConditional(sn);
   list *vars = NULL;
   Instruction *map;
   list *l;
   OutputPort *innerfuncur;
 
   /* Create the anonymous inner function */
-  sprintf(name,"anon%dfun",comp->nextanonid++);
-  innerfun = comp->program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
+  sprintf(name,"anon%dfun",m_nextanonid++);
+  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
 
   /* Set the return type of the function. FIXME: this should be derived from the sequence
      constructor within the function */
@@ -352,7 +434,7 @@ static int xslt_compile_innerfun(compilation *comp, Function *fun, Statement *sn
   /* Determine all variables and parameters of the parent function that are referenced
      in this block of code. These must all be declared as parameters to the inner function
      and passed in whenever it is called */
-  CHECK_CALL(find_referenced_vars(fun,sn->m_child,sn,&vars))
+  CHECK_CALL(findReferencedVarsStmt(fun,sn->m_child,sn,&vars))
 
   innerfun->m_nparams = list_count(vars);
   innerfun->m_params = new Parameter[innerfun->m_nparams];
@@ -383,12 +465,12 @@ static int xslt_compile_innerfun(compilation *comp, Function *fun, Statement *sn
     varcur->dest = map;
     varcur->destp = varno+1;
     varno++;
-    df_use_var(comp,fun,vr->local_outport,&varcur,need_gate,sloc);
+    useVar(fun,vr->local_outport,&varcur,need_gate,sloc);
   }
 
   /* FIXME: pass types for each parameter */
   List<SequenceType> types;
-  init_param_instructions(comp,innerfun,types,NULL);
+  initParamInstructions(innerfun,types,NULL);
 
   innerfun->m_ret = innerfun->addInstruction(OP_RETURN,sloc);
   innerfun->m_start = innerfun->addInstruction(OP_PASS,sloc);
@@ -400,7 +482,7 @@ static int xslt_compile_innerfun(compilation *comp, Function *fun, Statement *sn
   innerfuncur->dest = innerfun->m_ret;
   innerfuncur->destp = 0;
 
-  CHECK_CALL(xslt_compile_funcontents(comp,innerfun,sn,&innerfuncur))
+  CHECK_CALL(compileFunctionContents(innerfun,sn,&innerfuncur))
   assert(NULL != innerfuncur);
 
   *mapout = map;
@@ -415,7 +497,7 @@ static int xslt_compile_innerfun(compilation *comp, Function *fun, Statement *sn
 
 
 
-static void xslt_compile_conditional(compilation *comp, Function *fun, OutputPort **cursor,
+void Compilation::compileConditional(Function *fun, OutputPort **cursor,
                                     OutputPort **condcur, OutputPort **truecur,
                                     OutputPort **falsecur, sourceloc sloc)
 {
@@ -446,7 +528,7 @@ static void xslt_compile_conditional(compilation *comp, Function *fun, OutputPor
 
 
 
-static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, OutputPort **cursor)
+int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
 {
   switch (e->m_type) {
   case XPATH_EXPR_INVALID:
@@ -465,11 +547,11 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     OutputPort *falsecur;
     OutputPort *truecur;
     OutputPort *condcur;
-    Instruction *ebv = specialop(comp,fun,SPECIAL_NAMESPACE,"ebv",1,e->m_sloc);
-    xslt_compile_conditional(comp,fun,cursor,&condcur,&truecur,&falsecur,e->m_sloc);
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_right,&falsecur))
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,&truecur))
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_conditional,&condcur))
+    Instruction *ebv = specialop(fun,SPECIAL_NAMESPACE,"ebv",1,e->m_sloc);
+    compileConditional(fun,cursor,&condcur,&truecur,&falsecur,e->m_sloc);
+    CHECK_CALL(compileExpr(fun,e->m_right,&falsecur))
+    CHECK_CALL(compileExpr(fun,e->m_left,&truecur))
+    CHECK_CALL(compileExpr(fun,e->m_conditional,&condcur))
     set_and_move_cursor(&condcur,ebv,0,ebv,0);
     break;
   }
@@ -477,10 +559,10 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     assert(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_OR:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,SPECIAL_NAMESPACE,"or"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,SPECIAL_NAMESPACE,"or"))
     break;
   case XPATH_EXPR_AND:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,SPECIAL_NAMESPACE,"and"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,SPECIAL_NAMESPACE,"and"))
     break;
   case XPATH_EXPR_COMPARE_VALUES:
     switch (e->m_compare) {
@@ -510,29 +592,29 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
   case XPATH_EXPR_COMPARE_GENERAL:
     switch (e->m_compare) {
     case XPATH_GENERAL_COMP_EQ:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
       break;
     case XPATH_GENERAL_COMP_NE: {
-      Instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->m_sloc);
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
+      Instruction *not1 = specialop(fun,FN_NAMESPACE,"not",1,e->m_sloc);
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-equal"))
       set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
     case XPATH_GENERAL_COMP_LT:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
       break;
     case XPATH_GENERAL_COMP_LE: {
-      Instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->m_sloc);
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
+      Instruction *not1 = specialop(fun,FN_NAMESPACE,"not",1,e->m_sloc);
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
       set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
     case XPATH_GENERAL_COMP_GT:
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-greater-than"))
       break;
     case XPATH_GENERAL_COMP_GE: {
-      Instruction *not1 = specialop(comp,fun,FN_NAMESPACE,"not",1,e->m_sloc);
-      CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
+      Instruction *not1 = specialop(fun,FN_NAMESPACE,"not",1,e->m_sloc);
+      CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-less-than"))
       set_and_move_cursor(cursor,not1,0,not1,0);
       break;
     }
@@ -558,24 +640,24 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     }
     break;
   case XPATH_EXPR_TO:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,SPECIAL_NAMESPACE,"range"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,SPECIAL_NAMESPACE,"range"))
     break;
   case XPATH_EXPR_ADD:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-add"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-add"))
     break;
   case XPATH_EXPR_SUBTRACT:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-subtract"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-subtract"))
     break;
   case XPATH_EXPR_MULTIPLY:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-multiply"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-multiply"))
     break;
   case XPATH_EXPR_DIVIDE:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-divide"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-divide"))
     break;
   case XPATH_EXPR_IDIVIDE:
     break;
   case XPATH_EXPR_MOD:
-    CHECK_CALL(xslt_compile_binary_op(comp,fun,e,cursor,FN_NAMESPACE,"numeric-mode"))
+    CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-mode"))
     break;
   case XPATH_EXPR_UNION:
     assert(!"not yet implemented"); /* FIXME */
@@ -608,14 +690,14 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     assert(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_ROOT: {
-    Instruction *root = specialop(comp,fun,SPECIAL_NAMESPACE,"select-root",1,e->m_sloc);
+    Instruction *root = specialop(fun,SPECIAL_NAMESPACE,"select-root",1,e->m_sloc);
     set_and_move_cursor(cursor,root,0,root,0);
     if (NULL != e->m_left)
-      CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,cursor))
+      CHECK_CALL(compileExpr(fun,e->m_left,cursor))
     break;
   }
   case XPATH_EXPR_STRING_LITERAL: {
-    xslt_compile_string(comp,fun,e->m_strval.cstring(),cursor,e->m_sloc);
+    compileString(fun,e->m_strval.cstring(),cursor,e->m_sloc);
     break;
   }
   case XPATH_EXPR_INTEGER_LITERAL: {
@@ -644,19 +726,19 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
   }
   case XPATH_EXPR_VAR_REF: {
     OutputPort *varoutport;
-    int need_gate = expr_in_conditional(e);
+    int need_gate = exprInConditional(e);
 
-    if (NULL == (varoutport = resolve_var_to_outport(fun,e))) {
+    if (NULL == (varoutport = resolveVar(fun,e))) {
       fmessage(stderr,"No such variable \"%*\"\n",&e->m_qn.m_localPart);
       return -1;
     }
 
-    df_use_var(comp,fun,varoutport,cursor,need_gate,e->m_sloc);
+    useVar(fun,varoutport,cursor,need_gate,e->m_sloc);
 
     break;
   }
   case XPATH_EXPR_EMPTY: {
-    Instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,e->m_sloc);
+    Instruction *empty = specialop(fun,SPECIAL_NAMESPACE,"empty",1,e->m_sloc);
     set_and_move_cursor(cursor,empty,0,empty,0);
     break;
   }
@@ -664,7 +746,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     /* just gets passed through */
     break;
   case XPATH_EXPR_NODE_TEST: {
-    Instruction *select = specialop(comp,fun,SPECIAL_NAMESPACE,"select",1,e->m_sloc);
+    Instruction *select = specialop(fun,SPECIAL_NAMESPACE,"select",1,e->m_sloc);
     select->m_axis = e->m_axis;
 
     if (XPATH_NODE_TEST_NAME == e->m_nodetest) {
@@ -683,7 +765,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     break;
   }
   case XPATH_EXPR_ACTUAL_PARAM:
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,cursor))
+    CHECK_CALL(compileExpr(fun,e->m_left,cursor))
     break;
   case XPATH_EXPR_FUNCTION_CALL: {
     Instruction *call = NULL;
@@ -717,8 +799,8 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     if (!found) {
       Function *cfun;
 
-      if (NULL == (cfun = comp->program->getFunction(e->m_ident)))
-        return error(comp->ei,e->m_sloc.uri,e->m_sloc.line,String::null(),
+      if (NULL == (cfun = m_program->getFunction(e->m_ident)))
+        return error(m_ei,e->m_sloc.uri,e->m_sloc.line,String::null(),
                      "No such function %*",&e->m_ident);
 
       call = fun->addInstruction(OP_CALL,e->m_sloc);
@@ -768,7 +850,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
           return 0;
         }
 
-        CHECK_CALL(xslt_compile_expr(comp,fun,p->m_left,&param_cursor))
+        CHECK_CALL(compileExpr(fun,p->m_left,&param_cursor))
 
         paramno++;
       }
@@ -776,7 +858,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     break;
   }
   case XPATH_EXPR_PAREN:
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,cursor))
+    CHECK_CALL(compileExpr(fun,e->m_left,cursor))
     break;
 
 
@@ -788,7 +870,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     break;
   case XPATH_EXPR_SEQUENCE: {
     Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
-    Instruction *seq = specialop(comp,fun,SPECIAL_NAMESPACE,"sequence",2,e->m_sloc);
+    Instruction *seq = specialop(fun,SPECIAL_NAMESPACE,"sequence",2,e->m_sloc);
     OutputPort *leftcur = &dup->m_outports[0];
     OutputPort *rightcur = &dup->m_outports[1];
 
@@ -799,14 +881,14 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
     dup->m_outports[1].dest = seq;
     dup->m_outports[1].destp = 1;
 
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,&leftcur))
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_right,&rightcur))
+    CHECK_CALL(compileExpr(fun,e->m_left,&leftcur))
+    CHECK_CALL(compileExpr(fun,e->m_right,&rightcur))
 
     break;
   }
   case XPATH_EXPR_STEP: {
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_left,cursor))
-    CHECK_CALL(xslt_compile_expr(comp,fun,e->m_right,cursor))
+    CHECK_CALL(compileExpr(fun,e->m_left,cursor))
+    CHECK_CALL(compileExpr(fun,e->m_right,cursor))
     break;
   }
   case XPATH_EXPR_VARINLIST:
@@ -827,7 +909,7 @@ static int xslt_compile_expr(compilation *comp, Function *fun, Expression *e, Ou
   return 0;
 }
 
-static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statement *sn,
+int Compilation::compileSequenceItem(Function *fun, Statement *sn,
                                   OutputPort **cursor)
 {
   switch (sn->m_type) {
@@ -841,21 +923,21 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     break;
   case XSLT_INSTR_APPLY_TEMPLATES: {
     if (NULL != sn->m_select) {
-      CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,cursor))
+      CHECK_CALL(compileExpr(fun,sn->m_select,cursor))
     }
     else {
-      Instruction *select = specialop(comp,fun,SPECIAL_NAMESPACE,"select",1,sn->m_sloc);
+      Instruction *select = specialop(fun,SPECIAL_NAMESPACE,"select",1,sn->m_sloc);
       select->m_axis = AXIS_CHILD;
       select->m_seqtypetest = SequenceType::node();
       set_and_move_cursor(cursor,select,0,select,0);
     }
 
-    CHECK_CALL(xslt_compile_apply_templates(comp,fun,cursor,comp->templates,NULL,sn->m_sloc))
+    CHECK_CALL(compileApplyTemplates(fun,cursor,m_templates,NULL,sn->m_sloc))
     break;
   }
   case XSLT_INSTR_ATTRIBUTE: {
     Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
-    Instruction *attr = specialop(comp,fun,SPECIAL_NAMESPACE,"attribute",2,sn->m_sloc);
+    Instruction *attr = specialop(fun,SPECIAL_NAMESPACE,"attribute",2,sn->m_sloc);
     OutputPort *namecur = &dup->m_outports[0];
     OutputPort *childcur = &dup->m_outports[1];
     if (NULL != sn->m_name_expr) {
@@ -865,15 +947,15 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
 
     namecur->dest = attr;
     namecur->destp = 1;
-    xslt_compile_string(comp,fun,sn->m_qn.m_localPart,&namecur,sn->m_sloc);
+    compileString(fun,sn->m_qn.m_localPart,&namecur,sn->m_sloc);
 
     childcur->dest = attr;
     childcur->destp = 0;
 
     if (NULL != sn->m_select)
-      CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,&childcur))
+      CHECK_CALL(compileExpr(fun,sn->m_select,&childcur))
     else
-      CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&childcur))
+      CHECK_CALL(compileSequence(fun,sn,&childcur))
 
     set_and_move_cursor(cursor,dup,0,attr,0);
     break;
@@ -891,24 +973,24 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
         /* when */
         OutputPort *truecur = NULL;
         OutputPort *condcur = NULL;
-        Instruction *ebv = specialop(comp,fun,SPECIAL_NAMESPACE,"ebv",1,c->m_sloc);
-        xslt_compile_conditional(comp,fun,branchcur,&condcur,&truecur,&falsecur,c->m_sloc);
+        Instruction *ebv = specialop(fun,SPECIAL_NAMESPACE,"ebv",1,c->m_sloc);
+        compileConditional(fun,branchcur,&condcur,&truecur,&falsecur,c->m_sloc);
 
-        CHECK_CALL(xslt_compile_expr(comp,fun,c->m_select,&condcur))
+        CHECK_CALL(compileExpr(fun,c->m_select,&condcur))
         set_and_move_cursor(&condcur,ebv,0,ebv,0);
-        CHECK_CALL(xslt_compile_sequence(comp,fun,c,&truecur))
+        CHECK_CALL(compileSequence(fun,c,&truecur))
 
         branchcur = &falsecur;
       }
       else {
         /* otherwise */
-        CHECK_CALL(xslt_compile_sequence(comp,fun,c,branchcur))
+        CHECK_CALL(compileSequence(fun,c,branchcur))
         otherwise = 1;
       }
     }
 
     if (!otherwise) {
-      Instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,sn->m_sloc);
+      Instruction *empty = specialop(fun,SPECIAL_NAMESPACE,"empty",1,sn->m_sloc);
       set_and_move_cursor(branchcur,empty,0,empty,0);
     }
 
@@ -922,7 +1004,7 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     break;
   case XSLT_INSTR_ELEMENT: {
     Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
-    Instruction *elem = specialop(comp,fun,SPECIAL_NAMESPACE,"element",2,sn->m_sloc);
+    Instruction *elem = specialop(fun,SPECIAL_NAMESPACE,"element",2,sn->m_sloc);
     OutputPort *namecur = &dup->m_outports[0];
     OutputPort *childcur = &dup->m_outports[1];
     if (NULL != sn->m_name_expr) {
@@ -955,11 +1037,11 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
 
     namecur->dest = elem;
     namecur->destp = 1;
-    xslt_compile_string(comp,fun,sn->m_qn.m_localPart,&namecur,sn->m_sloc);
+    compileString(fun,sn->m_qn.m_localPart,&namecur,sn->m_sloc);
 
     childcur->dest = elem;
     childcur->destp = 0;
-    CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&childcur))
+    CHECK_CALL(compileSequence(fun,sn,&childcur))
 
     set_and_move_cursor(cursor,dup,0,elem,0);
 
@@ -969,14 +1051,14 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     break;
   case XSLT_INSTR_FOR_EACH: {
     Instruction *map = NULL;
-    CHECK_CALL(xslt_compile_innerfun(comp,fun,sn,&map,cursor,sn->m_sloc))
+    CHECK_CALL(compileInnerFunction(fun,sn,&map,cursor,sn->m_sloc))
 
     map->m_outports[0].dest = (*cursor)->dest;
     map->m_outports[0].destp = (*cursor)->destp;
     (*cursor)->dest = map;
     (*cursor)->destp = 0;
 
-    CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,cursor))
+    CHECK_CALL(compileExpr(fun,sn->m_select,cursor))
     *cursor = &map->m_outports[0];
     break;
   }
@@ -986,12 +1068,12 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     OutputPort *falsecur;
     OutputPort *truecur;
     OutputPort *condcur;
-    Instruction *ebv = specialop(comp,fun,SPECIAL_NAMESPACE,"ebv",1,sn->m_sloc);
-    Instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,sn->m_sloc);
-    xslt_compile_conditional(comp,fun,cursor,&condcur,&truecur,&falsecur,sn->m_sloc);
+    Instruction *ebv = specialop(fun,SPECIAL_NAMESPACE,"ebv",1,sn->m_sloc);
+    Instruction *empty = specialop(fun,SPECIAL_NAMESPACE,"empty",1,sn->m_sloc);
+    compileConditional(fun,cursor,&condcur,&truecur,&falsecur,sn->m_sloc);
     set_and_move_cursor(&falsecur,empty,0,empty,0);
-    CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&truecur))
-    CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,&condcur))
+    CHECK_CALL(compileSequence(fun,sn,&truecur))
+    CHECK_CALL(compileExpr(fun,sn->m_select,&condcur))
     set_and_move_cursor(&condcur,ebv,0,ebv,0);
     break;
   }
@@ -999,7 +1081,7 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     break;
   case XSLT_INSTR_NAMESPACE: {
     Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
-    Instruction *ns = specialop(comp,fun,SPECIAL_NAMESPACE,"namespace",2,sn->m_sloc);
+    Instruction *ns = specialop(fun,SPECIAL_NAMESPACE,"namespace",2,sn->m_sloc);
     OutputPort *prefixcur = &dup->m_outports[0];
     OutputPort *hrefcur = &dup->m_outports[1];
 
@@ -1010,11 +1092,11 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
 
     set_and_move_cursor(cursor,dup,0,ns,0);
 
-    CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_name_expr,&prefixcur))
+    CHECK_CALL(compileExpr(fun,sn->m_name_expr,&prefixcur))
     if (NULL != sn->m_select)
-      CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,&hrefcur))
+      CHECK_CALL(compileExpr(fun,sn->m_select,&hrefcur))
     else
-      CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&hrefcur))
+      CHECK_CALL(compileSequence(fun,sn,&hrefcur))
     break;
   }
   case XSLT_INSTR_NEXT_MATCH:
@@ -1028,17 +1110,17 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
   case XSLT_INSTR_RESULT_DOCUMENT:
     break;
   case XSLT_INSTR_SEQUENCE:
-    CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,cursor))
+    CHECK_CALL(compileExpr(fun,sn->m_select,cursor))
     break;
   case XSLT_INSTR_TEXT: {
-    Instruction *text = specialop(comp,fun,SPECIAL_NAMESPACE,"text",1,sn->m_sloc);
+    Instruction *text = specialop(fun,SPECIAL_NAMESPACE,"text",1,sn->m_sloc);
     text->m_str = sn->m_strval;
     set_and_move_cursor(cursor,text,0,text,0);
     break;
   }
   case XSLT_INSTR_VALUE_OF: {
     Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
-    Instruction *valueof = specialop(comp,fun,SPECIAL_NAMESPACE,"value-of",2,sn->m_sloc);
+    Instruction *valueof = specialop(fun,SPECIAL_NAMESPACE,"value-of",2,sn->m_sloc);
     OutputPort *valuecur = &dup->m_outports[0];
     OutputPort *sepcur = &dup->m_outports[1];
 
@@ -1050,16 +1132,16 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
     dup->m_outports[1].destp = 1;
 
     if (NULL != sn->m_expr1) /* "select" attribute */
-      CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_expr1,&sepcur))
+      CHECK_CALL(compileExpr(fun,sn->m_expr1,&sepcur))
     else if (NULL != sn->m_select)
-      xslt_compile_string(comp,fun," ",&sepcur,sn->m_sloc);
+      compileString(fun," ",&sepcur,sn->m_sloc);
     else
-      xslt_compile_string(comp,fun,"",&sepcur,sn->m_sloc);
+      compileString(fun,"",&sepcur,sn->m_sloc);
 
     if (NULL != sn->m_select)
-      CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,&valuecur))
+      CHECK_CALL(compileExpr(fun,sn->m_select,&valuecur))
     else
-      CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&valuecur))
+      CHECK_CALL(compileSequence(fun,sn,&valuecur))
 
     break;
   }
@@ -1070,7 +1152,7 @@ static int xslt_compile_sequence_item(compilation *comp, Function *fun, Statemen
   return 0;
 }
 
-static int xslt_compile_sequence(compilation *comp, Function *fun, Statement *parent,
+int Compilation::compileSequence(Function *fun, Statement *parent,
                              OutputPort **cursor)
 {
   Statement *sn;
@@ -1090,21 +1172,21 @@ static int xslt_compile_sequence(compilation *comp, Function *fun, Statement *pa
       pass->m_outports[0].dest = swallow;
       pass->m_outports[0].destp = 0;
       if (NULL != sn->m_select) {
-        CHECK_CALL(xslt_compile_expr(comp,fun,sn->m_select,&varcur))
+        CHECK_CALL(compileExpr(fun,sn->m_select,&varcur))
       }
       else {
-        Instruction *docinstr = specialop(comp,fun,SPECIAL_NAMESPACE,"document",1,sn->m_sloc);
+        Instruction *docinstr = specialop(fun,SPECIAL_NAMESPACE,"document",1,sn->m_sloc);
         docinstr->m_outports[0].dest = pass;
         docinstr->m_outports[0].destp = 0;
         varcur->dest = docinstr;
         varcur->destp = 0;
-        CHECK_CALL(xslt_compile_sequence(comp,fun,sn,&varcur))
+        CHECK_CALL(compileSequence(fun,sn,&varcur))
       }
       sn->m_outp = &pass->m_outports[0];
     }
     else if (sn->m_next) {
       Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
-      Instruction *seq = specialop(comp,fun,SPECIAL_NAMESPACE,"sequence",2,sn->m_sloc);
+      Instruction *seq = specialop(fun,SPECIAL_NAMESPACE,"sequence",2,sn->m_sloc);
 
       seq->m_outports[0].dest = (*cursor)->dest;
       seq->m_outports[0].destp = (*cursor)->destp;
@@ -1113,7 +1195,7 @@ static int xslt_compile_sequence(compilation *comp, Function *fun, Statement *pa
       (*cursor)->dest = seq;
       (*cursor)->destp = 0;
 
-      CHECK_CALL(xslt_compile_sequence_item(comp,fun,sn,cursor))
+      CHECK_CALL(compileSequenceItem(fun,sn,cursor))
 
       *cursor = &dup->m_outports[1];
       (*cursor)->dest = seq;
@@ -1122,27 +1204,27 @@ static int xslt_compile_sequence(compilation *comp, Function *fun, Statement *pa
       havecontent = 1;
     }
     else {
-      CHECK_CALL(xslt_compile_sequence_item(comp,fun,sn,cursor))
+      CHECK_CALL(compileSequenceItem(fun,sn,cursor))
 
       havecontent = 1;
     }
   }
 
   if (!havecontent) {
-    Instruction *empty = specialop(comp,fun,SPECIAL_NAMESPACE,"empty",1,parent->m_sloc);
+    Instruction *empty = specialop(fun,SPECIAL_NAMESPACE,"empty",1,parent->m_sloc);
     set_and_move_cursor(cursor,empty,0,empty,0);
   }
 
   return 0;
 }
 
-static int xslt_compile_funcontents(compilation *comp, Function *fun, Statement *parent,
+int Compilation::compileFunctionContents(Function *fun, Statement *parent,
                                 OutputPort **cursor)
 {
-  return xslt_compile_sequence(comp,fun,parent,cursor);
+  return compileSequence(fun,parent,cursor);
 }
 
-static int xslt_compile_function(compilation *comp, Statement *sn, Function *fun)
+int Compilation::compileFunction(Statement *sn, Function *fun)
 {
   OutputPort *cursor;
   List<SequenceType> seqtypes;
@@ -1163,7 +1245,7 @@ static int xslt_compile_function(compilation *comp, Statement *sn, Function *fun
   for (p = sn->m_param, paramno = 0; p; p = p->m_next, paramno++)
     seqtypes.append(p->m_st);
 
-  init_param_instructions(comp,fun,seqtypes,outports);
+  initParamInstructions(fun,seqtypes,outports);
 
   for (p = sn->m_param, paramno = 0; p; p = p->m_next, paramno++)
     p->m_outp = outports[paramno];
@@ -1186,14 +1268,13 @@ static int xslt_compile_function(compilation *comp, Statement *sn, Function *fun
   cursor->dest = fun->m_ret;
   cursor->destp = 0;
 
-  CHECK_CALL(xslt_compile_funcontents(comp,fun,sn,&cursor))
+  CHECK_CALL(compileFunctionContents(fun,sn,&cursor))
   assert(NULL != cursor);
 
   return 0;
 }
 
-static int xslt_compile_apply_function(compilation *comp,
-                                   list *templates, Function **ifout, const char *mode)
+int Compilation::compileApplyFunction(list *templates, Function **ifout, const char *mode)
 {
   list *l;
   OutputPort *cursor = NULL;
@@ -1205,8 +1286,8 @@ static int xslt_compile_apply_function(compilation *comp,
   char name[100];
   Function *innerfun;
 
-  sprintf(name,"anon%dfun",comp->nextanonid++);
-  innerfun = comp->program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
+  sprintf(name,"anon%dfun",m_nextanonid++);
+  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
 
   innerfun->init(nosourceloc);
 
@@ -1221,22 +1302,22 @@ static int xslt_compile_apply_function(compilation *comp,
     Instruction *call = innerfun->addInstruction(OP_CALL,nosourceloc);
 
     Instruction *dup = innerfun->addInstruction(OP_DUP,nosourceloc);
-    Instruction *contains = specialop(comp,innerfun,SPECIAL_NAMESPACE,"contains-node",2,
+    Instruction *contains = specialop(innerfun,SPECIAL_NAMESPACE,"contains-node",2,
                                          nosourceloc);
-    Instruction *root = specialop(comp,innerfun,FN_NAMESPACE,"root",1,nosourceloc);
-    Instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    Instruction *root = specialop(innerfun,FN_NAMESPACE,"root",1,nosourceloc);
+    Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     select->m_axis = AXIS_DESCENDANT_OR_SELF;
     select->m_seqtypetest = SequenceType::node();
     call->m_inports[0].st = SequenceType::item();
 
-    xslt_compile_conditional(comp,innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
+    compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
     /* FIXME: transform expression as described in XSLT 2.0 section 5.5.3 */
 
     set_and_move_cursor(&condcur,dup,0,dup,0);
     set_and_move_cursor(&condcur,root,0,root,0);
     set_and_move_cursor(&condcur,select,0,select,0);
-    CHECK_CALL(xslt_compile_expr(comp,innerfun,t->pattern,&condcur))
+    CHECK_CALL(compileExpr(innerfun,t->pattern,&condcur))
 
     set_and_move_cursor(&condcur,contains,0,contains,0);
 
@@ -1252,14 +1333,14 @@ static int xslt_compile_apply_function(compilation *comp,
 
   /* default template1 for document and element nodes */
   {
-    Instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
-    Instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
-    Instruction *not1 = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
-    Instruction *childsel = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
+    Instruction *not1 = specialop(innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    Instruction *childsel = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     SequenceType doctype = SequenceType(new ItemType(ITEM_DOCUMENT));
     SequenceType elemtype = SequenceType(new ItemType(ITEM_ELEMENT));
 
-    xslt_compile_conditional(comp,innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
+    compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
     select->m_axis = AXIS_SELF;
     select->m_seqtypetest = SequenceType::choice(doctype,elemtype);
@@ -1271,21 +1352,21 @@ static int xslt_compile_apply_function(compilation *comp,
     childsel->m_axis = AXIS_CHILD;
     childsel->m_seqtypetest = SequenceType::node();
     set_and_move_cursor(&truecur,childsel,0,childsel,0);
-    CHECK_CALL(xslt_compile_apply_templates(comp,innerfun,&truecur,templates,mode,nosourceloc))
+    CHECK_CALL(compileApplyTemplates(innerfun,&truecur,templates,mode,nosourceloc))
 
     branchcur = &falsecur;
   }
 
   /* default template1 for text and attribute nodes */
   {
-    Instruction *select = specialop(comp,innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
-    Instruction *isempty = specialop(comp,innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
-    Instruction *not1 = specialop(comp,innerfun,FN_NAMESPACE,"not",1,nosourceloc);
-    Instruction *string = specialop(comp,innerfun,FN_NAMESPACE,"string",1,nosourceloc);
+    Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
+    Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
+    Instruction *not1 = specialop(innerfun,FN_NAMESPACE,"not",1,nosourceloc);
+    Instruction *string = specialop(innerfun,FN_NAMESPACE,"string",1,nosourceloc);
     SequenceType texttype = SequenceType(new ItemType(ITEM_TEXT));
     SequenceType attrtype = SequenceType(new ItemType(ITEM_ATTRIBUTE));
 
-    xslt_compile_conditional(comp,innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
+    compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
     select->m_axis = AXIS_SELF;
     select->m_seqtypetest = SequenceType::choice(texttype,attrtype);
@@ -1299,7 +1380,7 @@ static int xslt_compile_apply_function(compilation *comp,
     branchcur = &falsecur;
   }
 
-  empty = specialop(comp,innerfun,SPECIAL_NAMESPACE,"empty",1,nosourceloc);
+  empty = specialop(innerfun,SPECIAL_NAMESPACE,"empty",1,nosourceloc);
   set_and_move_cursor(branchcur,empty,0,empty,0);
 
   *ifout = innerfun;
@@ -1323,7 +1404,7 @@ static int xslt_compile_apply_function(compilation *comp,
  * cursor must be set to the output port of a subgraph which computes the sequence of items
  * corresponding to the select attribute (which defaults to "child::node()")
  */
-static int xslt_compile_apply_templates(compilation *comp, Function *fun,
+int Compilation::compileApplyTemplates(Function *fun,
                                     OutputPort **cursor,
                                     list *templates, const char *mode, sourceloc sloc)
 {
@@ -1331,7 +1412,7 @@ static int xslt_compile_apply_templates(compilation *comp, Function *fun,
   Instruction *map = NULL;
 
   /* Do we already have an anonymous function for this mode? */
-  for (Iterator<Function*> it(comp->program->m_functions); it.haveCurrent(); it++) {
+  for (Iterator<Function*> it(m_program->m_functions); it.haveCurrent(); it++) {
     Function *candidate = *it;
     if (candidate->m_isapply) {
       if (((NULL == mode) && candidate->m_mode.isNull()) ||
@@ -1344,7 +1425,7 @@ static int xslt_compile_apply_templates(compilation *comp, Function *fun,
 
   /* Create the anonymous function if it doesn't already exist */
   if (NULL == applyfun)
-    CHECK_CALL(xslt_compile_apply_function(comp,templates,&applyfun,mode))
+    CHECK_CALL(compileApplyFunction(templates,&applyfun,mode))
 
   /* Add the map instruction */
   map = fun->addInstruction(OP_MAP,sloc);
@@ -1354,12 +1435,12 @@ static int xslt_compile_apply_templates(compilation *comp, Function *fun,
   return 0;
 }
 
-static list *xslt_compile_ordered_template_list(compilation *comp)
+list *Compilation::compileOrderedTemplateList()
 {
   Statement *sn;
   list *templates = NULL;
 
-  for (sn = comp->source->root->m_child; sn; sn = xl_next_decl(sn)) {
+  for (sn = m_source->root->m_child; sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_TEMPLATE == sn->m_type) {
       sn->m_tmpl = (template1*)calloc(1,sizeof(template1));
       sn->m_tmpl->pattern = sn->m_select;
@@ -1370,12 +1451,12 @@ static list *xslt_compile_ordered_template_list(compilation *comp)
   return templates;
 }
 
-static int xslt_compile_default_template(compilation *comp)
+int Compilation::compileDefaultTemplate()
 {
-  Function *fun = comp->program->addFunction(NSName(String::null(),"default"));
+  Function *fun = m_program->addFunction(NSName(String::null(),"default"));
   Instruction *pass = fun->addInstruction(OP_PASS,nosourceloc);
   Instruction *ret = fun->addInstruction(OP_RETURN,nosourceloc);
-  Instruction *output = specialop(comp,fun,SPECIAL_NAMESPACE,"output",1,nosourceloc);
+  Instruction *output = specialop(fun,SPECIAL_NAMESPACE,"output",1,nosourceloc);
   OutputPort *atcursor;
   df_seroptions *options;
 
@@ -1384,12 +1465,12 @@ static int xslt_compile_default_template(compilation *comp)
   fun->m_rtype = SequenceType(xs_g->any_atomic_type);
   pass->m_inports[0].st = SequenceType::item();
 
-  options = xslt_get_output_def(comp->source,NSName::null());
+  options = xslt_get_output_def(m_source,NSName::null());
   assert(NULL != options);
   output->m_seroptions = new df_seroptions(*options);
 
   atcursor = &pass->m_outports[0];
-  CHECK_CALL(xslt_compile_apply_templates(comp,fun,&atcursor,comp->templates,NULL,nosourceloc))
+  CHECK_CALL(compileApplyTemplates(fun,&atcursor,m_templates,NULL,nosourceloc))
   set_and_move_cursor(&atcursor,output,0,output,0);
 
   fun->m_start = pass;
@@ -1397,34 +1478,34 @@ static int xslt_compile_default_template(compilation *comp)
   return 0;
 }
 
-static int xslt_compile2(compilation *comp)
+int Compilation::compile2()
 {
   Statement *sn;
   int templatecount = 0;
 
-  comp->program->m_space_decls = list_copy(comp->source->space_decls,(list_copy_t)space_decl_copy);
+  m_program->m_space_decls = list_copy(m_source->space_decls,(list_copy_t)space_decl_copy);
 
   /* create empty functions first, so that they can be referenced */
 
-  for (sn = comp->source->root->m_child; sn; sn = xl_next_decl(sn)) {
+  for (sn = m_source->root->m_child; sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_FUNCTION == sn->m_type) {
-      if (NULL != comp->program->getFunction(sn->m_ident)) {
+      if (NULL != m_program->getFunction(sn->m_ident)) {
         fmessage(stderr,"Function \"%*\" already defined\n",&sn->m_qn.m_localPart);
         return -1;
       }
-      comp->program->addFunction(sn->m_ident);
+      m_program->addFunction(sn->m_ident);
     }
     else if (XSLT_DECL_TEMPLATE == sn->m_type) {
       sn->m_ident = NSName(ANON_TEMPLATE_NAMESPACE,String::format("template%d",templatecount++));
       assert(NULL != sn->m_tmpl);
-      sn->m_tmpl->fun = comp->program->addFunction(sn->m_ident);
+      sn->m_tmpl->fun = m_program->addFunction(sn->m_ident);
     }
   }
 
-  CHECK_CALL(xslt_compile_default_template(comp))
+  CHECK_CALL(compileDefaultTemplate())
 
   /* now process the contents of the functions etc */
-  for (sn = comp->source->root->m_child; sn; sn = xl_next_decl(sn)) {
+  for (sn = m_source->root->m_child; sn; sn = xl_next_decl(sn)) {
     switch (sn->m_type) {
     case XSLT_DECL_ATTRIBUTE_SET:
       break;
@@ -1433,8 +1514,8 @@ static int xslt_compile2(compilation *comp)
     case XSLT_DECL_DECIMAL_FORMAT:
       break;
     case XSLT_DECL_FUNCTION: {
-      Function *fun = comp->program->getFunction(sn->m_ident);
-      CHECK_CALL(xslt_compile_function(comp,sn,fun))
+      Function *fun = m_program->getFunction(sn->m_ident);
+      CHECK_CALL(compileFunction(sn,fun))
       break;
     }
     case XSLT_DECL_IMPORT_SCHEMA:
@@ -1453,7 +1534,7 @@ static int xslt_compile2(compilation *comp)
       break;
     case XSLT_DECL_TEMPLATE:
       assert(NULL != sn->m_tmpl->fun);
-      CHECK_CALL(xslt_compile_function(comp,sn,sn->m_tmpl->fun))
+      CHECK_CALL(compileFunction(sn,sn->m_tmpl->fun))
       break;
     default:
       assert(0);
@@ -1461,10 +1542,10 @@ static int xslt_compile2(compilation *comp)
     }
   }
 
-  for (Iterator<Function*> it(comp->program->m_functions); it.haveCurrent(); it++) {
+  for (Iterator<Function*> it(m_program->m_functions); it.haveCurrent(); it++) {
     Function *fun = *it;
     CHECK_CALL(df_check_function_connected(fun))
-    df_remove_redundant(comp->program,fun);
+    df_remove_redundant(m_program,fun);
     fun->computeTypes();
   }
 
@@ -1496,22 +1577,19 @@ static FunctionDefinition **modules[9] = {
 int xslt_compile(Error *ei, xslt_source *source, Program **program)
 {
   int r = 0;
-  compilation comp;
+  Compilation comp;
 
-  memset(&comp,0,sizeof(comp));
   *program = new Program(source->schema);
 
-  comp.ei = ei;
-  comp.source = source;
-  comp.program = *program;
-  comp.schema = source->schema;
-  comp.templates = xslt_compile_ordered_template_list(&comp);
+  comp.m_ei = ei;
+  comp.m_source = source;
+  comp.m_program = *program;
+  comp.m_schema = source->schema;
+  comp.m_templates = comp.compileOrderedTemplateList();
 
-  df_init_builtin_functions(comp.program->m_schema,comp.program->m_builtin_functions,modules);
+  df_init_builtin_functions(comp.m_program->m_schema,comp.m_program->m_builtin_functions,modules);
 
-  r = xslt_compile2(&comp);
-
-  list_free(comp.templates,(list_d_t)template_free);
+  r = comp.compile2();
 
   if (0 != r) {
     delete *program;
