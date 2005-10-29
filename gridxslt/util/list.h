@@ -27,6 +27,8 @@
 
 namespace GridXSLT {
 
+/* FIXME: ManagedPtrList should delete the objects upon calls to remove() or replace() */
+
 template <class type> class ListImpl;
 template <class type> class List;
 template <class type> class ManagedPtrList;
