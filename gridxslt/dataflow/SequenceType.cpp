@@ -21,6 +21,7 @@
  */
 
 #include "SequenceType.h"
+#include "Program.h"
 #include "util/macros.h"
 
 #include <string.h>
@@ -57,7 +58,7 @@ static void df_print_objname(StringBuffer &buf, const NSName &ident, NamespaceMa
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
     assert(NULL != def); /* FIXME: what to do if we can't find one? */
-    buf.format("%s:%*",def->prefix,&ident.m_name);
+    buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
     buf.format("%*",&ident.m_name);
@@ -90,7 +91,7 @@ static void print_objname(StringBuffer &buf, NamespaceMap *namespaces, const NSN
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
     assert(NULL != def); /* FIXME: what to do if we can't find one? */
-    buf.format("%s:%*",def->prefix,&ident.m_name);
+    buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
     buf.format("%*",&ident.m_name);
@@ -311,7 +312,7 @@ static int resolve_object(const QName &qn, NamespaceMap *namespaces, Schema *s,
         (NULL == (def = namespaces->lookup_prefix(qn.m_prefix))))
       return error(ei,filename,line,String::null(),"Invalid namespace prefix: %*",&qn.m_prefix);
 
-    ns = def ? def->href : NULL;
+    ns = def ? def->href : String::null();
   }
 
   if (NULL == (*obj = s->getObject(type,NSName(ns,qn.m_localPart)))) {
@@ -337,7 +338,7 @@ int SequenceTypeImpl::resolve(NamespaceMap *namespaces, Schema *s, const char *f
   if (NULL != m_item) {
     ns_def *def = NULL;
     ItemType *i = m_item;
-    char *ns = NULL;
+    String ns;
     CHECK_CALL(resolve_object(i->m_typeref,namespaces,s,filename,line,ei,
                (void**)&i->m_type,XS_OBJECT_TYPE))
     CHECK_CALL(resolve_object(i->m_elemref,namespaces,s,filename,line,ei,
@@ -350,7 +351,7 @@ int SequenceTypeImpl::resolve(NamespaceMap *namespaces, Schema *s, const char *f
       return error(ei,filename,line,String::null(),"Invalid namespace prefix: %*",
                    &m_item->m_localname.m_prefix);
 
-    ns = def ? def->href : NULL;
+    ns = def ? def->href : String::null();
 
     if ((ITEM_ELEMENT == m_item->m_kind) && (!m_item->m_localname.m_localPart.isNull())) {
       m_item->m_elem = new SchemaElement(s->as);
@@ -598,15 +599,10 @@ SequenceTypeImpl *SequenceTypeImpl::interleave(SequenceTypeImpl *content)
 {
   SequenceTypeImpl *pi = new SequenceTypeImpl(new ItemType(ITEM_PI));
   SequenceTypeImpl *comment = new SequenceTypeImpl(new ItemType(ITEM_COMMENT));
-  SequenceTypeImpl *choice = new SequenceTypeImpl(SEQTYPE_CHOICE);
-  SequenceTypeImpl *occurrence = new SequenceTypeImpl(SEQTYPE_OCCURRENCE);
-  SequenceTypeImpl *all = new SequenceTypeImpl(SEQTYPE_ALL);
-  choice->m_left = pi;
-  choice->m_right = comment;
-  occurrence->m_left = choice;
-  occurrence->m_occurrence = OCCURS_ZERO_OR_MORE;
-  all->m_left = content;
-  all->m_right = occurrence;
+  SequenceTypeImpl *choice = SequenceTypeImpl::choice(pi,comment);
+  SequenceTypeImpl *occurrence = SequenceTypeImpl::occurrence(choice,SEQTYPE_OCCURRENCE);
+  SequenceTypeImpl *all = SequenceTypeImpl::all(content,occurrence);
+
   /* FIXME: formal semantics 3.5.4 says that text nodes should also be allowed, but the actual
      formal definition doesn't include this - what to do here? */
   return all;
@@ -1095,7 +1091,7 @@ void Node::printXML(xmlTextWriter *writer)
   case NODE_ELEMENT: {
     Node *c;
 /*     debugl("node_print NODE_ELEMENT: %s",m_name); */
-    xmlTextWriterStartElement(writer,m_ident.m_name.cstring());
+    XMLWriter::startElement(writer,m_ident.m_name);
     Iterator<Node*> it;
     for (it = m_attributes; it.haveCurrent(); it++)
       (*it)->printXML(writer);
@@ -1103,7 +1099,7 @@ void Node::printXML(xmlTextWriter *writer)
       (*it)->printXML(writer);
     for (c = m_first_child; c; c = c->m_next)
       c->printXML(writer);
-    xmlTextWriterEndElement(writer);
+    XMLWriter::endElement(writer);
     break;
   }
   case NODE_ATTRIBUTE:
@@ -1142,7 +1138,7 @@ void Node::printXML(xmlTextWriter *writer)
       }
       else {
         String attrname = String("xmlns:") + m_prefix;
-        XMLWriter::attribute(writer,attrname.cstring(),m_value);
+        XMLWriter::attribute(writer,attrname,m_value);
       }
     }
     break;
@@ -1198,6 +1194,12 @@ ValueImpl::ValueImpl(const SequenceType &_st, const Value &left, const Value &ri
   value.pair.right = right.impl->ref();
 }
 
+ValueImpl::ValueImpl(Context *c)
+{
+  init(xs_g->context_type);
+  value.c = c;
+}
+
 ValueImpl::ValueImpl(int i)
 {
   init(xs_g->int_type);
@@ -1245,8 +1247,10 @@ ValueImpl::~ValueImpl()
 {
   if (SEQTYPE_ITEM == st.type()) {
     if (ITEM_ATOMIC == st.itemType()->m_kind) {
-      if (st.itemType()->m_type == xs_g->string_type)
+      if (isString())
         value.s->deref();
+      else if (isContext())
+        delete value.c;
     }
     else if (NULL != value.n) {
       value.n->deref();

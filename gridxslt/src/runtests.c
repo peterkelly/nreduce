@@ -20,8 +20,8 @@
  *
  */
 
-#include "util/xmlutils.h"
-#include "util/list.h"
+#include "util/XMLUtils.h"
+#include "util/List.h"
 #include "util/stringbuf.h"
 #include <stdio.h>
 #include <assert.h>

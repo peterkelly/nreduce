@@ -22,7 +22,7 @@
 
 #include "Program.h"
 #include "util/macros.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/debug.h"
 #include <assert.h>
 #include <string.h>
@@ -78,7 +78,11 @@ Instruction::~Instruction()
 
   if (NULL != m_seroptions)
     delete m_seroptions;
-  list_free(m_nsdefs,(list_d_t)ns_def_free);
+
+  list *l;
+  for (l = m_nsdefs; l; l = l->next)
+    delete static_cast<ns_def*>(l->data);
+  list_free(m_nsdefs,NULL);
   sourceloc_free(m_sloc);
 }
 

@@ -21,7 +21,7 @@
 #ifndef _HTTP_MESSAGE_H
 #define _HTTP_MESSAGE_H
 
-#include "util/list.h"
+#include "util/List.h"
 #include "util/stringbuf.h"
 
 typedef struct msgwriter msgwriter;

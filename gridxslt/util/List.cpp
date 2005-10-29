@@ -20,7 +20,7 @@
  *
  */
 
-#include "list.h"
+#include "List.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -124,39 +124,5 @@ void list_remove_ptr(list **l, void *ptr)
   old = *l;
   *l = (*l)->next;
   free(old);
-}
-
-list *string_list_union(list *a, list *b)
-{
-  list *result = NULL;
-  list *l;
-
-  for (l = a; l; l = l->next) {
-    char *str = (char*)l->data;
-    if (!list_contains_string(result,str))
-      list_append(&result,str ? strdup(str) : NULL);
-  }
-
-  for (l = b; l; l = l->next) {
-    char *str = (char*)l->data;
-    if (!list_contains_string(result,str))
-      list_append(&result,str ? strdup(str) : NULL);
-  }
-
-  return result;
-}
-
-list *string_list_intersection(list *a, list *b)
-{
-  list *result = NULL;
-  list *l;
-
-  for (l = a; l; l = l->next) {
-    char *str = (char*)l->data;
-    if (!list_contains_string(result,str) && list_contains_string(b,str))
-      list_append(&result,str ? strdup(str) : NULL);
-  }
-
-  return result;
 }
 

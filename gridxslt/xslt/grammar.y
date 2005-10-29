@@ -22,8 +22,8 @@
  */
 
 #include "Statement.h"
-#include "util/namespace.h"
-#include "util/xmlutils.h"
+#include "util/Namespace.h"
+#include "util/XMLUtils.h"
 #include "dataflow/Program.h"
 #include <stdio.h>
 #include <string.h>
@@ -770,10 +770,12 @@ XPathDocumentTest:
   DOCUMENT_NODE '(' ')'           { $$ = new SequenceTypeImpl(new ItemType(ITEM_DOCUMENT)); }
 | DOCUMENT_NODE '(' XPathElementTest ')'
                                   { $$ = new SequenceTypeImpl(new ItemType(ITEM_DOCUMENT));
-                                    $$->itemType()->m_content = SequenceTypeImpl::interleave($3); }
+                                    $$->itemType()->m_content = SequenceTypeImpl::interleave($3);
+                                    $$->itemType()->m_content->ref(); }
 | DOCUMENT_NODE '(' XPathSchemaElementTest ')'
                                   { $$ = new SequenceTypeImpl(new ItemType(ITEM_DOCUMENT));
-                                    $$->itemType()->m_content = SequenceTypeImpl::interleave($3); }
+                                    $$->itemType()->m_content = SequenceTypeImpl::interleave($3);
+                                    $$->itemType()->m_content->ref(); }
 ;
  
 XPathElementTest:

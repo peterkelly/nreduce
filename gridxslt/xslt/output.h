@@ -24,7 +24,7 @@
 #define _XSLT_OUTPUT_H
 
 #include "Statement.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include <stdio.h>
 
 void output_xslt(FILE *f, GridXSLT::Statement *node);

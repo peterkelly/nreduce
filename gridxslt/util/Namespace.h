@@ -23,8 +23,10 @@
 #ifndef _UTIL_NAMESPACE_H
 #define _UTIL_NAMESPACE_H
 
-#include "list.h"
-#include "xmlutils.h"
+#include "List.h"
+#include "String.h"
+#include <libxml/tree.h>
+#include <libxml/xmlwriter.h>
 
 #define XSLT_NAMESPACE Namespaces::XSLT
 #define XHTML_NAMESPACE Namespaces::XHTML
@@ -42,6 +44,89 @@
 #define SPECIAL_NAMESPACE Namespaces::SPECIAL
 
 namespace GridXSLT {
+
+class QName;
+class NSName;
+
+struct parse_qname {
+  char *prefix;
+  char *localpart;
+};
+
+struct sourceloc {
+  char *uri;
+  int line;
+};
+
+class QName : public Printable {
+public:
+  QName();
+  QName(const String &prefix, const String &localPart);
+  QName(const parse_qname &qn);
+
+  static QName null();
+  static QName parse(const String &name);
+  static List<QName> parseList(const String &list);
+
+  virtual void print(StringBuffer &buf);
+
+  bool isNull() const { return m_localPart.isNull(); }
+
+  String m_prefix;
+  String m_localPart;
+};
+
+bool operator==(const QName &a, const QName &b);
+inline bool operator!=(const QName &a, const QName &b) { return !(a==b); }
+
+class NSName : public Printable {
+public:
+  NSName();
+  NSName(String ns, String name);
+
+  static NSName null();
+
+  virtual void print(StringBuffer &buf);
+
+  bool isNull() const { return m_name.isNull(); }
+
+  String m_ns;
+  String m_name;
+};
+
+bool operator==(const NSName &a, const NSName &b);
+inline bool operator!=(const NSName &a, const NSName &b) { return !(a==b); }
+
+class QNameTest {
+public:
+  QNameTest();
+  ~QNameTest();
+
+  QName qn;
+  int wcprefix;
+  int wcname;
+};
+
+class NSNameTest {
+public:
+  NSNameTest();
+  ~NSNameTest();
+
+  bool matches(const NSName &nn1);
+
+  NSName nn;
+  int wcns;
+  int wcname;
+};
+
+class definition {
+public:
+  definition();
+  ~definition();
+
+  NSName ident;
+  sourceloc loc;
+};
 
 class Namespaces {
 public:
@@ -61,9 +146,11 @@ public:
   static String SPECIAL;
 };
 
-struct ns_def {
-  char *prefix;
-  char *href;
+class ns_def {
+public:
+  ns_def(const String &_prefix, const String &_href) : prefix(_prefix), href(_href) { }
+  String prefix;
+  String href;
 };
 
 class NamespaceMap {
@@ -72,23 +159,33 @@ public:
   ~NamespaceMap();
 
   void add_preferred(const String &href1, const String &preferred_prefix1);
-  void add_direct(const String &href1, const String &prefix1);
-  ns_def *lookup_prefix(const String &prefix1);
-  ns_def *lookup_href(const String &href1);
+  void add_direct(const String &href, const String &prefix);
+  ns_def *lookup_prefix(const String &prefix);
+  ns_def *lookup_href(const String &href);
 
-  list *defs;
+  ManagedPtrList<ns_def*> defs;
   NamespaceMap *parent;
 };
 
 void ns_def_free(ns_def *def);
 
-NamespaceMap *NamespaceMap_new();
 void NamespaceMap_free(NamespaceMap *map, int free_parents);
 
 NSName qname_to_nsname(NamespaceMap *map, const QName &qn);
 QName nsname_to_qname(NamespaceMap *map, const NSName &nn);
 
 NSNameTest *QNameTest_to_NSNameTest(NamespaceMap *map, const QNameTest *qt);
+
+NSNameTest *NSNameTest_copy(NSNameTest *test);
+
+sourceloc sourceloc_copy(sourceloc sloc);
+void sourceloc_free(sourceloc sloc);
+
+#define nosourceloc get_nosourceloc()
+sourceloc get_nosourceloc();
+
+int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
+                           char **namespace1, char **localpart);
 
 };
 

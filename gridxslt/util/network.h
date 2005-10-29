@@ -23,7 +23,7 @@
 
 #define BUFSIZE 65536
 
-#include "list.h"
+#include "List.h"
 
 typedef struct fdhandler fdhandler;
 typedef struct eventman eventman;

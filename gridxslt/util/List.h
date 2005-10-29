@@ -24,6 +24,7 @@
 #define _UTIL_LIST_H
 
 #include "Shared.h"
+#include "String.h" // FIXME: temp
 
 namespace GridXSLT {
 
@@ -204,6 +205,40 @@ public:
     last = n;
   }
 
+  bool contains(type data) const {
+    for (const ListNode<type> *n = first; n; n = n->next)
+      if (n->data == data)
+        return true;
+    return false;
+  }
+
+  inline ListImpl<type> *unionWith(const ListImpl<type> *other) const {
+    ListImpl<type> *result = new ListImpl<type>;
+    Iterator<type> it;
+    const ListNode<type> *n = first;
+
+    for (n = first; n; n = n->next)
+      if (!result->contains(n->data))
+        result->append(n->data);
+
+    for (n = other->first; n; n = n->next)
+      if (!result->contains(n->data))
+        result->append(n->data);
+
+    return result;
+  }
+
+  inline ListImpl<type> *intersection(const ListImpl<type> *other) const {
+    ListImpl<type> *result = new ListImpl<type>;
+    const ListNode<type> *n;
+
+    for (n = first; n; n = n->next)
+      if (!result->contains(n->data) && other->contains(n->data))
+        result->append(n->data);
+
+    return result;
+  }
+
 protected:
   ListNode<type> *first;
   ListNode<type> *last;
@@ -228,7 +263,7 @@ template <class type> class List {
   friend class Iterator<type>;
 public:
   List() { impl = new ListImpl<type>(); impl->ref(); }
-  List(ListImpl<type> *_impl) { impl = _impl ? _impl->ref() : NULL; }
+  List(ListImpl<type> *_impl) { impl = _impl ? _impl->ref() : 0; }
   List(const List<type> &other) { impl = other.impl->ref(); }
   List &operator=(const List<type> &other) { impl->deref(); impl = other.impl->ref(); return *this;}
   virtual ~List() { impl->deref(); }
@@ -241,6 +276,9 @@ public:
   inline void push(type data) { impl->push(data); }
   inline type pop() { return impl->pop(); }
   inline void append(type data) { impl->append(data); }
+  inline bool contains(type data) const { return impl->contains(data); }
+  inline List<type> unionWith(List<type> &other) const { return impl->unionWith(other.impl); }
+  inline List<type> intersection(List<type> &other) const { return impl->intersection(other.impl); }
 
 //protected:
   ListImpl<type> *impl;
@@ -283,7 +321,5 @@ void list_free(list *l, list_d_t d);
 int list_contains_string(list *l, const char *str);
 int list_contains_ptr(list *l, const void *data);
 void list_remove_ptr(list **l, void *ptr);
-list *string_list_union(list *a, list *b);
-list *string_list_intersection(list *a, list *b);
 
 #endif /* _UTIL_LIST_H */

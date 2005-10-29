@@ -22,8 +22,8 @@
 
 #define _UTIL_XMLUTILS_C
 
-#include "xmlutils.h"
-#include "namespace.h"
+#include "XMLUtils.h"
+#include "Namespace.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -43,144 +43,6 @@
 #include <stdlib.h>
 
 using namespace GridXSLT;
-
-QName::QName()
-{
-}
-
-QName::QName(String prefix, String localPart)
-  : m_prefix(prefix), m_localPart(localPart)
-{
-}
-
-QName::QName(const parse_qname &qn)
-  : m_prefix(qn.prefix), m_localPart(qn.localpart)
-{
-}
-
-QName QName::null()
-{
-  return QName(String::null(),String::null());
-}
-
-QName QName::parse(const char *name)
-{
-  char *prefix;
-  char *localPart = xmlSplitQName2(name,&prefix);
-  if (NULL == localPart)
-    localPart = strdup(name);
-  QName qn(prefix,localPart);
-  free(prefix);
-  free(localPart);
-  return qn;
-}
-
-List<QName> QName::parseList(const char *list)
-{
-  List<QName> qnames;
-  const char *start = list;
-  const char *c = list;
-
-  while (1) {
-    if ('\0' == *c || isspace(*c)) {
-      if (c != start) {
-        char *str = (char*)malloc(c-start+1);
-        memcpy(str,start,c-start);
-        str[c-start] = '\0';
-        qnames.append(QName::parse(str));
-        free(str);
-      }
-      start = c+1;
-    }
-    if ('\0' == *c)
-      break;
-    c++;
-  }
-  return qnames;
-}
-
-void QName::print(StringBuffer &buf)
-{
-  if (isNull())
-    return;
-  else if (!m_prefix.isNull())
-    buf.format("%*:%*",&m_prefix,&m_localPart);
-  else
-    buf.format("%*",&m_localPart);
-}
-
-bool GridXSLT::operator==(const QName &a, const QName &b)
-{
-  return ((a.m_prefix == b.m_prefix) && (a.m_localPart == b.m_localPart));
-}
-
-NSName::NSName()
-{
-}
-
-NSName::NSName(String ns, String name)
-  : m_ns(ns), m_name(name)
-{
-}
-
-NSName NSName::null()
-{
-  return NSName(String::null(),String::null());
-}
-
-void NSName::print(StringBuffer &buf)
-{
-  if (isNull())
-    return;
-  else if (!m_ns.isNull())
-    buf.format("{%*}%*",&m_ns,&m_name);
-  else
-    buf.format("%*",&m_name);
-}
-
-bool GridXSLT::operator==(const NSName &a, const NSName &b)
-{
-  return ((a.m_ns == b.m_ns) && (a.m_name == b.m_name));
-}
-
-QNameTest::QNameTest()
-  : wcprefix(0), wcname(0)
-{
-}
-
-QNameTest::~QNameTest()
-{
-}
-
-NSNameTest::NSNameTest()
-  : wcns(0), wcname(0)
-{
-}
-
-NSNameTest::~NSNameTest()
-{
-}
-
-bool NSNameTest::matches(const NSName &nn1)
-{
-  if (wcns && wcname)
-    return 1;
-  else if (wcns)
-    return (nn.m_name == nn1.m_name);
-  else if (wcname)
-    return (nn.m_ns == nn1.m_ns);
-  else
-    return (nn == nn1);
-}
-
-definition::definition()
-{
-  memset(&loc,0,sizeof(sourceloc));
-}
-
-definition::~definition()
-{
-}
 
 void XMLWriter::attribute(xmlTextWriterPtr writer, const String &name, const String &content)
 {
@@ -240,6 +102,18 @@ void XMLWriter::string(xmlTextWriterPtr writer, const String &content)
   char *contentstr = content.cstring();
   xmlTextWriterWriteString(writer,contentstr);
   free(contentstr);
+}
+
+void XMLWriter::startElement(xmlTextWriterPtr writer, const String &name)
+{
+  char *namestr = name.cstring();
+  xmlTextWriterStartElement(writer,namestr);
+  free(namestr);
+}
+
+void XMLWriter::endElement(xmlTextWriterPtr writer)
+{
+  xmlTextWriterEndElement(writer);
 }
 
 Error::Error()
@@ -316,83 +190,28 @@ int GridXSLT::XMLHasNsProp(xmlNodePtr n, const String &name, const String &ns)
   return r;
 }
 
-char *GridXSLT::XMLGetProp(xmlNodePtr n, const String &name)
+String GridXSLT::XMLGetProp(xmlNodePtr n, const String &name)
 {
   char *r;
   char *namestr = name.cstring();
   r = xmlGetProp(n,namestr);
+  String str(r);
   free(namestr);
-  return r;
+  free(r);
+  return str;
 }
 
-char *GridXSLT::XMLGetNsProp(xmlNodePtr n, const String &name, const String &ns)
+String GridXSLT::XMLGetNsProp(xmlNodePtr n, const String &name, const String &ns)
 {
   char *r;
   char *namestr = name.cstring();
   char *nsstr = ns.isNull() ? NULL : ns.cstring();
   r = xmlGetNsProp(n,namestr,nsstr);
+  String str(r);
   free(namestr);
   free(nsstr);
-  return r;
-}
-
-int GridXSLT::nullstr_equals(const char *a, const char *b)
-{
-  if ((NULL == a) && (NULL == b))
-    return 1;
-  else if ((NULL != a) && (NULL != b))
-    return !strcmp(a,b);
-  else
-    return 0;
-}
-
-NSNameTest *GridXSLT::NSNameTest_copy(NSNameTest *test)
-{
-  NSNameTest *copy = new NSNameTest();
-  *copy = *test;
-  return copy;
-}
-
-sourceloc GridXSLT::sourceloc_copy(sourceloc sloc)
-{
-  sourceloc copy;
-  copy.uri = sloc.uri ? strdup(sloc.uri) : NULL;
-  copy.line = sloc.line;
-  return copy;
-}
-
-void GridXSLT::sourceloc_free(sourceloc sloc)
-{
-  free(sloc.uri);
-}
-
-const sourceloc nosourceloc1 = { uri: NULL, line: -1 };
-
-sourceloc GridXSLT::get_nosourceloc()
-{
-  return nosourceloc1;
-}
-
-int GridXSLT::get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
-                           char **namespace1, char **localpart)
-{
-  QName qn = QName::parse(name);
-  xmlNsPtr ns = NULL;
-
-  *namespace1 = NULL;
-  *localpart = NULL;
-
-  /* FIXME: maybe set error info here instead of requiring thet caller to do it? */
-  char *prefix = qn.m_prefix.cstring();
-  if ((NULL == (ns = xmlSearchNs(doc,n,prefix))) && (NULL != prefix)) {
-    free(prefix);
-    return -1;
-  }
-  free(prefix);
-  *namespace1 = ns ? strdup(ns->href) : NULL;
-  *localpart = qn.m_localPart.cstring();
-
-  return 0;
+  free(r);
+  return str;
 }
 
 int GridXSLT::error(Error *ei, const String &filename, int line,
@@ -489,7 +308,7 @@ int GridXSLT::invalid_attribute_val(Error *ei, const String &filename, xmlNodePt
                           const String &attrname)
 {
   char *namestr = attrname.cstring();
-  char *val = XMLGetProp(n,namestr);
+  char *val = XMLGetProp(n,namestr).cstring();
   free(namestr);
   error(ei,filename,n->line,String::null(),"Invalid value \"%s\" for attribute \"%*\"",val,&attrname);
   free(val);
@@ -522,7 +341,7 @@ int GridXSLT::convert_to_nonneg_int(const String &str, int *val)
 
 int GridXSLT::parse_int_attr(Error *ei, char *filename, xmlNodePtr n, const String &attrname, int *val)
 {
-  char *str;
+  String str;
   char *tmp = attrname.cstring();
   int cr;
   if (!XMLHasProp(n,tmp)) {
@@ -533,7 +352,6 @@ int GridXSLT::parse_int_attr(Error *ei, char *filename, xmlNodePtr n, const Stri
 
   str = get_wscollapsed_attr(n,tmp,String::null());
   cr = convert_to_nonneg_int(str,val);
-  free(str);
   free(tmp);
 
   if (0 != cr)
@@ -558,20 +376,19 @@ int GridXSLT::parse_optional_int_attr(Error *ei, char *filename, xmlNodePtr n,
 int GridXSLT::parse_boolean_attr(Error *ei, char *filename, xmlNodePtr n,
                        const String &attrname, int *val)
 {
-  char *str;
+  String str;
   int invalid = 0;
   if (!XMLHasProp(n,attrname))
     return missing_attribute(n,attrname);
 
   /* FIXME: support 1, 0 */
   str = get_wscollapsed_attr(n,attrname,String::null());
-  if (!strcmp(str,"true") || !strcmp(str,"1"))
+  if ((str == "true") || (str == "1"))
     *val = 1;
-  else if (!strcmp(str,"false") || !strcmp(str,"0"))
+  else if ((str == "false") || (str == "0"))
       *val = 0;
   else
     invalid = 1;
-  free(str);
 
   if (invalid)
     return invalid_attribute_val(ei,filename,n,attrname);
@@ -629,11 +446,13 @@ void GridXSLT::collapse_whitespace(char *str)
   *end = '\0';
 }
 
-char *GridXSLT::get_wscollapsed_attr(xmlNodePtr n, const String &attrname, const String &ns)
+String GridXSLT::get_wscollapsed_attr(xmlNodePtr n, const String &attrname, const String &ns)
 {
-  char *val = XMLGetNsProp(n,attrname,ns);
+  char *val = XMLGetNsProp(n,attrname,ns).cstring();
   collapse_whitespace(val);
-  return val;
+  String str(val);
+  free(val);
+  return str;
 }
 
 void GridXSLT::xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...)
@@ -652,7 +471,7 @@ void GridXSLT::xml_write_attr(xmlTextWriter *writer, const char *attrname, const
 
 QName GridXSLT::xml_attr_qname(xmlNodePtr n, const char *attrname)
 {
-  char *name = XMLGetNsProp(n,attrname,String::null());
+  char *name = XMLGetNsProp(n,attrname,String::null()).cstring();
   QName qn = QName::parse(name);
   free(name);
   return qn;
@@ -660,7 +479,7 @@ QName GridXSLT::xml_attr_qname(xmlNodePtr n, const char *attrname)
 
 int GridXSLT::xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s)
 {
-  char *val = XMLGetNsProp(n,attrname,String::null());
+  char *val = XMLGetNsProp(n,attrname,String::null()).cstring();
   int r;
   r = strcmp(val,s);
   free(val);
@@ -836,7 +655,7 @@ xmlNodePtr GridXSLT::get_element_by_id(xmlNodePtr n, const char *id)
 {
   xmlNodePtr c;
   if (XMLHasNsProp(n,"id",XML_NAMESPACE)) {
-    char *nid = XMLGetNsProp(n,"id",XML_NAMESPACE);
+    char *nid = XMLGetNsProp(n,"id",XML_NAMESPACE).cstring();
     int equal;
     collapse_whitespace(nid);
     equal = !strcmp(nid,id);

@@ -21,7 +21,7 @@
  */
 
 #include "builtins.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "util/debug.h"
 #include "Expression.h"
 #include <string.h>

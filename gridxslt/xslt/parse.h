@@ -24,7 +24,7 @@
 #define _XSLT_PARSE_H
 
 #include "Statement.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include <stdio.h>
 
 int parse_xslt_relative_uri(GridXSLT::Error *ei, const char *filename, int line, const char *errname,

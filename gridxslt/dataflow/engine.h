@@ -25,7 +25,7 @@
 
 #include "Program.h"
 #include "SequenceType.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 
 int df_execute(GridXSLT::Program *program, int trace, GridXSLT::Error *ei,
                const GridXSLT::Value &context);

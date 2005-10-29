@@ -24,8 +24,8 @@
 #define _DATAFLOW_SERIALIZATION_H
 
 #include "util/stringbuf.h"
-#include "util/xmlutils.h"
-#include "util/namespace.h"
+#include "util/XMLUtils.h"
+#include "util/Namespace.h"
 #include "SequenceType.h"
 
 #define SERMETHOD_XML                     0

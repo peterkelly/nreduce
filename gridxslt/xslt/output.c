@@ -23,7 +23,7 @@
 #include "output.h"
 #include "parse.h"
 #include "dataflow/serialization.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/stringbuf.h"
 #include "util/macros.h"
 #include "util/debug.h"
@@ -43,7 +43,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node);
 
 static void expr_attr(xmlTextWriter *writer, char *attrname, Expression *expr, int brackets)
 {
-  stringbuf *buf = stringbuf_new();
+  StringBuffer buf;
 
   if (brackets) {
     if (XPATH_EXPR_STRING_LITERAL == expr->m_type) {
@@ -51,33 +51,27 @@ static void expr_attr(xmlTextWriter *writer, char *attrname, Expression *expr, i
       XMLWriter::attribute(writer,attrname,expr->m_strval);
     }
     else {
-      stringbuf_format(buf,"{");
+      buf.append("{");
       expr->serialize(buf,0);
-      stringbuf_format(buf,"}");
-      XMLWriter::attribute(writer,attrname,buf->data);
+      buf.append("}");
+      XMLWriter::attribute(writer,attrname,buf.contents());
     }
   }
   else {
     expr->serialize(buf,0);
-    XMLWriter::attribute(writer,attrname,buf->data);
+    XMLWriter::attribute(writer,attrname,buf.contents());
   }
-
-  stringbuf_free(buf);
 }
 
 static void xslt_start_element(xmlTextWriter *writer, Statement *sn, const char *name)
 {
-  list *l;
   char *elemname = (char*)alloca(strlen("xsl:")+strlen(name));
   sprintf(elemname,"xsl:%s",name);
   xmlTextWriterStartElement(writer,elemname);
 
-  for (l = sn->m_namespaces->defs; l; l = l->next) {
-    ns_def *def = (ns_def*)l->data;
-    char *attrname = (char*)malloc(strlen("xmlns:")+strlen(def->prefix)+1);
-    sprintf(attrname,"xmlns:%s",def->prefix);
-    XMLWriter::attribute(writer,attrname,def->href);
-    free(attrname);
+  for (Iterator<ns_def*> it = sn->m_namespaces->defs; it.haveCurrent(); it++) {
+    ns_def *def = *it;
+    XMLWriter::attribute(writer,String::format("xmlns:%*",&def->prefix),def->href);
   }
 }
 

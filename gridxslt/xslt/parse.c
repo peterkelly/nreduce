@@ -21,7 +21,7 @@
  */
 
 #include "parse.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/stringbuf.h"
 #include "util/macros.h"
 #include "util/debug.h"
@@ -147,7 +147,7 @@ static void print_node(xmlDocPtr doc, xmlNodePtr n, int indent)
     message("%s",n->name);
 
     for (attr = n->properties; attr; attr = attr->next)
-      message(" %s=%s",attr->name,XMLGetNsProp(n,attr->name,String::null()));
+      message(" %s=%s",attr->name,XMLGetNsProp(n,attr->name,String::null()).cstring());
 
 
     message("\n");
@@ -223,7 +223,7 @@ static int xslt_invalid_element(Error *ei, const char *filename, xmlNodePtr n)
 static int parse_optional_as(xmlNodePtr n, Statement *sn, Error *ei, const char *filename)
 {
   if (XMLHasNsProp(n,"as",String::null())) {
-    char *as = XMLGetNsProp(n,"as",String::null());
+    char *as = XMLGetNsProp(n,"as",String::null()).cstring();
     sn->m_st = seqtype_parse(as,filename,n->line,ei);
     free(as);
     if (sn->m_st.isNull())
@@ -267,7 +267,7 @@ static int parse_param(Statement *sn, xmlNodePtr n, xmlDocPtr doc,
      @end */
   REQUIRED_ATTRIBUTE(n,"name")
 
-  name = XMLGetNsProp(n,"name",String::null());
+  name = XMLGetNsProp(n,"name",String::null()).cstring();
   new_sn->m_qn = QName::parse(name);
 
   if (0 != get_ns_name_from_qname(n,doc,name,&fullns,&fullname)) {
@@ -329,9 +329,9 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
   for (c = start; c; xslt_next_element(&c)) {
     if (check_element(c,"analyze-string",XSLT_NAMESPACE)) {
       /* FIXME: add testcases to all.xl for use of fallback inside analyze-string */
-      char *select = XMLGetNsProp(c,"select",String::null());
-      char *regex = XMLGetNsProp(c,"regex",String::null());
-      char *flags = XMLGetNsProp(c,"flags",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
+      char *regex = XMLGetNsProp(c,"regex",String::null()).cstring();
+      char *flags = XMLGetNsProp(c,"flags",String::null()).cstring();
       int mcount = 0;
       int nmcount = 0;
       Statement **child2_ptr;
@@ -389,8 +389,8 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"apply-templates",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
-      char *mode = XMLGetNsProp(c,"mode",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
+      char *mode = XMLGetNsProp(c,"mode",String::null()).cstring();
 
       /* make sure all children are <xsl:sort> or <xsl:with-param> elements */
       for (c2 = c->children; c2; c2 = c2->next) {
@@ -415,7 +415,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"attribute",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
       /* FIXME: support for "namespace" attribute */
       char *select;
       /* FIXME: support for "separator" attribute */
@@ -430,7 +430,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       free(name);
 
 
-      select = XMLGetNsProp(c,"select",String::null());
+      select = XMLGetNsProp(c,"select",String::null()).cstring();
       if ((NULL != select) &&
           (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0)))) {
         free(select);
@@ -440,7 +440,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"call-template",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
 
       new_sn = add_node(&child_ptr,XSLT_INSTR_CALL_TEMPLATE,filename,c);
 
@@ -473,7 +473,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
           CHECK_CALL(parse_sequence_constructors(otherwise,c2->children,doc,ei,filename))
         }
         else if (check_element(c2,"when",XSLT_NAMESPACE)) {
-          char *test = XMLGetNsProp(c2,"test",String::null());
+          char *test = XMLGetNsProp(c2,"test",String::null()).cstring();
           Statement *when = add_node(&child2_ptr,XSLT_WHEN,filename,c2);
           if (NULL != otherwise)
             return parse_error(c2,"No <when> allowed after an <otherwise>");
@@ -487,7 +487,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       }
     }
     else if (check_element(c,"comment",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_COMMENT,filename,c);
       if ((NULL != select) && (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0))))
         return -1;
@@ -503,7 +503,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"copy-of",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       /* FIXME: support "copy-namespaces" */
       /* FIXME: support "type" */
       /* FIXME: support "validation" */
@@ -518,7 +518,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       }
     }
     else if (check_element(c,"element",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
       /* FIXME: support "namespace" */
       /* FIXME: support "inherit-namespace" */
       /* FIXME: support "use-attribute-sets" */
@@ -535,7 +535,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"for-each",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_FOR_EACH,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
@@ -547,11 +547,11 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"for-each-group",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
-      char *group_by = XMLGetNsProp(c,"group-by",String::null());
-      char *group_adjacent = XMLGetNsProp(c,"group-adjacent",String::null());
-      char *group_starting_with = XMLGetNsProp(c,"group-starting-with",String::null());
-      char *group_ending_with = XMLGetNsProp(c,"group-ending-with",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
+      char *group_by = XMLGetNsProp(c,"group-by",String::null()).cstring();
+      char *group_adjacent = XMLGetNsProp(c,"group-adjacent",String::null()).cstring();
+      char *group_starting_with = XMLGetNsProp(c,"group-starting-with",String::null()).cstring();
+      char *group_ending_with = XMLGetNsProp(c,"group-ending-with",String::null()).cstring();
       /* FIXME: support "collation" */
       int groupcount = 0;
       new_sn = add_node(&child_ptr,XSLT_INSTR_FOR_EACH_GROUP,filename,c);
@@ -588,7 +588,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"if",XSLT_NAMESPACE)) {
-      char *test = XMLGetNsProp(c,"test",String::null());
+      char *test = XMLGetNsProp(c,"test",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_IF,filename,c);
       if (NULL == test)
         return missing_attribute(c,"test");
@@ -597,8 +597,8 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"message",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
-      char *terminate = XMLGetNsProp(c,"terminate",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
+      char *terminate = XMLGetNsProp(c,"terminate",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_MESSAGE,filename,c);
       if ((NULL != select) && (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0))))
         return -1;
@@ -637,7 +637,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
 
       new_sn = add_node(&child_ptr,XSLT_INSTR_NAMESPACE,filename,c);
 
-      name = XMLGetNsProp(c,"name",String::null());
+      name = XMLGetNsProp(c,"name",String::null()).cstring();
       if (NULL == (new_sn->m_name_expr = get_expr_attr(ei,filename,c,"name",name))) {
         free(name);
         return -1;
@@ -658,7 +658,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       }
 
       if (XMLHasNsProp(c,"select",String::null())) {
-        char *select = XMLGetNsProp(c,"select",String::null());
+        char *select = XMLGetNsProp(c,"select",String::null()).cstring();
         if (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0))) {
           free(select);
           return -1;
@@ -686,15 +686,15 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       /* FIXME */
     }
     else if (check_element(c,"perform-sort",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_PERFORM_SORT,filename,c);
       if ((NULL != select) && (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0))))
         return -1;
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"processing-instruction",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_PROCESSING_INSTRUCTION,filename,c);
       if (NULL == name)
         return missing_attribute(c,"name");
@@ -709,7 +709,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       /* FIXME */
     }
     else if (check_element(c,"sequence",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       new_sn = add_node(&child_ptr,XSLT_INSTR_SEQUENCE,filename,c);
       if (NULL == select)
         return missing_attribute(c,"select");
@@ -779,7 +779,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
                      "or one or more child instructions must be present");
 
       if (XMLHasNsProp(c,"select",String::null())) {
-        char *select = XMLGetNsProp(c,"select",String::null());
+        char *select = XMLGetNsProp(c,"select",String::null()).cstring();
         if (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0))) {
           free(select);
           return -1;
@@ -788,7 +788,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       }
 
       if (XMLHasNsProp(c,"separator",String::null())) {
-        char *select = XMLGetNsProp(c,"separator",String::null());
+        char *select = XMLGetNsProp(c,"separator",String::null()).cstring();
         if (NULL == (new_sn->m_expr1 = get_expr_attr(ei,filename,c,"separator",select))) {
           free(select);
           return -1;
@@ -799,7 +799,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"variable",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
       char *select;
       /* FIXME: attribute "as" for SequenceType */
       new_sn = add_node(&child_ptr,XSLT_VARIABLE,filename,c);
@@ -808,7 +808,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       new_sn->m_qn = QName::parse(name);
       free(name);
 
-      select = XMLGetNsProp(c,"select",String::null());
+      select = XMLGetNsProp(c,"select",String::null()).cstring();
       if ((NULL != select) &&
           (NULL == (new_sn->m_select = get_expr(ei,filename,c,"select",select,0)))) {
         free(select);
@@ -822,10 +822,10 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       assert(!"params should already be handled by the parent function/template/stylesheet");
     }
     else if (check_element(c,"with-param",XSLT_NAMESPACE)) {
-      char *name = XMLGetNsProp(c,"name",String::null());
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *name = XMLGetNsProp(c,"name",String::null()).cstring();
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       /* FIXME: support "as" */
-      char *tunnel = XMLGetNsProp(c,"tunnel",String::null());
+      char *tunnel = XMLGetNsProp(c,"tunnel",String::null()).cstring();
 
       if ((XSLT_INSTR_APPLY_TEMPLATES != sn->m_type) &&
           (XSLT_INSTR_APPLY_IMPORTS != sn->m_type) &&
@@ -845,7 +845,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"sort",XSLT_NAMESPACE)) {
-      char *select = XMLGetNsProp(c,"select",String::null());
+      char *select = XMLGetNsProp(c,"select",String::null()).cstring();
       /* FIXME: support "lang" */
       /* FIXME: support "order" */
       /* FIXME: support "collation" */
@@ -1020,7 +1020,7 @@ static int parse_import_include(Statement *parent, xmlNodePtr n, xmlDocPtr doc, 
      @end */
   REQUIRED_ATTRIBUTE(n,"href")
 
-  href = XMLGetNsProp(n,"href",String::null());
+  href = XMLGetNsProp(n,"href",String::null()).cstring();
 
   /* @implements(xslt20:locating-modules-6)
      test { xslt/parse/import_baduri.test }
@@ -1146,7 +1146,7 @@ static int parse_strip_preserve(Statement *parent, xmlNodePtr n, xmlDocPtr doc, 
   ALLOWED_ATTRIBUTES(n,&xstr_elements)
   REQUIRED_ATTRIBUTE(n,"elements")
 
-  elements = get_wscollapsed_attr(n,"elements",String::null());
+  elements = get_wscollapsed_attr(n,"elements",String::null()).cstring();
   unptests = parse_string_list(elements);
   free(elements);
 
@@ -1333,7 +1333,7 @@ static int parse_decls(Statement *sn, xmlNodePtr n, xmlDocPtr doc,
       for (i = 0; i < SEROPTION_COUNT; i++)
         if (XMLHasNsProp(c,df_seroptions::seroption_names[i],String::null()))
           new_sn->m_seroptions[i] = get_wscollapsed_attr(c,df_seroptions::seroption_names[i],
-                                                         String::null());
+                                                         String::null()).cstring();
 
       if (NULL != (c2 = xslt_first_child(c)))
         return xslt_invalid_element(ei,filename,c2);
@@ -1388,12 +1388,12 @@ static int parse_decls(Statement *sn, xmlNodePtr n, xmlDocPtr doc,
       new_sn = add_node(&child_ptr,XSLT_DECL_TEMPLATE,filename,c);
 
       if (XMLHasNsProp(c,"name",String::null())) {
-        char *name = XMLGetNsProp(c,"name",String::null());
+        char *name = XMLGetNsProp(c,"name",String::null()).cstring();
         new_sn->m_qn = QName::parse(name);
         free(name);
       }
       if (XMLHasNsProp(c,"match",String::null())) {
-        char *match = XMLGetNsProp(c,"match",String::null());
+        char *match = XMLGetNsProp(c,"match",String::null()).cstring();
         if (match && (NULL == (new_sn->m_select = get_expr(ei,filename,c,"match",match,1)))) {
           free(match);
           return -1;

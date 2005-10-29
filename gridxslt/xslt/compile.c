@@ -22,7 +22,7 @@
 
 #include "compile.h"
 #include "builtins.h"
-#include "util/list.h"
+#include "util/List.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include "dataflow/optimization.h"
@@ -33,6 +33,7 @@
 namespace GridXSLT {
 
 class Compilation;
+class Template;
 
 class Compilation {
   DISABLE_COPY(Compilation)
@@ -75,11 +76,11 @@ public:
   int compileFunctionContents(Function *fun, Statement *parent,
                                 OutputPort **cursor);
   int compileFunction(Statement *sn, Function *fun);
-  int compileApplyFunction(list *templates, Function **ifout, const char *mode);
+  int compileApplyFunction(Function **ifout, const char *mode);
   int compileApplyTemplates(Function *fun,
                                     OutputPort **cursor,
-                                    list *templates, const char *mode, sourceloc sloc);
-  list *compileOrderedTemplateList();
+                                    const char *mode, sourceloc sloc);
+  void compileOrderedTemplateList();
   int compileDefaultTemplate();
   int compile2();
 
@@ -94,42 +95,46 @@ public:
 
   Schema *m_schema;
 
-  list *m_templates;
+  ManagedPtrList<Template*> m_templates;
   int m_nextanonid;
 };
 
-struct template1 {
+class Template {
+public:
+  Template();
+  ~Template() ;
+
   Expression *pattern;
   Function *fun;
-  int builtin;
+  bool builtin;
 };
 
 };
 
 using namespace GridXSLT;
 
-static void template_free(template1 *t)
+Template::Template()
+  : pattern(NULL), fun(NULL), builtin(false)
 {
-  if (t->builtin)
-    delete t->pattern;
-  free(t);
 }
 
-
+Template::~Template()
+{
+  if (builtin)
+    delete pattern;
+}
 
 Compilation::Compilation()
   : m_ei(NULL),
     m_source(NULL),
     m_program(NULL),
     m_schema(NULL),
-    m_templates(NULL),
     m_nextanonid(0)
 {
 }
 
 Compilation::~Compilation()
 {
-  list_free(m_templates,(list_d_t)template_free);
 }
 
 
@@ -140,19 +145,6 @@ Compilation::~Compilation()
 
 
 #define ANON_TEMPLATE_NAMESPACE "http://gridxslt.sourceforge.net/anon-template"
-
-/*
-static int compileExpr(Function *fun, Expression *e,
-                  GridXSLT::OutputPort **cursor);
-static int compileSequence(Function *fun, Statement *parent,
-                       GridXSLT::OutputPort **cursor);
-static int compileFunctionContents(Function *fun, Statement *parent,
-                                GridXSLT::OutputPort **cursor);
-static int compileApplyTemplates(Function *fun,
-                                    GridXSLT::OutputPort **cursor,
-                                    list *templates, const char *mode, sourceloc sloc);
-*/
-
 
 void Compilation::set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int destp,
                                 Instruction *newpos, int newdestno)
@@ -697,7 +689,7 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     break;
   }
   case XPATH_EXPR_STRING_LITERAL: {
-    compileString(fun,e->m_strval.cstring(),cursor,e->m_sloc);
+    compileString(fun,e->m_strval,cursor,e->m_sloc);
     break;
   }
   case XPATH_EXPR_INTEGER_LITERAL: {
@@ -932,7 +924,7 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
       set_and_move_cursor(cursor,select,0,select,0);
     }
 
-    CHECK_CALL(compileApplyTemplates(fun,cursor,m_templates,NULL,sn->m_sloc))
+    CHECK_CALL(compileApplyTemplates(fun,cursor,NULL,sn->m_sloc))
     break;
   }
   case XSLT_INSTR_ATTRIBUTE: {
@@ -1015,20 +1007,18 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
     if (sn->m_includens) {
       NamespaceMap *m;
       for (m = sn->m_namespaces; m; m = m->parent) {
-        list *l;
-        for (l = m->defs; l; l = l->next) {
-          ns_def *def = (ns_def*)l->data;
+        Iterator<ns_def*> nsit;
+        for (nsit = m->defs; nsit.haveCurrent(); nsit++) {
+          ns_def *def = *nsit;
           int have = 0;
           list *exl;
           for (exl = elem->m_nsdefs; exl && !have; exl = exl->next) {
             ns_def *exdef = (ns_def*)exl->data;
-            if (nullstr_equals(exdef->prefix,def->prefix))
+            if (exdef->prefix == def->prefix)
               have = 1;
           }
           if (!have) {
-            ns_def *copy = (ns_def*)calloc(1,sizeof(ns_def));
-            copy->prefix = def->prefix ? strdup(def->prefix) : NULL;
-            copy->href = strdup(def->href);
+            ns_def *copy = new ns_def(def->prefix,def->href);
             list_append(&elem->m_nsdefs,copy);
           }
         }
@@ -1274,9 +1264,8 @@ int Compilation::compileFunction(Statement *sn, Function *fun)
   return 0;
 }
 
-int Compilation::compileApplyFunction(list *templates, Function **ifout, const char *mode)
+int Compilation::compileApplyFunction(Function **ifout, const char *mode)
 {
-  list *l;
   OutputPort *cursor = NULL;
   OutputPort *truecur = NULL;
   OutputPort *falsecur = NULL;
@@ -1297,8 +1286,9 @@ int Compilation::compileApplyFunction(list *templates, Function **ifout, const c
 
   cursor = &innerfun->m_start->m_outports[0];
 
-  for (l = templates; l; l = l->next) {
-    template1 *t = (template1*)l->data;
+  Iterator<Template*> it;
+  for (it = m_templates; it.haveCurrent(); it++) {
+    Template *t = *it;
     Instruction *call = innerfun->addInstruction(OP_CALL,nosourceloc);
 
     Instruction *dup = innerfun->addInstruction(OP_DUP,nosourceloc);
@@ -1331,7 +1321,7 @@ int Compilation::compileApplyFunction(list *templates, Function **ifout, const c
     branchcur = &falsecur;
   }
 
-  /* default template1 for document and element nodes */
+  /* default template for document and element nodes */
   {
     Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
@@ -1352,12 +1342,12 @@ int Compilation::compileApplyFunction(list *templates, Function **ifout, const c
     childsel->m_axis = AXIS_CHILD;
     childsel->m_seqtypetest = SequenceType::node();
     set_and_move_cursor(&truecur,childsel,0,childsel,0);
-    CHECK_CALL(compileApplyTemplates(innerfun,&truecur,templates,mode,nosourceloc))
+    CHECK_CALL(compileApplyTemplates(innerfun,&truecur,mode,nosourceloc))
 
     branchcur = &falsecur;
   }
 
-  /* default template1 for text and attribute nodes */
+  /* default template for text and attribute nodes */
   {
     Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
@@ -1395,7 +1385,7 @@ int Compilation::compileApplyFunction(list *templates, Function **ifout, const c
  * in turn, and makes a call to the first one that matches. The apply-templates instruction
  * then corresponds to an evaluation of the select attribute (if there is one), followed by
  * a map operator which takes the sequence returned by the select expression and applies the
- * template1 function to each element in the resulting sequence.
+ * template function to each element in the resulting sequence.
  *
  * Only one anonymous function is maintained for each mode; it will be created if it does not yet
  * exist, otherwise the existing one will be re-used.
@@ -1406,7 +1396,7 @@ int Compilation::compileApplyFunction(list *templates, Function **ifout, const c
  */
 int Compilation::compileApplyTemplates(Function *fun,
                                     OutputPort **cursor,
-                                    list *templates, const char *mode, sourceloc sloc)
+                                    const char *mode, sourceloc sloc)
 {
   Function *applyfun = NULL;
   Instruction *map = NULL;
@@ -1425,7 +1415,7 @@ int Compilation::compileApplyTemplates(Function *fun,
 
   /* Create the anonymous function if it doesn't already exist */
   if (NULL == applyfun)
-    CHECK_CALL(compileApplyFunction(templates,&applyfun,mode))
+    CHECK_CALL(compileApplyFunction(&applyfun,mode))
 
   /* Add the map instruction */
   map = fun->addInstruction(OP_MAP,sloc);
@@ -1435,20 +1425,17 @@ int Compilation::compileApplyTemplates(Function *fun,
   return 0;
 }
 
-list *Compilation::compileOrderedTemplateList()
+void Compilation::compileOrderedTemplateList()
 {
   Statement *sn;
-  list *templates = NULL;
 
   for (sn = m_source->root->m_child; sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_TEMPLATE == sn->m_type) {
-      sn->m_tmpl = (template1*)calloc(1,sizeof(template1));
+      sn->m_tmpl = new Template();
       sn->m_tmpl->pattern = sn->m_select;
-      list_push(&templates,sn->m_tmpl);
+      m_templates.append(sn->m_tmpl);
     }
   }
-
-  return templates;
 }
 
 int Compilation::compileDefaultTemplate()
@@ -1470,7 +1457,7 @@ int Compilation::compileDefaultTemplate()
   output->m_seroptions = new df_seroptions(*options);
 
   atcursor = &pass->m_outports[0];
-  CHECK_CALL(compileApplyTemplates(fun,&atcursor,m_templates,NULL,nosourceloc))
+  CHECK_CALL(compileApplyTemplates(fun,&atcursor,NULL,nosourceloc))
   set_and_move_cursor(&atcursor,output,0,output,0);
 
   fun->m_start = pass;
@@ -1585,7 +1572,7 @@ int xslt_compile(Error *ei, xslt_source *source, Program **program)
   comp.m_source = source;
   comp.m_program = *program;
   comp.m_schema = source->schema;
-  comp.m_templates = comp.compileOrderedTemplateList();
+  comp.compileOrderedTemplateList();
 
   df_init_builtin_functions(comp.m_program->m_schema,comp.m_program->m_builtin_functions,modules);
 

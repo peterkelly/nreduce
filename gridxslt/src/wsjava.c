@@ -22,7 +22,7 @@
 
 #include "xslt/parse.h"
 #include "xslt/output.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/stringbuf.h"
 #include <stdio.h>
 #include <stdlib.h>

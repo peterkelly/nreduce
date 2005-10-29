@@ -681,15 +681,15 @@ int xs_check_range_restriction_ok(Schema *s, Particle *R, Particle *B, char *con
   return 0;
 }
 
-int ns_valid_wrt_wildcard(Schema *s, char *ns, Wildcard *w)
+int ns_valid_wrt_wildcard(Schema *s, const String &ns, Wildcard *w)
 {
   /* 3.10.4: Validation Rule: Wildcard allows Namespace Name */
   return ((WILDCARD_TYPE_ANY == w->type) ||               /* 1 */
           ((WILDCARD_TYPE_NOT == w->type) &&
-           (NULL != ns) &&
-           ((NULL == w->not_ns) || strcmp(ns,w->not_ns))) || /* 2 */
+           (!ns.isNull()) &&
+           ((w->not_ns.isNull()) || (ns != w->not_ns))) || /* 2 */
           ((WILDCARD_TYPE_SET == w->type) &&
-           list_contains_string(w->nslist,ns)));             /* 3 */
+           w->nslist.contains(ns)));             /* 3 */
 }
 
 int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, Range Rrange,
@@ -849,7 +849,7 @@ int particle_derivation_ok_elt_any_nscompat(Schema *s, Particle *R, Particle *B)
      @end */
   /* 1 The element declaration's {target namespace} is valid with respect to the wildcard's
        {namespace constraint} as defined by Wildcard allows Namespace Name (3.10.4). */
-  if (!ns_valid_wrt_wildcard(s,R->term.e->def.ident.m_ns.cstring(),B->term.w)) {
+  if (!ns_valid_wrt_wildcard(s,R->term.e->def.ident.m_ns,B->term.w)) {
     String rstr = R->toString();
     String bstr = B->toString();
     error(&s->ei,s->uri,R->defline,"rcase-NSCompat.1","Element %* is not a valid restriction of "
@@ -1929,7 +1929,7 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
        as defined in Wildcard allows Namespace Name (3.10.4). */
     else {
       if ((NULL == t->base->attribute_wildcard) ||
-          !ns_valid_wrt_wildcard(s,R->attribute->def.ident.m_ns.cstring(),
+          !ns_valid_wrt_wildcard(s,R->attribute->def.ident.m_ns,
           t->base->attribute_wildcard)) {
         debugl("t->name = %*\n",&t->def.ident);
         debugl("t->base->name = %*\n",&t->base->def.ident);

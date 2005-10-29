@@ -21,7 +21,7 @@
  */
 
 #include "fsm.h"
-#include "util/list.h"
+#include "util/List.h"
 #include "xmlschema/xmlschema.h"
 
 #include <stdio.h>

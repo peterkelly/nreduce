@@ -20,7 +20,7 @@
 
 #include "xslt/parse.h"
 #include "xslt/Statement.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include "http/http.h"

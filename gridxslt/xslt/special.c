@@ -23,7 +23,7 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "dataflow/engine.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "util/debug.h"
 #include "util/macros.h"
 #include "Expression.h"
@@ -248,9 +248,8 @@ static int df_construct_complex_content(Error *ei, sourceloc sloc,
               (v.asNode()->m_prefix == v2.asNode()->m_prefix) &&
               (v.asNode()->m_value != v2.asNode()->m_value)) {
             error(ei,sloc.uri,sloc.line,"XTDE0430","Sequence contains two namespace "
-                  "nodes trying to map the prefix \"%s\" to different URIs (\"%s\" and \"%s\")",
-                  v.asNode()->m_prefix.cstring(),v.asNode()->m_value.cstring(),
-                  v2.asNode()->m_value.cstring());
+                  "nodes trying to map the prefix \"%*\" to different URIs (\"%*\" and \"%*\")",
+                  &v.asNode()->m_prefix,&v.asNode()->m_value,&v2.asNode()->m_value);
             err = 1;
             break;
           }
@@ -711,7 +710,7 @@ static Value value_of(Environment *env, List<Value> &args)
      @implements(xslt20:value-of-10) @end */
 
   Node *textnode = new Node(NODE_TEXT);
-  String separator = args[1].convertToString().cstring();
+  String separator = args[1].convertToString();
   List<Value> values = args[0].sequenceToList();
   textnode->m_value = df_construct_simple_content(values,separator);
   return Value(textnode);

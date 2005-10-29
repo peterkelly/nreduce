@@ -25,7 +25,7 @@
 
 #include "Statement.h"
 #include "dataflow/Program.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 
 int xslt_compile(GridXSLT::Error *ei, GridXSLT::xslt_source *source, GridXSLT::Program **program);
 

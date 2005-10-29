@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 
 using namespace GridXSLT;
 

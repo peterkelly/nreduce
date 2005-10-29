@@ -136,7 +136,7 @@ Statement::Statement(int type)
     m_expr1(NULL),
     m_expr2(NULL),
     m_name_expr(NULL),
-    m_namespaces(NamespaceMap_new()),
+    m_namespaces(new NamespaceMap()),
     m_gmethod(0),
     m_seroptions(NULL),
     m_importpred(0),
@@ -408,7 +408,7 @@ void GridXSLT::Expression_resolve_var(Expression *from, const QName &varname,
   return;
 }
 
-int GridXSLT::parse_xl_syntax(const char *str, const char *filename, int baseline, Error *ei,
+int GridXSLT::parse_xl_syntax(const String &str, const char *filename, int baseline, Error *ei,
                     Expression **expr, Statement **sn, SequenceTypeImpl **st)
 {
   YY_BUFFER_STATE bufstate;
@@ -421,7 +421,9 @@ int GridXSLT::parse_xl_syntax(const char *str, const char *filename, int baselin
   parse_firstline = baseline;
   lex_lineno = 0;
 
-  bufstate = yy_scan_string(str);
+  char *cstr = str.cstring();
+  bufstate = yy_scan_string(cstr);
+  free(cstr);
   yy_switch_to_buffer(bufstate);
 
   r = yyparse();
@@ -486,7 +488,11 @@ static int ends_with(const char *filename, const char *ext)
 
 typedef struct output_defstr output_defstr;
 
-struct output_defstr {
+class output_defstr {
+  DISABLE_COPY(output_defstr)
+public:
+  output_defstr() : unpoptions(NULL), defby(NULL), options(NULL) { }
+  ~output_defstr();
   NSName ident;
   NSName method;
   char **unpoptions;
@@ -494,38 +500,36 @@ struct output_defstr {
   df_seroptions *options;
 };
 
-static output_defstr *get_output_defstr(xslt_source *source, list **deflist, const NSName &ident)
-{
-  list *l;
-  output_defstr *od;
-  for (l = *deflist; l; l = l->next) {
-    od = (output_defstr*)l->data;
-    if (od->ident == ident)
-      return od;
-  }
-  od = (output_defstr*)calloc(1,sizeof(output_defstr));
-  od->ident = ident;
-  od->unpoptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
-  od->defby = (Statement**)calloc(SEROPTION_COUNT,sizeof(Statement*));
-  list_append(deflist,od);
-  return od;
-}
-
-static void output_defstr_free(output_defstr *od)
+output_defstr::~output_defstr()
 {
   int i;
   for (i = 0; i < SEROPTION_COUNT; i++)
-    free(od->unpoptions[i]);
-  free(od->unpoptions);
-  free(od->defby);
-  free(od);
+    free(unpoptions[i]);
+  free(unpoptions);
+  free(defby);
+}
+
+static output_defstr *get_output_defstr(xslt_source *source, List<output_defstr*> &deflist,
+                                        const NSName &ident)
+{
+  output_defstr *od;
+  for (Iterator<output_defstr*> it = deflist; it.haveCurrent(); it++) {
+    od = *it;
+    if (od->ident == ident)
+      return od;
+  }
+  od = new output_defstr();
+  od->ident = ident;
+  od->unpoptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
+  od->defby = (Statement**)calloc(SEROPTION_COUNT,sizeof(Statement*));
+  deflist.append(od);
+  return od;
 }
 
 int xslt_build_output_defs(Error *ei, xslt_source *source)
 {
   Statement *sn;
-  list *deflist = NULL;
-  list *l;
+  ManagedPtrList<output_defstr*> deflist;
 
   /* @implements(xslt20:serialization-9)
      status { partial }
@@ -534,13 +538,13 @@ int xslt_build_output_defs(Error *ei, xslt_source *source)
      @end */
 
   /* We always have a default, unnamed output definition */
-  get_output_defstr(source,&deflist,NSName::null());
+  get_output_defstr(source,deflist,NSName::null());
 
   /* First figure out the applicable method for each output definition; this affects the defaults
      that are used */
   for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_OUTPUT == sn->m_type) {
-      output_defstr *od = get_output_defstr(source,&deflist,sn->m_ident);
+      output_defstr *od = get_output_defstr(source,deflist,sn->m_ident);
 
       if (NULL != sn->m_seroptions[SEROPTION_METHOD]) {
         QName qn = QName::parse(sn->m_seroptions[SEROPTION_METHOD]);
@@ -550,30 +554,25 @@ int xslt_build_output_defs(Error *ei, xslt_source *source)
            test { xslt/parse/output_badmethodprefix.test }
            test { xslt/parse/output_badmethod.test }
            @end */
-        if (od->method.isNull()) {
-          error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570",
-                "Could not resolve namespace for prefix \"%*\"",&qn.m_prefix);
-          list_free(deflist,(list_d_t)output_defstr_free);
-          return -1;
-        }
+        if (od->method.isNull())
+          return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570",
+                       "Could not resolve namespace for prefix \"%*\"",&qn.m_prefix);
 
         if ((od->method.m_ns.isNull()) &&
             (od->method.m_name != "xml") &&
             (od->method.m_name != "html") &&
             (od->method.m_name != "xhtml") &&
-            (od->method.m_name != "text")) {
-          error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570",
-                "If the method has a null namespace, it must be one of xml, html, xhtml, or text");
-          list_free(deflist,(list_d_t)output_defstr_free);
-          return -1;
-        }
+            (od->method.m_name != "text"))
+          return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1570","If the method has a null "
+                       "namespace, it must be one of xml, html, xhtml, or text");
       }
     }
   }
 
   /* Now create the parsed options object for each output def */
-  for (l = deflist; l; l = l->next) {
-    output_defstr *od = (output_defstr*)l->data;
+  Iterator<output_defstr*> it;
+  for (it = deflist; it.haveCurrent(); it++) {
+    output_defstr *od = *it;
     od->options = new df_seroptions(od->method);
     od->options->m_ident = od->ident;
     list_append(&source->output_defs,od->options);
@@ -582,7 +581,7 @@ int xslt_build_output_defs(Error *ei, xslt_source *source)
   /* Parse the remaining options */
   for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
     if (XSLT_DECL_OUTPUT == sn->m_type) {
-      output_defstr *od = get_output_defstr(source,&deflist,sn->m_ident);
+      output_defstr *od = get_output_defstr(source,deflist,sn->m_ident);
       int i;
       for (i = 0; i < SEROPTION_COUNT; i++) {
         /* FIXME: take into account import precedence */
@@ -619,30 +618,20 @@ int xslt_build_output_defs(Error *ei, xslt_source *source)
               od->defby[i] = sn;
             }
             else {
-              error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1560","Conflicting value for option %s: "
-                    "previously set to %s by another output declaration",
-                    df_seroptions::seroption_names[i],od->unpoptions[i]);
-              list_free(deflist,(list_d_t)output_defstr_free);
-              return -1;
+              return error(ei,sn->m_sloc.uri,sn->m_sloc.line,"XTSE1560",
+                           "Conflicting value for option %s: "
+                           "previously set to %s by another output declaration",
+                            df_seroptions::seroption_names[i],od->unpoptions[i]);
             }
           }
 
-          if (0 != od->options->parseOption(i,ei,sn->m_sloc.uri,sn->m_sloc.line,
-                                      sn->m_seroptions[i],sn->m_namespaces)) {
-            list_free(deflist,(list_d_t)output_defstr_free);
-            return -1;
-          }
-
+          CHECK_CALL(od->options->parseOption(i,ei,sn->m_sloc.uri,sn->m_sloc.line,
+                                              sn->m_seroptions[i],sn->m_namespaces))
         }
       }
     }
   }
 
-  for (l = deflist; l; l = l->next) {
-/*     output_defstr *od = (output_defstr*)l->data; */
-  }
-
-  list_free(deflist,(list_d_t)output_defstr_free);
   return 0;
 }
 
@@ -702,7 +691,6 @@ int GridXSLT::xslt_parse(Error *ei, const char *uri, xslt_source **source)
     stringbuf *input;
     char buf[1024];
     int r;
-    list *l;
     FILE *f;
 
     if (NULL == (f = fopen(uri,"r"))) {
@@ -726,8 +714,9 @@ int GridXSLT::xslt_parse(Error *ei, const char *uri, xslt_source **source)
     }
 
     /* add default namespaces declared in schema */
-    for (l = xs_g->namespaces->defs; l; l = l->next) {
-      ns_def *ns = (ns_def*)l->data;
+    Iterator<ns_def*> nsit;
+    for (nsit = xs_g->namespaces->defs; nsit.haveCurrent(); nsit++) {
+      ns_def *ns = *nsit;
       (*source)->root->m_namespaces->add_direct(ns->href,ns->prefix);
     }
 

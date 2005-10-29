@@ -21,8 +21,8 @@
  */
 
 #include "util/String.h"
-#include "util/list.h"
-#include "util/xmlutils.h"
+#include "util/List.h"
+#include "util/XMLUtils.h"
 #include "xmlschema/xmlschema.h"
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
@@ -136,17 +136,24 @@ int main(int argc, char **argv)
   xs_cleanup();
 #endif
 
-#if 0
-  String a = "foo";
-  String b = "bar";
-  message("%*:%*\n",&a,&b);
-#endif
+//   String a = "foo";
+//   String b = "bar";
+//   message("%*:%*\n",&a,&b);
 
-  QName q1 = QName("foo","bar");
-  QName q2 = QName("foo","bar2");
-  QName q3 = QName("foo","bar");
-  message("q1 == q2 ? %d\n",q1 == q2);
-  message("q1 == q3 ? %d\n",q1 == q3);
+//   QName q1 = QName("foo","bar");
+//   QName q2 = QName("foo","bar2");
+//   QName q3 = QName("foo","bar");
+//   message("q1 == q2 ? %d\n",q1 == q2);
+//   message("q1 == q3 ? %d\n",q1 == q3);
+
+//   String a = "tHiS iS a TeSt123!@";
+//   message("a = %*\n",&a);
+//   String up = a.toUpper();
+//   message("up = %*\n",&up);
+//   String down = a.toLower();
+//   message("down = %*\n",&down);
+
+  QName qn = QName::parse("foo:bar");
 
   return 0;
 }

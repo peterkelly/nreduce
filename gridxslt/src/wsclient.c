@@ -20,10 +20,10 @@
  *
  */
 
-#include "util/list.h"
+#include "util/List.h"
 #include "util/stringbuf.h"
 #include "util/String.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "syntax_wsdl.h"
 #include <stdio.h>
 #include <libxml/xmlwriter.h>

@@ -21,7 +21,7 @@
  */
 
 #include "stringbuf.h"
-#include "xmlutils.h"
+#include "XMLUtils.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

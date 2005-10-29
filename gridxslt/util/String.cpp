@@ -21,7 +21,7 @@
  */
 
 #include "String.h"
-#include "xmlutils.h"
+#include "XMLUtils.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -180,6 +180,50 @@ bool String::isAllWhitespace() const
     if ((impl->m_chars[i].c < 256) && !isspace(impl->m_chars[i].c))
       return 0;
   return 1;
+}
+
+String String::toUpper() const
+{
+  Char *chars = new Char[impl->m_len];
+  for (unsigned int i = 0; i < impl->m_len; i++) {
+    if (((unsigned short)'a' <= impl->m_chars[i].c) &&
+        ((unsigned short)'z' >= impl->m_chars[i].c))
+      chars[i].c = impl->m_chars[i].c - (unsigned short)('a' - 'A');
+    else
+      chars[i].c = impl->m_chars[i].c;
+  }
+
+  return new StringImpl(chars,impl->m_len);
+}
+
+String String::toLower() const
+{
+  Char *chars = new Char[impl->m_len];
+  for (unsigned int i = 0; i < impl->m_len; i++) {
+    if (((unsigned short)'A' <= impl->m_chars[i].c) &&
+        ((unsigned short)'Z' >= impl->m_chars[i].c))
+      chars[i].c = impl->m_chars[i].c + (unsigned short)('a' - 'A');
+    else
+      chars[i].c = impl->m_chars[i].c;
+  }
+
+  return new StringImpl(chars,impl->m_len);
+}
+
+double String::toDouble() const
+{
+  char *s = cstring();
+  double d = atof(s);
+  free(s);
+  return d;
+}
+
+int String::toInt() const
+{
+  char *s = cstring();
+  int i = atoi(s);
+  free(s);
+  return i;
 }
 
 void String::print(StringBuffer &buf)

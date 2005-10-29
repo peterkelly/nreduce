@@ -22,7 +22,7 @@
 
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "special.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>

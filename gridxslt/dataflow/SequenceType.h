@@ -25,9 +25,9 @@
 
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
-#include "util/list.h"
-#include "util/namespace.h"
-#include "util/xmlutils.h"
+#include "util/List.h"
+#include "util/Namespace.h"
+#include "util/XMLUtils.h"
 #include "xmlschema/xmlschema.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/tree.h>
@@ -71,6 +71,7 @@ namespace GridXSLT {
 class SequenceTypeImpl;
 class ValueImpl;
 class Value;
+class Context;
 
 class ItemType {
   DISABLE_COPY(ItemType)
@@ -254,6 +255,7 @@ class ValueImpl : public GridXSLT::Shared<ValueImpl> {
 public:
   ValueImpl(const SequenceType &_st);
   ValueImpl(const SequenceType &_st, const Value &left, const Value &right);
+  ValueImpl(Context *c);
   ValueImpl(int i);
   ValueImpl(float f);
   ValueImpl(double d);
@@ -275,6 +277,7 @@ public:
   String convertToString();
   ValueImpl *atomize();
 
+  inline bool isContext() const { return isDerivedFrom(xs_g->context_type); }
   inline bool isInt() const { return isDerivedFrom(xs_g->int_type); }
   inline bool isFloat() const { return isDerivedFrom(xs_g->float_type); }
   inline bool isDouble() const { return isDerivedFrom(xs_g->double_type); }
@@ -283,6 +286,7 @@ public:
   inline bool isNode() const
     { return (SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC != st.itemType()->m_kind); }
 
+  inline Context *asContext() const { assert(isContext()); return value.c; }
   inline int asInt() const { assert(isInt()); return value.i; }
   inline float asFloat() const { assert(isFloat()); return value.f; }
   inline double asDouble() const { assert(isDouble()); return value.d; }
@@ -294,6 +298,7 @@ public:
 
   SequenceType st;
   union {
+    Context *c;
     int i;
     float f;
     double d;
@@ -320,6 +325,7 @@ public:
   Value(const SequenceType &_st) { impl = new ValueImpl(_st); impl->ref(); }
   Value(const SequenceType &_st, const Value &left, const Value &right)
     { impl = new ValueImpl(_st,left,right); impl->ref(); }
+  Value(Context *c) { impl = new ValueImpl(c); impl->ref(); }
   Value(int i) { impl = new ValueImpl(i); impl->ref(); }
   Value(float f) { impl = new ValueImpl(f); impl->ref(); }
   Value(double d) { impl = new ValueImpl(d); impl->ref(); }
@@ -360,6 +366,7 @@ public:
   String convertToString() { return impl->convertToString(); }
   Value atomize() { return impl->atomize(); }
 
+  inline bool isContext() const { return impl->isContext(); }
   inline bool isInt() const { return impl->isInt(); }
   inline bool isFloat() const { return impl->isFloat(); }
   inline bool isDouble() const { return impl->isDouble(); }
@@ -367,6 +374,7 @@ public:
   inline bool isBool() const { return impl->isBool(); }
   inline bool isNode() const { return impl->isNode(); }
 
+  inline Context *asContext() const { return impl->asContext(); }
   inline int asInt() const { return impl->asInt(); }
   inline float asFloat() const { return impl->asFloat(); }
   inline double asDouble() const { return impl->asDouble(); }

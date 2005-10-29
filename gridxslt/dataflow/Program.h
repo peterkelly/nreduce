@@ -25,7 +25,7 @@
 
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
-#include "util/list.h"
+#include "util/List.h"
 #include "SequenceType.h"
 #include "serialization.h"
 #include <stdio.h>

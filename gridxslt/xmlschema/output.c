@@ -23,7 +23,7 @@
 #include "output.h"
 #include "xmlschema.h"
 #include "util/stringbuf.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -106,7 +106,7 @@ void write_ref_attribute(Schema *s, xmlTextWriter *writer, char *attrname, Refer
   if (!r->def.ident.m_ns.isNull()) {
     ns_def *ns = s->globals->namespaces->lookup_href(r->def.ident.m_ns);
     assert(NULL != ns);
-    XMLWriter::formatAttribute(writer,attrname,"%s:%*",ns->prefix,&r->def.ident.m_name);
+    XMLWriter::formatAttribute(writer,attrname,"%*:%*",&ns->prefix,&r->def.ident.m_name);
   }
   else {
     XMLWriter::attribute(writer,attrname,r->def.ident.m_name);
@@ -142,15 +142,15 @@ void output_wildcard_attrs(Schema *s, xmlTextWriter *writer, Wildcard *w)
   }
   else if (WILDCARD_TYPE_SET == w->type) {
     stringbuf *buf = stringbuf_new();
-    list *l;
-    for (l = w->nslist; l; l = l->next) {
-      char *ns = (char*)l->data;
-      if (NULL == ns)
+    Iterator<String> it;
+    for (it = w->nslist; it.haveCurrent(); it++) {
+      String ns = *it;
+      if (ns.isNull())
         stringbuf_format(buf,"##local ");
-      else if ((NULL != s->ns) && !strcmp(ns,s->ns))
+      else if (ns == s->ns)
         stringbuf_format(buf,"##targetNamespace ");
       else
-        stringbuf_format(buf,"%s ",ns);
+        stringbuf_format(buf,"%* ",&ns);
     }
     if (buf->size != 1)
       buf->data[buf->size-2] = '\0';
@@ -528,8 +528,6 @@ int DumpVisitor::modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg)
 
 int DumpVisitor::wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w)
 {
-  list *l;
-
   if (post)
     return 0;
 
@@ -543,10 +541,25 @@ int DumpVisitor::wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w)
     dump_printf("  Namespace constraint type: set\n");
   else if (WILDCARD_TYPE_ANY == w->type)
     assert(!"invalid wildcard type");
-  dump_printf("  Namespace not value: %s\n",w->not_ns ? w->not_ns : "(absent)");
-  dump_printf("  Namespace list:%s\n",w->nslist ? "" : " (empty)");
-  for (l = w->nslist; l; l = l->next)
-    dump_printf("    %s\n",l->data ? (char*)l->data : "(absent)");
+
+  if (!w->not_ns.isNull())
+    dump_printf("  Namespace not value: %*\n",&w->not_ns);
+  else
+    dump_printf("  Namespace not value: (absent)\n");
+
+  if (0 != w->nslist.count())
+    dump_printf("  Namespace list:\n");
+  else
+    dump_printf("  Namespace list: (empty)\n");
+
+  Iterator<String> nsit;
+  for (nsit = w->nslist; nsit.haveCurrent(); nsit++) {
+    String ns = *nsit;
+    if (!ns.isNull())
+      dump_printf("    %*\n",&ns);
+    else
+      dump_printf("    (absent)\n");
+  }
 
   if (WILDCARD_PROCESS_CONTENTS_SKIP == w->process_contents)
     dump_printf("  Process contents: skip\n");
@@ -968,15 +981,12 @@ void output_xmlschema(FILE *f, Schema *s)
   xmlTextWriterSetIndentString(writer,"  ");
   xmlTextWriterStartDocument(writer,NULL,NULL,NULL);
   xmlTextWriterStartElement(writer,"xsd:schema");
-  for (l = s->globals->namespaces->defs; l; l = l->next) {
-    ns_def *ns = (ns_def*)l->data;
+  Iterator<ns_def*> nsit;
+  for (nsit = s->globals->namespaces->defs; nsit.haveCurrent(); nsit++) {
+    ns_def *ns = *nsit;
     /* Hide the xdt namespace since it is only applicable for xpath */
-    if (ns->href != XDT_NAMESPACE) {
-      char *attrname = (char*)malloc(strlen("xmlns:")+strlen(ns->prefix)+1);
-      sprintf(attrname,"xmlns:%s",ns->prefix);
-      XMLWriter::attribute(writer,attrname,ns->href);
-      free(attrname);
-    }
+    if (ns->href != XDT_NAMESPACE)
+      XMLWriter::attribute(writer,String::format("xmlns:%*",&ns->prefix),ns->href);
   }
   if (s->ns)
     XMLWriter::attribute(writer,"targetNamespace",s->ns);

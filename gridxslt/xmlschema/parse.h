@@ -52,16 +52,14 @@ int xs_parse_complex_content_children(Schema *s,
                                    xmlNodePtr n, xmlDocPtr doc, char *ns,
                                    Type *t, xmlNodePtr c, int effective_mixed);
 int xs_parse_complex_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                          int toplevel, Type **tout,
-                          char *container_name, char *container_ns);
+                          int toplevel, Type **tout);
 int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s);
 int xs_parse_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
                        Particle **pout);
 int xs_parse_model_group(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                         ModelGroup **mgout, char *container_name, char *container_ns);
+                         ModelGroup **mgout);
 int xs_parse_all_choice_sequence(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
-                                 list **particles_list, Particle **pout,
-                                 char *container_name, char *container_ns);
+                                 list **particles_list, Particle **pout);
 int xs_parse_wildcard(Schema *s, xmlNodePtr n, xmlDocPtr doc, Wildcard **wout);
 int xs_parse_any(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list);
 int xs_parse_schema(Schema *s, xmlNodePtr n, xmlDocPtr doc);

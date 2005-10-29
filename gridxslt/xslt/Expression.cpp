@@ -24,7 +24,7 @@
 
 #include "Expression.h"
 #include "Statement.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/macros.h"
 #include "util/debug.h"
 #include <stdlib.h>
@@ -106,35 +106,35 @@ const char *xp_axis_types[AXIS_COUNT] = {
   "ancestor-or-self",
 };
 
-void print_qname(stringbuf *buf, const QName &qn)
+static void print_qname(StringBuffer &buf, const QName &qn)
 {
   /* FIXME: make sure we're printing "*" when we're supposed to (wildcards); below just supports
      the case of localpart="*" */
   if (qn.isNull())
-    stringbuf_format(buf,"*");
+    buf.format("*");
   else
-    stringbuf_format(buf,"%*",&qn);
+    buf.format("%*",&qn);
 }
 
-void print_qname_or_double_wildcard(stringbuf *buf, const QName &qn)
-{
-  if (!qn.m_prefix.isNull())
-    stringbuf_format(buf,"%*:",&qn.m_prefix);
-  else
-    stringbuf_format(buf,"*:");
-  if (!qn.m_localPart.isNull())
-    stringbuf_format(buf,"%*",&qn.m_localPart);
-  else
-    stringbuf_format(buf,"*");
-}
+// static void print_qname_or_double_wildcard(StringBuffer &buf, const QName &qn)
+// {
+//   if (!qn.m_prefix.isNull())
+//     buf.format("%*:",&qn.m_prefix);
+//   else
+//     buf.format("*:");
+//   if (!qn.m_localPart.isNull())
+//     buf.format("%*",&qn.m_localPart);
+//   else
+//     buf.format("*");
+// }
 
-void print_qname_or_wildcard(stringbuf *buf, const QName &qn)
-{
-  if (qn.m_prefix.isNull() && qn.m_localPart.isNull())
-    stringbuf_format(buf,"*");
-  else
-    print_qname(buf,qn);
-}
+// static void print_qname_or_wildcard(StringBuffer &buf, const QName &qn)
+// {
+//   if (qn.m_prefix.isNull() && qn.m_localPart.isNull())
+//     buf.format("*");
+//   else
+//     print_qname(buf,qn);
+// }
 
 Expression::Expression(int _type, Expression *_left, Expression *_right)
   : m_type(_type),
@@ -208,7 +208,7 @@ int Expression::resolve(Schema *s, const char *filename, Error *ei)
   return 0;
 }
 
-void Expression::serialize(stringbuf *buf, int brackets)
+void Expression::serialize(StringBuffer &buf, int brackets)
 {
 /*   Expression *f; */
 
@@ -218,35 +218,35 @@ void Expression::serialize(stringbuf *buf, int brackets)
     assert(0);
     break;
   case XPATH_EXPR_FOR:
-    stringbuf_format(buf,"for ");
+    buf.format("for ");
     m_conditional->serialize(buf,1);
-    stringbuf_format(buf," return ");
+    buf.format(" return ");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_SOME:
-    stringbuf_format(buf,"some ");
+    buf.format("some ");
     m_conditional->serialize(buf,1);
-    stringbuf_format(buf," satisfies ");
+    buf.format(" satisfies ");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_EVERY:
-    stringbuf_format(buf,"every ");
+    buf.format("every ");
     m_conditional->serialize(buf,1);
-    stringbuf_format(buf," satisfies ");
+    buf.format(" satisfies ");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_IF:
-    stringbuf_format(buf,"if (");
+    buf.format("if (");
     m_conditional->serialize(buf,1);
-    stringbuf_format(buf,") then ");
+    buf.format(") then ");
     m_left->serialize(buf,1);
-    stringbuf_format(buf," else ");
+    buf.format(" else ");
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_VAR_IN:
-    stringbuf_format(buf,"$");
+    buf.format("$");
     print_qname(buf,m_qn);
-    stringbuf_format(buf," in ");
+    buf.format(" in ");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_OR:
@@ -356,12 +356,8 @@ void Expression::serialize(stringbuf *buf, int brackets)
     break;
   case XPATH_EXPR_INSTANCE_OF: {
     m_left->serialize(buf,0);
-    stringbuf_format(buf," instance of ");
-    StringBuffer sb;
-    m_st.printXPath(sb,m_stmt->m_namespaces);
-    char *str = sb.contents().cstring();
-    stringbuf_format(buf,"%s",str);
-    free(str);
+    buf.format(" instance of ");
+    m_st.printXPath(buf,m_stmt->m_namespaces);
     break;
   }
   case XPATH_EXPR_TREAT:
@@ -374,42 +370,40 @@ void Expression::serialize(stringbuf *buf, int brackets)
     /* FIXME */
     break;
   case XPATH_EXPR_UNARY_MINUS:
-    stringbuf_format(buf,"-");
+    buf.format("-");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_UNARY_PLUS:
-    stringbuf_format(buf,"+");
+    buf.format("+");
     m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_ROOT:
-    stringbuf_format(buf,"/");
+    buf.format("/");
     if (NULL != m_left)
       m_left->serialize(buf,1);
     break;
   case XPATH_EXPR_STRING_LITERAL: {
     /* FIXME: quote ' (and other?) characters inside string */
-    char *strval = m_strval.cstring();
-    stringbuf_format(buf,"'%s'",strval);
-    free(strval);
+    buf.format("'%*'",&m_strval);
     break;
   }
   case XPATH_EXPR_INTEGER_LITERAL:
-    stringbuf_format(buf,"%d",m_ival);
+    buf.format("%d",m_ival);
     break;
   case XPATH_EXPR_DECIMAL_LITERAL:
-    stringbuf_format(buf,"%f",m_dval);
+    buf.format("%f",m_dval);
     break;
   case XPATH_EXPR_DOUBLE_LITERAL:
-    stringbuf_format(buf,"%f",m_dval);
+    buf.format("%f",m_dval);
     break;
   case XPATH_EXPR_VAR_REF:
-    stringbuf_format(buf,"$");
+    buf.format("$");
     print_qname(buf,m_qn);
     break;
   case XPATH_EXPR_EMPTY:
     break;
   case XPATH_EXPR_CONTEXT_ITEM:
-    stringbuf_format(buf,".");
+    buf.format(".");
     break;
   case XPATH_EXPR_NODE_TEST:
 
@@ -417,7 +411,7 @@ void Expression::serialize(stringbuf *buf, int brackets)
         (XPATH_NODE_TEST_SEQUENCETYPE == m_nodetest) &&
         (m_st.isNode())) {
       /* abbreviated form .. for parent::node() */
-      stringbuf_format(buf,"..");
+      buf.format("..");
     }
     else {
 
@@ -426,41 +420,41 @@ void Expression::serialize(stringbuf *buf, int brackets)
         /* nothing, since child is default axis */
         break;
       case AXIS_DESCENDANT:
-        stringbuf_format(buf,"descendant::");
+        buf.format("descendant::");
         break;
       case AXIS_ATTRIBUTE:
         /* use abbreviation @ instead of attribute:: */
-        stringbuf_format(buf,"@");
+        buf.format("@");
         break;
       case AXIS_SELF:
-        stringbuf_format(buf,"self::");
+        buf.format("self::");
         break;
       case AXIS_DESCENDANT_OR_SELF:
-        stringbuf_format(buf,"descendant-or-self::");
+        buf.format("descendant-or-self::");
         break;
       case AXIS_FOLLOWING_SIBLING:
-        stringbuf_format(buf,"following-sibling::");
+        buf.format("following-sibling::");
         break;
       case AXIS_FOLLOWING:
-        stringbuf_format(buf,"following::");
+        buf.format("following::");
         break;
       case AXIS_NAMESPACE:
-        stringbuf_format(buf,"namespace::");
+        buf.format("namespace::");
         break;
       case AXIS_PARENT:
-        stringbuf_format(buf,"parent::");
+        buf.format("parent::");
         break;
       case AXIS_ANCESTOR:
-        stringbuf_format(buf,"ancestor::");
+        buf.format("ancestor::");
         break;
       case AXIS_PRECEDING_SIBLING:
-        stringbuf_format(buf,"preceding-sibling::");
+        buf.format("preceding-sibling::");
         break;
       case AXIS_PRECEDING:
-        stringbuf_format(buf,"preceding::");
+        buf.format("preceding::");
         break;
       case AXIS_ANCESTOR_OR_SELF:
-        stringbuf_format(buf,"ancestor-or-self::");
+        buf.format("ancestor-or-self::");
         break;
       default:
         fmessage(stderr,"unknown axis %d\n",m_axis);
@@ -486,15 +480,15 @@ void Expression::serialize(stringbuf *buf, int brackets)
     break;
   case XPATH_EXPR_FUNCTION_CALL:
     print_qname(buf,m_qn);
-    stringbuf_format(buf,"(");
+    buf.format("(");
     if (m_left)
       m_left->serialize(buf,1);
-    stringbuf_format(buf,")");
+    buf.format(")");
     break;
   case XPATH_EXPR_PAREN:
-    stringbuf_format(buf,"(");
+    buf.format("(");
     m_left->serialize(buf,1);
-    stringbuf_format(buf,")");
+    buf.format(")");
     break;
 
   case XPATH_EXPR_ATOMIC_TYPE:
@@ -505,22 +499,22 @@ void Expression::serialize(stringbuf *buf, int brackets)
     break;
   case XPATH_EXPR_SEQUENCE:
     m_left->serialize(buf,1);
-    stringbuf_format(buf,", ");
+    buf.format(", ");
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_STEP:
     m_left->serialize(buf,1);
-    stringbuf_format(buf,"/");
+    buf.format("/");
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_VARINLIST:
     m_left->serialize(buf,1);
-    stringbuf_format(buf,", ");
+    buf.format(", ");
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_PARAMLIST:
     m_left->serialize(buf,1);
-    stringbuf_format(buf,", ");
+    buf.format(", ");
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_FILTER:
@@ -534,23 +528,23 @@ void Expression::serialize(stringbuf *buf, int brackets)
   }
 /*   for (f = filter; f; f = f->filter) { */
 /*     Expression *x = f->filter; */
-/*     stringbuf_format(buf,"["); */
+/*     buf.format("["); */
 /*     f->filter = NULL; */
 /*     f->serialize(buf,1); */
 /*     f->filter = x; */
-/*     stringbuf_format(buf,"]"); */
+/*     buf.format("]"); */
 /*   } */
 
 
 
 /*   if (brackets) */
-/*     stringbuf_format(buf,")"); */
+/*     buf.format(")"); */
 }
 
-void Expression::printBinaryExpr(stringbuf *buf, char *op)
+void Expression::printBinaryExpr(StringBuffer &buf, char *op)
 {
   m_left->serialize(buf,1);
-  stringbuf_format(buf," %s ",op);
+  buf.format(" %s ",op);
   m_right->serialize(buf,1);
 }
 
@@ -565,32 +559,29 @@ void Expression::printTree(int indent)
     m_right->printTree(indent+1);
 }
 
-Expression *GridXSLT::Expression_parse(const char *str, const char *filename, int baseline, Error *ei,
+Expression *GridXSLT::Expression_parse(const String &str, const char *filename, int baseline, Error *ei,
                        int pattern)
 {
   int r;
-  char *source = (char*)malloc(strlen("__just_pattern ")+strlen(str)+1);
+  String source;
   Expression *expr = NULL;
   if (pattern)
-    sprintf(source,"__just_pattern %s",str);
+    source = String::format("__just_pattern %*",&str);
   else
-    sprintf(source,"__just_expr %s",str);
+    source = String::format("__just_expr %*",&str);
   r = parse_xl_syntax(source,filename,baseline,ei,&expr,NULL,NULL);
-  free(source);
   if (0 != r)
     return NULL;
   assert(NULL != expr);
   return expr;
 }
 
-SequenceType GridXSLT::seqtype_parse(const char *str, const char *filename, int baseline, Error *ei)
+SequenceType GridXSLT::seqtype_parse(const String &str, const char *filename, int baseline, Error *ei)
 {
   int r;
-  char *source = (char*)malloc(strlen("__just_seqtype ")+strlen(str)+1);
+  String source = String::format("__just_seqtype %*",&str);
   SequenceTypeImpl *stimpl = NULL;
-  sprintf(source,"__just_seqtype %s",str);
   r = parse_xl_syntax(source,filename,baseline,ei,NULL,NULL,&stimpl);
-  free(source);
   if (0 != r)
     return SequenceType();
   assert(NULL != stimpl);

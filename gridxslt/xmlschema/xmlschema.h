@@ -23,9 +23,9 @@
 #ifndef _XMLSCHEMA_XMLSCHEMA_H
 #define _XMLSCHEMA_XMLSCHEMA_H
 
-#include "util/xmlutils.h"
-#include "util/list.h"
-#include "util/namespace.h"
+#include "util/XMLUtils.h"
+#include "util/List.h"
+#include "util/Namespace.h"
 #include <libxml/tree.h>
 #include <stdio.h>
 
@@ -331,11 +331,11 @@ public:
 
   int typeinfo_known;
   int size;
-  char *ctype;
+  String ctype;
   int custom_ctype;
-  char *parent_name;
-  char *parent_ns;
-  list *attribute_cvars;
+  String parent_name;
+  String parent_ns;
+  List<String> attribute_cvars;
 };
 
 class SchemaAttribute {
@@ -398,7 +398,7 @@ public:
   int typeinfo_known;
   int size;
   int pos;
-  char *cvar;
+  String cvar;
 };
 
 class AttributeGroup {
@@ -422,8 +422,8 @@ public:
 
   int typeinfo_known;
   int size;
-  char *ctype;
-  list *cvars;
+  String ctype;
+  List<String> cvars;
 };
 
 class IdentityConstraint {
@@ -462,11 +462,11 @@ public:
 
   int typeinfo_known;
   int size;
-  char *ctype;
+  String ctype;
   SchemaElement *defe;
-  char *parent_name;
-  char *parent_ns;
-  list *cvars;
+  String parent_name;
+  String parent_ns;
+  List<String> cvars;
 };
 
 class Notation {
@@ -500,7 +500,7 @@ public:
   void *seqdata;
 
   int typeinfo_known;
-  char *cvar;
+  String cvar;
   int pos;
   int base_size;
   int size;
@@ -522,8 +522,8 @@ public:
   ~Wildcard();
 
   int type;                                /* {namespace constraint} */
-  char *not_ns;                            /* {namespace constraint} */
-  list *nslist;                            /* {namespace constraint} */
+  String not_ns;                            /* {namespace constraint} */
+  List<String> nslist;                            /* {namespace constraint} */
   int process_contents;                    /* {process contents} */
   void *annotation;                        /* {annotation} */
   int defline;
@@ -545,7 +545,7 @@ public:
   int typeinfo_known;
   int pos;
   int size;
-  char *cvar;
+  String cvar;
 };
 
 class CStruct {
@@ -634,7 +634,7 @@ public:
   xs_symbol_table *symt;
   xs_allocset *as;
 
-  list *ctypes;
+  List<String> ctypes;
   list *cstructs;
   NamespaceMap *namespaces;
 };

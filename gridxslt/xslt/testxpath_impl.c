@@ -21,7 +21,7 @@
  */
 
 #include "util/stringbuf.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "xmlschema/xmlschema.h"
 #include "Expression.h"
 #include "Statement.h"
@@ -95,14 +95,12 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 int testxpath_main(int argc, char **argv)
 {
   struct arguments arguments;
-  stringbuf *exprstr;
-  stringbuf *input;
-  char buf[1024];
+  StringBuffer input;
+  char buf[1025];
   Schema *s = NULL;
   Statement *stmt = new Statement(XSLT_INSTR_SEQUENCE);
   Expression *expr;
   Error ei;
-  list *l;
   int r = 0;
 
   setbuf(stdout,NULL);
@@ -117,12 +115,9 @@ int testxpath_main(int argc, char **argv)
   else if (NULL == (s = parse_xmlschema_file(arguments.schema,xs_g)))
     return 1;
 
-  exprstr = stringbuf_new();
-  input = stringbuf_new();
-
 /*   stringbuf_format(input,"__just_expr "); */
   if (arguments.normalized_seqtypes)
-    stringbuf_format(input,"0 instance of ");
+    input.append("0 instance of ");
 
 
   if (NULL != arguments.filename) {
@@ -133,16 +128,18 @@ int testxpath_main(int argc, char **argv)
       return 1;
     }
 
-    while (0 < (r = fread(buf,1,1024,in)))
-      stringbuf_append(input,buf,r);
+    while (0 < (r = fread(buf,1,1024,in))) {
+      buf[r] = '\0';
+      input.append(buf);
+    }
     fclose(in);
   }
   else {
     assert(NULL != arguments.expr);
-    stringbuf_format(input,"%s",arguments.expr);
+    input.append(arguments.expr);
   }
 
-  if (NULL == (expr = Expression_parse(input->data,arguments.filename,1,&ei,0))) {
+  if (NULL == (expr = Expression_parse(input.contents(),arguments.filename,1,&ei,0))) {
     ei.fprint(stderr);
     ei.clear();
     return 1;
@@ -150,8 +147,9 @@ int testxpath_main(int argc, char **argv)
 
   expr->setParent(NULL,stmt);
   /* add default namespaces declared in schema */
-  for (l = xs_g->namespaces->defs; l; l = l->next) {
-    ns_def *ns = (ns_def*)l->data;
+  Iterator<ns_def*> nsit;
+  for (nsit = xs_g->namespaces->defs; nsit.haveCurrent(); nsit++) {
+    ns_def *ns = *nsit;
     stmt->m_namespaces->add_direct(ns->href,ns->prefix);
   }
 
@@ -169,8 +167,10 @@ int testxpath_main(int argc, char **argv)
       message("%*\n",&buf);
     }
     else {
+      StringBuffer exprstr;
       expr->serialize(exprstr,0);
-      message("%s\n",exprstr->data);
+      String e = exprstr.contents();
+      message("%*\n",&e);
     }
 
     if (arguments.tree)
@@ -178,8 +178,6 @@ int testxpath_main(int argc, char **argv)
   }
 
   delete expr;
-  stringbuf_free(exprstr);
-  stringbuf_free(input);
 
   delete stmt;
   delete s;

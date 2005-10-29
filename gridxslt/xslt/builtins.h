@@ -26,7 +26,7 @@
 #include "dataflow/Program.h"
 #include "dataflow/SequenceType.h"
 #include "xmlschema/xmlschema.h"
-#include "util/list.h"
+#include "util/List.h"
 
 namespace GridXSLT {
 

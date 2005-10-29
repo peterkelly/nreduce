@@ -23,7 +23,7 @@
 #ifndef _FSM_H
 #define _FSM_H
 
-#include "util/list.h"
+#include "util/List.h"
 #include <stdio.h>
 
 typedef struct fsm_transition fsm_transition;

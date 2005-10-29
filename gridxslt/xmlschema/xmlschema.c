@@ -25,7 +25,7 @@
 #include "xmlschema.h"
 #include "parse.h"
 #include "derivation.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/stringbuf.h"
 #include "util/debug.h"
 #include "util/macros.h"
@@ -267,11 +267,7 @@ Type::Type(xs_allocset *as)
     computed_content_type(0),
     typeinfo_known(0),
     size(0),
-    ctype(NULL),
-    custom_ctype(0),
-    parent_name(NULL),
-    parent_ns(NULL),
-    attribute_cvars(NULL)
+    custom_ctype(0)
 {
   memset(&facets,0,sizeof(xs_facetdata));
   memset(&child_facets,0,sizeof(xs_facetdata));
@@ -286,10 +282,6 @@ Type::~Type()
   list_free(members,NULL);
   xs_facetdata_freevals(&facets);
   xs_facetdata_freevals(&child_facets);
-  free(parent_name);
-  free(parent_ns);
-  list_free(attribute_cvars,(list_d_t)free);
-  free(ctype);
 }
 
 int Type::isDerived(Type *from)
@@ -360,15 +352,13 @@ AttributeGroupRef::AttributeGroupRef(xs_allocset *as)
     ref(NULL),
     typeinfo_known(0),
     size(0),
-    pos(0),
-    cvar(NULL)
+    pos(0)
 {
   as->alloc_attribute_group_ref.push(this);
 }
 
 AttributeGroupRef::~AttributeGroupRef()
 {
-  free(cvar);
 }
 
 AttributeGroup::AttributeGroup(xs_allocset *as)
@@ -382,9 +372,7 @@ AttributeGroup::AttributeGroup(xs_allocset *as)
     computed_attribute_uses(0),
     post_processed(0),
     typeinfo_known(0),
-    size(0),
-    ctype(NULL),
-    cvars(NULL)
+    size(0)
 {
   as->alloc_attribute_group.push(this);
 }
@@ -394,8 +382,6 @@ AttributeGroup::~AttributeGroup()
   list_free(attribute_uses,NULL);
   list_free(local_attribute_uses,NULL);
   list_free(attribute_group_refs,NULL);
-  list_free(cvars,(list_d_t)free);
-  free(ctype);
 }
 
 IdentityConstraint::IdentityConstraint(xs_allocset *as)
@@ -428,11 +414,7 @@ ModelGroup::ModelGroup(xs_allocset *as)
     content_model_of(NULL),
     typeinfo_known(0),
     size(0),
-    ctype(NULL),
-    defe(NULL),
-    parent_name(NULL),
-    parent_ns(NULL),
-    cvars(NULL)
+    defe(NULL)
 {
   as->alloc_model_group.push(this);
 }
@@ -440,10 +422,6 @@ ModelGroup::ModelGroup(xs_allocset *as)
 ModelGroup::~ModelGroup()
 {
   list_free(particles,NULL);
-  free(ctype);
-  list_free(cvars,(list_d_t)free);
-  free(parent_name);
-  free(parent_ns);
 }
 
 Notation::Notation(xs_allocset *as)
@@ -461,7 +439,6 @@ Particle::Particle(xs_allocset *as)
     vdata(NULL),
     seqdata(NULL),
     typeinfo_known(0),
-    cvar(NULL),
     pos(0),
     base_size(0),
     size(0),
@@ -477,7 +454,6 @@ Particle::Particle(xs_allocset *as)
 
 Particle::~Particle()
 {
-  free(cvar);
 }
 
 String Particle::toString()
@@ -505,8 +481,6 @@ String Particle::toString()
 
 Wildcard::Wildcard(xs_allocset *as)
   : type(0),
-    not_ns(NULL),
-    nslist(NULL),
     process_contents(0),
     annotation(NULL),
     defline(0)
@@ -516,8 +490,6 @@ Wildcard::Wildcard(xs_allocset *as)
 
 Wildcard::~Wildcard()
 {
-  free(not_ns);
-  list_free(nslist,(list_d_t)free);
 }
 
 AttributeUse::AttributeUse(xs_allocset *as)
@@ -528,8 +500,7 @@ AttributeUse::AttributeUse(xs_allocset *as)
     prohibited(0),
     typeinfo_known(0),
     pos(0),
-    size(0),
-    cvar(NULL)
+    size(0)
 {
   as->alloc_attribute_use.push(this);
 }
@@ -537,7 +508,6 @@ AttributeUse::AttributeUse(xs_allocset *as)
 AttributeUse::~AttributeUse()
 {
   free(vc.value);
-  free(cvar);
 }
 
 CStruct::CStruct(xs_allocset *as)
@@ -566,16 +536,15 @@ Type *new_primitive_type(BuiltinTypes *g, char *name, int size, char *ctype)
   t->typeinfo_known = 1;
   t->size = size;
   if (NULL != ctype) {
-    t->ctype = strdup(ctype);
+    t->ctype = ctype;
     t->custom_ctype = 1;
   }
   else if (t->base->custom_ctype) {
-    t->ctype = strdup(t->base->ctype);
+    t->ctype = t->base->ctype;
     t->custom_ctype = 1;
   }
   else {
-    t->ctype = (char*)malloc(strlen("XS")+strlen(name)+1);
-    sprintf(t->ctype,"XS%s",name);
+    t->ctype = String::format("XS%s",name);
   }
 
   for (i = 0; xs_allowed_facets[i].typenam; i++) {
@@ -609,16 +578,15 @@ Type *new_derived_type(BuiltinTypes *g, char *name, char *base, int size, char *
   t->size = (0 <= size) ? size : t->base->size;
 
   if (NULL != ctype) {
-    t->ctype = strdup(ctype);
+    t->ctype = ctype;
     t->custom_ctype = 1;
   }
   else if (t->base->custom_ctype) {
-    t->ctype = strdup(t->base->ctype);
+    t->ctype = t->base->ctype;
     t->custom_ctype = 1;
   }
   else {
-    t->ctype = (char*)malloc(strlen("XS")+strlen(name)+1);
-    sprintf(t->ctype,"XS%s",name);
+    t->ctype = String::format("XS%s",name);
   }
 
   t->baseref = new Reference(g->as);
@@ -651,8 +619,7 @@ Type *new_list_type(BuiltinTypes *g, char *name, char *item_type)
      we just encode them as a string */
   t->typeinfo_known = 1;
   t->size = sizeof(IMPL_POINTER);
-  t->ctype = (char*)malloc(strlen("XS")+strlen(name)+1);
-  sprintf(t->ctype,"XS%s",name);
+  t->ctype = String::format("XS%s",name);
 
   t->baseref = new Reference(g->as);
   t->baseref->def.ident = t->base->def.ident;
@@ -747,7 +714,7 @@ Type *xs_init_complex_ur_type(BuiltinTypes *g)
   complex_ur_type->content_type->term.mg->compositor = MODELGROUP_COMPOSITOR_SEQUENCE;
   complex_ur_type->content_type->term.mg->typeinfo_known = 1;
   complex_ur_type->content_type->term.mg->size = 0;
-  complex_ur_type->content_type->term.mg->ctype = strdup("****anytype****");
+  complex_ur_type->content_type->term.mg->ctype = "****anytype****";
   complex_ur_type->complex_content = 1;
   list_push(&complex_ur_type->content_type->term.mg->particles,p);
   p->range.min_occurs = 0;
@@ -775,7 +742,7 @@ Type *xs_init_complex_ur_type(BuiltinTypes *g)
   /* FIXME: set typeinfo based on contents of anyType */
   complex_ur_type->typeinfo_known = 1;
   complex_ur_type->size = 0;
-  complex_ur_type->ctype = strdup("XSanyType");
+  complex_ur_type->ctype = "XSanyType";
   return complex_ur_type;
 }
 
@@ -795,7 +762,7 @@ Type *xs_init_simple_ur_type(BuiltinTypes *g)
   simple_ur_type->allowed_facets = xs_allowed_facets[0].facets;
   simple_ur_type->typeinfo_known = 1;
   simple_ur_type->size = sizeof(IMPL_POINTER);
-  simple_ur_type->ctype = strdup("XSanySimpleType");
+  simple_ur_type->ctype = "XSanySimpleType";
   return simple_ur_type;
 }
 
@@ -813,7 +780,7 @@ Type *xs_new_simple_builtin(BuiltinTypes *g, const String &name, const String &n
   t->allowed_facets = g->simple_ur_type->allowed_facets;
   t->typeinfo_known = 1;
   t->size = sizeof(IMPL_POINTER);
-  t->ctype = String::format("XS%*",&name).cstring();
+  t->ctype = String::format("XS%*",&name);
   ss_add(g->symt->ss_types,t->def.ident,t);
   return t;
 }
@@ -826,7 +793,7 @@ void BuiltinTypes_init_xdt_types(BuiltinTypes *g)
   xs_new_simple_builtin(g,"dayTimeDuration",XDT_NAMESPACE,g->complex_ur_type);
   xs_new_simple_builtin(g,"yearMonthDuration",XDT_NAMESPACE,g->complex_ur_type);
 
-  g->context_type = xs_new_simple_builtin(g,"context",XDT_NAMESPACE,g->complex_ur_type);
+  g->context_type = xs_new_simple_builtin(g,"context",SPECIAL_NAMESPACE,g->complex_ur_type);
 
   /* FIXME: dayTimeDuration and yearMonthDuration are just placeholders for now; they need
      to be filled in with the correct type definitions. */
@@ -907,7 +874,6 @@ BuiltinTypes::BuiltinTypes()
     context_type(NULL),
     symt(NULL),
     as(NULL),
-    ctypes(NULL),
     cstructs(NULL),
     namespaces(NULL)
 {
@@ -922,7 +888,7 @@ BuiltinTypes::BuiltinTypes()
   BuiltinTypes_init_xdt_types(this);
   BuiltinTypes_init_simple_types(this);
 
-  namespaces = NamespaceMap_new();
+  namespaces = new NamespaceMap();
   namespaces->add_direct(XS_NAMESPACE,"xsd");
   namespaces->add_direct(XDT_NAMESPACE,"xdt");
 }
@@ -931,7 +897,6 @@ BuiltinTypes::~BuiltinTypes()
 {
   delete symt;
   delete as;
-  list_free(ctypes,(list_d_t)free);
   list_free(cstructs,NULL);
   NamespaceMap_free(namespaces,0);
 }
@@ -1029,8 +994,6 @@ int xs_resolve_ref(Schema *s, Reference *r)
 
 int Wildcard_namespace_constraints_equal(Schema *s, Wildcard *a, Wildcard *b)
 {
-  list *l;
-
   if (a->type != b->type)
     return 0;
 
@@ -1038,19 +1001,20 @@ int Wildcard_namespace_constraints_equal(Schema *s, Wildcard *a, Wildcard *b)
     return 1;
   }
   else if (WILDCARD_TYPE_NOT == a->type) {
-    if ((NULL == a->not_ns) && (NULL == b->not_ns))
+    if ((a->not_ns.isNull()) && (b->not_ns.isNull()))
       return 1;
-    if ((NULL != a->not_ns) && (NULL != b->not_ns) && !strcmp(a->not_ns,b->not_ns))
+    if ((!a->not_ns.isNull()) && (!b->not_ns.isNull()) && (a->not_ns == b->not_ns))
       return 1;
     return 0;
   }
   else {
     assert(WILDCARD_TYPE_SET == a->type);
-    for (l = a->nslist; l; l = l->next)
-      if (!list_contains_string(b->nslist,(char*)l->data))
+    Iterator<String> it;
+    for (it = a->nslist; it.haveCurrent(); it++)
+      if (!b->nslist.contains(*it))
         return 0;
-    for (l = b->nslist; l; l = l->next)
-      if (!list_contains_string(a->nslist,(char*)l->data))
+    for (it = b->nslist; it.haveCurrent(); it++)
+      if (!a->nslist.contains(*it))
         return 0;
     return 1;
   }
@@ -1058,14 +1022,12 @@ int Wildcard_namespace_constraints_equal(Schema *s, Wildcard *a, Wildcard *b)
 
 void Wildcard_copy_namespace_constraint(Wildcard *to, Wildcard *from)
 {
-  list *l;
   to->type = from->type;
-  to->not_ns = from->not_ns ? strdup(from->not_ns) : NULL;
-  assert(NULL == to->nslist);
-  for (l = from->nslist; l; l = l->next) {
-    char *ns = (char*)l->data;
-    list_append(&to->nslist,ns ? strdup(ns) : NULL);
-  }
+  to->not_ns = from->not_ns;
+  assert(0 == to->nslist.count());
+  Iterator<String> it;
+  for (it = from->nslist; it.haveCurrent(); it++)
+    to->nslist.append(*it);
 }
 
 int GridXSLT::Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *super)
@@ -1090,8 +1052,8 @@ int GridXSLT::Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *
      @implements(xmlschema-1:cos-ns-subset.2.2) @end
   */
   if ((WILDCARD_TYPE_NOT == sub->type) && (WILDCARD_TYPE_NOT == super->type) &&
-      (((NULL == sub->not_ns) && (NULL == super->not_ns)) ||
-       ((NULL != sub->not_ns) && (NULL != super->not_ns) && !strcmp(sub->not_ns,super->not_ns))))
+      (((sub->not_ns.isNull()) && (super->not_ns.isNull())) ||
+       ((!sub->not_ns.isNull()) && (!super->not_ns.isNull()) && (sub->not_ns == super->not_ns))))
     return 1;
 
   /* @implements(xmlschema-1:cos-ns-subset.3)
@@ -1119,10 +1081,10 @@ int GridXSLT::Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *
 
     /* 3.10.6-2-3-3-2-1 */
     if (WILDCARD_TYPE_SET == super->type) {
-      list *l;
       int found_missing = 0;
-      for (l = sub->nslist; l; l = l->next)
-        if (!list_contains_string(super->nslist,(char*)l->data))
+      Iterator<String> it;
+      for (it = sub->nslist; it.haveCurrent(); it++)
+        if (!super->nslist.contains(*it))
           found_missing = 1;
       if (!found_missing)
         return 1;
@@ -1130,8 +1092,8 @@ int GridXSLT::Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *
 
     /* 3.10.6-2-3-3-2-2 */
     if (WILDCARD_TYPE_NOT == super->type) {
-      if (!list_contains_string(sub->nslist,super->not_ns) &&
-          !list_contains_string(sub->nslist,NULL))
+      if (!sub->nslist.contains(super->not_ns) &&
+          !sub->nslist.contains(String::null()))
         return 1;
     }
   }
@@ -1142,8 +1104,8 @@ int GridXSLT::Wildcard_constraint_is_subset(Schema *s, Wildcard *sub, Wildcard *
 Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard *O2,
                                           int process_contents)
 {
-  list *S;
-  char *not_ns;
+  List<String> S;
+  String not_ns;
   Wildcard *w = new Wildcard(s->as);
   w->process_contents = process_contents;
   w->defline = (0 < O1->defline) ? O1->defline : O2->defline;
@@ -1186,7 +1148,7 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
   */
   if ((WILDCARD_TYPE_SET == O1->type) && (WILDCARD_TYPE_SET == O2->type)) {
     w->type = WILDCARD_TYPE_SET;
-    w->nslist = string_list_union(O1->nslist,O2->nslist);
+    w->nslist = O1->nslist.unionWith(O2->nslist);
     return w;
   }
 
@@ -1197,7 +1159,7 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
     /* FIXME: no test for this currently because there is no way to create "not" wildcards in
        different namespaces... this requires <import> functionality */
     w->type = WILDCARD_TYPE_NOT;
-    w->not_ns = NULL;
+    w->not_ns = String::null();
     return w;
   }
 
@@ -1211,10 +1173,10 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
     not_ns = O2->not_ns;
   }
 
-  if (NULL != not_ns) {
+  if (!not_ns.isNull()) {
     /* @implements(xmlschema-1:cos-aw-union.5) @end */
-    if (list_contains_string(S,not_ns)) {
-      if (list_contains_string(S,NULL)) {
+    if (S.contains(not_ns)) {
+      if (S.contains(String::null())) {
         /* @implements(xmlschema-1:cos-aw-union.5.1)
            test { wildcard_union51ar.test }
            test { wildcard_union51a.test }
@@ -1231,10 +1193,10 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
            test { wildcard_union52b.test }
            @end */
         w->type = WILDCARD_TYPE_NOT;
-        w->not_ns = NULL;
+        w->not_ns = String::null();
       }
     }
-    else if (list_contains_string(S,NULL)) {
+    else if (S.contains(String::null())) {
       /* @implements(xmlschema-1:cos-aw-union.5.3)
          test { wildcard_union53ar.test }
          test { wildcard_union53a.test }
@@ -1252,12 +1214,12 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
          test { wildcard_union54b.test }
          @end */
       w->type = WILDCARD_TYPE_NOT;
-      w->not_ns = strdup(not_ns);
+      w->not_ns = not_ns;
     }
   }
   else {
     /* @implements(xmlschema-1:cos-aw-union.6) @end */
-    if (list_contains_string(S,NULL)) {
+    if (S.contains(String::null())) {
       /* @implements(xmlschema-1:cos-aw-union.6.1)
          test { wildcard_union61ar.test }
          test { wildcard_union61a.test }
@@ -1274,7 +1236,7 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
          test { wildcard_union62b.test }
          @end */
       w->type = WILDCARD_TYPE_NOT;
-      w->not_ns = NULL;
+      w->not_ns = String::null();
     }
   }
 
@@ -1284,8 +1246,9 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
 Wildcard *GridXSLT::Wildcard_constraint_intersection(Schema *s, Wildcard *O1, Wildcard *O2,
                                                  int process_contents)
 {
-  list *S = NULL;
-  char *not_ns = NULL;
+  List<String> S;
+  bool havelist = false;
+  String not_ns;
   Wildcard *w = new Wildcard(s->as);
   w->process_contents = process_contents;
   w->defline = (0 < O1->defline) ? O1->defline : O2->defline;
@@ -1338,19 +1301,21 @@ Wildcard *GridXSLT::Wildcard_constraint_intersection(Schema *s, Wildcard *O1, Wi
   if ((WILDCARD_TYPE_NOT == O1->type) && (WILDCARD_TYPE_SET == O2->type)) {
     S = O2->nslist;
     not_ns = O1->not_ns;
+    havelist = true;
   }
   else if ((WILDCARD_TYPE_SET == O1->type) && (WILDCARD_TYPE_NOT == O2->type)) {
     S = O1->nslist;
     not_ns = O2->not_ns;
+    havelist = true;
   }
 
-  if (NULL != S) {
-    list *l;
+  if (havelist) {
     w->type = WILDCARD_TYPE_SET;
-    for (l = S; l; l = l->next) {
-      char *str = (char*)l->data;
-      if ((NULL != str) && ((NULL == not_ns) || strcmp(str,not_ns)))
-        list_append(&w->nslist,strdup(str));
+    Iterator<String> it;
+    for (it = S; it.haveCurrent(); it++) {
+      String str = *it;
+      if ((!str.isNull()) && ((not_ns.isNull()) || (str != not_ns)))
+        w->nslist.append(str);
     }
     return w;
   }
@@ -1366,14 +1331,14 @@ Wildcard *GridXSLT::Wildcard_constraint_intersection(Schema *s, Wildcard *O1, Wi
   */
   if ((WILDCARD_TYPE_SET == O1->type) && (WILDCARD_TYPE_SET == O2->type)) {
     w->type = WILDCARD_TYPE_SET;
-    w->nslist = string_list_intersection(O1->nslist,O2->nslist);
+    w->nslist = O1->nslist.intersection(O2->nslist);
     return w;
   }
 
   assert((WILDCARD_TYPE_NOT == O1->type) && (WILDCARD_TYPE_NOT == O2->type));
 
   /* @implements(xmlschema-1:cos-aw-intersect.5) @end */
-  if ((NULL != O1->not_ns) && (NULL != O2->not_ns)) {
+  if ((!O1->not_ns.isNull()) && (!O2->not_ns.isNull())) {
     /* we know the values are different because otherwise they would have been taken care of
        by rule 3.10.6-4-1 */
     /* FIXME: no test for this currently because there is no way to create "not" wildcards in
@@ -1387,7 +1352,7 @@ Wildcard *GridXSLT::Wildcard_constraint_intersection(Schema *s, Wildcard *O1, Wi
     /* FIXME: no test for this currently because there is no way to create "not" wildcards in
        different namespaces... this requires <import> functionality */
     w->type = WILDCARD_TYPE_NOT;
-    w->not_ns = O1->not_ns ? strdup(O1->not_ns) : strdup(O2->not_ns);
+    w->not_ns = !O1->not_ns.isNull() ? O1->not_ns : O2->not_ns;
   }
 
   return NULL;
@@ -1470,7 +1435,7 @@ int check_attribute_uses(Schema *s, list *attribute_uses, char *constraint1, cha
 
 int check_circular_references(Schema *s, void *obj, char *type, int defline, char *section,
                               char *constraint,
-                              char* (get_obj_name)(void *obj),
+                              String (get_obj_name)(void *obj),
                               void (add_references)(Schema *s, void *obj, list **tocheck))
 {
   list *encountered = NULL;
@@ -1479,17 +1444,17 @@ int check_circular_references(Schema *s, void *obj, char *type, int defline, cha
 
   list_push(&tocheck,obj);
   while (NULL != (cur = list_pop(&tocheck))) {
-    char *name = get_obj_name(cur);
+    String name = get_obj_name(cur);
     list *l;
     for (l = encountered; l; l = l->next) {
       if (cur == l->data) {
         stringbuf *buf = stringbuf_new();
         list *l2;
         for (l2 = encountered; l2; l2 = l2->next) {
-          char *name2 = get_obj_name(l2->data);
-          stringbuf_format(buf,"%s -> ",name2);
+          String name2 = get_obj_name(l2->data);
+          stringbuf_format(buf,"%* -> ",&name2);
         }
-        stringbuf_format(buf,"%s",name);
+        stringbuf_format(buf,"%*",&name);
 
         /* FIXME: circular references are allowed inside a <redefine> - see section 3.6.3 rule 3 */
         if (constraint)
@@ -1513,9 +1478,9 @@ int check_circular_references(Schema *s, void *obj, char *type, int defline, cha
   return 0;
 }
 
-char* get_model_group_def_name(void *obj)
+String get_model_group_def_name(void *obj)
 {
-  return ((ModelGroupDef*)obj)->def.ident.m_name.cstring();
+  return ((ModelGroupDef*)obj)->def.ident.m_name;
 }
 
 void add_model_group_mgdrefs(Schema *s, ModelGroup *mg, list **mgds, int indent)
@@ -1932,9 +1897,9 @@ int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
   return 0;
 }
 
-char *get_element_name(void *obj)
+String get_element_name(void *obj)
 {
-  return ((SchemaElement*)obj)->def.ident.m_name.cstring();
+  return ((SchemaElement*)obj)->def.ident.m_name;
 }
 
 void add_element_sgreferences(Schema *s, void *obj, list **tocheck)
@@ -2131,9 +2096,9 @@ int post_process_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au)
   return 0;
 }
 
-char *get_attribute_group_name(void *obj)
+String get_attribute_group_name(void *obj)
 {
-  return ((AttributeGroup*)obj)->def.ident.m_name.cstring();
+  return ((AttributeGroup*)obj)->def.ident.m_name;
 }
 
 void add_attribute_group_references(Schema *s, void *obj, list **tocheck)
@@ -2530,9 +2495,9 @@ int compute_attribute_wildcard(Schema *s, Type *t)
   return 0;
 }
 
-char* get_type_name(void *obj)
+String get_type_name(void *obj)
 {
-  return ((Type*)obj)->def.ident.m_name.cstring();
+  return ((Type*)obj)->def.ident.m_name;
 }
 
 void add_type_references(Schema *s, void *obj, list **tocheck)

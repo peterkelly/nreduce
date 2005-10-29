@@ -20,7 +20,7 @@
  *
  */
 
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include "util/macros.h"
 #include "xmlschema.h"
 #include "parse.h"

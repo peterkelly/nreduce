@@ -155,7 +155,7 @@ static int df_parse_cdata_section_elements(df_seroptions *options, Error *ei,
 {
   int r = 0;
   if (!value.isNull()) {
-    List<QName> qnames = QName::parseList(value.cstring());
+    List<QName> qnames = QName::parseList(value);
     for (Iterator<QName> it = qnames; it.haveCurrent(); it++) {
       NSName nn = qname_to_nsname(namespaces,*it);
       if (nn.isNull()) {
@@ -242,7 +242,7 @@ static int df_parse_method(df_seroptions *options, Error *ei,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull()) {
-    QName qn = QName::parse(value.cstring());
+    QName qn = QName::parse(value);
     NSName nn = qname_to_nsname(namespaces,qn);
     if (nn.isNull()) {
       error(ei,filename,line,String::null(),"Cannot resolve namespace prefix: %*",&qn.m_prefix);

@@ -22,7 +22,7 @@
 
 #include "syntax_wsdl.h"
 #include "xslt/parse.h"
-#include "util/namespace.h"
+#include "util/Namespace.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -160,7 +160,7 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   while (*mptr)
     mptr = &((*mptr)->next);
 
-  name = XMLGetProp(n,"name");
+  name = XMLGetProp(n,"name").cstring();
   if (NULL == name)
     return missing_attribute(n,"name");
 
@@ -183,9 +183,9 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c) {
-    char *name = XMLGetProp(c,"name");
-    char *element = XMLGetProp(c,"element");
-    char *type = XMLGetProp(c,"type");
+    char *name = XMLGetProp(c,"name").cstring();
+    char *element = XMLGetProp(c,"element").cstring();
+    char *type = XMLGetProp(c,"type").cstring();
     ws_part *p;
 
     if (!check_element(c,"part",WSDL_NAMESPACE))
@@ -223,8 +223,8 @@ int wsdl_parse_message(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 
 int wsdl_parse_param(wsdl *w, xmlNodePtr c2, xmlDocPtr doc, ws_param **p, int req_name)
 {
-  char *name = XMLGetProp(c2,"name");
-  char *message = XMLGetProp(c2,"message");
+  char *name = XMLGetProp(c2,"name").cstring();
+  char *message = XMLGetProp(c2,"message").cstring();
   ws_message *m;
   *p = NULL;
   if (NULL == message)
@@ -253,7 +253,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   while (*ptptr)
     ptptr = &((*ptptr)->next);
 
-  name = XMLGetProp(n,"name");
+  name = XMLGetProp(n,"name").cstring();
   if (NULL == name)
     return missing_attribute(n,"name");
 
@@ -276,7 +276,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c) {
-    char *name = XMLGetProp(c,"name");
+    char *name = XMLGetProp(c,"name").cstring();
     ws_operation *o;
     ws_param **fptr;
     xmlNodePtr c2;
@@ -334,7 +334,7 @@ int wsdl_parse_port_type(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 int wsdl_parse_bindparam(wsdl *w, ws_operation *o, xmlNodePtr c2, xmlDocPtr doc,
                          ws_bindparam **p, int fault)
 {
-  char *name = XMLGetProp(c2,"name");
+  char *name = XMLGetProp(c2,"name").cstring();
   *p = NULL;
   if (fault && (NULL == name))
     return missing_attribute(c2,"name");
@@ -357,8 +357,8 @@ int wsdl_parse_bindparam(wsdl *w, ws_operation *o, xmlNodePtr c2, xmlDocPtr doc,
 
 int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
-  char *name = XMLGetProp(n,"name");
-  char *type = XMLGetProp(n,"type");
+  char *name = XMLGetProp(n,"name").cstring();
+  char *type = XMLGetProp(n,"type").cstring();
   ws_port_type *pt;
   ws_binding *b;
   xmlNodePtr c;
@@ -397,7 +397,7 @@ int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   wsdl_skip_others(&c); /* this allows extensibility elements */
 
   while (c) {
-    char *name = XMLGetProp(c,"name");
+    char *name = XMLGetProp(c,"name").cstring();
     ws_bindop *bo;
     ws_bindparam **fptr;
     xmlNodePtr c2;
@@ -465,7 +465,7 @@ int wsdl_parse_binding(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 
 int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
-  char *name = XMLGetProp(n,"name");
+  char *name = XMLGetProp(n,"name").cstring();
   ws_service *s;
   ws_service **sptr = &w->services;
   ws_port **pptr;
@@ -491,8 +491,8 @@ int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
   }
 
   while (c && check_element(c,"port",WSDL_NAMESPACE)) {
-    char *name = XMLGetProp(c,"name");
-    char *binding = XMLGetProp(c,"binding");
+    char *name = XMLGetProp(c,"name").cstring();
+    char *binding = XMLGetProp(c,"binding").cstring();
     ws_port *p;
     xmlNodePtr c2;
     ws_binding *b;
@@ -533,8 +533,8 @@ int wsdl_parse_service(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 int wsdl_parse_definitions(wsdl *w, xmlNodePtr n, xmlDocPtr doc)
 {
   xmlNodePtr c;
-  char *name = XMLGetProp(n,"name");
-  char *target_ns = XMLGetProp(n,"targetNamespace");
+  char *name = XMLGetProp(n,"name").cstring();
+  char *target_ns = XMLGetProp(n,"targetNamespace").cstring();
 
   if (NULL != name)
     w->name = strdup(name);

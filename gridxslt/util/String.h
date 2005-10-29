@@ -136,6 +136,12 @@ public:
   String substring(unsigned int start, unsigned int len) const;
   int indexOf(const String &other) const;
   bool isAllWhitespace() const;
+  String toUpper() const;
+  String toLower() const;
+  double toDouble() const;
+  int toInt() const;
+
+  const Char *chars() const { return impl->m_chars; }
 
   StringImpl *handle() const { return impl; }
 

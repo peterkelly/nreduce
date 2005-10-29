@@ -24,7 +24,7 @@
 #define _XSLT_XPATH_H
 
 #include "util/stringbuf.h"
-#include "util/xmlutils.h"
+#include "util/XMLUtils.h"
 #include "dataflow/Program.h"
 #include "dataflow/SequenceType.h"
 
@@ -130,8 +130,8 @@ public:
 
   void setParent(Expression *parent, Statement *stmt);
   int resolve(Schema *s, const char *filename, GridXSLT::Error *ei);
-  void serialize(stringbuf *buf, int brackets);
-  void printBinaryExpr(stringbuf *buf, char *op);
+  void serialize(StringBuffer &buf, int brackets);
+  void printBinaryExpr(StringBuffer &buf, char *op);
   void printTree(int indent);
 
   int m_type;
@@ -161,9 +161,9 @@ public:
   class GridXSLT::OutputPort *m_outp;
 };
 
-Expression *Expression_parse(const char *str, const char *filename, int baseline, Error *ei,
+Expression *Expression_parse(const String &str, const char *filename, int baseline, Error *ei,
                        int pattern);
-SequenceType seqtype_parse(const char *str, const char *filename, int baseline, Error *ei);
+SequenceType seqtype_parse(const String &str, const char *filename, int baseline, Error *ei);
 
 };
 

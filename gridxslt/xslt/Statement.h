@@ -25,9 +25,9 @@
 
 #include "Expression.h"
 #include "xmlschema/xmlschema.h"
-#include "util/namespace.h"
-#include "util/xmlutils.h"
-#include "util/list.h"
+#include "util/Namespace.h"
+#include "util/XMLUtils.h"
+#include "util/List.h"
 #include "dataflow/SequenceType.h"
 #include "dataflow/serialization.h"
 
@@ -136,7 +136,7 @@ public:
   int m_gmethod;
   GridXSLT::String m_strval;
   char **m_seroptions;
-  List<QNameTest*> m_QNameTests;
+  ManagedPtrList<QNameTest*> m_QNameTests;
   int m_importpred;
   int m_includens;
   int m_literal;
@@ -147,8 +147,8 @@ public:
   NSName m_ident;
 
   int m_templateno;
-  struct template1 *m_tmpl;
-  class GridXSLT::OutputPort *m_outp;
+  class Template *m_tmpl;
+  class OutputPort *m_outp;
   list *m_templates;
 };
 
@@ -156,7 +156,7 @@ int Statement_resolve(Statement *first, Schema *s, const char *filename, GridXSL
 Statement *Statement_resolve_var(Statement *from, const QName &varname);
 void Expression_resolve_var(Expression *from, const QName &varname, Expression **defexpr, Statement **defnode);
 
-int parse_xl_syntax(const char *str, const char *filename, int baseline, GridXSLT::Error *ei,
+int parse_xl_syntax(const String &str, const char *filename, int baseline, GridXSLT::Error *ei,
                     Expression **expr, Statement **sn, GridXSLT::SequenceTypeImpl **st);
 Statement *Statement_parse(const char *str, const char *filename, int baseline, GridXSLT::Error *ei);
 Statement *xl_first_decl(Statement *root);
