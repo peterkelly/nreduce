@@ -27,7 +27,6 @@
 #include "util/debug.h"
 #include "dataflow/optimization.h"
 #include "dataflow/validity.h"
-#include <assert.h>
 #include <string.h>
 
 namespace GridXSLT {
@@ -63,7 +62,7 @@ public:
                                 Statement *below, list **vars);
   void initParamInstructions(Function *fun,
                                     List<SequenceType> &seqtypes, OutputPort **outports);
-  int compileInnerFunction(Function *fun, Statement *sn,
+  int compileInnerFunction(Function *fun, Statement *sn, Expression *expr,
                                  Instruction **mapout, OutputPort **cursor, sourceloc sloc);
   void compileConditional(Function *fun, OutputPort **cursor,
                                     OutputPort **condcur, OutputPort **truecur,
@@ -73,13 +72,12 @@ public:
                                   OutputPort **cursor);
   int compileSequence(Function *fun, Statement *parent,
                              OutputPort **cursor);
-  int compileFunctionContents(Function *fun, Statement *parent,
+  int compileFunctionContents(Function *fun, Statement *parent, Expression *expr,
                                 OutputPort **cursor);
   int compileFunction(Statement *sn, Function *fun);
   int compileApplyFunction(Function **ifout, const char *mode);
-  int compileApplyTemplates(Function *fun,
-                                    OutputPort **cursor,
-                                    const char *mode, sourceloc sloc);
+  int compileApplyTemplates(Function *fun, OutputPort **cursor, const char *mode, sourceloc sloc,
+                            Instruction **map);
   void compileOrderedTemplateList();
   int compileDefaultTemplate();
   int compile2();
@@ -248,7 +246,7 @@ OutputPort *Compilation::resolveVar(Function *fun, Expression *varref)
   Expression *defexpr = NULL;
   Statement *defnode = NULL;
   OutputPort *outport = NULL;
-  int i;
+  unsigned int i;
 
   Expression_resolve_var(varref,varref->m_qn,&defexpr,&defnode);
   if (NULL != defexpr)
@@ -340,7 +338,7 @@ int Compilation::findReferencedVarsExpr(Function *fun, Expression *e,
         OutputPort *local_outport;
 
         local_outport = resolveVar(fun,e); /* get the local version */
-        assert(NULL != local_outport);
+        ASSERT(NULL != local_outport);
 
         vr->ref = e;
         vr->defexpr = defexpr;
@@ -379,21 +377,22 @@ int Compilation::findReferencedVarsStmt(Function *fun, Statement *sn,
 void Compilation::initParamInstructions(Function *fun,
                                     List<SequenceType> &seqtypes, OutputPort **outports)
 {
-  int paramno;
+  unsigned int paramno;
 
-  for (paramno = 0; paramno < fun->m_nparams; paramno++) {
+  ASSERT(0 < fun->m_params);
+  for (paramno = 1; paramno < fun->m_nparams; paramno++) {
     Instruction *swallow = fun->addInstruction(OP_SWALLOW,nosourceloc);
     Instruction *pass = fun->addInstruction(OP_PASS,nosourceloc);
 
     if (!seqtypes.isEmpty() && (!seqtypes[paramno].isNull()))
       fun->m_params[paramno].st = seqtypes[paramno];
     else
-      fun->m_params[paramno].st = SequenceType(xs_g->complex_ur_type);
+      fun->m_params[paramno].st = SequenceType::itemstar();
 
     pass->m_outports[0].dest = swallow;
     pass->m_outports[0].destp = 0;
     pass->m_inports[0].st = fun->m_params[paramno].st;
-    assert(!fun->m_params[paramno].st.isNull());
+    ASSERT(!fun->m_params[paramno].st.isNull());
 
     fun->m_params[paramno].start = pass;
     fun->m_params[paramno].outport = &pass->m_outports[0];
@@ -403,33 +402,35 @@ void Compilation::initParamInstructions(Function *fun,
   }
 }
 
-int Compilation::compileInnerFunction(Function *fun, Statement *sn,
+int Compilation::compileInnerFunction(Function *fun, Statement *sn, Expression *expr,
                                  Instruction **mapout, OutputPort **cursor, sourceloc sloc)
 {
   char name[100];
   Function *innerfun;
   int varno;
-  int need_gate = stmtInConditional(sn);
+  /* FIXME: need to take into variable declarations within XPath expressions e.g. for */
+  int need_gate = stmtInConditional(sn ? sn : expr->m_stmt);
   list *vars = NULL;
   Instruction *map;
   list *l;
   OutputPort *innerfuncur;
 
-  /* Create the anonymous inner function */
-  sprintf(name,"anon%dfun",m_nextanonid++);
-  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
-
-  /* Set the return type of the function. FIXME: this should be derived from the sequence
-     constructor within the function */
-  innerfun->m_rtype = SequenceType(xs_g->complex_ur_type);
 
   /* Determine all variables and parameters of the parent function that are referenced
      in this block of code. These must all be declared as parameters to the inner function
      and passed in whenever it is called */
-  CHECK_CALL(findReferencedVarsStmt(fun,sn->m_child,sn,&vars))
+  if (NULL != sn)
+    CHECK_CALL(findReferencedVarsStmt(fun,sn->m_child,sn,&vars))
+  else
+    CHECK_CALL(findReferencedVarsExpr(fun,expr,expr->m_stmt,&vars))
 
-  innerfun->m_nparams = list_count(vars);
-  innerfun->m_params = new Parameter[innerfun->m_nparams];
+  /* Create the anonymous inner function */
+  sprintf(name,"anon%dfun",m_nextanonid++);
+  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name),1+list_count(vars));
+
+  /* Set the return type of the function. FIXME: this should be derived from the sequence
+     constructor within the function */
+  innerfun->m_rtype = SequenceType::itemstar();
 
   /* Create the map instruction which will be used to activate the inner function for
      each item in the input sequence. The number of input ports of the instruction
@@ -443,14 +444,14 @@ int Compilation::compileInnerFunction(Function *fun, Statement *sn,
 
   /* For each parameter and variable referenced from within the code block, connect the
      source to the appropriate input port of the map instruction */
-  varno = 0;
+  varno = 1;
   for (l = vars; l; l = l->next) {
     var_reference *vr = (var_reference*)l->data;
     Instruction *dup = fun->addInstruction(OP_DUP,sloc);
     OutputPort *varcur = &dup->m_outports[1];
 
-    assert(NULL != vr->top_outport);
-    assert(NULL != vr->local_outport);
+    ASSERT(NULL != vr->top_outport);
+    ASSERT(NULL != vr->local_outport);
     innerfun->m_params[varno].varsource = vr->top_outport;
 
     set_and_move_cursor(cursor,dup,0,dup,0);
@@ -465,17 +466,26 @@ int Compilation::compileInnerFunction(Function *fun, Statement *sn,
   initParamInstructions(innerfun,types,NULL);
 
   innerfun->m_ret = innerfun->addInstruction(OP_RETURN,sloc);
-  innerfun->m_start = innerfun->addInstruction(OP_PASS,sloc);
+
+
+
+//  innerfun->m_start = innerfun->addInstruction(OP_PASS,sloc);
 
   /* FIXME: set correct type based on cursor's type */
-  innerfun->m_start->m_inports[0].st = SequenceType::item();
+//  innerfun->m_start->m_inports[0].st = SequenceType::item();
+
+/*   set_and_move_cursor(cursor,map,0,map,0); */
+
+  innerfun->m_params[0].st = SequenceType(xs_g->context_type);
+  innerfun->m_params[0].start = innerfun->addInstruction(OP_PASS,sn ? sn->m_sloc : expr->m_sloc);
+  innerfun->m_params[0].start->m_inports[0].st = innerfun->m_params[0].st;
       
-  innerfuncur = &innerfun->m_start->m_outports[0];
+  innerfuncur = &innerfun->m_params[0].start->m_outports[0];
   innerfuncur->dest = innerfun->m_ret;
   innerfuncur->destp = 0;
 
-  CHECK_CALL(compileFunctionContents(innerfun,sn,&innerfuncur))
-  assert(NULL != innerfuncur);
+  CHECK_CALL(compileFunctionContents(innerfun,sn,expr,&innerfuncur))
+  ASSERT(NULL != innerfuncur);
 
   *mapout = map;
   list_free(vars,(list_d_t)free);
@@ -524,16 +534,16 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
 {
   switch (e->m_type) {
   case XPATH_EXPR_INVALID:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_FOR:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_SOME:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_EVERY:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_IF: {
     OutputPort *falsecur;
@@ -548,7 +558,7 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     break;
   }
   case XPATH_EXPR_VAR_IN:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_OR:
     CHECK_CALL(compileBinaryOp(fun,e,cursor,SPECIAL_NAMESPACE,"or"))
@@ -559,25 +569,25 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
   case XPATH_EXPR_COMPARE_VALUES:
     switch (e->m_compare) {
     case XPATH_VALUE_COMP_EQ:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_VALUE_COMP_NE:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_VALUE_COMP_LT:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_VALUE_COMP_LE:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_VALUE_COMP_GT:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_VALUE_COMP_GE:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
@@ -611,23 +621,23 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
       break;
     }
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
   case XPATH_EXPR_COMPARE_NODES:
     switch (e->m_compare) {
     case XPATH_NODE_COMP_IS:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_NODE_COMP_PRECEDES:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     case XPATH_NODE_COMP_FOLLOWS:
-      assert(!"not yet implemented"); /* FIXME */
+      ASSERT(!"not yet implemented"); /* FIXME */
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
@@ -652,40 +662,58 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     CHECK_CALL(compileBinaryOp(fun,e,cursor,FN_NAMESPACE,"numeric-mode"))
     break;
   case XPATH_EXPR_UNION:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_UNION2:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_INTERSECT:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_EXCEPT:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_INSTANCE_OF:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_TREAT:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_CASTABLE:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_CAST:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_UNARY_MINUS:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_UNARY_PLUS:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_ROOT: {
+    Instruction *dup = NULL;
+
+    if (NULL != e->m_left) {
+      dup = fun->addInstruction(OP_DUP,e->m_sloc);
+      set_and_move_cursor(cursor,dup,0,dup,0);
+    }
+
+    Instruction *dot = specialop(fun,SPECIAL_NAMESPACE,"dot",0,e->m_sloc);
+    set_and_move_cursor(cursor,dot,0,dot,0);
+
     Instruction *root = specialop(fun,SPECIAL_NAMESPACE,"select-root",1,e->m_sloc);
     set_and_move_cursor(cursor,root,0,root,0);
-    if (NULL != e->m_left)
-      CHECK_CALL(compileExpr(fun,e->m_left,cursor))
+    if (NULL != e->m_left) {
+//      CHECK_CALL(compileExpr(fun,e->m_left,cursor))
+
+      Instruction *map;
+      CHECK_CALL(compileInnerFunction(fun,NULL,e->m_left,&map,cursor,e->m_sloc))
+      set_and_move_cursor(cursor,map,0,map,0);
+      dup->m_outports[1].dest = map;
+      dup->m_outports[1].destp = 1;
+    }
+
     break;
   }
   case XPATH_EXPR_STRING_LITERAL: {
@@ -734,10 +762,15 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     set_and_move_cursor(cursor,empty,0,empty,0);
     break;
   }
-  case XPATH_EXPR_CONTEXT_ITEM:
-    /* just gets passed through */
+  case XPATH_EXPR_CONTEXT_ITEM: {
+    Instruction *dot = specialop(fun,SPECIAL_NAMESPACE,"dot",0,e->m_sloc);
+    set_and_move_cursor(cursor,dot,0,dot,0);
     break;
+  }
   case XPATH_EXPR_NODE_TEST: {
+    Instruction *dot = specialop(fun,SPECIAL_NAMESPACE,"dot",0,e->m_sloc);
+    set_and_move_cursor(cursor,dot,0,dot,0);
+
     Instruction *select = specialop(fun,SPECIAL_NAMESPACE,"select",1,e->m_sloc);
     select->m_axis = e->m_axis;
 
@@ -750,7 +783,7 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     else {
       /* FIXME: support other types (should there even by others?) */
       debug("e->m_nodetest = %d\n",e->m_nodetest);
-      assert(!"node test type not supported");
+      ASSERT(!"node test type not supported");
     }
 
     set_and_move_cursor(cursor,select,0,select,0);
@@ -761,7 +794,6 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     break;
   case XPATH_EXPR_FUNCTION_CALL: {
     Instruction *call = NULL;
-    OutputPort *source = *cursor;
     Expression *p;
     String name;
     int nparams = 0;
@@ -793,60 +825,74 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
 
       if (NULL == (cfun = m_program->getFunction(e->m_ident)))
         return error(m_ei,e->m_sloc.uri,e->m_sloc.line,String::null(),
-                     "No such function %*",&e->m_ident);
+                     "No such function %* with %d args",&e->m_ident,supparam);
 
       call = fun->addInstruction(OP_CALL,e->m_sloc);
       call->m_cfun = cfun;
 
-      nparams = call->m_cfun->m_nparams;
+      unsigned int i;
+      call->freeInports();
+      call->m_ninports = call->m_cfun->m_nparams;
+      call->m_inports = new InputPort[call->m_ninports];
+      for (i = 0; i < call->m_cfun->m_nparams; i++) {
+        call->m_inports[i].st = call->m_cfun->m_params[i].st;
+        ASSERT(!call->m_inports[i].st.isNull());
+      }
+
+      nparams = call->m_cfun->m_nparams-1;
       name = call->m_cfun->m_ident.m_name;
     }
 
-    set_and_move_cursor(cursor,call,0,call,0);
+    unsigned int paramno = 0;
+    unsigned int userparams = call->m_ninports;
 
-    if (0 < nparams) {
-      int paramno = 0;
+    OutputPort **psource = (OutputPort**)alloca(call->m_ninports*sizeof(OutputPort*));
 
-      if (OP_BUILTIN != call->m_opcode) {
-        int i;
-        call->freeInports();
-        call->m_ninports = nparams;
-        call->m_inports = new InputPort[call->m_ninports];
-        for (i = 0; i < call->m_cfun->m_nparams; i++)
-          call->m_inports[i].st = call->m_cfun->m_params[i].st;
+    for (paramno = 0; paramno < call->m_ninports; paramno++) {
+      if (paramno < call->m_ninports-1) {
+        Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
+        dup->m_outports[0].dest = call;
+        dup->m_outports[0].destp = paramno;
+        psource[paramno] = &dup->m_outports[0];
+        set_and_move_cursor(cursor,dup,0,dup,1);
       }
-
-      for (p = e->m_left; p; p = p->m_right) {
-        OutputPort *param_cursor = NULL; /* FIXME */
-
-        if (paramno < nparams-1) {
-          Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
-          source->dest = dup;
-          source->destp = 0;
-          source = &dup->m_outports[0];
-          source->dest = call;
-          source->destp = 0;
-          param_cursor = &dup->m_outports[1];
-        }
-        else {
-          param_cursor = source;
-        }
-
-        param_cursor->dest = call;
-        param_cursor->destp = paramno;
-
-        assert(XPATH_EXPR_ACTUAL_PARAM == p->m_type);
-        if (paramno >= nparams) {
-          fmessage(stderr,"%d: Too many parameters; %* only accepts %d parameters\n",
-                  p->m_sloc.line,&name,nparams);
-          return 0;
-        }
-
-        CHECK_CALL(compileExpr(fun,p->m_left,&param_cursor))
-
-        paramno++;
+      else {
+        psource[paramno] = *cursor;
+        set_and_move_cursor(cursor,call,paramno,call,0);
       }
     }
+
+
+    paramno = 0;
+
+    if ((OP_BUILTIN != call->m_opcode) || call->m_bif->m_context) {
+      paramno++;
+      userparams--;
+    }
+
+
+    p = e->m_left;
+    while (paramno < call->m_ninports) {
+
+      if (NULL == p) {
+        fmessage(stderr,"%s:%d: Insufficient parameters (expected %u)\n",
+                 e->m_sloc.uri,e->m_sloc.line,userparams);
+        return -1;
+      }
+
+      OutputPort *pcur = psource[paramno];
+      CHECK_CALL(compileExpr(fun,p->m_left,&pcur))
+
+      paramno++;
+      p = p->m_right;
+    }
+
+    if (NULL != p) {
+      fmessage(stderr,"%s:%d: Too many parameters (expected %u)\n",
+               p->m_sloc.uri,p->m_sloc.line,userparams);
+      return -1;
+    }
+
     break;
   }
   case XPATH_EXPR_PAREN:
@@ -855,10 +901,10 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
 
 
   case XPATH_EXPR_ATOMIC_TYPE:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_ITEM_TYPE:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_SEQUENCE: {
     Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
@@ -879,22 +925,31 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
     break;
   }
   case XPATH_EXPR_STEP: {
+    Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
+    set_and_move_cursor(cursor,dup,0,dup,0);
+
     CHECK_CALL(compileExpr(fun,e->m_left,cursor))
-    CHECK_CALL(compileExpr(fun,e->m_right,cursor))
+
+    Instruction *map;
+    CHECK_CALL(compileInnerFunction(fun,NULL,e->m_right,&map,cursor,e->m_sloc))
+    set_and_move_cursor(cursor,map,0,map,0);
+    dup->m_outports[1].dest = map;
+    dup->m_outports[1].destp = 1;
+
     break;
   }
   case XPATH_EXPR_VARINLIST:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_PARAMLIST:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
   case XPATH_EXPR_FILTER:
-    assert(!"not yet implemented"); /* FIXME */
+    ASSERT(!"not yet implemented"); /* FIXME */
     break;
 
   default:
-    assert(0);
+    ASSERT(0);
     break;
   }
 
@@ -906,7 +961,7 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
 {
   switch (sn->m_type) {
   case XSLT_VARIABLE: {
-    assert(0); /* handled previosuly */
+    ASSERT(0); /* handled previosuly */
     break;
   }
   case XSLT_INSTR_ANALYZE_STRING:
@@ -924,7 +979,8 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
       set_and_move_cursor(cursor,select,0,select,0);
     }
 
-    CHECK_CALL(compileApplyTemplates(fun,cursor,NULL,sn->m_sloc))
+    Instruction *map;
+    CHECK_CALL(compileApplyTemplates(fun,cursor,NULL,sn->m_sloc,&map))
     break;
   }
   case XSLT_INSTR_ATTRIBUTE: {
@@ -933,9 +989,9 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
     OutputPort *namecur = &dup->m_outports[0];
     OutputPort *childcur = &dup->m_outports[1];
     if (NULL != sn->m_name_expr) {
-      assert(!"attribute name expressions not yet implemented");
+      ASSERT(!"attribute name expressions not yet implemented");
     }
-    assert(!sn->m_qn.isNull());
+    ASSERT(!sn->m_qn.isNull());
 
     namecur->dest = attr;
     namecur->destp = 1;
@@ -1000,9 +1056,9 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
     OutputPort *namecur = &dup->m_outports[0];
     OutputPort *childcur = &dup->m_outports[1];
     if (NULL != sn->m_name_expr) {
-      assert(!"element name expressions not yet implemented");
+      ASSERT(!"element name expressions not yet implemented");
     }
-    assert(!sn->m_qn.isNull());
+    ASSERT(!sn->m_qn.isNull());
 
     if (sn->m_includens) {
       NamespaceMap *m;
@@ -1041,15 +1097,33 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
     break;
   case XSLT_INSTR_FOR_EACH: {
     Instruction *map = NULL;
-    CHECK_CALL(compileInnerFunction(fun,sn,&map,cursor,sn->m_sloc))
+    Instruction *dup = fun->addInstruction(OP_DUP,sn->m_sloc);
 
-    map->m_outports[0].dest = (*cursor)->dest;
-    map->m_outports[0].destp = (*cursor)->destp;
-    (*cursor)->dest = map;
-    (*cursor)->destp = 0;
+    CHECK_CALL(compileInnerFunction(fun,sn,NULL,&map,cursor,sn->m_sloc))
 
-    CHECK_CALL(compileExpr(fun,sn->m_select,cursor))
-    *cursor = &map->m_outports[0];
+
+
+
+    set_and_move_cursor(cursor,dup,0,dup,0);
+    
+    OutputPort *selectcur = &dup->m_outports[1];
+    selectcur->dest = map;
+    selectcur->destp = 0;
+
+    CHECK_CALL(compileExpr(fun,sn->m_select,&selectcur))
+
+    set_and_move_cursor(cursor,map,1,map,0);
+
+
+
+
+
+/*     map->m_outports[0].dest = (*cursor)->dest; */
+/*     map->m_outports[0].destp = (*cursor)->destp; */
+/*     (*cursor)->dest = map; */
+/*     (*cursor)->destp = 0; */
+
+/*     *cursor = &map->m_outports[0]; */
     break;
   }
   case XSLT_INSTR_FOR_EACH_GROUP:
@@ -1136,7 +1210,7 @@ int Compilation::compileSequenceItem(Function *fun, Statement *sn,
     break;
   }
   default:
-    assert(0);
+    ASSERT(0);
     break;
   }
   return 0;
@@ -1208,10 +1282,13 @@ int Compilation::compileSequence(Function *fun, Statement *parent,
   return 0;
 }
 
-int Compilation::compileFunctionContents(Function *fun, Statement *parent,
+int Compilation::compileFunctionContents(Function *fun, Statement *parent, Expression *expr,
                                 OutputPort **cursor)
 {
-  return compileSequence(fun,parent,cursor);
+  if (NULL != parent)
+    return compileSequence(fun,parent,cursor);
+  else
+    return compileExpr(fun,expr,cursor);
 }
 
 int Compilation::compileFunction(Statement *sn, Function *fun)
@@ -1223,43 +1300,39 @@ int Compilation::compileFunction(Statement *sn, Function *fun)
   int paramno;
 
   /* Compute parameters */
-  fun->m_nparams = 0;
-  for (p = sn->m_param; p; p = p->m_next)
-    fun->m_nparams++;
-
-  if (0 != fun->m_nparams)
-    fun->m_params = new Parameter[fun->m_nparams];
 
   outports = (OutputPort**)calloc(fun->m_nparams,sizeof(OutputPort*));
 
-  for (p = sn->m_param, paramno = 0; p; p = p->m_next, paramno++)
+  seqtypes.append(SequenceType(xs_g->context_type));
+  for (p = sn->m_param; p; p = p->m_next)
     seqtypes.append(p->m_st);
+  ASSERT(seqtypes.count() == fun->m_nparams);
 
   initParamInstructions(fun,seqtypes,outports);
 
-  for (p = sn->m_param, paramno = 0; p; p = p->m_next, paramno++)
+  for (p = sn->m_param, paramno = 1; p; p = p->m_next, paramno++)
     p->m_outp = outports[paramno];
 
   free(outports);
 
   /* Compute return type */
   fun->m_rtype = sn->m_st;
-  if (fun->m_rtype.isNull()) {
-    fun->m_rtype = SequenceType(xs_g->complex_ur_type);
-    assert(NULL != fun->m_rtype.itemType()->m_type);
-  }
+  if (fun->m_rtype.isNull())
+    fun->m_rtype = SequenceType::itemstar();
 
   /* Add wrapper instructions */
   fun->m_ret = fun->addInstruction(OP_RETURN,sn->m_sloc);
-  fun->m_start = fun->addInstruction(OP_PASS,sn->m_sloc);
-  fun->m_start->m_inports[0].st = SequenceType::item();
 
-  cursor = &fun->m_start->m_outports[0];
+  fun->m_params[0].st = SequenceType(xs_g->context_type);
+  fun->m_params[0].start = fun->addInstruction(OP_PASS,sn->m_sloc);
+  fun->m_params[0].start->m_inports[0].st = fun->m_params[0].st;
+
+  cursor = &fun->m_params[0].start->m_outports[0];
   cursor->dest = fun->m_ret;
   cursor->destp = 0;
 
-  CHECK_CALL(compileFunctionContents(fun,sn,&cursor))
-  assert(NULL != cursor);
+  CHECK_CALL(compileFunctionContents(fun,sn,NULL,&cursor))
+  ASSERT(NULL != cursor);
 
   return 0;
 }
@@ -1276,21 +1349,28 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
   Function *innerfun;
 
   sprintf(name,"anon%dfun",m_nextanonid++);
-  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name));
+  innerfun = m_program->addFunction(NSName(ANON_TEMPLATE_NAMESPACE,name),1);
 
   innerfun->init(nosourceloc);
 
   innerfun->m_isapply = 1;
   innerfun->m_mode = mode;
+  innerfun->m_internal = true;
 
+  innerfun->m_params[0].st = SequenceType(xs_g->context_type);
+  innerfun->m_params[0].start = innerfun->addInstruction(OP_PASS,nosourceloc);
+  innerfun->m_params[0].start->m_inports[0].st = innerfun->m_params[0].st;
 
-  cursor = &innerfun->m_start->m_outports[0];
+  cursor = &innerfun->m_params[0].start->m_outports[0];
+  cursor->dest = innerfun->m_ret;
+  cursor->destp = 0;
 
   Iterator<Template*> it;
   for (it = m_templates; it.haveCurrent(); it++) {
     Template *t = *it;
     Instruction *call = innerfun->addInstruction(OP_CALL,nosourceloc);
 
+    Instruction *dot = specialop(innerfun,SPECIAL_NAMESPACE,"dot",0,nosourceloc);
     Instruction *dup = innerfun->addInstruction(OP_DUP,nosourceloc);
     Instruction *contains = specialop(innerfun,SPECIAL_NAMESPACE,"contains-node",2,
                                          nosourceloc);
@@ -1304,10 +1384,29 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
 
     /* FIXME: transform expression as described in XSLT 2.0 section 5.5.3 */
 
+    Instruction *cdup = innerfun->addInstruction(OP_DUP,t->pattern->m_sloc);
+    set_and_move_cursor(&condcur,cdup,0,cdup,0);
+
+
+    set_and_move_cursor(&condcur,dot,0,dot,0);
     set_and_move_cursor(&condcur,dup,0,dup,0);
     set_and_move_cursor(&condcur,root,0,root,0);
     set_and_move_cursor(&condcur,select,0,select,0);
-    CHECK_CALL(compileExpr(innerfun,t->pattern,&condcur))
+
+
+
+    Instruction *map;
+    CHECK_CALL(compileInnerFunction(innerfun,NULL,t->pattern,&map,&condcur,t->pattern->m_sloc))
+    set_and_move_cursor(&condcur,map,0,map,0);
+    cdup->m_outports[1].dest = map;
+    cdup->m_outports[1].destp = 1;
+
+
+//    CHECK_CALL(compileExpr(innerfun,t->pattern,&condcur))
+
+
+
+
 
     set_and_move_cursor(&condcur,contains,0,contains,0);
 
@@ -1323,6 +1422,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
 
   /* default template for document and element nodes */
   {
+    Instruction *cdot = specialop(innerfun,SPECIAL_NAMESPACE,"dot",0,nosourceloc);
     Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
     Instruction *not1 = specialop(innerfun,FN_NAMESPACE,"not",1,nosourceloc);
@@ -1335,20 +1435,33 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     select->m_axis = AXIS_SELF;
     select->m_seqtypetest = SequenceType::choice(doctype,elemtype);
 
+    set_and_move_cursor(&condcur,cdot,0,cdot,0);
     set_and_move_cursor(&condcur,select,0,select,0);
     set_and_move_cursor(&condcur,isempty,0,isempty,0);
     set_and_move_cursor(&condcur,not1,0,not1,0);
 
+    Instruction *dup = innerfun->addInstruction(OP_DUP,nosourceloc);
+    set_and_move_cursor(&truecur,dup,0,dup,0);
+
+    Instruction *dot = specialop(innerfun,SPECIAL_NAMESPACE,"dot",0,nosourceloc);
+    set_and_move_cursor(&truecur,dot,0,dot,0);
+
     childsel->m_axis = AXIS_CHILD;
     childsel->m_seqtypetest = SequenceType::node();
     set_and_move_cursor(&truecur,childsel,0,childsel,0);
-    CHECK_CALL(compileApplyTemplates(innerfun,&truecur,mode,nosourceloc))
+
+    Instruction *map;
+    CHECK_CALL(compileApplyTemplates(innerfun,&truecur,mode,nosourceloc,&map))
+
+    dup->m_outports[1].dest = map;
+    dup->m_outports[1].destp = 1;
 
     branchcur = &falsecur;
   }
 
   /* default template for text and attribute nodes */
   {
+    Instruction *cdot = specialop(innerfun,SPECIAL_NAMESPACE,"dot",0,nosourceloc);
     Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     Instruction *isempty = specialop(innerfun,FN_NAMESPACE,"empty",1,nosourceloc);
     Instruction *not1 = specialop(innerfun,FN_NAMESPACE,"not",1,nosourceloc);
@@ -1361,6 +1474,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     select->m_axis = AXIS_SELF;
     select->m_seqtypetest = SequenceType::choice(texttype,attrtype);
 
+    set_and_move_cursor(&condcur,cdot,0,cdot,0);
     set_and_move_cursor(&condcur,select,0,select,0);
     set_and_move_cursor(&condcur,isempty,0,isempty,0);
     set_and_move_cursor(&condcur,not1,0,not1,0);
@@ -1394,12 +1508,10 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
  * cursor must be set to the output port of a subgraph which computes the sequence of items
  * corresponding to the select attribute (which defaults to "child::node()")
  */
-int Compilation::compileApplyTemplates(Function *fun,
-                                    OutputPort **cursor,
-                                    const char *mode, sourceloc sloc)
+int Compilation::compileApplyTemplates(Function *fun, OutputPort **cursor, const char *mode,
+                                       sourceloc sloc, Instruction **map)
 {
   Function *applyfun = NULL;
-  Instruction *map = NULL;
 
   /* Do we already have an anonymous function for this mode? */
   for (Iterator<Function*> it(m_program->m_functions); it.haveCurrent(); it++) {
@@ -1418,9 +1530,13 @@ int Compilation::compileApplyTemplates(Function *fun,
     CHECK_CALL(compileApplyFunction(&applyfun,mode))
 
   /* Add the map instruction */
-  map = fun->addInstruction(OP_MAP,sloc);
-  map->m_cfun = applyfun;
-  set_and_move_cursor(cursor,map,0,map,0);
+  (*map) = fun->addInstruction(OP_MAP,sloc);
+  (*map)->m_cfun = applyfun;
+  (*map)->freeInports();
+  (*map)->m_ninports = applyfun->m_nparams+1;
+  (*map)->m_inports = new InputPort[(*map)->m_ninports];
+
+  set_and_move_cursor(cursor,*map,0,*map,0);
 
   return 0;
 }
@@ -1440,27 +1556,41 @@ void Compilation::compileOrderedTemplateList()
 
 int Compilation::compileDefaultTemplate()
 {
-  Function *fun = m_program->addFunction(NSName(String::null(),"default"));
+  Function *fun = m_program->addFunction(NSName(String::null(),"default"),1);
+  fun->m_internal = true;
   Instruction *pass = fun->addInstruction(OP_PASS,nosourceloc);
   Instruction *ret = fun->addInstruction(OP_RETURN,nosourceloc);
   Instruction *output = specialop(fun,SPECIAL_NAMESPACE,"output",1,nosourceloc);
   OutputPort *atcursor;
   df_seroptions *options;
 
+  fun->m_rtype = SequenceType(xs_g->any_atomic_type);
+  fun->m_params[0].st = SequenceType(xs_g->context_type);
+  fun->m_params[0].start = pass;
+
   pass->m_outports[0].dest = ret;
   pass->m_outports[0].destp = 0;
-  fun->m_rtype = SequenceType(xs_g->any_atomic_type);
-  pass->m_inports[0].st = SequenceType::item();
+  pass->m_inports[0].st = fun->m_params[0].st;
 
   options = xslt_get_output_def(m_source,NSName::null());
-  assert(NULL != options);
+  ASSERT(NULL != options);
   output->m_seroptions = new df_seroptions(*options);
 
   atcursor = &pass->m_outports[0];
-  CHECK_CALL(compileApplyTemplates(fun,&atcursor,NULL,nosourceloc))
-  set_and_move_cursor(&atcursor,output,0,output,0);
 
-  fun->m_start = pass;
+  Instruction *dup = fun->addInstruction(OP_DUP,nosourceloc);
+  set_and_move_cursor(&atcursor,dup,0,dup,0);
+
+  Instruction *dot = specialop(fun,SPECIAL_NAMESPACE,"dot",0,nosourceloc);
+  set_and_move_cursor(&atcursor,dot,0,dot,0);
+
+  Instruction *map;
+  CHECK_CALL(compileApplyTemplates(fun,&atcursor,NULL,nosourceloc,&map))
+
+  dup->m_outports[1].dest = map;
+  dup->m_outports[1].destp = 1;
+
+  set_and_move_cursor(&atcursor,output,0,output,0);
 
   return 0;
 }
@@ -1475,17 +1605,22 @@ int Compilation::compile2()
   /* create empty functions first, so that they can be referenced */
 
   for (sn = m_source->root->m_child; sn; sn = xl_next_decl(sn)) {
+    unsigned int nparams = 0;
+    Statement *p;
+    for (p = sn->m_param; p; p = p->m_next)
+      nparams++;
+
     if (XSLT_DECL_FUNCTION == sn->m_type) {
       if (NULL != m_program->getFunction(sn->m_ident)) {
         fmessage(stderr,"Function \"%*\" already defined\n",&sn->m_qn.m_localPart);
         return -1;
       }
-      m_program->addFunction(sn->m_ident);
+      m_program->addFunction(sn->m_ident,nparams+1);
     }
     else if (XSLT_DECL_TEMPLATE == sn->m_type) {
       sn->m_ident = NSName(ANON_TEMPLATE_NAMESPACE,String::format("template%d",templatecount++));
-      assert(NULL != sn->m_tmpl);
-      sn->m_tmpl->fun = m_program->addFunction(sn->m_ident);
+      ASSERT(NULL != sn->m_tmpl);
+      sn->m_tmpl->fun = m_program->addFunction(sn->m_ident,nparams+1);
     }
   }
 
@@ -1520,21 +1655,23 @@ int Compilation::compile2()
     case XSLT_DECL_STRIP_SPACE:
       break;
     case XSLT_DECL_TEMPLATE:
-      assert(NULL != sn->m_tmpl->fun);
+      ASSERT(NULL != sn->m_tmpl->fun);
       CHECK_CALL(compileFunction(sn,sn->m_tmpl->fun))
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
   }
 
+#if 1
   for (Iterator<Function*> it(m_program->m_functions); it.haveCurrent(); it++) {
     Function *fun = *it;
     CHECK_CALL(df_check_function_connected(fun))
     df_remove_redundant(m_program,fun);
     fun->computeTypes();
   }
+#endif
 
   return 0;
 }

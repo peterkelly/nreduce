@@ -24,7 +24,6 @@
 #include "util/macros.h"
 #include "util/Namespace.h"
 #include "util/debug.h"
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
@@ -93,7 +92,7 @@ void Instruction::freeInports()
 
 void Instruction_compute_types(Instruction *instr)
 {
-  int i;
+  unsigned int i;
 
   instr->m_computed = 1;
 
@@ -144,7 +143,7 @@ void Instruction_compute_types(Instruction *instr)
   case OP_BUILTIN:
     break;
   default:
-    assert(!"invalid opcode");
+    ASSERT(!"invalid opcode");
     break;
   }
 
@@ -153,26 +152,24 @@ void Instruction_compute_types(Instruction *instr)
     InputPort *ip = &op->dest->m_inports[op->destp];
     int remaining = 0;
 
-    assert(!op->st.isNull());
+    ASSERT(!op->st.isNull());
 
     if ((OP_BUILTIN == op->dest->m_opcode) || (OP_CALL == op->dest->m_opcode)) {
       if (ip->st.isNull()) {
         message("null sequence type!\n");
       }
-      assert(!ip->st.isNull());
+      ASSERT(!ip->st.isNull());
     }
     else {
-      int i;
-
       if ((OP_MERGE != op->dest->m_opcode) || (ip->st.isNull())) {
         if (!ip->st.isNull()) {
           debug("%* instr %d inport %d [opcode %d] already has a type\n",
                 &instr->m_fun->m_ident,op->dest->m_id,op->destp,op->dest->m_opcode);
         }
-        assert(ip->st.isNull());
+        ASSERT(ip->st.isNull());
         ip->st = op->st;
 
-        for (i = 0; i < op->dest->m_ninports; i++)
+        for (unsigned int i = 0; i < op->dest->m_ninports; i++)
           if (op->dest->m_inports[i].st.isNull())
             remaining++;
 
@@ -185,16 +182,16 @@ void Instruction_compute_types(Instruction *instr)
 }
 
 
-Function::Function()
-  : m_nparams(0),
-    m_params(NULL),
-    m_start(NULL),
-    m_ret(NULL),
+Function::Function(unsigned int nparams)
+  : m_ret(NULL),
     m_nextid(0),
     m_mapseq(NULL),
     m_program(NULL),
-    m_isapply(0)
+    m_isapply(0),
+    m_internal(false)
 {
+  m_nparams = nparams;
+  m_params = new Parameter[m_nparams];
 }
 
 Function::~Function()
@@ -208,23 +205,22 @@ Function::~Function()
 
 void Function::init(sourceloc sloc)
 {
-  assert(NULL == m_ret);
-  assert(NULL == m_start);
-  assert(m_rtype.isNull());
+  ASSERT(NULL == m_ret);
+  ASSERT(m_rtype.isNull());
 
   m_ret = addInstruction(OP_RETURN,sloc);
-  m_start = addInstruction(OP_PASS,sloc);
-  m_start->m_inports[0].st = SequenceType::item();
-  m_start->m_outports[0].dest = m_ret;
-  m_start->m_outports[0].destp = 0;
+//  m_start = addInstruction(OP_PASS,sloc);
+//  m_start->m_inports[0].st = SequenceType::item();
+//  m_start->m_outports[0].dest = m_ret;
+//  m_start->m_outports[0].destp = 0;
 
-  m_rtype = SequenceType(xs_g->complex_ur_type);
+  m_rtype = SequenceType::itemstar();
 }
 
 Instruction *Function::addInstruction(int opcode, sourceloc sloc)
 {
   Instruction *instr = new Instruction();
-  int i;
+  unsigned int i;
   m_instructions.append(instr);
   instr->m_id = m_nextid++;
   instr->m_opcode = opcode;
@@ -281,7 +277,7 @@ Instruction *Function::addInstruction(int opcode, sourceloc sloc)
     instr->m_noutports = 1;
     break;
   default:
-    assert(!"invalid opcode");
+    ASSERT(!"invalid opcode");
     break;
   }
 
@@ -319,12 +315,27 @@ Instruction *Function::addBuiltinInstruction(const NSName &ident, int nargs, sou
   instr->m_bif = bif;
 
   instr->freeInports();
-  instr->m_ninports = nargs;
-  instr->m_inports = new InputPort[nargs];
-  for (i = 0; i < nargs; i++)
-    instr->m_inports[i].st = bif->m_argtypes[i];
 
-  assert(1 == instr->m_noutports);
+  if (bif->m_context) {
+    // Function requires context item - this goes to the first input port (0)
+    instr->m_ninports = nargs+1;
+    instr->m_inports = new InputPort[instr->m_ninports];
+    instr->m_inports[0].st = SequenceType(xs_g->context_type);
+    for (i = 0; i < nargs; i++)
+      instr->m_inports[i+1].st = bif->m_argtypes[i];
+  }
+  else {
+    // Function does not require context item - just have one input port for each parameter
+
+    ASSERT(0 < nargs); // Functions with no arguments must take the context as input
+
+    instr->m_ninports = nargs;
+    instr->m_inports = new InputPort[instr->m_ninports];
+    for (i = 0; i < nargs; i++)
+      instr->m_inports[i].st = bif->m_argtypes[i];
+  }
+
+  ASSERT(1 == instr->m_noutports);
   instr->m_outports[0].st = bif->m_rettype;
 
   return instr;
@@ -339,22 +350,19 @@ void Function::deleteInstruction(Instruction *instr)
       return;
     }
   }
-  assert(!"instruction not found");
+  ASSERT(!"instruction not found");
 }
 
 void Function::computeTypes()
 {
-  int i;
-
-  Instruction_compute_types(m_start);
-  for (i = 0; i < m_nparams; i++)
+  for (unsigned int i = 0; i < m_nparams; i++)
     Instruction_compute_types(m_params[i].start);
 }
 
 Context::Context()
   : position(0),
     size(0),
-    havefocus(0),
+    havefocus(false),
     tmpl(NULL)
 {
 }
@@ -379,7 +387,7 @@ Environment::~Environment()
 }
 
 BuiltinFunction::BuiltinFunction()
-  : m_fun(NULL), m_nargs(0)
+  : m_fun(NULL), m_nargs(0), m_context(false)
 {
 }
 
@@ -403,9 +411,9 @@ Program::~Program()
     delete *bit;
 }
 
-Function *Program::addFunction(const NSName &ident)
+Function *Program::addFunction(const NSName &ident, unsigned int nparams)
 {
-  Function *fun = new Function();
+  Function *fun = new Function(nparams);
   m_functions.append(fun);
   fun->m_ident = ident;
   fun->m_program = this;
@@ -435,34 +443,48 @@ static int has_portlabels(Instruction *instr)
   return ((OP_DUP != instr->m_opcode) && (OP_GATE != instr->m_opcode));
 }
 
-void Program::outputDot(FILE *f, int types)
+void Program::getActualOutputPort(Instruction **dest, unsigned int *destp)
 {
-  fmessage(f,"digraph {\n");
-/*   fmessage(f,"  rankdir=LR;\n"); */
-  fmessage(f,"  nodesep=0.5;\n");
-  fmessage(f,"  ranksep=0.3;\n");
-  fmessage(f,"  node[shape=record,fontsize=12,fontname=\"Arial\",style=filled];\n");
-  for (Iterator<Function*> it(m_functions); it.haveCurrent(); it++) {
-    Function *fun = *it;
-    int i;
+  if (OP_MAP == (*dest)->m_opcode) {
+    if (0 < (*destp)) {
+      (*destp)--;
+      ASSERT((*destp) < (*dest)->m_cfun->m_nparams);
+      (*dest) = (*dest)->m_cfun->m_params[(*destp)].start;
+      ASSERT(NULL != (*dest));
+    }
+  }
+}
+
+void Program::outputDotFunction(FILE *f, bool types, bool internal, bool anonfuns, Function *fun,
+                                List<Function*> &printed, Instruction *retdest,
+                                unsigned int retdestp)
+{
+    if (!internal && fun->m_internal)
+      return;
+
+    if (printed.contains(fun))
+      return;
+
+    printed.append(fun);
+
+    unsigned int i;
 
     fmessage(f,"  subgraph cluster%p {\n",fun);
+    fmessage(f,"    color=black;\n");
     fmessage(f,"    label=\"%*\";\n",&fun->m_ident.m_name);
 
     fmessage(f,"  subgraph clusterz%p {\n",fun);
     fmessage(f,"    label=\"\";\n");
     fmessage(f,"    color=white;\n");
 
-    fmessage(f,"    %*start [label=\"[context]\",color=white];\n",&fun->m_ident.m_name);
-    if (NULL != fun->m_start)
-      fmessage(f,"    %*start -> %*%d;\n",&
-               fun->m_ident.m_name,&fun->m_ident.m_name,fun->m_start->m_id);
     for (i = 0; i < fun->m_nparams; i++) {
       fmessage(f,"    %*p%d [label=\"[param %d]\",color=white];\n",&fun->m_ident.m_name,i,i);
       if (NULL != fun->m_params[i].start)
         fmessage(f,"    %*p%d -> %*%d;\n",
                 &fun->m_ident.m_name,i,&fun->m_ident.m_name,fun->m_params[i].start->m_id);
     }
+    if (!anonfuns)
+      fmessage(f,"    %*input;\n",&fun->m_ident.m_name);
     fmessage(f,"  }\n");
 
     fmessage(f,"  subgraph clusterx%p {\n",fun);
@@ -470,12 +492,17 @@ void Program::outputDot(FILE *f, int types)
     fmessage(f,"    color=white;\n");
 
     Iterator<Instruction*> iit;
-    for (iit = fun->m_instructions; it.haveCurrent(); iit++) {
+    for (iit = fun->m_instructions; iit.haveCurrent(); iit++) {
       Instruction *instr = *iit;
-      int i;
+      unsigned int i;
 
       if (fun->m_mapseq == instr)
         continue;
+
+      if (!anonfuns && (OP_MAP == instr->m_opcode)) {
+        outputDotFunction(f,types,internal,anonfuns,instr->m_cfun,printed,
+                          instr->m_outports[0].dest,instr->m_outports[0].destp);
+      }
 
       if (OP_DUP == instr->m_opcode) {
         fmessage(f,"    %*%d [label=\"\",style=filled,height=0.2,width=0.2,"
@@ -570,9 +597,19 @@ void Program::outputDot(FILE *f, int types)
       }
 
       for (i = 0; i < instr->m_noutports; i++) {
-        if (NULL != instr->m_outports[i].dest) {
-          Instruction *dest = instr->m_outports[i].dest;
-          int destp = instr->m_outports[i].destp;
+
+        Instruction *dest = instr->m_outports[i].dest;
+        unsigned int destp = instr->m_outports[i].destp;
+
+        if ((OP_RETURN == instr->m_opcode) && (NULL != retdest)) {
+          dest = retdest;
+          destp = retdestp;
+        }
+
+        if (!anonfuns && (OP_MAP == instr->m_opcode))
+          continue;
+
+        if (NULL != dest) {
 
           if (types && has_portlabels(instr))
             fmessage(f,"    %*%d:o%d",&fun->m_ident.m_name,instr->m_id,i);
@@ -581,10 +618,20 @@ void Program::outputDot(FILE *f, int types)
 
           fmessage(f," -> ");
 
-          if (types && has_portlabels(dest))
-            fmessage(f," %*%d:i%d [label=\"",&dest->m_fun->m_ident.m_name,dest->m_id,destp);
-          else
-            fmessage(f," %*%d [label=\"",&dest->m_fun->m_ident.m_name,dest->m_id);
+
+
+          if (!anonfuns && (0 == destp) && (OP_MAP == dest->m_opcode)) {
+            fmessage(f," %*input [label=\"",&dest->m_cfun->m_ident.m_name);
+          }
+          else {
+            if (!anonfuns)
+              getActualOutputPort(&dest,&destp);
+
+            if (types && has_portlabels(dest))
+              fmessage(f," %*%d:i%d [label=\"",&dest->m_fun->m_ident.m_name,dest->m_id,destp);
+            else
+              fmessage(f," %*%d [label=\"",&dest->m_fun->m_ident.m_name,dest->m_id);
+          }
 
 /*           if ((OP_SPLIT == instr->m_opcode) && (0 == i)) */
 /*             fmessage(f,"F"); */
@@ -593,13 +640,13 @@ void Program::outputDot(FILE *f, int types)
 
           fmessage(f,"\"");
 
-          if (OP_DUP == instr->m_outports[i].dest->m_opcode)
+          if (OP_DUP == dest->m_opcode)
             fmessage(f,",color=\"#808080\",arrowhead=none");
           else if (OP_DUP == instr->m_opcode)
             fmessage(f,",color=\"#808080\"");
           else if ((2 == i) &&
                    (OP_SPLIT == instr->m_opcode) &&
-                   (OP_MERGE == instr->m_outports[i].dest->m_opcode))
+                   (OP_MERGE == dest->m_opcode))
             fmessage(f,",style=dashed");
 
           fmessage(f,"];\n");
@@ -609,19 +656,37 @@ void Program::outputDot(FILE *f, int types)
 
     fmessage(f,"  }\n");
     fmessage(f,"  }\n");
+}
+
+void Program::outputDot(FILE *f, bool types, bool internal, bool anonfuns)
+{
+  fmessage(f,"digraph {\n");
+/*   fmessage(f,"  rankdir=LR;\n"); */
+  fmessage(f,"  nodesep=0.5;\n");
+  fmessage(f,"  ranksep=0.3;\n");
+  fmessage(f,"  node[shape=record,fontsize=12,fontname=\"Arial\",style=filled];\n");
+
+  List<Function*> printed;
+
+  for (Iterator<Function*> fit(m_functions); fit.haveCurrent(); fit++) {
+    Function *fun = *fit;
+    outputDotFunction(f,types,internal,anonfuns,fun,printed,NULL,0);
   }
   fmessage(f,"}\n");
 }
 
-void Program::outputDF(FILE *f)
+void Program::outputDF(FILE *f, bool internal)
 {
   StringBuffer buf;
   for (Iterator<Function*> it(m_functions); it.haveCurrent(); it++) {
     Function *fun = *it;
-    int i;
+    unsigned int i;
+
+    if (!internal && fun->m_internal)
+      continue;
 
     fmessage(f,"function %* {\n",&fun->m_ident.m_name);
-    assert(!fun->m_rtype.isNull());
+    ASSERT(!fun->m_rtype.isNull());
     buf.clear();
     fun->m_rtype.printFS(buf,xs_g->namespaces);
     fmessage(f,"  return %*\n",&buf);
@@ -632,12 +697,9 @@ void Program::outputDF(FILE *f)
       fmessage(f,"  param %d start %d type %*\n",i,fun->m_params[i].start->m_id,&buf);
     }
 
-    fmessage(f,"  start %d\n",fun->m_start->m_id);
-
     Iterator<Instruction*> iit;
     for (iit = fun->m_instructions; iit.haveCurrent(); iit++) {
       Instruction *instr = *iit;
-      int i;
 
       if (fun->m_mapseq == instr)
         continue;
@@ -647,14 +709,17 @@ void Program::outputDF(FILE *f)
         for (i = 0; i < instr->m_noutports; i++) {
           if (0 < i)
             fmessage(f," ");
-          assert(NULL != instr->m_outports[i].dest);
+          ASSERT(NULL != instr->m_outports[i].dest);
           fmessage(f,"%d:%d",instr->m_outports[i].dest->m_id,instr->m_outports[i].destp);
         }
       }
+      if (OP_BUILTIN == instr->m_opcode) {
+        fmessage(f," [%*]",&instr->m_bif->m_ident);
+      }
 
       if (OP_CONST == instr->m_opcode) {
-        assert(SEQTYPE_ITEM == instr->m_cvalue.type().type());
-        assert(ITEM_ATOMIC == instr->m_cvalue.type().itemType()->m_kind);
+        ASSERT(SEQTYPE_ITEM == instr->m_cvalue.type().type());
+        ASSERT(ITEM_ATOMIC == instr->m_cvalue.type().itemType()->m_kind);
 
         if (instr->m_cvalue.type().itemType()->m_type == xs_g->string_type) {
           String escaped = escape_str(instr->m_cvalue.asString());
@@ -664,7 +729,7 @@ void Program::outputDF(FILE *f)
           fmessage(f," = %d",instr->m_cvalue.asInt());
         }
         else {
-          assert(!"unknown constant type");
+          ASSERT(!"unknown constant type");
         }
       }
 
@@ -672,12 +737,12 @@ void Program::outputDF(FILE *f)
 
       for (i = 0; i < instr->m_ninports; i++) {
         if (instr->m_inports[i].st.isNull()) {
-          fmessage(f,"    in %d: none\n",i);
+          fmessage(f,"    in  %d: none\n",i);
         }
         else {
           StringBuffer buf2;
           instr->m_inports[i].st.printFS(buf2,xs_g->namespaces);
-          fmessage(f,"    in %d: %*\n",i,&buf2);
+          fmessage(f,"    in  %d: %*\n",i,&buf2);
         }
       }
 
@@ -688,7 +753,7 @@ void Program::outputDF(FILE *f)
         else {
           StringBuffer buf2;
           instr->m_outports[i].st.printFS(buf2,xs_g->namespaces);
-          fmessage(f,"    out %d: %&\n",i,&buf2);
+          fmessage(f,"    out %d: %*\n",i,&buf2);
         }
       }
 

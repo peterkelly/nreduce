@@ -62,13 +62,13 @@ extern const char *OpCodeNames[GridXSLT::OP_COUNT];
 
 class InputPort {
 public:
-  InputPort() : source(0), sourcep(0), from_special(0) { }
+  InputPort() : source(0), sourcep(0), from_special(false) { }
   ~InputPort() { }
 
   SequenceType st;
   Instruction *source;
-  int sourcep;
-  int from_special;
+  unsigned int sourcep;
+  bool from_special;
 };
 
 class OutputPort {
@@ -78,10 +78,10 @@ public:
 
   SequenceType st;
   Instruction *dest;
-  int destp;
+  unsigned int destp;
 
   Instruction *owner;
-  int portno;
+  unsigned int portno;
 };
 
 class Instruction {
@@ -95,10 +95,10 @@ public:
   int m_opcode;
   int m_id;
 
-  int m_ninports;
+  unsigned int m_ninports;
   InputPort *m_inports;
 
-  int m_noutports;
+  unsigned int m_noutports;
   OutputPort *m_outports;
 
   Value m_cvalue;
@@ -134,7 +134,7 @@ public:
 class Function {
   DISABLE_COPY(Function)
 public:
-  Function();
+  Function(unsigned int nparams);
   ~Function();
 
   void init(sourceloc sloc);
@@ -146,16 +146,17 @@ public:
 
   NSName m_ident;
   List<Instruction*> m_instructions;
-  int m_nparams;
+  unsigned int m_nparams;
   Parameter *m_params;
   SequenceType m_rtype;
-  Instruction *m_start;
+/*   Instruction *m_start; */
   Instruction *m_ret;
   int m_nextid;
   Instruction *m_mapseq;
   Program *m_program;
   int m_isapply;
   String m_mode;
+  bool m_internal;
 };
 
 class Context {
@@ -166,7 +167,7 @@ public:
   Value item;
   int position;
   int size;
-  int havefocus;
+  bool havefocus;
   Function *tmpl;
   String mode;
   String group;
@@ -191,6 +192,7 @@ struct FunctionDefinition {
   String name;
   char *arguments;
   char *returns;
+  bool context;
 };
 
 class BuiltinFunction {
@@ -202,6 +204,7 @@ public:
   gxfunction *m_fun;
   NSName m_ident;
   int m_nargs;
+  bool m_context;
   List<SequenceType> m_argtypes;
   SequenceType m_rettype;
 };
@@ -212,15 +215,20 @@ public:
   Program(Schema *schema);
   ~Program();
 
-  Function *addFunction(const NSName &ident);
+  Function *addFunction(const NSName &ident, unsigned int nparams);
   Function *getFunction(const NSName &ident);
-  void outputDot(FILE *f, int types);
-  void outputDF(FILE *f);
+  void outputDot(FILE *f, bool types, bool internal, bool anonfuns);
+  void outputDF(FILE *f, bool internal);
 
   List<Function*> m_functions;
   Schema *m_schema;
   list *m_space_decls;
   List<BuiltinFunction*> m_builtin_functions;
+
+private:
+  void getActualOutputPort(Instruction **dest, unsigned int *destp);
+  void outputDotFunction(FILE *f, bool types, bool internal, bool anonfuns, Function *fun,
+                         List<Function*> &printed, Instruction *retdest, unsigned int retdestp);
 };
 
 };
