@@ -30,7 +30,6 @@
 #include "dataflow/serialization.h"
 #include "xslt/compile.h"
 #include <stdio.h>
-#include <assert.h>
 #include <string.h>
 #include <argp.h>
 #include <unistd.h>
@@ -52,7 +51,9 @@ static char args_doc[] = "[INPUT] SOURCEFILE\n"
 
 static struct argp_option options[] = {
   {"dot",                      'd', "FILE",  0, "Output graph in dot format to FILE" },
+  {"internal",                 'i', NULL,    0, "Include internal functions in output" },
   {"types",                    'y', NULL,    0, "Show port types in dot output" },
+  {"anon-functions",           'a', NULL,    0, "Show anonymous functions separately" },
   {"df",                       'f', NULL,    0, "Just print compiled dataflow graph; do not "
                                                 "execute" },
   {"trace",                    't', NULL,    0, "Enable tracing" },
@@ -64,12 +65,14 @@ static struct argp_option options[] = {
 struct arguments {
   char *filename;
   char *dot;
-  int types;
+  bool internal;
+  bool types;
+  bool anonfuns;
   char *input;
-  int df;
-  int trace;
-  int print_tree;
-  int server;
+  bool df;
+  bool trace;
+  bool print_tree;
+  bool server;
 };
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -80,20 +83,26 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
   case 'd':
     arguments->dot = arg;
     break;
+  case 'i':
+    arguments->internal = true;
+    break;
   case 'y':
-    arguments->types = 1;
+    arguments->types = true;
+    break;
+  case 'a':
+    arguments->anonfuns = true;
     break;
   case 'f':
-    arguments->df = 1;
+    arguments->df = true;
     break;
   case 't':
-    arguments->trace = 1;
+    arguments->trace = true;
     break;
   case 'p':
-    arguments->print_tree = 1;
+    arguments->print_tree = true;
     break;
   case 's':
-    arguments->server = 1;
+    arguments->server = true;
     break;
   case ARGP_KEY_ARG:
     if (0 == state->arg_num) {
@@ -199,12 +208,12 @@ int gridxslt_main(int argc, char **argv)
       perror(arguments.dot);
       return 1;
     }
-    program->outputDot(dotfile,arguments.types);
+    program->outputDot(dotfile,arguments.types,arguments.internal,arguments.anonfuns);
     fclose(dotfile);
   }
 
   if (arguments.df) {
-    program->outputDF(stdout);
+    program->outputDF(stdout,arguments.internal);
   }
   else {
 

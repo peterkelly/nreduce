@@ -23,8 +23,8 @@
 #include "util/XMLUtils.h"
 #include "util/List.h"
 #include "util/stringbuf.h"
+#include "util/debug.h"
 #include <stdio.h>
-#include <assert.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <math.h>
@@ -717,7 +717,7 @@ int test_file(char *filename, char *shortname, int justrun, struct arguments *ar
         got_expected_rc = 1;
         break;
       default:
-        assert(!"invalid state");
+        ASSERT(!"invalid state");
         break;
       }
     }

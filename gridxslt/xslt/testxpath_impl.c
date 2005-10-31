@@ -22,6 +22,7 @@
 
 #include "util/stringbuf.h"
 #include "util/Namespace.h"
+#include "util/debug.h"
 #include "xmlschema/xmlschema.h"
 #include "Expression.h"
 #include "Statement.h"
@@ -29,7 +30,6 @@
 #include <argp.h>
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 
 using namespace GridXSLT;
 
@@ -135,7 +135,7 @@ int testxpath_main(int argc, char **argv)
     fclose(in);
   }
   else {
-    assert(NULL != arguments.expr);
+    ASSERT(NULL != arguments.expr);
     input.append(arguments.expr);
   }
 
@@ -161,8 +161,8 @@ int testxpath_main(int argc, char **argv)
   else {
     if (arguments.normalized_seqtypes) {
       StringBuffer buf;
-      assert(XPATH_EXPR_INSTANCE_OF == expr->m_type);
-      assert(!expr->m_st.isNull());
+      ASSERT(XPATH_EXPR_INSTANCE_OF == expr->m_type);
+      ASSERT(!expr->m_st.isNull());
       expr->m_st.printFS(buf,xs_g->namespaces);
       message("%*\n",&buf);
     }

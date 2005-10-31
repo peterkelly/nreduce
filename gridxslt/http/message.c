@@ -27,7 +27,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <ctype.h>
 
 using namespace GridXSLT;
@@ -522,7 +521,7 @@ int msgparser_parse(msgparser *mp, const char *buf, int size)
     case STATE_BODY:
       break;
     default:
-      assert(0);
+      ASSERT(0);
     }
   }
 

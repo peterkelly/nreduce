@@ -24,6 +24,7 @@
 #include "xmlschema.h"
 #include "util/stringbuf.h"
 #include "util/Namespace.h"
+#include "util/debug.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/xmlIO.h>
 #include <libxml/parser.h>
@@ -31,7 +32,6 @@
 #include <libxml/uri.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 
@@ -44,7 +44,7 @@ void DumpVisitor::incIndent()
 
 void DumpVisitor::decIndent()
 {
-  assert(0 < indent);
+  ASSERT(0 < indent);
   indent--;
 }
 
@@ -80,7 +80,7 @@ void DumpVisitor::dump_enum_val(const char **enumvals, char *name, int val)
     }
   }
   /* we only get here if the value is invalid */
-  assert(0);
+  ASSERT(0);
 }
 
 void output_value_constraint(xmlTextWriter *writer, ValueConstraint *vc)
@@ -105,7 +105,7 @@ void write_ref_attribute(Schema *s, xmlTextWriter *writer, char *attrname, Refer
 {
   if (!r->def.ident.m_ns.isNull()) {
     ns_def *ns = s->globals->namespaces->lookup_href(r->def.ident.m_ns);
-    assert(NULL != ns);
+    ASSERT(NULL != ns);
     XMLWriter::formatAttribute(writer,attrname,"%*:%*",&ns->prefix,&r->def.ident.m_name);
   }
   else {
@@ -203,7 +203,7 @@ int OutputVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
   if (!t->complex) {
     /* <simpleType> */
 
-    assert((TYPE_VARIETY_ATOMIC == t->variety) ||
+    ASSERT((TYPE_VARIETY_ATOMIC == t->variety) ||
            (TYPE_VARIETY_LIST == t->variety) ||
            (TYPE_VARIETY_UNION == t->variety));
 
@@ -236,7 +236,7 @@ int OutputVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
       else {
         stringbuf *member_types = stringbuf_new();
         list *l;
-        assert(TYPE_SIMPLE_UNION == t->stype);
+        ASSERT(TYPE_SIMPLE_UNION == t->stype);
         xmlTextWriterStartElement(writer,"xsd:union");
 
         for (l = t->members; l; l = l->next) {
@@ -299,7 +299,7 @@ int OutputVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
           write_ref_attribute(s,writer,"base",t->baseref);
         }
         else {
-          assert(TYPE_DERIVATION_RESTRICTION == t->derivation_method);
+          ASSERT(TYPE_DERIVATION_RESTRICTION == t->derivation_method);
           xmlTextWriterStartElement(writer,"xsd:restriction");
           write_ref_attribute(s,writer,"base",t->baseref);
         }
@@ -406,7 +406,7 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
     else if (TYPE_SIMPLE_UNION == t->stype)
       dump_printf("  Type: union\n");
     else
-      assert(0);
+      ASSERT(0);
 
     if (TYPE_VARIETY_ATOMIC == t->variety)
       dump_printf("  Variety: atomic\n");
@@ -415,7 +415,7 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
     else if (TYPE_VARIETY_UNION == t->variety)
       dump_printf("  Variety: union\n");
     else
-      assert(0);
+      ASSERT(0);
 
     dump_printf("  Locally declared facets:\n");
     for (facet = 0; facet < XS_FACET_NUMFACETS; facet++)
@@ -444,7 +444,7 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
         dump_printf("  Derivation method: extension\n");
       }
       else {
-        assert(TYPE_DERIVATION_RESTRICTION == t->derivation_method);
+        ASSERT(TYPE_DERIVATION_RESTRICTION == t->derivation_method);
         dump_printf("  Derivation method: restriction\n");
       }
 
@@ -459,7 +459,7 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
 /*         dump_printf("  Base type: {http://www.w3.org/2001/XMLSchema}anySimpleType\n"); */
 /*       } */
       else {
-/*         assert(t->base == s->globals->complex_ur_type); */
+/*         ASSERT(t->base == s->globals->complex_ur_type); */
 /*         dump_printf("  Base type: {http://www.w3.org/2001/XMLSchema}anyType\n"); */
         dump_printf("  Base type: (built-in ur-type)\n");
       }
@@ -520,7 +520,7 @@ int DumpVisitor::modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg)
   else if (MODELGROUP_COMPOSITOR_SEQUENCE == mg->compositor)
     dump_printf("  Compositor: sequence\n");
   else
-    assert(0);
+    ASSERT(0);
 
   incIndent();
   return 0;
@@ -540,7 +540,7 @@ int DumpVisitor::wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w)
   else if (WILDCARD_TYPE_SET == w->type)
     dump_printf("  Namespace constraint type: set\n");
   else if (WILDCARD_TYPE_ANY == w->type)
-    assert(!"invalid wildcard type");
+    ASSERT(!"invalid wildcard type");
 
   if (!w->not_ns.isNull())
     dump_printf("  Namespace not value: %*\n",&w->not_ns);
@@ -568,7 +568,7 @@ int DumpVisitor::wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w)
   else if (WILDCARD_PROCESS_CONTENTS_STRICT == w->process_contents)
     dump_printf("  Process contents: strict\n");
   else
-    assert(0);
+    ASSERT(0);
 
   dump_printf("  Annotation: (none)\n");
 
@@ -591,7 +591,7 @@ int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
     if (!post) {
       xmlTextWriterStartElement(writer,"xsd:element");
 
-      assert(p->term.e);
+      ASSERT(p->term.e);
 
       if (p->ref)
         write_ref_attribute(s,writer,"ref",p->ref);
@@ -621,7 +621,7 @@ int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
   }
   else if (PARTICLE_TERM_MODEL_GROUP == p->term_type) {
 
-    assert(p->term.mg);
+    ASSERT(p->term.mg);
 
     if (p->ref) {
       if (!post) {
@@ -643,7 +643,7 @@ int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
         else if (MODELGROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor)
           xmlTextWriterStartElement(writer,"xsd:sequence");
         else
-          assert(0);
+          ASSERT(0);
 
         output_particle_minmax(writer,p);
       }
@@ -653,12 +653,12 @@ int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
     }
   }
   else {
-    assert(PARTICLE_TERM_WILDCARD == p->term_type);
+    ASSERT(PARTICLE_TERM_WILDCARD == p->term_type);
 
     if (!post) {
       xmlTextWriterStartElement(writer,"xsd:any");
       output_particle_minmax(writer,p);
-      assert(p->term.w);
+      ASSERT(p->term.w);
 
       output_wildcard_attrs(s,writer,p->term.w);
     }
@@ -697,7 +697,7 @@ int OutputVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupD
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:group");
     XMLWriter::attribute(writer,"name",mgd->def.ident.m_name);
-    assert(mgd->model_group);
+    ASSERT(mgd->model_group);
 
     if (MODELGROUP_COMPOSITOR_ALL == mgd->model_group->compositor)
       xmlTextWriterStartElement(writer,"xsd:all");
@@ -706,7 +706,7 @@ int OutputVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupD
     else if (MODELGROUP_COMPOSITOR_SEQUENCE == mgd->model_group->compositor)
       xmlTextWriterStartElement(writer,"xsd:sequence");
     else
-      assert(0);
+      ASSERT(0);
   }
   else {
     xmlTextWriterEndElement(writer);
@@ -722,7 +722,7 @@ int DumpVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef
     return 0;
   }
 
-  assert(mgd->model_group);
+  ASSERT(mgd->model_group);
   dump_printf("Model group %*\n",&mgd->def.ident);
   if (MODELGROUP_COMPOSITOR_ALL == mgd->model_group->compositor)
     dump_printf("  Compositor: all\n");
@@ -731,7 +731,7 @@ int DumpVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef
   else if (MODELGROUP_COMPOSITOR_SEQUENCE == mgd->model_group->compositor)
     dump_printf("  Compositor: sequence\n");
   else
-    assert(0);
+    ASSERT(0);
 
   incIndent();
   return 0;
@@ -748,7 +748,7 @@ int OutputVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
     xmlTextWriterStartElement(writer,"xsd:element");
     XMLWriter::attribute(writer,"name",e->def.ident.m_name);
 
-    assert(e->type);
+    ASSERT(e->type);
     if (e->typeref)
       maybe_output_element_typeref(s,e,writer);
     if (e->nillable)
@@ -780,7 +780,7 @@ int DumpVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
   dump_printf("Element %*\n",&e->def.ident);
   dump_reference("Type",e->typeref);
   if (NULL != e->sgheadref) {
-    assert(NULL != e->sghead);
+    ASSERT(NULL != e->sghead);
     dump_reference("Substitution group",e->sgheadref);
   }
   if (NULL != e->sgmembers) {
@@ -935,7 +935,7 @@ int DumpVisitor::attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *
     return 0;
   }
 
-  assert(a->type);
+  ASSERT(a->type);
 
   dump_printf("Attribute %*\n",&a->def.ident);
 
@@ -957,7 +957,7 @@ int DumpVisitor::attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *
     return 0;
   }
 
-  assert(au->attribute);
+  ASSERT(au->attribute);
 
   dump_printf("Attribute use\n");
   dump_printf("  Required: %s\n",au->required ? "true" : "false");

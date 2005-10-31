@@ -30,6 +30,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
+/* FIXME: need to handle reserved words properly, e.g. using them as variable names.
+This requires special handling in the lexer; see the document from the W3C on this */
+
 using namespace GridXSLT;
 
 extern int lex_lineno;

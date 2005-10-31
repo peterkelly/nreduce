@@ -34,7 +34,6 @@
 #include <libxml/uri.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 
 using namespace GridXSLT;
@@ -84,7 +83,7 @@ void output_xslt_with_param(xmlTextWriter *writer, Statement *wp)
 {
   Statement *c;
 
-  assert(XSLT_WITH_PARAM == wp->m_type);
+  ASSERT(XSLT_WITH_PARAM == wp->m_type);
   xslt_start_element(writer,wp,"with-param");
 
   xml_write_attr(writer,"name","%*",&wp->m_qn);
@@ -102,7 +101,7 @@ void output_xslt_with_param(xmlTextWriter *writer, Statement *wp)
 
 void output_xslt_param(xmlTextWriter *writer, Statement *node)
 {
-  assert(XSLT_PARAM == node->m_type);
+  ASSERT(XSLT_PARAM == node->m_type);
 
   xslt_start_element(writer,node,"param");
 
@@ -242,7 +241,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
     for (c = node->m_child; c; c = c->m_next) {
       if (XSLT_WHEN == c->m_type) {
         xslt_start_element(writer,c,"when");
-        assert(c->m_select);
+        ASSERT(c->m_select);
         expr_attr(writer,"test",c->m_select,0);
         for (c2 = c->m_child; c2; c2 = c2->m_next)
           output_xslt_sequence_constructor(writer,c2);
@@ -356,7 +355,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
       expr_attr(writer,"group-ending-with",node->m_expr1,0);
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     } 
     for (c = node->m_sort; c; c = c->m_next)
@@ -508,7 +507,7 @@ void output_xslt(FILE *f, Statement *node)
   xmlOutputBuffer *buf = xmlOutputBufferCreateFile(f,NULL);
   xmlTextWriter *writer = xmlNewTextWriter(buf);
 
-  assert(XSLT_TRANSFORM == node->m_type);
+  ASSERT(XSLT_TRANSFORM == node->m_type);
 
   xmlTextWriterSetIndent(writer,1);
   xmlTextWriterSetIndentString(writer,"  ");

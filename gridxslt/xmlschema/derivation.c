@@ -31,7 +31,6 @@
 #include <libxml/tree.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 
@@ -74,7 +73,7 @@ int xs_check_simple_type_derivation_valid_atomic(Schema *s, Type *t)
 
   if (t == s->globals->simple_ur_type)
     return 0;
-  assert(t->primitive_type);
+  ASSERT(t->primitive_type);
 
   /* @implements(xmlschema-1:cos-st-restricts.1)
      test { simpletype_restriction_derivation_anysimpletype.test }
@@ -84,7 +83,7 @@ int xs_check_simple_type_derivation_valid_atomic(Schema *s, Type *t)
   /* @implements(xmlschema-1:cos-st-restricts.1.1) @end */
   /* 1.1 The {base type definition} must be an atomic simple type definition or a built-in
      primitive datatype. */
-  assert(TYPE_VARIETY_INVALID != t->base->variety);
+  ASSERT(TYPE_VARIETY_INVALID != t->base->variety);
   /* note: not sure if we can test this; i think this stuff is already checked previously */
   if (t->base->complex || ((TYPE_VARIETY_ATOMIC != t->base->variety) && !t->base->builtin)) {
     return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.1.1","For atomic simple types, "
@@ -150,7 +149,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
     list *l;
     for (l = t->item_type->members; l; l = l->next) {
       MemberType *mt = (MemberType*)l->data;
-      assert(mt->type);
+      ASSERT(mt->type);
       if (mt->type->complex || (TYPE_VARIETY_ATOMIC != mt->type->variety))
         return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.1","If <list> has an item "
                      "type that is a union, then all member types of the union must be atomic");
@@ -210,8 +209,8 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
        that are derived from other union types except by using <restriction>, which doesn't allow
        the declaration of a different set of member types.
        Probably don't need to check this. */
-    assert(t->item_type);
-    assert(t->base->item_type);
+    ASSERT(t->item_type);
+    ASSERT(t->base->item_type);
     CHECK_CALL(xs_check_simple_type_derivation_ok(s,t->item_type,t->base->item_type,0,0,0,0))
 
     for (facet = 0; facet < XS_FACET_NUMFACETS; facet++) {
@@ -264,8 +263,8 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
   /* 3.1 The {member type definitions} must all have {variety} of atomic or list. */
   for (l = t->members; l; l = l->next) {
     MemberType *mt = (MemberType*)l->data;
-    assert(mt->type);
-    assert(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
+    ASSERT(mt->type);
+    ASSERT(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
     if (mt->type->complex || (TYPE_VARIETY_UNION == mt->type->variety))
       return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.1",
                    "All member types of a union must be atomic or list types");
@@ -361,8 +360,8 @@ int GridXSLT::xs_check_simple_type_derivation_valid(Schema *s, Type *t)
 {
   /* 3.14.6 Schema Component Constraint: Derivation Valid (Restriction, Simple) */
   /* Note: we return 0 here on success, and -1 on error (and set error info) */
-  assert(!t->complex);
-  assert(TYPE_VARIETY_INVALID != t->variety);
+  ASSERT(!t->complex);
+  ASSERT(TYPE_VARIETY_INVALID != t->variety);
 
   if (TYPE_VARIETY_ATOMIC == t->variety) {
     CHECK_CALL(xs_check_simple_type_derivation_valid_atomic(s,t))
@@ -371,7 +370,7 @@ int GridXSLT::xs_check_simple_type_derivation_valid(Schema *s, Type *t)
     CHECK_CALL(xs_check_simple_type_derivation_valid_list(s,t))
   }
   else {
-    assert(TYPE_VARIETY_UNION == t->variety);
+    ASSERT(TYPE_VARIETY_UNION == t->variety);
     CHECK_CALL(xs_check_simple_type_derivation_valid_union(s,t))
   }
 
@@ -384,8 +383,8 @@ int GridXSLT::xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
 {
   /* 3.14.6 Schema Component Constraint: Type Derivation OK (Simple) */
   /* Note: we return 0 here on success, and -1 on error (and set error info) */
-  assert(!D->complex);
-  assert(TYPE_VARIETY_INVALID != D->variety);
+  ASSERT(!D->complex);
+  ASSERT(TYPE_VARIETY_INVALID != D->variety);
 
   /* For a simple type definition (call it D, for derived) to be validly derived from a type
      definition (call this B, for base) given a subset of {extension, restriction, list, union}
@@ -436,7 +435,7 @@ int GridXSLT::xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
     list *l;
     for (l = B->members; l; l = l->next) {
       MemberType *mt = (MemberType*)l->data;
-      assert(mt->type);
+      ASSERT(mt->type);
       if (0 == xs_check_simple_type_derivation_ok(s,D,mt->type,final_extension,final_restriction,
                                                   final_list,final_union))
         return 0;
@@ -516,7 +515,7 @@ Range GridXSLT::Particle_effective_total_range(Particle *p)
     r.max_occurs = p->range.max_occurs;
   }
   else {
-    assert(PARTICLE_TERM_MODEL_GROUP == p->term_type);
+    ASSERT(PARTICLE_TERM_MODEL_GROUP == p->term_type);
 
     if ((MODELGROUP_COMPOSITOR_ALL == p->term.mg->compositor) ||
         (MODELGROUP_COMPOSITOR_SEQUENCE == p->term.mg->compositor)) {
@@ -564,7 +563,7 @@ Range GridXSLT::Particle_effective_total_range(Particle *p)
          @end */
       r.min_occurs = -1;
       r.max_occurs = 0;
-      assert(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
+      ASSERT(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
       for (l = p->term.mg->particles; l; l = l->next) {
         Particle *p2 = (Particle*)l->data;
         Range r2 = Particle_effective_total_range(p2);
@@ -602,8 +601,8 @@ int GridXSLT::xs_check_particle_valid_extension(Schema *s, Particle *E, Particle
      complex type extending another (when both are non-empty), and creates the sequence which
      satisfies the constraints tested here. */
 
-  assert(NULL != E);
-  assert(NULL != B);
+  ASSERT(NULL != E);
+  ASSERT(NULL != B);
 
   /* [Definition:]  For a particle (call it E, for extension) to be a valid extension of another
      particle (call it B, for base)  one of the following must be true: */
@@ -805,8 +804,8 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
   /* 3.2.5 R's {type definition} is validly derived given {extension, list, union} from B's
            {type definition} as defined by Type Derivation OK (Complex) (3.4.6) or Type Derivation 
            OK (Simple) (3.14.6), as appropriate. */
-  assert(R->type);
-  assert(B->type);
+  ASSERT(R->type);
+  ASSERT(B->type);
   if ((R->type->complex && (0 != xs_check_complex_type_derivation_ok(s,R->type,B->type,1,0))) ||
       (!R->type->complex && (0 != xs_check_simple_type_derivation_ok(s,R->type,B->type,1,0,1,1)))) {
 
@@ -829,8 +828,8 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
 
 int particle_derivation_ok_elt_any_nscompat(Schema *s, Particle *R, Particle *B)
 {
-  assert(PARTICLE_TERM_ELEMENT == R->term_type);
-  assert(PARTICLE_TERM_WILDCARD == B->term_type);
+  ASSERT(PARTICLE_TERM_ELEMENT == R->term_type);
+  ASSERT(PARTICLE_TERM_WILDCARD == B->term_type);
 
   particle_debug("particle_derivation_ok_elt_any_nscompat");
 
@@ -875,8 +874,8 @@ int particle_derivation_ok_all_choice_sequence_recurseasifgroup(Schema *s,
 {
   Particle *tp = new Particle(s->as);
   ModelGroup *tmg = new ModelGroup(s->as);
-  assert(PARTICLE_TERM_ELEMENT == R->term_type);
-  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  ASSERT(PARTICLE_TERM_ELEMENT == R->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == B->term_type);
   particle_debug("particle_derivation_ok_all_choice_sequence_recurseasifgroup");
 
   /* @implements(xmlschema-1:rcase-RecurseAsIfGroup)
@@ -917,8 +916,8 @@ int particle_derivation_ok_all_choice_sequence_recurseasifgroup(Schema *s,
 
 int particle_derivation_ok_any_any_nssubset(Schema *s, Particle *R, Particle *B)
 {
-  assert(PARTICLE_TERM_WILDCARD == R->term_type);
-  assert(PARTICLE_TERM_WILDCARD == B->term_type);
+  ASSERT(PARTICLE_TERM_WILDCARD == R->term_type);
+  ASSERT(PARTICLE_TERM_WILDCARD == B->term_type);
   particle_debug("particle_derivation_ok_any_any_nssubset");
   /* Schema Component Constraint: Particle Derivation OK (Any:Any -- NSSubset)
 
@@ -976,8 +975,8 @@ int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(Sch
 {
   list *l;
   Range etr;
-  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(PARTICLE_TERM_WILDCARD == B->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  ASSERT(PARTICLE_TERM_WILDCARD == B->term_type);
   particle_debug("particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality");
 
   /* Schema Component Constraint: Particle Derivation OK
@@ -1053,12 +1052,12 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
   frompos = 0;
   for (l = from->term.mg->particles; l; l = l->next)
     fromparticles[frompos++] = (Particle*)l->data;
-  assert(frompos == fromcount);
+  ASSERT(frompos == fromcount);
 
   topos = 0;
   for (l = to->term.mg->particles; l; l = l->next)
     toparticles[topos++] = (Particle*)l->data;
-  assert(topos == tocount);
+  ASSERT(topos == tocount);
 
 /*   debugl("mapping: fromcount=%d, tocount=%d",fromcount,tocount); */
   frompos = 0;
@@ -1142,7 +1141,7 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
 
 /*   debugl("mapping: succeeded"); */
 
-  assert(frompos == fromcount);
+  ASSERT(frompos == fromcount);
   for (i = 0; i < fromcount; i++) {
 /*     debugl("mapping: final %d = %d",i,mapping[i]); */
     tomapped[mapping[i]]++;
@@ -1187,8 +1186,8 @@ int particle_derivation_ok_all_all_sequence_sequence_recurse(Schema *s, Particle
                                                              Particle *B)
 {
 
-  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == B->term_type);
   particle_debug("particle_derivation_ok_all_all_sequence_sequence_recurse");
 
   /* Schema Component Constraint: Particle Derivation OK (All:All,Sequence:Sequence -- Recurse)
@@ -1359,10 +1358,10 @@ int particle_derivation_ok_sequence_choice_mapandsum(Schema *s, Particle *R, Par
 {
   Range Rrange2;
   particle_debug("particle_derivation_ok_sequence_choice_mapandsum");
-  assert(PARTICLE_TERM_MODEL_GROUP == R->term_type);
-  assert(PARTICLE_TERM_MODEL_GROUP == B->term_type);
-  assert(MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor);
-  assert(MODELGROUP_COMPOSITOR_CHOICE == B->term.mg->compositor);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == R->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == B->term_type);
+  ASSERT(MODELGROUP_COMPOSITOR_SEQUENCE == R->term.mg->compositor);
+  ASSERT(MODELGROUP_COMPOSITOR_CHOICE == B->term.mg->compositor);
   /* Schema Component Constraint: Particle Derivation OK (Sequence:Choice -- MapAndSum)
 
      For a sequence group particle to be a valid restriction of a choice group particle all of the
@@ -1442,7 +1441,7 @@ int GridXSLT::particle_emptiable(Schema *s, Particle *p)
 Particle *new_empty_group_particle(Particle *orig, xs_allocset *as)
 {
   Particle *newp = new Particle(as);
-  assert(PARTICLE_TERM_MODEL_GROUP == orig->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == orig->term_type);
   newp->range = orig->range;
   newp->term_type = PARTICLE_TERM_MODEL_GROUP;
   newp->term.mg = new ModelGroup(as);
@@ -1455,7 +1454,7 @@ Particle *new_empty_group_particle(Particle *orig, xs_allocset *as)
 
 int add_nonpointless_particles(Particle *in, Particle *parent, xs_allocset *as)
 {
-  assert(PARTICLE_TERM_MODEL_GROUP == parent->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP == parent->term_type);
 
   if (PARTICLE_TERM_MODEL_GROUP != in->term_type) {
     list_append(&parent->term.mg->particles,in);
@@ -1616,8 +1615,8 @@ int xs_check_particle_valid_restriction2(Schema *s, Particle *R, Particle *B)
       btypestr = "sequence";
   }
 
-  assert(btypestr);
-  assert(rtypestr);
+  ASSERT(btypestr);
+  ASSERT(rtypestr);
 /*   debugl("checking particle restriction: R=%s, B=%s",rtypestr,btypestr); */
 
 
@@ -1687,7 +1686,7 @@ int xs_check_particle_valid_restriction2(Schema *s, Particle *R, Particle *B)
 
     }
     else {
-      assert(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
+      ASSERT(MODELGROUP_COMPOSITOR_CHOICE == p->term.mg->compositor);
 
     }
   }
@@ -1875,8 +1874,8 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
       /* 2.1.2 R's {attribute declaration}'s {type definition} must be validly derived from B's
                {type definition} given the empty set as defined in Type Derivation OK (Simple)
                (3.14.6). */
-      assert(R->attribute->type);
-      assert(B->attribute->type);
+      ASSERT(R->attribute->type);
+      ASSERT(B->attribute->type);
       if (0 != xs_check_simple_type_derivation_ok(s,R->attribute->type,B->attribute->type,
                                                   0,0,0,0))
         return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.2","Attribute %* "
@@ -2063,7 +2062,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
      5.2.1 The {content type} of the complex type definition must be a simple type definition
      5.2.2 One of the following must be true: */
   else if (!t->complex_content) {
-    assert(t->simple_content_type);
+    ASSERT(t->simple_content_type);
 
     /* @implements(xmlschema-1:derivation-ok-restriction.5.2.2.1)
        test { complextype_sc_content9.test }

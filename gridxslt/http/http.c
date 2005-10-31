@@ -36,7 +36,6 @@
 #include <errno.h>
 #include <netdb.h>
 #include <stdarg.h>
-#include <assert.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <time.h>
@@ -348,7 +347,7 @@ int http_write(eventman *em, fdhandler *h)
     return 0;
 
   if (!c->resp.mw->finished) {
-    assert(NULL != c->resp.uh);
+    ASSERT(NULL != c->resp.uh);
     if (!c->resp.uh->write(c->resp.uh,c->resp.mw))
       msgwriter_end(c->resp.mw);
   }

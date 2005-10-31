@@ -22,7 +22,6 @@
 
 #include "validity.h"
 #include "util/debug.h"
-#include <assert.h>
 
 using namespace GridXSLT;
 
@@ -31,12 +30,12 @@ void df_check_portsmatch(Program *program, Function *fun)
   Iterator<Instruction*> it;
   for (it = fun->m_instructions; it.haveCurrent(); it++) {
     Instruction *instr = *it;
-    int i;
+    unsigned int i;
     for (i = 0; i < instr->m_ninports; i++) {
       if (NULL != instr->m_inports[i].source) {
         OutputPort *outport = &instr->m_inports[i].source->m_outports[instr->m_inports[i].sourcep];
-        assert(outport->dest == instr);
-        assert(outport->destp == i);
+        ASSERT(outport->dest == instr);
+        ASSERT(outport->destp == i);
       }
     }
     for (i = 0; i < instr->m_noutports; i++) {
@@ -54,8 +53,8 @@ void df_check_portsmatch(Program *program, Function *fun)
 /*                  fun->name,inport->source->id,inport->sourcep,OpCodeNames[inport->source->opcode]); */
 /*         } */
 
-        assert(inport->source == instr);
-        assert(inport->sourcep == i);
+        ASSERT(inport->source == instr);
+        ASSERT(inport->sourcep == i);
       }
     }
   }
@@ -69,7 +68,7 @@ int df_check_function_connected(Function *fun)
   Iterator<Instruction*> it;
   for (it = fun->m_instructions; it.haveCurrent(); it++) {
     Instruction *instr = *it;
-    int i;
+    unsigned int i;
     if (instr->m_internal)
       continue;
     for (i = 0; i < instr->m_noutports; i++) {
@@ -83,7 +82,7 @@ int df_check_function_connected(Function *fun)
       }
       if (NULL != instr->m_outports[i].dest) {
         Instruction *dest = instr->m_outports[i].dest;
-        int destp = instr->m_outports[i].destp;
+        unsigned int destp = instr->m_outports[i].destp;
 
 
 /*         debug("Output port %s:%d.%d (of %p %s) -> input port %s:%d.%d (of %p %s)\n", */
@@ -119,19 +118,17 @@ int df_check_function_connected(Function *fun)
   /* Now check input ports */
   for (it = fun->m_instructions; it.haveCurrent(); it++) {
     Instruction *instr = *it;
-    int i;
+    unsigned int i;
 
     /* don't check inputs for parameters or start instruction */
-    int isparam = 0;
+    bool isparam = false;
 
     if (instr->m_internal)
       continue;
 
-    if (instr == fun->m_start)
-      continue;
     for (i = 0; i < fun->m_nparams; i++)
       if (instr == fun->m_params[i].start)
-        isparam = 1;
+        isparam = true;
     if (isparam)
       continue;
 

@@ -22,8 +22,8 @@
 
 #include "fsm.h"
 #include "util/String.h"
+#include "util/debug.h"
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -393,7 +393,7 @@ void add_dfsm_transition(fsm *df, list **dfsmtls, void *input, fsm_state *to)
 {
   dfsm_transition *d;
   list *l;
-  assert(input);
+  ASSERT(input);
   for (l = *dfsmtls; l; l = l->next) {
     dfsm_transition *d = (dfsm_transition*)l->data;
     if (df->input_equals(input,d->input)) {
@@ -489,7 +489,7 @@ void fsm_determinise(fsm *f, fsm *df)
 {
   list *dfl;
   add_first_dfsm_state(f,df);
-  assert(df->states);
+  ASSERT(df->states);
   df->start = (fsm_state*)df->states->data;
   for (dfl = df->states; dfl; dfl = dfl->next) {
     add_dfsm_transitions_for_dfsm_state(df,(fsm_state*)dfl->data);

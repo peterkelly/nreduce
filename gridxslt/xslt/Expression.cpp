@@ -29,7 +29,6 @@
 #include "util/debug.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <assert.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -182,10 +181,10 @@ void Expression::setParent(Expression *parent, Statement *stmt)
 
 int Expression::resolve(Schema *s, const char *filename, Error *ei)
 {
-  assert(m_stmt);
+  ASSERT(m_stmt);
 
-  assert(m_ident.m_name.isNull());
-  assert(m_ident.m_ns.isNull());
+  ASSERT(m_ident.m_name.isNull());
+  ASSERT(m_ident.m_ns.isNull());
 
   if (!m_qn.isNull()) {
     m_ident = qname_to_nsname(m_stmt->m_namespaces,m_qn);
@@ -215,7 +214,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
   switch (m_type) {
   case XPATH_EXPR_INVALID:
     fmessage(stderr,"Invalid expression type\n");
-    assert(0);
+    ASSERT(0);
     break;
   case XPATH_EXPR_FOR:
     buf.format("for ");
@@ -276,7 +275,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
       printBinaryExpr(buf,"ge");
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
@@ -301,7 +300,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
       printBinaryExpr(buf,">=");
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
@@ -317,7 +316,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
       printBinaryExpr(buf,">>");
       break;
     default:
-      assert(0);
+      ASSERT(0);
       break;
     }
     break;
@@ -458,7 +457,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
         break;
       default:
         fmessage(stderr,"unknown axis %d\n",m_axis);
-        assert(0);
+        ASSERT(0);
         break;
       }
       switch (m_nodetest) {
@@ -467,10 +466,10 @@ void Expression::serialize(StringBuffer &buf, int brackets)
         break;
       case XPATH_NODE_TEST_SEQUENCETYPE:
         /* FIXME */
-        assert(!"not yet implemented");
+        ASSERT(!"not yet implemented");
         break;
       default:
-        assert(0);
+        ASSERT(0);
         break;
       }
     }
@@ -492,10 +491,10 @@ void Expression::serialize(StringBuffer &buf, int brackets)
     break;
 
   case XPATH_EXPR_ATOMIC_TYPE:
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case XPATH_EXPR_ITEM_TYPE:
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case XPATH_EXPR_SEQUENCE:
     m_left->serialize(buf,1);
@@ -518,12 +517,12 @@ void Expression::serialize(StringBuffer &buf, int brackets)
     m_right->serialize(buf,1);
     break;
   case XPATH_EXPR_FILTER:
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
 
   default:
     fmessage(stderr,"Unknown expression type %d\n",m_type);
-    assert(0);
+    ASSERT(0);
     break;
   }
 /*   for (f = filter; f; f = f->filter) { */
@@ -572,7 +571,7 @@ Expression *GridXSLT::Expression_parse(const String &str, const char *filename, 
   r = parse_xl_syntax(source,filename,baseline,ei,&expr,NULL,NULL);
   if (0 != r)
     return NULL;
-  assert(NULL != expr);
+  ASSERT(NULL != expr);
   return expr;
 }
 
@@ -584,7 +583,7 @@ SequenceType GridXSLT::seqtype_parse(const String &str, const char *filename, in
   r = parse_xl_syntax(source,filename,baseline,ei,NULL,NULL,&stimpl);
   if (0 != r)
     return SequenceType();
-  assert(NULL != stimpl);
+  ASSERT(NULL != stimpl);
   return SequenceType(stimpl);
 }
 

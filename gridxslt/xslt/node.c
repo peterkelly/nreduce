@@ -23,9 +23,9 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 
@@ -33,19 +33,32 @@ using namespace GridXSLT;
 
 #define FNS FN_NAMESPACE
 
-static Value root1(Environment *env, List<Value> &args)
+static Value root0(Environment *env, List<Value> &args)
 {
-  Node *n;
-  assert(args[0].type().type() == SEQTYPE_ITEM);
-  assert(args[0].type().itemType()->m_kind != ITEM_ATOMIC);
-  n = args[0].asNode();
-  while (NULL != n->m_parent)
-    n = n->m_parent;
-  return Value(n);
+  Context *c = args[0].asContext();
+
+  if (!c->havefocus) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","undefined context item");
+    return Value::null();
+  }
+
+  if (!c->item.isNode()) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"XPTY0006","context item is not a node");
+    return Value::null();
+  }
+
+  return c->item.asNode()->root();
 }
 
-FunctionDefinition node_fundefs[2] = {
-  { root1,    FNS, "root",     "node()?",                  "node()?" },
+static Value root1(Environment *env, List<Value> &args)
+{
+  // FIXME: handle empty sequence
+  return args[0].asNode()->root();
+}
+
+FunctionDefinition node_fundefs[3] = {
+  { root1,    FNS, "root",     "node()?",                  "node()?", false },
+  { root0,    FNS, "root",     "",                         "node()", true },
   { NULL },
 };
 

@@ -28,10 +28,10 @@
 #include "util/List.h"
 #include "util/Namespace.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include "xmlschema/xmlschema.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/tree.h>
-#include <assert.h>
 
 #define ITEM_INVALID                  0
 #define ITEM_ATOMIC                   1
@@ -106,6 +106,8 @@ public:
 
   static SequenceTypeImpl *item();
   static SequenceTypeImpl *node();
+  static SequenceTypeImpl *itemstar();
+  static SequenceTypeImpl *nodestar();
   static SequenceTypeImpl *interleave(SequenceTypeImpl *content);
 
   static SequenceTypeImpl *all(SequenceTypeImpl *left, SequenceTypeImpl *right);
@@ -193,16 +195,18 @@ public:
 
   static SequenceType item() { return SequenceTypeImpl::item(); }
   static SequenceType node() { return SequenceTypeImpl::node(); }
+  static SequenceType itemstar() { return SequenceTypeImpl::itemstar(); }
+  static SequenceType nodestar() { return SequenceTypeImpl::nodestar(); }
   static SequenceType interleave(SequenceType &content)
     { return SequenceTypeImpl::interleave(content.impl); }
 
-  static SequenceType all(SequenceType &left, SequenceType &right)
+  static SequenceType all(const SequenceType &left, SequenceType &right)
     { return SequenceTypeImpl::all(left.impl,right.impl); }
-  static SequenceType choice(SequenceType &left, SequenceType &right)
+  static SequenceType choice(const SequenceType &left, SequenceType &right)
     { return SequenceTypeImpl::choice(left.impl,right.impl); }
-  static SequenceType sequence(SequenceType &left, SequenceType &right)
+  static SequenceType sequence(const SequenceType &left, SequenceType &right)
     { return SequenceTypeImpl::sequence(left.impl,right.impl); }
-  static SequenceType occurrence(SequenceType &left, int occ)
+  static SequenceType occurrence(const SequenceType &left, int occ)
     { return SequenceTypeImpl::occurrence(left.impl,occ); }
 
   void print(StringBuffer &buf);
@@ -286,13 +290,13 @@ public:
   inline bool isNode() const
     { return (SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC != st.itemType()->m_kind); }
 
-  inline Context *asContext() const { assert(isContext()); return value.c; }
-  inline int asInt() const { assert(isInt()); return value.i; }
-  inline float asFloat() const { assert(isFloat()); return value.f; }
-  inline double asDouble() const { assert(isDouble()); return value.d; }
-  inline String asString() const { assert(isString()); return value.s; }
-  inline bool asBool() const { assert(isBool()); return value.b; }
-  inline Node *asNode() const { assert(isNode()); return value.n; }
+  inline Context *asContext() const { ASSERT(isContext()); return value.c; }
+  inline int asInt() const { ASSERT(isInt()); return value.i; }
+  inline float asFloat() const { ASSERT(isFloat()); return value.f; }
+  inline double asDouble() const { ASSERT(isDouble()); return value.d; }
+  inline String asString() const { ASSERT(isString()); return value.s; }
+  inline bool asBool() const { ASSERT(isBool()); return value.b; }
+  inline Node *asNode() const { ASSERT(isNode()); return value.n; }
 
   inline SequenceType &type() { return st; }
 

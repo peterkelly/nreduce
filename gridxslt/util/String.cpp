@@ -22,12 +22,11 @@
 
 #include "String.h"
 #include "XMLUtils.h"
-
+#include "debug.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include <assert.h>
 
 using namespace GridXSLT;
 
@@ -123,7 +122,7 @@ String String::format(const char *format, ...)
 
 const Char &String::charAt(unsigned int pos) const
 {
-  assert(pos <= impl->m_len);
+  ASSERT(pos <= impl->m_len);
   return impl->m_chars[pos];
 }
 

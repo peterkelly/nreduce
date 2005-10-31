@@ -27,7 +27,6 @@
 #include "util/debug.h"
 #include "util/macros.h"
 #include "Expression.h"
-#include <assert.h>
 #include <string.h>
 #include <math.h>
 
@@ -145,7 +144,7 @@ static int df_construct_complex_content(Error *ei, sourceloc sloc,
   /* FIXME */
   for (it = values; it.haveCurrent(); it++) {
     Value v = *it;
-    assert(SEQTYPE_ITEM == v.type().type());
+    ASSERT(SEQTYPE_ITEM == v.type().type());
     if (ITEM_ATOMIC == v.type().itemType()->m_kind)
       it.replace(Value(v.convertToString()));
   }
@@ -343,7 +342,7 @@ static int df_construct_complex_content(Error *ei, sourceloc sloc,
   for (it = values; it.haveCurrent(); it++) {
     Value v = *it;
     /* FIXME: avoid copying here where possible */
-    assert(ITEM_ATOMIC != v.type().itemType()->m_kind);
+    ASSERT(ITEM_ATOMIC != v.type().itemType()->m_kind);
 
     if (ITEM_ATTRIBUTE == v.type().itemType()->m_kind)
       parent->addAttribute(v.asNode()->deepCopy());
@@ -439,7 +438,7 @@ static Value element(Environment *env, List<Value> &args)
 
   elemvalue = Value(elem);
 
-  assert(args[1].isDerivedFrom(xs_g->string_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->string_type));
   elem->m_ident.m_name = args[1].asString();
 
   /* FIXME: namespace (should be received on an input port) - what about prefix? */
@@ -457,8 +456,8 @@ static Value range(Environment *env, List<Value> &args)
   List<Value> range;
 
   /* FIXME: support empty sequences and conversion of other types when passed in */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   min = args[0].asInt();
   max = args[1].asInt();
 
@@ -476,13 +475,13 @@ static Value contains_node(Environment *env, List<Value> &args)
   List<Value> nodevals = args[0].sequenceToList();
   Node *n = args[1].asNode();
   bool found = false;
-  assert(SEQTYPE_ITEM == args[1].type().type());
-  assert(ITEM_ATOMIC != args[1].type().itemType()->m_kind);
+  ASSERT(SEQTYPE_ITEM == args[1].type().type());
+  ASSERT(ITEM_ATOMIC != args[1].type().itemType()->m_kind);
 
   for (Iterator<Value> it = nodevals; it.haveCurrent(); it++) {
     Value nv = *it;
-    assert(SEQTYPE_ITEM == nv.type().type());
-    assert(ITEM_ATOMIC != nv.type().itemType()->m_kind);
+    ASSERT(SEQTYPE_ITEM == nv.type().type());
+    ASSERT(ITEM_ATOMIC != nv.type().itemType()->m_kind);
     if (nv.asNode() == n)
       found = true;
   }
@@ -498,10 +497,10 @@ static Value select_root(Environment *env, List<Value> &args)
   for (Iterator<Value> it = values; it.haveCurrent(); it++) {
     Value v = *it;
     Node *root;
-    /* FIXME: raise a dynamic error here instead of asserting */
+    /* FIXME: raise a dynamic error here instead of ASSERTing */
     if ((SEQTYPE_ITEM != v.type().type()) || (ITEM_ATOMIC == v.type().itemType()->m_kind)) {
       fmessage(stderr,"ERROR: non-node in selectroot input\n");
-      assert(0);
+      ASSERT(0);
     }
     root = v.asNode();
     while (NULL != root->m_parent)
@@ -519,7 +518,7 @@ static int nodetest_matches(Node *n, const String &nametest, SequenceType &seqty
             (n->m_ident.m_name == nametest));
   }
   else {
-    assert(!seqtypetest.isNull());
+    ASSERT(!seqtypetest.isNull());
     if (SEQTYPE_ITEM == seqtypetest.type()) {
       switch (seqtypetest.itemType()->m_kind) {
       case ITEM_ATOMIC:
@@ -555,7 +554,7 @@ static int nodetest_matches(Node *n, const String &nametest, SequenceType &seqty
         return (n->m_type == NODE_NAMESPACE);
         break;
       default:
-        assert(!"invalid item type");
+        ASSERT(!"invalid item type");
         break;
       }
     }
@@ -601,38 +600,38 @@ static int append_matching_nodes(Node *self, const String &nametest,
     break;
   case AXIS_FOLLOWING_SIBLING:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_FOLLOWING:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_NAMESPACE:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_PARENT:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_ANCESTOR:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_PRECEDING_SIBLING:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_PRECEDING:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   case AXIS_ANCESTOR_OR_SELF:
     /* FIXME */
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
     break;
   default:
-    assert(!"invalid axis");
+    ASSERT(!"invalid axis");
     break;
   }
   return 0;
@@ -645,10 +644,10 @@ static Value select1(Environment *env, List<Value> &args)
 
   for (Iterator<Value> it = values; it.haveCurrent(); it++) {
     Value v = *it;
-    /* FIXME: raise a dynamic error here instead of asserting */
+    /* FIXME: raise a dynamic error here instead of ASSERTing */
     if ((SEQTYPE_ITEM != v.type().type()) || (ITEM_ATOMIC == v.type().itemType()->m_kind)) {
       fmessage(stderr,"ERROR: non-node in select input\n");
-      assert(0);
+      ASSERT(0);
     }
     if (ITEM_ATOMIC != v.type().itemType()->m_kind) {
       if (0 != append_matching_nodes(v.asNode(),env->instr->m_nametest,
@@ -726,7 +725,7 @@ static Value attribute2(Environment *env, List<Value> &args)
      xsl:attribute */
   /* FIXME: support namespace */
 
-  assert(args[1].isDerivedFrom(xs_g->string_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->string_type));
   attr->m_ident.m_name = df_construct_simple_content(namevals," ");
   attr->m_value = df_construct_simple_content(values," ");
 
@@ -762,7 +761,7 @@ static Value sequence(Environment *env, List<Value> &args)
 static Value output(Environment *env, List<Value> &args)
 {
   stringbuf *buf = stringbuf_new();
-  assert(NULL != env->instr->m_seroptions);
+  ASSERT(NULL != env->instr->m_seroptions);
   Value arg0 = args[0];
   if (0 != df_serialize(arg0,buf,env->instr->m_seroptions,env->ei)) {
     stringbuf_free(buf);
@@ -775,7 +774,7 @@ static Value output(Environment *env, List<Value> &args)
 
 static Value filter(Environment *env, List<Value> &args)
 {
-  assert(0);
+  ASSERT(0);
     /* FIXME */
   return Value::null();
 }
@@ -879,24 +878,37 @@ static Value or2(Environment *env, List<Value> &args)
   return Value(v1.asBool() || v2.asBool());
 }
 
-FunctionDefinition special_fundefs[18] = {
-  { element,       FNS, "element",       "item()*,xsd:string",        "element()"       },
-  { range,         FNS, "range",         "xsd:integer?,xsd:integer?", "xsd:integer*"    },
-  { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean"     },
-  { select_root,   FNS, "select-root",   "node()",                    "node()"          },
-  { select1,       FNS, "select",        "node()*",                   "node()*"         },
-  { namespace2,    FNS, "namespace",     "item()*,item()*",           "node()"          },
-  { text,          FNS, "text",          "item()*",                   "text()"          },
-  { value_of,      FNS, "value-of",      "item()*,item()*",           "text()"          },
-  { attribute2,    FNS, "attribute",     "item()*,item()*",           "attribute()"     },
-  { document,      FNS, "document",      "item()*",                   "document-node()" },
-  { sequence,      FNS, "sequence",      "item()*,item()*",           "item()*"         },
-  { output,        FNS, "output",        "item()*",                   "item()*"         },
-  { filter,        FNS, "filter",        "item()*",                   "item()*"         },
-  { spempty,       FNS, "empty",         "item()*",                   "item()*"         },
-  { ebv,           FNS, "ebv",           "item()*",                   "xsd:boolean"     },
-  { and2,          FNS, "and",           "item()*,item()*",           "xsd:boolean"     },
-  { or2,           FNS, "or",            "item()*,item()*",           "xsd:boolean"     },
+static Value dot(Environment *env, List<Value> &args)
+{
+  Context *c = args[0].asContext();
+
+  if (!c->havefocus) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
+    return Value::null();
+  }
+
+  return c->item;
+}
+
+FunctionDefinition special_fundefs[19] = {
+  { element,       FNS, "element",       "item()*,xsd:string",        "element()", false       },
+  { range,         FNS, "range",         "xsd:integer?,xsd:integer?", "xsd:integer*", false    },
+  { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean", false     },
+  { select_root,   FNS, "select-root",   "node()",                    "node()", false          },
+  { select1,       FNS, "select",        "node()*",                   "node()*", false         },
+  { namespace2,    FNS, "namespace",     "item()*,item()*",           "node()", false          },
+  { text,          FNS, "text",          "item()*",                   "text()", false          },
+  { value_of,      FNS, "value-of",      "item()*,item()*",           "text()", false          },
+  { attribute2,    FNS, "attribute",     "item()*,item()*",           "attribute()", false     },
+  { document,      FNS, "document",      "item()*",                   "document-node()", false },
+  { sequence,      FNS, "sequence",      "item()*,item()*",           "item()*", false         },
+  { output,        FNS, "output",        "item()*",                   "item()*", false         },
+  { filter,        FNS, "filter",        "item()*",                   "item()*", false         },
+  { spempty,       FNS, "empty",         "item()*",                   "item()*", false         },
+  { ebv,           FNS, "ebv",           "item()*",                   "xsd:boolean", false     },
+  { and2,          FNS, "and",           "item()*,item()*",           "xsd:boolean", false     },
+  { or2,           FNS, "or",            "item()*,item()*",           "xsd:boolean", false     },
+  { dot,           FNS, "dot",           "",                          "item()", true           },
   { NULL },
 };
 

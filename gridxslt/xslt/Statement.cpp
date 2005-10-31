@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 #include <math.h>
 
 using namespace GridXSLT;
@@ -279,8 +278,8 @@ int GridXSLT::Statement_resolve(Statement *first, Schema *s, const char *filenam
 
   for (sn = first; sn; sn = sn->m_next) {
 
-    assert(sn->m_ident.m_name.isNull());
-    assert(sn->m_ident.m_ns.isNull());
+    ASSERT(sn->m_ident.m_name.isNull());
+    ASSERT(sn->m_ident.m_ns.isNull());
 
     /* @implements(xslt20:qname-11)
        status { partial }
@@ -454,7 +453,7 @@ Statement *GridXSLT::Statement_parse(const char *str, const char *filename, int 
   Statement *sn = NULL;
   if (0 != parse_xl_syntax(str,filename,baseline,ei,NULL,&sn,NULL))
     return NULL;
-  assert(NULL != sn);
+  ASSERT(NULL != sn);
   return sn;
 }
 
@@ -612,7 +611,7 @@ int xslt_build_output_defs(Error *ei, xslt_source *source)
             if (od->defby[i]->m_importpred != sn->m_importpred) {
               /* use value from declaration with higher import precedence; this should always
                  be sn since we are traverse importees before importers */
-              assert(od->defby[i]->m_importpred < sn->m_importpred);
+              ASSERT(od->defby[i]->m_importpred < sn->m_importpred);
               free(od->unpoptions[i]);
               od->unpoptions[i] = strdup(sn->m_seroptions[i]);
               od->defby[i] = sn;

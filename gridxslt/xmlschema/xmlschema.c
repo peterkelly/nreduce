@@ -35,7 +35,6 @@
 #include <libxml/tree.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 
@@ -465,7 +464,7 @@ String Particle::toString()
     return "<any>";
   }
   else {
-    assert(PARTICLE_TERM_MODEL_GROUP == term_type);
+    ASSERT(PARTICLE_TERM_MODEL_GROUP == term_type);
     if (MODELGROUP_COMPOSITOR_ALL == term.mg->compositor) {
       return "<all>";
     }
@@ -473,7 +472,7 @@ String Particle::toString()
       return "<choice>";
     }
     else {
-      assert(MODELGROUP_COMPOSITOR_SEQUENCE == term.mg->compositor);
+      ASSERT(MODELGROUP_COMPOSITOR_SEQUENCE == term.mg->compositor);
       return "<sequence>";
     }
   }
@@ -530,7 +529,7 @@ Type *new_primitive_type(BuiltinTypes *g, char *name, int size, char *ctype)
   t->builtin = 1;
   t->variety = TYPE_VARIETY_ATOMIC;
   t->stype = TYPE_SIMPLE_BUILTIN;
-  assert(g->any_atomic_type);
+  ASSERT(g->any_atomic_type);
   t->base = g->any_atomic_type;
 
   t->typeinfo_known = 1;
@@ -554,7 +553,7 @@ Type *new_primitive_type(BuiltinTypes *g, char *name, int size, char *ctype)
       break;
     }
   }
-  assert(found_allowed_facets);
+  ASSERT(found_allowed_facets);
 
   ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
   return t;
@@ -570,11 +569,11 @@ Type *new_derived_type(BuiltinTypes *g, char *name, char *base, int size, char *
   t->base = (Type*)ss_lookup_local(g->symt->ss_types,NSName(XS_NAMESPACE,base));
   if (!t->base) {
     message("no such base type %s for %s\n",base,name);
-    assert(0);
+    ASSERT(0);
   }
 
   t->typeinfo_known = 1;
-  assert(t->base->typeinfo_known);
+  ASSERT(t->base->typeinfo_known);
   t->size = (0 <= size) ? size : t->base->size;
 
   if (NULL != ctype) {
@@ -596,7 +595,7 @@ Type *new_derived_type(BuiltinTypes *g, char *name, char *base, int size, char *
   t->baseref->obj = (void**)&t->base;
   t->baseref->builtin = 1;
   
-  assert(t->base);
+  ASSERT(t->base);
   ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
   return t;
 }
@@ -612,7 +611,7 @@ Type *new_list_type(BuiltinTypes *g, char *name, char *item_type)
   t->item_type = (Type*)ss_lookup_local(g->symt->ss_types,NSName(XS_NAMESPACE,item_type));
   if (!t->item_type) {
     message("no such item type %s for %s\n",item_type,name);
-    assert(0);
+    ASSERT(0);
   }
 
   /* FIXME: find a better way to handle encoding of list (and union?) simpleTypes... for now
@@ -635,7 +634,7 @@ Type *new_list_type(BuiltinTypes *g, char *name, char *item_type)
   t->item_typeref->obj = (void**)&t->base;
   t->item_typeref->builtin = 1;
   
-  assert(t->base);
+  ASSERT(t->base);
   ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
   return t;
 }
@@ -753,7 +752,7 @@ Type *xs_init_simple_ur_type(BuiltinTypes *g)
   simple_ur_type->builtin = 1;
   simple_ur_type->complex = 0;
   simple_ur_type->def.ident = NSName(XS_NAMESPACE,"anySimpleType");
-  assert(g->complex_ur_type);
+  ASSERT(g->complex_ur_type);
   simple_ur_type->base = g->complex_ur_type;
   simple_ur_type->final_extension = 0;
   simple_ur_type->final_restriction = 0;
@@ -769,12 +768,12 @@ Type *xs_init_simple_ur_type(BuiltinTypes *g)
 Type *xs_new_simple_builtin(BuiltinTypes *g, const String &name, const String &ns, Type *base)
 {
   Type *t;
-  assert(NULL != base);
+  ASSERT(NULL != base);
   t = new Type(g->as);
   t->builtin = 1;
   t->complex = 0;
   t->def.ident = NSName(ns,name);
-  t->base = g->simple_ur_type;
+  t->base = base;
   t->variety = TYPE_VARIETY_ATOMIC;
   t->stype = TYPE_SIMPLE_BUILTIN;
   t->allowed_facets = g->simple_ur_type->allowed_facets;
@@ -793,7 +792,7 @@ void BuiltinTypes_init_xdt_types(BuiltinTypes *g)
   xs_new_simple_builtin(g,"dayTimeDuration",XDT_NAMESPACE,g->complex_ur_type);
   xs_new_simple_builtin(g,"yearMonthDuration",XDT_NAMESPACE,g->complex_ur_type);
 
-  g->context_type = xs_new_simple_builtin(g,"context",SPECIAL_NAMESPACE,g->complex_ur_type);
+  g->context_type = xs_new_simple_builtin(g,"context",XDT_NAMESPACE,g->any_atomic_type);
 
   /* FIXME: dayTimeDuration and yearMonthDuration are just placeholders for now; they need
      to be filled in with the correct type definitions. */
@@ -847,7 +846,7 @@ void *xs_symbol_table::lookup(int type, const NSName &ident)
     ss = ss_notations;
     break;
   default:
-    assert(!"invalid object type");
+    ASSERT(!"invalid object type");
     break;
   }
   return ss_lookup(ss,ident);
@@ -963,10 +962,10 @@ int xs_resolve_ref(Schema *s, Reference *r)
      @implements(xmlschema-1:src-resolve.4.2) @end
      @implements(xmlschema-1:src-resolve.4.2.1) @end
      @implements(xmlschema-1:src-resolve.4.2.2) @end */
-  assert(!r->builtin);
-  assert(!r->def.ident.isNull());
-  assert(NULL == r->target); /* shouldn't be resolved yet */
-  assert(!r->resolved);
+  ASSERT(!r->builtin);
+  ASSERT(!r->def.ident.isNull());
+  ASSERT(NULL == r->target); /* shouldn't be resolved yet */
+  ASSERT(!r->resolved);
 
   if (NULL == (r->target = r->s->getObject(r->type,r->def.ident)))
     return error(&s->ei,s->uri,r->def.loc.line,String::null(),"No such %s %*",
@@ -1008,7 +1007,7 @@ int Wildcard_namespace_constraints_equal(Schema *s, Wildcard *a, Wildcard *b)
     return 0;
   }
   else {
-    assert(WILDCARD_TYPE_SET == a->type);
+    ASSERT(WILDCARD_TYPE_SET == a->type);
     Iterator<String> it;
     for (it = a->nslist; it.haveCurrent(); it++)
       if (!b->nslist.contains(*it))
@@ -1024,7 +1023,7 @@ void Wildcard_copy_namespace_constraint(Wildcard *to, Wildcard *from)
 {
   to->type = from->type;
   to->not_ns = from->not_ns;
-  assert(0 == to->nslist.count());
+  ASSERT(0 == to->nslist.count());
   Iterator<String> it;
   for (it = from->nslist; it.haveCurrent(); it++)
     to->nslist.append(*it);
@@ -1168,7 +1167,7 @@ Wildcard *GridXSLT::Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard 
     not_ns = O1->not_ns;
   }
   else {
-    assert((WILDCARD_TYPE_NOT == O2->type) && (WILDCARD_TYPE_SET == O1->type));
+    ASSERT((WILDCARD_TYPE_NOT == O2->type) && (WILDCARD_TYPE_SET == O1->type));
     S = O1->nslist;
     not_ns = O2->not_ns;
   }
@@ -1335,7 +1334,7 @@ Wildcard *GridXSLT::Wildcard_constraint_intersection(Schema *s, Wildcard *O1, Wi
     return w;
   }
 
-  assert((WILDCARD_TYPE_NOT == O1->type) && (WILDCARD_TYPE_NOT == O2->type));
+  ASSERT((WILDCARD_TYPE_NOT == O1->type) && (WILDCARD_TYPE_NOT == O2->type));
 
   /* @implements(xmlschema-1:cos-aw-intersect.5) @end */
   if ((!O1->not_ns.isNull()) && (!O2->not_ns.isNull())) {
@@ -1385,12 +1384,12 @@ int check_attribute_uses(Schema *s, list *attribute_uses, char *constraint1, cha
     AttributeUse *au = (AttributeUse*)l->data;
     Type *t;
     list *l2;
-    assert(NULL != au->attribute);
-    assert(NULL != au->attribute->type);
+    ASSERT(NULL != au->attribute);
+    ASSERT(NULL != au->attribute->type);
 
     for (l2 = encountered; l2; l2 = l2->next) {
       AttributeUse *au2 = (AttributeUse*)l2->data;
-      assert(NULL != au->attribute);
+      ASSERT(NULL != au->attribute);
       if (au->attribute->def.ident == au2->attribute->def.ident) {
         list_free(encountered,NULL);
         return error(&s->ei,s->uri,au2->defline,constraint1,"duplicate attribute not allowed: %*",
@@ -1544,7 +1543,7 @@ void GridXSLT::xs_get_first_elements_and_wildcards(Particle *p, list **first_ew)
     }
   }
   else {
-    assert(PARTICLE_TERM_WILDCARD == p->term_type);
+    ASSERT(PARTICLE_TERM_WILDCARD == p->term_type);
     list_push(first_ew,p);
   }
 }
@@ -1582,8 +1581,8 @@ void get_all_elements(Particle *p, list **elements)
 
 int particles_overlap(Particle *p1, Particle *p2, int indent)
 {
-  assert(PARTICLE_TERM_MODEL_GROUP != p1->term_type);
-  assert(PARTICLE_TERM_MODEL_GROUP != p2->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP != p1->term_type);
+  ASSERT(PARTICLE_TERM_MODEL_GROUP != p2->term_type);
 
   /* H Analysis of the Unique Particle Attribution Constraint (non-normative) */
 
@@ -1955,7 +1954,7 @@ void compute_element_type(Schema *s, SchemaElement *e)
   if (NULL != e->sghead) {
     if (!e->sghead->computed_type)
       compute_element_type(s,e->sghead);
-    assert(e->sghead->type);
+    ASSERT(e->sghead->type);
   }
 
   if (NULL == e->type) {
@@ -2056,7 +2055,7 @@ int post_process_attribute(Schema *s, xmlDocPtr doc, SchemaAttribute *a)
 
 int post_process_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au)
 {
-  assert(au->attribute);
+  ASSERT(au->attribute);
 
   /* Note: we have to do this check separately for both attributes and attribute uses, since each
      has an independent value constraint, i.e. it is possible to have a top-level attribute
@@ -2107,7 +2106,7 @@ void add_attribute_group_references(Schema *s, void *obj, list **tocheck)
   AttributeGroup *ag = (AttributeGroup*)obj;
   for (l = ag->attribute_group_refs; l; l = l->next) {
     AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
-    assert(NULL != agr->ag);
+    ASSERT(NULL != agr->ag);
     list_push(tocheck,agr->ag);
   }
 }
@@ -2200,7 +2199,7 @@ int compute_content_type(Schema *s, Type *t)
   /* simple content */
   else {
 
-    assert(t->base);
+    ASSERT(t->base);
 
     /* @implements(xmlschema-1:src-ct.2) @end
        @implements(xmlschema-1:src-ct.2.1) @end
@@ -2227,7 +2226,7 @@ int compute_content_type(Schema *s, Type *t)
       if (!t->base->complex_content) {
         Type *base;
         int defline;
-        assert(NULL != t->base->simple_content_type);
+        ASSERT(NULL != t->base->simple_content_type);
 
         /* 1.1 the simple type definition corresponding to the <simpleType> among the [children] of
                <restriction> if there is one; */
@@ -2248,7 +2247,7 @@ int compute_content_type(Schema *s, Type *t)
            if any), as defined in Simple Type Restriction (Facets) (3.14.6); */
         CHECK_CALL(xs_create_simple_type_restriction(s,base,defline,&t->child_facets,
                    &t->simple_content_type))
-        assert(NULL != t->simple_content_type);
+        ASSERT(NULL != t->simple_content_type);
       }
 
       /* 2 If the type definition resolved to by the actual value of the base [attribute] is a
@@ -2279,7 +2278,7 @@ int compute_content_type(Schema *s, Type *t)
 
         CHECK_CALL(xs_create_simple_type_restriction(s,t->child_type,t->child_type->def.loc.line,
                                                      &t->child_facets,&t->simple_content_type))
-        assert(NULL != t->simple_content_type);
+        ASSERT(NULL != t->simple_content_type);
       }
     }
     else if (TYPE_DERIVATION_EXTENSION == t->derivation_method) {
@@ -2296,7 +2295,7 @@ int compute_content_type(Schema *s, Type *t)
 
 /*         message("t = %s\n",t->name); */
 /*         message("t->base = %s\n",t->base->name); */
-        assert(t->base->simple_content_type);
+        ASSERT(t->base->simple_content_type);
         t->simple_content_type = t->base->simple_content_type;
       }
 
@@ -2322,7 +2321,7 @@ int compute_complete_wildcard(Schema *s, Wildcard *local_wildcard, list *attribu
   for (l = attribute_group_refs; l; l = l->next) {
     AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     AttributeGroup *ag = (AttributeGroup*)agr->ag;
-    assert(NULL != ag);
+    ASSERT(NULL != ag);
 
     /* Make sure the referenced group has its {attribute wildcard} property computed. Note:
        this cannot cause an infinite loop because we've already checked for circular references. */
@@ -2365,7 +2364,7 @@ int compute_attribute_uses(Schema *s, list *local_attribute_uses, list *attribut
   list *l;
   list *l2;
 
-  assert(NULL == *attribute_uses);
+  ASSERT(NULL == *attribute_uses);
 
   /* Compute the {attribute uses} property of attribute groups, and for complex types
      (step 1 and 2 only) */
@@ -2381,7 +2380,7 @@ int compute_attribute_uses(Schema *s, list *local_attribute_uses, list *attribut
   for (l = attribute_group_refs; l; l = l->next) {
     AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
     AttributeGroup *ag = (AttributeGroup*)agr->ag;
-    assert(NULL != ag);
+    ASSERT(NULL != ag);
 
     /* Make sure the referenced group has its {attribute uses} property computed. Note:
        this cannot cause an infinite loop because we've already checked for circular references. */
@@ -2513,8 +2512,8 @@ void add_type_union_members(Schema *s, void *obj, list **tocheck)
   list *l;
   for (l = t->members; l; l = l->next) {
     MemberType *mt = (MemberType*)l->data;
-    assert(mt->type);
-    assert(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
+    ASSERT(mt->type);
+    ASSERT(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
     if (!mt->type->complex && (TYPE_VARIETY_UNION == mt->type->variety))
       list_push(tocheck,mt->type);
   }
@@ -2556,7 +2555,7 @@ int post_process_particle(Schema *s, xmlDocPtr doc, Particle *p)
 int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
 {
 
-  assert(t->base);
+  ASSERT(t->base);
 
   /* @implements(xmlschema-1:src-ct.1)
      test { complextype_cc_extension_simpletype.test }
@@ -2587,7 +2586,7 @@ int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
       b = b->base;
     t->variety = b->variety;
     if (TYPE_VARIETY_LIST == t->variety) {
-      assert(b->item_type);
+      ASSERT(b->item_type);
       t->item_type = b->item_type;
       /* FIXME: do the same for member types? */
     }
@@ -2898,7 +2897,7 @@ int xs_visit_particle(Schema *s, xmlDocPtr doc, Particle *p, SchemaVisitor *v)
 {
   if (PARTICLE_TERM_ELEMENT == p->term_type) {
     if (NULL == p->term.e) { /* may not be resolved yet */
-      assert(p->ref && !p->ref->resolved);
+      ASSERT(p->ref && !p->ref->resolved);
       return 0;
     }
     if (p->ref && v->once_each)
@@ -2917,7 +2916,7 @@ int xs_visit_particle(Schema *s, xmlDocPtr doc, Particle *p, SchemaVisitor *v)
     CHECK_CALL(v->modelGroup(s,doc,1,p->term.mg))
   }
   else {
-    assert(PARTICLE_TERM_WILDCARD == p->term_type);
+    ASSERT(PARTICLE_TERM_WILDCARD == p->term_type);
     CHECK_CALL(v->wildcard(s,doc,0,p->term.w))
     CHECK_CALL(xs_visit_wildcard(s,doc,p->term.w,v))
     CHECK_CALL(v->wildcard(s,doc,1,p->term.w))

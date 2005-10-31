@@ -26,9 +26,8 @@
 #include "dataflow/serialization.h"
 #include "xmlschema/xmlschema.h"
 #include "util/stringbuf.h"
-
+#include "util/debug.h"
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>

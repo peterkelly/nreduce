@@ -23,7 +23,7 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
-#include <assert.h>
+#include "util/debug.h"
 
 using namespace GridXSLT;
 
@@ -59,9 +59,9 @@ static Value substring3(Environment *env, List<Value> &args)
 }
 
 FunctionDefinition string_fundefs[4] = {
-  { string_join, FNS, "string-join", "xsd:string*,xsd:string",              "xsd:string" },
-  { substring2,  FNS, "substring",   "xsd:string?,xsd:double",              "xsd:string" },
-  { substring3,  FNS, "substring",   "xsd:string?,xsd:double,xsd:double ",  "xsd:string" },
+  { string_join, FNS, "string-join", "xsd:string*,xsd:string",              "xsd:string", false },
+  { substring2,  FNS, "substring",   "xsd:string?,xsd:double",              "xsd:string", false },
+  { substring3,  FNS, "substring",   "xsd:string?,xsd:double,xsd:double ",  "xsd:string", false },
   { NULL },
 };
 

@@ -23,9 +23,9 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 
@@ -86,10 +86,12 @@ static Value doc(Environment *env, List<Value> &args)
   return Value(docnode);
 }
 
-FunctionDefinition sequence_fundefs[4] = {
-  { seqempty, FNS, "empty",     "item()*",                  "xsd:boolean" },
-  { count,    FNS, "count",     "item()*",                  "xsd:integer" },
-  { doc,      FNS, "doc",       "xsd:string?",              "document-node()?" },
+FunctionDefinition sequence_fundefs[6] = {
+  { seqempty, FNS, "empty",     "item()*",                  "xsd:boolean", false },
+  { count,    FNS, "count",     "item()*",                  "xsd:integer", false },
+  { doc,      FNS, "doc",       "xsd:string?",              "document-node()?", false },
+  { count,    FNS, "foo",  "item()*,item()*,item()*,item()*",   "xsd:integer", false },
+  { count,    FNS, "cfoo",  "item()*,item()*,item()*,item()*",   "xsd:integer", true },
   { NULL },
 };
 

@@ -31,7 +31,6 @@
 #include <dirent.h>
 #include <string.h>
 #include <time.h>
-#include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -224,8 +223,8 @@ int tree_write(urihandler *uh, msgwriter *mw)
   tree_node *tn;
   struct dirent *entry;
 
-  assert(!mw->finished);
-  assert(NULL != d->dirs);
+  ASSERT(!mw->finished);
+  ASSERT(NULL != d->dirs);
 
   tn = (tree_node*)d->dirs->data;
 

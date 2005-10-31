@@ -25,7 +25,6 @@
 #include "serialization.h"
 #include "util/macros.h"
 #include "util/debug.h"
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -346,8 +345,8 @@ int df_seroptions::parseOption(int option, Error *ei,
                                const char *filename, int line,
                                const String &value, NamespaceMap *namespaces)
 {
-  assert(0 <= option);
-  assert(SEROPTION_COUNT > option);
+  ASSERT(0 <= option);
+  ASSERT(SEROPTION_COUNT > option);
   /* FIXME: must always ensure that the values passed in are whitespace collapsed
      (including values that come from attribute value templates) */
   return parse_functions[option](this,ei,filename,line,value,namespaces);
@@ -403,7 +402,7 @@ static Value df_normalize_sequence(Value &seq, Error *ei)
   else {
     for (it = in; it.haveCurrent(); it++) {
       Value v = *it;
-      assert(SEQTYPE_ITEM == v.type().type());
+      ASSERT(SEQTYPE_ITEM == v.type().type());
       s1.append(v);
     }
   }
@@ -523,7 +522,7 @@ static Value df_normalize_sequence(Value &seq, Error *ei)
     doc = new Node(NODE_DOCUMENT);
     for (it = s6; it.haveCurrent(); it++) {
       Value v = *it;
-      assert(ITEM_ATOMIC != v.type().itemType()->m_kind);
+      ASSERT(ITEM_ATOMIC != v.type().itemType()->m_kind);
       doc->addChild(v.asNode()->deepCopy());
     }
   }
@@ -670,12 +669,12 @@ int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options,
 
   doc = normseq.asNode()->ref();
 
-  assert(doc->checkTree());
+  ASSERT(doc->checkTree());
 
   if (options->m_indent) {
     Node *olddoc = doc;
     doc = get_indented_doc(olddoc);
-    assert(doc->checkTree());
+    ASSERT(doc->checkTree());
     debug("identation: new doc has %d refs\n",doc->m_refcount);
     olddoc->deref();
   }
@@ -695,13 +694,13 @@ int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options,
   newline = strchr(buf->data,'\n');
   contentstart = newline+1-buf->data;
   contentlen = buf->size-1-contentstart;
-  assert(NULL != newline);
+  ASSERT(NULL != newline);
   memmove(newline,newline+1,contentlen);
   buf->size--;
   buf->data[buf->size-1] = '\0';
 
   /* Remove newline at end */
-  assert('\n' == buf->data[buf->size-2]);
+  ASSERT('\n' == buf->data[buf->size-2]);
   buf->size--;
   buf->data[buf->size-1] = '\0';
 

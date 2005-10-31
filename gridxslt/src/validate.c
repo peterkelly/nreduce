@@ -22,10 +22,10 @@
 
 #include "fsm.h"
 #include "util/List.h"
+#include "util/debug.h"
 #include "xmlschema/xmlschema.h"
 
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <math.h>
@@ -210,7 +210,7 @@ void build_term_fsm(Schema *s, Particle *p, fsm *f,
   case PARTICLE_TERM_WILDCARD:
     break;
   default:
-    assert(0);
+    ASSERT(0);
     break;
   }
   trace_depth--;
@@ -281,7 +281,7 @@ void build_model_group_entry_fsm(Schema *s, Particle *p, fsm *f,
     }
     bd->intermediate->count += p->range.min_occurs-1;
 
-    assert(start != bd->intermediate);
+    ASSERT(start != bd->intermediate);
     build_term_fsm(s,p,f,start,startid,bd->intermediate,bd->intermediateid,allocated_inputs,userel);
     start = bd->intermediate;
     startid = bd->intermediateid;
@@ -289,7 +289,7 @@ void build_model_group_entry_fsm(Schema *s, Particle *p, fsm *f,
 
     if (2 < p->range.min_occurs) {
 /*         for (i = 1; i < p->range.min_occurs-1; i++) { */
-          assert(start == bd->intermediate);
+          ASSERT(start == bd->intermediate);
           build_term_fsm(s,p,f,start,startid,bd->intermediate,bd->intermediateid,
                          allocated_inputs,p->range.min_occurs-2);
 
@@ -364,7 +364,7 @@ void build_model_group_fsm(Schema *s, ModelGroup *mg, fsm *f,
 
   switch (mg->compositor) {
   case MODELGROUP_COMPOSITOR_ALL:
-    assert(0);
+    ASSERT(0);
     break;
   case MODELGROUP_COMPOSITOR_CHOICE:
     for (l = mg->particles; l; l = l->next) {
@@ -526,7 +526,7 @@ void build_model_group_fsm(Schema *s, ModelGroup *mg, fsm *f,
 
     break;
   default:
-    assert(0);
+    ASSERT(0);
     break;
   }
 }

@@ -22,6 +22,7 @@
 #include "util/stringbuf.h"
 #include "util/network.h"
 #include "util/String.h"
+#include "util/debug.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -30,7 +31,6 @@
 #include <errno.h>
 #include <netdb.h>
 #include <stdarg.h>
-#include <assert.h>
 #include <ctype.h>
 #include <sys/socket.h>
 #include <sys/types.h>

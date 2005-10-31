@@ -30,7 +30,7 @@
 
 using namespace GridXSLT;
 
-void debugl(const char *format, ...)
+void GridXSLT::debugl(const char *format, ...)
 {
 #ifdef DEBUG
   va_list ap;
@@ -50,7 +50,7 @@ void debugl(const char *format, ...)
 #endif
 }
 
-void debug(const char *format, ...)
+void GridXSLT::debug(const char *format, ...)
 {
 #ifdef DEBUG
   va_list ap;
@@ -70,7 +70,7 @@ void debug(const char *format, ...)
 #endif
 }
 
-void debug_indent(int indent, const char *format, ...)
+void GridXSLT::debug_indent(int indent, const char *format, ...)
 {
 #ifdef DEBUG
   int i;
@@ -85,3 +85,11 @@ void debug_indent(int indent, const char *format, ...)
   message("\n");
 #endif
 }
+
+void GridXSLT::fatal(const char *msg, const char *filename, int line)
+{
+  fprintf(stderr,"ASSERTION FAILURE: %s:%d: %s\n",filename,line,msg);
+  *((int*)NULL) = 0;
+  exit(1);
+}
+

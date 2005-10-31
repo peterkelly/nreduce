@@ -21,9 +21,9 @@
  */
 
 #include "List.h"
+#include "debug.h"
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 using namespace GridXSLT;
 
@@ -118,7 +118,7 @@ int list_contains_ptr(list *l, const void *data)
 void list_remove_ptr(list **l, void *ptr)
 {
   list *old;
-  assert(list_contains_ptr(*l,ptr));
+  ASSERT(list_contains_ptr(*l,ptr));
   while ((*l)->data != ptr)
     l = &((*l)->next);
   old = *l;

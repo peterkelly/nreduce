@@ -23,7 +23,6 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
-#include <assert.h>
 
 #define FNS FN_NAMESPACE
 
@@ -31,27 +30,31 @@ using namespace GridXSLT;
 
 static Value position(Environment *env, List<Value> &args)
 {
-  if (!env->ctxt->havefocus) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
+  Context *c = args[0].asContext();
+
+  if (!c->havefocus) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","undefined context item");
     return Value::null();
   }
 
-  return Value(env->ctxt->position);
+  return Value(c->position);
 }
 
 static Value last(Environment *env, List<Value> &args)
 {
-  if (!env->ctxt->havefocus) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","No context item");
+  Context *c = args[0].asContext();
+
+  if (!c->havefocus) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FONC0001","undefined context item");
     return Value::null();
   }
 
-  return Value(env->ctxt->size);
+  return Value(c->size);
 }
 
 FunctionDefinition context_fundefs[3] = {
-  { position,    FNS, "position",    "",                                    "xsd:integer" },
-  { last,        FNS, "last",        "",                                    "xsd:integer" },
+  { position,    FNS, "position",    "",                                    "xsd:integer", true },
+  { last,        FNS, "last",        "",                                    "xsd:integer", true },
   { NULL },
 };
 

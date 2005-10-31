@@ -23,9 +23,9 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 
@@ -40,14 +40,14 @@ static Value string1(Environment *env, List<Value> &args)
     result = Value("");
   }
   else {
-    assert(SEQTYPE_ITEM == args[0].type().type());
+    ASSERT(SEQTYPE_ITEM == args[0].type().type());
     result = Value(args[0].convertToString());
   }
   return result;
 }
 
 FunctionDefinition accessor_fundefs[9] = {
-  { string1,  FNS, "string",            "item()?",       "xsd:string" },
+  { string1,  FNS, "string",            "item()?",       "xsd:string", false },
   { NULL },
 };
 

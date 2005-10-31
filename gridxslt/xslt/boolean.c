@@ -23,10 +23,10 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include "special.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 
@@ -47,7 +47,7 @@ static Value not1(Environment *env, List<Value> &args)
 }
 
 FunctionDefinition boolean_fundefs[2] = {
-  { not1,    FNS, "not",     "item()*",                  "xsd:boolean" },
+  { not1,    FNS, "not",     "item()*",                  "xsd:boolean", false },
   { NULL },
 };
 

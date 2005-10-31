@@ -21,11 +21,11 @@
  */
 
 #include "util/stringbuf.h"
+#include "util/debug.h"
 #include "xmlschema.h"
 #include "validation.h"
 
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -103,7 +103,7 @@ static int decode(FILE *out, xs_validator *v, xmlNodePtr n, stringbuf *encoded)
   xmlTextWriter *writer = xmlNewTextWriter(buf);
   NSName nn = NSName(String::null(),n->name);
   Type *t = xs_lookup_type(v->s,nn);
-  assert(t);
+  ASSERT(t);
 
   xmlTextWriterSetIndent(writer,1);
   xmlTextWriterSetIndentString(writer,"  ");
@@ -227,7 +227,7 @@ int binxml_main(int argc, char **argv)
     xmlFreeDoc(doc);
   }
   else {
-    assert(!"not yet implemented");
+    ASSERT(!"not yet implemented");
 #if 0
     FILE *f;
     int r;

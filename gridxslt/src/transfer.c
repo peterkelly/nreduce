@@ -31,7 +31,6 @@
 #include <errno.h>
 #include <netdb.h>
 #include <stdarg.h>
-#include <assert.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <sys/socket.h>

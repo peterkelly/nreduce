@@ -33,7 +33,6 @@
 #include <libxml/uri.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 
 using namespace GridXSLT;
@@ -41,7 +40,7 @@ using namespace GridXSLT;
 int xs_check_attribute_type(Schema *s, Reference *r)
 {
   SchemaAttribute *a = (SchemaAttribute*)r->source;
-  assert(a->type);
+  ASSERT(a->type);
   if (a->type->complex)
     return error(&s->ei,s->uri,r->def.loc.line,String::null(),"Attributes can only use simple types");
   return 0;
@@ -514,7 +513,7 @@ int GridXSLT::xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s,
     }
     else { /* complexType */
       CHECK_CALL(xs_parse_complex_type(s,c,doc,ns,0,&e->type))
-      assert(e->type);
+      ASSERT(e->type);
       xs_next_element(&c);
     }
   }
@@ -743,7 +742,7 @@ int GridXSLT::xs_parse_attribute(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *n
       return error(&s->ei,s->uri,c->line,"src-attribute.4",
                    "<simpleType> not allowed here when \"type\" is set on <attribute>");
     CHECK_CALL(xs_parse_simple_type(s,c,doc,ns,0,&a->type))
-    assert(NULL != a->type);
+    ASSERT(NULL != a->type);
   }
 
   if (!XMLHasProp(n,"ref") && (NULL == a->type) && (NULL == a->typeref))
@@ -803,7 +802,7 @@ int GridXSLT::xs_parse_attribute_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr do
   if (!XMLHasProp(n,"ref"))
     return missing_attribute2(&s->ei,s->uri,n->line,String::null(),"ref");
   CHECK_CALL(xs_parse_ref(s,n,doc,"ref",XS_OBJECT_ATTRIBUTE_GROUP,(void**)&agr->ag,&agr->ref))
-  assert(agr->ref);
+  ASSERT(agr->ref);
 
 
   list_append(reflist,agr);
@@ -817,7 +816,8 @@ int xs_facet_num(const char *str)
   for (i = 0; i < XS_FACET_NUMFACETS; i++)
     if (!strcmp(xs_facet_names[i],str))
       return i;
-  assert(0);
+  ASSERT(0);
+  return 0;
 }
 
 int xs_parse_facet(Schema *s, xmlNodePtr n, xs_facetdata *fd)
@@ -1092,7 +1092,7 @@ int GridXSLT::xs_parse_simple_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char 
 
       mt = new MemberType(s->as);
       CHECK_CALL(xs_parse_simple_type(s,c2,doc,ns,0,&mt->type));
-      assert(NULL != mt->type);
+      ASSERT(NULL != mt->type);
       list_append(&t->members,mt);
 
       xs_next_element(&c2);
@@ -1131,7 +1131,7 @@ int GridXSLT::xs_parse_complex_type_attributes(Schema *s, xmlNodePtr n, xmlDocPt
   if (c && check_element(c,"anyAttribute",XS_NAMESPACE)) {
     /* {attribute wildcard} 1.1 */
     CHECK_CALL(xs_parse_wildcard(s,c,doc,&t->local_wildcard))
-    assert(t->local_wildcard);
+    ASSERT(t->local_wildcard);
     xs_next_element(&c);
   }
 
@@ -1227,9 +1227,9 @@ int GridXSLT::xs_parse_complex_content_children(Schema *s,
     }
     else { /* must be <all>, <choice> or <sequence> - otherwise test211 would be true */
       CHECK_CALL(xs_parse_all_choice_sequence(s,c,ns,doc,NULL,&effective_content))
-      assert(effective_content);
-      assert(PARTICLE_TERM_MODEL_GROUP == effective_content->term_type);
-      assert(effective_content->term.mg);
+      ASSERT(effective_content);
+      ASSERT(PARTICLE_TERM_MODEL_GROUP == effective_content->term_type);
+      ASSERT(effective_content->term.mg);
       effective_content->term.mg->content_model_of = t;
     }
   }
@@ -1419,7 +1419,7 @@ int GridXSLT::xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *
     return invalid_element2(&s->ei,s->uri,c);
 
   CHECK_CALL(xs_parse_model_group(s,c,ns,doc,&mgd->model_group))
-  assert(mgd->model_group);
+  ASSERT(mgd->model_group);
   mgd->model_group->mgd = mgd;
 
   xs_next_element(&c);
@@ -1491,11 +1491,11 @@ int GridXSLT::xs_parse_model_group(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr 
   else if (check_element(n,"sequence",XS_NAMESPACE))
     mg->compositor = MODELGROUP_COMPOSITOR_SEQUENCE;
   else
-    assert(0);
+    ASSERT(0);
 
   mg->particles = NULL;
   mg->annotation = NULL;
-  assert(mgout);
+  ASSERT(mgout);
   *mgout = mg;
 
   /* Iterate through the child elements of the model group.
@@ -1563,7 +1563,7 @@ int GridXSLT::xs_parse_all_choice_sequence(Schema *s, xmlNodePtr n, char *ns, xm
     return invalid_attribute_val(&s->ei,s->uri,n,"minOccurs");
 
   CHECK_CALL(xs_parse_model_group(s,n,ns,doc,&mg))
-  assert(mg);
+  ASSERT(mg);
 
   p = new Particle(s->as);
   p->term.mg = mg;

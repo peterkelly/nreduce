@@ -23,9 +23,8 @@
 #include "SequenceType.h"
 #include "Program.h"
 #include "util/macros.h"
-
+#include "util/debug.h"
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 
 //#define TRACE_ALLOC
@@ -57,7 +56,7 @@ static void df_print_objname(StringBuffer &buf, const NSName &ident, NamespaceMa
 {
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
-    assert(NULL != def); /* FIXME: what to do if we can't find one? */
+    ASSERT(NULL != def); /* FIXME: what to do if we can't find one? */
     buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
@@ -90,7 +89,7 @@ static void print_objname(StringBuffer &buf, NamespaceMap *namespaces, const NSN
 {
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
-    assert(NULL != def); /* FIXME: what to do if we can't find one? */
+    ASSERT(NULL != def); /* FIXME: what to do if we can't find one? */
     buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
@@ -185,7 +184,7 @@ void ItemType::printFS(StringBuffer &buf, NamespaceMap *namespaces)
     buf.append("namespace"); /* FIXME: is this valid? */
     break;
   default:
-    assert(!"invalid item type");
+    ASSERT(!"invalid item type");
     break;
   }
 }
@@ -199,9 +198,9 @@ void ItemType::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
   case ITEM_DOCUMENT:
     buf.append("document-node(");
     if (NULL != m_content) {
-      assert(SEQTYPE_ALL == m_content->type());
-      assert(SEQTYPE_ITEM == m_content->left()->type());
-      assert(ITEM_ELEMENT == m_content->left()->itemType()->m_kind);
+      ASSERT(SEQTYPE_ALL == m_content->type());
+      ASSERT(SEQTYPE_ITEM == m_content->left()->type());
+      ASSERT(ITEM_ELEMENT == m_content->left()->itemType()->m_kind);
       m_content->left()->itemType()->printXPath(buf,namespaces);
     }
     buf.append(")");
@@ -288,7 +287,7 @@ void ItemType::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
     buf.append("namespace()"); /* FIXME: is this valid? */
     break;
   default:
-    assert(!"invalid item type");
+    ASSERT(!"invalid item type");
     break;
   }
 }
@@ -394,12 +393,14 @@ void SequenceTypeImpl::toList(list **types)
     list_append(types,this);
   }
   else {
-    assert(SEQTYPE_EMPTY == m_type);
+    ASSERT(SEQTYPE_EMPTY == m_type);
   }
 }
 
 static int validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
 {
+//   message("validate_sequence_item: base->itemType()->m_kind = %s\n",
+//           df_item_kinds[base->itemType()->m_kind]);
   if (base->itemType()->m_kind != st->itemType()->m_kind)
     return 0;
 
@@ -408,6 +409,8 @@ static int validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
     /* FIXME: handle union and list simple types */
     Type *basetype = base->itemType()->m_type;
     Type *derived = st->itemType()->m_type;
+//     message("validate_sequence_item: checking if %* is derived from %*\n",
+//             &derived->def.ident,&basetype->def.ident);
     while (1) {
       if (basetype == derived)
         return 1;
@@ -436,7 +439,7 @@ static int validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
     return 1;
   }
 
-  assert(!"invalid item kind");
+  ASSERT(!"invalid item kind");
   return 0;
 }
 
@@ -446,7 +449,7 @@ static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
   case SEQTYPE_ITEM:
     if (NULL == *lptr)
       return 0;
-    assert(SEQTYPE_ITEM == ((SequenceTypeImpl*)((*lptr)->data))->type());
+    ASSERT(SEQTYPE_ITEM == ((SequenceTypeImpl*)((*lptr)->data))->type());
     if (validate_sequence_item(base,(SequenceTypeImpl*)((*lptr)->data))) {
       *lptr = (*lptr)->next;
       return 1;
@@ -476,11 +479,11 @@ static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
       *lptr = backup;
       return 1;
     }
-    assert(!"invalid occurrence type");
+    ASSERT(!"invalid occurrence type");
     break;
   }
   case SEQTYPE_ALL:
-    assert(!"SEQTYPE_ALL not yet supported");
+    ASSERT(!"SEQTYPE_ALL not yet supported");
     break;
   case SEQTYPE_SEQUENCE:
     return (validate_sequence_list(base->left(),lptr) &&
@@ -493,15 +496,18 @@ static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
     return validate_sequence_list(base->right(),lptr);
   }
   case SEQTYPE_EMPTY:
-    assert(!"EMPTY is not a valid specifier type");
+    ASSERT(!"EMPTY is not a valid specifier type");
     break;
   }
-  assert(!"invalid sequence type");
+  ASSERT(!"invalid sequence type");
   return 0;
 }
 
 int SequenceTypeImpl::isDerivedFrom(SequenceTypeImpl *base)
 {
+  SequenceType st1(this);
+  SequenceType st2(base);
+//   message("SequenceTypeImpl::isDerivedFrom(): this = %*, base = %*\n",&st1,&st2);
   list *types = NULL;
   list *types2;
   int r;
@@ -509,6 +515,7 @@ int SequenceTypeImpl::isDerivedFrom(SequenceTypeImpl *base)
   types2 = types;
   r = validate_sequence_list(base,&types2);
   list_free(types,NULL);
+//   message("SequenceTypeImpl::isDerivedFrom() r = %d\n",r);
   return r;
 }
 
@@ -595,6 +602,16 @@ SequenceTypeImpl *SequenceTypeImpl::node()
   return st;
 }
 
+SequenceTypeImpl *SequenceTypeImpl::itemstar()
+{
+  return SequenceTypeImpl::occurrence(SequenceTypeImpl::item(),OCCURS_ZERO_OR_MORE);
+}
+
+SequenceTypeImpl *SequenceTypeImpl::nodestar()
+{
+  return SequenceTypeImpl::occurrence(SequenceTypeImpl::node(),OCCURS_ZERO_OR_MORE);
+}
+
 SequenceTypeImpl *SequenceTypeImpl::interleave(SequenceTypeImpl *content)
 {
   SequenceTypeImpl *pi = new SequenceTypeImpl(new ItemType(ITEM_PI));
@@ -634,6 +651,11 @@ SequenceTypeImpl *SequenceTypeImpl::sequence(SequenceTypeImpl *left, SequenceTyp
 
 SequenceTypeImpl *SequenceTypeImpl::occurrence(SequenceTypeImpl *left, int occ)
 {
+  // If the type in question is already the same occurrence indicator, no need to do anything...
+  // FIXME: is there something in formal semantics about this?
+  if ((left->type() == SEQTYPE_OCCURRENCE) && (left->occurs() == occ))
+    return left;
+
   SequenceTypeImpl *st = new SequenceTypeImpl(SEQTYPE_OCCURRENCE);
   st->m_left = left->ref();
   st->m_occurrence = occ;
@@ -692,7 +714,7 @@ void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces)
       buf.append("+");
       break;
     default:
-      assert(!"invalid occurrence");
+      ASSERT(!"invalid occurrence");
       break;
     }
     break;
@@ -721,7 +743,7 @@ void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces)
     buf.append("empty");
     break;
   default:
-    assert(!"invalid sequence type");
+    ASSERT(!"invalid sequence type");
     break;
   }
 }
@@ -732,7 +754,7 @@ void SequenceTypeImpl::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
     m_item->printXPath(buf,namespaces);
   }
   else if (SEQTYPE_OCCURRENCE == m_type) {
-    assert(SEQTYPE_ITEM == m_left->m_type);
+    ASSERT(SEQTYPE_ITEM == m_left->m_type);
     if ((ITEM_PI == m_left->m_item->m_kind) &&
         (OCCURS_OPTIONAL == m_occurrence) &&
         (!m_left->m_item->m_pistr.isNull())) {
@@ -753,7 +775,7 @@ void SequenceTypeImpl::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
         buf.append("+");
         break;
       default:
-        assert(!"invalid occurrence");
+        ASSERT(!"invalid occurrence");
         break;
       }
     }
@@ -774,7 +796,7 @@ void SequenceTypeImpl::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
     m_right->printXPath(buf,namespaces);
   }
   else {
-    assert(!"sequencetype not expressible in xpath syntax");
+    ASSERT(!"sequencetype not expressible in xpath syntax");
   }
 }
 
@@ -842,7 +864,7 @@ void Node::deref()
 /*   debugl("node_deref %s %p (root is %s %p), now have %d refs", */
 /*         df_item_kinds[n->type],n,df_item_kinds[r->type],r,r->refcount); */
 
-  assert(0 <= r->m_refcount);
+  ASSERT(0 <= r->m_refcount);
   if (0 == r->m_refcount)
     delete r;
 }
@@ -883,10 +905,10 @@ Node *Node::deepCopy()
 
 void Node::addChild(Node *c)
 {
-  assert(NULL == c->m_parent);
-  assert(NULL == c->m_prev);
-  assert(NULL == c->m_next);
-  assert(0 == c->m_refcount);
+  ASSERT(NULL == c->m_parent);
+  ASSERT(NULL == c->m_prev);
+  ASSERT(NULL == c->m_next);
+  ASSERT(0 == c->m_refcount);
 
   if (NULL != m_last_child)
     m_last_child->m_next = this;
@@ -905,10 +927,10 @@ void Node::addChild(Node *c)
 
 void Node::insertChild(Node *c, Node *before)
 {
-  assert(NULL == c->m_parent);
-  assert(NULL == c->m_prev);
-  assert(NULL == c->m_next);
-  assert(0 == c->m_refcount);
+  ASSERT(NULL == c->m_parent);
+  ASSERT(NULL == c->m_prev);
+  ASSERT(NULL == c->m_next);
+  ASSERT(0 == c->m_refcount);
 
   if (NULL == before) {
     addChild(c);
@@ -930,10 +952,10 @@ void Node::insertChild(Node *c, Node *before)
 
 void Node::addAttribute(Node *attr)
 {
-  assert(NULL == attr->m_parent);
-  assert(NULL == attr->m_prev);
-  assert(NULL == attr->m_next);
-  assert(0 == attr->m_refcount);
+  ASSERT(NULL == attr->m_parent);
+  ASSERT(NULL == attr->m_prev);
+  ASSERT(NULL == attr->m_next);
+  ASSERT(0 == attr->m_refcount);
 
   m_attributes.append(attr);
   attr->m_parent = this;
@@ -941,10 +963,10 @@ void Node::addAttribute(Node *attr)
 
 void Node::addNamespace(Node *ns)
 {
-  assert(NULL == ns->m_parent);
-  assert(NULL == ns->m_prev);
-  assert(NULL == ns->m_next);
-  assert(0 == ns->m_refcount);
+  ASSERT(NULL == ns->m_parent);
+  ASSERT(NULL == ns->m_prev);
+  ASSERT(NULL == ns->m_next);
+  ASSERT(0 == ns->m_refcount);
 
   m_namespaces.append(ns);
   ns->m_parent = this;
@@ -993,7 +1015,7 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
   }
   case XML_ATTRIBUTE_NODE:
     /* Should never see this in the main element tree */
-    assert(0);
+    ASSERT(0);
     break;
   case XML_TEXT_NODE:
     n = new Node(NODE_TEXT);
@@ -1014,7 +1036,7 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
     break;
   default:
     /* FIXME: support other node types such as CDATA sections and entities */
-    assert(!"node type not supported");
+    ASSERT(!"node type not supported");
   }
 
   for (c = xn->children; c; c = c->next) {
@@ -1144,7 +1166,7 @@ void Node::printXML(xmlTextWriter *writer)
     break;
   }
   default:
-    assert(!"invalid node type");
+    ASSERT(!"invalid node type");
     break;
   }
 }
@@ -1177,7 +1199,7 @@ void Node::printBuf(StringBuffer &buf)
     buf.append(m_value);
     break;
   default:
-    assert(!"invalid node type");
+    ASSERT(!"invalid node type");
     break;
   }
 }
@@ -1316,7 +1338,7 @@ void ValueImpl::printbuf(StringBuffer &buf)
       else if (st.itemType()->m_type == xs_g->boolean_type)
         buf.format("%s",value.b ? "true" : "false");
       else
-        buf.format("(atomic value)"); /* FIXME */
+        buf.format("(atomic value %*)",&st.itemType()->m_type->def.ident); /* FIXME */
     }
     else if ((ITEM_ELEMENT == st.itemType()->m_kind) ||
              (ITEM_DOCUMENT == st.itemType()->m_kind)) {
@@ -1375,7 +1397,7 @@ static int df_count_sequence_values(ValueImpl *seq)
     return 1;
   }
   else {
-    assert(SEQTYPE_EMPTY == seq->st.type());
+    ASSERT(SEQTYPE_EMPTY == seq->st.type());
     return 0;
   }
 }
@@ -1398,7 +1420,7 @@ ValueImpl **ValueImpl::sequenceToArray()
   ValueImpl **values = (ValueImpl**)malloc((count+1)*sizeof(ValueImpl*));
   valptr = values;
   df_build_sequence_array(this,&valptr);
-  assert(valptr == values+count);
+  ASSERT(valptr == values+count);
   values[count] = NULL;
   return values;
 }
@@ -1413,7 +1435,7 @@ void ValueImpl::getSequenceValues(List<Value> &values)
     values.append(this);
   }
   else {
-    assert(SEQTYPE_EMPTY == st.type());
+    ASSERT(SEQTYPE_EMPTY == st.type());
   }
 }
 
@@ -1471,10 +1493,10 @@ ValueImpl *ValueImpl::atomize()
     }
   }
   else {
-    assert(SEQTYPE_EMPTY == st.type());
+    ASSERT(SEQTYPE_EMPTY == st.type());
     /* FIXME: is this safe? are there any situations in which atomize() could be called with
        an empty sequence? */
-    assert(!"can't atomize an empty sequence");
+    ASSERT(!"can't atomize an empty sequence");
     return NULL;
   }
 }

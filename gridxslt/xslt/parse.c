@@ -33,7 +33,6 @@
 #include <libxml/uri.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <ctype.h>
 
 using namespace GridXSLT;
@@ -819,7 +818,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
       CHECK_CALL(parse_sequence_constructors(new_sn,c->children,doc,ei,filename))
     }
     else if (check_element(c,"param",XSLT_NAMESPACE)) {
-      assert(!"params should already be handled by the parent function/template/stylesheet");
+      ASSERT(!"params should already be handled by the parent function/template/stylesheet");
     }
     else if (check_element(c,"with-param",XSLT_NAMESPACE)) {
       char *name = XMLGetNsProp(c,"name",String::null()).cstring();
@@ -1006,8 +1005,8 @@ static int parse_import_include(Statement *parent, xmlNodePtr n, xmlDocPtr doc, 
 
 */
 
-  assert(XSLT_TRANSFORM == parent->m_type);
-  assert(NULL != parent->m_uri);
+  ASSERT(XSLT_TRANSFORM == parent->m_type);
+  ASSERT(NULL != parent->m_uri);
 
 /*   ALLOWED_ATTRIBUTES(n,"href") */
   ALLOWED_ATTRIBUTES(n,&xstr_href)

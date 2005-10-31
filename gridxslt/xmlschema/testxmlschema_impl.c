@@ -22,13 +22,13 @@
 
 #include "util/Namespace.h"
 #include "util/macros.h"
+#include "util/debug.h"
 #include "xmlschema.h"
 #include "parse.h"
 #include "output.h"
 #include "derivation.h"
 
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>

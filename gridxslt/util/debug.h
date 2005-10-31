@@ -23,13 +23,21 @@
 #ifndef _UTIL_DEBUG_H
 #define _UTIL_DEBUG_H
 
+#ifdef NDEBUG
+#define ASSERT(expr) 
+#else
+#define ASSERT(expr) {if (!(expr)) fatal(__STRING(expr), __FILE__, __LINE__); }
+#endif
+
 #define DEBUG
 
 namespace GridXSLT {
-};
 
 void debugl(const char *format, ...);
 void debug(const char *format, ...);
 void debug_indent(int indent, const char *format, ...);
+void fatal(const char *msg, const char *filename, int line);
+
+};
 
 #endif /* _UTIL_DEBUG_H */

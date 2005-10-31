@@ -84,6 +84,14 @@ void GridXSLT::df_init_builtin_functions(Schema *schema,
       bif->m_fun = fundef->fun;
       bif->m_ident = NSName(fundef->ns,fundef->name);
       bif->m_nargs = parse_argtype_list(schema,namespaces,fundef->arguments,bif->m_argtypes);
+      bif->m_context = fundef->context;
+
+      if ((0 == bif->m_nargs) && !bif->m_context) {
+        fmessage(stderr,"FATAL: internal function %* must require context since it has "
+                 "no arguments\n",&bif->m_ident);
+        exit(1);
+      }
+
       bif->m_rettype = parse_argtype(schema,namespaces,fundef->returns,strlen(fundef->returns));
       builtin_functions.push(bif);
 

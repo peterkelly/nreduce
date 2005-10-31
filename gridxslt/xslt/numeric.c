@@ -23,9 +23,9 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
+#include "util/debug.h"
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 
@@ -36,48 +36,48 @@ using namespace GridXSLT;
 static Value numeric_add(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   return Value(args[0].asInt() + args[1].asInt());
 }
 
 static Value numeric_subtract(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   return Value(args[0].asInt() - args[1].asInt());
 }
 
 static Value numeric_multiply(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   return Value(args[0].asInt() * args[1].asInt());
 }
 
 static Value numeric_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   return Value(args[0].asInt() / args[1].asInt());
 }
 
 static Value numeric_integer_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   return Value(args[0].asInt() / args[1].asInt());
 }
 
 static Value numeric_equal(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
 
   if (args[0].asInt() == args[1].asInt())
     return Value(true);
@@ -88,8 +88,8 @@ static Value numeric_equal(Environment *env, List<Value> &args)
 static Value numeric_less_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
 
   if (args[0].asInt() < args[1].asInt())
     return Value(true);
@@ -100,8 +100,8 @@ static Value numeric_less_than(Environment *env, List<Value> &args)
 static Value numeric_greater_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  assert(args[0].isDerivedFrom(xs_g->int_type));
-  assert(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
 
   if (args[0].asInt() > args[1].asInt())
     return Value(true);
@@ -111,21 +111,21 @@ static Value numeric_greater_than(Environment *env, List<Value> &args)
 
 FunctionDefinition numeric_fundefs[9] = {
   { numeric_add,            FNS, "numeric-add",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:integer", false },
   { numeric_subtract,       FNS, "numeric-subtract",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:integer", false },
   { numeric_multiply,       FNS, "numeric-multiply",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:integer", false },
   { numeric_divide,         FNS, "numeric-divide",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:integer", false },
   { numeric_integer_divide, FNS, "numeric-integer-divide",
-    "xsd:integer,xsd:integer",       "xsd:integer" },
+    "xsd:integer,xsd:integer",       "xsd:integer", false },
   { numeric_equal,          FNS, "numeric-equal",
-    "xsd:integer,xsd:integer",       "xsd:boolean" },
+    "xsd:integer,xsd:integer",       "xsd:boolean", false },
   { numeric_less_than,      FNS, "numeric-less-than",
-    "xsd:integer,xsd:integer",       "xsd:boolean" },
+    "xsd:integer,xsd:integer",       "xsd:boolean", false },
   { numeric_greater_than,   FNS, "numeric-greater-than",
-    "xsd:integer,xsd:integer",       "xsd:boolean" },
+    "xsd:integer,xsd:integer",       "xsd:boolean", false },
   { NULL },
 };
 
