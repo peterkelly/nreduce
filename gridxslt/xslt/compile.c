@@ -944,10 +944,28 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
   case XPATH_EXPR_PARAMLIST:
     ASSERT(!"not yet implemented"); /* FIXME */
     break;
-  case XPATH_EXPR_FILTER:
-    ASSERT(!"not yet implemented"); /* FIXME */
-    break;
+  case XPATH_EXPR_FILTER: {
+    Instruction *dup = fun->addInstruction(OP_DUP,e->m_sloc);
+    set_and_move_cursor(cursor,dup,0,dup,0);
 
+    CHECK_CALL(compileExpr(fun,e->m_left,cursor))
+
+    Instruction *listdup = fun->addInstruction(OP_DUP,e->m_sloc);
+    set_and_move_cursor(cursor,listdup,0,listdup,0);
+
+    Instruction *map;
+    CHECK_CALL(compileInnerFunction(fun,NULL,e->m_right,&map,cursor,e->m_sloc))
+    set_and_move_cursor(cursor,map,0,map,0);
+    dup->m_outports[1].dest = map;
+    dup->m_outports[1].destp = 1;
+
+    Instruction *filter = specialop(fun,SPECIAL_NAMESPACE,"filter",2,e->m_sloc);
+    set_and_move_cursor(cursor,filter,1,filter,0);
+    listdup->m_outports[1].dest = filter;
+    listdup->m_outports[1].destp = 0;
+
+    break;
+  }
   default:
     ASSERT(0);
     break;

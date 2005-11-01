@@ -27,6 +27,7 @@
 #include "util/debug.h"
 #include "util/macros.h"
 #include "Expression.h"
+#include "special.h"
 #include <string.h>
 #include <math.h>
 
@@ -455,7 +456,22 @@ static Value range(Environment *env, List<Value> &args)
   int max;
   List<Value> range;
 
-  /* FIXME: support empty sequences and conversion of other types when passed in */
+  /* FIXME: support empty sequences */
+  /* FIXME: support conversion of other types when passed in (this should be done automatically
+     by the compiler by inserting the appropriate conversion operators) */
+
+
+/*   Value v0 = args[0]; */
+/*   Value v1 = args[1]; */
+/*   message("args[0] = %*\n",&v0); */
+/*   message("args[1] = %*\n",&v1); */
+
+/*   SequenceType st0 = args[0].type(); */
+/*   SequenceType st1 = args[1].type(); */
+
+/*   message("args[0].type() = %*\n",&st0); */
+/*   message("args[1].type() = %*\n",&st1); */
+
   ASSERT(args[0].isDerivedFrom(xs_g->int_type));
   ASSERT(args[1].isDerivedFrom(xs_g->int_type));
   min = args[0].asInt();
@@ -753,7 +769,12 @@ static Value document(Environment *env, List<Value> &args)
 
 static Value sequence(Environment *env, List<Value> &args)
 {
-  Value pair;
+  if (args[0].type().isEmptyType())
+    return args[1];
+
+  if (args[1].type().isEmptyType())
+    return args[0];
+
   SequenceType st = SequenceType::sequence(args[0].type(),args[1].type());
   return Value(st,args[0],args[1]);
 }
@@ -774,9 +795,47 @@ static Value output(Environment *env, List<Value> &args)
 
 static Value filter(Environment *env, List<Value> &args)
 {
-  ASSERT(0);
-    /* FIXME */
-  return Value::null();
+  List<Value> items = args[0].sequenceToList();
+  List<Value> predicates = args[1].sequenceToList();
+  List<Value> result;
+
+  ASSERT(items.count() == predicates.count());
+
+  Iterator<Value> iit;
+  Iterator<Value> pit;
+
+  int pos = 1;
+  for (iit = items, pit = predicates; iit.haveCurrent(); iit++, pit++) {
+    Value v = *iit;
+    Value p = *pit;
+    bool matches = false;
+
+    if (p.isInt()) {
+      matches = (pos == (int)p.asInt());
+    }
+    else if (p.isFloat()) {
+      matches = (pos == (int)p.asFloat());
+    }
+    else if (p.isDouble()) {
+      matches = (pos == (int)p.asDouble());
+    }
+    else {
+      List<Value> current;
+      current.append(p);
+      Value b = ebv(env,current);
+      if (b.isNull())
+        return Value::null();
+      matches = b.asBool();
+    }
+
+    if (matches)
+      result.append(v);
+
+    pos++;
+  }
+
+//  message("filter: %u input items, %u output items\n",items.count(),result.count());
+  return Value::listToSequence2(result);
 }
 
 static Value spempty(Environment *env, List<Value> &args)
@@ -903,7 +962,7 @@ FunctionDefinition special_fundefs[19] = {
   { document,      FNS, "document",      "item()*",                   "document-node()", false },
   { sequence,      FNS, "sequence",      "item()*,item()*",           "item()*", false         },
   { output,        FNS, "output",        "item()*",                   "item()*", false         },
-  { filter,        FNS, "filter",        "item()*",                   "item()*", false         },
+  { filter,        FNS, "filter",        "item()*,item()*",           "item()*", false         },
   { spempty,       FNS, "empty",         "item()*",                   "item()*", false         },
   { ebv,           FNS, "ebv",           "item()*",                   "xsd:boolean", false     },
   { and2,          FNS, "and",           "item()*,item()*",           "xsd:boolean", false     },

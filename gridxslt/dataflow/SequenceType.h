@@ -133,6 +133,10 @@ public:
   inline bool isItem() const { return m_isItem; }
   inline int valtype() const { return m_valtype; }
 
+  inline bool isItemType() const { return (SEQTYPE_ITEM == m_valtype); }
+  inline bool isSequenceType() const { return (SEQTYPE_SEQUENCE == m_valtype); }
+  inline bool isEmptyType() const { return (SEQTYPE_EMPTY == m_valtype); }
+
 private:
   int m_type;
   SequenceTypeImpl *m_left;
@@ -192,6 +196,10 @@ public:
   inline bool isNode() const { return impl->isNode(); }
   inline bool isItem() const { return impl->isItem(); }
   inline int valtype() const { return impl->valtype(); }
+
+  inline bool isItemType() const { return impl->isItemType(); }
+  inline bool isSequenceType() const { return impl->isSequenceType(); }
+  inline bool isEmptyType() const { return impl->isEmptyType(); }
 
   static SequenceType item() { return SequenceTypeImpl::item(); }
   static SequenceType node() { return SequenceTypeImpl::node(); }
