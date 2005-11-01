@@ -1,0 +1,129 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/books.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+books.xml
+<?xml version="1.0" encoding="utf-8"?>
+<books>
+  <book>
+    <title>Enterprise Services Architecture</title>
+    <author>Dan Woods</author>
+    <chapter>Concepts and Philosophy</chapter>
+    <chapter>In Practice</chapter>
+    <chapter>Making the Business Case</chapter>
+    <chapter>Anatomy</chapter>
+    <chapter>The Platform</chapter>
+    <chapter>Applying Enterprise Services Architecture</chapter>
+    <chapter>Creating a Road Map</chapter>
+    <chapter>The Enterprise Value Chain</chapter>
+    <chapter>Enterprise Services Architecture and Society</chapter>
+  </book>
+  <book>
+    <title>RT Essentials</title>
+    <author>Dave Rolsky</author>
+    <author>Darren Chamberlain</author>
+    <author>Richard Foley</author>
+    <author>Jesse Vincent</author>
+    <author>Robert Spier</author>
+    <chapter>What Is Ticketing?</chapter>
+    <chapter>Installation</chapter>
+    <chapter>Getting Started</chapter>
+    <chapter>Command-Line Interface</chapter>
+    <chapter>Administrative Tasks</chapter>
+    <chapter>Scrips</chapter>
+    <chapter>Example Configurations</chapter>
+    <chapter>Architecture</chapter>
+    <chapter>API</chapter>
+    <chapter>Development Environments</chapter>
+  </book>
+  <book>
+    <title>Upgrading to PHP 5</title>
+    <author>Adam Trachtenberg</author>
+    <chapter>Introduction</chapter>
+    <chapter>Object-Oriented Programming</chapter>
+    <chapter>MySQL</chapter>
+    <chapter>SQLite</chapter>
+    <chapter>XML</chapter>
+    <chapter>Iterators and SPL</chapter>
+    <chapter>Error Handling and Debugging</chapter>
+    <chapter>Streams, Wrappers, and Filters</chapter>
+    <chapter>Other Extensions</chapter>
+    <chapter>PHP 5 in Action</chapter>
+  </book>
+</books>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <xsl:variable name="books" select="/books"/>
+    <books>
+      <xsl:for-each select="(0 to count($books/book)-1)">
+        <xsl:variable name="num" select="."/>
+        <xsl:variable name="book" select="$books/book[count($books/book)-$num]"/>
+        <book>
+          <xsl:sequence select="$book/title"/>
+          <xsl:sequence select="$book/author"/>
+          <xsl:for-each select="(0 to count($book/chapter)-1)">
+            <xsl:variable name="num" select="."/>
+            <xsl:sequence select="$book/chapter[count($book/chapter)-$num]"/>
+          </xsl:for-each>
+        </book>
+      </xsl:for-each>
+    </books>
+  </xsl:template>
+
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<books>
+   <book>
+      <title>Upgrading to PHP 5</title>
+      <author>Adam Trachtenberg</author>
+      <chapter>PHP 5 in Action</chapter>
+      <chapter>Other Extensions</chapter>
+      <chapter>Streams, Wrappers, and Filters</chapter>
+      <chapter>Error Handling and Debugging</chapter>
+      <chapter>Iterators and SPL</chapter>
+      <chapter>XML</chapter>
+      <chapter>SQLite</chapter>
+      <chapter>MySQL</chapter>
+      <chapter>Object-Oriented Programming</chapter>
+      <chapter>Introduction</chapter>
+   </book>
+   <book>
+      <title>RT Essentials</title>
+      <author>Dave Rolsky</author>
+      <author>Darren Chamberlain</author>
+      <author>Richard Foley</author>
+      <author>Jesse Vincent</author>
+      <author>Robert Spier</author>
+      <chapter>Development Environments</chapter>
+      <chapter>API</chapter>
+      <chapter>Architecture</chapter>
+      <chapter>Example Configurations</chapter>
+      <chapter>Scrips</chapter>
+      <chapter>Administrative Tasks</chapter>
+      <chapter>Command-Line Interface</chapter>
+      <chapter>Getting Started</chapter>
+      <chapter>Installation</chapter>
+      <chapter>What Is Ticketing?</chapter>
+   </book>
+   <book>
+      <title>Enterprise Services Architecture</title>
+      <author>Dan Woods</author>
+      <chapter>Enterprise Services Architecture and Society</chapter>
+      <chapter>The Enterprise Value Chain</chapter>
+      <chapter>Creating a Road Map</chapter>
+      <chapter>Applying Enterprise Services Architecture</chapter>
+      <chapter>The Platform</chapter>
+      <chapter>Anatomy</chapter>
+      <chapter>Making the Business Case</chapter>
+      <chapter>In Practice</chapter>
+      <chapter>Concepts and Philosophy</chapter>
+   </book>
+</books>
+================================== RETURN CODE =================================
+0

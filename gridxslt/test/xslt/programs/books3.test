@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/books.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+books.xml
+<?xml version="1.0" encoding="utf-8"?>
+<books>
+  <book title="Enterprise Services Architecture"/>
+  <book title="RT Essentials"/>
+  <book title="Upgrading to PHP 5"/>
+</books>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+  <xsl:output indent="yes"/>
+
+  <xsl:template match="/">
+    <xsl:variable name="books" select="/books"/>
+    <books>
+      <xsl:for-each select="(0 to count($books/book)-1)">
+        <xsl:variable name="num" select="."/>
+        <xsl:sequence select="$books/book[count($books/book)-$num]"/>
+      </xsl:for-each>
+    </books>
+  </xsl:template>
+
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<books>
+   <book title="Upgrading to PHP 5"/>
+   <book title="RT Essentials"/>
+   <book title="Enterprise Services Architecture"/>
+</books>
+================================== RETURN CODE =================================
+0
