@@ -4,7 +4,7 @@ gridxslt runtests.tmp/temp.xl
 temp.xl
 transform {
 
-  xsd:int fact(xsd:int $n) {
+  xsd:integer fact(xsd:integer $n) {
     sequence(if ($n = 1) then 1 else $n*fact($n - 1));
   }
 
