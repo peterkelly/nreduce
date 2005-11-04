@@ -472,8 +472,8 @@ static Value range(Environment *env, List<Value> &args)
 /*   message("args[0].type() = %*\n",&st0); */
 /*   message("args[1].type() = %*\n",&st1); */
 
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   min = args[0].asInt();
   max = args[1].asInt();
 
@@ -949,7 +949,15 @@ static Value dot(Environment *env, List<Value> &args)
   return c->item;
 }
 
-FunctionDefinition special_fundefs[19] = {
+static Value instanceof(Environment *env, List<Value> &args)
+{
+  if (args[0].type().isDerivedFrom(env->instr->m_seqtypetest))
+    return Value(true);
+  else
+    return Value(false);
+}
+
+FunctionDefinition special_fundefs[20] = {
   { element,       FNS, "element",       "item()*,xsd:string",        "element()", false       },
   { range,         FNS, "range",         "xsd:integer?,xsd:integer?", "xsd:integer*", false    },
   { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean", false     },
@@ -968,6 +976,7 @@ FunctionDefinition special_fundefs[19] = {
   { and2,          FNS, "and",           "item()*,item()*",           "xsd:boolean", false     },
   { or2,           FNS, "or",            "item()*,item()*",           "xsd:boolean", false     },
   { dot,           FNS, "dot",           "",                          "item()", true           },
+  { instanceof,    FNS, "instanceof",    "item()*",                   "xsd:boolean", false     },
   { NULL },
 };
 
