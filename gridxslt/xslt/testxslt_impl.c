@@ -213,6 +213,8 @@ int testxslt_main(int argc, char **argv)
   memset(&arguments,0,sizeof(arguments));
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
+  xs_init();
+
   if (0 != xslt_parse(&ei,arguments.filename,&source)) {
     ei.fprint(stderr);
     ei.clear();
@@ -229,6 +231,7 @@ int testxslt_main(int argc, char **argv)
     output_xslt(stdout,source->root);
 
   xslt_source_free(source);
+  xs_cleanup();
 
   return r;
 }
