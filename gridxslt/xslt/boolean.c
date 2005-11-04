@@ -46,8 +46,20 @@ static Value not1(Environment *env, List<Value> &args)
   return Value(!v1.asBool());
 }
 
-FunctionDefinition boolean_fundefs[2] = {
+static Value true0(Environment *env, List<Value> &args)
+{
+  return Value(true);
+}
+
+static Value false0(Environment *env, List<Value> &args)
+{
+  return Value(false);
+}
+
+FunctionDefinition boolean_fundefs[4] = {
   { not1,    FNS, "not",     "item()*",                  "xsd:boolean", false },
+  { true0,   FNS, "true",    "",                         "xsd:boolean", true },
+  { false0,  FNS, "false",   "",                         "xsd:boolean", true },
   { NULL },
 };
 
