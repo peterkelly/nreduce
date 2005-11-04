@@ -10,7 +10,7 @@ schema.xml
         <xsd:complexType>
           <xsd:sequence>
             <xsd:element name="name" type="xsd:string"/>
-            <xsd:element name="age" type="xsd:int"/>
+            <xsd:element name="age" type="xsd:integer"/>
             <xsd:element name="occupation" type="xsd:string"/>
           </xsd:sequence>
         </xsd:complexType>
