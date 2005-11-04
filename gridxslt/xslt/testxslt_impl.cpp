@@ -218,19 +218,21 @@ int testxslt_main(int argc, char **argv)
   if (0 != xslt_parse(&ei,arguments.filename,&source)) {
     ei.fprint(stderr);
     ei.clear();
-    return 1;
+    r = 1;
   }
+  else {
 
-  if (arguments.tree)
-    source->root->printTree(0);
-  else if (arguments.output_defs)
-    dump_output_defs(source);
-  else if (arguments.space_decls)
-    dump_space_decls(source);
-  else
-    output_xslt(stdout,source->root);
+    if (arguments.tree)
+      source->root->printTree(0);
+    else if (arguments.output_defs)
+      dump_output_defs(source);
+    else if (arguments.space_decls)
+      dump_space_decls(source);
+    else
+      output_xslt(stdout,source->root);
 
-  xslt_source_free(source);
+    xslt_source_free(source);
+  }
   xs_cleanup();
 
   return r;
