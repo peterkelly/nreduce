@@ -23,7 +23,7 @@
 #include "util/String.h"
 #include "util/List.h"
 #include "util/XMLUtils.h"
-#include "xmlschema/xmlschema.h"
+#include "xmlschema/XMLSchema.h"
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include <stdio.h>

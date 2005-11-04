@@ -21,7 +21,7 @@
  */
 
 #include "List.h"
-#include "debug.h"
+#include "Debug.h"
 #include <stdlib.h>
 #include <string.h>
 

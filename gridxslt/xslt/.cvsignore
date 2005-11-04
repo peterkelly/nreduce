@@ -4,9 +4,9 @@ Makefile
 Makefile.in
 *.lo
 *.la
-grammar.tab.c
+grammar.tab.cpp
 grammar.tab.h
 dftest
-lexer.yy.c
+lexer.yy.cpp
 testxpath
 testxslt

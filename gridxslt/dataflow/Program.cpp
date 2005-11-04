@@ -21,9 +21,9 @@
  */
 
 #include "Program.h"
-#include "util/macros.h"
+#include "util/Macros.h"
 #include "util/Namespace.h"
-#include "util/debug.h"
+#include "util/Debug.h"
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>

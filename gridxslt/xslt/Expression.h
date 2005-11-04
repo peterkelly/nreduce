@@ -23,7 +23,7 @@
 #ifndef _XSLT_XPATH_H
 #define _XSLT_XPATH_H
 
-#include "util/stringbuf.h"
+#include "util/String.h"
 #include "util/XMLUtils.h"
 #include "dataflow/Program.h"
 #include "dataflow/SequenceType.h"

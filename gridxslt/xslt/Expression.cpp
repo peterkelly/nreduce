@@ -25,8 +25,8 @@
 #include "Expression.h"
 #include "Statement.h"
 #include "util/Namespace.h"
-#include "util/macros.h"
-#include "util/debug.h"
+#include "util/Macros.h"
+#include "util/Debug.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>

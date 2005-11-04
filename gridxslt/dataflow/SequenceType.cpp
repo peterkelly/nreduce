@@ -22,8 +22,8 @@
 
 #include "SequenceType.h"
 #include "Program.h"
-#include "util/macros.h"
-#include "util/debug.h"
+#include "util/Macros.h"
+#include "util/Debug.h"
 #include <string.h>
 #include <ctype.h>
 

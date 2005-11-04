@@ -1,4 +1,4 @@
-AC_INIT(src/gridxslt.c)
+AC_INIT(src/gridxslt.cpp)
 AM_INIT_AUTOMAKE(gridxslt, 0.1)
 AC_PROG_CC
 AM_PROG_LEX

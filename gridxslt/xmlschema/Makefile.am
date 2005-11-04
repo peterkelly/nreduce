@@ -1,10 +1,10 @@
 noinst_LTLIBRARIES = libxmlschema.la
 noinst_PROGRAMS = testxmlschema genbindings binxml
-testxmlschema_SOURCES = testxmlschema.c
-libxmlschema_la_SOURCES = xmlschema.c derivation.c output.c parse.c validation.c testxmlschema_impl.c binxml_impl.c genbindings_impl.c
-genbindings_SOURCES = genbindings.c
-binxml_SOURCES = binxml.c
+testxmlschema_SOURCES = testxmlschema.cpp
+libxmlschema_la_SOURCES = XMLSchema.cpp Derivation.cpp Output.cpp Parse.cpp Validation.cpp testxmlschema_impl.cpp binxml_impl.cpp genbindings_impl.cpp
+genbindings_SOURCES = genbindings.cpp
+binxml_SOURCES = binxml.cpp
 gridxsltincludedir = $(includedir)/gridxslt
-noinst_HEADERS = xmlschema.h derivation.h output.h parse.h validation.h
+noinst_HEADERS = XMLSchema.h Derivation.h Output.h Parse.h Validation.h
 INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
 LDADD = libxmlschema.la ../util/libutil.la @ALL_LIBS@

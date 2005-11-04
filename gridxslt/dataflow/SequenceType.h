@@ -23,13 +23,12 @@
 #ifndef _DATAFLOW_SEQUENCETYPE2_H
 #define _DATAFLOW_SEQUENCETYPE2_H
 
-#include "xmlschema/xmlschema.h"
-#include "util/stringbuf.h"
+#include "xmlschema/XMLSchema.h"
+#include "util/String.h"
 #include "util/List.h"
 #include "util/Namespace.h"
 #include "util/XMLUtils.h"
-#include "util/debug.h"
-#include "xmlschema/xmlschema.h"
+#include "util/Debug.h"
 #include <libxml/xmlwriter.h>
 #include <libxml/tree.h>
 

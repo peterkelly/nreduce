@@ -23,11 +23,11 @@
 #ifndef _DATAFLOW_PROGRAM_H
 #define _DATAFLOW_PROGRAM_H
 
-#include "xmlschema/xmlschema.h"
-#include "util/stringbuf.h"
+#include "xmlschema/XMLSchema.h"
+#include "util/String.h"
 #include "util/List.h"
 #include "SequenceType.h"
-#include "serialization.h"
+#include "Serialization.h"
 #include <stdio.h>
 
 namespace GridXSLT {

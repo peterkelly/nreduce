@@ -24,12 +24,12 @@
 #define _XSLT_XSLT_H
 
 #include "Expression.h"
-#include "xmlschema/xmlschema.h"
+#include "xmlschema/XMLSchema.h"
 #include "util/Namespace.h"
 #include "util/XMLUtils.h"
 #include "util/List.h"
 #include "dataflow/SequenceType.h"
-#include "dataflow/serialization.h"
+#include "dataflow/Serialization.h"
 
 #define XSLT_DECLARATION                  0
 #define XSLT_IMPORT                       1

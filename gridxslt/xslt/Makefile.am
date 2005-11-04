@@ -1,20 +1,22 @@
 noinst_LTLIBRARIES = libxslt.la
 noinst_PROGRAMS = testxslt testxpath
-BUILT_SOURCES = grammar.tab.c lexer.yy.c
-CLEANFILES = grammar.tab.c lexer.yy.c grammar.tab.h
-libxslt_la_SOURCES = grammar.tab.c lexer.yy.c Statement.cpp Expression.cpp parse.c output.c compile.c builtins.c special.c string.c sequence.c node.c boolean.c numeric.c accessor.c context.c testxpath_impl.c testxslt_impl.c TypeConversion.cpp
+BUILT_SOURCES = grammar.tab.cpp lexer.yy.cpp
+CLEANFILES = grammar.tab.cpp lexer.yy.cpp grammar.tab.h
+libxslt_la_SOURCES = grammar.tab.cpp lexer.yy.cpp Statement.cpp Expression.cpp Parse.cpp Output.cpp Compilation.cpp Builtins.cpp Special.cpp String.cpp Sequence.cpp Node.cpp Boolean.cpp Numeric.cpp Accessor.cpp Context.cpp testxpath_impl.cpp testxslt_impl.cpp TypeConversion.cpp
 gridxsltincludedir = $(includedir)/gridxslt
-noinst_HEADERS = grammar.tab.h Statement.h Expression.h parse.h output.h compile.h builtins.h special.h
-testxslt_SOURCES = testxslt.c
-testxpath_SOURCES = testxpath.c
+noinst_HEADERS = grammar.tab.h Statement.h Expression.h Parse.h Output.h Compilation.h Builtins.h Special.h
+testxslt_SOURCES = testxslt.cpp
+testxpath_SOURCES = testxpath.cpp
 INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
 LDADD = libxslt.la ../dataflow/libdataflow.la ../xmlschema/libxmlschema.la ../util/libutil.la @ALL_LIBS@
 
-grammar.tab.c: grammar.y
+grammar.tab.cpp: grammar.y
 	bison -d grammar.y
+	mv -f grammar.tab.c grammar.tab.cpp
 
 grammar.tab.h: grammar.y
-	bison -d grammar.y
+	bison -o grammar.tab.cpp -d grammar.y
 
-lexer.yy.c: lexer.l
+lexer.yy.cpp: lexer.l
 	flex lexer.l
+	mv -f lexer.yy.c lexer.yy.cpp

@@ -23,10 +23,10 @@
 #define _XSLT_XSLT_C
 
 #include "Statement.h"
-#include "parse.h"
-#include "dataflow/serialization.h"
-#include "util/macros.h"
-#include "util/debug.h"
+#include "Parse.h"
+#include "dataflow/Serialization.h"
+#include "util/Macros.h"
+#include "util/Debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

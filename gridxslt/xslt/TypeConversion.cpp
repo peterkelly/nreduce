@@ -23,7 +23,7 @@
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
-#include "util/debug.h"
+#include "util/Debug.h"
 #include <math.h>
 #include <stdlib.h>
 #include <errno.h>

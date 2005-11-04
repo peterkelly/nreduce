@@ -24,7 +24,6 @@
 #define _UTIL_XMLUTILS_H
 
 #include <stdio.h>
-#include "stringbuf.h"
 #include "String.h"
 #include "List.h"
 #include "Namespace.h"
