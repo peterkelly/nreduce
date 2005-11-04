@@ -225,6 +225,43 @@ int String::toInt() const
   return i;
 }
 
+String String::collapseWhitespace() const
+{
+  Char *chars = new Char[impl->m_len];
+  unsigned int pos = 0;
+  bool haveSpace = false;
+  for (unsigned int i = 0; i < impl->m_len; i++) {
+    if (((unsigned short)'\t' == impl->m_chars[i].c) ||
+        ((unsigned short)'\r' == impl->m_chars[i].c) ||
+        ((unsigned short)'\n' == impl->m_chars[i].c) ||
+        ((unsigned short)' ' == impl->m_chars[i].c)) {
+      if (!haveSpace && (0 < pos))
+        chars[pos++].c = ' ';
+      haveSpace = true;
+    }
+    else {
+      chars[pos++] = impl->m_chars[i];
+      haveSpace = false;
+    }
+  }
+  if ((0 < pos) && ((unsigned short)' ' == chars[pos-1].c))
+    pos--;
+  return new StringImpl(chars,pos);
+}
+
+String String::replaceWhitespace() const
+{
+  Char *chars = new Char[impl->m_len];
+  memcpy(chars,impl->m_chars,impl->m_len*sizeof(Char));
+  for (unsigned int i = 0; i < impl->m_len; i++) {
+    if (((unsigned short)'\t' == chars[i].c) ||
+        ((unsigned short)'\r' == chars[i].c) ||
+        ((unsigned short)'\n' == chars[i].c))
+      chars[i].c = ' ';
+  }
+  return new StringImpl(chars,impl->m_len);
+}
+
 void String::print(StringBuffer &buf)
 {
   buf.append(*this);

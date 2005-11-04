@@ -140,6 +140,8 @@ public:
   String toLower() const;
   double toDouble() const;
   int toInt() const;
+  String collapseWhitespace() const;
+  String replaceWhitespace() const;
 
   const Char *chars() const { return impl->m_chars; }
 
