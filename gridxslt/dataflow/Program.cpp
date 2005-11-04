@@ -725,7 +725,7 @@ void Program::outputDF(FILE *f, bool internal)
           String escaped = escape_str(instr->m_cvalue.asString());
           fmessage(f," = \"%*\"",&escaped);
         }
-        else if (instr->m_cvalue.type().itemType()->m_type == xs_g->int_type) {
+        else if (instr->m_cvalue.isInt()) {
           fmessage(f," = %d",instr->m_cvalue.asInt());
         }
         else {
