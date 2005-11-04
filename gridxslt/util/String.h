@@ -24,6 +24,7 @@
 #define _UTIL_STRING_H
 
 #include "Shared.h"
+#include "List.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -43,6 +44,7 @@ public:
 class Char {
 public:
   unsigned short c;
+  bool isSpace() const { return ((' ' == c) || ('\r' == c) || ('\n' == c) || ('\t' == c)); }
 };
 
 inline bool operator==(const Char &a, const Char &b) { return (a.c == b.c); }
@@ -142,6 +144,7 @@ public:
   int toInt() const;
   String collapseWhitespace() const;
   String replaceWhitespace() const;
+  List<String> parseList() const;
 
   const Char *chars() const { return impl->m_chars; }
 

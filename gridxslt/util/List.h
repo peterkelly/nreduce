@@ -24,7 +24,6 @@
 #define _UTIL_LIST_H
 
 #include "Shared.h"
-#include "String.h" // FIXME: temp
 
 namespace GridXSLT {
 

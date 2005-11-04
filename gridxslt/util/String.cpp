@@ -262,6 +262,23 @@ String String::replaceWhitespace() const
   return new StringImpl(chars,impl->m_len);
 }
 
+List<String> String::parseList() const
+{
+  List<String> lst;
+  unsigned int start = 0;
+  unsigned int i;
+  for (i = 0; i < impl->m_len; i++) {
+    if (impl->m_chars[i].isSpace()) {
+      if (i > start)
+        lst.append(String(substring(start,i-start)));
+      start = i+1;
+    }
+  }
+  if (i > start)
+    lst.append(String(substring(start,i-start)));
+  return lst;
+}
+
 void String::print(StringBuffer &buf)
 {
   buf.append(*this);

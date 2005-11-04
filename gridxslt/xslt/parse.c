@@ -302,6 +302,18 @@ static int parse_param(Statement *sn, xmlNodePtr n, xmlDocPtr doc,
   return 0;
 }
 
+static bool shouldExcludePrefix(xmlNodePtr from, const String &prefix)
+{
+  // FIXME: only take into account exclude-result-prefixes attributes with the appropriate
+  // attribute... see XSLT 2.0 section 11.1.3 point 3 for details
+  for (xmlNodePtr n = from; n; n = n->parent) {
+    String exclude = XMLGetProp(n,"exclude-result-prefixes");
+    if (!exclude.isNull() && exclude.parseList().contains(prefix))
+      return true;
+  }
+  return false;
+}
+
 static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPtr doc,
                                        Error *ei, const char *filename)
 {
@@ -873,6 +885,7 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
     else if (XML_ELEMENT_NODE == c->type) {
       xmlAttrPtr attr;
       Statement **child2_ptr;
+
       /* literal result element */
       new_sn = add_node(&child_ptr,XSLT_INSTR_ELEMENT,filename,c);
       new_sn->m_literal = 1;
@@ -884,6 +897,27 @@ static int parse_sequence_constructors(Statement *sn, xmlNodePtr start, xmlDocPt
          prefix -> namespace mapping must be established in the result document */
       if (c->ns && c->ns->prefix)
         new_sn->m_qn.m_prefix = c->ns->prefix;
+
+
+
+
+/*       message("BEGIN Parsing literal result element %s\n",c->name); */
+
+      int level = 0;
+      for (xmlNodePtr tn = c; tn; tn = tn->parent) {
+        for (xmlNsPtr ns = tn->nsDef; ns; ns = ns->next) {
+          if ((ns->href != XSLT_NAMESPACE) && !shouldExcludePrefix(c,ns->prefix)) {
+            Statement *nsnode = add_node(&child2_ptr,XSLT_INSTR_NAMESPACE,filename,c);
+            nsnode->m_name_expr = new Expression(XPATH_EXPR_STRING_LITERAL,NULL,NULL);
+            nsnode->m_name_expr->m_strval = ns->prefix;
+            nsnode->m_select = new Expression(XPATH_EXPR_STRING_LITERAL,NULL,NULL);
+            nsnode->m_select->m_strval = ns->href;
+          }
+        }
+        level++;
+      }
+
+/*       message("END Parsing literal result element\n"); */
 
       /* copy attributes */
       for (attr = c->properties; attr; attr = attr->next) {

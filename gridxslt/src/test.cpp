@@ -32,10 +32,11 @@ using namespace GridXSLT;
 
 int main(int argc, char **argv)
 {
-  String s = "   a      b\r\nc\r\nd\te   ";
-  message("%*",&s);
-  message("\n-------\n");
-  String a = s.collapseWhitespace();
-  message("%*",&a);
+  ASSERT(2 <= argc);
+  String a = argv[1];
+  List<String> lst = a.parseList();
+  for (Iterator<String> it = lst; it.haveCurrent(); it++)
+    message("\"%*\"\n",&(*it));
+
   return 0;
 }
