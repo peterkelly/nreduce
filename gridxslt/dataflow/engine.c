@@ -88,7 +88,7 @@ Activity::~Activity()
 ExecutionState::ExecutionState(Program *_program, Error *_ei)
   : program(_program), actno(0), trace(0), ei(_ei)
 {
-  intype = SequenceType(xs_g->int_type);
+  intype = SequenceType(xs_g->integer_type);
 }
 
 ExecutionState::~ExecutionState()

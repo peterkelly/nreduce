@@ -307,7 +307,7 @@ void init_typeinfo_model_group(Schema *s, ModelGroup *mg, list **typestack, list
 
   if (MODELGROUP_COMPOSITOR_CHOICE == mg->compositor) {
     /* extra int at the start indicating which option is selected */
-    mg->size += sizeof(IMPL_INT);
+    mg->size += sizeof(IMPL_INTEGER);
   }
 
 /*   message("init_typeinfo_model_group %p pn %s (ct %s)\n",mg,mg->parent_name,mg->ctype); */
@@ -1071,9 +1071,9 @@ int validate_element_against_particle(xs_validator *v,
        new memory here; this is done as we find new occurrances (at which time count also gets
        updated). */
     IMPL_POINTER arraypos = encoded->size-1-posinparent;
-    IMPL_INT count2 = 0;
-    memcpy(encoded->data+posinparent,&count2,sizeof(IMPL_INT));
-    memcpy(encoded->data+posinparent+sizeof(IMPL_INT),&arraypos,sizeof(IMPL_POINTER));
+    IMPL_INTEGER count2 = 0;
+    memcpy(encoded->data+posinparent,&count2,sizeof(IMPL_INTEGER));
+    memcpy(encoded->data+posinparent+sizeof(IMPL_INTEGER),&arraypos,sizeof(IMPL_POINTER));
     datapos = arraypos;
     break;
   }
@@ -1084,9 +1084,9 @@ int validate_element_against_particle(xs_validator *v,
   case XS_ENCODING_MAX_ARRAY: {
     /* Maximum number of occurrances; write count in parent, and then the actual data directly
        after that. */
-    IMPL_INT count2 = 0;
-    memcpy(encoded->data+posinparent,&count2,sizeof(IMPL_INT));
-    datapos = posinparent + sizeof(IMPL_INT);
+    IMPL_INTEGER count2 = 0;
+    memcpy(encoded->data+posinparent,&count2,sizeof(IMPL_INTEGER));
+    datapos = posinparent + sizeof(IMPL_INTEGER);
     break;
   }
   default:
@@ -1181,9 +1181,9 @@ int validate_element_against_particle(xs_validator *v,
           IMPL_LONG val = text.toInt();
           memcpy(encoded->data+datapos,&val,sizeof(IMPL_LONG));
         }
-        else if (v->s->globals->int_type == p->term.e->type) {
-          IMPL_INT val = text.toInt();
-          memcpy(encoded->data+datapos,&val,sizeof(IMPL_INT));
+        else if (v->s->globals->integer_type == p->term.e->type) {
+          IMPL_INTEGER val = text.toInt();
+          memcpy(encoded->data+datapos,&val,sizeof(IMPL_INTEGER));
         }
         else if (v->s->globals->short_type == p->term.e->type) {
           IMPL_SHORT val = text.toInt();
@@ -1280,10 +1280,10 @@ int validate_element_against_particle(xs_validator *v,
 
   for (l = strings; l; l = l->next) {
     stringencinfo *s = (stringencinfo*)l->data;
-    IMPL_INT spos = encoded->size-1-s->datapos;
+    IMPL_INTEGER spos = encoded->size-1-s->datapos;
     s = (stringencinfo*)l->data;
 /*     message("string value: %s, datapos=%d, spos=%d\n",s->str,s->datapos,spos); */
-    memcpy(encoded->data+s->datapos,&spos,sizeof(IMPL_INT));
+    memcpy(encoded->data+s->datapos,&spos,sizeof(IMPL_INTEGER));
 /*     message("string relpos 0x%02x (abspos 0x%02x) value \"%s\"\n",spos,encoded->size-1,s->str); */
     char *temp = s->str.cstring();
     stringbuf_append(encoded,temp,strlen(temp)+1);
@@ -1393,8 +1393,8 @@ int xs_decode_particle(xs_validator *v, xmlTextWriter *writer, Particle *p, stri
         IMPL_LONG val = *(IMPL_LONG*)(encoded->data+pos);
         XMLWriter::formatString(writer,"%ld",val);
       }
-      else if (v->s->globals->int_type == p->term.e->type) {
-        IMPL_INT val = *(IMPL_INT*)(encoded->data+pos);
+      else if (v->s->globals->integer_type == p->term.e->type) {
+        IMPL_INTEGER val = *(IMPL_INTEGER*)(encoded->data+pos);
         XMLWriter::formatString(writer,"%d",val);
       }
       else if (v->s->globals->short_type == p->term.e->type) {

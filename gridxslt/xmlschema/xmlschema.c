@@ -676,16 +676,16 @@ void BuiltinTypes_init_simple_types(BuiltinTypes *g)
   new_list_type(g,"ENTITIES","ENTITY");
   new_list_type(g,"NMTOKENS","NMTOKEN");
 
-  new_derived_type(g,"integer","decimal",-1,NULL);
+  g->integer_type = new_derived_type(g,"integer","decimal",sizeof(IMPL_INTEGER),NULL);
   new_derived_type(g,"nonPositiveInteger","integer",-1,NULL);
   g->long_type = new_derived_type(g,"long","integer",sizeof(IMPL_LONG),"long");
   new_derived_type(g,"nonNegativeInteger","integer",-1,NULL);
   new_derived_type(g,"negativeInteger","nonPositiveInteger",-1,NULL);
-  g->int_type = new_derived_type(g,"int","long",sizeof(IMPL_INT),"int");
+  new_derived_type(g,"int","long",-1,"int");
   g->short_type = new_derived_type(g,"short","int",sizeof(IMPL_SHORT),"short");
   g->byte_type = new_derived_type(g,"byte","short",sizeof(IMPL_BYTE),"char");
   new_derived_type(g,"unsignedLong","nonNegativeInteger",-1,NULL);
-  new_derived_type(g,"postivieInteger","nonNegativeInteger",-1,NULL);
+  new_derived_type(g,"positiveInteger","nonNegativeInteger",-1,NULL);
   new_derived_type(g,"unsignedInt","unsignedLong",-1,NULL);
   new_derived_type(g,"unsignedShort","unsignedInt",-1,NULL);
   new_derived_type(g,"unsignedByte","unsignedShort",-1,NULL);
@@ -864,7 +864,7 @@ BuiltinTypes::BuiltinTypes()
     boolean_type(NULL),
     string_type(NULL),
     long_type(NULL),
-    int_type(NULL),
+    integer_type(NULL),
     short_type(NULL),
     byte_type(NULL),
     float_type(NULL),

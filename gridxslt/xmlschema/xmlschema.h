@@ -65,7 +65,7 @@ Helper components
 #define IMPL_ARRAYSIZE int
 #define IMPL_BOOLEAN char
 #define IMPL_LONG long
-#define IMPL_INT int
+#define IMPL_INTEGER int
 #define IMPL_SHORT short
 #define IMPL_BYTE char
 #define IMPL_FLOAT float
@@ -622,7 +622,7 @@ public:
   Type *boolean_type;
   Type *string_type;
   Type *long_type;
-  Type *int_type;
+  Type *integer_type;
   Type *short_type;
   Type *byte_type;
   Type *float_type;

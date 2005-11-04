@@ -36,48 +36,48 @@ using namespace GridXSLT;
 static Value numeric_add(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   return Value(args[0].asInt() + args[1].asInt());
 }
 
 static Value numeric_subtract(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   return Value(args[0].asInt() - args[1].asInt());
 }
 
 static Value numeric_multiply(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   return Value(args[0].asInt() * args[1].asInt());
 }
 
 static Value numeric_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   return Value(args[0].asInt() / args[1].asInt());
 }
 
 static Value numeric_integer_divide(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
   return Value(args[0].asInt() / args[1].asInt());
 }
 
 static Value numeric_equal(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
 
   if (args[0].asInt() == args[1].asInt())
     return Value(true);
@@ -88,8 +88,8 @@ static Value numeric_equal(Environment *env, List<Value> &args)
 static Value numeric_less_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
 
   if (args[0].asInt() < args[1].asInt())
     return Value(true);
@@ -100,8 +100,8 @@ static Value numeric_less_than(Environment *env, List<Value> &args)
 static Value numeric_greater_than(Environment *env, List<Value> &args)
 {
   /* FIXME: type promotion and use appropriate typed operator */
-  ASSERT(args[0].isDerivedFrom(xs_g->int_type));
-  ASSERT(args[1].isDerivedFrom(xs_g->int_type));
+  ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
+  ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
 
   if (args[0].asInt() > args[1].asInt())
     return Value(true);

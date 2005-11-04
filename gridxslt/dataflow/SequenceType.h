@@ -290,7 +290,7 @@ public:
   ValueImpl *atomize();
 
   inline bool isContext() const { return isDerivedFrom(xs_g->context_type); }
-  inline bool isInt() const { return isDerivedFrom(xs_g->int_type); }
+  inline bool isInt() const { return isDerivedFrom(xs_g->integer_type); }
   inline bool isFloat() const { return isDerivedFrom(xs_g->float_type); }
   inline bool isDouble() const { return isDerivedFrom(xs_g->double_type); }
   inline bool isString() const { return isDerivedFrom(xs_g->string_type); }
