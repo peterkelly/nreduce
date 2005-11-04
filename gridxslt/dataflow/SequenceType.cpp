@@ -685,15 +685,15 @@ void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces)
   /* item() and node() are not actually part of the formal semantics type syntax - however since
      we currently use this output function for debugging purposes, it is more convenient to
      show the condensed form from XPath syntax rather than the full expansion */
-  if (m_isItem) {
-    buf.append("item()");
-    return;
-  }
+//   if (m_isItem) {
+//     buf.append("item()");
+//     return;
+//   }
 
-  if (m_isNode) {
-    buf.append("node()");
-    return;
-  }
+//   if (m_isNode) {
+//     buf.append("node()");
+//     return;
+//   }
 
   switch (m_type) {
   case SEQTYPE_ITEM:
@@ -1224,7 +1224,7 @@ ValueImpl::ValueImpl(Context *c)
 
 ValueImpl::ValueImpl(int i)
 {
-  init(xs_g->int_type);
+  init(xs_g->integer_type);
   value.i = i;
 }
 
@@ -1327,15 +1327,17 @@ void ValueImpl::printbuf(StringBuffer &buf)
   if (SEQTYPE_ITEM == st.type()) {
 
     if (ITEM_ATOMIC == st.itemType()->m_kind) {
-      if (st.itemType()->m_type == xs_g->int_type)
+      if (st.itemType()->m_type->isDerived(xs_g->integer_type))
         buf.format("%d",value.i);
-      else if (st.itemType()->m_type == xs_g->double_type)
+      else if (st.itemType()->m_type->isDerived(xs_g->double_type))
         buf.format("%f",value.d);
-      else if (st.itemType()->m_type == xs_g->decimal_type)
+      else if (st.itemType()->m_type->isDerived(xs_g->float_type))
+        buf.format("%f",value.f);
+      else if (st.itemType()->m_type->isDerived(xs_g->decimal_type))
         buf.format("%f",value.d);
-      else if (st.itemType()->m_type == xs_g->string_type)
+      else if (st.itemType()->m_type->isDerived(xs_g->string_type))
         buf.append(value.s);
-      else if (st.itemType()->m_type == xs_g->boolean_type)
+      else if (st.itemType()->m_type->isDerived(xs_g->boolean_type))
         buf.format("%s",value.b ? "true" : "false");
       else
         buf.format("(atomic value %*)",&st.itemType()->m_type->def.ident); /* FIXME */
