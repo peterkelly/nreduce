@@ -673,9 +673,13 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
   case XPATH_EXPR_EXCEPT:
     ASSERT(!"not yet implemented"); /* FIXME */
     break;
-  case XPATH_EXPR_INSTANCE_OF:
-    ASSERT(!"not yet implemented"); /* FIXME */
+  case XPATH_EXPR_INSTANCE_OF: {
+    CHECK_CALL(compileExpr(fun,e->m_left,cursor))
+    Instruction *instanceof = specialop(fun,SPECIAL_NAMESPACE,"instanceof",1,e->m_sloc);
+    instanceof->m_seqtypetest = e->m_st;
+    set_and_move_cursor(cursor,instanceof,0,instanceof,0);
     break;
+  }
   case XPATH_EXPR_TREAT:
     ASSERT(!"not yet implemented"); /* FIXME */
     break;
@@ -722,7 +726,7 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
   }
   case XPATH_EXPR_INTEGER_LITERAL: {
     Instruction *instr = fun->addInstruction(OP_CONST,e->m_sloc);
-    instr->m_outports[0].st = SequenceType(xs_g->int_type);
+    instr->m_outports[0].st = SequenceType(xs_g->integer_type);
     instr->m_cvalue = Value(e->m_ival);
 /*     instr->m_inports[0].st = SequenceType::item(); */
     set_and_move_cursor(cursor,instr,0,instr,0);
@@ -810,9 +814,16 @@ int Compilation::compileExpr(Function *fun, Expression *e, OutputPort **cursor)
 
 
 
-    if ((e->m_qn.m_prefix.isNull()) || (e->m_qn.m_prefix == "fn")) {
-      call = fun->addBuiltinInstruction(NSName(FN_NAMESPACE,e->m_qn.m_localPart),
-                                        supparam,e->m_sloc);
+
+
+    if ((e->m_ident.m_ns.isNull()) ||
+        (e->m_ident.m_ns == FN_NAMESPACE) ||
+        (e->m_ident.m_ns == XS_NAMESPACE) ||
+        (e->m_ident.m_ns == XDT_NAMESPACE)) {
+      NSName ident = e->m_ident;
+      if (ident.m_ns.isNull())
+        ident.m_ns = FN_NAMESPACE;
+      call = fun->addBuiltinInstruction(ident,supparam,e->m_sloc);
       if (NULL != call) {
         nparams = supparam;
         name = e->m_qn.m_prefix;
@@ -1703,8 +1714,9 @@ extern FunctionDefinition *boolean_module;
 extern FunctionDefinition *numeric_module;
 extern FunctionDefinition *accessor_module;
 extern FunctionDefinition *context_module;
+extern FunctionDefinition *TypeConversion_module;
 
-static FunctionDefinition **modules[9] = {
+static FunctionDefinition **modules[10] = {
   &special_module,
   &string_module,
   &sequence_module,
@@ -1713,6 +1725,7 @@ static FunctionDefinition **modules[9] = {
   &numeric_module,
   &accessor_module,
   &context_module,
+  &TypeConversion_module,
   NULL
 };
 
