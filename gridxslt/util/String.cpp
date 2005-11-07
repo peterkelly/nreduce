@@ -163,7 +163,7 @@ String String::substring(unsigned int start, unsigned int len) const
 int String::indexOf(const String &other) const
 {
   if ((other.length() == 0) || (other.length() > length()))
-    return 0;
+    return -1;
 
   unsigned int laststart = length() - other.length();
 
