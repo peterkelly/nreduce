@@ -27,6 +27,6 @@
 #include "util/XMLUtils.h"
 #include <stdio.h>
 
-void output_xslt(FILE *f, GridXSLT::Statement *node);
+void output_xslt(FILE *f, GridXSLT::TransformExpr *node);
 
 #endif /* _XSLT_OUTPUT_H */

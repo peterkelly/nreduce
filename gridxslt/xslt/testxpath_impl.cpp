@@ -98,7 +98,7 @@ int testxpath_main(int argc, char **argv)
   StringBuffer input;
   char buf[1025];
   Schema *s = NULL;
-  Statement *stmt = new Statement(XSLT_INSTR_SEQUENCE);
+  XSLTSequenceExpr *stmt = new XSLTSequenceExpr(NULL);
   Expression *expr;
   Error ei;
   int r = 0;
@@ -145,7 +145,8 @@ int testxpath_main(int argc, char **argv)
     return 1;
   }
 
-  expr->setParent(NULL,stmt);
+  int importpred = 1;
+  expr->setParent(stmt,&importpred);
   /* add default namespaces declared in schema */
   Iterator<ns_def*> nsit;
   for (nsit = xs_g->namespaces->defs; nsit.haveCurrent(); nsit++) {
@@ -161,16 +162,14 @@ int testxpath_main(int argc, char **argv)
   else {
     if (arguments.normalized_seqtypes) {
       StringBuffer buf;
-      ASSERT(XPATH_EXPR_INSTANCE_OF == expr->m_type);
-      ASSERT(!expr->m_st.isNull());
-      expr->m_st.printFS(buf,xs_g->namespaces);
+      ASSERT(XPATH_INSTANCE_OF == expr->m_type);
+      TypeExpr *iof = static_cast<TypeExpr*>(expr);
+      ASSERT(!iof->m_st.isNull());
+      iof->m_st.printFS(buf,xs_g->namespaces);
       message("%*\n",&buf);
     }
     else {
-      StringBuffer exprstr;
-      expr->serialize(exprstr,0);
-      String e = exprstr.contents();
-      message("%*\n",&e);
+      message("%*\n",expr);
     }
 
     if (arguments.tree)
