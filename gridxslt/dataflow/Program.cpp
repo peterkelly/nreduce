@@ -66,8 +66,6 @@ Instruction::Instruction()
     m_seroptions(NULL),
     m_nsdefs(NULL)
 {
-  m_sloc.uri = NULL;
-  m_sloc.line = 0;
 }
 
 Instruction::~Instruction()
@@ -377,8 +375,6 @@ Environment::Environment()
     space_decls(NULL),
     instr(NULL)
 {
-  sloc.uri = NULL;
-  sloc.line = 0;
 }
 
 Environment::~Environment()
