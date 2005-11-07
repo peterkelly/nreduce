@@ -692,7 +692,7 @@ Wildcard *Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard *O2,
 Wildcard *Wildcard_constraint_intersection(Schema *s, Wildcard *a, Wildcard *b,
                                                  int process_contents);
 
-int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const char *uri, const char *sourceloc,
+int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const String &uri, const char *sourceloc,
                             Schema **sout, GridXSLT::Error *ei, BuiltinTypes *g);
 
 Schema *parse_xmlschema_file(char *filename, BuiltinTypes *g);

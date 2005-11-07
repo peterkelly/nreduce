@@ -897,7 +897,7 @@ BuiltinTypes::~BuiltinTypes()
   delete symt;
   delete as;
   list_free(cstructs,NULL);
-  NamespaceMap_free(namespaces,0);
+  delete namespaces;
 }
 
 
@@ -2786,11 +2786,12 @@ int xs_post_process_schema(Schema *s, xmlDocPtr doc)
   return 0;
 }
 
-int GridXSLT::parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const char *uri, const char *sourceloc,
-                            Schema **sout, Error *ei, BuiltinTypes *g)
+int GridXSLT::parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const String &uri,
+                                      const char *sourceloc,
+                                      Schema **sout, Error *ei, BuiltinTypes *g)
 {
   Schema *s = new Schema(g);
-  s->uri = strdup(uri);
+  s->uri = uri.cstring();
 
   if ((0 == xs_parse_schema(s,n,doc)) &&
       (0 == xs_post_process_schema(s,doc))) {
@@ -2811,7 +2812,6 @@ Schema *GridXSLT::parse_xmlschema_file(char *filename, BuiltinTypes *g)
   Schema *s = NULL;
   Error ei;
   FILE *f;
-  char *uri;
 
   if (NULL == (f = fopen(filename,"r"))) {
     fmessage(stderr,"Can't open %s: %s\n",filename,strerror(errno));
@@ -2840,15 +2840,13 @@ Schema *GridXSLT::parse_xmlschema_file(char *filename, BuiltinTypes *g)
     return NULL;
   }
 
-  uri = get_real_uri(filename);
+  String uri = get_real_uri(filename);
   if (0 != parse_xmlschema_element(root,doc,uri,filename,&s,&ei,g)) {
     ei.fprint(stderr);
     ei.clear();
     xmlFreeDoc(doc);
-    free(uri);
     return NULL;
   }
-  free(uri);
 
   xmlFreeDoc(doc);
   return s;

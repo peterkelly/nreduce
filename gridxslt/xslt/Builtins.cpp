@@ -37,9 +37,9 @@ static SequenceType parse_argtype(Schema *schema, NamespaceMap *namespaces, cons
   char *argtype = strdup(str);
   argtype[len] = '\0';
 
-  st = seqtype_parse(argtype,NULL,-1,&ei);
+  st = seqtype_parse(argtype,String::null(),-1,&ei);
 
-  if (st.isNull() || (0 != st.resolve(namespaces,schema,NULL,-1,&ei))) {
+  if (st.isNull() || (0 != st.resolve(namespaces,schema,String::null(),-1,&ei))) {
     fmessage(stderr,"FATAL: internal function uses unknown type \"%s\"\n",argtype);
     exit(1);
   }

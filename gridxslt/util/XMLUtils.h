@@ -30,6 +30,8 @@
 
 namespace GridXSLT {
 
+class Node;
+
 class XMLWriter {
 public:
 
@@ -122,16 +124,18 @@ int is_all_whitespace(const char *s, int len);
 
 
 
-char *get_real_uri(const GridXSLT::String &filename);
-char *get_relative_uri(const char *uri, const char *base);
+String get_real_uri(const GridXSLT::String &filename);
+String get_relative_uri(const GridXSLT::String &uri, const String &base);
 
 xmlNodePtr get_element_by_id(xmlNodePtr n, const char *id);
-int retrieve_uri_element(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const GridXSLT::String &errname,
-                         const char *full_uri, xmlDocPtr *doc, xmlNodePtr *node,
-                         const char *refsource);
+int retrieve_uri_element(GridXSLT::Error *ei, const GridXSLT::String &filename,
+                         int line, const GridXSLT::String &errname,
+                         const GridXSLT::String &full_uri, xmlDocPtr *doc, xmlNodePtr *node,
+                         const GridXSLT::String &refsource);
 int retrieve_uri(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const GridXSLT::String &errname,
                  const char *full_uri, stringbuf *buf, const char *refsource);
 
+String buildURI(const String &URI, const String &base);
 
 class symbol_space_entry {
   DISABLE_COPY(symbol_space_entry)

@@ -997,13 +997,12 @@ void output_xmlschema(FILE *f, Schema *s)
 
   for (l = s->imports; l; l = l->next) {
     Schema *import = (Schema*)l->data;
-    char *rel = get_relative_uri(import->uri,s->uri);
+    String rel = get_relative_uri(import->uri,s->uri);
     xmlTextWriterStartElement(writer,"xsd:import");
     if (NULL != import->ns)
       XMLWriter::attribute(writer,"namespace",import->ns);
     XMLWriter::attribute(writer,"schemaLocation",rel);
     xmlTextWriterEndElement(writer);
-    free(rel);
   }
 
   v.once_each = 1;

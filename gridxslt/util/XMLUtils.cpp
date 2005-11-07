@@ -599,14 +599,14 @@ static size_t write_buf(void *ptr, size_t size, size_t nmemb, void *data)
   return size*nmemb;
 }
 
-char *GridXSLT::get_real_uri(const String &filename)
+String GridXSLT::get_real_uri(const String &filename)
 {
   char *real;
   char *fnstr = filename.cstring();
   if (NULL != strstr(fnstr,"://")) {
     /* full uri */
     free(fnstr);
-    return filename.cstring();
+    return filename;
   }
   else {
     char path[PATH_MAX];
@@ -627,12 +627,16 @@ char *GridXSLT::get_real_uri(const String &filename)
     real = (char*)malloc(strlen("file://")+strlen(path)+1);
     sprintf(real,"file://%s",path);
     free(fnstr);
-    return real;
+    String r = real;
+    free(real);
+    return r;
   }
 }
 
-char *GridXSLT::get_relative_uri(const char *uri, const char *base)
+String GridXSLT::get_relative_uri(const GridXSLT::String &uri1, const String &base1)
 {
+  char *uri = uri1.cstring();
+  char *base = base1.cstring();
   char *relfilename = xmlBuildRelativeURI(uri,base);
   char *rel;
   xmlURIPtr parsed = xmlParseURI(uri);
@@ -647,7 +651,11 @@ char *GridXSLT::get_relative_uri(const char *uri, const char *base)
   }
   xmlFreeURI(parsed);
   free(relfilename);
-  return rel;
+  free(uri);
+  String r = rel;
+  free(rel);
+  free(base);
+  return r;
 }
 
 xmlNodePtr GridXSLT::get_element_by_id(xmlNodePtr n, const char *id)
@@ -670,10 +678,14 @@ xmlNodePtr GridXSLT::get_element_by_id(xmlNodePtr n, const char *id)
   return NULL;
 }
 
-int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, const String &errname,
-                         const char *full_uri, xmlDocPtr *doc, xmlNodePtr *node,
-                         const char *refsource)
+int GridXSLT::retrieve_uri_element(Error *ei, const String &filename,
+                                   int line, const String &errname,
+                                   const GridXSLT::String &full_uri1,
+                                   xmlDocPtr *doc, xmlNodePtr *node,
+                                   const GridXSLT::String &refsource1)
 {
+  char *full_uri = full_uri1.cstring();
+  char *refsource = refsource1.cstring();
   stringbuf *src = stringbuf_new();
   xmlNodePtr root;
   xmlURIPtr parsed;
@@ -693,6 +705,8 @@ int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, 
   if (0 != retrieve_uri(ei,filename,line,errname,full_uri,src,refsource)) {
     stringbuf_free(src);
     free(justdoc);
+    free(full_uri);
+    free(refsource);
     return -1;
   }
 
@@ -700,6 +714,8 @@ int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, 
     error(ei,full_uri,-1,errname,"Parse error");
     stringbuf_free(src);
     free(justdoc);
+    free(full_uri);
+    free(refsource);
     return -1;
   }
 
@@ -709,6 +725,8 @@ int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, 
     error(ei,full_uri,-1,errname,"No root element found");
     xmlFreeDoc(*doc);
     free(justdoc);
+    free(full_uri);
+    free(refsource);
     return -1;
   }
 
@@ -727,6 +745,8 @@ int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, 
       xmlFreeDoc(*doc);
       xmlFreeURI(parsed);
       free(justdoc);
+      free(full_uri);
+      free(refsource);
       return -1;
     }
   }
@@ -736,6 +756,8 @@ int GridXSLT::retrieve_uri_element(Error *ei, const String &filename, int line, 
 
   xmlFreeURI(parsed);
   free(justdoc);
+  free(full_uri);
+  free(refsource);
   return 0;
 }
 
@@ -824,6 +846,18 @@ int GridXSLT::retrieve_uri(Error *ei, const String &filename, int line, const St
   free(uri);
 
   return 0;
+}
+
+String GridXSLT::buildURI(const String &URI, const String &base)
+{
+  char *URI1 = URI.cstring();
+  char *base1 = base.cstring();
+  char *built = xmlBuildURI(URI1,base1);
+  String r = built;
+  free(built);
+  free(URI1);
+  free(base1);
+  return r;
 }
 
 symbol_space_entry::symbol_space_entry()
