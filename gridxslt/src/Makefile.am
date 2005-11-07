@@ -21,4 +21,4 @@ test_LDADD = ../libgridxslt.la gridxslt_impl.o @ALL_LIBS@
 noinst_LTLIBRARIES = libsrc.la
 libsrc_la_SOURCES = syntax_wsdl.cpp gridxslt_impl.cpp
 
-
+CLEANFILES = *.da *.bb *.bbg *.gcov

@@ -4,4 +4,4 @@ LDADD = @ALL_LIBS@
 gridxsltincludedir = $(includedir)/gridxslt
 noinst_HEADERS = Macros.h XMLUtils.h List.h Debug.h Namespace.h Network.h String.h Shared.h
 INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
-
+CLEANFILES = *.da *.bb *.bbg *.gcov

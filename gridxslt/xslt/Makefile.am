@@ -1,7 +1,7 @@
 noinst_LTLIBRARIES = libxslt.la
 noinst_PROGRAMS = testxslt testxpath
 BUILT_SOURCES = grammar.tab.cpp lexer.yy.cpp
-CLEANFILES = grammar.tab.cpp lexer.yy.cpp grammar.tab.h
+CLEANFILES = *.da *.bb *.bbg *.gcov grammar.tab.cpp lexer.yy.cpp grammar.tab.h
 libxslt_la_SOURCES = grammar.tab.cpp lexer.yy.cpp Statement.cpp Expression.cpp Parse.cpp Output.cpp Compilation.cpp Builtins.cpp Special.cpp String.cpp Sequence.cpp Node.cpp Boolean.cpp Numeric.cpp Accessor.cpp Context.cpp testxpath_impl.cpp testxslt_impl.cpp TypeConversion.cpp
 gridxsltincludedir = $(includedir)/gridxslt
 noinst_HEADERS = grammar.tab.h Statement.h Expression.h Parse.h Output.h Compilation.h Builtins.h Special.h

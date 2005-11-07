@@ -8,3 +8,4 @@ gridxsltincludedir = $(includedir)/gridxslt
 noinst_HEADERS = XMLSchema.h Derivation.h Output.h Parse.h Validation.h
 INCLUDES = -I@top_srcdir@ @ALL_INCLUDES@
 LDADD = libxmlschema.la ../util/libutil.la @ALL_LIBS@
+CLEANFILES = *.da *.bb *.bbg *.gcov
