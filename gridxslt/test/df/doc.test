@@ -25,7 +25,7 @@ temp.xl
 transform {
 
   xsd:int main() {
-    sequence(fn:doc("runtests.tmp/people.xml"));
+    sequence(doc("runtests.tmp/people.xml"));
   }
 
 }
