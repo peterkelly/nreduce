@@ -157,7 +157,7 @@ static Value load_input_doc(Error *ei, const char *filename, list *space_decls)
   }
 
   docnode = new Node(NODE_DOCUMENT);
-  rootelem = Node::fromXMLNode(root);
+  rootelem = new Node(root);
   df_strip_spaces(rootelem,space_decls);
   docnode->addChild(rootelem);
 
