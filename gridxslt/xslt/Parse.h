@@ -27,7 +27,9 @@
 #include "util/XMLUtils.h"
 #include <stdio.h>
 
-int parse_xslt_relative_uri(GridXSLT::Error *ei, const char *filename, int line, const char *errname,
-                            const char *base_uri, const char *uri, GridXSLT::Statement *sroot);
+int parse_xslt_relative_uri(GridXSLT::Error *ei, const GridXSLT::String &filename,
+                            int line, const char *errname,
+                            const GridXSLT::String &base_uri, const GridXSLT::String &uri,
+                            GridXSLT::TransformExpr *sroot);
 
 #endif /* _XSLT_PARSE_H */
