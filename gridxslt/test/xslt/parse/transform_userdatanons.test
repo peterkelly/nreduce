@@ -6,6 +6,6 @@ testxslt
   <info/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:2: error XTSE0130: User-defined data elements only permitted if they have a non-null namespace URI
+runtests.tmp/input.xml:3: error XTSE0130: User-defined data elements only permitted if they have a non-null namespace URI
 ================================== RETURN CODE =================================
 1

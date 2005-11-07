@@ -7,6 +7,6 @@ testxslt
   <xsl:import href="other.xsl"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:2: error XTSE0140: A user-defined data element must not precede an import element
+runtests.tmp/input.xml:3: error XTSE0140: A user-defined data element must not precede an import element
 ================================== RETURN CODE =================================
 1

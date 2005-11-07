@@ -21,6 +21,6 @@ other.xsl
   <xsl:import href="other.xsl"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:2: error XTSE0200: The xsl:import element children must precede all other element children of an xsl:stylesheet element, including any xsl:include element children and any user-defined data elements.
+runtests.tmp/input.xml:8: error XTSE0200: The xsl:import element children must precede all other element children of an xsl:stylesheet element, including any xsl:include element children and any user-defined data elements.
 ================================== RETURN CODE =================================
 1
