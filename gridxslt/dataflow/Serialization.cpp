@@ -116,13 +116,13 @@ df_seroptions::~df_seroptions()
 {
 }
 
-static int invalid_seroption(Error *ei, const char *filename,
+static int invalid_seroption(Error *ei, const String &filename,
                              int line, const String &option, const String &value)
 {
   return error(ei,filename,line,String::null(),"Invalid value for %*: %*",&option,&value);
 }
 
-int parse_yes_no(Error *ei, const char *filename, int line,
+int parse_yes_no(Error *ei, const String &filename, int line,
                  int *val, const String &name, const String &str)
 {
   if (str.isNull())
@@ -136,11 +136,11 @@ int parse_yes_no(Error *ei, const char *filename, int line,
   return 0;
 }
 
-typedef int (parsefun)(df_seroptions *options, Error *ei, const char *filename,
+typedef int (parsefun)(df_seroptions *options, Error *ei, const String &filename,
                        int line, const String &value, NamespaceMap *namespaces);
 
 static int df_parse_byte_order_mark(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_byte_order_mark,
@@ -149,7 +149,7 @@ static int df_parse_byte_order_mark(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_cdata_section_elements(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   int r = 0;
@@ -174,7 +174,7 @@ static int df_parse_cdata_section_elements(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_doctype_public(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull())
@@ -183,7 +183,7 @@ static int df_parse_doctype_public(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_doctype_system(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull())
@@ -192,7 +192,7 @@ static int df_parse_doctype_system(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_encoding(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull())
@@ -201,7 +201,7 @@ static int df_parse_encoding(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_escape_uri_attributes(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_escape_uri_attributes,
@@ -210,7 +210,7 @@ static int df_parse_escape_uri_attributes(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_include_content_type(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_include_content_type,
@@ -219,7 +219,7 @@ static int df_parse_include_content_type(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_indent(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_indent,
@@ -228,7 +228,7 @@ static int df_parse_indent(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_media_type(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull())
@@ -237,7 +237,7 @@ static int df_parse_media_type(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_method(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull()) {
@@ -263,7 +263,7 @@ static int df_parse_method(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_normalization_form(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull())
@@ -272,7 +272,7 @@ static int df_parse_normalization_form(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_omit_xml_declaration(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_omit_xml_declaration,
@@ -281,7 +281,7 @@ static int df_parse_omit_xml_declaration(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_standalone(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   if (!value.isNull()) {
@@ -298,7 +298,7 @@ static int df_parse_standalone(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_undeclare_prefixes(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   CHECK_CALL(parse_yes_no(ei,filename,line,&options->m_undeclare_prefixes,
@@ -307,7 +307,7 @@ static int df_parse_undeclare_prefixes(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_use_character_maps(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   /* FIXME */
@@ -315,7 +315,7 @@ static int df_parse_use_character_maps(df_seroptions *options, Error *ei,
 }
 
 static int df_parse_version(df_seroptions *options, Error *ei,
-                                           const char *filename, int line,
+                                           const String &filename, int line,
                                            const String &value, NamespaceMap *namespaces)
 {
   /* FIXME */
@@ -342,7 +342,7 @@ parsefun *parse_functions[SEROPTION_COUNT] = {
 };
 
 int df_seroptions::parseOption(int option, Error *ei,
-                               const char *filename, int line,
+                               const String &filename, int line,
                                const String &value, NamespaceMap *namespaces)
 {
   ASSERT(0 <= option);

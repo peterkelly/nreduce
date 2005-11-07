@@ -74,7 +74,7 @@ public:
   df_seroptions(const df_seroptions &other) { initFrom(other); }
 
   int parseOption(int option, GridXSLT::Error *ei,
-                  const char *filename, int line,
+                  const String &filename, int line,
                   const GridXSLT::String &value, NamespaceMap *namespaces);
 
 
