@@ -27,6 +27,82 @@
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
 
+namespace GridXSLT {
+
+class Compilation;
+class Template;
+
+class var_reference {
+public:
+  var_reference() : ref(NULL), top_outport(NULL), local_outport(NULL) { }
+  Expression *ref;
+  OutputPort *top_outport;
+  OutputPort *local_outport;
+};
+
+
+class Compilation {
+  DISABLE_COPY(Compilation)
+public:
+  Compilation();
+  ~Compilation();
+
+  void set_and_move_cursor(OutputPort **cursor, Instruction *destinstr, int destp,
+                                Instruction *newpos, int newdestno);
+
+  Instruction *specialop(Function *fun, const String &ns,
+                              const String &name, int nargs, sourceloc sloc);
+  void useVar(Function *fun, OutputPort *outport,
+                       OutputPort **cursor, int need_gate, sourceloc sloc);
+  OutputPort *resolveVar(Function *fun, VarRefExpr *varref);
+  void compileString(Function *fun, const String &str,
+                                OutputPort **cursor, sourceloc sloc);
+  int haveVarReference(List<var_reference*> vars, OutputPort *top_outport);
+  void initParamInstructions(Function *fun,
+                                    List<SequenceType> &seqtypes, OutputPort **outports);
+  int compileInnerFunction(Function *fun, SyntaxNode *sn,
+                                 Instruction **mapout, OutputPort **cursor, sourceloc sloc);
+  void compileConditional(Function *fun, OutputPort **cursor,
+                                    OutputPort **condcur, OutputPort **truecur,
+                                    OutputPort **falsecur, sourceloc sloc);
+  int compileSequence(Function *fun, Statement *parent,
+                             OutputPort **cursor);
+  int compileFunctionContents(Function *fun, SyntaxNode *sn, OutputPort **cursor);
+  int compileFunction(Statement *sn, Function *fun);
+  int compileApplyFunction(Function **ifout, const char *mode);
+  int compileApplyTemplates(Function *fun, OutputPort **cursor, const char *mode, sourceloc sloc,
+                            Instruction **map);
+  void compileOrderedTemplateList();
+  int compileDefaultTemplate();
+  int compile2();
+
+
+
+
+
+
+  Error *m_ei;
+  xslt_source *m_source;
+  Program *m_program;
+
+  Schema *m_schema;
+
+  ManagedPtrList<Template*> m_templates;
+  int m_nextanonid;
+};
+
+class Template {
+public:
+  Template();
+  ~Template() ;
+
+  Expression *pattern;
+  Function *fun;
+  bool builtin;
+};
+
+};
+
 int xslt_compile(GridXSLT::Error *ei, GridXSLT::xslt_source *source, GridXSLT::Program **program);
 
 #endif /* _XSLT_COMPILE_H */

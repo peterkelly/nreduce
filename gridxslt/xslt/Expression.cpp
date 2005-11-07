@@ -36,9 +36,9 @@ using namespace GridXSLT;
 
 extern int lex_lineno;
 extern int parse_firstline;
-extern char *parse_filename;
+extern String parse_filename;
 
-const char *Expression_types[XPATH_EXPR_COUNT] = {
+const char *Expression_types[SYNTAXTYPE_COUNT] = {
   "invalid",
   "for",
   "some",
@@ -47,9 +47,33 @@ const char *Expression_types[XPATH_EXPR_COUNT] = {
   "var_in",
   "or",
   "and",
-  "compare_values",
-  "compare_general",
-  "compare_nodes",
+
+
+
+
+
+
+  "general-comp-eq",
+  "general-comp-ne",
+  "general-comp-lt",
+  "general-comp-le",
+  "general-comp-gt",
+  "general-comp-ge",
+
+  "value-comp-eq",
+  "value-comp-ne",
+  "value-comp-lt",
+  "value-comp-le",
+  "value-comp-gt",
+  "value-comp-ge",
+
+  "node-comp-is",
+  "node-comp-precedes",
+  "node-comp-follows",
+
+
+
+
   "to",
   "add",
   "subtract",
@@ -86,7 +110,63 @@ const char *Expression_types[XPATH_EXPR_COUNT] = {
   "varinlist",
   "paramlist",
   "filter",
+
+  "declaration",
+  "import",
+  "instruction",
+  "literal-result-element",
+  "matching-substring",
+  "non-matching-substring",
+  "otherwise",
+  "output-character",
+  "param",
+  "sort",
+  "transform",
+  "variable",
+  "when",
+  "with-param",
+
+  "attribute-set",
+  "character-map",
+  "decimal-format",
+  "function",
+  "import-schema",
+  "include",
+  "key",
+  "namespace-alias",
+  "output",
+  "preserve-space",
+  "strip-space",
+  "template",
+
+  "analyze-string",
+  "apply-imports",
+  "apply-templates",
+  "attribute",
+  "call-template",
+  "choose",
+  "comment",
+  "copy",
+  "copy-of",
+  "element",
+  "fallback",
+  "for-each",
+  "for-each-group",
+  "if",
+  "message",
+  "namespace",
+  "next-match",
+  "number",
+  "perform-sort",
+  "processing-instruction",
+  "result-document",
+  "sequence",
+  "text",
+  "value-of"
+
 };
+
+const char **xslt_element_names = Expression_types;
 
 const char *xp_axis_types[AXIS_COUNT] = {
   NULL,
@@ -115,408 +195,450 @@ static void print_qname(StringBuffer &buf, const QName &qn)
     buf.format("%*",&qn);
 }
 
-// static void print_qname_or_double_wildcard(StringBuffer &buf, const QName &qn)
-// {
-//   if (!qn.m_prefix.isNull())
-//     buf.format("%*:",&qn.m_prefix);
-//   else
-//     buf.format("*:");
-//   if (!qn.m_localPart.isNull())
-//     buf.format("%*",&qn.m_localPart);
-//   else
-//     buf.format("*");
-// }
-
-// static void print_qname_or_wildcard(StringBuffer &buf, const QName &qn)
-// {
-//   if (qn.m_prefix.isNull() && qn.m_localPart.isNull())
-//     buf.format("*");
-//   else
-//     print_qname(buf,qn);
-// }
-
-Expression::Expression(int _type, Expression *_left, Expression *_right)
-  : m_type(_type),
-    m_conditional(NULL),
-    m_left(_left),
-    m_right(_right),
-    m_compare(0),
-    m_nodetest(0),
-    m_ival(0),
-    m_dval(0),
-    m_nillable(0),
-    m_axis(0),
+SyntaxNode::SyntaxNode(SyntaxType type)
+  : m_type(type),
+    m_namespaces(new NamespaceMap()),
+    m_outp(NULL),
     m_parent(NULL),
-    m_stmt(NULL),
-    m_occ('\0'),
-    m_outp(NULL)
+    m_nrefs(0)
 {
-  m_sloc.uri = parse_filename ? strdup(parse_filename) : NULL;
+  memset(&m_refs,0,EXPR_MAXREFS*sizeof(SyntaxNode*));
+}
+
+void SyntaxNode::setParent(SyntaxNode *parent, int *importpred)
+{
+  m_parent = parent;
+
+  if (parent)
+    m_namespaces->parent = parent->m_namespaces;
+
+  for (unsigned i = 0; i < m_nrefs; i++)
+    if (NULL != m_refs[i])
+      m_refs[i]->setParent(this,importpred);
+}
+
+int SyntaxNode::resolve(Schema *s, const String &filename, GridXSLT::Error *ei)
+{
+  for (unsigned i = 0; i < m_nrefs; i++)
+    if (NULL != m_refs[i])
+      CHECK_CALL(m_refs[i]->resolve(s,filename,ei))
+  return 0;
+}
+
+SyntaxNode *SyntaxNode::resolveVar(const QName &varname)
+{
+  if (m_parent)
+    return m_parent->resolveVar(varname);
+  else
+    return NULL;
+}
+
+int SyntaxNode::findReferencedVars(Compilation *comp, Function *fun, SyntaxNode *below,
+                                   List<var_reference*> &vars)
+{
+  for (unsigned int i = 0; i < m_nrefs; i++)
+    if (NULL != m_refs[i])
+      CHECK_CALL(m_refs[i]->findReferencedVars(comp,fun,below,vars))
+  return 0;
+}
+
+bool SyntaxNode::inConditional() const
+{
+  if (!m_parent)
+    return false;
+  if ((XSLT_INSTR_CHOOSE == m_parent->m_type) ||
+      ((XSLT_INSTR_IF == m_parent->m_type) &&
+       (this != static_cast<XSLTIfExpr*>(m_parent)->m_select)) ||
+      ((XPATH_IF == m_parent->m_type) &&
+       (this != static_cast<XPathIfExpr*>(m_parent)->conditional())))
+    return true;
+  return m_parent->inConditional();
+}
+
+bool SyntaxNode::isBelow(SyntaxNode *below) const
+{
+  if (this == below)
+    return true;
+  else if (m_parent)
+    return m_parent->isBelow(below);
+  else
+    return false;
+}
+
+SyntaxNode::~SyntaxNode()
+{
+  for (unsigned i = 0; i < m_nrefs; i++)
+    if (NULL != m_refs[i])
+      delete m_refs[i];
+  delete m_namespaces;
+}
+
+Expression::Expression(SyntaxType _type)
+  : SyntaxNode(_type),
+    m_stmt(NULL)
+{
+  m_sloc.uri = parse_filename;
   m_sloc.line = parse_firstline+lex_lineno;
 }
 
 Expression::~Expression()
 {
-  if (NULL != m_conditional)
-    delete m_conditional;
-  if (NULL != m_left)
-    delete m_left;
-  if (NULL != m_right)
-    delete m_right;
   sourceloc_free(m_sloc);
 }
 
-void Expression::setParent(Expression *parent, Statement *stmt)
+void Expression::setParent(SyntaxNode *parent, int *importpred)
 {
-  m_parent = parent;
-  m_stmt = stmt;
+  SyntaxNode::setParent(parent,importpred);
 
-  if (NULL != m_conditional)
-    m_conditional->setParent(this,m_stmt);
-  if (NULL != m_left)
-    m_left->setParent(this,m_stmt);
-  if (NULL != m_right)
-    m_right->setParent(this,m_stmt);
+  SyntaxNode *s = parent;
+  while (s->isExpression())
+    s = s->parent();
+
+  m_stmt = static_cast<Statement*>(s);
+
 }
 
-int Expression::resolve(Schema *s, const char *filename, Error *ei)
+int Expression::resolve(Schema *s, const String &filename, Error *ei)
 {
-  ASSERT(m_stmt);
-
   ASSERT(m_ident.m_name.isNull());
   ASSERT(m_ident.m_ns.isNull());
 
   if (!m_qn.isNull()) {
-    m_ident = qname_to_nsname(m_stmt->m_namespaces,m_qn);
+    m_ident = qname_to_nsname(m_namespaces,m_qn);
     if (m_ident.isNull())
       return error(ei,m_sloc.uri,m_sloc.line,"XPST0081",
                    "Could not resolve namespace for prefix \"%*\"",&m_qn.m_prefix);
   }
 
-
-  if (NULL != m_conditional)
-    CHECK_CALL(m_conditional->resolve(s,filename,ei))
-  if (NULL != m_left)
-    CHECK_CALL(m_left->resolve(s,filename,ei))
-  if (NULL != m_right)
-    CHECK_CALL(m_right->resolve(s,filename,ei))
-
-  if (!m_st.isNull())
-    CHECK_CALL(m_st.resolve(m_stmt->m_namespaces,s,m_sloc.uri,m_sloc.line,ei))
-
-  return 0;
+  return SyntaxNode::resolve(s,filename,ei);
 }
 
-void Expression::serialize(StringBuffer &buf, int brackets)
+int TypeExpr::resolve(Schema *s, const String &filename, GridXSLT::Error *ei)
+{
+  if (!m_st.isNull())
+    CHECK_CALL(m_st.resolve(m_namespaces,s,m_sloc.uri,m_sloc.line,ei))
+  return Expression::resolve(s,filename,ei);
+}
+
+void BinaryExpr::print(StringBuffer &buf)
+{
+
+  String str;
+  switch (m_type) {
+  case XPATH_OR:            str = "or";        break;
+  case XPATH_AND:           str = "and";       break;
+  case XPATH_VALUE_EQ:      str = "eq";        break;
+  case XPATH_VALUE_NE:      str = "ne";        break;
+  case XPATH_VALUE_LT:      str = "lt";        break;
+  case XPATH_VALUE_LE:      str = "le";        break;
+  case XPATH_VALUE_GT:      str = "gt";        break;
+  case XPATH_VALUE_GE:      str = "ge";        break;
+  case XPATH_GENERAL_EQ:    str = "=";         break;
+  case XPATH_GENERAL_NE:    str = "!=";        break;
+  case XPATH_GENERAL_LT:    str = "<";         break;
+  case XPATH_GENERAL_LE:    str = "<=";        break;
+  case XPATH_GENERAL_GT:    str = ">";         break;
+  case XPATH_GENERAL_GE:    str = ">=";        break;
+  case XPATH_NODE_IS:       str = "is";        break;
+  case XPATH_NODE_PRECEDES: str = "<<";        break;
+  case XPATH_NODE_FOLLOWS:  str = ">>";        break;
+  case XPATH_TO:            str = "to";        break;
+  case XPATH_ADD:           str = "+";         break;
+  case XPATH_SUBTRACT:      str = "-";         break;
+  case XPATH_MULTIPLY:      str = "*";         break;
+  case XPATH_DIVIDE:        str = "div";       break;
+  case XPATH_IDIVIDE:       str = "idiv";      break;
+  case XPATH_MOD:           str = "mod";       break;
+  case XPATH_UNION:         str = "union";     break;
+  case XPATH_UNION2:        str = "|";         break;
+  case XPATH_INTERSECT:     str = "intersect"; break;
+  case XPATH_EXCEPT:        str = "except";    break;
+  default:                  ASSERT(0);         break;
+  }
+
+  m_left->print(buf);
+  buf.format(" %* ",&str);
+  m_right->print(buf);
+}
+
+void UnaryExpr::print(StringBuffer &buf)
+{
+  if (XPATH_UNARY_MINUS == m_type)
+    buf.format("-");
+  else
+    buf.format("+");
+  m_source->print(buf);
+}
+
+void TypeExpr::print(StringBuffer &buf)
+{
+  switch (m_type) {
+  case XPATH_INSTANCE_OF: {
+    m_source->print(buf);
+    buf.format(" instance of ");
+    m_st.printXPath(buf,m_namespaces);
+    break;
+  }
+  case XPATH_TREAT:
+    /* FIXME */
+    ASSERT(0);
+    break;
+    break;
+  case XPATH_CASTABLE:
+    /* FIXME */
+    ASSERT(0);
+    break;
+    break;
+  case XPATH_CAST:
+    /* FIXME */
+    ASSERT(0);
+    break;
+    break;
+  default:
+    ASSERT(0);
+    break;
+  }
+}
+
+int NodeTestExpr::resolve(Schema *s, const String &filename, GridXSLT::Error *ei)
+{
+  if (!m_st.isNull())
+    CHECK_CALL(m_st.resolve(m_namespaces,s,m_sloc.uri,m_sloc.line,ei))
+  return Expression::resolve(s,filename,ei);
+}
+
+void NodeTestExpr::print(StringBuffer &buf)
+{
+  if ((AXIS_PARENT == m_axis) &&
+      (XPATH_NODE_TEST_SEQUENCETYPE == m_nodetest) &&
+      (m_st.isNode())) {
+    /* abbreviated form .. for parent::node() */
+    buf.format("..");
+  }
+  else {
+
+    switch (m_axis) {
+    case AXIS_CHILD:
+      /* nothing, since child is default axis */
+      break;
+    case AXIS_DESCENDANT:
+      buf.format("descendant::");
+      break;
+    case AXIS_ATTRIBUTE:
+      /* use abbreviation @ instead of attribute:: */
+      buf.format("@");
+      break;
+    case AXIS_SELF:
+      buf.format("self::");
+      break;
+    case AXIS_DESCENDANT_OR_SELF:
+      buf.format("descendant-or-self::");
+      break;
+    case AXIS_FOLLOWING_SIBLING:
+      buf.format("following-sibling::");
+      break;
+    case AXIS_FOLLOWING:
+      buf.format("following::");
+      break;
+    case AXIS_NAMESPACE:
+      buf.format("namespace::");
+      break;
+    case AXIS_PARENT:
+      buf.format("parent::");
+      break;
+    case AXIS_ANCESTOR:
+      buf.format("ancestor::");
+      break;
+    case AXIS_PRECEDING_SIBLING:
+      buf.format("preceding-sibling::");
+      break;
+    case AXIS_PRECEDING:
+      buf.format("preceding::");
+      break;
+    case AXIS_ANCESTOR_OR_SELF:
+      buf.format("ancestor-or-self::");
+      break;
+    default:
+      fmessage(stderr,"unknown axis %d\n",m_axis);
+      ASSERT(0);
+      break;
+    }
+    switch (m_nodetest) {
+    case XPATH_NODE_TEST_NAME:
+      print_qname(buf,m_qn);
+      break;
+    case XPATH_NODE_TEST_SEQUENCETYPE:
+      m_st.printXPath(buf,m_namespaces);
+      break;
+    default:
+      ASSERT(0);
+      break;
+    }
+  }
+}
+
+void IntegerExpr::print(StringBuffer &buf)
+{
+  buf.format("%d",m_ival);
+}
+
+void DecimalExpr::print(StringBuffer &buf)
+{
+  buf.format("%f",m_dval);
+}
+
+void DoubleExpr::print(StringBuffer &buf)
+{
+  buf.format("%f",m_dval);
+}
+
+void StringExpr::print(StringBuffer &buf)
+{
+  // FIXME: quote ' (and other?) characters inside string
+  buf.format("'%*'",&m_strval);
+}
+
+void QuantifiedExpr::print(StringBuffer &buf)
+{
+  switch (m_type) {
+  case XPATH_SOME:
+    buf.format("some ");
+    m_conditional->print(buf);
+    buf.format(" satisfies ");
+    m_left->print(buf);
+    break;
+  case XPATH_EVERY:
+    buf.format("every ");
+    m_conditional->print(buf);
+    buf.format(" satisfies ");
+    m_left->print(buf);
+    break;
+  default:
+    ASSERT(0);
+    break;
+  }
+}
+
+void ForExpr::print(StringBuffer &buf)
+{
+  buf.format("for ");
+  m_conditional->print(buf);
+  buf.format(" return ");
+  m_left->print(buf);
+}
+
+void XPathIfExpr::print(StringBuffer &buf)
+{
+  buf.format("if (");
+  m_conditional->print(buf);
+  buf.format(") then ");
+  m_trueExpr->print(buf);
+  buf.format(" else ");
+  m_falseExpr->print(buf);
+}
+
+void RootExpr::print(StringBuffer &buf)
+{
+  buf.format("/");
+  if (NULL != m_source)
+    m_source->print(buf);
+}
+
+void ContextItemExpr::print(StringBuffer &buf)
+{
+  buf.format(".");
+}
+
+void CallExpr::print(StringBuffer &buf)
+{
+  print_qname(buf,m_qn);
+  buf.format("(");
+  if (m_left)
+    m_left->print(buf);
+  buf.format(")");
+}
+
+void ParenExpr::print(StringBuffer &buf)
+{
+  buf.format("(");
+  m_left->print(buf);
+  buf.format(")");
+}
+
+void SequenceExpr::print(StringBuffer &buf)
+{
+  m_left->print(buf);
+  buf.format(", ");
+  m_right->print(buf);
+}
+
+void StepExpr::print(StringBuffer &buf)
+{
+  m_left->print(buf);
+  buf.format("/");
+  m_right->print(buf);
+}
+
+void VarInExpr::print(StringBuffer &buf)
+{
+  buf.format("$");
+  print_qname(buf,m_qn);
+  buf.format(" in ");
+  m_left->print(buf);
+}
+
+void VarInListExpr::print(StringBuffer &buf)
+{
+  m_left->print(buf);
+  buf.format(", ");
+  m_right->print(buf);
+}
+
+void ActualParamExpr::print(StringBuffer &buf)
+{
+  m_left->print(buf);
+}
+
+SyntaxNode *ForExpr::resolveVar(const QName &varname)
+{
+  // FIXME: comparison needs to be namespace aware (keep in mind prefix mappings could differ)
+  if (varname.m_localPart == m_qn.m_localPart)
+    return this;
+  return Expression::resolveVar(varname);
+}
+
+SyntaxNode *Expression::resolveVar(const QName &varname)
+{
+  return SyntaxNode::resolveVar(varname);
+}
+
+void Expression::print(StringBuffer &buf)
 {
 /*   Expression *f; */
 
   switch (m_type) {
-  case XPATH_EXPR_INVALID:
+  case XPATH_INVALID:
     fmessage(stderr,"Invalid expression type\n");
     ASSERT(0);
     break;
-  case XPATH_EXPR_FOR:
-    buf.format("for ");
-    m_conditional->serialize(buf,1);
-    buf.format(" return ");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_SOME:
-    buf.format("some ");
-    m_conditional->serialize(buf,1);
-    buf.format(" satisfies ");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_EVERY:
-    buf.format("every ");
-    m_conditional->serialize(buf,1);
-    buf.format(" satisfies ");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_IF:
-    buf.format("if (");
-    m_conditional->serialize(buf,1);
-    buf.format(") then ");
-    m_left->serialize(buf,1);
-    buf.format(" else ");
-    m_right->serialize(buf,1);
-    break;
-  case XPATH_EXPR_VAR_IN:
-    buf.format("$");
-    print_qname(buf,m_qn);
-    buf.format(" in ");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_OR:
-    printBinaryExpr(buf,"or");
-    break;
-  case XPATH_EXPR_AND:
-    printBinaryExpr(buf,"and");
-    break;
-  case XPATH_EXPR_COMPARE_VALUES:
-    switch (m_compare) {
-    case XPATH_VALUE_COMP_EQ:
-      printBinaryExpr(buf,"eq");
-      break;
-    case XPATH_VALUE_COMP_NE:
-      printBinaryExpr(buf,"ne");
-      break;
-    case XPATH_VALUE_COMP_LT:
-      printBinaryExpr(buf,"lt");
-      break;
-    case XPATH_VALUE_COMP_LE:
-      printBinaryExpr(buf,"le");
-      break;
-    case XPATH_VALUE_COMP_GT:
-      printBinaryExpr(buf,"gt");
-      break;
-    case XPATH_VALUE_COMP_GE:
-      printBinaryExpr(buf,"ge");
-      break;
-    default:
-      ASSERT(0);
-      break;
-    }
-    break;
-  case XPATH_EXPR_COMPARE_GENERAL:
-    switch (m_compare) {
-    case XPATH_GENERAL_COMP_EQ:
-      printBinaryExpr(buf,"=");
-      break;
-    case XPATH_GENERAL_COMP_NE:
-      printBinaryExpr(buf,"!=");
-      break;
-    case XPATH_GENERAL_COMP_LT:
-      printBinaryExpr(buf,"<");
-      break;
-    case XPATH_GENERAL_COMP_LE:
-      printBinaryExpr(buf,"<=");
-      break;
-    case XPATH_GENERAL_COMP_GT:
-      printBinaryExpr(buf,">");
-      break;
-    case XPATH_GENERAL_COMP_GE:
-      printBinaryExpr(buf,">=");
-      break;
-    default:
-      ASSERT(0);
-      break;
-    }
-    break;
-  case XPATH_EXPR_COMPARE_NODES:
-    switch (m_compare) {
-    case XPATH_NODE_COMP_IS:
-      printBinaryExpr(buf,"is");
-      break;
-    case XPATH_NODE_COMP_PRECEDES:
-      printBinaryExpr(buf,"<<");
-      break;
-    case XPATH_NODE_COMP_FOLLOWS:
-      printBinaryExpr(buf,">>");
-      break;
-    default:
-      ASSERT(0);
-      break;
-    }
-    break;
-  case XPATH_EXPR_TO:
-    printBinaryExpr(buf,"to");
-    break;
-  case XPATH_EXPR_ADD:
-    printBinaryExpr(buf,"+");
-    break;
-  case XPATH_EXPR_SUBTRACT:
-    printBinaryExpr(buf,"-");
-    break;
-  case XPATH_EXPR_MULTIPLY:
-    printBinaryExpr(buf,"*");
-    break;
-  case XPATH_EXPR_DIVIDE:
-    printBinaryExpr(buf,"div");
-    break;
-  case XPATH_EXPR_IDIVIDE:
-    printBinaryExpr(buf,"idiv");
-    break;
-  case XPATH_EXPR_MOD:
-    printBinaryExpr(buf,"mod");
-    break;
-  case XPATH_EXPR_UNION:
-    printBinaryExpr(buf,"union");
-    break;
-  case XPATH_EXPR_UNION2:
-    printBinaryExpr(buf,"|");
-    break;
-  case XPATH_EXPR_INTERSECT:
-    printBinaryExpr(buf,"intersect");
-    break;
-  case XPATH_EXPR_EXCEPT:
-    printBinaryExpr(buf,"except");
-    break;
-  case XPATH_EXPR_INSTANCE_OF: {
-    m_left->serialize(buf,0);
-    buf.format(" instance of ");
-    m_st.printXPath(buf,m_stmt->m_namespaces);
-    break;
-  }
-  case XPATH_EXPR_TREAT:
-    /* FIXME */
-    break;
-  case XPATH_EXPR_CASTABLE:
-    /* FIXME */
-    break;
-  case XPATH_EXPR_CAST:
-    /* FIXME */
-    break;
-  case XPATH_EXPR_UNARY_MINUS:
-    buf.format("-");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_UNARY_PLUS:
-    buf.format("+");
-    m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_ROOT:
-    buf.format("/");
-    if (NULL != m_left)
-      m_left->serialize(buf,1);
-    break;
-  case XPATH_EXPR_STRING_LITERAL: {
-    /* FIXME: quote ' (and other?) characters inside string */
-    buf.format("'%*'",&m_strval);
-    break;
-  }
-  case XPATH_EXPR_INTEGER_LITERAL:
-    buf.format("%d",m_ival);
-    break;
-  case XPATH_EXPR_DECIMAL_LITERAL:
-    buf.format("%f",m_dval);
-    break;
-  case XPATH_EXPR_DOUBLE_LITERAL:
-    buf.format("%f",m_dval);
-    break;
-  case XPATH_EXPR_VAR_REF:
+  case XPATH_VAR_REF:
     buf.format("$");
     print_qname(buf,m_qn);
     break;
-  case XPATH_EXPR_EMPTY:
+  case XPATH_EMPTY:
     break;
-  case XPATH_EXPR_CONTEXT_ITEM:
-    buf.format(".");
-    break;
-  case XPATH_EXPR_NODE_TEST:
-
-    if ((AXIS_PARENT == m_axis) &&
-        (XPATH_NODE_TEST_SEQUENCETYPE == m_nodetest) &&
-        (m_st.isNode())) {
-      /* abbreviated form .. for parent::node() */
-      buf.format("..");
-    }
-    else {
-
-      switch (m_axis) {
-      case AXIS_CHILD:
-        /* nothing, since child is default axis */
-        break;
-      case AXIS_DESCENDANT:
-        buf.format("descendant::");
-        break;
-      case AXIS_ATTRIBUTE:
-        /* use abbreviation @ instead of attribute:: */
-        buf.format("@");
-        break;
-      case AXIS_SELF:
-        buf.format("self::");
-        break;
-      case AXIS_DESCENDANT_OR_SELF:
-        buf.format("descendant-or-self::");
-        break;
-      case AXIS_FOLLOWING_SIBLING:
-        buf.format("following-sibling::");
-        break;
-      case AXIS_FOLLOWING:
-        buf.format("following::");
-        break;
-      case AXIS_NAMESPACE:
-        buf.format("namespace::");
-        break;
-      case AXIS_PARENT:
-        buf.format("parent::");
-        break;
-      case AXIS_ANCESTOR:
-        buf.format("ancestor::");
-        break;
-      case AXIS_PRECEDING_SIBLING:
-        buf.format("preceding-sibling::");
-        break;
-      case AXIS_PRECEDING:
-        buf.format("preceding::");
-        break;
-      case AXIS_ANCESTOR_OR_SELF:
-        buf.format("ancestor-or-self::");
-        break;
-      default:
-        fmessage(stderr,"unknown axis %d\n",m_axis);
-        ASSERT(0);
-        break;
-      }
-      switch (m_nodetest) {
-      case XPATH_NODE_TEST_NAME:
-        print_qname(buf,m_qn);
-        break;
-      case XPATH_NODE_TEST_SEQUENCETYPE:
-        /* FIXME */
-        ASSERT(!"not yet implemented");
-        break;
-      default:
-        ASSERT(0);
-        break;
-      }
-    }
-    break;
-  case XPATH_EXPR_ACTUAL_PARAM:
-    m_left->serialize(buf,0);
-    break;
-  case XPATH_EXPR_FUNCTION_CALL:
-    print_qname(buf,m_qn);
-    buf.format("(");
-    if (m_left)
-      m_left->serialize(buf,1);
-    buf.format(")");
-    break;
-  case XPATH_EXPR_PAREN:
-    buf.format("(");
-    m_left->serialize(buf,1);
-    buf.format(")");
-    break;
-
-  case XPATH_EXPR_ATOMIC_TYPE:
+  case XPATH_ATOMIC_TYPE:
     ASSERT(!"not yet implemented");
     break;
-  case XPATH_EXPR_ITEM_TYPE:
+  case XPATH_ITEM_TYPE:
     ASSERT(!"not yet implemented");
     break;
-  case XPATH_EXPR_SEQUENCE:
-    m_left->serialize(buf,1);
-    buf.format(", ");
-    m_right->serialize(buf,1);
-    break;
-  case XPATH_EXPR_STEP:
-    m_left->serialize(buf,1);
-    buf.format("/");
-    m_right->serialize(buf,1);
-    break;
-  case XPATH_EXPR_VARINLIST:
-    m_left->serialize(buf,1);
-    buf.format(", ");
-    m_right->serialize(buf,1);
-    break;
-  case XPATH_EXPR_PARAMLIST:
-    m_left->serialize(buf,1);
-    buf.format(", ");
-    m_right->serialize(buf,1);
-    break;
-  case XPATH_EXPR_FILTER:
+//   case XPATH_PARAMLIST:
+//     m_left->print(buf);
+//     buf.format(", ");
+//     m_right->print(buf);
+//     break;
+  case XPATH_FILTER:
     ASSERT(!"not yet implemented");
     break;
 
@@ -529,7 +651,7 @@ void Expression::serialize(StringBuffer &buf, int brackets)
 /*     Expression *x = f->filter; */
 /*     buf.format("["); */
 /*     f->filter = NULL; */
-/*     f->serialize(buf,1); */
+/*     f->print(buf); */
 /*     f->filter = x; */
 /*     buf.format("]"); */
 /*   } */
@@ -540,25 +662,16 @@ void Expression::serialize(StringBuffer &buf, int brackets)
 /*     buf.format(")"); */
 }
 
-void Expression::printBinaryExpr(StringBuffer &buf, char *op)
-{
-  m_left->serialize(buf,1);
-  buf.format(" %s ",op);
-  m_right->serialize(buf,1);
-}
-
 void Expression::printTree(int indent)
 {
   message("%p %#i%s %*\n",this,2*indent,Expression_types[m_type],&m_ident);
-  if (m_conditional)
-    m_conditional->printTree(indent+1);
-  if (m_left)
-    m_left->printTree(indent+1);
-  if (m_right)
-    m_right->printTree(indent+1);
+
+  for (unsigned i = 0; i < m_nrefs; i++)
+    if (NULL != m_refs[i])
+      static_cast<Expression*>(m_refs[i])->printTree(indent+1);
 }
 
-Expression *GridXSLT::Expression_parse(const String &str, const char *filename, int baseline, Error *ei,
+Expression *GridXSLT::Expression_parse(const String &str, const String &filename, int baseline, Error *ei,
                        int pattern)
 {
   int r;
@@ -575,7 +688,7 @@ Expression *GridXSLT::Expression_parse(const String &str, const char *filename, 
   return expr;
 }
 
-SequenceType GridXSLT::seqtype_parse(const String &str, const char *filename, int baseline, Error *ei)
+SequenceType GridXSLT::seqtype_parse(const String &str, const String &filename, int baseline, Error *ei)
 {
   int r;
   String source = String::format("__just_seqtype %*",&str);
