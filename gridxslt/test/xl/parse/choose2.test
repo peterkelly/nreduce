@@ -1,0 +1,30 @@
+=================================== PROGRAM ====================================
+testxslt runtests.tmp/input.xl
+===================================== FILE =====================================
+input.xl
+transform {
+  function f:test() {
+    choose {
+      when ($a > $b)
+        value-of (4 + foo(12));
+      otherwise
+        value-of (0);
+    }
+  }
+}
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:functions" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:test">
+    <xsl:choose>
+      <xsl:when test="$a &gt; $b">
+        <xsl:value-of select="4 + foo(12)"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="0"/>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
+</xsl:transform>
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,28 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:functions" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:test">
+    <xsl:analyze-string select="$foo" regex="{$pattern}">
+      <xsl:matching-substring>
+        <xsl:value-of select="."/>
+        <xsl:value-of select="4 + foo(12)"/>
+      </xsl:matching-substring>
+    </xsl:analyze-string>
+  </xsl:function>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:functions" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:test">
+    <xsl:analyze-string select="$foo" regex="{$pattern}">
+      <xsl:matching-substring>
+        <xsl:value-of select="."/>
+        <xsl:value-of select="4 + foo(12)"/>
+      </xsl:matching-substring>
+    </xsl:analyze-string>
+  </xsl:function>
+</xsl:transform>
+================================== RETURN CODE =================================
+0

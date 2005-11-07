@@ -1,0 +1,32 @@
+=================================== PROGRAM ====================================
+testxslt
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:functions" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:test">
+    <xsl:next-match>
+      <xsl:fallback>
+        <xsl:value-of select="'fallback1'"/>
+      </xsl:fallback>
+      <xsl:fallback>
+        <xsl:value-of select="'fallback2'"/>
+      </xsl:fallback>
+    </xsl:next-match>
+  </xsl:function>
+</xsl:transform>
+==================================== OUTPUT ====================================
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:functions" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes" version="2.0">
+  <xsl:function name="f:test">
+    <xsl:next-match>
+      <xsl:fallback>
+        <xsl:value-of select="'fallback1'"/>
+      </xsl:fallback>
+      <xsl:fallback>
+        <xsl:value-of select="'fallback2'"/>
+      </xsl:fallback>
+    </xsl:next-match>
+  </xsl:function>
+</xsl:transform>
+================================== RETURN CODE =================================
+0
