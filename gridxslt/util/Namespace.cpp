@@ -53,6 +53,11 @@ QName::QName(const String &prefix, const String &localPart)
 {
 }
 
+QName::QName(const String &localPart)
+  : m_localPart(localPart)
+{
+}
+
 QName::QName(const parse_qname &qn)
   : m_prefix(qn.prefix), m_localPart(qn.localpart)
 {
@@ -124,8 +129,13 @@ NSName::NSName()
 {
 }
 
-NSName::NSName(String ns, String name)
+NSName::NSName(const String &ns, const String &name)
   : m_ns(ns), m_name(name)
+{
+}
+
+NSName::NSName(const String &name)
+  : m_name(name)
 {
 }
 
@@ -150,8 +160,41 @@ bool GridXSLT::operator==(const NSName &a, const NSName &b)
 }
 
 QNameTest::QNameTest()
-  : wcprefix(0), wcname(0)
+  : wcprefix(false), wcname(false)
 {
+}
+
+QNameTest::QNameTest(const String &str)
+  : wcprefix(false), wcname(false)
+{
+  String prefix;
+  String localpart;
+
+  int colonpos = str.indexOf(":");
+  if (0 > colonpos) {
+    prefix = String::null();
+    localpart = str;
+  }
+  else {
+    prefix = str.substring(0,colonpos);
+    localpart = str.substring(colonpos+1);
+  }
+
+  if (!prefix.isNull()) {
+    if (prefix == "*")
+      wcprefix = 1;
+    else
+      qn.m_prefix = prefix;
+  }
+
+  if (localpart == "*") {
+    if (prefix.isNull())
+      wcprefix = 1;
+    wcname = 1;
+  }
+  else {
+    qn.m_localPart = localpart;
+  }
 }
 
 QNameTest::~QNameTest()
@@ -181,7 +224,6 @@ bool NSNameTest::matches(const NSName &nn1)
 
 definition::definition()
 {
-  memset(&loc,0,sizeof(sourceloc));
 }
 
 definition::~definition()
@@ -200,13 +242,6 @@ NamespaceMap::NamespaceMap()
 
 NamespaceMap::~NamespaceMap()
 {
-}
-
-void GridXSLT::NamespaceMap_free(NamespaceMap *map, int free_parents)
-{
-  if (free_parents)
-    NamespaceMap_free(map->parent,1);
-  delete map;
 }
 
 void NamespaceMap::add_preferred(const String &href1, const String &preferred_prefix1)
@@ -316,17 +351,16 @@ NSNameTest *GridXSLT::NSNameTest_copy(NSNameTest *test)
 sourceloc GridXSLT::sourceloc_copy(sourceloc sloc)
 {
   sourceloc copy;
-  copy.uri = sloc.uri ? strdup(sloc.uri) : NULL;
+  copy.uri = sloc.uri;
   copy.line = sloc.line;
   return copy;
 }
 
 void GridXSLT::sourceloc_free(sourceloc sloc)
 {
-  free(sloc.uri);
 }
 
-const sourceloc nosourceloc1 = { uri: NULL, line: -1 };
+const sourceloc nosourceloc1 = sourceloc();
 
 sourceloc GridXSLT::get_nosourceloc()
 {

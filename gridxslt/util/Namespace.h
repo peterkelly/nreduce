@@ -53,8 +53,11 @@ struct parse_qname {
   char *localpart;
 };
 
-struct sourceloc {
-  char *uri;
+class sourceloc {
+public:
+  sourceloc() : line(0) { }
+  sourceloc(const String &_uri, int _line) : uri(_uri), line(_line) { }
+  String uri;
   int line;
 };
 
@@ -62,6 +65,7 @@ class QName : public Printable {
 public:
   QName();
   QName(const String &prefix, const String &localPart);
+  QName(const String &localPart);
   QName(const parse_qname &qn);
 
   static QName null();
@@ -82,7 +86,8 @@ inline bool operator!=(const QName &a, const QName &b) { return !(a==b); }
 class NSName : public Printable {
 public:
   NSName();
-  NSName(String ns, String name);
+  NSName(const String &ns, const String &name);
+  NSName(const String &name);
 
   static NSName null();
 
@@ -100,11 +105,12 @@ inline bool operator!=(const NSName &a, const NSName &b) { return !(a==b); }
 class QNameTest {
 public:
   QNameTest();
+  QNameTest(const String &str);
   ~QNameTest();
 
   QName qn;
-  int wcprefix;
-  int wcname;
+  bool wcprefix;
+  bool wcname;
 };
 
 class NSNameTest {
@@ -168,8 +174,6 @@ public:
 };
 
 void ns_def_free(ns_def *def);
-
-void NamespaceMap_free(NamespaceMap *map, int free_parents);
 
 NSName qname_to_nsname(NamespaceMap *map, const QName &qn);
 QName nsname_to_qname(NamespaceMap *map, const NSName &nn);
