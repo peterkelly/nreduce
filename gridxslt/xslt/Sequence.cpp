@@ -77,7 +77,7 @@ static Value doc(Environment *env, List<Value> &args)
   }
 
   docnode = new Node(NODE_DOCUMENT);
-  rootelem = Node::fromXMLNode(root);
+  rootelem = new Node(root);
   df_strip_spaces(rootelem,env->space_decls);
   docnode->addChild(rootelem);
 
