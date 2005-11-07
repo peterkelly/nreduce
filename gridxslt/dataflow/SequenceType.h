@@ -118,7 +118,7 @@ public:
 
   void printFS(StringBuffer &buf, NamespaceMap *namespaces);
   void printXPath(StringBuffer &buf, NamespaceMap *namespaces);
-  int resolve(NamespaceMap *namespaces, Schema *s, const char *filename,
+  int resolve(NamespaceMap *namespaces, Schema *s, const String &filename,
               int line, Error *ei);
   void toList(list **types);
   int isDerivedFrom(SequenceTypeImpl *base);
@@ -182,7 +182,7 @@ public:
 
   void printFS(StringBuffer &buf, NamespaceMap *namespaces) { impl->printFS(buf,namespaces); }
   void printXPath(StringBuffer &buf, NamespaceMap *namespaces) { impl->printXPath(buf,namespaces); }
-  int resolve(NamespaceMap *namespaces, Schema *s, const char *filename, int line, Error *ei)
+  int resolve(NamespaceMap *namespaces, Schema *s, const String &filename, int line, Error *ei)
     { return impl->resolve(namespaces,s,filename,line,ei); }
   void toList(list **types) { impl->toList(types); }
   int isDerivedFrom(SequenceType &base) { return impl->isDerivedFrom(base.impl); }
@@ -226,6 +226,7 @@ class Node {
   DISABLE_COPY(Node)
 public:
   Node(int type);
+  Node(xmlNodePtr xn);
   ~Node();
 
   Node *root();
@@ -237,21 +238,30 @@ public:
   void insertChild(Node *c, Node *before);
   void addAttribute(Node *attr);
   void addNamespace(Node *ns);
-  static Node *fromXMLNode(xmlNodePtr xn);
   int checkTree();
   Node *traversePrev(Node *subtree);
   Node *traverseNext(Node *subtree);
   void printXML(xmlTextWriter *writer);
   void printBuf(StringBuffer &buf);
 
+  String getAttribute(const NSName &attrName) const;
+  bool hasAttribute(const NSName &attrName) const;
+
   int m_type;
   List<Node*> m_namespaces;
   List<Node*> m_attributes;
   String m_prefix;
   NSName m_ident;
+  QName m_qn;
   String m_target;
   String m_value;
   int m_refcount;
+
+  Node *next() const { return m_next; }
+  Node *prev() const { return m_prev; }
+  Node *firstChild() const { return m_first_child; }
+  Node *lastChild() const { return m_last_child; }
+  Node *parent() const { return m_parent; }
 
   Node *m_next;
   Node *m_prev;
@@ -259,6 +269,9 @@ public:
   Node *m_last_child;
   Node *m_parent;
   int m_nodeno;
+
+  xmlNodePtr m_xn;
+  int m_line;
 };
 
 class ValueImpl : public GridXSLT::Shared<ValueImpl> {

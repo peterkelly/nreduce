@@ -293,7 +293,7 @@ void ItemType::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
 }
 
 static int resolve_object(const QName &qn, NamespaceMap *namespaces, Schema *s,
-                          const char *filename, int line,Error *ei, void **obj, int type)
+                          const String &filename, int line,Error *ei, void **obj, int type)
 {
   ns_def *def = NULL;
   String ns;
@@ -326,7 +326,7 @@ static int resolve_object(const QName &qn, NamespaceMap *namespaces, Schema *s,
   return 0;
 }
 
-int SequenceTypeImpl::resolve(NamespaceMap *namespaces, Schema *s, const char *filename,
+int SequenceTypeImpl::resolve(NamespaceMap *namespaces, Schema *s, const String &filename,
                           int line, Error *ei)
 {
   if (NULL != m_left)
@@ -813,7 +813,9 @@ Node::Node(int type)
     m_first_child(NULL),
     m_last_child(NULL),
     m_parent(NULL),
-    m_nodeno(0)
+    m_nodeno(0),
+    m_xn(NULL),
+    m_line(0)
 {
 #ifdef TRACE_ALLOC
   list_append(&allocnodes,this);
@@ -972,9 +974,18 @@ void Node::addNamespace(Node *ns)
   ns->m_parent = this;
 }
 
-Node *Node::fromXMLNode(xmlNodePtr xn)
+Node::Node(xmlNodePtr xn)
+  : m_type(0),
+    m_refcount(0),
+    m_next(NULL),
+    m_prev(NULL),
+    m_first_child(NULL),
+    m_last_child(NULL),
+    m_parent(NULL),
+    m_nodeno(0),
+    m_xn(xn),
+    m_line(xn->line)
 {
-  Node *n = NULL;
   xmlNodePtr c;
   struct _xmlAttr *aptr;
 
@@ -982,15 +993,24 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
   case XML_ELEMENT_NODE: {
     xmlNs *ns;
     xmlNodePtr p;
-    n = new Node(NODE_ELEMENT);
-    n->m_ident.m_name = xn->name;
-    /* FIXME: prefix/namespace */
+    m_type = NODE_ELEMENT;
+    m_ident.m_name = xn->name;
+    m_qn.m_localPart = xn->name;
+    if (xn->ns) {
+      m_ident.m_ns = xn->ns->href;
+      m_qn.m_localPart = xn->ns->prefix;
+    }
 
     for (aptr = xn->properties; aptr; aptr = aptr->next) {
       Node *attr = new Node(NODE_ATTRIBUTE);
       StringBuffer buf;
       xmlNodePtr ac;
       attr->m_ident.m_name = aptr->name;
+      attr->m_qn.m_localPart = aptr->name;
+      if (aptr->ns) {
+        attr->m_ident.m_ns = aptr->ns->href;
+        attr->m_qn.m_localPart = aptr->ns->prefix;
+      }
 
       for (ac = aptr->children; ac; ac = ac->next) {
         if (NULL != ac->content)
@@ -998,7 +1018,7 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
       }
 
       attr->m_value = buf.contents();
-      n->addAttribute(attr);
+      addAttribute(attr);
     }
 
 
@@ -1007,7 +1027,7 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
         Node *nsnode = new Node(NODE_NAMESPACE);
         nsnode->m_prefix = ns->prefix;
         nsnode->m_value = ns->href;
-        n->addNamespace(nsnode);
+        addNamespace(nsnode);
       }
     }
 
@@ -1018,21 +1038,21 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
     ASSERT(0);
     break;
   case XML_TEXT_NODE:
-    n = new Node(NODE_TEXT);
-    n->m_value = xn->content;
+    m_type = NODE_TEXT;
+    m_value = xn->content;
     break;
   case XML_PI_NODE:
-    n = new Node(NODE_PI);
-    n->m_target = xn->name;
-    n->m_value = xn->content;
+    m_type = NODE_PI;
+    m_target = xn->name;
+    m_value = xn->content;
     break;
   case XML_COMMENT_NODE:
-    n = new Node(NODE_COMMENT);
+    m_type = NODE_COMMENT;
     /* FIXME: do we know that xn->content will always be non-NULL here? */
-    n->m_value = xn->content;
+    m_value = xn->content;
     break;
   case XML_DOCUMENT_NODE:
-    n = new Node(NODE_DOCUMENT);
+    m_type = NODE_DOCUMENT;
     break;
   default:
     /* FIXME: support other node types such as CDATA sections and entities */
@@ -1040,12 +1060,10 @@ Node *Node::fromXMLNode(xmlNodePtr xn)
   }
 
   for (c = xn->children; c; c = c->next) {
-    Node *cn = Node::fromXMLNode(c);
+    Node *cn = new Node(c);
     if (NULL != cn)
-      n->addChild(cn);
+      addChild(cn);
   }
-
-  return n;
 }
 
 int Node::checkTree()
@@ -1202,6 +1220,22 @@ void Node::printBuf(StringBuffer &buf)
     ASSERT(!"invalid node type");
     break;
   }
+}
+
+String Node::getAttribute(const NSName &attrName) const
+{
+  for (Iterator<Node*> it = m_attributes; it.haveCurrent(); it++)
+    if ((*it)->m_ident == attrName)
+      return (*it)->m_value;
+  return String::null();
+}
+
+bool Node::hasAttribute(const NSName &attrName) const
+{
+  for (Iterator<Node*> it = m_attributes; it.haveCurrent(); it++)
+    if ((*it)->m_ident == attrName)
+      return true;
+  return false;
 }
 
 ValueImpl::ValueImpl(const SequenceType &_st)
