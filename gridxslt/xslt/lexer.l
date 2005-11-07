@@ -205,7 +205,7 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 "otherwise"     { return OTHERWISE; }
 "call"          { return CALL; }
 "void"          { return VOID; }
-"override"      { return OVERRIDE; }
+"nooverride"      { return NOOVERRIDE; }
 "required"      { return REQUIRED; }
 "tunnel"        { return TUNNEL; }
 "transform"     { return TRANSFORM; }
