@@ -1,0 +1,26 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0"?>
+<xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+               xmlns:f="urn:functions"
+               xmlns:xs="http://www.w3.org/2001/XMLSchema"
+               xmlns:xdt="http://www.w3.org/2005/04/xpath-datatypes"
+               version="2.0">
+
+  <xsl:output method="text"/>
+
+  <xsl:template match="/">
+    <xsl:value-of select="round-half-to-even(xs:double('123.456789'),0)"/>
+  </xsl:template>
+
+</xsl:transform>
+==================================== OUTPUT ====================================
+123
+================================== RETURN CODE =================================
+0
