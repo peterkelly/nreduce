@@ -197,7 +197,7 @@ public:
   virtual SyntaxNode *resolveVar(const QName &varname);
   virtual int findReferencedVars(Compilation *comp, Function *fun, SyntaxNode *below,
                                  List<var_reference*> &vars);
-  virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor) { ASSERT(0);return 0; }
+  virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
   virtual void print(StringBuffer &buf) { ASSERT(!"Cannot print this type of syntax node"); }
   bool inConditional() const;
   bool isBelow(SyntaxNode *below) const;
