@@ -54,8 +54,6 @@ XPATH_EXCEPT
 XPATH_TREAT
 XPATH_CASTABLE
 XPATH_CAST
-XPATH_UNARY_MINUS
-XPATH_UNARY_PLUS
 XPATH_ATOMIC_TYPE
 XPATH_ITEM_TYPE
 XPATH_VARINLIST
@@ -159,7 +157,7 @@ int BinaryExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
     funName = NSName(FN_NAMESPACE,"numeric-divide");
     break;
   case XPATH_IDIVIDE:
-    ASSERT(!"not implemented");
+    funName = NSName(FN_NAMESPACE,"numeric-integer-divide");
     break;
   case XPATH_MOD:
     funName = NSName(FN_NAMESPACE,"numeric-mod");
@@ -193,8 +191,16 @@ int BinaryExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
 
 int UnaryExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
 {
-  ASSERT(!"not yet implemented");
-  return -1;
+  CHECK_CALL(m_source->compile(comp,fun,cursor))
+  if (XPATH_UNARY_PLUS == m_type) {
+    Instruction *plus = comp->specialop(fun,FN_NAMESPACE,"numeric-unary-plus",1,m_sloc);
+    comp->set_and_move_cursor(cursor,plus,0,plus,0);
+  }
+  else {
+    Instruction *minus = comp->specialop(fun,FN_NAMESPACE,"numeric-unary-minus",1,m_sloc);
+    comp->set_and_move_cursor(cursor,minus,0,minus,0);
+  }
+  return 0;
 }
 
 int CallExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
@@ -217,6 +223,8 @@ int CallExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
     NSName ident = m_ident;
     if (ident.m_ns.isNull())
       ident.m_ns = FN_NAMESPACE;
+    // FIXME: shouldn't allow direct access to operators (as distinct from builtin functions)...
+    // must use namespace to access these (e.g. op:numeric-integer-divide)
     call = fun->addBuiltinInstruction(ident,supparam,m_sloc);
     if (NULL != call) {
       nparams = supparam;
@@ -419,7 +427,7 @@ int DecimalExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
 {
   Instruction *instr = fun->addInstruction(OP_CONST,m_sloc);
   instr->m_outports[0].st = SequenceType(xs_g->decimal_type);
-  instr->m_cvalue = Value(m_dval);
+  instr->m_cvalue = Value::decimal(m_dval);
   comp->set_and_move_cursor(cursor,instr,0,instr,0);
   return 0;
 }
