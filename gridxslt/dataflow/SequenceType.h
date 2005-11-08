@@ -279,6 +279,7 @@ class ValueImpl : public GridXSLT::Shared<ValueImpl> {
 public:
   ValueImpl(const SequenceType &_st);
   ValueImpl(const SequenceType &_st, const Value &left, const Value &right);
+  ValueImpl(Type *t);
   ValueImpl(Context *c);
   ValueImpl(int i);
   ValueImpl(float f);
@@ -302,20 +303,23 @@ public:
   ValueImpl *atomize();
 
   inline bool isContext() const { return isDerivedFrom(xs_g->context_type); }
-  inline bool isInt() const { return isDerivedFrom(xs_g->integer_type); }
+  inline bool isInteger() const { return isDerivedFrom(xs_g->integer_type); }
   inline bool isFloat() const { return isDerivedFrom(xs_g->float_type); }
   inline bool isDouble() const { return isDerivedFrom(xs_g->double_type); }
+  inline bool isDecimal() const { return (isDerivedFrom(xs_g->decimal_type) && !isInteger()); }
   inline bool isString() const { return isDerivedFrom(xs_g->string_type); }
-  inline bool isBool() const { return isDerivedFrom(xs_g->boolean_type); }
+  inline bool isBoolean() const { return isDerivedFrom(xs_g->boolean_type); }
   inline bool isNode() const
     { return (SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC != st.itemType()->m_kind); }
+  inline bool isNumeric() const { return (isInteger() || isFloat() || isDouble() || isDecimal()); }
 
   inline Context *asContext() const { ASSERT(isContext()); return value.c; }
-  inline int asInt() const { ASSERT(isInt()); return value.i; }
+  inline int asInteger() const { ASSERT(isInteger()); return value.i; }
   inline float asFloat() const { ASSERT(isFloat()); return value.f; }
   inline double asDouble() const { ASSERT(isDouble()); return value.d; }
+  inline double asDecimal() const { ASSERT(isDecimal()); return value.d; }
   inline String asString() const { ASSERT(isString()); return value.s; }
-  inline bool asBool() const { ASSERT(isBool()); return value.b; }
+  inline bool asBoolean() const { ASSERT(isBoolean()); return value.b; }
   inline Node *asNode() const { ASSERT(isNode()); return value.n; }
 
   inline SequenceType &type() { return st; }
@@ -349,6 +353,7 @@ public:
   Value(const SequenceType &_st) { impl = new ValueImpl(_st); impl->ref(); }
   Value(const SequenceType &_st, const Value &left, const Value &right)
     { impl = new ValueImpl(_st,left,right); impl->ref(); }
+  Value(Type *t) { impl = new ValueImpl(t); impl->ref(); }
   Value(Context *c) { impl = new ValueImpl(c); impl->ref(); }
   Value(int i) { impl = new ValueImpl(i); impl->ref(); }
   Value(float f) { impl = new ValueImpl(f); impl->ref(); }
@@ -357,6 +362,8 @@ public:
   Value(const String &s) { impl = new ValueImpl(s); impl->ref(); }
   Value(bool b) { impl = new ValueImpl(b); impl->ref(); }
   Value(Node *n) { impl = new ValueImpl(n); impl->ref(); }
+
+  static Value decimal(double d);
 
   Value(ValueImpl *_impl) {
     impl = _impl;
@@ -384,26 +391,29 @@ public:
 
   int isDerivedFrom(Type *type) const { return impl->isDerivedFrom(type); }
   void fprint(FILE *f) const { impl->fprint(f); }
-  ValueImpl **sequenceToArray() { return impl->sequenceToArray(); }
-  void getSequenceValues(List<Value> &values) { impl->getSequenceValues(values); }
-  List<Value> sequenceToList() { return impl->sequenceToList(); }
-  String convertToString() { return impl->convertToString(); }
-  Value atomize() { return impl->atomize(); }
+  ValueImpl **sequenceToArray() const { return impl->sequenceToArray(); }
+  void getSequenceValues(List<Value> &values) const { impl->getSequenceValues(values); }
+  List<Value> sequenceToList() const { return impl->sequenceToList(); }
+  String convertToString() const { return impl->convertToString(); }
+  Value atomize() const { return impl->atomize(); }
 
   inline bool isContext() const { return impl->isContext(); }
-  inline bool isInt() const { return impl->isInt(); }
+  inline bool isInteger() const { return impl->isInteger(); }
   inline bool isFloat() const { return impl->isFloat(); }
   inline bool isDouble() const { return impl->isDouble(); }
+  inline bool isDecimal() const { return impl->isDecimal(); }
   inline bool isString() const { return impl->isString(); }
-  inline bool isBool() const { return impl->isBool(); }
+  inline bool isBoolean() const { return impl->isBoolean(); }
   inline bool isNode() const { return impl->isNode(); }
+  inline bool isNumeric() const { return impl->isNumeric(); }
 
   inline Context *asContext() const { return impl->asContext(); }
-  inline int asInt() const { return impl->asInt(); }
+  inline int asInteger() const { return impl->asInteger(); }
   inline float asFloat() const { return impl->asFloat(); }
   inline double asDouble() const { return impl->asDouble(); }
+  inline double asDecimal() const { return impl->asDecimal(); }
   inline String asString() const { return impl->asString(); }
-  inline bool asBool() const { return impl->asBool(); }
+  inline bool asBoolean() const { return impl->asBoolean(); }
   inline Node *asNode() const { return impl->asNode(); }
 
   inline SequenceType &type() { return impl->type(); }

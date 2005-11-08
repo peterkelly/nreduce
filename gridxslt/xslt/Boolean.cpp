@@ -43,7 +43,7 @@ static Value not1(Environment *env, List<Value> &args)
   if (v1.isNull())
     return Value::null();
 
-  return Value(!v1.asBool());
+  return Value(!v1.asBoolean());
 }
 
 static Value true0(Environment *env, List<Value> &args)

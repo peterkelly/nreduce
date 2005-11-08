@@ -721,8 +721,8 @@ void Program::outputDF(FILE *f, bool internal)
           String escaped = escape_str(instr->m_cvalue.asString());
           fmessage(f," = \"%*\"",&escaped);
         }
-        else if (instr->m_cvalue.isInt()) {
-          fmessage(f," = %d",instr->m_cvalue.asInt());
+        else if (instr->m_cvalue.isInteger()) {
+          fmessage(f," = %d",instr->m_cvalue.asInteger());
         }
         else {
           ASSERT(!"unknown constant type");

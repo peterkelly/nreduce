@@ -474,8 +474,8 @@ static Value range(Environment *env, List<Value> &args)
 
   ASSERT(args[0].isDerivedFrom(xs_g->integer_type));
   ASSERT(args[1].isDerivedFrom(xs_g->integer_type));
-  min = args[0].asInt();
-  max = args[1].asInt();
+  min = args[0].asInteger();
+  max = args[1].asInteger();
 
   if (min <= max) {
     int i;
@@ -810,8 +810,8 @@ static Value filter(Environment *env, List<Value> &args)
     Value p = *pit;
     bool matches = false;
 
-    if (p.isInt()) {
-      matches = (pos == (int)p.asInt());
+    if (p.isInteger()) {
+      matches = (pos == (int)p.asInteger());
     }
     else if (p.isFloat()) {
       matches = (pos == (int)p.asFloat());
@@ -825,7 +825,7 @@ static Value filter(Environment *env, List<Value> &args)
       Value b = ebv(env,current);
       if (b.isNull())
         return Value::null();
-      matches = b.asBool();
+      matches = b.asBoolean();
     }
 
     if (matches)
@@ -877,8 +877,8 @@ Value ebv(Environment *env, List<Value> &args)
     if (args[0].isDouble())
       return Value((0.0 != args[0].asDouble()) || isnan(args[0].asDouble()));
 
-    if (args[0].isInt())
-      return Value((0.0 != args[0].asInt()) || isnan(args[0].asInt()));
+    if (args[0].isInteger())
+      return Value((0.0 != args[0].asInteger()) || isnan(args[0].asInteger()));
 
     /* 2. If its operand is a sequence whose first item is a node, fn:boolean returns true. */
     if (ITEM_ATOMIC != args[0].type().itemType()->m_kind)
@@ -914,7 +914,7 @@ static Value and2(Environment *env, List<Value> &args)
   if (v2.isNull()) {
     return Value::null();
   }
-  return Value(v1.asBool() && v2.asBool());
+  return Value(v1.asBoolean() && v2.asBoolean());
 }
 
 static Value or2(Environment *env, List<Value> &args)
@@ -934,7 +934,7 @@ static Value or2(Environment *env, List<Value> &args)
   if (v2.isNull()) {
     return Value::null();
   }
-  return Value(v1.asBool() || v2.asBool());
+  return Value(v1.asBoolean() || v2.asBoolean());
 }
 
 static Value dot(Environment *env, List<Value> &args)
@@ -951,6 +951,7 @@ static Value dot(Environment *env, List<Value> &args)
 
 static Value instanceof(Environment *env, List<Value> &args)
 {
+  SequenceType st = args[0].type();
   if (args[0].type().isDerivedFrom(env->instr->m_seqtypetest))
     return Value(true);
   else

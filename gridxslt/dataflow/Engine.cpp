@@ -218,7 +218,7 @@ int df_fire_activity(ExecutionState *state, Activity *a)
     break;
   case OP_SPLIT:
     ASSERT(a->values[0].isDerivedFrom(xs_g->boolean_type));
-    if (!a->values[0].asBool()) {
+    if (!a->values[0].asBoolean()) {
       df_output_value(a,0,a->values[1]);
       df_deref_activity(a->outports[1].a,0,a->outports[2].a);
     }
