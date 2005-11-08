@@ -242,6 +242,13 @@ int SyntaxNode::findReferencedVars(Compilation *comp, Function *fun, SyntaxNode 
   return 0;
 }
 
+int SyntaxNode::compile(Compilation *comp, Function *fun, OutputPort **cursor)
+{
+  message("Compilation of syntax node type %d is not supported\n",m_type);
+  ASSERT(0);
+  return 0;
+}
+
 bool SyntaxNode::inConditional() const
 {
   if (!m_parent)
