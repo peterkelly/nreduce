@@ -41,11 +41,11 @@ test.xsl
   </xsl:function>
 
   <xsl:template match="/">
-    <xsl:value-of select="f:shownum(xs:integer(false()))"/>
+    <xsl:value-of select="f:shownum(xs:decimal(true()))"/>
   </xsl:template>
 
 </xsl:transform>
 ==================================== OUTPUT ====================================
-integer: 0
+decimal: 1
 ================================== RETURN CODE =================================
 0

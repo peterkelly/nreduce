@@ -1,5 +1,6 @@
 =================================== PROGRAM ====================================
 gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+skipsubst
 ===================================== FILE =====================================
 in.xml
 <?xml version="1.0"?>
@@ -41,11 +42,11 @@ test.xsl
   </xsl:function>
 
   <xsl:template match="/">
-    <xsl:value-of select="f:shownum(xs:integer(false()))"/>
+    <xsl:value-of select="f:shownum(xs:decimal(xs:float('-12.4')))"/>
   </xsl:template>
 
 </xsl:transform>
 ==================================== OUTPUT ====================================
-integer: 0
+decimal: -12.4
 ================================== RETURN CODE =================================
 0
