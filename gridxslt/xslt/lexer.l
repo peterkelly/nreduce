@@ -173,7 +173,7 @@ NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
 "and"           { return AND; }
 "comment"	      { return COMMENT; }
 "div"           { return DIV; }
-"udiv"          { return IDIV; }
+"idiv"          { return IDIV; }
 "mod"           { return MOD; }
 "node"          { return NODE; }
 "or"            { return OR; }
