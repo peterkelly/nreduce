@@ -105,6 +105,8 @@ df_seroptions::df_seroptions(const NSName &method)
   }
 
   m_method = method;
+  if (m_method.isNull())
+    m_method = NSName("xml");
   m_normalization_form = "none";
   m_omit_xml_declaration = 0;
   m_standalone = STANDALONE_OMIT;
@@ -649,38 +651,16 @@ static Node *get_indented_doc(Node *n)
   return copy;
 }
 
-int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options,
-                 Error *ei)
+static int df_serialize_xml(Node *doc, stringbuf *buf, df_seroptions *options, Error *ei)
 {
-  Value normseq = df_normalize_sequence(v,ei);
-  Node *doc;
-  xmlOutputBuffer *xb;
-  xmlTextWriter *writer;
-  char *newline;
-  int contentstart;
-  int contentlen;
-
-  if (normseq.isNull())
-    return -1;
-
-  /* FIXME: when indent is disabled, saxon does not print a newline after the <?xml...?>
-     declaration. If we want to be consistent with saxon (for testing purposes) we need to do
-     this but I'm not sure if libxml supports it. */
-
-  doc = normseq.asNode()->ref();
-
-  ASSERT(doc->checkTree());
-
   if (options->m_indent) {
-    Node *olddoc = doc;
-    doc = get_indented_doc(olddoc);
+    doc = get_indented_doc(doc);
     ASSERT(doc->checkTree());
     debug("identation: new doc has %d refs\n",doc->m_refcount);
-    olddoc->deref();
   }
 
-  xb = xmlOutputBufferCreateIO(serialize_stringbuf,NULL,buf,NULL);
-  writer = xmlNewTextWriter(xb);
+  xmlOutputBuffer *xb = xmlOutputBufferCreateIO(serialize_stringbuf,NULL,buf,NULL);
+  xmlTextWriter *writer = xmlNewTextWriter(xb);
 
   xmlTextWriterStartDocument(writer,NULL,"UTF-8",NULL);
 
@@ -691,9 +671,9 @@ int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options,
   xmlFreeTextWriter(writer);
 
   /* Remove newline after XML declaration */
-  newline = strchr(buf->data,'\n');
-  contentstart = newline+1-buf->data;
-  contentlen = buf->size-1-contentstart;
+  char *newline = strchr(buf->data,'\n');
+  int contentstart = newline+1-buf->data;
+  int contentlen = buf->size-1-contentstart;
   ASSERT(NULL != newline);
   memmove(newline,newline+1,contentlen);
   buf->size--;
@@ -704,9 +684,52 @@ int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options,
   buf->size--;
   buf->data[buf->size-1] = '\0';
 
-  doc->deref();
+  if (options->m_indent)
+    doc->deref();
 
   return 0;
+}
+
+static int df_serialize_text(Node *doc, stringbuf *buf, df_seroptions *options, Error *ei)
+{
+  StringBuffer sb;
+  doc->printBuf(sb);
+  char *text = sb.contents().cstring();
+  stringbuf_append(buf,text,strlen(text));
+  free(text);
+  return 0;
+}
+
+int GridXSLT::df_serialize(Value &v, stringbuf *buf, df_seroptions *options, Error *ei)
+{
+  Value normseq = df_normalize_sequence(v,ei);
+  int r = 0;
+
+  if (normseq.isNull())
+    return -1;
+
+  /* FIXME: when indent is disabled, saxon does not print a newline after the <?xml...?>
+     declaration. If we want to be consistent with saxon (for testing purposes) we need to do
+     this but I'm not sure if libxml supports it. */
+
+  Node *doc = normseq.asNode()->ref();
+
+  ASSERT(doc->checkTree());
+
+  if (options->m_method == NSName("xml")) {
+    r = df_serialize_xml(doc,buf,options,ei);
+  }
+  else if (options->m_method == NSName("text")) {
+    r = df_serialize_text(doc,buf,options,ei);
+  }
+  else {
+    r = error(ei,String::null(),0,String::null(),
+              "Serialization method %* is not supported",&options->m_method);
+  }
+
+  doc->deref();
+
+  return r;
 }
 
 /* Note: this is only safe to call on a newly created tree! If there are variables that
