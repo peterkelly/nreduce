@@ -34,6 +34,16 @@ using namespace GridXSLT;
 
 // See conversion table in XQuery/XPath functions and operators section 17.1
 
+// Note: when casting from a numeric type to itself, we create a new value even though
+// it's the same type. This is because the argument may be a subtype and we want the
+// cast operator to return the actual type itself
+
+// FIXME: Here we just use the native C conversions; the spec gives more detail about
+// the conversion process. Should really confirm that we conform to these.
+
+// FIXME: we should probably raise an error when an attempt to cast from an invalid type
+// is made... e.g. converting from one of the date types to a number
+
 static Value cvstring(Environment *env, List<Value> &args)
 {
   /* FIXME */
@@ -50,65 +60,130 @@ static Value cvboolean(Environment *env, List<Value> &args)
 
 static Value cvdecimal(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  if (args[0].isNumeric() && !args[0].isInteger()) {
+    double d;
+    if (args[0].isFloat())
+      d = args[0].asFloat();
+    else if (args[0].isDouble())
+      d = args[0].asDouble();
+    else 
+      d = args[0].asDecimal();
+    if (isinf(d) || isnan(d)) {
+      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","invalid lexical value");
+      return Value::null();
+    }
+  }
+
+  if (args[0].isFloat())
+    return Value::decimal(double(args[0].asFloat()));
+
+  if (args[0].isDouble())
+    return Value::decimal(args[0].asDouble());
+
+  if (args[0].isInteger())
+    return Value::decimal(double(args[0].asInteger()));
+
+  if (args[0].isDecimal())
+    return Value::decimal(double(args[0].asDecimal()));
+
+  if (args[0].isBoolean())
+    return Value::decimal(double(args[0].asBoolean() ? 1.0 : 0.0));
+
+  String str = args[0].convertToString().collapseWhitespace();
+  if (0 == str.length()) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+    return Value::null();
+  }
+
+  char *s = str.cstring();
+  char *end = NULL;
+  errno = 0;
+  double d = strtod(s,&end);
+  Value v;
+  if ('\0' != *end)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+  else if (0 != errno)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for double");
+  else
+    v = Value::decimal(d);
+  free(s);
+  return v;
 }
 
 static Value cvfloat(Environment *env, List<Value> &args)
 {
-  if (args[0].isDerivedFrom(xs_g->float_type)) {
-    return Value(args[0].asFloat());
-  }
-  else if (args[0].isDerivedFrom(xs_g->double_type)) {
-    return Value(float(args[0].asDouble()));
-  }
-  else if (args[0].isDerivedFrom(xs_g->integer_type) ||
-           args[0].isDerivedFrom(xs_g->decimal_type)) {
-    return Value(float(args[0].asInt()));
-  }
-  else if (args[0].isDerivedFrom(xs_g->boolean_type)) {
-    if (args[0].asBool())
-      return Value(float(1));
-    else
-      return Value(float(0));
-  }
-  else if (args[0].isDerivedFrom(xs_g->untyped_atomic) ||
-           args[0].isDerivedFrom(xs_g->string_type)) {
+  if (args[0].isFloat())
+    return args[0].asFloat();
 
-    if (0 == args[0].asString().length()) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-      return Value::null();
-    }
+  if (args[0].isDouble())
+    return float(args[0].asDouble());
 
-    char *s = args[0].asString().collapseWhitespace().cstring();
-    char *end = NULL;
-    errno = 0;
-    float f = strtof(s,&end);
-    if ('\0' != *end) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-      free(s);
-      return Value::null();
-    }
-    if (0 != errno) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for integer");
-      free(s);
-      return Value::null();
-    }
-    free(s);
-    return Value(f);
-  }
-  else {
+  if (args[0].isInteger())
+    return float(args[0].asInteger());
+
+  if (args[0].isDecimal())
+    return float(args[0].asDecimal());
+
+  if (args[0].isBoolean())
+    return float(args[0].asBoolean() ? 1.0 : 0.0);
+
+  String str = args[0].convertToString().collapseWhitespace();
+  if (0 == str.length()) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
     return Value::null();
   }
+
+  char *s = str.cstring();
+  char *end = NULL;
+  errno = 0;
+  float f = strtof(s,&end);
+  Value v;
+  if ('\0' != *end)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+  else if (0 != errno)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for float");
+  else
+    v = Value(f);
+  free(s);
+  return v;
 }
 
 static Value cvdouble(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  if (args[0].isFloat())
+    return double(args[0].asFloat());
+
+  if (args[0].isDouble())
+    return args[0].asDouble();
+
+  if (args[0].isInteger())
+    return double(args[0].asInteger());
+
+  if (args[0].isDecimal())
+    return double(args[0].asDecimal());
+
+  if (args[0].isBoolean())
+    return double(args[0].asBoolean() ? 1.0 : 0.0);
+
+  String str = args[0].convertToString().collapseWhitespace();
+  if (0 == str.length()) {
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+    return Value::null();
+  }
+
+  char *s = str.cstring();
+  char *end = NULL;
+  errno = 0;
+  double d = strtod(s,&end);
+  Value v;
+  if ('\0' != *end)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+  else if (0 != errno)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for double");
+  else
+    v = Value(d);
+  free(s);
+  return v;
 }
 
 static Value cvduration(Environment *env, List<Value> &args)
@@ -267,69 +342,54 @@ static Value cvENTITY(Environment *env, List<Value> &args)
 
 static Value cvinteger(Environment *env, List<Value> &args)
 {
-  if (args[0].isDerivedFrom(xs_g->untyped_atomic) ||
-      args[0].isDerivedFrom(xs_g->string_type)) {
-
-    if (0 == args[0].asString().length()) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-      return Value::null();
-    }
-
-    char *s = args[0].asString().collapseWhitespace().cstring();
-    char *end = NULL;
-    errno = 0;
-    int i = strtol(s,&end,10);
-    if ('\0' != *end) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-      free(s);
-      return Value::null();
-    }
-    if (0 != errno) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for integer");
-      free(s);
-      return Value::null();
-    }
-    free(s);
-    return Value(i);
-  }
-  else if (args[0].isDerivedFrom(xs_g->float_type)) {
-    float f = args[0].asFloat();
-    if (isinf(f) || isnan(f)) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","invalid lexical value");
-      return Value::null();
-    }
-    int i = int(floorf(f));
-    return Value(i);
-  }
-  else if (args[0].isDerivedFrom(xs_g->double_type)) {
-    double d = args[0].asDouble();
+  if (args[0].isNumeric() && !args[0].isInteger()) {
+    double d;
+    if (args[0].isFloat())
+      d = args[0].asFloat();
+    else if (args[0].isDouble())
+      d = args[0].asDouble();
+    else 
+      d = args[0].asDecimal();
     if (isinf(d) || isnan(d)) {
       error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","invalid lexical value");
       return Value::null();
     }
-    int i = int(floorf(d));
-    return Value(i);
   }
-  else if (args[0].isDerivedFrom(xs_g->integer_type)) {
-    int i = args[0].asInt();
-    return Value(i);
-  }
-  else if (args[0].isDerivedFrom(xs_g->boolean_type)) {
-    if (args[0].asBool())
-      return Value(1);
-    else
-      return Value(0);
-  }
-  else if (args[0].isDerivedFrom(xs_g->decimal_type)) {
-    /* FIXME: i think we should perhaps be storing decimals as strings - these are
-       arbitrary precision floating point numbers? */
-    int i = args[0].asInt();
-    return Value(i);
-  }
-  else {
+
+  if (args[0].isFloat())
+    return int(args[0].asFloat());
+
+  if (args[0].isDouble())
+    return int(args[0].asDouble());
+
+  if (args[0].isInteger())
+    return args[0].asInteger();
+
+  if (args[0].isDecimal())
+    return int(args[0].asDecimal());
+
+  if (args[0].isBoolean())
+    return args[0].asBoolean() ? 1 : 0;
+
+  String str = args[0].convertToString().collapseWhitespace();
+  if (0 == str.length()) {
     error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
     return Value::null();
   }
+
+  char *s = str.cstring();
+  char *end = NULL;
+  errno = 0;
+  int i = strtol(s,&end,10);
+  Value v;
+  if ('\0' != *end)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
+  else if (0 != errno)
+    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for integer");
+  else
+    v = Value(i);
+  free(s);
+  return v;
 }
 
 static Value cvnonPositiveInteger(Environment *env, List<Value> &args)
