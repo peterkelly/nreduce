@@ -26,6 +26,7 @@
 #include "util/Debug.h"
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 //#define TRACE_ALLOC
 //#define PRINT_SEQTYPE_ALLOC
@@ -1250,6 +1251,11 @@ ValueImpl::ValueImpl(const SequenceType &_st, const Value &left, const Value &ri
   value.pair.right = right.impl->ref();
 }
 
+ValueImpl::ValueImpl(Type *t)
+{
+  init(t);
+}
+
 ValueImpl::ValueImpl(Context *c)
 {
   init(xs_g->context_type);
@@ -1356,6 +1362,55 @@ static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
   return len;
 }
 
+void printDouble(double d, StringBuffer &buf)
+{
+  if (d == double(int(d))) {
+    int i = int(d);
+    if (signbit(d) && (0.0 == d))
+      buf.format("-0");
+    else
+      buf.format("%d",i);
+  }
+  else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
+    int ipart = int(d);
+    double fraction;
+
+    if (0.0 < d)
+      fraction = d - floor(d);
+    else
+      fraction = d - ceil(d);
+
+    int start = signbit(d) ? 1 : 0;
+
+    char tmp[100];
+    sprintf(tmp,"%f",fraction);
+    int pos = strlen(tmp)-1;
+    while ((2+start < pos) && ('0' == tmp[pos]))
+      tmp[pos--] = '\0';
+    ASSERT('0' == tmp[start]);
+    ASSERT('.' == tmp[start+1]);
+
+    buf.format("%d.%s",ipart,tmp+start+2);
+  }
+  else if (0.0 == d) {
+    buf.format("0");
+  }
+  else if (isnan(d)) {
+    buf.format("NaN");
+  }
+  else if (isinf(d) && (0.0 < d)) {
+    buf.format("INF");
+  }
+  else if (isinf(d) && (0.0 > d)) {
+    buf.format("-INF");
+  }
+  else {
+    buf.format("%f",d);
+  }
+}
+
+
+
 void ValueImpl::printbuf(StringBuffer &buf)
 {
   if (SEQTYPE_ITEM == st.type()) {
@@ -1364,11 +1419,11 @@ void ValueImpl::printbuf(StringBuffer &buf)
       if (st.itemType()->m_type->isDerived(xs_g->integer_type))
         buf.format("%d",value.i);
       else if (st.itemType()->m_type->isDerived(xs_g->double_type))
-        buf.format("%f",value.d);
+        printDouble(value.d,buf);
       else if (st.itemType()->m_type->isDerived(xs_g->float_type))
-        buf.format("%f",value.f);
+        printDouble(double(value.f),buf);
       else if (st.itemType()->m_type->isDerived(xs_g->decimal_type))
-        buf.format("%f",value.d);
+        printDouble(value.d,buf);
       else if (st.itemType()->m_type->isDerived(xs_g->string_type))
         buf.append(value.s);
       else if (st.itemType()->m_type->isDerived(xs_g->boolean_type))
@@ -1571,6 +1626,13 @@ void ValueImpl::printRemaining()
   }
   message("SequenceTypeImpl instances remaining: %d\n",list_count(allocseqtypes));
 #endif
+}
+
+Value Value::decimal(double d)
+{
+  ValueImpl *vimpl = new ValueImpl(xs_g->decimal_type);
+  vimpl->value.d = d;
+  return vimpl;
 }
 
 Value Value::listToSequence(list *values)
