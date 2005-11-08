@@ -4,5 +4,9 @@ Makefile
 Makefile.in
 *.lo
 *.la
+*.bb
+*.bbg
+*.gcov
+*.da
 funops.c
 funops.h

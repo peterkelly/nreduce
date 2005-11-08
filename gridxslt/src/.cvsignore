@@ -4,6 +4,10 @@ Makefile
 Makefile.in
 *.lo
 *.la
+*.bb
+*.bbg
+*.gcov
+*.da
 asm
 cbpel
 create
