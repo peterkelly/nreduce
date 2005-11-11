@@ -842,9 +842,7 @@ static Value spempty(Environment *env, List<Value> &args)
 {
   /* FIXME: this should take 0 parameters (only context)... remember to update all code that
      uses this function */
-  SequenceType st = SequenceType(SEQTYPE_EMPTY);
-  Value result = Value(st);
-  return result;
+  return Value::empty();
 }
 
 Value ebv(Environment *env, List<Value> &args)
