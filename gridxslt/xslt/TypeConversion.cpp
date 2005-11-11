@@ -31,35 +31,157 @@
 using namespace GridXSLT;
 
 #define XSNS XS_NAMESPACE
+#define XDTNS XDT_NAMESPACE
 
 // See conversion table in XQuery/XPath functions and operators section 17.1
 
-// Note: when casting from a numeric type to itself, we create a new value even though
-// it's the same type. This is because the argument may be a subtype and we want the
-// cast operator to return the actual type itself
+// Note: when casting from a numeric type to itself, we create a new value even though it's the
+// same type. This is because the argument may be a subtype and we want the cast operator to
+// return the actual type itself
 
-// FIXME: Here we just use the native C conversions; the spec gives more detail about
-// the conversion process. Should really confirm that we conform to these.
+// FIXME: Here we just use the native C conversions for numeric values; the spec gives more detail
+// about the conversion process. Should really confirm that we conform to these. The numeric
+// coversions are marked as "done" for now, assuming that the compiler will take care of this.
+// Should be right most cases.
 
-// FIXME: we should probably raise an error when an attempt to cast from an invalid type
-// is made... e.g. converting from one of the date types to a number
+// FIXME: we should probably raise an error when an attempt to cast from an invalid type is
+// made... e.g. converting from one of the date types to a number
+
+// FIXME: we also need to support constructor functions for user-defined datatypes. This will
+// require special handling of functions since the set of available functions won't be known
+// until runtime.
+
+// FIXME: the spec gives detailed instructions for how to convert numeric types to strings...
+// this is handled by printDouble() in SequenceType.cpp. I've marked theses as done but
+// should really verify that we're following the spec exactly... there may be cases where C's
+// printf() doesn't correctly format the numbers.
+
+
+// @implements(xpath-functions:casting-1) @end
+// @implements(xpath-functions:casting-3) @end
+
+// @implements(xpath-functions:casting-from-primitive-to-primitive-1) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-2) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-3) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-4) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-5) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-6) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-7) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-8) @end
+// @implements(xpath-functions:casting-from-primitive-to-primitive-9) @end
+
+// @implements(xpath-functions:casting-to-binary-1) @end
+
+// @implements(xpath-functions:casting-from-strings-1) @end
+// @implements(xpath-functions:casting-from-strings-2) @end
+// @implements(xpath-functions:casting-from-strings-3) @end
+// @implements(xpath-functions:casting-from-strings-4) @end
+// @implements(xpath-functions:casting-from-strings-5) @end
+
+// @implements(xpath-functions:casting-to-string-1) @end
+// @implements(xpath-functions:casting-to-string-2) @end
+// @implements(xpath-functions:casting-to-string-3) @end
+// @implements(xpath-functions:casting-to-string-4) @end
+// @implements(xpath-functions:casting-to-string-5) @end
+
+// @implements(xpath-functions:casting-to-durations-1) status { deferred } @end
+// @implements(xpath-functions:casting-to-durations-2) status { deferred } @end
+// @implements(xpath-functions:casting-to-durations-3) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-1) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-2) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-3) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-4) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-5) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-6) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-7) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-8) status { deferred } @end
+// @implements(xpath-functions:casting-to-datetimes-9) status { deferred } @end
+
+static String typestr(const SequenceType &st)
+{
+  if ((SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC == st.itemType()->m_kind) &&
+      ((st.itemType()->m_type->def.ident.m_ns == XS_NAMESPACE) ||
+       (st.itemType()->m_type->def.ident.m_ns == XDT_NAMESPACE))) {
+    return st.itemType()->m_type->def.ident.m_name;
+  }
+  else {
+    StringBuffer buf;
+    SequenceType(st).print(buf);
+    return buf;
+  }
+}
+
+static Value invalidTypeConversion(Environment *env, const Value &source, const String &target)
+{
+  String st = typestr(source.type());
+  error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","Cannot convert %* to %*",&st,&target);
+  return Value::null();
+}
+
+static Value invalidValueConversion(Environment *env, const Value &source, const String &target)
+{
+  String st = typestr(source.type());
+  error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","Cannot convert %* %* to %*",
+        &st,&source,&target);
+  return Value::null();
+}
+
+static Value invalidString(Environment *env, const String &source, const String &target)
+{
+  error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001",
+        "The string \"%*\" cannot be cast to a %*",&source,&target);
+  return Value::null();
+}
 
 static Value cvstring(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  // FIXME: check this more according to the spec... the logic should actually be implemented
+  // in convertToString()
+  // see also cvuntypedAtomic()
+  return args[0].convertToString();
 }
 
 static Value cvboolean(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  // @implements(xpath-functions:casting-boolean-1) @end
+  // @implements(xpath-functions:casting-boolean-2) @end
+
+  if (args[0].isBoolean())
+    return args[0].asBoolean();
+
+  if (args[0].isFloat())
+    return !((0.0 == args[0].asFloat()) || isnan(args[0].asFloat()));
+
+  if (args[0].isDouble())
+    return !((0.0 == args[0].asDouble()) || isnan(args[0].asDouble()));
+
+  if (args[0].isDecimal())
+    return !((0.0 == args[0].asDecimal()) || isnan(args[0].asDecimal()));
+
+  if (args[0].isInteger())
+    return !(0 == args[0].asInteger());
+
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+    if (("true" == str) || ("1" == str))
+      return true;
+    else if (("false" == str) || ("0" == str))
+      return false;
+    else
+      return invalidString(env,str,"boolean");
+  }
+
+  return invalidTypeConversion(env,args[0],"boolean");
 }
 
 static Value cvdecimal(Environment *env, List<Value> &args)
 {
+  // @implements(xpath-functions:casting-to-numerics-3) @end
+
   if (args[0].isNumeric() && !args[0].isInteger()) {
     double d;
     if (args[0].isFloat())
@@ -68,10 +190,8 @@ static Value cvdecimal(Environment *env, List<Value> &args)
       d = args[0].asDouble();
     else 
       d = args[0].asDecimal();
-    if (isinf(d) || isnan(d)) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","invalid lexical value");
-      return Value::null();
-    }
+    if (isinf(d) || isnan(d))
+      return invalidValueConversion(env,args[0],"decimal");
   }
 
   if (args[0].isFloat())
@@ -89,29 +209,38 @@ static Value cvdecimal(Environment *env, List<Value> &args)
   if (args[0].isBoolean())
     return Value::decimal(double(args[0].asBoolean() ? 1.0 : 0.0));
 
-  String str = args[0].convertToString().collapseWhitespace();
-  if (0 == str.length()) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-    return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+
+    if (0 == str.length())
+      return invalidString(env,str,"decimal");
+
+    char *s = str.cstring();
+    char *end = NULL;
+    errno = 0;
+    double d = strtod(s,&end);
+    Value v;
+    if ('\0' != *end)
+      invalidString(env,str,"decimal");
+    else if (0 != errno)
+      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for decimal");
+    else
+      v = Value::decimal(d);
+    free(s);
+    return v;
   }
 
-  char *s = str.cstring();
-  char *end = NULL;
-  errno = 0;
-  double d = strtod(s,&end);
-  Value v;
-  if ('\0' != *end)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-  else if (0 != errno)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for double");
-  else
-    v = Value::decimal(d);
-  free(s);
-  return v;
+  return invalidTypeConversion(env,args[0],"decimal");
 }
 
 static Value cvfloat(Environment *env, List<Value> &args)
 {
+  // @implements(xpath-functions:casting-to-numerics-1) @end
+
   if (args[0].isFloat())
     return args[0].asFloat();
 
@@ -127,29 +256,38 @@ static Value cvfloat(Environment *env, List<Value> &args)
   if (args[0].isBoolean())
     return float(args[0].asBoolean() ? 1.0 : 0.0);
 
-  String str = args[0].convertToString().collapseWhitespace();
-  if (0 == str.length()) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-    return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+
+    if (0 == str.length())
+      return invalidString(env,str,"float");
+
+    char *s = str.cstring();
+    char *end = NULL;
+    errno = 0;
+    float f = strtof(s,&end);
+    Value v;
+    if ('\0' != *end)
+      invalidString(env,str,"float");
+    else if (0 != errno)
+      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for float");
+    else
+      v = Value(f);
+    free(s);
+    return v;
   }
 
-  char *s = str.cstring();
-  char *end = NULL;
-  errno = 0;
-  float f = strtof(s,&end);
-  Value v;
-  if ('\0' != *end)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-  else if (0 != errno)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for float");
-  else
-    v = Value(f);
-  free(s);
-  return v;
+  return invalidTypeConversion(env,args[0],"float");
 }
 
 static Value cvdouble(Environment *env, List<Value> &args)
 {
+  // @implements(xpath-functions:casting-to-numerics-2) @end
+
   if (args[0].isFloat())
     return double(args[0].asFloat());
 
@@ -165,25 +303,32 @@ static Value cvdouble(Environment *env, List<Value> &args)
   if (args[0].isBoolean())
     return double(args[0].asBoolean() ? 1.0 : 0.0);
 
-  String str = args[0].convertToString().collapseWhitespace();
-  if (0 == str.length()) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-    return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+
+    if (0 == str.length())
+      return invalidString(env,str,"double");
+
+    char *s = str.cstring();
+    char *end = NULL;
+    errno = 0;
+    double d = strtod(s,&end);
+    Value v;
+    if ('\0' != *end)
+      invalidString(env,str,"double");
+    else if (0 != errno)
+      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for double");
+    else
+      v = Value(d);
+    free(s);
+    return v;
   }
 
-  char *s = str.cstring();
-  char *end = NULL;
-  errno = 0;
-  double d = strtod(s,&end);
-  Value v;
-  if ('\0' != *end)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-  else if (0 != errno)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for double");
-  else
-    v = Value(d);
-  free(s);
-  return v;
+  return invalidTypeConversion(env,args[0],"double");
 }
 
 static Value cvduration(Environment *env, List<Value> &args)
@@ -251,23 +396,70 @@ static Value cvgMonth(Environment *env, List<Value> &args)
 
 static Value cvhexBinary(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+    BinaryArray arr = BinaryArray::fromHex(str);
+    if (arr.isNull()) {
+      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid hex string");
+      return Value::null();
+    }
+    return Value::hexBinary(arr);
+  }
+
+  if (args[0].isHexBinary())
+    return Value::hexBinary(args[0].asHexBinary());
+
+  if (args[0].isBase64Binary())
+    return Value::hexBinary(args[0].asBase64Binary());
+
+  return invalidTypeConversion(env,args[0],"hexBinary");
 }
 
 static Value cvbase64Binary(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+    BinaryArray arr = BinaryArray::fromBase64(str);
+    if (arr.isNull()) {
+      error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid base64 string");
+      return Value::null();
+    }
+    return Value::base64Binary(arr);
+  }
+
+  if (args[0].isHexBinary())
+    return Value::base64Binary(args[0].asHexBinary());
+
+  if (args[0].isBase64Binary())
+    return Value::base64Binary(args[0].asBase64Binary());
+
+  return invalidTypeConversion(env,args[0],"base64Binary");
 }
 
 static Value cvanyURI(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  // @implements(xpath-functions:casting-to-anyuri-1) @end
+  // @implements(xpath-functions:casting-to-anyuri-2) @end
+  // @implements(xpath-functions:casting-to-anyuri-3) @end
+
+  if (args[0].isString())
+    return URI(args[0].asString().collapseWhitespace());
+
+  if (args[0].isUntypedAtomic())
+    return URI(args[0].asUntypedAtomic().collapseWhitespace());
+
+  if (args[0].isAnyURI())
+    return URI(args[0].asAnyURI());
+
+  return invalidTypeConversion(env,args[0],"anyURI");
 }
 
 static Value cvQName(Environment *env, List<Value> &args)
@@ -342,6 +534,8 @@ static Value cvENTITY(Environment *env, List<Value> &args)
 
 static Value cvinteger(Environment *env, List<Value> &args)
 {
+  // @implements(xpath-functions:casting-to-numerics-4) @end
+
   if (args[0].isNumeric() && !args[0].isInteger()) {
     double d;
     if (args[0].isFloat())
@@ -350,10 +544,8 @@ static Value cvinteger(Environment *env, List<Value> &args)
       d = args[0].asDouble();
     else 
       d = args[0].asDecimal();
-    if (isinf(d) || isnan(d)) {
-      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","invalid lexical value");
-      return Value::null();
-    }
+    if (isinf(d) || isnan(d))
+      return invalidValueConversion(env,args[0],"integer");
   }
 
   if (args[0].isFloat())
@@ -371,25 +563,32 @@ static Value cvinteger(Environment *env, List<Value> &args)
   if (args[0].isBoolean())
     return args[0].asBoolean() ? 1 : 0;
 
-  String str = args[0].convertToString().collapseWhitespace();
-  if (0 == str.length()) {
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-    return Value::null();
+  if (args[0].isString() || args[0].isUntypedAtomic()) {
+    String str;
+    if (args[0].isString())
+      str = args[0].asString().collapseWhitespace();
+    else
+      str = args[0].asUntypedAtomic().collapseWhitespace();
+
+    if (0 == str.length())
+      return invalidString(env,str,"integer");
+
+    char *s = str.cstring();
+    char *end = NULL;
+    errno = 0;
+    int i = strtol(s,&end,10);
+    Value v;
+    if ('\0' != *end)
+      invalidString(env,str,"integer");
+    else if (0 != errno)
+      error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for integer");
+    else
+      v = Value(i);
+    free(s);
+    return v;
   }
 
-  char *s = str.cstring();
-  char *end = NULL;
-  errno = 0;
-  int i = strtol(s,&end,10);
-  Value v;
-  if ('\0' != *end)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","invalid value for cast/constructor");
-  else if (0 != errno)
-    error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0003","input value too large for integer");
-  else
-    v = Value(i);
-  free(s);
-  return v;
+  return invalidTypeConversion(env,args[0],"integer");
 }
 
 static Value cvnonPositiveInteger(Environment *env, List<Value> &args)
@@ -492,9 +691,8 @@ static Value cvdayTimeDuration(Environment *env, List<Value> &args)
 
 static Value cvuntypedAtomic(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
+  String str = args[0].convertToString();
+  return Value::untypedAtomic(str);
 }
 
 
@@ -550,7 +748,7 @@ FunctionDefinition TypeConversion_fundefs[44] = {
                                                           "xdt:yearMonthDuration?", false },
   { cvdayTimeDuration, XSNS, "dayTimeDuration", "xdt:anyAtomicType?",
                                                             "xdt:dayTimeDuration?", false },
-  { cvuntypedAtomic, XSNS, "untypedAtomic", "xdt:anyAtomicType?",
+  { cvuntypedAtomic, XDTNS, "untypedAtomic", "xdt:anyAtomicType?",
                                                               "xdt:untypedAtomic?", false },
   { NULL },
 };
