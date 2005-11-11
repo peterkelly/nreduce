@@ -99,7 +99,7 @@ public:
     impl = new StringImpl(cstr,len);
     impl->ref();
   }
-  String(const GridXSLT::String &other) {
+  String(const String &other) {
     impl = other.impl;
     if (impl)
       impl->ref();
@@ -182,6 +182,18 @@ private:
 
 void fmessage(FILE *f, const char *format, ...);
 void message(const char *format, ...);
+
+class URI {
+public:
+  URI(const String &str);
+  URI(const URI &other);
+  URI &operator=(const URI &other);
+
+  String toString() const;
+
+protected:
+  String m_str;
+};
 
 };
 

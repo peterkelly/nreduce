@@ -744,3 +744,24 @@ void circbuf_free(circbuf *cb)
   free(cb->data);
   free(cb);
 }
+
+URI::URI(const String &str)
+  : m_str(str)
+{
+}
+
+URI::URI(const URI &other)
+  : m_str(other.m_str)
+{
+}
+
+URI &URI::operator=(const URI &other)
+{
+  m_str = other.m_str;
+  return *this;
+}
+
+String URI::toString() const
+{
+  return m_str;
+}
