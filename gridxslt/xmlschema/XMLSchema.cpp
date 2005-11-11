@@ -653,13 +653,13 @@ void BuiltinTypes_init_simple_types(BuiltinTypes *g)
   new_primitive_type(g,"gMonth",sizeof(IMPL_POINTER),NULL);
   g->string_type = new_primitive_type(g,"string",sizeof(IMPL_POINTER),"char*");
   g->boolean_type = new_primitive_type(g,"boolean",sizeof(IMPL_BOOLEAN),NULL);
-  new_primitive_type(g,"base64Binary",sizeof(IMPL_POINTER),NULL);
-  new_primitive_type(g,"hexBinary",sizeof(IMPL_POINTER),NULL);
+  g->base64_binary_type = new_primitive_type(g,"base64Binary",sizeof(IMPL_POINTER),NULL);
+  g->hex_binary_type = new_primitive_type(g,"hexBinary",sizeof(IMPL_POINTER),NULL);
   g->float_type = new_primitive_type(g,"float",sizeof(IMPL_FLOAT),"float");
   g->decimal_type = new_primitive_type(g,"decimal",sizeof(IMPL_DOUBLE),NULL);
   g->double_type = new_primitive_type(g,"double",sizeof(IMPL_DOUBLE),"double");
-  new_primitive_type(g,"anyURI",sizeof(IMPL_POINTER),NULL);
-  new_primitive_type(g,"QName",sizeof(IMPL_POINTER),NULL);
+  g->any_uri_type = new_primitive_type(g,"anyURI",sizeof(IMPL_POINTER),NULL);
+  g->qname_type = new_primitive_type(g,"QName",sizeof(IMPL_POINTER),NULL);
   new_primitive_type(g,"NOTATION",sizeof(IMPL_POINTER),NULL);
 
   new_derived_type(g,"normalizedString","string",-1,NULL);

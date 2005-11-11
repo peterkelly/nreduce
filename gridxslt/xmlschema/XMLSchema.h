@@ -629,6 +629,11 @@ public:
   Type *double_type;
   Type *decimal_type;
 
+  Type *base64_binary_type;
+  Type *hex_binary_type;
+  Type *any_uri_type;
+  Type *qname_type;
+
   Type *context_type;
 
   xs_symbol_table *symt;
