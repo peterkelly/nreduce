@@ -101,6 +101,41 @@ using namespace GridXSLT;
 // @implements(xpath-functions:func-numeric-greater-than-2) @end
 // @implements(xpath-functions:func-numeric-greater-than-3) @end
 
+// @implements(xpath-functions:d1e1718-1) @end
+// @implements(xpath-functions:d1e1718-2) @end
+// @implements(xpath-functions:d1e1718-3) @end
+// @implements(xpath-functions:func-abs-1) @end
+// @implements(xpath-functions:func-abs-2) @end
+// @implements(xpath-functions:func-abs-3) @end
+// @implements(xpath-functions:func-abs-4) @end
+// @implements(xpath-functions:func-abs-5) @end
+// @implements(xpath-functions:func-ceiling-1) @end
+// @implements(xpath-functions:func-ceiling-2) @end
+// @implements(xpath-functions:func-ceiling-3) @end
+// @implements(xpath-functions:func-ceiling-4) @end
+// @implements(xpath-functions:func-ceiling-5) @end
+// @implements(xpath-functions:func-floor-1) @end
+// @implements(xpath-functions:func-floor-2) @end
+// @implements(xpath-functions:func-floor-3) @end
+// @implements(xpath-functions:func-floor-4) @end
+// @implements(xpath-functions:func-floor-5) @end
+// @implements(xpath-functions:func-round-1) @end
+// @implements(xpath-functions:func-round-2) @end
+// @implements(xpath-functions:func-round-3) @end
+// @implements(xpath-functions:func-round-4) @end
+// @implements(xpath-functions:func-round-5) @end
+// @implements(xpath-functions:func-round-6) @end
+// @implements(xpath-functions:func-round-half-to-even-1) @end
+// @implements(xpath-functions:func-round-half-to-even-2) @end
+// @implements(xpath-functions:func-round-half-to-even-3) @end
+// @implements(xpath-functions:func-round-half-to-even-4) @end
+// @implements(xpath-functions:func-round-half-to-even-5) @end
+// @implements(xpath-functions:func-round-half-to-even-6) @end
+// @implements(xpath-functions:func-round-half-to-even-7) @end
+// @implements(xpath-functions:func-round-half-to-even-8) @end
+
+
+
 // FIXME: ensure floating point operations are conformant with IEEE 754-1985 as mentioned in
 // the spec. For now we just assume the underlying hardware provides this assurance but
 // need to confirm; there may be certain cases where we e.g. need to raise an error
@@ -424,6 +459,9 @@ static Value numeric_unary_minus(Environment *env, List<Value> &args)
 
 static Value abs1(Environment *env, List<Value> &args)
 {
+  if (SEQTYPE_EMPTY == args[0].type().type())
+    return Value::empty();
+
   if (!args[0].isNumeric()) {
     String s = args[0].convertToString();
     error(env->ei,env->sloc.uri,env->sloc.line,String::null(),
@@ -443,6 +481,9 @@ static Value abs1(Environment *env, List<Value> &args)
 
 static Value ceiling1(Environment *env, List<Value> &args)
 {
+  if (SEQTYPE_EMPTY == args[0].type().type())
+    return Value::empty();
+
   if (!args[0].isNumeric()) {
     String s = args[0].convertToString();
     error(env->ei,env->sloc.uri,env->sloc.line,String::null(),
@@ -462,6 +503,9 @@ static Value ceiling1(Environment *env, List<Value> &args)
 
 static Value floor1(Environment *env, List<Value> &args)
 {
+  if (SEQTYPE_EMPTY == args[0].type().type())
+    return Value::empty();
+
   if (!args[0].isNumeric()) {
     String s = args[0].convertToString();
     error(env->ei,env->sloc.uri,env->sloc.line,String::null(),
@@ -481,6 +525,9 @@ static Value floor1(Environment *env, List<Value> &args)
 
 static Value round1(Environment *env, List<Value> &args)
 {
+  if (SEQTYPE_EMPTY == args[0].type().type())
+    return Value::empty();
+
   if (!args[0].isNumeric()) {
     String s = args[0].convertToString();
     error(env->ei,env->sloc.uri,env->sloc.line,String::null(),
@@ -535,6 +582,9 @@ double roundh2e(double d, int precision)
 
 static Value round_half_to_even2(Environment *env, List<Value> &args)
 {
+  if (SEQTYPE_EMPTY == args[0].type().type())
+    return Value::empty();
+
   if (!args[0].isNumeric()) {
     String s = args[0].convertToString();
     error(env->ei,env->sloc.uri,env->sloc.line,String::null(),
@@ -578,12 +628,12 @@ FunctionDefinition numeric_fundefs[18] = {
   { numeric_greater_than,   FNS, "numeric-greater-than",   "item(),item()", "xsd:boolean", false },
   { numeric_unary_plus,     FNS, "numeric-unary-plus",     "item()",        "item()",      false },
   { numeric_unary_minus,    FNS, "numeric-unary-minus",    "item()",        "item()",      false },
-  { abs1,                   FNS, "abs",                    "item()",        "item()",      false },
-  { ceiling1,               FNS, "ceiling",                "item()",        "item()",      false },
-  { floor1,                 FNS, "floor",                  "item()",        "item()",      false },
-  { round1,                 FNS, "round",                  "item()",        "item()",      false },
-  { round_half_to_even2,    FNS, "round-half-to-even",     "item(),xsd:integer", "item()", false },
-  { round_half_to_even1,    FNS, "round-half-to-even",     "item()",        "item()",      false },
+  { abs1,                   FNS, "abs",                    "item()?",       "item()",      false },
+  { ceiling1,               FNS, "ceiling",                "item()?",       "item()",      false },
+  { floor1,                 FNS, "floor",                  "item()?",       "item()",      false },
+  { round1,                 FNS, "round",                  "item()?",       "item()",      false },
+  { round_half_to_even2,    FNS, "round-half-to-even",     "item()?,xsd:integer", "item()", false },
+  { round_half_to_even1,    FNS, "round-half-to-even",     "item()?",       "item()",      false },
   { NULL },
 };
 
