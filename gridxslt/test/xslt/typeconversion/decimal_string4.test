@@ -47,6 +47,6 @@ test.xsl
 
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/test.xsl:36: error FORG0001: invalid value for cast/constructor
+runtests.tmp/test.xsl:36: error FORG0001: The string "" cannot be cast to a decimal
 ================================== RETURN CODE =================================
 1

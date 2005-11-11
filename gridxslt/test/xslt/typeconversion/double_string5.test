@@ -47,6 +47,6 @@ test.xsl
 
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/test.xsl:36: error FORG0001: invalid value for cast/constructor
+runtests.tmp/test.xsl:36: error FORG0001: The string "x" cannot be cast to a double
 ================================== RETURN CODE =================================
 1
