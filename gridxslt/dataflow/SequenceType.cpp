@@ -57,7 +57,8 @@ static void df_print_objname(StringBuffer &buf, const NSName &ident, NamespaceMa
 {
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
-    ASSERT(NULL != def); /* FIXME: what to do if we can't find one? */
+    ASSERT(NULL != def); // FIXME: need to handle this gracefully... need to figure out where
+                         // this can occur
     buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
@@ -85,12 +86,13 @@ static int is_ncname(const String &s)
   return 1;
 }
 
-/* FIXME: merge with df_print_objname... only difference is the parameter order */
+// FIXME: merge with df_print_objname... only difference is the parameter order
 static void print_objname(StringBuffer &buf, NamespaceMap *namespaces, const NSName &ident)
 {
   if (!ident.m_ns.isNull()) {
     ns_def *def = namespaces->lookup_href(ident.m_ns);
-    ASSERT(NULL != def); /* FIXME: what to do if we can't find one? */
+    ASSERT(NULL != def); // FIXME: need to handle this gracefully... need to figure out where
+                         // this can occur
     buf.format("%*:%*",&def->prefix,&ident.m_name);
   }
   else {
@@ -1305,14 +1307,32 @@ ValueImpl::ValueImpl(Node *n)
   value.n = n->ref();
 }
 
+ValueImpl::ValueImpl(const URI &uri)
+{
+  init(xs_g->any_uri_type);
+  value.u = new URI(uri);
+}
+
+ValueImpl::ValueImpl(const NSName &nn)
+{
+  init(xs_g->qname_type);
+  value.q = new NSName(nn);
+}
+
 ValueImpl::~ValueImpl()
 {
   if (SEQTYPE_ITEM == st.type()) {
     if (ITEM_ATOMIC == st.itemType()->m_kind) {
-      if (isString())
+      if (isString() || isUntypedAtomic())
         value.s->deref();
       else if (isContext())
         delete value.c;
+      else if (isBase64Binary() || isHexBinary())
+        value.a->deref();
+      else if (isAnyURI())
+        delete value.u;
+      else if (isQName())
+        delete value.q;
     }
     else if (NULL != value.n) {
       value.n->deref();
@@ -1362,7 +1382,7 @@ static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
   return len;
 }
 
-void printDouble(double d, StringBuffer &buf)
+static void printDouble(double d, StringBuffer &buf)
 {
   if (d == double(int(d))) {
     int i = int(d);
@@ -1416,17 +1436,23 @@ void ValueImpl::printbuf(StringBuffer &buf)
   if (SEQTYPE_ITEM == st.type()) {
 
     if (ITEM_ATOMIC == st.itemType()->m_kind) {
-      if (st.itemType()->m_type->isDerived(xs_g->integer_type))
-        buf.format("%d",value.i);
-      else if (st.itemType()->m_type->isDerived(xs_g->double_type))
-        printDouble(value.d,buf);
-      else if (st.itemType()->m_type->isDerived(xs_g->float_type))
+      if (isFloat())
         printDouble(double(value.f),buf);
-      else if (st.itemType()->m_type->isDerived(xs_g->decimal_type))
+      else if (isDouble())
         printDouble(value.d,buf);
-      else if (st.itemType()->m_type->isDerived(xs_g->string_type))
+      else if (isInteger())
+        buf.format("%d",value.i);
+      else if (isDecimal())
+        printDouble(value.d,buf);
+      else if (isString() || isUntypedAtomic())
         buf.append(value.s);
-      else if (st.itemType()->m_type->isDerived(xs_g->boolean_type))
+      else if (isAnyURI())
+        buf.append(value.u->toString());
+      else if (isBase64Binary())
+        buf.append(value.a->toBase64());
+      else if (isHexBinary())
+        buf.append(value.a->toHex());
+      else if (isBoolean())
         buf.format("%s",value.b ? "true" : "false");
       else
         buf.format("(atomic value %*)",&st.itemType()->m_type->def.ident); /* FIXME */
@@ -1633,6 +1659,32 @@ Value Value::decimal(double d)
   ValueImpl *vimpl = new ValueImpl(xs_g->decimal_type);
   vimpl->value.d = d;
   return vimpl;
+}
+
+Value Value::untypedAtomic(const String &str)
+{
+  ValueImpl *vimpl = new ValueImpl(xs_g->untyped_atomic);
+  vimpl->value.s = str.handle()->ref();
+  return vimpl;
+}
+
+Value Value::base64Binary(const BinaryArray &a)
+{
+  ValueImpl *vimpl = new ValueImpl(xs_g->base64_binary_type);
+  vimpl->value.a = a.handle()->ref();
+  return vimpl;
+}
+
+Value Value::hexBinary(const BinaryArray &a)
+{
+  ValueImpl *vimpl = new ValueImpl(xs_g->hex_binary_type);
+  vimpl->value.a = a.handle()->ref();
+  return vimpl;
+}
+
+Value Value::empty()
+{
+  return Value(SequenceType(SEQTYPE_EMPTY));
 }
 
 Value Value::listToSequence(list *values)

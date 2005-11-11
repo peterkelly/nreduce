@@ -25,6 +25,7 @@
 
 #include "xmlschema/XMLSchema.h"
 #include "util/String.h"
+#include "util/BinaryArray.h"
 #include "util/List.h"
 #include "util/Namespace.h"
 #include "util/XMLUtils.h"
@@ -288,6 +289,8 @@ public:
   ValueImpl(const String &s);
   ValueImpl(bool b);
   ValueImpl(Node *n);
+  ValueImpl(const URI &uri);
+  ValueImpl(const NSName &nn);
   ~ValueImpl();
 
   void init(const SequenceType &_st);
@@ -313,6 +316,12 @@ public:
     { return (SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC != st.itemType()->m_kind); }
   inline bool isNumeric() const { return (isInteger() || isFloat() || isDouble() || isDecimal()); }
 
+  inline bool isUntypedAtomic() const { return isDerivedFrom(xs_g->untyped_atomic); }
+  inline bool isBase64Binary() const { return isDerivedFrom(xs_g->base64_binary_type); }
+  inline bool isHexBinary() const { return isDerivedFrom(xs_g->hex_binary_type); }
+  inline bool isAnyURI() const { return isDerivedFrom(xs_g->any_uri_type); }
+  inline bool isQName() const { return isDerivedFrom(xs_g->qname_type); }
+
   inline Context *asContext() const { ASSERT(isContext()); return value.c; }
   inline int asInteger() const { ASSERT(isInteger()); return value.i; }
   inline float asFloat() const { ASSERT(isFloat()); return value.f; }
@@ -321,6 +330,12 @@ public:
   inline String asString() const { ASSERT(isString()); return value.s; }
   inline bool asBoolean() const { ASSERT(isBoolean()); return value.b; }
   inline Node *asNode() const { ASSERT(isNode()); return value.n; }
+
+  inline String asUntypedAtomic() const { ASSERT(isUntypedAtomic()); return value.s; }
+  inline BinaryArray asBase64Binary() const { ASSERT(isBase64Binary()); return value.a; }
+  inline BinaryArray asHexBinary() const { ASSERT(isHexBinary()); return value.a; }
+  inline URI asAnyURI() const { ASSERT(isAnyURI()); return *value.u; }
+  inline NSName asQName() const { ASSERT(isQName()); return *value.q; }
 
   inline SequenceType &type() { return st; }
 
@@ -332,6 +347,9 @@ public:
     double d;
     StringImpl *s;
     bool b;
+    BinaryArrayImpl *a;
+    URI *u;
+    NSName *q;
     struct {
       ValueImpl *left;
       ValueImpl *right;
@@ -362,8 +380,14 @@ public:
   Value(const String &s) { impl = new ValueImpl(s); impl->ref(); }
   Value(bool b) { impl = new ValueImpl(b); impl->ref(); }
   Value(Node *n) { impl = new ValueImpl(n); impl->ref(); }
+  Value(const URI &uri) { impl = new ValueImpl(uri); impl->ref(); }
+  Value(const NSName &nn) { impl = new ValueImpl(nn); impl->ref(); }
 
   static Value decimal(double d);
+  static Value untypedAtomic(const String &str);
+  static Value base64Binary(const BinaryArray &a);
+  static Value hexBinary(const BinaryArray &a);
+  static Value empty();
 
   Value(ValueImpl *_impl) {
     impl = _impl;
@@ -386,7 +410,6 @@ public:
   ~Value() { if (impl) impl->deref(); }
 
   inline bool isNull() const { return (0 == impl); }
-
   static Value null() { return Value(); }
 
   int isDerivedFrom(Type *type) const { return impl->isDerivedFrom(type); }
@@ -407,6 +430,12 @@ public:
   inline bool isNode() const { return impl->isNode(); }
   inline bool isNumeric() const { return impl->isNumeric(); }
 
+  inline bool isUntypedAtomic() const { return impl->isUntypedAtomic(); }
+  inline bool isBase64Binary() const { return impl->isBase64Binary(); }
+  inline bool isHexBinary() const { return impl->isHexBinary(); }
+  inline bool isAnyURI() const { return impl->isAnyURI(); }
+  inline bool isQName() const { return impl->isQName(); }
+
   inline Context *asContext() const { return impl->asContext(); }
   inline int asInteger() const { return impl->asInteger(); }
   inline float asFloat() const { return impl->asFloat(); }
@@ -416,7 +445,13 @@ public:
   inline bool asBoolean() const { return impl->asBoolean(); }
   inline Node *asNode() const { return impl->asNode(); }
 
-  inline SequenceType &type() { return impl->type(); }
+  inline String asUntypedAtomic() const { return impl->asUntypedAtomic(); }
+  inline BinaryArray asBase64Binary() const { return impl->asBase64Binary(); }
+  inline BinaryArray asHexBinary() const { return impl->asHexBinary(); }
+  inline URI asAnyURI() const { return impl->asAnyURI(); }
+  inline NSName asQName() const { return impl->asQName(); }
+
+  inline SequenceType &type() const { return impl->type(); }
 
   static Value listToSequence(list *values);
   static Value listToSequence2(List<Value> &values);
