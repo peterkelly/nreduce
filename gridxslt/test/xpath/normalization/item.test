@@ -13,6 +13,6 @@ testxpath -n
 ==================================== INPUT =====================================
 item()
 ==================================== OUTPUT ====================================
-((((((element | attribute) | text) | document) | comment) | processing-instruction) | xdt:anyAtomicType)
+(((((((element | attribute) | text) | document) | comment) | processing-instruction) | namespace) | xdt:anyAtomicType)
 ================================== RETURN CODE =================================
 0

@@ -12,6 +12,6 @@ testxpath -n
 ==================================== INPUT =====================================
 node()
 ==================================== OUTPUT ====================================
-(((((element | attribute) | text) | document) | comment) | processing-instruction)
+((((((element | attribute) | text) | document) | comment) | processing-instruction) | namespace)
 ================================== RETURN CODE =================================
 0
