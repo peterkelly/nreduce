@@ -667,7 +667,7 @@ static Value select1(Environment *env, List<Value> &args)
     }
     if (ITEM_ATOMIC != v.type().itemType()->m_kind) {
       if (0 != append_matching_nodes(v.asNode(),env->instr->m_nametest,
-                                     env->instr->m_seqtypetest,
+                                     env->instr->m_type,
                                      env->instr->m_axis,output)) {
         return Value::null();
       }
@@ -950,13 +950,93 @@ static Value dot(Environment *env, List<Value> &args)
 static Value instanceof(Environment *env, List<Value> &args)
 {
   SequenceType st = args[0].type();
-  if (args[0].type().isDerivedFrom(env->instr->m_seqtypetest))
+  if (args[0].type().isDerivedFrom(env->instr->m_type))
     return Value(true);
   else
     return Value(false);
 }
 
-FunctionDefinition special_fundefs[20] = {
+static Value promote_float(Environment *env, List<Value> &args)
+{
+  return Value::null();
+}
+
+static Value promote_double(Environment *env, List<Value> &args)
+{
+  if (args[0].isDouble())
+    return args[0];
+
+  if (args[0].isFloat())
+    return Value(double(args[0].asFloat()));
+
+  // FIXME
+  return Value::null();
+}
+
+static Value promote_string(Environment *env, List<Value> &args)
+{
+  // FIXME
+  return Value::null();
+}
+
+static Value cast(Environment *env, List<Value> &args)
+{
+  ASSERT(0);
+
+
+  Value oldv = args[0];
+  SequenceType st = oldv.type();
+
+  message("cast: from value %* (type %*) to type %*\n",&oldv,&st,&env->instr->m_type);
+
+
+  // F&O 17.3: Casting from derived types to parent types
+  if (st.isDerivedFrom(env->instr->m_type)) {
+    // FIXME: this is only really appropriate for derivation by restriction - is it possible
+    // for isDerivedFrom() to return true for other types of derivation?
+    Value newv = Value(env->instr->m_type);
+    if (newv.isContext()) {
+      newv.handle()->value.c = new Context(*oldv.handle()->value.c);
+    }
+    else if (newv.isInteger())
+      newv.handle()->value.i = oldv.handle()->value.i;
+    else if (newv.isFloat())
+      newv.handle()->value.f = oldv.handle()->value.f;
+    else if (newv.isDouble())
+      newv.handle()->value.d = oldv.handle()->value.d;
+    else if (newv.isDecimal()) {
+      if (oldv.isInteger())
+        newv.handle()->value.d = double(oldv.handle()->value.i);
+      else
+        newv.handle()->value.d = oldv.handle()->value.d;
+    }
+    else if (newv.isString())
+      newv.handle()->value.s = oldv.handle()->value.s->ref();
+    else if (newv.isBoolean())
+      newv.handle()->value.b = oldv.handle()->value.b;
+    else if (newv.isNode())
+      newv.handle()->value.n = oldv.handle()->value.n->ref();
+    else if (newv.isUntypedAtomic())
+      newv.handle()->value.s = oldv.handle()->value.s->ref();
+    else if (newv.isBase64Binary())
+      newv.handle()->value.a = oldv.handle()->value.a->ref();
+    else if (newv.isHexBinary())
+      newv.handle()->value.a = oldv.handle()->value.a->ref();
+    else if (newv.isAnyURI())
+      newv.handle()->value.u = new URI(*oldv.handle()->value.u);
+    else if (newv.isQName())
+      newv.handle()->value.q = new NSName(*oldv.handle()->value.q);
+    else
+      ASSERT(0);
+    return newv;
+  }
+
+  ASSERT(0);
+  // FIXME
+  return Value::null();
+}
+
+FunctionDefinition special_fundefs[24] = {
   { element,       FNS, "element",       "item()*,xsd:string",        "element()", false       },
   { range,         FNS, "range",         "xsd:integer?,xsd:integer?", "xsd:integer*", false    },
   { contains_node, FNS, "contains-node", "node()*,node()",            "xsd:boolean", false     },
@@ -976,6 +1056,10 @@ FunctionDefinition special_fundefs[20] = {
   { or2,           FNS, "or",            "item()*,item()*",           "xsd:boolean", false     },
   { dot,           FNS, "dot",           "",                          "item()", true           },
   { instanceof,    FNS, "instanceof",    "item()*",                   "xsd:boolean", false     },
+  { promote_float,   FNS, "promote-float",  "item()",                    "xsd:float", false    },
+  { promote_double,  FNS, "promote-double", "item()",                    "xsd:double", false   },
+  { promote_string,  FNS, "promote-string", "item()",                    "xsd:string", false   },
+  { cast,          FNS, "cast",          "item()",                    "item()", false          },
   { NULL },
 };
 
