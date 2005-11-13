@@ -31,14 +31,20 @@ using namespace GridXSLT;
 
 static Value string_join(Environment *env, List<Value> &args)
 {
+  // @implements(xpath20:func-string-join-1) @end
+  // @implements(xpath20:func-string-join-2) @end
+  // @implements(xpath20:func-string-join-3) @end
+  // @implements(xpath20:func-string-join-4) @end
+
   List<Value> values = args[0].sequenceToList();
+  String separator = args[1].asString();
   StringBuffer buf;
   Value res;
 
   for (Iterator<Value> it = values; it.haveCurrent(); it++) {
     buf.append((*it).asString());
     if (it.haveNext())
-      buf.append((*it).asString());
+      buf.append(separator);
   }
 
   return Value(buf.contents());
@@ -46,16 +52,25 @@ static Value string_join(Environment *env, List<Value> &args)
 
 static Value substring2(Environment *env, List<Value> &args)
 {
-  /* FIXME */
-  String s = args[0].asString();
-  return Value(s);
+  if (args[0].isEmpty())
+    return String("");
+
+  String sourceString = args[0].asString();
+  double startingLoc = xpathround(args[1].asDouble());
+
+  return sourceString.substring((unsigned int)startingLoc);
 }
 
 static Value substring3(Environment *env, List<Value> &args)
 {
-  String s = args[0].asString();
-  /* FIXME */
-  return Value(s);
+  if (args[0].isEmpty())
+    return String("");
+
+  String sourceString = args[0].asString();
+  double startingLoc = xpathround(args[1].asDouble());
+  double length = xpathround(args[2].asDouble());
+
+  return sourceString.substring((unsigned int)startingLoc,(unsigned int)length);
 }
 
 FunctionDefinition string_fundefs[4] = {
