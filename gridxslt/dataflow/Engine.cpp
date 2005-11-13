@@ -199,11 +199,11 @@ int df_fire_activity(ExecutionState *state, Activity *a)
     if (!a->values[i].type().isDerivedFrom(a->instr->m_inports[i].st)) {
       StringBuffer buf1;
       StringBuffer buf2;
-      a->values[i].type().printFS(buf1,xs_g->namespaces);
-      a->instr->m_inports[i].st.printFS(buf2,xs_g->namespaces);
+      a->values[i].type().printFS(buf1,xs_g->namespaces,true);
+      a->instr->m_inports[i].st.printFS(buf2,xs_g->namespaces,true);
       error(state->ei,a->instr->m_sloc.uri,a->instr->m_sloc.line,String::null(),
             "Instruction %*:%d: Sequence type mismatch: %* does not match %*",
-            &a->instr->m_fun->m_ident,a->instr->m_id,&buf1,&buf2);
+            &a->instr->m_fun->m_ident.m_name,a->instr->m_id,&buf1,&buf2);
       return -1;
     }
   }
@@ -383,7 +383,7 @@ int df_execute_network(ExecutionState *state)
   do {
     it = state->activities;
     found = 0;
-    while (it.haveCurrent()) {
+    while (it.haveCurrent() && !err) {
       Activity *a = *it;
 
       if ((0 == a->remaining) && !a->fired) {
