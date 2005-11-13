@@ -158,20 +158,20 @@ void Instruction_compute_types(Instruction *instr)
       }
       ASSERT(!ip->st.isNull());
     }
+    else if (OP_MERGE == op->dest->m_opcode) {
+      ip->st = SequenceType::itemstar();
+    }
     else {
-      if ((OP_MERGE != op->dest->m_opcode) || (ip->st.isNull())) {
-        if (!ip->st.isNull()) {
-          debug("%* instr %d inport %d [opcode %d] already has a type\n",
-                &instr->m_fun->m_ident,op->dest->m_id,op->destp,op->dest->m_opcode);
-        }
-        ASSERT(ip->st.isNull());
-        ip->st = op->st;
-
-        for (unsigned int i = 0; i < op->dest->m_ninports; i++)
-          if (op->dest->m_inports[i].st.isNull())
-            remaining++;
-
+      if (!ip->st.isNull()) {
+        debug("%* instr %d inport %d [opcode %d] already has a type\n",
+              &instr->m_fun->m_ident,op->dest->m_id,op->destp,op->dest->m_opcode);
       }
+      ASSERT(ip->st.isNull());
+      ip->st = op->st;
+
+      for (unsigned int i = 0; i < op->dest->m_ninports; i++)
+        if (op->dest->m_inports[i].st.isNull())
+          remaining++;
     }
 
     if ((0 == remaining) && !op->dest->m_computed)
@@ -522,7 +522,7 @@ void Program::outputDotFunction(FILE *f, bool types, bool internal, bool anonfun
           for (i = 0; i < instr->m_ninports; i++) {
             if (!instr->m_inports[i].st.isNull()) {
               StringBuffer buf;
-              instr->m_inports[i].st.printFS(buf,xs_g->namespaces);
+              instr->m_inports[i].st.printFS(buf,xs_g->namespaces,true);
               if (0 < i)
                 fmessage(f,"|<i%d>%*",i,&buf);
               else
@@ -558,7 +558,7 @@ void Program::outputDotFunction(FILE *f, bool types, bool internal, bool anonfun
             else {
               StringBuffer buf;
               /* FIXME: need to use the namespace map of the syntax tree node */
-              instr->m_seqtypetest.printXPath(buf,xs_g->namespaces);
+              instr->m_type.printXPath(buf,xs_g->namespaces);
               fmessage(f,"%*",&buf);
             }
 /*             fmessage(f,"\\n[%s]",df_axis_types[instr->m_axis]); */
@@ -578,7 +578,7 @@ void Program::outputDotFunction(FILE *f, bool types, bool internal, bool anonfun
           for (i = 0; i < instr->m_noutports; i++) {
             if (!instr->m_outports[i].st.isNull()) {
               StringBuffer buf;
-              instr->m_outports[i].st.printFS(buf,xs_g->namespaces);
+              instr->m_outports[i].st.printFS(buf,xs_g->namespaces,true);
               if (0 < i)
                 fmessage(f,"|<o%d>%*",i,&buf);
               else
@@ -684,12 +684,12 @@ void Program::outputDF(FILE *f, bool internal)
     fmessage(f,"function %* {\n",&fun->m_ident.m_name);
     ASSERT(!fun->m_rtype.isNull());
     buf.clear();
-    fun->m_rtype.printFS(buf,xs_g->namespaces);
+    fun->m_rtype.printFS(buf,xs_g->namespaces,true);
     fmessage(f,"  return %*\n",&buf);
 
     for (i = 0; i < fun->m_nparams; i++) {
       buf.clear();
-      fun->m_params[i].st.printFS(buf,xs_g->namespaces);
+      fun->m_params[i].st.printFS(buf,xs_g->namespaces,true);
       fmessage(f,"  param %d start %d type %*\n",i,fun->m_params[i].start->m_id,&buf);
     }
 
@@ -737,7 +737,7 @@ void Program::outputDF(FILE *f, bool internal)
         }
         else {
           StringBuffer buf2;
-          instr->m_inports[i].st.printFS(buf2,xs_g->namespaces);
+          instr->m_inports[i].st.printFS(buf2,xs_g->namespaces,true);
           fmessage(f,"    in  %d: %*\n",i,&buf2);
         }
       }
@@ -748,7 +748,7 @@ void Program::outputDF(FILE *f, bool internal)
         }
         else {
           StringBuffer buf2;
-          instr->m_outports[i].st.printFS(buf2,xs_g->namespaces);
+          instr->m_outports[i].st.printFS(buf2,xs_g->namespaces,true);
           fmessage(f,"    out %d: %*\n",i,&buf2);
         }
       }
