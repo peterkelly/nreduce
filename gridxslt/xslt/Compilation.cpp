@@ -207,9 +207,7 @@ int CallExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
 {
   Instruction *call = NULL;
   ActualParamExpr *p;
-  String name;
-  int nparams = 0;
-  int found = 0;
+  bool found = false;
   int supparam = 0;
 
   for (p = m_left; p; p = p->right()) {
@@ -226,19 +224,12 @@ int CallExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
     // FIXME: shouldn't allow direct access to operators (as distinct from builtin functions)...
     // must use namespace to access these (e.g. op:numeric-integer-divide)
     call = fun->addBuiltinInstruction(ident,supparam,m_sloc);
-    if (NULL != call) {
-      nparams = supparam;
-      name = m_qn.m_prefix;
-      found = 1;
-    }
+    if (NULL != call)
+      found = true;
   }
 
-  if (!found) {
-    Function *cfun;
-
-    if (NULL == (cfun = comp->m_program->getFunction(m_ident)))
-      return error(comp->m_ei,m_sloc.uri,m_sloc.line,String::null(),
-                   "No such function %* with %d args",&m_ident,supparam);
+  Function *cfun;
+  if (!found && (NULL != (cfun = comp->m_program->getFunction(m_ident)))) {
 
     call = fun->addInstruction(OP_CALL,m_sloc);
     call->m_cfun = cfun;
@@ -251,10 +242,19 @@ int CallExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
       call->m_inports[i].st = call->m_cfun->m_params[i].st;
       ASSERT(!call->m_inports[i].st.isNull());
     }
-
-    nparams = call->m_cfun->m_nparams-1;
-    name = call->m_cfun->m_ident.m_name;
+    found = true;
   }
+
+  Type *ctype;
+  if (!found && (NULL != (ctype = comp->m_schema->getType(m_ident)))) {
+    call = comp->specialop(fun,SPECIAL_NAMESPACE,"cast",1,m_sloc);
+    call->m_type = SequenceType(ctype);
+    found = true;
+  }
+
+  if (!found)
+    return error(comp->m_ei,m_sloc.uri,m_sloc.line,String::null(),
+                 "No such function %* with %d args",&m_ident,supparam);
 
   unsigned int paramno = 0;
   unsigned int userparams = call->m_ninports;
@@ -328,7 +328,7 @@ int TypeExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
   case XPATH_INSTANCE_OF: {
     CHECK_CALL(m_source->compile(comp,fun,cursor))
     Instruction *instanceof = comp->specialop(fun,SPECIAL_NAMESPACE,"instanceof",1,m_sloc);
-    instanceof->m_seqtypetest = m_st;
+    instanceof->m_type = m_st;
     comp->set_and_move_cursor(cursor,instanceof,0,instanceof,0);
     break;
   }
@@ -487,7 +487,7 @@ int NodeTestExpr::compile(Compilation *comp, Function *fun, OutputPort **cursor)
     select->m_nametest = m_qn.m_localPart;
   }
   else if (XPATH_NODE_TEST_SEQUENCETYPE == m_nodetest) {
-    select->m_seqtypetest = m_st;
+    select->m_type = m_st;
   }
   else {
     // FIXME: support other types (should there even by others?)
@@ -533,7 +533,7 @@ int ApplyTemplatesExpr::compile(Compilation *comp, Function *fun, OutputPort **c
   else {
     Instruction *select = comp->specialop(fun,SPECIAL_NAMESPACE,"select",1,m_sloc);
     select->m_axis = AXIS_CHILD;
-    select->m_seqtypetest = SequenceType::node();
+    select->m_type = SequenceType::node();
     comp->set_and_move_cursor(cursor,select,0,select,0);
   }
 
@@ -1204,7 +1204,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     Instruction *root = specialop(innerfun,FN_NAMESPACE,"root",1,nosourceloc);
     Instruction *select = specialop(innerfun,SPECIAL_NAMESPACE,"select",1,nosourceloc);
     select->m_axis = AXIS_DESCENDANT_OR_SELF;
-    select->m_seqtypetest = SequenceType::node();
+    select->m_type = SequenceType::node();
     call->m_inports[0].st = SequenceType::item();
 
     compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
@@ -1260,7 +1260,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
     select->m_axis = AXIS_SELF;
-    select->m_seqtypetest = SequenceType::choice(doctype,elemtype);
+    select->m_type = SequenceType::choice(doctype,elemtype);
 
     set_and_move_cursor(&condcur,cdot,0,cdot,0);
     set_and_move_cursor(&condcur,select,0,select,0);
@@ -1274,7 +1274,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     set_and_move_cursor(&truecur,dot,0,dot,0);
 
     childsel->m_axis = AXIS_CHILD;
-    childsel->m_seqtypetest = SequenceType::node();
+    childsel->m_type = SequenceType::node();
     set_and_move_cursor(&truecur,childsel,0,childsel,0);
 
     Instruction *map;
@@ -1299,7 +1299,7 @@ int Compilation::compileApplyFunction(Function **ifout, const char *mode)
     compileConditional(innerfun,branchcur,&condcur,&truecur,&falsecur,nosourceloc);
 
     select->m_axis = AXIS_SELF;
-    select->m_seqtypetest = SequenceType::choice(texttype,attrtype);
+    select->m_type = SequenceType::choice(texttype,attrtype);
 
     set_and_move_cursor(&condcur,cdot,0,cdot,0);
     set_and_move_cursor(&condcur,select,0,select,0);
