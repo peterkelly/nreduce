@@ -536,28 +536,16 @@ static Value round1(Environment *env, List<Value> &args)
   }
 
   if (args[0].isFloat()) {
-    float f = args[0].asFloat();
-    if (0.5 == (fabsf(f) - floorf(fabs(f))))
-      return ceilf(f);
-    else
-      return roundf(f);
+    return xpathroundf(args[0].asFloat());
   }
   else if (args[0].isDouble()) {
-    double d = args[0].asDouble();
-    if (0.5 == (fabs(d) - floor(fabs(d))))
-      return ceil(d);
-    else
-      return round(d);
+    return xpathround(args[0].asDouble());
   }
   else if (args[0].isInteger()) {
     return args[0].asInteger();
   }
   else { // args[0].isDecimal()
-    double d = args[0].asDecimal();
-    if (0.5 == (fabs(d) - floor(fabs(d))))
-      return Value::decimal(ceil(d));
-    else
-      return Value::decimal(round(d));
+    return Value::decimal(xpathround(args[0].asDecimal()));
   }
 }
 
