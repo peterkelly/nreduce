@@ -24,6 +24,7 @@
 #include "dataflow/Program.h"
 #include "util/XMLUtils.h"
 #include "util/Debug.h"
+#include "TypeConversion.h"
 #include <math.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -97,7 +98,7 @@ using namespace GridXSLT;
 // @implements(xpath-functions:casting-to-datetimes-8) status { deferred } @end
 // @implements(xpath-functions:casting-to-datetimes-9) status { deferred } @end
 
-static String typestr(const SequenceType &st)
+String GridXSLT::typestr(const SequenceType &st)
 {
   if ((SEQTYPE_ITEM == st.type()) && (ITEM_ATOMIC == st.itemType()->m_kind) &&
       ((st.itemType()->m_type->def.ident.m_ns == XS_NAMESPACE) ||
@@ -111,14 +112,14 @@ static String typestr(const SequenceType &st)
   }
 }
 
-static Value invalidTypeConversion(Environment *env, const Value &source, const String &target)
+Value GridXSLT::invalidTypeConversion(Environment *env, const Value &source, const String &target)
 {
   String st = typestr(source.type());
   error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001","Cannot convert %* to %*",&st,&target);
   return Value::null();
 }
 
-static Value invalidValueConversion(Environment *env, const Value &source, const String &target)
+Value GridXSLT::invalidValueConversion(Environment *env, const Value &source, const String &target)
 {
   String st = typestr(source.type());
   error(env->ei,env->sloc.uri,env->sloc.line,"FOCA0002","Cannot convert %* %* to %*",
@@ -126,7 +127,7 @@ static Value invalidValueConversion(Environment *env, const Value &source, const
   return Value::null();
 }
 
-static Value invalidString(Environment *env, const String &source, const String &target)
+Value GridXSLT::invalidString(Environment *env, const String &source, const String &target)
 {
   error(env->ei,env->sloc.uri,env->sloc.line,"FORG0001",
         "The string \"%*\" cannot be cast to a %*",&source,&target);
@@ -469,68 +470,68 @@ static Value cvQName(Environment *env, List<Value> &args)
   return Value::null();
 }
 
-static Value cvnormalizedString(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvnormalizedString(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvtoken(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvtoken(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvlanguage(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvlanguage(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvNMTOKEN(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvNMTOKEN(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvName(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvName(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvNCName(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvNCName(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvID(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvID(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvIDREF(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvIDREF(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
-static Value cvENTITY(Environment *env, List<Value> &args)
-{
-  /* FIXME */
-  ASSERT(0);
-  return Value::null();
-}
+// static Value cvENTITY(Environment *env, List<Value> &args)
+// {
+//   /* FIXME */
+//   ASSERT(0);
+//   return Value::null();
+// }
 
 static Value cvinteger(Environment *env, List<Value> &args)
 {
@@ -698,7 +699,7 @@ static Value cvuntypedAtomic(Environment *env, List<Value> &args)
 
 
 
-FunctionDefinition TypeConversion_fundefs[44] = {
+FunctionDefinition TypeConversion_fundefs[35] = {
   { cvstring,       XSNS, "string",       "xdt:anyAtomicType?", "xsd:string?",       false },
   { cvboolean,      XSNS, "boolean",      "xdt:anyAtomicType?", "xsd:boolean?",      false },
   { cvdecimal,      XSNS, "decimal",      "xdt:anyAtomicType?", "xsd:decimal?",      false },
@@ -717,16 +718,16 @@ FunctionDefinition TypeConversion_fundefs[44] = {
   { cvbase64Binary, XSNS, "base64Binary", "xdt:anyAtomicType?", "xsd:base64Binary?", false },
   { cvanyURI,       XSNS, "anyURI",       "xdt:anyAtomicType?", "xsd:anyURI?",       false },
   { cvQName,        XSNS, "QName",        "xsd:string",          "xsd:QName",         false },
-  { cvnormalizedString, XSNS, "normalizedString", "xdt:anyAtomicType?",
-                                                            "xsd:normalizedString?", false },
-  { cvtoken,        XSNS, "token",        "xdt:anyAtomicType?", "xsd:token?",        false },
-  { cvlanguage,     XSNS, "language",     "xdt:anyAtomicType?", "xsd:language?",     false },
-  { cvNMTOKEN,      XSNS, "NMTOKEN",      "xdt:anyAtomicType?", "xsd:NMTOKEN?",      false },
-  { cvName,         XSNS, "Name",         "xdt:anyAtomicType?", "xsd:Name?",         false },
-  { cvNCName,       XSNS, "NCName",       "xdt:anyAtomicType?", "xsd:NCName?",       false },
-  { cvID,           XSNS, "ID",           "xdt:anyAtomicType?", "xsd:ID?",           false },
-  { cvIDREF,        XSNS, "IDREF",        "xdt:anyAtomicType?", "xsd:IDREF?",        false },
-  { cvENTITY,       XSNS, "ENTITY",       "xdt:anyAtomicType?", "xsd:ENTITY?",       false },
+//   { cvnormalizedString, XSNS, "normalizedString", "xdt:anyAtomicType?",
+//                                                             "xsd:normalizedString?", false },
+//   { cvtoken,        XSNS, "token",        "xdt:anyAtomicType?", "xsd:token?",        false },
+//   { cvlanguage,     XSNS, "language",     "xdt:anyAtomicType?", "xsd:language?",     false },
+//   { cvNMTOKEN,      XSNS, "NMTOKEN",      "xdt:anyAtomicType?", "xsd:NMTOKEN?",      false },
+//   { cvName,         XSNS, "Name",         "xdt:anyAtomicType?", "xsd:Name?",         false },
+//   { cvNCName,       XSNS, "NCName",       "xdt:anyAtomicType?", "xsd:NCName?",       false },
+//   { cvID,           XSNS, "ID",           "xdt:anyAtomicType?", "xsd:ID?",           false },
+//   { cvIDREF,        XSNS, "IDREF",        "xdt:anyAtomicType?", "xsd:IDREF?",        false },
+//   { cvENTITY,       XSNS, "ENTITY",       "xdt:anyAtomicType?", "xsd:ENTITY?",       false },
   { cvinteger,      XSNS, "integer",      "xdt:anyAtomicType?", "xsd:integer?",      false },
   { cvnonPositiveInteger, XSNS, "nonPositiveInteger", "xdt:anyAtomicType?",
                                                           "xsd:nonPositiveInteger?", false },
