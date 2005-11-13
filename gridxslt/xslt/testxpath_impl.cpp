@@ -165,7 +165,7 @@ int testxpath_main(int argc, char **argv)
       ASSERT(XPATH_INSTANCE_OF == expr->m_type);
       TypeExpr *iof = static_cast<TypeExpr*>(expr);
       ASSERT(!iof->m_st.isNull());
-      iof->m_st.printFS(buf,xs_g->namespaces);
+      iof->m_st.printFS(buf,xs_g->namespaces,false);
       message("%*\n",&buf);
     }
     else {
