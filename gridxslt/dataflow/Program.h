@@ -112,7 +112,7 @@ public:
   int m_computed;
 
   String m_nametest;
-  SequenceType m_seqtypetest;
+  SequenceType m_type;
   int m_axis;
   df_seroptions *m_seroptions;
   list *m_nsdefs;
