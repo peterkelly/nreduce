@@ -3,6 +3,6 @@ testxpath
 ==================================== INPUT =====================================
 $test instance of element(foo,xsd:integer1)
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:2: error: No such type: xsd:integer1
+runtests.tmp/input.xml:2: error XPST0051: No such type: xsd:integer1
 ================================== RETURN CODE =================================
 1

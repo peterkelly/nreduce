@@ -8,6 +8,6 @@ testxslt
   </xsl:function>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error: No such type: xs:string2
+runtests.tmp/input.xml:4: error XPST0051: No such type: xs:string2
 ================================== RETURN CODE =================================
 1

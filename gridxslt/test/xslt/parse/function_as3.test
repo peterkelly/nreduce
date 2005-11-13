@@ -6,6 +6,6 @@ testxslt
   <xsl:function name="f:myfunc" as="xs:string2"/>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:3: error: No such type: xs:string2
+runtests.tmp/input.xml:3: error XPST0051: No such type: xs:string2
 ================================== RETURN CODE =================================
 1

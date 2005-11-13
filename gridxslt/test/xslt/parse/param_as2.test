@@ -8,6 +8,6 @@ testxslt
   </xsl:function>
 </xsl:transform>
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:4: error: Invalid namespace prefix: xs
+runtests.tmp/input.xml:4: error XPST0051: Invalid namespace prefix: xs
 ================================== RETURN CODE =================================
 1

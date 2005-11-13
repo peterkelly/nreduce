@@ -3,6 +3,6 @@ testxpath
 ==================================== INPUT =====================================
 $test instance of attribute(*,x:integer)
 ==================================== OUTPUT ====================================
-runtests.tmp/input.xml:2: error: Invalid namespace prefix: x
+runtests.tmp/input.xml:2: error XPST0051: Invalid namespace prefix: x
 ================================== RETURN CODE =================================
 1
