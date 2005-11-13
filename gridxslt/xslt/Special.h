@@ -20,7 +20,12 @@
  *
  */
 
+#ifndef _XSLT_SPECIAL_H
+#define _XSLT_SPECIAL_H
+
 #include "dataflow/SequenceType.h"
 #include "dataflow/Program.h"
 
 GridXSLT::Value ebv(GridXSLT::Environment *ctxt, GridXSLT::List<GridXSLT::Value> &args);
+
+#endif /* _XSLT_SPECIAL_H */
