@@ -28,6 +28,13 @@
 #include <ctype.h>
 #include <math.h>
 
+// FIXME: complete support for associating XML schema types with elements. Need a validating
+// parser for this.
+
+// Sequence type matching: Sections 2.5.4.1 and 2.5.4.2 have tests written for them. Postponing
+// the remaining tests for 2.5.4.* until we can fully support element and attribute tests that
+// use XML schema types.
+
 //#define TRACE_ALLOC
 //#define PRINT_SEQTYPE_ALLOC
 
@@ -116,7 +123,7 @@ ItemType::~ItemType()
     m_content->deref();
 }
 
-void ItemType::printFS(StringBuffer &buf, NamespaceMap *namespaces)
+void ItemType::printFS(StringBuffer &buf, NamespaceMap *namespaces,  bool abbrev)
 {
   switch (m_kind) {
   case ITEM_ATOMIC:
@@ -126,7 +133,7 @@ void ItemType::printFS(StringBuffer &buf, NamespaceMap *namespaces)
     buf.append("document");
     if (NULL != m_content) {
       buf.append(" { ");
-      m_content->printFS(buf,namespaces);
+      m_content->printFS(buf,namespaces,abbrev);
       buf.append(" }");
     }
     break;
@@ -296,7 +303,8 @@ void ItemType::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
 }
 
 static int resolve_object(const QName &qn, NamespaceMap *namespaces, Schema *s,
-                          const String &filename, int line,Error *ei, void **obj, int type)
+                          const String &filename, int line,Error *ei, void **obj, int type,
+                          const String &errname)
 {
   ns_def *def = NULL;
   String ns;
@@ -312,19 +320,13 @@ static int resolve_object(const QName &qn, NamespaceMap *namespaces, Schema *s,
   else {
     if ((!qn.m_prefix.isNull()) &&
         (NULL == (def = namespaces->lookup_prefix(qn.m_prefix))))
-      return error(ei,filename,line,String::null(),"Invalid namespace prefix: %*",&qn.m_prefix);
+      return error(ei,filename,line,errname,"Invalid namespace prefix: %*",&qn.m_prefix);
 
     ns = def ? def->href : String::null();
   }
 
-  if (NULL == (*obj = s->getObject(type,NSName(ns,qn.m_localPart)))) {
-    if (!qn.m_prefix.isNull())
-      return error(ei,filename,line,String::null(),"No such %s: %*:%*",
-                   xs_object_types[type],&qn.m_prefix,&qn.m_localPart);
-    else
-      return error(ei,filename,line,String::null(),"No such %s: %*",
-                   xs_object_types[type],&qn.m_localPart);
-  }
+  if (NULL == (*obj = s->getObject(type,NSName(ns,qn.m_localPart))))
+    return error(ei,filename,line,errname,"No such %s: %*",xs_object_types[type],&qn);
 
   return 0;
 }
@@ -342,11 +344,11 @@ int SequenceTypeImpl::resolve(NamespaceMap *namespaces, Schema *s, const String 
     ItemType *i = m_item;
     String ns;
     CHECK_CALL(resolve_object(i->m_typeref,namespaces,s,filename,line,ei,
-               (void**)&i->m_type,XS_OBJECT_TYPE))
+               (void**)&i->m_type,XS_OBJECT_TYPE,"XPST0051"))
     CHECK_CALL(resolve_object(i->m_elemref,namespaces,s,filename,line,ei,
-               (void**)&i->m_elem,XS_OBJECT_ELEMENT))
+               (void**)&i->m_elem,XS_OBJECT_ELEMENT,String::null()))
     CHECK_CALL(resolve_object(i->m_attrref,namespaces,s,filename,line,ei,
-               (void**)&i->m_attr,XS_OBJECT_ATTRIBUTE))
+               (void**)&i->m_attr,XS_OBJECT_ATTRIBUTE,String::null()))
 
     if ((!m_item->m_localname.m_prefix.isNull()) &&
         (NULL == (def = namespaces->lookup_prefix(m_item->m_localname.m_prefix))))
@@ -400,12 +402,12 @@ void SequenceTypeImpl::toList(list **types)
   }
 }
 
-static int validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
+static bool validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
 {
 //   message("validate_sequence_item: base->itemType()->m_kind = %s\n",
 //           df_item_kinds[base->itemType()->m_kind]);
   if (base->itemType()->m_kind != st->itemType()->m_kind)
-    return 0;
+    return false;
 
   switch (base->itemType()->m_kind) {
   case ITEM_ATOMIC: {
@@ -416,48 +418,56 @@ static int validate_sequence_item(SequenceTypeImpl *base, SequenceTypeImpl *st)
 //             &derived->def.ident,&basetype->def.ident);
     while (1) {
       if (basetype == derived)
-        return 1;
+        return true;
       if (derived->base == derived)
-        return 0;
+        return false;
       derived = derived->base;
     }
     break;
   }
   case ITEM_DOCUMENT:
     /* FIXME: check further details of type */
-    return 1;
+    return true;
   case ITEM_ELEMENT:
     /* FIXME: check further details of type */
-    return 1;
+    return true;
   case ITEM_ATTRIBUTE:
     /* FIXME: check further details of type */
-    return 1;
+    return true;
   case ITEM_PI:
-    return 1;
+    return true;
   case ITEM_COMMENT:
-    return 1;
+    return true;
   case ITEM_TEXT:
-    return 1;
+    return true;
   case ITEM_NAMESPACE:
-    return 1;
+    return true;
   }
 
   ASSERT(!"invalid item kind");
-  return 0;
+  return false;
 }
 
-static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
+static bool validate_sequence_list(SequenceTypeImpl *base, list **lptr)
 {
   switch (base->type()) {
-  case SEQTYPE_ITEM:
+  case SEQTYPE_ITEM: {
     if (NULL == *lptr)
-      return 0;
-    ASSERT(SEQTYPE_ITEM == ((SequenceTypeImpl*)((*lptr)->data))->type());
-    if (validate_sequence_item(base,(SequenceTypeImpl*)((*lptr)->data))) {
+      return false;
+    SequenceTypeImpl *item = (SequenceTypeImpl*)((*lptr)->data);
+    SequenceType tst(item);
+    SequenceType bst(base);
+    ASSERT(SEQTYPE_ITEM == item->type());
+    if (validate_sequence_item(base,item)) {
+//       message("validate_sequence_list 2: base %* matches item %*\n",&bst,&tst);
+//       message("prev remaining: %d\n",list_count(*lptr));
       *lptr = (*lptr)->next;
-      return 1;
+//       message("now remaining: %d\n",list_count(*lptr));
+      return true;
     }
-    return 0;
+//     message("validate_sequence_list 2: base %* DOES NOT match item %*\n",&bst,&tst);
+    return false;
+  }
   case SEQTYPE_OCCURRENCE: {
     list *backup = *lptr;
     switch (base->occurs()) {
@@ -465,22 +475,22 @@ static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
       return validate_sequence_list(base->left(),lptr);
     case OCCURS_OPTIONAL:
       if (validate_sequence_list(base->left(),lptr))
-        return 1;
+        return true;
       *lptr = backup;
-      return 1;
+      return true;
     case OCCURS_ZERO_OR_MORE:
       while (validate_sequence_list(base->left(),lptr))
         backup = *lptr;
       *lptr = backup;
-      return 1;
+      return true;
     case OCCURS_ONE_OR_MORE:
       if (!validate_sequence_list(base->left(),lptr))
-        return 0;
+        return false;
       backup = *lptr;
       while (validate_sequence_list(base->left(),lptr))
         backup = *lptr;
       *lptr = backup;
-      return 1;
+      return true;
     }
     ASSERT(!"invalid occurrence type");
     break;
@@ -494,32 +504,39 @@ static int validate_sequence_list(SequenceTypeImpl *base, list **lptr)
   case SEQTYPE_CHOICE: {
     list *backup = *lptr;
     if (validate_sequence_list(base->left(),lptr))
-      return 1;
+      return true;
     *lptr = backup;
     return validate_sequence_list(base->right(),lptr);
   }
   case SEQTYPE_EMPTY:
-    ASSERT(!"EMPTY is not a valid specifier type");
-    break;
+    return (0 == *lptr);
   }
   ASSERT(!"invalid sequence type");
   return 0;
 }
 
-int SequenceTypeImpl::isDerivedFrom(SequenceTypeImpl *base)
+bool SequenceTypeImpl::isDerivedFrom(SequenceTypeImpl *base)
 {
   SequenceType st1(this);
   SequenceType st2(base);
 //   message("SequenceTypeImpl::isDerivedFrom(): this = %*, base = %*\n",&st1,&st2);
   list *types = NULL;
   list *types2;
-  int r;
   toList(&types);
   types2 = types;
-  r = validate_sequence_list(base,&types2);
+
+  bool valid = validate_sequence_list(base,&types2);
+
+  if (NULL != types2) { // didn't match the whole sequence
+//     message("isDerivedFrom: remaining: %d of %d sequence items\n",
+//             list_count(types),list_count(types2));
+    valid = false;
+  }
+
   list_free(types,NULL);
-//   message("SequenceTypeImpl::isDerivedFrom() r = %d\n",r);
-  return r;
+//   message("SequenceTypeImpl::isDerivedFrom() returning %d\n",valid);
+
+  return valid;
 }
 
 SequenceTypeImpl::SequenceTypeImpl(int type)
@@ -572,12 +589,14 @@ static SequenceTypeImpl *create_item_or_node(int item)
   SequenceTypeImpl *i4 = new SequenceTypeImpl(new ItemType(ITEM_DOCUMENT));
   SequenceTypeImpl *i5 = new SequenceTypeImpl(new ItemType(ITEM_COMMENT));
   SequenceTypeImpl *i6 = new SequenceTypeImpl(new ItemType(ITEM_PI));
+  SequenceTypeImpl *i7 = new SequenceTypeImpl(new ItemType(ITEM_NAMESPACE)); // not part of spec
 
   SequenceTypeImpl *choice = add_alternative(i1,i2);
   choice = add_alternative(choice,i3);
   choice = add_alternative(choice,i4);
   choice = add_alternative(choice,i5);
   choice = add_alternative(choice,i6);
+  choice = add_alternative(choice,i7);
 
   if (item) {
     SequenceTypeImpl *i7 = new SequenceTypeImpl(new ItemType(ITEM_ATOMIC));
@@ -683,27 +702,30 @@ void SequenceTypeImpl::init()
 #endif
 }
 
-void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces)
+void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces, bool abbrev)
 {
-  /* item() and node() are not actually part of the formal semantics type syntax - however since
-     we currently use this output function for debugging purposes, it is more convenient to
-     show the condensed form from XPath syntax rather than the full expansion */
-//   if (m_isItem) {
-//     buf.append("item()");
-//     return;
-//   }
+  // item() and node() are not actually part of the formal semantics type syntax - however since
+  // we currently use this output function for debugging purposes, it is more convenient to
+  // show the condensed form from XPath syntax rather than the full expansion
 
-//   if (m_isNode) {
-//     buf.append("node()");
-//     return;
-//   }
+  // We can only do this if the abbreviation is specifically allowed... for some tests we need
+  // the formal semantics core syntax
+  if (abbrev && m_isItem) {
+    buf.append("item()");
+    return;
+  }
+
+  if (abbrev && m_isNode) {
+    buf.append("node()");
+    return;
+  }
 
   switch (m_type) {
   case SEQTYPE_ITEM:
-    m_item->printFS(buf,namespaces);
+    m_item->printFS(buf,namespaces,abbrev);
     break;
   case SEQTYPE_OCCURRENCE:
-    m_left->printFS(buf,namespaces);
+    m_left->printFS(buf,namespaces,abbrev);
     switch (m_occurrence) {
     case OCCURS_ONCE:
       break;
@@ -723,23 +745,23 @@ void SequenceTypeImpl::printFS(StringBuffer &buf, NamespaceMap *namespaces)
     break;
   case SEQTYPE_ALL:
     buf.append("(");
-    m_left->printFS(buf,namespaces);
+    m_left->printFS(buf,namespaces,abbrev);
     buf.append(" & ");
-    m_right->printFS(buf,namespaces);
+    m_right->printFS(buf,namespaces,abbrev);
     buf.append(")");
     break;
   case SEQTYPE_SEQUENCE:
     buf.append("(");
-    m_left->printFS(buf,namespaces);
+    m_left->printFS(buf,namespaces,abbrev);
     buf.append(" , ");
-    m_right->printFS(buf,namespaces);
+    m_right->printFS(buf,namespaces,abbrev);
     buf.append(")");
     break;
   case SEQTYPE_CHOICE:
     buf.append("(");
-    m_left->printFS(buf,namespaces);
+    m_left->printFS(buf,namespaces,abbrev);
     buf.append(" | ");
-    m_right->printFS(buf,namespaces);
+    m_right->printFS(buf,namespaces,abbrev);
     buf.append(")");
     break;
   case SEQTYPE_EMPTY:
@@ -805,7 +827,7 @@ void SequenceTypeImpl::printXPath(StringBuffer &buf, NamespaceMap *namespaces)
 
 void SequenceType::print(StringBuffer &buf)
 {
-  impl->printFS(buf,xs_g->namespaces);
+  impl->printFS(buf,xs_g->namespaces,false);
 }
 
 Node::Node(int type)
@@ -1360,20 +1382,20 @@ void ValueImpl::init(Type *t)
   init(SequenceType(t));
 }
 
-int ValueImpl::isDerivedFrom(Type *type) const
+bool ValueImpl::isDerivedFrom(Type *type) const
 {
   Type *t1;
   if (SEQTYPE_ITEM != st.type())
-    return 0;
+    return false;
 
   if (ITEM_ATOMIC != st.itemType()->m_kind)
-    return 0;
+    return false;
 
   for (t1 = st.itemType()->m_type; t1 != t1->base; t1 = t1->base)
     if (t1 == type)
-      return 1;
+      return true;
 
-  return 0;
+  return false;
 }
 
 static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
@@ -1635,7 +1657,7 @@ void ValueImpl::printRemaining()
     ValueImpl *v = (ValueImpl*)l->data;
     StringBuffer stbuf;
     StringBuffer valbuf;
-    v->st.printFS(stbuf,xs_g->namespaces);
+    v->st.printFS(stbuf,xs_g->namespaces,true);
     if ((SEQTYPE_ITEM == v->st.type()) &&
         (ITEM_ATOMIC == v->st.itemType()->m_kind))
       v->printbuf(valbuf);
@@ -1647,7 +1669,7 @@ void ValueImpl::printRemaining()
   for (l = allocseqtypes; l; l = l->next) {
     SequenceTypeImpl *st = (SequenceTypeImpl*)l->data;
     StringBuffer buf;
-    st->printFS(buf,xs_g->namespaces);
+    st->printFS(buf,xs_g->namespaces,true);
     message("remaining SequenceTypeImpl %* - %d refs\n",buf,st->refCount());
   }
   message("SequenceTypeImpl instances remaining: %d\n",list_count(allocseqtypes));
@@ -1726,5 +1748,21 @@ Value Value::listToSequence2(List<Value> &values)
     }
   }
   return result;
+}
+
+float GridXSLT::xpathroundf(float f)
+{
+  if (0.5 == (fabsf(f) - floorf(fabs(f))))
+    return ceilf(f);
+  else
+    return roundf(f);
+}
+
+double GridXSLT::xpathround(double d)
+{
+  if (0.5 == (fabs(d) - floor(fabs(d))))
+    return ceil(d);
+  else
+    return round(d);
 }
 

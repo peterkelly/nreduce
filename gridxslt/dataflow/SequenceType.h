@@ -79,7 +79,7 @@ public:
   ItemType(int kind);
   ~ItemType();
 
-  void printFS(StringBuffer &buf, NamespaceMap *namespaces);
+  void printFS(StringBuffer &buf, NamespaceMap *namespaces, bool abbrev);
   void printXPath(StringBuffer &buf, NamespaceMap *namespaces);
 
   int m_kind;
@@ -117,12 +117,12 @@ public:
 
   void init();
 
-  void printFS(StringBuffer &buf, NamespaceMap *namespaces);
+  void printFS(StringBuffer &buf, NamespaceMap *namespaces, bool abbrev);
   void printXPath(StringBuffer &buf, NamespaceMap *namespaces);
   int resolve(NamespaceMap *namespaces, Schema *s, const String &filename,
               int line, Error *ei);
   void toList(list **types);
-  int isDerivedFrom(SequenceTypeImpl *base);
+  bool isDerivedFrom(SequenceTypeImpl *base);
 
   inline int type() const { return m_type; }
   inline SequenceTypeImpl *left() const { return m_left; }
@@ -181,12 +181,13 @@ public:
   inline bool isNull() const { return (0 == impl); }
   static SequenceType null() { return SequenceType(); }
 
-  void printFS(StringBuffer &buf, NamespaceMap *namespaces) { impl->printFS(buf,namespaces); }
+  void printFS(StringBuffer &buf, NamespaceMap *namespaces, bool abbrev)
+    { impl->printFS(buf,namespaces,abbrev); }
   void printXPath(StringBuffer &buf, NamespaceMap *namespaces) { impl->printXPath(buf,namespaces); }
   int resolve(NamespaceMap *namespaces, Schema *s, const String &filename, int line, Error *ei)
     { return impl->resolve(namespaces,s,filename,line,ei); }
   void toList(list **types) { impl->toList(types); }
-  int isDerivedFrom(SequenceType &base) { return impl->isDerivedFrom(base.impl); }
+  bool isDerivedFrom(SequenceType &base) { return impl->isDerivedFrom(base.impl); }
 
   inline int type() const { return impl->type(); }
   inline SequenceType left() const { return impl->left(); }
@@ -296,7 +297,7 @@ public:
   void init(const SequenceType &_st);
   void init(Type *t);
 
-  int isDerivedFrom(Type *type) const;
+  bool isDerivedFrom(Type *type) const;
   void printbuf(StringBuffer &buf);
   void fprint(FILE *f);
   ValueImpl **sequenceToArray();
@@ -321,6 +322,8 @@ public:
   inline bool isHexBinary() const { return isDerivedFrom(xs_g->hex_binary_type); }
   inline bool isAnyURI() const { return isDerivedFrom(xs_g->any_uri_type); }
   inline bool isQName() const { return isDerivedFrom(xs_g->qname_type); }
+
+  inline bool isEmpty() const { return (SEQTYPE_EMPTY == st.type()); }
 
   inline Context *asContext() const { ASSERT(isContext()); return value.c; }
   inline int asInteger() const { ASSERT(isInteger()); return value.i; }
@@ -412,7 +415,7 @@ public:
   inline bool isNull() const { return (0 == impl); }
   static Value null() { return Value(); }
 
-  int isDerivedFrom(Type *type) const { return impl->isDerivedFrom(type); }
+  bool isDerivedFrom(Type *type) const { return impl->isDerivedFrom(type); }
   void fprint(FILE *f) const { impl->fprint(f); }
   ValueImpl **sequenceToArray() const { return impl->sequenceToArray(); }
   void getSequenceValues(List<Value> &values) const { impl->getSequenceValues(values); }
@@ -436,6 +439,8 @@ public:
   inline bool isAnyURI() const { return impl->isAnyURI(); }
   inline bool isQName() const { return impl->isQName(); }
 
+  inline bool isEmpty() const { return impl->isEmpty(); }
+
   inline Context *asContext() const { return impl->asContext(); }
   inline int asInteger() const { return impl->asInteger(); }
   inline float asFloat() const { return impl->asFloat(); }
@@ -458,6 +463,8 @@ public:
 
   virtual void print(StringBuffer &buf) { impl->printbuf(buf); }
 
+  inline ValueImpl *handle() const { return impl; }
+
 private:
   ValueImpl *impl;
 };
@@ -465,6 +472,9 @@ private:
 #ifndef _DATAFLOW_SEQUENCETYPE_C
 extern const char *df_item_kinds[ITEM_COUNT];
 #endif
+
+float xpathroundf(float f);
+double xpathround(double d);
 
 };
 
