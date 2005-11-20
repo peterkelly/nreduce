@@ -229,6 +229,8 @@ int String::toInt() const
 
 String String::collapseWhitespace() const
 {
+  if (NULL == impl)
+    return impl;
   Char *chars = new Char[impl->m_len];
   unsigned int pos = 0;
   bool haveSpace = false;
@@ -253,6 +255,8 @@ String String::collapseWhitespace() const
 
 String String::replaceWhitespace() const
 {
+  if (NULL == impl)
+    return impl;
   Char *chars = new Char[impl->m_len];
   memcpy(chars,impl->m_chars,impl->m_len*sizeof(Char));
   for (unsigned int i = 0; i < impl->m_len; i++) {
@@ -283,7 +287,10 @@ List<String> String::parseList() const
 
 void String::print(StringBuffer &buf)
 {
-  buf.append(*this);
+  if (impl)
+    buf.append(*this);
+  else
+    buf.append("(null)");
 }
 
 bool GridXSLT::operator==(String const &a, String const &b)
