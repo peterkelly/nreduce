@@ -34,16 +34,16 @@ public:
   OutputVisitor(xmlTextWriter *_writer) : SchemaVisitor(), writer(_writer) { }
   virtual ~OutputVisitor() { }
 
-  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t);
-  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a);
-  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e);
+  virtual int type(Schema *s, int post, Type *t);
+  virtual int attribute(Schema *s, int post, SchemaAttribute *a);
+  virtual int element(Schema *s, int post, SchemaElement *e);
 
-  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag);
-  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+  virtual int attributeGroup(Schema *s, int post, AttributeGroup *ag);
+  virtual int attributeGroupRef(Schema *s, int post,
                                 AttributeGroupRef *agr);
-  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd);
-  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p);
-  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au);
+  virtual int modelGroupDef(Schema *s, int post, ModelGroupDef *mgd);
+  virtual int particle(Schema *s, int post, Particle *p);
+  virtual int attributeUse(Schema *s, int post, AttributeUse *au);
 
   xmlTextWriter *writer;
 };
@@ -54,18 +54,18 @@ public:
   DumpVisitor() : SchemaVisitor(), f(NULL), indent(0), in_builtin_type(0), found_non_builtin(0) { }
   virtual ~DumpVisitor() { }
 
-  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t);
-  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a);
-  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e);
-  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag);
-  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+  virtual int type(Schema *s, int post, Type *t);
+  virtual int attribute(Schema *s, int post, SchemaAttribute *a);
+  virtual int element(Schema *s, int post, SchemaElement *e);
+  virtual int attributeGroup(Schema *s, int post, AttributeGroup *ag);
+  virtual int attributeGroupRef(Schema *s, int post,
                                 AttributeGroupRef *agr);
-  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd);
-  virtual int modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg);
-  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p);
-  virtual int wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w);
-  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au);
-  virtual int schema(Schema *s, xmlDocPtr doc, int post, Schema *s2);
+  virtual int modelGroupDef(Schema *s, int post, ModelGroupDef *mgd);
+  virtual int modelGroup(Schema *s, int post, ModelGroup *mg);
+  virtual int particle(Schema *s, int post, Particle *p);
+  virtual int wildcard(Schema *s, int post, Wildcard *w);
+  virtual int attributeUse(Schema *s, int post, AttributeUse *au);
+  virtual int schema(Schema *s, int post, Schema *s2);
 
   void incIndent();
   void decIndent();

@@ -26,6 +26,7 @@
 #include "util/XMLUtils.h"
 #include "util/List.h"
 #include "util/Namespace.h"
+#include "util/Node.h"
 #include <libxml/tree.h>
 #include <stdio.h>
 
@@ -183,21 +184,21 @@ public:
   SchemaVisitor() : once_each(0) { }
   virtual ~SchemaVisitor() { }
 
-  virtual int type(Schema *s, xmlDocPtr doc, int post, Type *t) { return 0; }
-  virtual int attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a) { return 0; }
-  virtual int element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e) { return 0; }
-  virtual int attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag) { return 0; }
-  virtual int attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
+  virtual int type(Schema *s, int post, Type *t) { return 0; }
+  virtual int attribute(Schema *s, int post, SchemaAttribute *a) { return 0; }
+  virtual int element(Schema *s, int post, SchemaElement *e) { return 0; }
+  virtual int attributeGroup(Schema *s, int post, AttributeGroup *ag) { return 0; }
+  virtual int attributeGroupRef(Schema *s, int post,
                                 AttributeGroupRef *agr) { return 0; }
-  virtual int identityConstraint(Schema *s, xmlDocPtr doc, int post,
+  virtual int identityConstraint(Schema *s, int post,
                          IdentityConstraint *ic) { return 0; }
-  virtual int modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd) { return 0; }
-  virtual int modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg) { return 0; }
-  virtual int notation(Schema *s, xmlDocPtr doc, int post, Notation *n) { return 0; }
-  virtual int particle(Schema *s, xmlDocPtr doc, int post, Particle *p) { return 0; }
-  virtual int wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w) { return 0; }
-  virtual int attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au) { return 0; }
-  virtual int schema(Schema *s, xmlDocPtr doc, int post, Schema *s2) { return 0; }
+  virtual int modelGroupDef(Schema *s, int post, ModelGroupDef *mgd) { return 0; }
+  virtual int modelGroup(Schema *s, int post, ModelGroup *mg) { return 0; }
+  virtual int notation(Schema *s, int post, Notation *n) { return 0; }
+  virtual int particle(Schema *s, int post, Particle *p) { return 0; }
+  virtual int wildcard(Schema *s, int post, Wildcard *w) { return 0; }
+  virtual int attributeUse(Schema *s, int post, AttributeUse *au) { return 0; }
+  virtual int schema(Schema *s, int post, Schema *s2) { return 0; }
 
   int once_each;
 };
@@ -226,7 +227,7 @@ public:
   ValueConstraint();
   ~ValueConstraint();
 
-  char *value;
+  String value;
   int type;
 };
 
@@ -257,12 +258,16 @@ public:
   Reference *ref;
 };
 
-struct xs_facetdata {
+class xs_facetdata {
+public:
+  xs_facetdata();
+  ~xs_facetdata();
+
   char *strval[XS_FACET_NUMFACETS];
   int intval[XS_FACET_NUMFACETS];
   int defline[XS_FACET_NUMFACETS];
-  list *patterns;
-  list *enumerations;
+  List<String> patterns;
+  List<String> enumerations;
 };
 
 class Type {
@@ -595,13 +600,13 @@ public:
 
   void *lookup(int type, const NSName &ident);
 
-  symbol_space *ss_types;                  /* {type definitions} */
-  symbol_space *ss_attributes;             /* {attribute declarations} */
-  symbol_space *ss_elements;               /* {element declarations} */
-  symbol_space *ss_attribute_groups;       /* {attribute group definitions} */
-  symbol_space *ss_identity_constraints;
-  symbol_space *ss_model_group_defs;       /* {model group declarations} */
-  symbol_space *ss_notations;              /* {notation declarations} */
+  SymbolSpace *ss_types;                  /* {type definitions} */
+  SymbolSpace *ss_attributes;             /* {attribute declarations} */
+  SymbolSpace *ss_elements;               /* {element declarations} */
+  SymbolSpace *ss_attribute_groups;       /* {attribute group definitions} */
+  SymbolSpace *ss_identity_constraints;
+  SymbolSpace *ss_model_group_defs;       /* {model group declarations} */
+  SymbolSpace *ss_notations;              /* {notation declarations} */
 };
 
 class BuiltinTypes {
@@ -666,8 +671,8 @@ public:
   void *attribute_grop_definitions;
   void *notation_declarations;
 
-  char *uri;
-  char *ns;
+  String m_uri;
+  String m_targetNamespace;
   GridXSLT::Error ei;
 
   BuiltinTypes *globals;
@@ -678,8 +683,8 @@ public:
   int attrformq;  /* attributeFormDefault: qualified=1, unqualified=0 */
   int elemformq;  /* elementFormDefault: qualified=1, unqualified=0 */
 
-  char *block_default;
-  char *final_default;
+  String block_default;
+  String final_default;
 
   void *annotations;                       /* {annotations} */
 
@@ -697,7 +702,7 @@ Wildcard *Wildcard_constraint_union(Schema *s, Wildcard *O1, Wildcard *O2,
 Wildcard *Wildcard_constraint_intersection(Schema *s, Wildcard *a, Wildcard *b,
                                                  int process_contents);
 
-int parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const String &uri, const char *sourceloc,
+int parse_xmlschema_element(Node *node, const String &uri, const char *sourceloc,
                             Schema **sout, GridXSLT::Error *ei, BuiltinTypes *g);
 
 Schema *parse_xmlschema_file(char *filename, BuiltinTypes *g);

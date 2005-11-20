@@ -94,9 +94,9 @@ void output_value_constraint(xmlTextWriter *writer, ValueConstraint *vc)
 void DumpVisitor::dump_value_constraint(ValueConstraint *vc)
 {
   if (VALUECONSTRAINT_DEFAULT == vc->type)
-    dump_printf("  Value constraint: default \"%s\"\n",vc->value);
+    dump_printf("  Value constraint: default \"%*\"\n",&vc->value);
   else if (VALUECONSTRAINT_FIXED == vc->type)
-    dump_printf("  Value constraint: fixed \"%s\"\n",vc->value);
+    dump_printf("  Value constraint: fixed \"%*\"\n",&vc->value);
   else
     dump_printf("  Value constraint: (none)\n");
 }
@@ -147,7 +147,7 @@ void output_wildcard_attrs(Schema *s, xmlTextWriter *writer, Wildcard *w)
       String ns = *it;
       if (ns.isNull())
         stringbuf_format(buf,"##local ");
-      else if (ns == s->ns)
+      else if (ns == s->m_targetNamespace)
         stringbuf_format(buf,"##targetNamespace ");
       else
         stringbuf_format(buf,"%* ",&ns);
@@ -169,7 +169,6 @@ void output_wildcard_attrs(Schema *s, xmlTextWriter *writer, Wildcard *w)
 void output_facetdata(xmlTextWriter *writer, xs_facetdata *fd)
 {
   int i;
-  list *l;
 
   for (i = 0; i < XS_FACET_NUMFACETS; i++) {
     if (NULL != fd->strval[i]) {
@@ -182,20 +181,21 @@ void output_facetdata(xmlTextWriter *writer, xs_facetdata *fd)
     }
   }
 
-  for (l = fd->patterns; l; l = l->next) {
+  Iterator<String> it;
+  for (it = fd->patterns; it.haveCurrent(); it++) {
     xmlTextWriterStartElement(writer,"xsd:pattern");
-    XMLWriter::attribute(writer,"value",(char*)l->data);
+    XMLWriter::attribute(writer,"value",*it);
     xmlTextWriterEndElement(writer);
   }
 
-  for (l = fd->enumerations; l; l = l->next) {
+  for (it = fd->enumerations; it.haveCurrent(); it++) {
     xmlTextWriterStartElement(writer,"xsd:enumeration");
-    XMLWriter::attribute(writer,"value",(char*)l->data);
+    XMLWriter::attribute(writer,"value",*it);
     xmlTextWriterEndElement(writer);
   }
 }
 
-int OutputVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
+int OutputVisitor::type(Schema *s, int post, Type *t)
 {
   if (t->builtin)
     return 0;
@@ -340,7 +340,7 @@ void print_name(FILE *f, char *name, char *ns)
     fmessage(f,"%s",name);
 }
 
-int DumpVisitor::schema(Schema *s, xmlDocPtr doc, int post, Schema *s2)
+int DumpVisitor::schema(Schema *s, int post, Schema *s2)
 {
   if (post) {
     decIndent();
@@ -348,7 +348,10 @@ int DumpVisitor::schema(Schema *s, xmlDocPtr doc, int post, Schema *s2)
   }
 
   dump_printf("Schema\n");
-  dump_printf("  Target namespace: %s\n",s2->ns ? s2->ns : "(none)");
+  if (s2->m_targetNamespace.isNull())
+    dump_printf("  Target namespace: (none)\n");
+  else
+    dump_printf("  Target namespace: %*\n",&s2->m_targetNamespace);
   dump_printf("  Default attribute form: %s\n",s2->attrformq ? "qualified" : "unqualified");
   dump_printf("  Default element form: %s\n",s2->elemformq ? "qualified" : "unqualified");
 
@@ -367,7 +370,7 @@ int DumpVisitor::schema(Schema *s, xmlDocPtr doc, int post, Schema *s2)
   return 0;
 }
 
-int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
+int DumpVisitor::type(Schema *s, int post, Type *t)
 {
   if (t->builtin) {
     if (!found_non_builtin)
@@ -392,7 +395,6 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
 
   if (!t->complex) {
     int facet;
-    list *l;
     /* <simpleType> */
 
     dump_printf("Simple type %*\n",&t->def.ident);
@@ -421,10 +423,15 @@ int DumpVisitor::type(Schema *s, xmlDocPtr doc, int post, Type *t)
     for (facet = 0; facet < XS_FACET_NUMFACETS; facet++)
       if (t->facets.strval[facet])
         dump_printf("    %s=%s\n",xs_facet_names[facet],t->facets.strval[facet]);
-    for (l = t->facets.patterns; l; l = l->next)
-      dump_printf("    pattern=%s\n",(char*)l->data);
-    for (l = t->facets.enumerations; l; l = l->next)
-      dump_printf("    enumeration=%s\n",(char*)l->data);
+    Iterator<String> it;
+    for (it = t->facets.patterns; it.haveCurrent(); it++) {
+      String pattern = *it;
+      dump_printf("    pattern=%*\n",&pattern);
+    }
+    for (it = t->facets.enumerations; it.haveCurrent(); it++) {
+      String enumeration = *it;
+      dump_printf("    enumeration=%*\n",&enumeration);
+    }
   }
   else {
     dump_printf("Complex type %*\n",&t->def.ident);
@@ -505,7 +512,7 @@ int output_model_group(Schema *s, xmlDocPtr doc, void *data, int post, ModelGrou
   return 0;
 }
 
-int DumpVisitor::modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg)
+int DumpVisitor::modelGroup(Schema *s, int post, ModelGroup *mg)
 {
   if (post) {
     decIndent();
@@ -526,7 +533,7 @@ int DumpVisitor::modelGroup(Schema *s, xmlDocPtr doc, int post, ModelGroup *mg)
   return 0;
 }
 
-int DumpVisitor::wildcard(Schema *s, xmlDocPtr doc, int post, Wildcard *w)
+int DumpVisitor::wildcard(Schema *s, int post, Wildcard *w)
 {
   if (post)
     return 0;
@@ -584,7 +591,7 @@ void maybe_output_element_typeref(Schema *s, SchemaElement *e, xmlTextWriter *wr
     write_ref_attribute(s,writer,"type",e->typeref);
 }
 
-int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
+int OutputVisitor::particle(Schema *s, int post, Particle *p)
 {
   if (PARTICLE_TERM_ELEMENT == p->term_type) {
 
@@ -670,7 +677,7 @@ int OutputVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
   return 0;
 }
 
-int DumpVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
+int DumpVisitor::particle(Schema *s, int post, Particle *p)
 {
   if (post) {
     decIndent();
@@ -692,7 +699,7 @@ int DumpVisitor::particle(Schema *s, xmlDocPtr doc, int post, Particle *p)
   return 0;
 }
 
-int OutputVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd)
+int OutputVisitor::modelGroupDef(Schema *s, int post, ModelGroupDef *mgd)
 {
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:group");
@@ -715,7 +722,7 @@ int OutputVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupD
   return 0;
 }
 
-int DumpVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef *mgd)
+int DumpVisitor::modelGroupDef(Schema *s, int post, ModelGroupDef *mgd)
 {
   if (post) {
     decIndent();
@@ -737,7 +744,7 @@ int DumpVisitor::modelGroupDef(Schema *s, xmlDocPtr doc, int post, ModelGroupDef
   return 0;
 }
 
-int OutputVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
+int OutputVisitor::element(Schema *s, int post, SchemaElement *e)
 {
   if (!e->toplevel) {
     /* we are inside a model group, referenced from a particle - output_particle() will print
@@ -767,7 +774,7 @@ int OutputVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
   return 0;
 }
 
-int DumpVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
+int DumpVisitor::element(Schema *s, int post, SchemaElement *e)
 {
   list *l;
   stringbuf *tmpbuf;
@@ -815,7 +822,7 @@ int DumpVisitor::element(Schema *s, xmlDocPtr doc, int post, SchemaElement *e)
   return 0;
 }
 
-int OutputVisitor::attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a)
+int OutputVisitor::attribute(Schema *s, int post, SchemaAttribute *a)
 {
   if (!a->toplevel) {
     /* we are referenced from an attribute use... that will print the relevant info instead */
@@ -836,7 +843,7 @@ int OutputVisitor::attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute
   return 0;
 }
 
-int OutputVisitor::attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au)
+int OutputVisitor::attributeUse(Schema *s, int post, AttributeUse *au)
 {
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:attribute");
@@ -869,7 +876,7 @@ int OutputVisitor::attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse
   return 0;
 }
 
-int DumpVisitor::attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag)
+int DumpVisitor::attributeGroup(Schema *s, int post, AttributeGroup *ag)
 {
   if (post) {
     decIndent();
@@ -882,7 +889,7 @@ int DumpVisitor::attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGro
   return 0;
 }
 
-int DumpVisitor::attributeGroupRef(Schema *s, xmlDocPtr doc, int post, AttributeGroupRef *agr)
+int DumpVisitor::attributeGroupRef(Schema *s, int post, AttributeGroupRef *agr)
 {
   if (post) {
     decIndent();
@@ -895,7 +902,7 @@ int DumpVisitor::attributeGroupRef(Schema *s, xmlDocPtr doc, int post, Attribute
   return 0;
 }
 
-int OutputVisitor::attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeGroup *ag)
+int OutputVisitor::attributeGroup(Schema *s, int post, AttributeGroup *ag)
 {
   if (!post) {
     xmlTextWriterStartElement(writer,"xsd:attributeGroup");
@@ -915,8 +922,7 @@ int OutputVisitor::attributeGroup(Schema *s, xmlDocPtr doc, int post, AttributeG
   return 0;
 }
 
-int OutputVisitor::attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
-                                AttributeGroupRef *agr)
+int OutputVisitor::attributeGroupRef(Schema *s, int post, AttributeGroupRef *agr)
 {
   if (post)
     return 0;
@@ -928,7 +934,7 @@ int OutputVisitor::attributeGroupRef(Schema *s, xmlDocPtr doc, int post,
   return 0;
 }
 
-int DumpVisitor::attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *a)
+int DumpVisitor::attribute(Schema *s, int post, SchemaAttribute *a)
 {
   if (post) {
     decIndent();
@@ -950,7 +956,7 @@ int DumpVisitor::attribute(Schema *s, xmlDocPtr doc, int post, SchemaAttribute *
   return 0;
 }
 
-int DumpVisitor::attributeUse(Schema *s, xmlDocPtr doc, int post, AttributeUse *au)
+int DumpVisitor::attributeUse(Schema *s, int post, AttributeUse *au)
 {
   if (post) {
     decIndent();
@@ -988,8 +994,8 @@ void output_xmlschema(FILE *f, Schema *s)
     if (ns->href != XDT_NAMESPACE)
       XMLWriter::attribute(writer,String::format("xmlns:%*",&ns->prefix),ns->href);
   }
-  if (s->ns)
-    XMLWriter::attribute(writer,"targetNamespace",s->ns);
+  if (!s->m_targetNamespace.isNull())
+    XMLWriter::attribute(writer,"targetNamespace",s->m_targetNamespace);
   if (s->attrformq)
     XMLWriter::attribute(writer,"attributeFormDefault","qualified");
   if (s->elemformq)
@@ -997,10 +1003,10 @@ void output_xmlschema(FILE *f, Schema *s)
 
   for (l = s->imports; l; l = l->next) {
     Schema *import = (Schema*)l->data;
-    String rel = get_relative_uri(import->uri,s->uri);
+    String rel = get_relative_uri(import->m_uri,s->m_uri);
     xmlTextWriterStartElement(writer,"xsd:import");
-    if (NULL != import->ns)
-      XMLWriter::attribute(writer,"namespace",import->ns);
+    if (!import->m_targetNamespace.isNull())
+      XMLWriter::attribute(writer,"namespace",import->m_targetNamespace);
     XMLWriter::attribute(writer,"schemaLocation",rel);
     xmlTextWriterEndElement(writer);
   }

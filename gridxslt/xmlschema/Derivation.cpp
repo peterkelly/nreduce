@@ -52,7 +52,7 @@ int check_facet_valid_restriction(Schema *s, Type *D, Type *B, int facet)
       if (((XS_FACET_LENGTH == facet) && (D->facets.intval[facet] != B->facets.intval[facet])) ||
           ((XS_FACET_MINLENGTH == facet) && (D->facets.intval[facet] < B->facets.intval[facet])) ||
           ((XS_FACET_MAXLENGTH == facet) && (D->facets.intval[facet] > B->facets.intval[facet])))
-        return error(&s->ei,s->uri,D->facets.defline[facet],"structures-3.14.6",
+        return error(&s->ei,s->m_uri,D->facets.defline[facet],"structures-3.14.6",
                      "\"%s\" is not a valid restriction of \"%s\" for the %s facet",
                      D->facets.strval[facet],b2->facets.strval[facet],xs_facet_names[facet]);
     }
@@ -86,7 +86,7 @@ int xs_check_simple_type_derivation_valid_atomic(Schema *s, Type *t)
   ASSERT(TYPE_VARIETY_INVALID != t->base->variety);
   /* note: not sure if we can test this; i think this stuff is already checked previously */
   if (t->base->complex || ((TYPE_VARIETY_ATOMIC != t->base->variety) && !t->base->builtin)) {
-    return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.1.1","For atomic simple types, "
+    return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.1.1","For atomic simple types, "
                  "the base type definition must be an atomic simple type definition or a "
                  "built-in primitive datatype");
   }
@@ -106,7 +106,7 @@ int xs_check_simple_type_derivation_valid_atomic(Schema *s, Type *t)
       /* 1.3.1 DF must be an allowed constraining facet for the {primitive type definition}, as
          specified in the appropriate subsection of 3.2 Primitive datatypes. */
       if (!t->facetAllowed(facet))
-        return error(&s->ei,s->uri,t->facets.defline[facet],"cos-st-restricts.1.3.1",
+        return error(&s->ei,s->m_uri,t->facets.defline[facet],"cos-st-restricts.1.3.1",
                      "Facet %s not allowed on types derived from %*",
                      xs_facet_names[facet],&t->primitive_type->def.ident);
 
@@ -143,7 +143,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
   /* 2.1 The {item type definition} must have a {variety} of atomic or union (in which case all
          the {member type definitions} must be atomic). */
   if (t->item_type->complex || (TYPE_VARIETY_LIST == t->item_type->variety))
-    return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.1",
+    return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.1",
                  "<list> can only have its item type set to an atomic or union type");
   if (TYPE_VARIETY_UNION == t->item_type->variety) {
     list *l;
@@ -151,7 +151,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
       MemberType *mt = (MemberType*)l->data;
       ASSERT(mt->type);
       if (mt->type->complex || (TYPE_VARIETY_ATOMIC != mt->type->variety))
-        return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.1","If <list> has an item "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.1","If <list> has an item "
                      "type that is a union, then all member types of the union must be atomic");
     }
   }
@@ -172,7 +172,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
     /* 2.3.1.1 The {final} of the {item type definition} must not contain list. */
 
     if (t->item_type->final_list)
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.1.1",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.3.1.1",
                    "Item type %* disallows use in lists",&t->item_type->def.ident);
 
     /* @implements(xmlschema-1:cos-st-restricts.2.3.1.2) @end */
@@ -181,7 +181,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
        by the specification of the XML representation) */
     for (facet = 0; facet < XS_FACET_NUMFACETS; facet++) {
       if ((NULL != t->facets.strval[facet]) && (XS_FACET_WHITESPACE != facet)) {
-        return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.1.2","Simple types "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.3.1.2","Simple types "
                      "declared with <list> may not have any facets set other than whiteSpace");
       }
     }
@@ -194,7 +194,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
     /* 2.3.2.1 The {base type definition} must have a {variety} of list. */
     /* Can't really test this, it's enforced by the parser */
     if (t->base->complex || (TYPE_VARIETY_LIST != t->base->variety))
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.2.1","Simple types with a "
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.3.2.1","Simple types with a "
                    "variety of list must have a base type which is also a list");
 
     /* @implements(xmlschema-1:cos-st-restricts.2.3.2.2) @end */
@@ -227,7 +227,7 @@ int xs_check_simple_type_derivation_valid_list(Schema *s, Type *t)
             (XS_FACET_WHITESPACE != facet) &&
             (XS_FACET_PATTERN != facet) &&
             (XS_FACET_ENUMERATION != facet))
-          return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.2.3.2.4","Facet %s is not "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.2.3.2.4","Facet %s is not "
                        "allowed in a list or list-derived type",xs_facet_names[facet]);
 
         /* @implements(xmlschema-1:cos-st-restricts.2.3.2.5)
@@ -266,7 +266,7 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
     ASSERT(mt->type);
     ASSERT(mt->type->complex || (TYPE_VARIETY_INVALID != mt->type->variety));
     if (mt->type->complex || (TYPE_VARIETY_UNION == mt->type->variety))
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.1",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.3.1",
                    "All member types of a union must be atomic or list types");
   }
 
@@ -289,7 +289,7 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
     for (l = t->members; l; l = l->next) {
       MemberType *mt = (MemberType*)l->data;
       if (mt->type->final_union)
-        return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.3.1.1",
+        return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.3.3.1.1",
                      "Member type %* disallows use inside <union>",&mt->type->def.ident);
     }
 
@@ -299,7 +299,7 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
        checks? */
     for (facet = 0; facet < XS_FACET_NUMFACETS; facet++)
       if (NULL != t->facets.strval[facet])
-        error(&s->ei,s->uri,t->facets.defline[facet],"cos-st-restricts.3.3.1.2",
+        error(&s->ei,s->m_uri,t->facets.defline[facet],"cos-st-restricts.3.3.1.2",
               "Union type derived from anySimpleType must not have any facets set");
   }
   /* @implements(xmlschema-1:cos-st-restricts.3.3.2) @end */
@@ -310,7 +310,7 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
     /* 3.3.2.1 The {base type definition} must have a {variety} of union. */
     /* Can't really test this, it's enforced by the parser */
     if (t->base->complex || (TYPE_VARIETY_UNION != t->base->variety))
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.3.2.1","Simple types with a "
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.3.3.2.1","Simple types with a "
                    "variety of union must have a base type which is also a union");
 
     /* @implements(xmlschema-1:cos-st-restricts.3.3.2.2) @end */
@@ -333,7 +333,7 @@ int xs_check_simple_type_derivation_valid_union(Schema *s, Type *t)
         /* 3.3.2.4 Only pattern and enumeration facet components are allowed among the {facets}. */
         if ((XS_FACET_PATTERN != facet) &&
             (XS_FACET_ENUMERATION != facet))
-          return error(&s->ei,s->uri,t->def.loc.line,"cos-st-restricts.3.3.2.4","Facet %s is not "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"cos-st-restricts.3.3.2.4","Facet %s is not "
                        "allowed in a union or union-derived type",xs_facet_names[facet]);
 
         /* @implements(xmlschema-1:cos-st-restricts.3.3.2.5)
@@ -405,7 +405,7 @@ int GridXSLT::xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
   /* 2.1 restriction is not in the subset, or in the {final} of its own {base type definition}; */
   /* Note: base type case is already taken care of by 3.14.6-1-3 */
   if (final_restriction)
-    return error(&s->ei,s->uri,D->def.loc.line,"cos-st-derived-ok.2.1",
+    return error(&s->ei,s->m_uri,D->def.loc.line,"cos-st-derived-ok.2.1",
                  "Restriction disallowed when deriving from %*",&B->def.ident);
 
   /* @implements(xmlschema-1:cos-st-derived-ok.2.2) @end */
@@ -453,7 +453,7 @@ int GridXSLT::xs_check_simple_type_derivation_ok(Schema *s, Type *D, Type *B,
   if ((D->base == s->globals->simple_ur_type) ||
       (0 != xs_check_simple_type_derivation_ok(s,D->base,B,final_extension,final_restriction,
                                                 final_list,final_union)))
-    return error(&s->ei,s->uri,D->def.loc.line,"cos-st-derived-ok.2.2.2",
+    return error(&s->ei,s->m_uri,D->def.loc.line,"cos-st-derived-ok.2.2.2",
                  "%* cannot be derived from %*",&D->def.ident,&B->def.ident);
 
   return 0;
@@ -478,7 +478,6 @@ int GridXSLT::xs_create_simple_type_restriction(Schema *s, Type *base, int defli
      @end */
   int facet;
   Type *t = new Type(s->as);
-  list *l;
   t->def.loc.line = defline;
   t->stype = TYPE_SIMPLE_RESTRICTION;
   t->base = base;
@@ -491,11 +490,12 @@ int GridXSLT::xs_create_simple_type_restriction(Schema *s, Type *base, int defli
     t->facets.defline[facet] = facets->defline[facet];
   }
 
-  for (l = facets->patterns; l; l = l->next)
-    list_append(&t->facets.patterns,strdup((char*)l->data));
+  Iterator<String> it;
+  for (it = facets->patterns; it.haveCurrent(); it++)
+    t->facets.patterns.append(*it);
 
-  for (l = facets->enumerations; l; l = l->next)
-    list_append(&t->facets.enumerations,strdup((char*)l->data));
+  for (it = facets->enumerations; it.haveCurrent(); it++)
+    t->facets.enumerations.append(*it);
 
   *restriction = t;
   return 0;
@@ -618,15 +618,15 @@ int GridXSLT::xs_check_particle_valid_extension(Schema *s, Particle *E, Particle
        the exception of {annotation} properties. */
 
   if ((1 != E->range.min_occurs) || (1 != E->range.max_occurs))
-    return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2","Particle range is not 1-1");
+    return error(&s->ei,s->m_uri,E->defline,"cos-particle-extend.2","Particle range is not 1-1");
 
   if ((PARTICLE_TERM_MODEL_GROUP != E->term_type) ||
       (MODELGROUP_COMPOSITOR_SEQUENCE != E->term.mg->compositor))
-    return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2",
+    return error(&s->ei,s->m_uri,E->defline,"cos-particle-extend.2",
                  "Particle is not a sequence group");
 
   if (NULL == E->term.mg->particles)
-    return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2",
+    return error(&s->ei,s->m_uri,E->defline,"cos-particle-extend.2",
                  "Sequence group has no particles");
 
   /* Note: The wording in the spec suggests that a deep comparison is necessary here, i.e.
@@ -635,7 +635,7 @@ int GridXSLT::xs_check_particle_valid_extension(Schema *s, Particle *E, Particle
      exactly what is done when constructing a derived type, comparing to see if they are
      the same object is sufficient. */
   if ((Particle*)E->term.mg->particles->data != B)
-    return error(&s->ei,s->uri,E->defline,"cos-particle-extend.2",
+    return error(&s->ei,s->m_uri,E->defline,"cos-particle-extend.2",
                  "First particle in the sequence is not equal to base");
 
   return 0; /* success */
@@ -672,7 +672,7 @@ int xs_check_range_restriction_ok(Schema *s, Particle *R, Particle *B, char *con
     String rrangestr = R->range.toString();
     String brangestr = B->range.toString();
     String bstr = B->toString();
-    return error(&s->ei,s->uri,R->defline,constraint,"Occurrence range %* is not a valid "
+    return error(&s->ei,s->m_uri,R->defline,constraint,"Occurrence range %* is not a valid "
                  "restriction of the range %*, declared on the corresponding %* of the base type",
                  &rrangestr,&brangestr,&bstr);
     return -1;
@@ -708,7 +708,7 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
      @end */
   /* 1 The declarations' {name}s and {target namespace}s are the same. */
   if (R->def.ident != B->def.ident)
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.1","Element %* does not match "
+    return error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.1","Element %* does not match "
                  "corresponding element %* on base type",&R->def.ident,&B->def.ident);
 
   /* @implements(xmlschema-1:rcase-NameAndTypeOK.2)
@@ -720,7 +720,7 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
   if (!occurrence_range_restriction_ok(Rrange,Brange)) {
     String rrangestr = Rrange.toString();
     String brangestr = Brange.toString();
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.2","Occurrence range %* is not a "
+    return error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.2","Occurrence range %* is not a "
                  "valid restriction of the range %*, declared on the corresponding %* element on "
                  "the base type",&rrangestr,&brangestr,&B->def.ident);
   }
@@ -745,7 +745,7 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
      @end */
   /* 3.2.1 Either B's {nillable} is true or R's {nillable} is false. */
   if (!B->nillable && R->nillable)
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.1","This element cannot be "
+    return error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.3.2.1","This element cannot be "
                  "declared nillable, because the corresponding element declaration on the base "
                  "type does not specify nillable");
 
@@ -761,10 +761,10 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
            declaration's {value constraint} is fixed with the same value. */
   if ((VALUECONSTRAINT_FIXED == B->vc.type) &&
       ((VALUECONSTRAINT_FIXED != R->vc.type) ||
-       strcmp(B->vc.value,R->vc.value)))
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.2","This element must be declared "
-                 "with a fixed value of \"%s\", as is required by the corresponding element "
-                 "declaration on the base type",B->vc.value);
+       (B->vc.value != R->vc.value)))
+    return error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.3.2.2","This element must be declared "
+                 "with a fixed value of \"%*\", as is required by the corresponding element "
+                 "declaration on the base type",&B->vc.value);
 
   /* @implements(xmlschema-1:rcase-NameAndTypeOK.3.2.3)
      status { deferred } issue { requires support for identity-constraint definitions } @end */
@@ -785,7 +785,7 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
   if ((B->disallow_substitution && !R->disallow_substitution) ||
       (B->disallow_extension && !R->disallow_extension) ||
       (B->disallow_restriction && !R->disallow_restriction)) {
-    return error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.4","This element must declare in "
+    return error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.3.2.4","This element must declare in "
                  "its \"block\" attribute a superset of the items blocked by the corresponding "
                  "element declaration on the base type");
   }
@@ -810,10 +810,10 @@ int particle_restriction_ok_elt_elt_nameandtypeok(Schema *s, SchemaElement *R, R
       (!R->type->complex && (0 != xs_check_simple_type_derivation_ok(s,R->type,B->type,1,0,1,1)))) {
 
     if (!B->type->def.ident.m_name.isNull())
-      error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.5",
+      error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.3.2.5",
             "Element type must be a valid derivation of %*",&B->type->def.ident);
     else
-      error(&s->ei,s->uri,Rdefline,"rcase-NameAndTypeOK.3.2.5","Element type must be a valid "
+      error(&s->ei,s->m_uri,Rdefline,"rcase-NameAndTypeOK.3.2.5","Element type must be a valid "
             "derivation of the type declared for the corresponding element on the base type");
     return -1;
   }
@@ -851,7 +851,7 @@ int particle_derivation_ok_elt_any_nscompat(Schema *s, Particle *R, Particle *B)
   if (!ns_valid_wrt_wildcard(s,R->term.e->def.ident.m_ns,B->term.w)) {
     String rstr = R->toString();
     String bstr = B->toString();
-    error(&s->ei,s->uri,R->defline,"rcase-NSCompat.1","Element %* is not a valid restriction of "
+    error(&s->ei,s->m_uri,R->defline,"rcase-NSCompat.1","Element %* is not a valid restriction of "
           "the corresponding %* in the base type, because it is not valid with respect to the "
           "namespace constraint",&rstr,&bstr);
     return -1;
@@ -943,7 +943,7 @@ int particle_derivation_ok_any_any_nssubset(Schema *s, Particle *R, Particle *B)
   /* 2 R's {namespace constraint} must be an intensional subset of B's {namespace constraint} as
        defined by Wildcard Subset (3.10.6). */
   if (!Wildcard_constraint_is_subset(s,R->term.w,B->term.w)) {
-    return error(&s->ei,s->uri,R->defline,"rcase-NSSubset.2","Element wildcard is not a valid "
+    return error(&s->ei,s->m_uri,R->defline,"rcase-NSSubset.2","Element wildcard is not a valid "
                  "restriction of the corresponding wildcard in the base type, because its "
                  "namespace constraint is not an intensional subset of the base wildcard's");
   }
@@ -961,7 +961,7 @@ int particle_derivation_ok_any_any_nssubset(Schema *s, Particle *R, Particle *B)
        lax is stronger than skip. */
   if ((B->term.w != s->globals->complex_ur_type_element_wildcard) &&
       (R->term.w->process_contents < B->term.w->process_contents)) {
-    return error(&s->ei,s->uri,R->defline,"rcase-NSSubset.3","Element wildcard is not a valid "
+    return error(&s->ei,s->m_uri,R->defline,"rcase-NSSubset.3","Element wildcard is not a valid "
                  "restriction of the corresponding wildcard in the base type, because it's "
                  "processContents is weaker, in the ordering of \"skip\" (weakest), \"lax\", and "
                  "\"strict\" (strongest)");
@@ -1012,7 +1012,7 @@ int particle_derivation_ok_all_choice_sequence_any_nsrecursecheckcardinality(Sch
     String rstr = R->toString();
     String etrstr = etr.toString();
     String brangestr = B->range.toString();
-    return error(&s->ei,s->uri,R->defline,"rcase-NSRecurseCheckCardinality.2","%* effective total "
+    return error(&s->ei,s->m_uri,R->defline,"rcase-NSRecurseCheckCardinality.2","%* effective total "
                  "range (%*) is not a valid restriction of the range %* declared for the "
                  "corresponding <any> within the base type",&rstr,&etrstr,&brangestr);
   }
@@ -1047,7 +1047,7 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
 
   /* FIXME: write tests for this */
   if (0 == tocount)
-    return error(&s->ei,s->uri,from->defline,"constraint","Base type does not allow content here");
+    return error(&s->ei,s->m_uri,from->defline,"constraint","Base type does not allow content here");
 
   frompos = 0;
   for (l = from->term.mg->particles; l; l = l->next)
@@ -1118,7 +1118,7 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
 /*       debugl("mapping: failed"); */
       if (!order_preserving && !require_nonemptiable_unique) {
         String fpstr = fromparticles[frompos]->toString();
-        error(&s->ei,s->uri,fromparticles[frompos]->defline,constraint,
+        error(&s->ei,s->m_uri,fromparticles[frompos]->defline,constraint,
               "A match for %* does not exist in the base type",&fpstr);
       }
       else if (!first_error.m_message.isNull()) {
@@ -1130,7 +1130,7 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
            any problems, from which we can deduce that the reason for the failure was that the
            particle we are looking for actually does not exist in the base at all. */
         String fpstr = fromparticles[frompos]->toString();
-        error(&s->ei,s->uri,fromparticles[frompos]->defline,constraint,"%* does not exist in the "
+        error(&s->ei,s->m_uri,fromparticles[frompos]->defline,constraint,"%* does not exist in the "
               "base type, or does not reside at the same position in the base type as it does here",
               &fpstr);
       }
@@ -1163,12 +1163,12 @@ int xs_compute_particle_mapping(Schema *s, Particle *from, Particle *to,
 
         if ((NULL != prev) && order_preserving) {
           String prevstr = prev->toString();
-          error(&s->ei,s->uri,prev->defline,constraint,"Expected %* to appear after %*, as it is "
+          error(&s->ei,s->m_uri,prev->defline,constraint,"Expected %* to appear after %*, as it is "
                 "present in the base type with a minOccurs value greater than 0",&tpstr,&prevstr);
         }
         else {
           String fromstr = from->toString();
-          error(&s->ei,s->uri,from->defline,constraint,"Expected %* to appear within this %*, as "
+          error(&s->ei,s->m_uri,from->defline,constraint,"Expected %* to appear within this %*, as "
                 "it is present in the base type with a minOccurs value greater than 0",
                 &tpstr,&fromstr);
         }
@@ -1411,7 +1411,7 @@ int particle_derivation_ok_sequence_choice_mapandsum(Schema *s, Particle *R, Par
     String rrange2str = Rrange2.toString();
     String brangestr = B->range.toString();
     String bstr = B->toString();
-    return error(&s->ei,s->uri,R->defline,"rcase-MapAndSum.2","Total occurrence range %* is not a "
+    return error(&s->ei,s->m_uri,R->defline,"rcase-MapAndSum.2","Total occurrence range %* is not a "
                  "valid restriction of the range %*, declared on the corresponding %* of the base "
                  "type",&rrange2str,&brangestr,&bstr);
   }
@@ -1758,7 +1758,7 @@ int xs_check_particle_valid_restriction2(Schema *s, Particle *R, Particle *B)
     }
   }
 
-  return error(&s->ei,s->uri,R->defline,"cos-particle-restrict.2",
+  return error(&s->ei,s->m_uri,R->defline,"cos-particle-restrict.2",
                "Invalid particle restriction: %s cannot restrict %s",rtypestr,btypestr);
 }
 
@@ -1813,7 +1813,7 @@ int xs_check_complex_restriction_rule1(Schema *s, Type *t)
   /* Note: the case of the base type being a simple type is already handled by src-ct.1 in
      post_process_type1() */
   if (!t->base->complex || t->base->final_restriction) {
-    return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.1",
+    return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.1",
                  "Base type disallows restriction");
   }
 
@@ -1863,7 +1863,7 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
          2.1.1.1 B's {required} is false.
          2.1.1.2 R's {required} is true. */
       if (B->required && !R->required)
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.1","Attribute %* "
+        return error(&s->ei,s->m_uri,R->defline,"derivation-ok-restriction.2.1.1","Attribute %* "
                      "must be marked as required, because it is required by base type %*",
                      &R->attribute->def.ident,&t->base->def.ident);
 
@@ -1878,7 +1878,7 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
       ASSERT(B->attribute->type);
       if (0 != xs_check_simple_type_derivation_ok(s,R->attribute->type,B->attribute->type,
                                                   0,0,0,0))
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.2","Attribute %* "
+        return error(&s->ei,s->m_uri,R->defline,"derivation-ok-restriction.2.1.2","Attribute %* "
                      "must have a type that is a valid derivation of type %*, used on the "
                      "corresponding attribute in base type %*",
                      &R->attribute->def.ident,&B->attribute->type->def.ident,&t->base->def.ident);
@@ -1912,11 +1912,11 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
          2.1.3.2 R's effective value constraint is fixed with the same string as B's. */
       if ((VALUECONSTRAINT_FIXED == Bevc->type) &&
           ((VALUECONSTRAINT_FIXED != Revc->type) ||
-           strcmp(Revc->value,Bevc->value)))
-        return error(&s->ei,s->uri,R->defline,"derivation-ok-restriction.2.1.3","Attribute %* "
-                     "must have a fixed value of \"%s\", because this fixed value is set on the "
+           (Revc->value != Bevc->value)))
+        return error(&s->ei,s->m_uri,R->defline,"derivation-ok-restriction.2.1.3","Attribute %* "
+                     "must have a fixed value of \"%*\", because this fixed value is set on the "
                      "corresponding attribute declaration in base type %*",
-                     &R->attribute->def.ident,Bevc->value,&t->base->def.ident);
+                     &R->attribute->def.ident,&Bevc->value,&t->base->def.ident);
     }
 #if 0
     /* Wait until we have all the other restriction stuff implemented... this causes problems
@@ -1933,7 +1933,7 @@ int xs_check_complex_restriction_rule2(Schema *s, Type *t)
         debugl("t->name = %*\n",&t->def.ident);
         debugl("t->base->name = %*\n",&t->base->def.ident);
         debugl("R->attribute->name = %*\n",&R->attribute->def.ident);
-        return error(&s->ei,s->uri,R->defline,"structures-3.4.6","Declaration of attribute %* is "
+        return error(&s->ei,s->m_uri,R->defline,"structures-3.4.6","Declaration of attribute %* is "
                      "invalid because base type %* does not have an attribute wildcard that "
                      "permits attributes from this namespace",
                      &R->attribute->def.ident,&t->base->def.ident);
@@ -1975,7 +1975,7 @@ int xs_check_complex_restriction_rule3(Schema *s, Type *t)
       }
 
       if (!found)
-        return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.3","Attribute %* "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.3","Attribute %* "
                      "cannot be declared as prohibited, because it is declared as required by base "
                      "type %*",&B->attribute->def.ident,&t->base->def.ident);
     }
@@ -2000,7 +2000,7 @@ int xs_check_complex_restriction_rule4(Schema *s, Type *t)
      @end */
   /* 4.1 The {base type definition} must also have one. */
   if (NULL == t->base->attribute_wildcard) {
-    return error(&s->ei,s->uri,t->local_wildcard->defline,"derivation-ok-restriction.4.1",
+    return error(&s->ei,s->m_uri,t->local_wildcard->defline,"derivation-ok-restriction.4.1",
                  "Attribute wildcard is only allowed if the base type also has one");
   }
 
@@ -2011,7 +2011,7 @@ int xs_check_complex_restriction_rule4(Schema *s, Type *t)
          subset of the {base type definition}'s {attribute wildcard}'s {namespace constraint}, as
          defined by Wildcard Subset (3.10.6). */
   if (!Wildcard_constraint_is_subset(s,t->attribute_wildcard,t->base->attribute_wildcard)) {
-    return error(&s->ei,s->uri,t->local_wildcard->defline,"derivation-ok-restriction.4.2",
+    return error(&s->ei,s->m_uri,t->local_wildcard->defline,"derivation-ok-restriction.4.2",
                  "Attribute wildcard must be a valid subset of the base type's");
   }
 
@@ -2031,7 +2031,7 @@ int xs_check_complex_restriction_rule4(Schema *s, Type *t)
          lax is stronger than skip. */
   if ((t->base != s->globals->complex_ur_type) &&
       (t->attribute_wildcard->process_contents < t->base->attribute_wildcard->process_contents)) {
-    return error(&s->ei,s->uri,t->local_wildcard->defline,"derivation-ok-restriction.4.3",
+    return error(&s->ei,s->m_uri,t->local_wildcard->defline,"derivation-ok-restriction.4.3",
                  "Attribute wildcard on derived type must be at least as strong as that of the "
                  "base type, in the ordering of \"skip\" (weakest), \"lax\", and \"strict\" "
                  "(strongest)");
@@ -2077,7 +2077,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
         return 0; /* success */
       }
       else {
-        return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.5.2.2.1",
+        return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.5.2.2.1",
                      "Invalid derivation for complex type with simple content; the simple type "
                      "that is declared within %* is not a valid derivation of the simple type "
                      "declared within %*",&t->def.ident,&t->base->def.ident);
@@ -2093,7 +2093,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
         return 0; /* success */
       }
       else {
-        return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.5.2.2.2","A complex "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.5.2.2.2","A complex "
                      "type with simple content must either have a content type that is validly "
                      "derived from that of the base, or the base must be mixed and have an "
                      "emptiable particle");
@@ -2127,7 +2127,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
                have a particle which is emptiable as defined in Particle Emptiable (3.9.6). */
     if ((NULL != t->base->content_type) &&
         (!t->base->mixed || !particle_emptiable(s,t->base->content_type))) {
-      return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.5.3.2","A complex type "
+      return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.5.3.2","A complex type "
                    "can only have empty content if it's base also has empty content, or allows "
                    "mixed content and has an emptiable particle as its content type");
     }
@@ -2149,7 +2149,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
        5.4.1.2 The {content type} of the complex type definition itself and of the {base type
                definition} must be mixed */
     if (t->mixed && !t->base->mixed) {
-      return error(&s->ei,s->uri,t->def.loc.line,"derivation-ok-restriction.5.4.1","A complex type "
+      return error(&s->ei,s->m_uri,t->def.loc.line,"derivation-ok-restriction.5.4.1","A complex type "
                    "can only allow mixed content if its base type also allows mixed content");
     }
 
@@ -2158,7 +2158,7 @@ int xs_check_complex_restriction_rule5(Schema *s, Type *t)
              particle of the {content type} of the {base type definition} as defined in Particle
              Valid (Restriction) (3.9.6). */
     if (NULL == t->base->content_type) { /* not sure about this - see above */
-      return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.6","Base type does not allow any "
+      return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.4.6","Base type does not allow any "
                    "content; extension must be specified if content to be allowed in this type");
     }
     else {
@@ -2243,12 +2243,12 @@ int xs_check_complex_extension_rule14(Schema *s, Type *t)
   /* 1.4.3.2.2.1 Both {content type}s must be mixed or both must be element-only. */
 
   if (t->mixed && !t->base->mixed) {
-    return error(&s->ei,s->uri,t->def.loc.line,"cos-ct-extends.1.4.3.2.2.1","Mixed content cannot "
+    return error(&s->ei,s->m_uri,t->def.loc.line,"cos-ct-extends.1.4.3.2.2.1","Mixed content cannot "
                  "be specified for this type, because both the type itself and the base type are "
                  "non-empty, and the base type specifies element-only content");
   }
   else if (!t->mixed && t->base->mixed) {
-    return error(&s->ei,s->uri,t->def.loc.line,"cos-ct-extends.1.4.3.2.2.1","Element-only content "
+    return error(&s->ei,s->m_uri,t->def.loc.line,"cos-ct-extends.1.4.3.2.2.1","Element-only content "
                  "cannot be specified for this type, because both the type itself and the base "
                  "type are non-empty, and the base type specifies mixed content");
   }
@@ -2289,7 +2289,7 @@ int GridXSLT::xs_check_complex_extension(Schema *s, Type *t)
 
     /* 1.1 The {final} of the {base type definition} must not contain extension. */
     if (t->base->final_extension)
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-ct-extends.1.1",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-ct-extends.1.1",
                    "Invalid derivation; base type is declared final for extensions");
 
 
@@ -2346,7 +2346,7 @@ int GridXSLT::xs_check_complex_extension(Schema *s, Type *t)
        @end */
     /* 2.2 The {final} of the {base type definition} must not contain extension. */
     if (t->base->final_extension)
-      return error(&s->ei,s->uri,t->def.loc.line,"cos-ct-extends.2.2",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"cos-ct-extends.2.2",
                    "Invalid derivation; base type is declared final for extensions");
   }
 
@@ -2371,12 +2371,12 @@ int GridXSLT::xs_check_complex_type_derivation_ok(Schema *s, Type *D, Type *B,
      in the subset. */
   if (B != D) {
     if ((TYPE_DERIVATION_EXTENSION == D->derivation_method) && final_extension)
-      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
+      return error(&s->ei,s->m_uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
                    "extension of %*; extension is disallowed for the latter",
                    &D->def.ident,&B->def.ident);
 
     if ((TYPE_DERIVATION_RESTRICTION == D->derivation_method) && final_restriction)
-      return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
+      return error(&s->ei,s->m_uri,D->def.loc.line,"cos-ct-derived-ok.1","%* is not a valid "
                    "restriction of %*; restriction is disallowed for the latter",
                    &D->def.ident,&B->def.ident);
   }
@@ -2420,7 +2420,7 @@ int GridXSLT::xs_check_complex_type_derivation_ok(Schema *s, Type *D, Type *B,
                                                                final_restriction))) ||
       (!D->complex && (0 != xs_check_simple_type_derivation_ok(s,D->base,B,final_extension,
                                                                final_restriction,0,0))))
-    return error(&s->ei,s->uri,D->def.loc.line,"cos-ct-derived-ok.2.3",
+    return error(&s->ei,s->m_uri,D->def.loc.line,"cos-ct-derived-ok.2.3",
                  "%* cannot be derived from %*",&D->def.ident,&B->def.ident);
 
   /* Note: This constraint is used to check that when someone uses a type in a context where

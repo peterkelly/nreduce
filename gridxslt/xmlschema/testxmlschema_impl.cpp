@@ -248,7 +248,7 @@ static int get_element_wildcards(Particle *p, list **wildcards)
 
 static int dump_all_wildcards(DumpVisitor *di, Schema *s)
 {
-  symbol_space_entry *sse;
+  SymbolSpaceEntry *sse;
   int prevline = 0;
 
   for (sse = s->symt->ss_types->entries; sse; sse = sse->next) {
@@ -261,8 +261,8 @@ static int dump_all_wildcards(DumpVisitor *di, Schema *s)
       else
         message("Attribute wildcard for type %*:\n",&t->def.ident.m_name);
       if (t->attribute_wildcard) {
-        di->wildcard(s,NULL,0,t->attribute_wildcard);
-        di->wildcard(s,NULL,1,t->attribute_wildcard);
+        di->wildcard(s,0,t->attribute_wildcard);
+        di->wildcard(s,1,t->attribute_wildcard);
       }
       else {
         message("(none)\n");
@@ -281,8 +281,8 @@ static int dump_all_wildcards(DumpVisitor *di, Schema *s)
           message("Element wildcard within type {%*}%*:\n",&t->def.ident.m_ns,&t->def.ident.m_name);
         else
           message("Element wildcard within type %*:\n",&t->def.ident.m_name);
-        di->wildcard(s,NULL,0,w);
-        di->wildcard(s,NULL,1,w);
+        di->wildcard(s,0,w);
+        di->wildcard(s,1,w);
         prevline = 1;
       }
       list_free(element_wildcards,NULL);
@@ -298,8 +298,8 @@ static int dump_all_wildcards(DumpVisitor *di, Schema *s)
     else
       message("Attribute wildcard for attribute group %*:\n",&ag->def.ident.m_name);
     if (ag->attribute_wildcard) {
-      di->wildcard(s,NULL,0,ag->attribute_wildcard);
-      di->wildcard(s,NULL,1,ag->attribute_wildcard);
+      di->wildcard(s,0,ag->attribute_wildcard);
+      di->wildcard(s,1,ag->attribute_wildcard);
     }
     else {
         message("(none)\n");
@@ -323,13 +323,13 @@ static int get_types(Schema *s, char *typenames, Type **t1, Type **t2)
   name2 = strdup(comma+1);
   *comma = '\0';
 
-  if ((NULL == (*t1 = s->getType(NSName(s->ns,name1)))) &&
+  if ((NULL == (*t1 = s->getType(NSName(s->m_targetNamespace,name1)))) &&
       (NULL == (*t1 = s->getType(NSName(XS_NAMESPACE,name1))))) {
     fmessage(stderr,"No such type: %s\n",name1);
     return 1;
   }
 
-  if ((NULL == (*t2 = s->getType(NSName(s->ns,name2)))) &&
+  if ((NULL == (*t2 = s->getType(NSName(s->m_targetNamespace,name2)))) &&
       (NULL == (*t2 = s->getType(NSName(XS_NAMESPACE,name2))))) {
     fmessage(stderr,"No such type: %s\n",name2);
     return 1;
@@ -366,8 +366,8 @@ static int dump_wildcard_union(DumpVisitor *di, Schema *s, char *typenames)
   get_type_wildcards(s,typenames,&O1,&O2);
   u = Wildcard_constraint_union(s,O1,O2,WILDCARD_PROCESS_CONTENTS_SKIP);
   if (NULL != u) {
-    di->wildcard(s,NULL,0,u);
-    di->wildcard(s,NULL,1,u);
+    di->wildcard(s,0,u);
+    di->wildcard(s,1,u);
   }
   else {
     message("Union is not expressible\n");
@@ -383,8 +383,8 @@ static int dump_wildcard_intersection(DumpVisitor *di, Schema *s, char *typename
   get_type_wildcards(s,typenames,&O1,&O2);
   i = Wildcard_constraint_intersection(s,O1,O2,WILDCARD_PROCESS_CONTENTS_SKIP);
   if (NULL != i) {
-    di->wildcard(s,NULL,0,i);
-    di->wildcard(s,NULL,1,i);
+    di->wildcard(s,0,i);
+    di->wildcard(s,1,i);
   }
   else {
     message("Intersection is not expressible\n");
@@ -408,7 +408,7 @@ static int print_range(Schema *s, char *typenam)
   Type *t;
   Range r;
 
-  if (NULL == (t = s->getType(NSName(s->ns,typenam)))) {
+  if (NULL == (t = s->getType(NSName(s->m_targetNamespace,typenam)))) {
     fmessage(stderr,"No such type: %s\n",typenam);
     return 1;
   }
@@ -485,7 +485,7 @@ static int print_non_pointless(Schema *s, char *typenam)
   Particle *p;
   xs_allocset *as = new xs_allocset();
 
-  if (NULL == (t = s->getType(NSName(s->ns,typenam)))) {
+  if (NULL == (t = s->getType(NSName(s->m_targetNamespace,typenam)))) {
     fmessage(stderr,"No such type: %s\n",typenam);
     return 1;
   }

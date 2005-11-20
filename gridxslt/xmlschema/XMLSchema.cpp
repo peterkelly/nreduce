@@ -69,8 +69,6 @@ const char *xs_object_types[7] = {
   "notation"
 };
 
-void xs_facetdata_freevals(xs_facetdata *fd);
-
 BuiltinTypes *xs_g = NULL;
 
 typedef struct Type_allows_facet Type_allows_facet;
@@ -159,14 +157,11 @@ Type_allows_facet xs_allowed_facets[21] = {
   { NULL,          { -1 }}
 };
 
-int xs_visit_particle(Schema *s, xmlDocPtr doc, Particle *p, SchemaVisitor *v);
-int xs_visit_type(Schema *s, xmlDocPtr doc, Type *t, SchemaVisitor *v);
-int xs_visit_attribute_group_ref(Schema *s, xmlDocPtr doc,
-                                 AttributeGroupRef *agr, SchemaVisitor *v);
-int xs_visit_attribute_group(Schema *s, xmlDocPtr doc, AttributeGroup *a,
-                             SchemaVisitor *v);
-int xs_visit_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au,
-                           SchemaVisitor *v);
+int xs_visit_particle(Schema *s, Particle *p, SchemaVisitor *v);
+int xs_visit_type(Schema *s, Type *t, SchemaVisitor *v);
+int xs_visit_attribute_group_ref(Schema *s, AttributeGroupRef *agr, SchemaVisitor *v);
+int xs_visit_attribute_group(Schema *s, AttributeGroup *a, SchemaVisitor *v);
+int xs_visit_attribute_use(Schema *s, AttributeUse *au, SchemaVisitor *v);
 
 
 
@@ -188,8 +183,7 @@ String Range::toString()
 }
 
 ValueConstraint::ValueConstraint()
-  : value(NULL),
-    type(0)
+  : type(0)
 {
 }
 
@@ -268,8 +262,6 @@ Type::Type(xs_allocset *as)
     size(0),
     custom_ctype(0)
 {
-  memset(&facets,0,sizeof(xs_facetdata));
-  memset(&child_facets,0,sizeof(xs_facetdata));
   as->alloc_type.push(this);
 }
 
@@ -279,8 +271,6 @@ Type::~Type()
   list_free(local_attribute_uses,NULL);
   list_free(attribute_group_refs,NULL);
   list_free(members,NULL);
-  xs_facetdata_freevals(&facets);
-  xs_facetdata_freevals(&child_facets);
 }
 
 int Type::isDerived(Type *from)
@@ -316,7 +306,6 @@ SchemaAttribute::SchemaAttribute(xs_allocset *as)
 
 SchemaAttribute::~SchemaAttribute()
 {
-  free(vc.value);
 }
 
 SchemaElement::SchemaElement(xs_allocset *as)
@@ -342,7 +331,6 @@ SchemaElement::SchemaElement(xs_allocset *as)
 
 SchemaElement::~SchemaElement()
 {
-  free(vc.value);
   list_free(sgmembers,NULL);
 }
 
@@ -506,7 +494,6 @@ AttributeUse::AttributeUse(xs_allocset *as)
 
 AttributeUse::~AttributeUse()
 {
-  free(vc.value);
 }
 
 CStruct::CStruct(xs_allocset *as)
@@ -555,7 +542,7 @@ Type *new_primitive_type(BuiltinTypes *g, char *name, int size, char *ctype)
   }
   ASSERT(found_allowed_facets);
 
-  ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
+  g->symt->ss_types->add(NSName(XS_NAMESPACE,name),t);
   return t;
 }
 
@@ -566,7 +553,7 @@ Type *new_derived_type(BuiltinTypes *g, char *name, char *base, int size, char *
   t->builtin = 1;
   t->variety = TYPE_VARIETY_ATOMIC;
   t->stype = TYPE_SIMPLE_RESTRICTION;
-  t->base = (Type*)ss_lookup_local(g->symt->ss_types,NSName(XS_NAMESPACE,base));
+  t->base = (Type*)g->symt->ss_types->lookup(NSName(XS_NAMESPACE,base));
   if (!t->base) {
     message("no such base type %s for %s\n",base,name);
     ASSERT(0);
@@ -596,7 +583,7 @@ Type *new_derived_type(BuiltinTypes *g, char *name, char *base, int size, char *
   t->baseref->builtin = 1;
   
   ASSERT(t->base);
-  ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
+  g->symt->ss_types->add(NSName(XS_NAMESPACE,name),t);
   return t;
 }
 
@@ -608,7 +595,7 @@ Type *new_list_type(BuiltinTypes *g, char *name, char *item_type)
   t->variety = TYPE_VARIETY_LIST;
   t->stype = TYPE_SIMPLE_LIST;
   t->base = g->simple_ur_type;
-  t->item_type = (Type*)ss_lookup_local(g->symt->ss_types,NSName(XS_NAMESPACE,item_type));
+  t->item_type = (Type*)g->symt->ss_types->lookup(NSName(XS_NAMESPACE,item_type));
   if (!t->item_type) {
     message("no such item type %s for %s\n",item_type,name);
     ASSERT(0);
@@ -635,7 +622,7 @@ Type *new_list_type(BuiltinTypes *g, char *name, char *item_type)
   t->item_typeref->builtin = 1;
   
   ASSERT(t->base);
-  ss_add(g->symt->ss_types,NSName(XS_NAMESPACE,name),t);
+  g->symt->ss_types->add(NSName(XS_NAMESPACE,name),t);
   return t;
 }
 
@@ -780,7 +767,7 @@ Type *xs_new_simple_builtin(BuiltinTypes *g, const String &name, const String &n
   t->typeinfo_known = 1;
   t->size = sizeof(IMPL_POINTER);
   t->ctype = String::format("XS%*",&name);
-  ss_add(g->symt->ss_types,t->def.ident,t);
+  g->symt->ss_types->add(t->def.ident,t);
   return t;
 }
 
@@ -800,29 +787,29 @@ void BuiltinTypes_init_xdt_types(BuiltinTypes *g)
 
 xs_symbol_table::xs_symbol_table()
 {
-  ss_types = ss_new(NULL,"type");
-  ss_attributes = ss_new(NULL,"attribute");
-  ss_elements = ss_new(NULL,"element");
-  ss_attribute_groups = ss_new(NULL,"attribute group");
-  ss_identity_constraints = ss_new(NULL,"identity constraint");
-  ss_model_group_defs = ss_new(NULL,"group");
-  ss_notations = ss_new(NULL,"notation");
+  ss_types = new SymbolSpace("type");
+  ss_attributes = new SymbolSpace("attribute");
+  ss_elements = new SymbolSpace("element");
+  ss_attribute_groups = new SymbolSpace("attribute group");
+  ss_identity_constraints = new SymbolSpace("identity constraint");
+  ss_model_group_defs = new SymbolSpace("group");
+  ss_notations = new SymbolSpace("notation");
 }
 
 xs_symbol_table::~xs_symbol_table()
 {
-  ss_free(ss_types);
-  ss_free(ss_attributes);
-  ss_free(ss_elements);
-  ss_free(ss_attribute_groups);
-  ss_free(ss_identity_constraints);
-  ss_free(ss_model_group_defs);
-  ss_free(ss_notations);
+  delete ss_types;
+  delete ss_attributes;
+  delete ss_elements;
+  delete ss_attribute_groups;
+  delete ss_identity_constraints;
+  delete ss_model_group_defs;
+  delete ss_notations;
 }
 
 void *xs_symbol_table::lookup(int type, const NSName &ident)
 {
-  symbol_space *ss = NULL;
+  SymbolSpace *ss = NULL;
   switch (type) {
   case XS_OBJECT_TYPE:
     ss = ss_types;
@@ -849,7 +836,7 @@ void *xs_symbol_table::lookup(int type, const NSName &ident)
     ASSERT(!"invalid object type");
     break;
   }
-  return ss_lookup(ss,ident);
+  return ss->lookup(ident);
 }
 
 
@@ -880,8 +867,8 @@ BuiltinTypes::BuiltinTypes()
   symt = new xs_symbol_table();
   complex_ur_type = xs_init_complex_ur_type(this);
   simple_ur_type = xs_init_simple_ur_type(this);
-  ss_add(symt->ss_types,NSName(XS_NAMESPACE,"anyType"),complex_ur_type);
-  ss_add(symt->ss_types,NSName(XS_NAMESPACE,"anySimpleType"),simple_ur_type);
+  symt->ss_types->add(NSName(XS_NAMESPACE,"anyType"),complex_ur_type);
+  symt->ss_types->add(NSName(XS_NAMESPACE,"anySimpleType"),simple_ur_type);
 
   /* FIXME: init builtin attributes (section 3.2.7) */
   BuiltinTypes_init_xdt_types(this);
@@ -968,7 +955,7 @@ int xs_resolve_ref(Schema *s, Reference *r)
   ASSERT(!r->resolved);
 
   if (NULL == (r->target = r->s->getObject(r->type,r->def.ident)))
-    return error(&s->ei,s->uri,r->def.loc.line,String::null(),"No such %s %*",
+    return error(&s->ei,s->m_uri,r->def.loc.line,String::null(),"No such %s %*",
                  xs_object_types[r->type],&r->def.ident);
 
   if (r->obj)
@@ -1392,7 +1379,7 @@ int check_attribute_uses(Schema *s, list *attribute_uses, char *constraint1, cha
       ASSERT(NULL != au->attribute);
       if (au->attribute->def.ident == au2->attribute->def.ident) {
         list_free(encountered,NULL);
-        return error(&s->ei,s->uri,au2->defline,constraint1,"duplicate attribute not allowed: %*",
+        return error(&s->ei,s->m_uri,au2->defline,constraint1,"duplicate attribute not allowed: %*",
                      &au2->attribute->def.ident);
       }
     }
@@ -1415,7 +1402,7 @@ int check_attribute_uses(Schema *s, list *attribute_uses, char *constraint1, cha
       if (t == s->globals->id_type) {
         if (NULL != id_derivative) {
           list_free(encountered,NULL);
-          return error(&s->ei,s->uri,au->defline,constraint2,"only one attribute in a group can be "
+          return error(&s->ei,s->m_uri,au->defline,constraint2,"only one attribute in a group can be "
                        "of type ID (or a derivative); %* conflicts with %*",
                        &au->attribute->def.ident.m_name,
                        &id_derivative->attribute->def.ident.m_name);
@@ -1457,10 +1444,10 @@ int check_circular_references(Schema *s, void *obj, char *type, int defline, cha
 
         /* FIXME: circular references are allowed inside a <redefine> - see section 3.6.3 rule 3 */
         if (constraint)
-          error(&s->ei,s->uri,defline,constraint,"Circular %s reference detected: %s",
+          error(&s->ei,s->m_uri,defline,constraint,"Circular %s reference detected: %s",
                 type,buf->data);
         else
-          error(&s->ei,s->uri,defline,String::null(),"Circular %s reference detected: %s",type,buf->data);
+          error(&s->ei,s->m_uri,defline,String::null(),"Circular %s reference detected: %s",type,buf->data);
         stringbuf_free(buf);
         list_free(tocheck,NULL);
         list_free(encountered,NULL);
@@ -1505,7 +1492,7 @@ void add_model_group_def_references(Schema *s, void *obj, list **tocheck)
   add_model_group_mgdrefs(s,mgd->model_group,tocheck,1);
 }
 
-int post_process_model_group_def(Schema *s, xmlDocPtr doc, ModelGroupDef *mgd)
+int post_process_model_group_def(Schema *s, ModelGroupDef *mgd)
 {
   /* @implements(xmlschema-1:mg-props-correct.2)
      test { groupdef_sequence_circular.test }
@@ -1751,7 +1738,7 @@ int xs_mg_particles_overlap(ModelGroup *mg, Particle **overlap1, Particle **over
   return 0;
 }
 
-int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
+int post_process_model_group(Schema *s, ModelGroup *mg)
 {
   list *elements = NULL;
   list *l;
@@ -1768,7 +1755,7 @@ int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
     for (l = mg->particles; l; l = l->next) {
       Particle *p = (Particle*)l->data;
       if ((0 != p->range.max_occurs) && (1 != p->range.max_occurs))
-        return error(&s->ei,s->uri,p->defline,"cos-all-limited.2",
+        return error(&s->ei,s->m_uri,p->defline,"cos-all-limited.2",
                      "items directly within <all> must have maxOccurs equal to 0 or 1");
     }
   }
@@ -1795,12 +1782,12 @@ int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
 /*     debugl("found overlapping particles that can match adjacent elements"); */
 
     if (overlap1 == overlap2) {
-      error(&s->ei,s->uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
+      error(&s->ei,s->m_uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
             "violated: separate instances of %* may validate adjacent information items, and "
             "minOccurs is less than maxOccurs",&overlap1str);
     }
     else {
-      error(&s->ei,s->uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
+      error(&s->ei,s->m_uri,overlap1->defline,"cos-nonambig","unique particle attribution constraint "
             "violated: overlapping particles %* and %* may validate adjacent information items, "
             "and the former has minOccurs less than maxOccurs",&overlap1str,&overlap2str);
     }
@@ -1828,7 +1815,7 @@ int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
         if (particles_overlap(few1,few2,0)) {
           String few1str = few1->toString();
           String few2str = few2->toString();
-          error(&s->ei,s->uri,few1->defline,"cos-nonambig","unique particle attribution constraint "
+          error(&s->ei,s->m_uri,few1->defline,"cos-nonambig","unique particle attribution constraint "
                 "violated: %* and %* overlap, and are both within the same <choice> or <all> group",
                 &few1str,&few2str);
           list_free(first_ew,NULL);
@@ -1878,7 +1865,7 @@ int post_process_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg)
           else
             stringbuf_format(t2,"(none)");
 
-          error(&s->ei,s->uri,e1->def.loc.line,"cos-element-consistent","inconsistent element "
+          error(&s->ei,s->m_uri,e1->def.loc.line,"cos-element-consistent","inconsistent element "
                 "declarations found for %*: types %s and %s are not the same top-level type "
                 "declaration; both elements must have the same type for them to be used within the "
                 "same model group",&e1->def.ident,t1->data,t2->data);
@@ -1978,7 +1965,7 @@ void compute_element_type(Schema *s, SchemaElement *e)
   e->computed_type = 1;
 }
 
-int post_process_element1(Schema *s, xmlDocPtr doc, SchemaElement *e)
+int post_process_element1(Schema *s, SchemaElement *e)
 {
   /* @implements(xmlschema-1:e-props-correct.6)
      test { element_sg_bigcircular.test }
@@ -1991,7 +1978,7 @@ int post_process_element1(Schema *s, xmlDocPtr doc, SchemaElement *e)
   return 0;
 }
 
-int post_process_element2(Schema *s, xmlDocPtr doc, SchemaElement *e)
+int post_process_element2(Schema *s, SchemaElement *e)
 {
   /* @implements(xmlschema-1:e-props-correct.3) @end
      Note: this constraint specifies that if {substitution group affiliaton} is non-absent
@@ -2026,7 +2013,7 @@ int post_process_element2(Schema *s, xmlDocPtr doc, SchemaElement *e)
       /* FIXME: check t->{content type} */
     }
     if (id_derived)
-      return error(&s->ei,s->uri,e->def.loc.line,"e-props-correct.5",
+      return error(&s->ei,s->m_uri,e->def.loc.line,"e-props-correct.5",
                    "value constraints cannot be specified for ID-derived elements");
     /* If default/fixed value specified, need to check here that it is valid */
   }
@@ -2034,7 +2021,7 @@ int post_process_element2(Schema *s, xmlDocPtr doc, SchemaElement *e)
   return 0;
 }
 
-int post_process_attribute(Schema *s, xmlDocPtr doc, SchemaAttribute *a)
+int post_process_attribute(Schema *s, SchemaAttribute *a)
 {
   /* @implements(xmlschema-1:a-props-correct.3)
      test { attribute_tl_id_default.test }
@@ -2046,14 +2033,14 @@ int post_process_attribute(Schema *s, xmlDocPtr doc, SchemaAttribute *a)
     Type *t;
     for (t = a->type; t && t != t->base; t = t->base)
       if (t == s->globals->id_type)
-        return error(&s->ei,s->uri,a->def.loc.line,"a-props-correct.3",
+        return error(&s->ei,s->m_uri,a->def.loc.line,"a-props-correct.3",
                      "value constraints cannot be specified for ID-derived attributes");
   }
 
   return 0;
 }
 
-int post_process_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au)
+int post_process_attribute_use(Schema *s, AttributeUse *au)
 {
   ASSERT(au->attribute);
 
@@ -2075,7 +2062,7 @@ int post_process_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au)
     Type *t;
     for (t = au->attribute->type; t && t != t->base; t = t->base)
       if (t == s->globals->id_type)
-        return error(&s->ei,s->uri,au->defline,"a-props-correct.3",
+        return error(&s->ei,s->m_uri,au->defline,"a-props-correct.3",
                      "value constraints cannot be specified for ID-derived attributes");
   }
 
@@ -2087,8 +2074,8 @@ int post_process_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au)
      @end */
   if (VALUECONSTRAINT_FIXED == au->attribute->vc.type) {
     if ((VALUECONSTRAINT_FIXED != au->vc.type) ||
-        strcmp(au->attribute->vc.value,au->vc.value))
-      return error(&s->ei,s->uri,au->defline,"au-props-correct.2","attribute reference must "
+        (au->attribute->vc.value != au->vc.value))
+      return error(&s->ei,s->m_uri,au->defline,"au-props-correct.2","attribute reference must "
                    "contain a \"fixed\" value equal to that of the attribute it references");
   }
 
@@ -2111,7 +2098,7 @@ void add_attribute_group_references(Schema *s, void *obj, list **tocheck)
   }
 }
 
-int post_process_attribute_group(Schema *s, xmlDocPtr doc, AttributeGroup *ag)
+int post_process_attribute_group(Schema *s, AttributeGroup *ag)
 {
   /* @implements(xmlschema-1:src-attribute_group.3)
      description { Check for circular attribute group references }
@@ -2217,7 +2204,7 @@ int compute_content_type(Schema *s, Type *t)
          test { complextype_sc_restriction_simpletype.test }
          @end */
       if (!t->base->complex)
-        return error(&s->ei,s->uri,t->def.loc.line,"ct-props-correct.2","base type is a "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"ct-props-correct.2","base type is a "
                      "simple type; must use <extension> instead of <restriction>");
 
       /* 1 If the type definition resolved to by the actual value of the base [attribute] is a
@@ -2256,12 +2243,12 @@ int compute_content_type(Schema *s, Type *t)
            chosen, then */
       else {
         if (!t->base->mixed)
-          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","%* cannot be restricted "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.4.2","%* cannot be restricted "
                        "with simple content, because it does not have its \"mixed\" attribute "
                        "set to \"true\"",&t->base->def.ident);
 
         if ((NULL != t->base->content_type) && !particle_emptiable(s,t->base->content_type))
-          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","%* cannot be restricted "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.4.2","%* cannot be restricted "
                        "with simple content, because its content model requires one or more "
                        "elements to be present",&t->base->def.ident);
 
@@ -2272,7 +2259,7 @@ int compute_content_type(Schema *s, Type *t)
            which specify facets, if any), as defined in Simple Type Restriction (Facets)
            (3.14.6); */
         if (NULL == t->child_type)
-          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","A complex type with "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.4.2","A complex type with "
                        "simple content that restricts a complex type with complex content must "
                        "contain a <simpleType> child");
 
@@ -2290,7 +2277,7 @@ int compute_content_type(Schema *s, Type *t)
       if (t->base->complex) {
 
         if (t->base->complex_content)
-          return error(&s->ei,s->uri,t->def.loc.line,"structures-3.4.2","A complex type with "
+          return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.4.2","A complex type with "
                        "simple content cannot extend a complex type with complex content");
 
 /*         message("t = %s\n",t->name); */
@@ -2344,7 +2331,7 @@ int compute_complete_wildcard(Schema *s, Wildcard *local_wildcard, list *attribu
         /* FIXME: no test for this currently because there is no way to create "not" wildcards in
            different namespaces... this requires <import> functionality */
         if (NULL == w)
-          return error(&s->ei,s->uri,defline,"structures-3.10.6","Attribute wildcard intersection "
+          return error(&s->ei,s->m_uri,defline,"structures-3.10.6","Attribute wildcard intersection "
                        "with the local wildcard and/or one or more attribute groups is not "
                        "expressible, because two wildcards are negations of different namespaces");
 
@@ -2481,7 +2468,7 @@ int compute_attribute_wildcard(Schema *s, Type *t)
                                        t->attribute_wildcard->process_contents);
 
       if (NULL == t->attribute_wildcard)
-        return error(&s->ei,s->uri,t->def.loc.line,"structures-3.10.6","Union of local attribute "
+        return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.10.6","Union of local attribute "
                      "wildcard and base type's attribute wildcard is not expressible, because one "
                      "is a negation and the other is a set of namespaces including ##local but not "
                      "##targetNamespace");
@@ -2519,7 +2506,7 @@ void add_type_union_members(Schema *s, void *obj, list **tocheck)
   }
 }
 
-int post_process_particle(Schema *s, xmlDocPtr doc, Particle *p)
+int post_process_particle(Schema *s, Particle *p)
 {
   /* @implements(xmlschema-1:p-props-correct.1) @end */
 
@@ -2535,7 +2522,7 @@ int post_process_particle(Schema *s, xmlDocPtr doc, Particle *p)
        test { sequence_maxoccurs0.test }
        @end */
     if (0 == p->range.max_occurs)
-      return error(&s->ei,s->uri,p->defline,"p-props-correct.2.1",
+      return error(&s->ei,s->m_uri,p->defline,"p-props-correct.2.1",
                    "if maxOccurs has a finite value, it must be greater than or equal to 1");
     /* @implements(xmlschema-1:p-props-correct.2.2)
        test { any_minoccursgtmaxoccurs.test }
@@ -2545,14 +2532,14 @@ int post_process_particle(Schema *s, xmlDocPtr doc, Particle *p)
        test { sequence_minoccursgtmaxoccurs.test }
        @end */
     if (p->range.min_occurs > p->range.max_occurs)
-      return error(&s->ei,s->uri,p->defline,"p-props-correct.2.2",
+      return error(&s->ei,s->m_uri,p->defline,"p-props-correct.2.2",
                    "minOccurs must not be greater than maxOccurs");
   }
 
   return 0;
 }
 
-int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
+int post_process_type1(Schema *s, Type *t)
 {
 
   ASSERT(t->base);
@@ -2564,7 +2551,7 @@ int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
      test { complextype_cc_restriction_simpletype2.test }
      @end */
   if (t->complex && t->complex_content && !t->base->complex)
-    return error(&s->ei,s->uri,t->def.loc.line,"src-ct.1",
+    return error(&s->ei,s->m_uri,t->def.loc.line,"src-ct.1",
                  "complex type with complex content cannot extend or restrict a simple type");
 
   /* @implements(xmlschema-1:ct-props-correct.3)
@@ -2612,7 +2599,7 @@ int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
        test { simpletype_restriction_derivation_complex.test }
        @end */
     if (!found && (t != s->globals->simple_ur_type))
-      return error(&s->ei,s->uri,t->def.loc.line,"st-props-correct.2",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"st-props-correct.2",
                    "Simple type must ultimately be derived from %*",
                    &s->globals->simple_ur_type->def.ident);
   }
@@ -2620,7 +2607,7 @@ int post_process_type1(Schema *s, xmlDocPtr doc, Type *t)
   return 0;
 }
 
-int post_process_type2(Schema *s, xmlDocPtr doc, Type *t)
+int post_process_type2(Schema *s, Type *t)
 {
   CHECK_CALL(compute_content_type(s,t))
 
@@ -2643,7 +2630,7 @@ int post_process_type2(Schema *s, xmlDocPtr doc, Type *t)
       t->primitive_type = s->globals->simple_ur_type;
 
     if ((TYPE_VARIETY_ATOMIC == t->variety) && (NULL == t->primitive_type)) {
-      return error(&s->ei,s->uri,t->def.loc.line,"structures-3.14.6",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"structures-3.14.6",
                    "An atomic type must be ultimately derived from a built-in primitive type");
     }
 
@@ -2662,7 +2649,7 @@ int post_process_type2(Schema *s, xmlDocPtr doc, Type *t)
        test { simpletype_union_base_final_restriction4.test }
        @end */
     if (t->base->final_restriction)
-      return error(&s->ei,s->uri,t->def.loc.line,"st-props-correct.3",
+      return error(&s->ei,s->m_uri,t->def.loc.line,"st-props-correct.3",
                    "Base type disallows restriction");
 
     /* rule 4 - actually marked as "deleted" in the spec file, not sure how to hide it in table
@@ -2686,7 +2673,7 @@ int post_process_type2(Schema *s, xmlDocPtr doc, Type *t)
   return 0;
 }
 
-int xs_post_process_schema(Schema *s, xmlDocPtr doc)
+int xs_post_process_schema(Schema *s)
 {
   /* resolve references */
   Iterator<Reference*> rit;
@@ -2701,10 +2688,10 @@ int xs_post_process_schema(Schema *s, xmlDocPtr doc)
      rely on these checks being done to avoid infinite recursion. */
   Iterator<Type*> tit;
   for (tit = s->as->alloc_type; tit.haveCurrent(); tit++)
-    CHECK_CALL(post_process_type1(s,doc,*tit))
+    CHECK_CALL(post_process_type1(s,*tit))
   Iterator<SchemaElement*> eit;
   for (eit = s->as->alloc_element; eit.haveCurrent(); eit++)
-    CHECK_CALL(post_process_element1(s,doc,*eit))
+    CHECK_CALL(post_process_element1(s,*eit))
 
   /* now we compute the types for all elements; this must also be done before other post-processing
      occurs */
@@ -2716,27 +2703,27 @@ int xs_post_process_schema(Schema *s, xmlDocPtr doc)
   }
 
   for (tit = s->as->alloc_type; tit.haveCurrent(); tit++)
-    CHECK_CALL(post_process_type2(s,doc,*tit))
+    CHECK_CALL(post_process_type2(s,*tit))
   Iterator<Particle*> pit;
   for (pit = s->as->alloc_particle; pit.haveCurrent(); pit++)
-    CHECK_CALL(post_process_particle(s,doc,*pit))
+    CHECK_CALL(post_process_particle(s,*pit))
   Iterator<ModelGroupDef*> mgdit;
   for (mgdit = s->as->alloc_model_group_def; mgdit.haveCurrent(); mgdit++)
-    CHECK_CALL(post_process_model_group_def(s,doc,*mgdit))
+    CHECK_CALL(post_process_model_group_def(s,*mgdit))
   Iterator<ModelGroup*> mgit;
   for (mgit = s->as->alloc_model_group; mgit.haveCurrent(); mgit++)
-    CHECK_CALL(post_process_model_group(s,doc,*mgit))
+    CHECK_CALL(post_process_model_group(s,*mgit))
   for (eit = s->as->alloc_element; eit.haveCurrent(); eit++)
-    CHECK_CALL(post_process_element2(s,doc,*eit))
+    CHECK_CALL(post_process_element2(s,*eit))
   Iterator<SchemaAttribute*> ait;
   for (ait = s->as->alloc_attribute; ait.haveCurrent(); ait++)
-    CHECK_CALL(post_process_attribute(s,doc,*ait))
+    CHECK_CALL(post_process_attribute(s,*ait))
   Iterator<AttributeUse*> auit;
   for (auit = s->as->alloc_attribute_use; auit.haveCurrent(); auit++)
-    CHECK_CALL(post_process_attribute_use(s,doc,*auit))
+    CHECK_CALL(post_process_attribute_use(s,*auit))
   Iterator<AttributeGroup*> agit;
   for (agit = s->as->alloc_attribute_group; agit.haveCurrent(); agit++)
-    CHECK_CALL(post_process_attribute_group(s,doc,*agit))
+    CHECK_CALL(post_process_attribute_group(s,*agit))
 
   /* compute attribute wildcards - note this must be done after post processing to ensure
      that circular references have been checked for */
@@ -2786,15 +2773,15 @@ int xs_post_process_schema(Schema *s, xmlDocPtr doc)
   return 0;
 }
 
-int GridXSLT::parse_xmlschema_element(xmlNodePtr n, xmlDocPtr doc, const String &uri,
+int GridXSLT::parse_xmlschema_element(Node *node, const String &uri,
                                       const char *sourceloc,
                                       Schema **sout, Error *ei, BuiltinTypes *g)
 {
   Schema *s = new Schema(g);
-  s->uri = uri.cstring();
+  s->m_uri = uri;
 
-  if ((0 == xs_parse_schema(s,n,doc)) &&
-      (0 == xs_post_process_schema(s,doc))) {
+  if ((0 == xs_parse_schema(s,node)) &&
+      (0 == xs_post_process_schema(s))) {
     *sout = s;
     return 0;
   }
@@ -2841,7 +2828,8 @@ Schema *GridXSLT::parse_xmlschema_file(char *filename, BuiltinTypes *g)
   }
 
   String uri = get_real_uri(filename);
-  if (0 != parse_xmlschema_element(root,doc,uri,filename,&s,&ei,g)) {
+  Node *rootNode = new Node(root);
+  if (0 != parse_xmlschema_element(rootNode,uri,filename,&s,&ei,g)) {
     ei.fprint(stderr);
     ei.clear();
     xmlFreeDoc(doc);
@@ -2852,7 +2840,7 @@ Schema *GridXSLT::parse_xmlschema_file(char *filename, BuiltinTypes *g)
   return s;
 }
 
-int xs_visit_element(Schema *s, xmlDocPtr doc, SchemaElement *e, SchemaVisitor *v)
+int xs_visit_element(Schema *s, SchemaElement *e, SchemaVisitor *v)
 {
   if (e->type &&
       !(e->typeref && v->once_each)) {
@@ -2865,33 +2853,33 @@ int xs_visit_element(Schema *s, xmlDocPtr doc, SchemaElement *e, SchemaVisitor *
         ((NULL == e->sghead) && (e->type != s->globals->complex_ur_type)) ||
         ((NULL != e->sghead) && (e->type != e->sghead->type))) {
 
-      CHECK_CALL(v->type(s,doc,0,e->type))
-      CHECK_CALL(xs_visit_type(s,doc,e->type,v))
-      CHECK_CALL(v->type(s,doc,1,e->type))
+      CHECK_CALL(v->type(s,0,e->type))
+      CHECK_CALL(xs_visit_type(s,e->type,v))
+      CHECK_CALL(v->type(s,1,e->type))
     }
   }
 
   return 0;
 }
 
-int xs_visit_wildcard(Schema *s, xmlDocPtr doc, Wildcard *e, SchemaVisitor *v)
+int xs_visit_wildcard(Schema *s, Wildcard *e, SchemaVisitor *v)
 {
   return 0;
 }
 
-int xs_visit_model_group(Schema *s, xmlDocPtr doc, ModelGroup *mg, SchemaVisitor *v)
+int xs_visit_model_group(Schema *s, ModelGroup *mg, SchemaVisitor *v)
 {
   list *l;
   for (l = mg->particles; l; l = l->next) {
     Particle *p2 = (Particle*)l->data;
-    CHECK_CALL(v->particle(s,doc,0,p2))
-    CHECK_CALL(xs_visit_particle(s,doc,p2,v))
-    CHECK_CALL(v->particle(s,doc,1,p2))
+    CHECK_CALL(v->particle(s,0,p2))
+    CHECK_CALL(xs_visit_particle(s,p2,v))
+    CHECK_CALL(v->particle(s,1,p2))
   }
   return 0;
 }
 
-int xs_visit_particle(Schema *s, xmlDocPtr doc, Particle *p, SchemaVisitor *v)
+int xs_visit_particle(Schema *s, Particle *p, SchemaVisitor *v)
 {
   if (PARTICLE_TERM_ELEMENT == p->term_type) {
     if (NULL == p->term.e) { /* may not be resolved yet */
@@ -2900,30 +2888,30 @@ int xs_visit_particle(Schema *s, xmlDocPtr doc, Particle *p, SchemaVisitor *v)
     }
     if (p->ref && v->once_each)
       return 0;
-    CHECK_CALL(v->element(s,doc,0,p->term.e))
-    CHECK_CALL(xs_visit_element(s,doc,p->term.e,v))
-    CHECK_CALL(v->element(s,doc,1,p->term.e))
+    CHECK_CALL(v->element(s,0,p->term.e))
+    CHECK_CALL(xs_visit_element(s,p->term.e,v))
+    CHECK_CALL(v->element(s,1,p->term.e))
   }
   else if (PARTICLE_TERM_MODEL_GROUP == p->term_type) {
     if (NULL == p->term.mg) /* may not be resolved yet */
       return 0;
     if (p->ref && v->once_each)
       return 0;
-    CHECK_CALL(v->modelGroup(s,doc,0,p->term.mg))
-    CHECK_CALL(xs_visit_model_group(s,doc,p->term.mg,v))
-    CHECK_CALL(v->modelGroup(s,doc,1,p->term.mg))
+    CHECK_CALL(v->modelGroup(s,0,p->term.mg))
+    CHECK_CALL(xs_visit_model_group(s,p->term.mg,v))
+    CHECK_CALL(v->modelGroup(s,1,p->term.mg))
   }
   else {
     ASSERT(PARTICLE_TERM_WILDCARD == p->term_type);
-    CHECK_CALL(v->wildcard(s,doc,0,p->term.w))
-    CHECK_CALL(xs_visit_wildcard(s,doc,p->term.w,v))
-    CHECK_CALL(v->wildcard(s,doc,1,p->term.w))
+    CHECK_CALL(v->wildcard(s,0,p->term.w))
+    CHECK_CALL(xs_visit_wildcard(s,p->term.w,v))
+    CHECK_CALL(v->wildcard(s,1,p->term.w))
   }
 
   return 0;
 }
 
-int xs_visit_type(Schema *s, xmlDocPtr doc, Type *t, SchemaVisitor *v)
+int xs_visit_type(Schema *s, Type *t, SchemaVisitor *v)
 {
   Particle *p = t->content_type;
   list *l;
@@ -2935,25 +2923,25 @@ int xs_visit_type(Schema *s, xmlDocPtr doc, Type *t, SchemaVisitor *v)
   if (t->base &&
       (t->base != t) && /* ur-type */
       !(t->baseref && v->once_each)) {
-    CHECK_CALL(v->type(s,doc,0,t->base))
-    CHECK_CALL(xs_visit_type(s,doc,t->base,v))
-    CHECK_CALL(v->type(s,doc,1,t->base))
+    CHECK_CALL(v->type(s,0,t->base))
+    CHECK_CALL(xs_visit_type(s,t->base,v))
+    CHECK_CALL(v->type(s,1,t->base))
   }
 
   /* now the item type (if we're a list simple type) */
   if (t->item_type && ((NULL == t->item_typeref) || !v->once_each)) {
-    CHECK_CALL(v->type(s,doc,0,t->item_type))
-    CHECK_CALL(xs_visit_type(s,doc,t->item_type,v))
-    CHECK_CALL(v->type(s,doc,1,t->item_type))
+    CHECK_CALL(v->type(s,0,t->item_type))
+    CHECK_CALL(xs_visit_type(s,t->item_type,v))
+    CHECK_CALL(v->type(s,1,t->item_type))
   }
 
   /* now member types (if we're a union simple type) */
   for (l = t->members; l; l = l->next) {
     MemberType *mt = (MemberType*)l->data;
     if (mt->type && ((NULL == mt->ref) || !v->once_each)) {
-      CHECK_CALL(v->type(s,doc,0,mt->type))
-      CHECK_CALL(xs_visit_type(s,doc,mt->type,v))
-      CHECK_CALL(v->type(s,doc,1,mt->type))
+      CHECK_CALL(v->type(s,0,mt->type))
+      CHECK_CALL(xs_visit_type(s,mt->type,v))
+      CHECK_CALL(v->type(s,1,mt->type))
     }
   }
 
@@ -2965,21 +2953,21 @@ int xs_visit_type(Schema *s, xmlDocPtr doc, Type *t, SchemaVisitor *v)
     p = t->effective_content;
 
   if (p) {
-    CHECK_CALL(v->particle(s,doc,0,p))
-    CHECK_CALL(xs_visit_particle(s,doc,p,v))
-    CHECK_CALL(v->particle(s,doc,1,p))
+    CHECK_CALL(v->particle(s,0,p))
+    CHECK_CALL(xs_visit_particle(s,p,v))
+    CHECK_CALL(v->particle(s,1,p))
   }
 
   if (t->child_type) {
-    CHECK_CALL(v->type(s,doc,0,t->child_type))
-    CHECK_CALL(xs_visit_type(s,doc,t->child_type,v))
-    CHECK_CALL(v->type(s,doc,1,t->child_type))
+    CHECK_CALL(v->type(s,0,t->child_type))
+    CHECK_CALL(xs_visit_type(s,t->child_type,v))
+    CHECK_CALL(v->type(s,1,t->child_type))
   }
 
   if (t->simple_content_type && !v->once_each) {
-    CHECK_CALL(v->type(s,doc,0,t->simple_content_type))
-    CHECK_CALL(xs_visit_type(s,doc,t->simple_content_type,v))
-    CHECK_CALL(v->type(s,doc,1,t->simple_content_type))
+    CHECK_CALL(v->type(s,0,t->simple_content_type))
+    CHECK_CALL(xs_visit_type(s,t->simple_content_type,v))
+    CHECK_CALL(v->type(s,1,t->simple_content_type))
   }
 
   /* FIXME: should we also visit simple_content_type? (probably only relevant for dumping) */
@@ -2991,51 +2979,48 @@ int xs_visit_type(Schema *s, xmlDocPtr doc, Type *t, SchemaVisitor *v)
     l = t->attribute_uses;
   for (; l; l = l->next) {
     AttributeUse *au = (AttributeUse*)l->data;
-    CHECK_CALL(v->attributeUse(s,doc,0,au))
-    CHECK_CALL(xs_visit_attribute_use(s,doc,au,v))
-    CHECK_CALL(v->attributeUse(s,doc,1,au))
+    CHECK_CALL(v->attributeUse(s,0,au))
+    CHECK_CALL(xs_visit_attribute_use(s,au,v))
+    CHECK_CALL(v->attributeUse(s,1,au))
   }
 
   /* attribute group references */
   for (l = t->attribute_group_refs; l; l = l->next) {
     AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
-    CHECK_CALL(v->attributeGroupRef(s,doc,0,agr))
-    CHECK_CALL(xs_visit_attribute_group_ref(s,doc,agr,v))
-    CHECK_CALL(v->attributeGroupRef(s,doc,1,agr))
+    CHECK_CALL(v->attributeGroupRef(s,0,agr))
+    CHECK_CALL(xs_visit_attribute_group_ref(s,agr,v))
+    CHECK_CALL(v->attributeGroupRef(s,1,agr))
   }
 
   return 0;
 }
 
-int xs_visit_model_group_def(Schema *s, xmlDocPtr doc, ModelGroupDef *mgd,
-                             SchemaVisitor *v)
+int xs_visit_model_group_def(Schema *s, ModelGroupDef *mgd, SchemaVisitor *v)
 {
   list *l;
 
   for (l = mgd->model_group->particles; l; l = l->next) {
     Particle *p = (Particle*)l->data;
-    CHECK_CALL(v->particle(s,doc,0,p))
-    CHECK_CALL(xs_visit_particle(s,doc,p,v))
-    CHECK_CALL(v->particle(s,doc,1,p))
+    CHECK_CALL(v->particle(s,0,p))
+    CHECK_CALL(xs_visit_particle(s,p,v))
+    CHECK_CALL(v->particle(s,1,p))
   }
 
   return 0;
 }
 
-int xs_visit_attribute_group_ref(Schema *s, xmlDocPtr doc,
-                                 AttributeGroupRef *agr, SchemaVisitor *v)
+int xs_visit_attribute_group_ref(Schema *s, AttributeGroupRef *agr, SchemaVisitor *v)
 {
   if (!v->once_each) {
     AttributeGroup *ag = (AttributeGroup*)agr->ag;
-    CHECK_CALL(v->attributeGroup(s,doc,0,ag))
-    CHECK_CALL(xs_visit_attribute_group(s,doc,ag,v))
-    CHECK_CALL(v->attributeGroup(s,doc,1,ag))
+    CHECK_CALL(v->attributeGroup(s,0,ag))
+    CHECK_CALL(xs_visit_attribute_group(s,ag,v))
+    CHECK_CALL(v->attributeGroup(s,1,ag))
   }
   return 0;
 }
 
-int xs_visit_attribute_group(Schema *s, xmlDocPtr doc, AttributeGroup *ag,
-                             SchemaVisitor *v)
+int xs_visit_attribute_group(Schema *s, AttributeGroup *ag, SchemaVisitor *v)
 {
   list *l;
 
@@ -3046,41 +3031,40 @@ int xs_visit_attribute_group(Schema *s, xmlDocPtr doc, AttributeGroup *ag,
     l = ag->attribute_uses;
   for (; l; l = l->next) {
     AttributeUse *au = (AttributeUse*)l->data;
-    CHECK_CALL(v->attributeUse(s,doc,0,au))
-    CHECK_CALL(xs_visit_attribute_use(s,doc,au,v))
-    CHECK_CALL(v->attributeUse(s,doc,1,au))
+    CHECK_CALL(v->attributeUse(s,0,au))
+    CHECK_CALL(xs_visit_attribute_use(s,au,v))
+    CHECK_CALL(v->attributeUse(s,1,au))
   }
 
   /* attribute group references */
   for (l = ag->attribute_group_refs; l; l = l->next) {
     AttributeGroupRef *agr = (AttributeGroupRef*)l->data;
-    CHECK_CALL(v->attributeGroupRef(s,doc,0,agr))
-    CHECK_CALL(xs_visit_attribute_group_ref(s,doc,agr,v))
-    CHECK_CALL(v->attributeGroupRef(s,doc,1,agr))
+    CHECK_CALL(v->attributeGroupRef(s,0,agr))
+    CHECK_CALL(xs_visit_attribute_group_ref(s,agr,v))
+    CHECK_CALL(v->attributeGroupRef(s,1,agr))
   }
   return 0;
 }
 
-int xs_visit_attribute(Schema *s, xmlDocPtr doc, SchemaAttribute *a, SchemaVisitor *v)
+int xs_visit_attribute(Schema *s, SchemaAttribute *a, SchemaVisitor *v)
 {
   if (a->type &&
       !(a->typeref && v->once_each)) {
-    CHECK_CALL(v->type(s,doc,0,a->type))
-    CHECK_CALL(xs_visit_type(s,doc,a->type,v))
-    CHECK_CALL(v->type(s,doc,1,a->type))
+    CHECK_CALL(v->type(s,0,a->type))
+    CHECK_CALL(xs_visit_type(s,a->type,v))
+    CHECK_CALL(v->type(s,1,a->type))
   }
 
   return 0;
 }
 
-int xs_visit_attribute_use(Schema *s, xmlDocPtr doc, AttributeUse *au,
-                           SchemaVisitor *v)
+int xs_visit_attribute_use(Schema *s, AttributeUse *au, SchemaVisitor *v)
 {
   if (au->attribute &&
       !(au->ref && v->once_each)) {
-    CHECK_CALL(v->attribute(s,doc,0,au->attribute))
-    CHECK_CALL(xs_visit_attribute(s,doc,au->attribute,v))
-    CHECK_CALL(v->attribute(s,doc,1,au->attribute))
+    CHECK_CALL(v->attribute(s,0,au->attribute))
+    CHECK_CALL(xs_visit_attribute(s,au->attribute,v))
+    CHECK_CALL(v->attribute(s,1,au->attribute))
   }
 
   return 0;
@@ -3099,15 +3083,11 @@ Schema::Schema(BuiltinTypes *g)
     attribute_declarations(NULL),
     attribute_grop_definitions(NULL),
     notation_declarations(NULL),
-    uri(NULL),
-    ns(NULL),
     globals(NULL),
     as(NULL),
     symt(NULL),
     attrformq(0),
     elemformq(0),
-    block_default(NULL),
-    final_default(NULL),
     annotations(NULL),
     imports(NULL)
 {
@@ -3119,11 +3099,6 @@ Schema::Schema(BuiltinTypes *g)
 Schema::~Schema()
 {
   list *l;
-  free(uri);
-  free(ns);
-
-  free(block_default);
-  free(final_default);
 
   for (l = imports; l; l = l->next)
     delete static_cast<Schema*>(l->data);
@@ -3186,344 +3161,62 @@ void *Schema::getObject(int type, const NSName &ident)
 
 int Schema::visit(xmlDocPtr doc, SchemaVisitor *v)
 {
-  symbol_space_entry *sse;
+  SymbolSpaceEntry *sse;
 
-  CHECK_CALL(v->schema(this,doc,0,this))
+  CHECK_CALL(v->schema(this,0,this))
 
   for (sse = symt->ss_types->entries; sse; sse = sse->next) {
     Type *t = (Type*)sse->object;
-    CHECK_CALL(v->type(this,doc,0,t))
-    CHECK_CALL(xs_visit_type(this,doc,t,v))
-    CHECK_CALL(v->type(this,doc,1,t))
+    CHECK_CALL(v->type(this,0,t))
+    CHECK_CALL(xs_visit_type(this,t,v))
+    CHECK_CALL(v->type(this,1,t))
   }
 
   for (sse = symt->ss_elements->entries; sse; sse = sse->next) {
-    CHECK_CALL(v->element(this,doc,0,(SchemaElement*)sse->object))
-    CHECK_CALL(xs_visit_element(this,doc,(SchemaElement*)sse->object,v))
-    CHECK_CALL(v->element(this,doc,1,(SchemaElement*)sse->object))
+    CHECK_CALL(v->element(this,0,(SchemaElement*)sse->object))
+    CHECK_CALL(xs_visit_element(this,(SchemaElement*)sse->object,v))
+    CHECK_CALL(v->element(this,1,(SchemaElement*)sse->object))
   }
 
   for (sse = symt->ss_attributes->entries; sse; sse = sse->next) {
-    CHECK_CALL(v->attribute(this,doc,0,(SchemaAttribute*)sse->object))
-    CHECK_CALL(xs_visit_attribute(this,doc,(SchemaAttribute*)sse->object,v))
-    CHECK_CALL(v->attribute(this,doc,1,(SchemaAttribute*)sse->object))
+    CHECK_CALL(v->attribute(this,0,(SchemaAttribute*)sse->object))
+    CHECK_CALL(xs_visit_attribute(this,(SchemaAttribute*)sse->object,v))
+    CHECK_CALL(v->attribute(this,1,(SchemaAttribute*)sse->object))
   }
 
   for (sse = symt->ss_model_group_defs->entries; sse; sse = sse->next) {
-    CHECK_CALL(v->modelGroupDef(this,doc,0,(ModelGroupDef*)sse->object))
-    CHECK_CALL(xs_visit_model_group_def(this,doc,(ModelGroupDef*)sse->object,v))
-    CHECK_CALL(v->modelGroupDef(this,doc,1,(ModelGroupDef*)sse->object))
+    CHECK_CALL(v->modelGroupDef(this,0,(ModelGroupDef*)sse->object))
+    CHECK_CALL(xs_visit_model_group_def(this,(ModelGroupDef*)sse->object,v))
+    CHECK_CALL(v->modelGroupDef(this,1,(ModelGroupDef*)sse->object))
   }
 
   for (sse = symt->ss_attribute_groups->entries; sse; sse = sse->next) {
-    CHECK_CALL(v->attributeGroup(this,doc,0,(AttributeGroup*)sse->object))
-    CHECK_CALL(xs_visit_attribute_group(this,doc,(AttributeGroup*)sse->object,v))
-    CHECK_CALL(v->attributeGroup(this,doc,1,(AttributeGroup*)sse->object))
+    CHECK_CALL(v->attributeGroup(this,0,(AttributeGroup*)sse->object))
+    CHECK_CALL(xs_visit_attribute_group(this,(AttributeGroup*)sse->object,v))
+    CHECK_CALL(v->attributeGroup(this,1,(AttributeGroup*)sse->object))
   }
 
-  CHECK_CALL(v->schema(this,doc,1,this))
+  CHECK_CALL(v->schema(this,1,this))
 
   return 0;
 }
 
-void xs_facetdata_freevals(xs_facetdata *fd)
+xs_facetdata::xs_facetdata()
+{
+  memset(&strval,0,XS_FACET_NUMFACETS*sizeof(char*));
+  memset(&intval,0,XS_FACET_NUMFACETS*sizeof(int));
+  memset(&defline,0,XS_FACET_NUMFACETS*sizeof(int));
+}
+
+xs_facetdata::~xs_facetdata()
 {
   int facet;
   for (facet = 0; facet < XS_FACET_NUMFACETS; facet++)
-    free(fd->strval[facet]);
-  list_free(fd->patterns,(list_d_t)free);
-  list_free(fd->enumerations,(list_d_t)free);
+    free(strval[facet]);
 }
 
   /*
      FIXME: when parsing, we currently ignore attributes we're not interested in. I think we're
      supposed to disallow any attributes from the XML Schema namespace that are not explicitly
      allowed on the elements.
-
-     Deferred: Simple type validation
-     @implements(xmlschema-1:cvc-simple-type.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-simple-type.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-simple-type.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-simple-type.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-simple-type.2.3) status { deferred } @end
-
-     Deferred: Annotations
-     @implements(xmlschema-1:src-annotation) status { deferred } @end
-     @implements(xmlschema-1:an-props-correct) status { deferred } @end
-
-     Deferred: Notation declarations
-     @implements(xmlschema-1:src-notation) status { deferred } @end
-     @implements(xmlschema-1:sic-notation-used) status { deferred } @end
-     @implements(xmlschema-1:n-props-correct) status { deferred } @end
-     @implements(xmlschema-1:Notation Declaration{name}) status { deferred } @end
-     @implements(xmlschema-1:Notation Declaration{target namespace}) status { deferred } @end
-     @implements(xmlschema-1:Notation Declaration{system identifier}) status { deferred } @end
-     @implements(xmlschema-1:Notation Declaration{public identifier}) status { deferred } @end
-     @implements(xmlschema-1:Notation Declaration{annotation}) status { deferred } @end
-
-     Deferred: Identity-constraint definitions
-     @implements(xmlschema-1:src-identity-constraint) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.2.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-identity-constraint.4.3) status { deferred } @end
-     @implements(xmlschema-1:sic-key.1) status { deferred } @end
-     @implements(xmlschema-1:sic-key.2) status { deferred } @end
-     @implements(xmlschema-1:c-props-correct.1) status { deferred } @end
-     @implements(xmlschema-1:c-props-correct.2) status { deferred } @end
-     @implements(xmlschema-1:c-selector-xpath.1) status { deferred } @end
-     @implements(xmlschema-1:c-selector-xpath.2) status { deferred } @end
-     @implements(xmlschema-1:c-selector-xpath.2.1) status { deferred } @end
-     @implements(xmlschema-1:c-selector-xpath.2.2) status { deferred } @end
-     @implements(xmlschema-1:c-fields-xpaths.1) status { deferred } @end
-     @implements(xmlschema-1:c-fields-xpaths.2) status { deferred } @end
-     @implements(xmlschema-1:c-fields-xpaths.2.1) status { deferred } @end
-     @implements(xmlschema-1:c-fields-xpaths.2.2) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{name}) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{target namespace}) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{identity-constraint category})
-     status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{selector}) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{fields}) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{referenced key}) status { deferred } @end
-     @implements(xmlschema-1:Identity-constraint Definition{annotation}) status { deferred } @end
-
-     Deferred: Wildcard validation
-
-     @implements(xmlschema-1:cvc-wildcard.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.2.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-wildcard-namespace.3) status { deferred } @end
-
-     Deferred: Particle validation
-
-     @implements(xmlschema-1:cvc-particle.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.1.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.2.3.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-particle.3.3) status { deferred } @end
-
-     Deferred: Model group validation
-
-     @implements(xmlschema-1:cvc-model-group.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-model-group.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-model-group.3) status { deferred } @end
-
-     Deferred: Attribute use validation
-     @implements(xmlschema-1:cvc-au) status { deferred } @end
-
-     Deferred: Redefinition
-
-     @implements(xmlschema-1:src-redefine.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.2.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.2.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.3) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.3.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.3.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.3.3) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.4) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.4.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.4.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.5) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.1.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.1.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.2.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.6.2.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.7) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.7.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.7.2) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.7.2.1) status { deferred } @end
-     @implements(xmlschema-1:src-redefine.7.2.2) status { deferred } @end
-
-     @implements(xmlschema-1:src-expredef.1) status { deferred } @end
-     @implements(xmlschema-1:src-expredef.1.1) status { deferred } @end
-     @implements(xmlschema-1:src-expredef.1.2) status { deferred } @end
-     @implements(xmlschema-1:src-expredef.2) status { deferred } @end
-
-     Deferred: Complex type validation
-
-     @implements(xmlschema-1:cvc-complex-type.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.2.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.2.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.3.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.3.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.5) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.5.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-complex-type.5.2) status { deferred } @end
-
-     Deferred: Complex type information set contributions
-
-     @implements(xmlschema-1:sic-attrDefault) status { deferred } @end
-
-     Deferred: Element validation
-
-     @implements(xmlschema-1:cvc-elt.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.3.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.3.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.4.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.4.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.4.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.2.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.5.2.2.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.6) status { deferred } @end
-     @implements(xmlschema-1:cvc-elt.7) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3.1.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-type.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-id.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-id.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.1.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.1.2.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-elt.2) status { deferred } @end
-
-     @implements(xmlschema-1:cos-equiv-derived-ok-rec.1)
-     status { deferred } issue { only relevant for particle validation? } @end
-     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2)
-     status { deferred } issue { only relevant for particle validation? } @end
-     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.1)
-     status { deferred } issue { only relevant for particle validation? } @end
-     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.2)
-     status { deferred } issue { only relevant for particle validation? } @end
-     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.3)
-     status { deferred } issue { only relevant for particle validation? } @end
-
-     Deferred: Element information set contributions
-
-     @implements(xmlschema-1:sic-e-outcome.1) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1.1) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1.1.1) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1.1.2) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1.2) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.1.3) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1.2) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.2) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.1) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.2) status { deferred } @end
-     @implements(xmlschema-1:sic-e-outcome.3) status { deferred } @end
-     @implements(xmlschema-1:sic-elt-error-code.1) status { deferred } @end
-     @implements(xmlschema-1:sic-elt-error-code.2) status { deferred } @end
-     @implements(xmlschema-1:sic-elt-decl) status { deferred } @end
-     @implements(xmlschema-1:sic-eltType.1) status { deferred } @end
-     @implements(xmlschema-1:sic-eltType.2) status { deferred } @end
-     @implements(xmlschema-1:sic-eltDefault.1) status { deferred } @end
-     @implements(xmlschema-1:sic-eltDefault.2) status { deferred } @end
-
-     Deferred: Attribute validation
-
-     @implements(xmlschema-1:cvc-attribute.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-attribute.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-attribute.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-attribute.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-attr.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-attr.1.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-attr.1.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-attr.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-assess-attr.3) status { deferred } @end
-
-     Deferred: Attribute information set contributions
-
-     @implements(xmlschema-1:sic-a-outcome.1) status { deferred } @end
-     @implements(xmlschema-1:sic-a-outcome.1.1) status { deferred } @end
-     @implements(xmlschema-1:sic-a-outcome.1.2) status { deferred } @end
-     @implements(xmlschema-1:sic-a-outcome.2) status { deferred } @end
-     @implements(xmlschema-1:sic-a-outcome.1) status { deferred } @end
-     @implements(xmlschema-1:sic-a-outcome.2) status { deferred } @end
-     @implements(xmlschema-1:sic-attr-error-code.1) status { deferred } @end
-     @implements(xmlschema-1:sic-attr-error-code.2) status { deferred } @end
-     @implements(xmlschema-1:sic-attr-decl) status { deferred } @end
-     @implements(xmlschema-1:sic-attrType.1) status { deferred } @end
-     @implements(xmlschema-1:sic-attrType.2) status { deferred } @end
-
-     Deferred: Annotations
-
-     @implements(xmlschema-1:Element Declaration{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Attribute Declaration{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Attribute Group Definition{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Simple Type Definition{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Complex Type Definition{annotations}) status { deferred } @end
-     @implements(xmlschema-1:Model Group Definition{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Model Group{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Wildcard{annotation}) status { deferred } @end
-     @implements(xmlschema-1:Schema{annotations}) status { deferred } @end
-     @implements(xmlschema-1:Annotation{application information}) status { deferred } @end
-     @implements(xmlschema-1:Annotation{user information}) status { deferred } @end
-     @implements(xmlschema-1:Annotation{attributes}) status { deferred } @end
-
-     Deferred: Qname resolution (instance)
-
-     @implements(xmlschema-1:cvc-resolve-instance.1) status { deferred } @end
-     @implements(xmlschema-1:cvc-resolve-instance.2) status { deferred } @end
-     @implements(xmlschema-1:cvc-resolve-instance.3) status { deferred } @end
-     @implements(xmlschema-1:cvc-resolve-instance.4) status { deferred } @end
-     @implements(xmlschema-1:cvc-resolve-instance.5) status { deferred } @end
-     @implements(xmlschema-1:cvc-resolve-instance.6) status { deferred } @end
   */

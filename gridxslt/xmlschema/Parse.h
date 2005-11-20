@@ -27,42 +27,42 @@
 
 namespace GridXSLT {
 
-int xs_parse_value_constraint(Schema *s, xmlNodePtr n, xmlDocPtr doc, ValueConstraint *vc,
+int xs_parse_value_constraint(Schema *s, Node *n, ValueConstraint *vc,
                               const char *errname);
-int xs_parse_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *attrname, int type,
+int xs_parse_ref(Schema *s, Node *n, const NSName &attrname, int type,
                  void **obj, Reference **refptr);
-int xs_parse_form(Schema *s, xmlNodePtr n, int *qualified);
-int xs_parse_block_final(const char *str, int *extension, int *restriction,
+int xs_parse_form(Schema *s, Node *n, int *qualified);
+int xs_parse_block_final(const String &str, int *extension, int *restriction,
                          int *substitution, int *list, int *union1);
-int xs_parse_element(xmlNodePtr n, xmlDocPtr doc, char *ns,
+int xs_parse_element(Node *n, const String &ns1,
                      Schema *s, list **particles_list);
-int xs_parse_attribute_use(Schema *s, xmlNodePtr n, int *use);
-int xs_parse_attribute(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int xs_parse_attribute_use(Schema *s, Node *n, int *use);
+int xs_parse_attribute(Schema *s, Node *n, const String &ns1,
                        int toplevel, list **aulist);
-int xs_parse_attribute_group_def(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns);
-int xs_parse_attribute_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int xs_parse_attribute_group_def(Schema *s, Node *n, const String &ns1);
+int xs_parse_attribute_group_ref(Schema *s, Node *n, const String &ns1,
                                  list **reflist);
-int xs_parse_simple_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+int xs_parse_simple_type(Schema *s, Node *n, const String &ns1,
                          int toplevel, Type **tout);
-int xs_parse_complex_type_attributes(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     Type *t, xmlNodePtr c);
-int xs_parse_simple_content_children(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                     Type *t, xmlNodePtr c);
+int xs_parse_complex_type_attributes(Schema *s, Node *n, const String &ns1,
+                                     Type *t, Node *c);
+int xs_parse_simple_content_children(Schema *s, Node *n, const String &ns1,
+                                     Type *t, Node *c);
 int xs_parse_complex_content_children(Schema *s,
-                                   xmlNodePtr n, xmlDocPtr doc, char *ns,
-                                   Type *t, xmlNodePtr c, int effective_mixed);
-int xs_parse_complex_type(Schema *s, xmlNodePtr n, xmlDocPtr doc, char *ns,
+                                   Node *n, const String &ns1,
+                                   Type *t, Node *c, int effective_mixed);
+int xs_parse_complex_type(Schema *s, Node *n, const String &ns1,
                           int toplevel, Type **tout);
-int xs_parse_group_def(xmlNodePtr n, xmlDocPtr doc, char *ns, Schema *s);
-int xs_parse_group_ref(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list,
+int xs_parse_group_def(Node *n, const String &ns1, Schema *s);
+int xs_parse_group_ref(Schema *s, Node *n, list **particles_list,
                        Particle **pout);
-int xs_parse_model_group(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+int xs_parse_model_group(Schema *s, Node *n, const String &ns1,
                          ModelGroup **mgout);
-int xs_parse_all_choice_sequence(Schema *s, xmlNodePtr n, char *ns, xmlDocPtr doc,
+int xs_parse_all_choice_sequence(Schema *s, Node *n, const String &ns1,
                                  list **particles_list, Particle **pout);
-int xs_parse_wildcard(Schema *s, xmlNodePtr n, xmlDocPtr doc, Wildcard **wout);
-int xs_parse_any(Schema *s, xmlNodePtr n, xmlDocPtr doc, list **particles_list);
-int xs_parse_schema(Schema *s, xmlNodePtr n, xmlDocPtr doc);
+int xs_parse_wildcard(Schema *s, Node *n, Wildcard **wout);
+int xs_parse_any(Schema *s, Node *n, list **particles_list);
+int xs_parse_schema(Schema *s, Node *node);
 
 };
 

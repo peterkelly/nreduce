@@ -420,7 +420,7 @@ void xs_init_attribute_cnames(Schema *s, list *attribute_uses, list *attribute_g
 void xs_init_cnames(Schema *s)
 {
   list *l;
-  symbol_space_entry *sse;
+  SymbolSpaceEntry *sse;
   List<String> empty;
 
   for (l = s->imports; l; l = l->next)
@@ -618,7 +618,7 @@ void xs_init_typeinfo_attribute_groups(Schema *s)
 void xs_init_typeinfo_others(Schema *s)
 {
   list *l;
-  symbol_space_entry *sse;
+  SymbolSpaceEntry *sse;
 
   for (l = s->imports; l; l = l->next)
     xs_init_typeinfo_others((Schema*)l->data);
