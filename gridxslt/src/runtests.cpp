@@ -212,9 +212,8 @@ void expand_args(char *program, char *infilename, char ***args)
   char *start;
   char *cur;
   int argno = 0;
-  char *cmdline = strdup(program);
+  char *cmdline = String(program).collapseWhitespace().cstring();
   int count = 1;
-  collapse_whitespace(cmdline);
   for (cur = cmdline; '\0' != *cur; cur++)
     if (' ' == *cur)
       count++;
