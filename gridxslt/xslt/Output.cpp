@@ -86,7 +86,7 @@ void output_xslt_with_param(xmlTextWriter *writer, WithParamExpr *wp)
   ASSERT(XSLT_WITH_PARAM == wp->m_type);
   xslt_start_element(writer,wp,"with-param");
 
-  xml_write_attr(writer,"name","%*",&wp->m_qn);
+  XMLWriter::formatAttribute(writer,"name","%*",&wp->m_qn);
 
   /* FIXME: attribute "as" for SequenceType */
   if (wp->m_select)
@@ -105,7 +105,7 @@ void output_xslt_param(xmlTextWriter *writer, ParamExpr *node)
 
   xslt_start_element(writer,node,"param");
 
-  xml_write_attr(writer,"name","%*",&node->m_qn);
+  XMLWriter::formatAttribute(writer,"name","%*",&node->m_qn);
 
   /* as */
   if (!node->m_st.isNull()) {
@@ -159,7 +159,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
   case XSLT_VARIABLE: {
     VariableExpr *variable = static_cast<VariableExpr*>(node);
     xslt_start_element(writer,variable,"variable");
-    xml_write_attr(writer,"name","%*",&variable->m_qn);
+    XMLWriter::formatAttribute(writer,"name","%*",&variable->m_qn);
     /* FIXME: attribute "as" for SequenceType */
     if (variable->m_select)
       expr_attr(writer,"select",variable->m_select,0);
@@ -211,7 +211,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
     if (atexpr->m_select)
       expr_attr(writer,"select",atexpr->m_select,0);
     if (!atexpr->m_mode.isNull())
-      xml_write_attr(writer,"mode","%*",&atexpr->m_mode);
+      XMLWriter::formatAttribute(writer,"mode","%*",&atexpr->m_mode);
     for (c = atexpr->m_param; c; c = c->m_next)
       output_xslt_with_param(writer,static_cast<WithParamExpr*>(c));
     for (c = atexpr->m_sort; c; c = c->m_next)
@@ -227,7 +227,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
     /* FIXME: support for "validation" attribute */
     xslt_start_element(writer,attribute,"attribute");
     if (!attribute->m_qn.isNull())
-      xml_write_attr(writer,"name","%*",&attribute->m_qn);
+      XMLWriter::formatAttribute(writer,"name","%*",&attribute->m_qn);
     else
       expr_attr(writer,"name",static_cast<AttributeExpr*>(attribute)->m_name_expr,1);
     if (attribute->m_select)
@@ -239,7 +239,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
   }
   case XSLT_INSTR_CALL_TEMPLATE:
     xslt_start_element(writer,node,"call-template");
-    xml_write_attr(writer,"name","%*",&node->m_qn);
+    XMLWriter::formatAttribute(writer,"name","%*",&node->m_qn);
     for (c = node->m_param; c; c = c->m_next)
       output_xslt_with_param(writer,static_cast<WithParamExpr*>(c));
     xslt_end_element(writer);
@@ -454,7 +454,7 @@ void output_xslt_sequence_constructor(xmlTextWriter *writer, Statement *node)
     PIExpr *piexpr = static_cast<PIExpr*>(node);
     xslt_start_element(writer,piexpr,"processing-instruction");
     if (!piexpr->m_qn.isNull())
-      xml_write_attr(writer,"name","%*",&piexpr->m_qn);
+      XMLWriter::formatAttribute(writer,"name","%*",&piexpr->m_qn);
     else
       expr_attr(writer,"name",piexpr->m_name_expr,1);
     if (piexpr->m_select)
@@ -586,7 +586,7 @@ void output_xslt(FILE *f, TransformExpr *node)
     case XSLT_DECL_FUNCTION: {
       FunctionExpr *function = static_cast<FunctionExpr*>(sn);
       xslt_start_element(writer,function,"function");
-      xml_write_attr(writer,"name","%*",&function->m_qn);
+      XMLWriter::formatAttribute(writer,"name","%*",&function->m_qn);
       if (!(function->m_flags & FLAG_OVERRIDE))
         XMLWriter::attribute(writer,"override","no");
 
@@ -614,10 +614,10 @@ void output_xslt(FILE *f, TransformExpr *node)
       int i;
       xslt_start_element(writer,output,"output");
       if (!output->m_qn.isNull())
-        xml_write_attr(writer,"name","%*",&output->m_qn);
+        XMLWriter::formatAttribute(writer,"name","%*",&output->m_qn);
       for (i = 0; i < SEROPTION_COUNT; i++)
         if (NULL != output->m_seroptions[i])
-          xml_write_attr(writer,df_seroptions::seroption_names[i],"%s",output->m_seroptions[i]);
+          XMLWriter::formatAttribute(writer,df_seroptions::seroption_names[i],"%s",output->m_seroptions[i]);
       xslt_end_element(writer);
       break;
     }
@@ -627,7 +627,7 @@ void output_xslt(FILE *f, TransformExpr *node)
       SpaceExpr *space = static_cast<SpaceExpr*>(sn);
       char *elements = QNameTest_list_str(space->m_qnametests);
       xslt_start_element(writer,sn,"preserve-space");
-      xml_write_attr(writer,"elements",elements);
+      XMLWriter::formatAttribute(writer,"elements",elements);
       xslt_end_element(writer);
       free(elements);
       break;
@@ -636,7 +636,7 @@ void output_xslt(FILE *f, TransformExpr *node)
       SpaceExpr *space = static_cast<SpaceExpr*>(sn);
       char *elements = QNameTest_list_str(space->m_qnametests);
       xslt_start_element(writer,sn,"strip-space");
-      xml_write_attr(writer,"elements",elements);
+      XMLWriter::formatAttribute(writer,"elements",elements);
       xslt_end_element(writer);
       free(elements);
       break;
@@ -648,7 +648,7 @@ void output_xslt(FILE *f, TransformExpr *node)
       /* FIXME: support "as" */
       xslt_start_element(writer,tmpl,"template");
       if (!tmpl->m_qn.isNull())
-        xml_write_attr(writer,"name","%*",&tmpl->m_qn);
+        XMLWriter::formatAttribute(writer,"name","%*",&tmpl->m_qn);
       if (tmpl->m_select)
         expr_attr(writer,"match",tmpl->m_select,0);
       for (c = tmpl->m_param; c; c = c->m_next)
