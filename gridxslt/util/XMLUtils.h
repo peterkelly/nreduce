@@ -27,6 +27,7 @@
 #include "String.h"
 #include "List.h"
 #include "Namespace.h"
+#include "Node.h"
 
 namespace GridXSLT {
 
@@ -63,54 +64,33 @@ public:
   String m_errname;
 };
 
-int XMLHasProp(xmlNodePtr n, const String &name);
-int XMLHasNsProp(xmlNodePtr n, const String &name, const String &ns);
-String XMLGetProp(xmlNodePtr n, const String &name);
-String XMLGetNsProp(xmlNodePtr n, const String &name, const String &ns);
-
-
-
-
 
 
 
 
 int error(GridXSLT::Error *ei, const GridXSLT::String &filename, int line,
           const GridXSLT::String &errname, const char *format, ...);
-int parse_error(xmlNodePtr n, const char *format, ...);
-int invalid_element2(GridXSLT::Error *ei, const GridXSLT::String &filename, xmlNodePtr n);
-int invalid_element(xmlNodePtr n);
-int missing_attribute2(GridXSLT::Error *ei, const GridXSLT::String &filename, int line,
+int invalid_element(GridXSLT::Error *ei, const GridXSLT::String &filename, Node *n);
+int missing_attribute(GridXSLT::Error *ei, const GridXSLT::String &filename, int line,
                        const GridXSLT::String &errname,
-                       const GridXSLT::String &attrname);
-int missing_attribute(xmlNodePtr n, const GridXSLT::String &attrname);
-int attribute_not_allowed(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const char *attrname);
+                       const GridXSLT::NSName &attrname);
+int attribute_not_allowed(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const NSName &attrname);
 int conflicting_attributes(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const GridXSLT::String &errname,
                            const GridXSLT::String &conflictor,
                            const GridXSLT::String &conflictee);
-int invalid_attribute_val(GridXSLT::Error *ei, const GridXSLT::String &filename, xmlNodePtr n,
-                          const GridXSLT::String &attrname);
-int check_element(xmlNodePtr n, const GridXSLT::String &localname,
-                  const GridXSLT::String &namespace1);
+int invalid_attribute_val(GridXSLT::Error *ei, const GridXSLT::String &filename, Node *n,
+                          const GridXSLT::NSName &attrname);
 
 int convert_to_nonneg_int(const GridXSLT::String &str, int *val);
-int parse_int_attr(GridXSLT::Error *ei, char *filename, xmlNodePtr n,
-                   const GridXSLT::String &attrname, int *val);
-int parse_optional_int_attr(GridXSLT::Error *ei, char *filename,
-                            xmlNodePtr n, const GridXSLT::String &attrname, int *val, int def);
-int parse_boolean_attr(GridXSLT::Error *ei, char *filename, xmlNodePtr n,
-                       const GridXSLT::String &attrname, int *val);
-int parse_optional_boolean_attr(GridXSLT::Error *ei, char *filename,
-                                xmlNodePtr n, const GridXSLT::String &attrname, int *val, int def);
-void replace_whitespace(char *str);
-void collapse_whitespace(char *str);
-GridXSLT::String get_wscollapsed_attr(xmlNodePtr n, const GridXSLT::String &attrname,
-                           const GridXSLT::String &ns);
+int parse_int_attr(GridXSLT::Error *ei, const String &filename, Node *n,
+                   const GridXSLT::NSName &attrname, int *val);
+int parse_optional_int_attr(GridXSLT::Error *ei, const String &filename,
+                            Node *n, const GridXSLT::NSName &attrname, int *val, int def);
+int parse_boolean_attr(GridXSLT::Error *ei, const String &filename, Node *n,
+                       const GridXSLT::NSName &attrname, int *val);
+int parse_optional_boolean_attr(GridXSLT::Error *ei, const String &filename,
+                                Node *n, const GridXSLT::NSName &attrname, int *val, int def);
 
-
-void xml_write_attr(xmlTextWriter *writer, const char *attrname, const char *format, ...);
-QName xml_attr_qname(xmlNodePtr n, const char *attrname);
-int xml_attr_strcmp(xmlNodePtr n, const char *attrname, const char *s);
 
 
 
@@ -127,45 +107,42 @@ int is_all_whitespace(const char *s, int len);
 String get_real_uri(const GridXSLT::String &filename);
 String get_relative_uri(const GridXSLT::String &uri, const String &base);
 
-xmlNodePtr get_element_by_id(xmlNodePtr n, const char *id);
 int retrieve_uri_element(GridXSLT::Error *ei, const GridXSLT::String &filename,
                          int line, const GridXSLT::String &errname,
-                         const GridXSLT::String &full_uri, xmlDocPtr *doc, xmlNodePtr *node,
+                         const GridXSLT::String &full_uri, Node **nout, Node **rootout,
                          const GridXSLT::String &refsource);
 int retrieve_uri(GridXSLT::Error *ei, const GridXSLT::String &filename, int line, const GridXSLT::String &errname,
                  const char *full_uri, stringbuf *buf, const char *refsource);
 
 String buildURI(const String &URI, const String &base);
 
-class symbol_space_entry {
-  DISABLE_COPY(symbol_space_entry)
+int check_element(xmlNodePtr n, const GridXSLT::String &localname,
+                  const GridXSLT::String &namespace1);
+
+class SymbolSpaceEntry {
+  DISABLE_COPY(SymbolSpaceEntry)
 public:
-  symbol_space_entry();
-  ~symbol_space_entry();
+  SymbolSpaceEntry();
+  ~SymbolSpaceEntry();
 
   NSName ident;
   void *object;
-  symbol_space_entry *next;
+  SymbolSpaceEntry *next;
 };
 
-struct symbol_space {
-  symbol_space *fallback;
-  symbol_space_entry *entries;
-  char *type;
+class SymbolSpace {
+  DISABLE_COPY(SymbolSpace)
+public:
+  SymbolSpace(const String &_type);
+  ~SymbolSpace();
+
+  void *lookup(const NSName &ident);
+  int add(const NSName &ident, void *object);
+
+  SymbolSpaceEntry *entries;
+  String type;
 };
 
-symbol_space *ss_new(symbol_space *fallback, const char *type);
-void *ss_lookup_local(symbol_space *ss, const NSName &ident);
-void *ss_lookup(symbol_space *ss, const NSName &ident);
-int ss_add(symbol_space *ss, const NSName &ident, void *object);
-void ss_free(symbol_space *ss);
-
 };
-
-
-
-
-
-
 
 #endif /* _UTIL_XMLUTILS_H */
