@@ -188,9 +188,6 @@ void sourceloc_free(sourceloc sloc);
 #define nosourceloc get_nosourceloc()
 sourceloc get_nosourceloc();
 
-int get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
-                           char **namespace1, char **localpart);
-
 };
 
 #endif /* _UTIL_NAMESPACE_H */
