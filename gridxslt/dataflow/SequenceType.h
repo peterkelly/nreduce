@@ -33,17 +33,6 @@
 #include <libxml/xmlwriter.h>
 #include <libxml/tree.h>
 
-#define ITEM_INVALID                  0
-#define ITEM_ATOMIC                   1
-#define ITEM_DOCUMENT                 2
-#define ITEM_ELEMENT                  3
-#define ITEM_ATTRIBUTE                4
-#define ITEM_PI                       5
-#define ITEM_COMMENT                  6
-#define ITEM_TEXT                     7
-#define ITEM_NAMESPACE                8
-#define ITEM_COUNT                    9
-
 #define SEQTYPE_INVALID               0
 #define SEQTYPE_ITEM                  1
 #define SEQTYPE_OCCURRENCE            2
@@ -56,15 +45,6 @@
 #define OCCURS_OPTIONAL               1
 #define OCCURS_ZERO_OR_MORE           2
 #define OCCURS_ONE_OR_MORE            3
-
-#define NODE_INVALID                  0
-#define NODE_DOCUMENT                 ITEM_DOCUMENT
-#define NODE_ELEMENT                  ITEM_ELEMENT
-#define NODE_ATTRIBUTE                ITEM_ATTRIBUTE
-#define NODE_PI                       ITEM_PI
-#define NODE_COMMENT                  ITEM_COMMENT
-#define NODE_TEXT                     ITEM_TEXT
-#define NODE_NAMESPACE                ITEM_NAMESPACE
 
 namespace GridXSLT {
 
@@ -222,58 +202,6 @@ public:
 
 private:
   SequenceTypeImpl *impl;
-};
-
-class Node {
-  DISABLE_COPY(Node)
-public:
-  Node(int type);
-  Node(xmlNodePtr xn);
-  ~Node();
-
-  Node *root();
-  Node *ref();
-  void deref();
-
-  Node *deepCopy();
-  void addChild(Node *c);
-  void insertChild(Node *c, Node *before);
-  void addAttribute(Node *attr);
-  void addNamespace(Node *ns);
-  int checkTree();
-  Node *traversePrev(Node *subtree);
-  Node *traverseNext(Node *subtree);
-  void printXML(xmlTextWriter *writer);
-  void printBuf(StringBuffer &buf);
-
-  String getAttribute(const NSName &attrName) const;
-  bool hasAttribute(const NSName &attrName) const;
-
-  int m_type;
-  List<Node*> m_namespaces;
-  List<Node*> m_attributes;
-  String m_prefix;
-  NSName m_ident;
-  QName m_qn;
-  String m_target;
-  String m_value;
-  int m_refcount;
-
-  Node *next() const { return m_next; }
-  Node *prev() const { return m_prev; }
-  Node *firstChild() const { return m_first_child; }
-  Node *lastChild() const { return m_last_child; }
-  Node *parent() const { return m_parent; }
-
-  Node *m_next;
-  Node *m_prev;
-  Node *m_first_child;
-  Node *m_last_child;
-  Node *m_parent;
-  int m_nodeno;
-
-  xmlNodePtr m_xn;
-  int m_line;
 };
 
 class ValueImpl : public GridXSLT::Shared<ValueImpl> {
