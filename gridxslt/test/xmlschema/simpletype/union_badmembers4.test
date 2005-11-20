@@ -1,0 +1,16 @@
+=================================== PROGRAM ====================================
+testxmlschema
+==================================== INPUT =====================================
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:simpleType name="st1">
+    <xsd:union memberTypes="xsd:string xsd:int"/>
+  </xsd:simpleType>
+  <xsd:simpleType name="st2">
+    <xsd:union memberTypes="xsd:string st1 int"/>
+  </xsd:simpleType>
+</xsd:schema>
+==================================== OUTPUT ====================================
+runtests.tmp/input.xml:7: error: No such type int
+================================== RETURN CODE =================================
+1
