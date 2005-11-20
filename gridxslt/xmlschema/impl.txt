@@ -1,0 +1,287 @@
+
+     Deferred: Simple type validation
+     @implements(xmlschema-1:cvc-simple-type.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-simple-type.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-simple-type.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-simple-type.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-simple-type.2.3) status { deferred } @end
+
+     Deferred: Annotations
+     @implements(xmlschema-1:src-annotation) status { deferred } @end
+     @implements(xmlschema-1:an-props-correct) status { deferred } @end
+
+     Deferred: Notation declarations
+     @implements(xmlschema-1:src-notation) status { deferred } @end
+     @implements(xmlschema-1:sic-notation-used) status { deferred } @end
+     @implements(xmlschema-1:n-props-correct) status { deferred } @end
+     @implements(xmlschema-1:Notation Declaration{name}) status { deferred } @end
+     @implements(xmlschema-1:Notation Declaration{target namespace}) status { deferred } @end
+     @implements(xmlschema-1:Notation Declaration{system identifier}) status { deferred } @end
+     @implements(xmlschema-1:Notation Declaration{public identifier}) status { deferred } @end
+     @implements(xmlschema-1:Notation Declaration{annotation}) status { deferred } @end
+
+     Deferred: Identity-constraint definitions
+     @implements(xmlschema-1:src-identity-constraint) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.2.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-identity-constraint.4.3) status { deferred } @end
+     @implements(xmlschema-1:sic-key.1) status { deferred } @end
+     @implements(xmlschema-1:sic-key.2) status { deferred } @end
+     @implements(xmlschema-1:c-props-correct.1) status { deferred } @end
+     @implements(xmlschema-1:c-props-correct.2) status { deferred } @end
+     @implements(xmlschema-1:c-selector-xpath.1) status { deferred } @end
+     @implements(xmlschema-1:c-selector-xpath.2) status { deferred } @end
+     @implements(xmlschema-1:c-selector-xpath.2.1) status { deferred } @end
+     @implements(xmlschema-1:c-selector-xpath.2.2) status { deferred } @end
+     @implements(xmlschema-1:c-fields-xpaths.1) status { deferred } @end
+     @implements(xmlschema-1:c-fields-xpaths.2) status { deferred } @end
+     @implements(xmlschema-1:c-fields-xpaths.2.1) status { deferred } @end
+     @implements(xmlschema-1:c-fields-xpaths.2.2) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{name}) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{target namespace}) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{identity-constraint category})
+     status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{selector}) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{fields}) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{referenced key}) status { deferred } @end
+     @implements(xmlschema-1:Identity-constraint Definition{annotation}) status { deferred } @end
+
+     Deferred: Wildcard validation
+
+     @implements(xmlschema-1:cvc-wildcard.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.2.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-wildcard-namespace.3) status { deferred } @end
+
+     Deferred: Particle validation
+
+     @implements(xmlschema-1:cvc-particle.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.1.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.2.3.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-particle.3.3) status { deferred } @end
+
+     Deferred: Model group validation
+
+     @implements(xmlschema-1:cvc-model-group.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-model-group.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-model-group.3) status { deferred } @end
+
+     Deferred: Attribute use validation
+     @implements(xmlschema-1:cvc-au) status { deferred } @end
+
+     Deferred: Redefinition
+
+     @implements(xmlschema-1:src-redefine.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.2.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.2.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.3) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.3.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.3.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.3.3) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.4) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.4.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.4.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.5) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.1.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.1.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.2.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.6.2.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.7) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.7.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.7.2) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.7.2.1) status { deferred } @end
+     @implements(xmlschema-1:src-redefine.7.2.2) status { deferred } @end
+
+     @implements(xmlschema-1:src-expredef.1) status { deferred } @end
+     @implements(xmlschema-1:src-expredef.1.1) status { deferred } @end
+     @implements(xmlschema-1:src-expredef.1.2) status { deferred } @end
+     @implements(xmlschema-1:src-expredef.2) status { deferred } @end
+
+     Deferred: Complex type validation
+
+     @implements(xmlschema-1:cvc-complex-type.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.2.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.2.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.3.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.3.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.5) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.5.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-complex-type.5.2) status { deferred } @end
+
+     Deferred: Complex type information set contributions
+
+     @implements(xmlschema-1:sic-attrDefault) status { deferred } @end
+
+     Deferred: Element validation
+
+     @implements(xmlschema-1:cvc-elt.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.3.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.3.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.4.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.4.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.4.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.2.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.5.2.2.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.6) status { deferred } @end
+     @implements(xmlschema-1:cvc-elt.7) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3.1.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-type.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-id.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-id.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.1.3.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.1.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.1.2.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.1.2.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-elt.2) status { deferred } @end
+
+     @implements(xmlschema-1:cos-equiv-derived-ok-rec.1)
+     status { deferred } issue { only relevant for particle validation? } @end
+     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2)
+     status { deferred } issue { only relevant for particle validation? } @end
+     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.1)
+     status { deferred } issue { only relevant for particle validation? } @end
+     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.2)
+     status { deferred } issue { only relevant for particle validation? } @end
+     @implements(xmlschema-1:cos-equiv-derived-ok-rec.2.3)
+     status { deferred } issue { only relevant for particle validation? } @end
+
+     Deferred: Element information set contributions
+
+     @implements(xmlschema-1:sic-e-outcome.1) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1.1) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1.1.1) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1.1.2) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1.2) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.1.3) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1.2) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.2) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.1) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.2) status { deferred } @end
+     @implements(xmlschema-1:sic-e-outcome.3) status { deferred } @end
+     @implements(xmlschema-1:sic-elt-error-code.1) status { deferred } @end
+     @implements(xmlschema-1:sic-elt-error-code.2) status { deferred } @end
+     @implements(xmlschema-1:sic-elt-decl) status { deferred } @end
+     @implements(xmlschema-1:sic-eltType.1) status { deferred } @end
+     @implements(xmlschema-1:sic-eltType.2) status { deferred } @end
+     @implements(xmlschema-1:sic-eltDefault.1) status { deferred } @end
+     @implements(xmlschema-1:sic-eltDefault.2) status { deferred } @end
+
+     Deferred: Attribute validation
+
+     @implements(xmlschema-1:cvc-attribute.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-attribute.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-attribute.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-attribute.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-attr.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-attr.1.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-attr.1.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-attr.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-assess-attr.3) status { deferred } @end
+
+     Deferred: Attribute information set contributions
+
+     @implements(xmlschema-1:sic-a-outcome.1) status { deferred } @end
+     @implements(xmlschema-1:sic-a-outcome.1.1) status { deferred } @end
+     @implements(xmlschema-1:sic-a-outcome.1.2) status { deferred } @end
+     @implements(xmlschema-1:sic-a-outcome.2) status { deferred } @end
+     @implements(xmlschema-1:sic-a-outcome.1) status { deferred } @end
+     @implements(xmlschema-1:sic-a-outcome.2) status { deferred } @end
+     @implements(xmlschema-1:sic-attr-error-code.1) status { deferred } @end
+     @implements(xmlschema-1:sic-attr-error-code.2) status { deferred } @end
+     @implements(xmlschema-1:sic-attr-decl) status { deferred } @end
+     @implements(xmlschema-1:sic-attrType.1) status { deferred } @end
+     @implements(xmlschema-1:sic-attrType.2) status { deferred } @end
+
+     Deferred: Annotations
+
+     @implements(xmlschema-1:Element Declaration{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Attribute Declaration{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Attribute Group Definition{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Simple Type Definition{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Complex Type Definition{annotations}) status { deferred } @end
+     @implements(xmlschema-1:Model Group Definition{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Model Group{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Wildcard{annotation}) status { deferred } @end
+     @implements(xmlschema-1:Schema{annotations}) status { deferred } @end
+     @implements(xmlschema-1:Annotation{application information}) status { deferred } @end
+     @implements(xmlschema-1:Annotation{user information}) status { deferred } @end
+     @implements(xmlschema-1:Annotation{attributes}) status { deferred } @end
+
+     Deferred: Qname resolution (instance)
+
+     @implements(xmlschema-1:cvc-resolve-instance.1) status { deferred } @end
+     @implements(xmlschema-1:cvc-resolve-instance.2) status { deferred } @end
+     @implements(xmlschema-1:cvc-resolve-instance.3) status { deferred } @end
+     @implements(xmlschema-1:cvc-resolve-instance.4) status { deferred } @end
+     @implements(xmlschema-1:cvc-resolve-instance.5) status { deferred } @end
+     @implements(xmlschema-1:cvc-resolve-instance.6) status { deferred } @end
