@@ -367,25 +367,3 @@ sourceloc GridXSLT::get_nosourceloc()
   return nosourceloc1;
 }
 
-int GridXSLT::get_ns_name_from_qname(xmlNodePtr n, xmlDocPtr doc, const char *name,
-                           char **namespace1, char **localpart)
-{
-  QName qn = QName::parse(name);
-  xmlNsPtr ns = NULL;
-
-  *namespace1 = NULL;
-  *localpart = NULL;
-
-  /* FIXME: maybe set error info here instead of requiring thet caller to do it? */
-  char *prefix = qn.m_prefix.cstring();
-  if ((NULL == (ns = xmlSearchNs(doc,n,prefix))) && (NULL != prefix)) {
-    free(prefix);
-    return -1;
-  }
-  free(prefix);
-  *namespace1 = ns ? strdup(ns->href) : NULL;
-  *localpart = qn.m_localPart.cstring();
-
-  return 0;
-}
-
