@@ -42,9 +42,9 @@ using namespace GridXSLT;
                                             standard_attributes,0,__VA_ARGS__,NULL))
 #define REQUIRED_ATTRIBUTE(_node,_name) \
       if (!(_node)->hasAttribute(_name)) \
-        return missing_attribute2(ei,filename,(_node)->m_line,String::null(),(_name).m_name);
+        return missing_attribute(ei,filename,(_node)->m_line,String::null(),_name);
 
-static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc,
+static int parse_sequence_constructors(Statement *sn, Node *start,
                                        Error *ei, const String &filename);
 
 static int parse_xslt_uri(Error *ei, const String &filename, int line, const char *errname,
@@ -292,7 +292,7 @@ static int xslt_invalid_element(Error *ei, const String &filename, Node *n)
     return error(ei,filename,n->m_line,"XTSE0170",
                  "An xsl:include element must be a top-level element");
   else
-    return invalid_element2(ei,filename,n->m_xn);
+    return invalid_element(ei,filename,n);
 }
 
 
@@ -307,14 +307,12 @@ static int parse_optional_as(Node *n, SequenceType *st, Error *ei, const String 
   return 0;
 }
 
-static int parse_param(Statement *sn, Node *n, xmlDocPtr doc,
+static int parse_param(Statement *sn, Node *n,
                        Error *ei, const String &filename)
 {
-//   char *required = XMLGetNsProp(n,"required",String::null());
-//   char *tunnel = XMLGetNsProp(n,"tunnel",String::null());
+  String required = n->getAttribute(ATTR_REQUIRED); // FIXME: support this
+  String tunnel = n->getAttribute(ATTR_TUNNEL); // FIXME: support this
   Statement **param_ptr = &sn->m_param;
-  char *fullname;
-  char *fullns;
 
   // @implements(xslt20:parameters-5) status { info } @end
 
@@ -339,16 +337,11 @@ static int parse_param(Statement *sn, Node *n, xmlDocPtr doc,
 
   String name = n->getAttribute(ATTR_NAME);
   QName qn = QName::parse(name);
-
-  char *tmp = name.cstring();
-  if (0 != get_ns_name_from_qname(n->m_xn,doc,tmp,&fullns,&fullname)) {
-    free(tmp);
+  NSName resolved = n->resolveQName(qn);
+  if (resolved.isNull()) {
     return error(ei,filename,n->m_line,"XTSE0280","Could not resolve namespace for prefix \"%*\"",
                  &qn.m_prefix);
   }
-  free(tmp);
-  free(fullname);
-  free(fullns);
 
   Expression *selectExpr = NULL;
 
@@ -373,7 +366,7 @@ static int parse_param(Statement *sn, Node *n, xmlDocPtr doc,
   // @end
   CHECK_CALL(parse_optional_as(n,&new_sn->m_st,ei,filename))
 
-  CHECK_CALL(parse_sequence_constructors(new_sn,n->firstChild(),doc,ei,filename))
+  CHECK_CALL(parse_sequence_constructors(new_sn,n->firstChild(),ei,filename))
 
   return 0;
 }
@@ -392,7 +385,7 @@ static bool shouldExcludePrefix(Node *from, const String &prefix)
   return false;
 }
 
-static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc,
+static int parse_sequence_constructors(Statement *sn, Node *start,
                                        Error *ei, const String &filename)
 {
   Statement **child_ptr = &sn->m_child;
@@ -408,8 +401,6 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
   // FIXME: for yes/no values, complain if the value is something other than "yes" or "no"
   // (unless of course the attribute is missing and not required). Should this check be
   // case insensitive?
-
-  // FIXME: verify that all missing_attribute() calls have a return before them!
 
   xslt_skip_others(&start);
   for (Node *child = start; child; xslt_next_element(&child)) {
@@ -445,27 +436,27 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
         if (c2->m_ident == ELEM_MATCHING_SUBSTRING) {
           SCExpr *matching = new SCExpr(XSLT_MATCHING_SUBSTRING);
           add_node(&child2_ptr,matching,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(matching,c2->firstChild(),doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(matching,c2->firstChild(),ei,filename))
           mcount++;
         }
         else if (c2->m_ident == ELEM_NON_MATCHING_SUBSTRING) {
           SCExpr *non_matching = new SCExpr(XSLT_NON_MATCHING_SUBSTRING);
           add_node(&child2_ptr,non_matching,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(non_matching,c2->firstChild(),doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(non_matching,c2->firstChild(),ei,filename))
           nmcount++;
         }
         else if (c2->m_ident == ELEM_FALLBACK) {
           FallbackExpr *fallback = new FallbackExpr();
           add_node(&child2_ptr,fallback,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(fallback,c2->firstChild(),doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(fallback,c2->firstChild(),ei,filename))
         }
       }
       if ((0 == mcount) && (0 == nmcount))
-        return parse_error(child->m_xn,
-                           "XTSE1130: analyze-string must have at least a matching-substring "
+        return error(ei,filename,child->m_line,"XTSE1130",
+                           "analyze-string must have at least a matching-substring "
                            "or non-matching-substring child");
       if ((1 < mcount) || (1 < nmcount))
-        return parse_error(child->m_xn,
+        return error(ei,filename,child->m_line,String::null(),
                            "matching-substring and non-matching-substring may only appear once "
                            "each inside analyze-string");
     }
@@ -480,10 +471,10 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
         if (NODE_ELEMENT != c2->m_type)
           continue;
         if (c2->m_ident != ELEM_WITH_PARAM)
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_APPLY_TEMPLATES) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT,&ATTR_MODE)
@@ -497,7 +488,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
           continue;
         if ((c2->m_ident != ELEM_SORT) &&
             (c2->m_ident != ELEM_WITH_PARAM))
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
 
       Expression *selectExpr = NULL;
@@ -513,7 +504,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       if (!mode.isNull())
         new_sn->m_mode = QName::parse(mode);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_ATTRIBUTE) {
       ALLOWED_ATTRIBUTES(child,&ATTR_NAME,&ATTR_NAMESPACE,&ATTR_SELECT,&ATTR_SEPARATOR,
@@ -537,7 +528,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       add_node(&child_ptr,new_sn,filename,child);
       new_sn->m_qn = QName::parse(name);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_CALL_TEMPLATE) {
       ALLOWED_ATTRIBUTES(child,&ATTR_NAME)
@@ -553,10 +544,10 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
         if (NODE_ELEMENT != c2->m_type)
           continue;
         if (c2->m_ident != ELEM_WITH_PARAM)
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_CHOOSE) {
       ALLOWED_ATTRIBUTES(child,NULL)
@@ -570,14 +561,16 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
 
         if (c2->m_ident == ELEM_OTHERWISE) {
           if (NULL != otherwise)
-            return parse_error(c2->m_xn,"Only one <otherwise> is allowed inside <choose>");
+            return error(ei,filename,c2->m_line,String::null(),
+                         "Only one <otherwise> is allowed inside <choose>");
           otherwise = new SCExpr(XSLT_OTHERWISE);
           add_node(&child2_ptr,otherwise,filename,c2);
-          CHECK_CALL(parse_sequence_constructors(otherwise,c2->firstChild(),doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(otherwise,c2->firstChild(),ei,filename))
         }
         else if (c2->m_ident == ELEM_WHEN) {
           if (NULL != otherwise)
-            return parse_error(c2->m_xn,"No <when> allowed after an <otherwise>");
+            return error(ei,filename,c2->m_line,String::null(),
+                         "No <when> allowed after an <otherwise>");
 
           REQUIRED_ATTRIBUTE(c2,ATTR_TEST)
 
@@ -590,7 +583,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
           WhenExpr *when = new WhenExpr(testExpr);
           add_node(&child2_ptr,when,filename,c2);
 
-          CHECK_CALL(parse_sequence_constructors(when,c2->firstChild(),doc,ei,filename))
+          CHECK_CALL(parse_sequence_constructors(when,c2->firstChild(),ei,filename))
         }
         else {
           return xslt_invalid_element(ei,filename,c2);
@@ -610,7 +603,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       CommentExpr *new_sn = new CommentExpr(selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_COPY) {
       ALLOWED_ATTRIBUTES(child,&ATTR_COPY_NAMESPACES,&ATTR_INHERIT_NAMESPACES,
@@ -623,7 +616,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
 
       CopyExpr *new_sn = new CopyExpr();
       add_node(&child_ptr,new_sn,filename,child);
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_COPY_OF) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT,&ATTR_COPY_NAMESPACES,&ATTR_TYPE,&ATTR_VALIDATION)
@@ -644,7 +637,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Node *c2;
       for (c2 = child->firstChild(); c2; c2 = c2->next()) {
         if (NODE_ELEMENT == c2->m_type)
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
     }
     else if (child->m_ident == ELEM_ELEMENT) {
@@ -661,13 +654,13 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Expression *nameExpr = get_expr_attr(ei,filename,child->m_line,"name",name);
       Statement *new_sn = new ElementExpr(nameExpr,false,false);
       add_node(&child_ptr,new_sn,filename,child);
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_FALLBACK) {
       ALLOWED_ATTRIBUTES(child,NULL)
       Statement *new_sn = new FallbackExpr();
       add_node(&child_ptr,new_sn,filename,child);
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_FOR_EACH) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT)
@@ -682,7 +675,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new ForEachExpr(selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_FOR_EACH_GROUP) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT,&ATTR_GROUP_BY,&ATTR_GROUP_ADJACENT,
@@ -726,7 +719,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       }
       if (0 == groupcount) {
         delete selectexpr;
-        return parse_error(child->m_xn,"No grouping method specified");
+        return error(ei,filename,child->m_line,String::null(),"No grouping method specified");
       }
 
       ForEachGroupExpr *new_sn = new ForEachGroupExpr(gmethod,selectexpr,expr1);
@@ -735,8 +728,9 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       if (NULL == new_sn->m_expr1)
         return -1;
       if (1 < groupcount)
-        return parse_error(child->m_xn,"Only one grouping method can be specified");
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+        return error(ei,filename,child->m_line,String::null(),
+                     "Only one grouping method can be specified");
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_IF) {
       ALLOWED_ATTRIBUTES(child,&ATTR_TEST)
@@ -751,7 +745,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new XSLTIfExpr(selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_MESSAGE) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT,&ATTR_TERMINATE)
@@ -779,7 +773,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new MessageExpr(select_expr,term,terminate_expr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_NAMESPACE) {
       ALLOWED_ATTRIBUTES(child,&ATTR_NAME,&ATTR_SELECT)
@@ -831,7 +825,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       NamespaceExpr *new_sn = new NamespaceExpr(name_expr,String::null(),selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_NEXT_MATCH) {
       NextMatchExpr *new_sn = new NextMatchExpr();
@@ -844,15 +838,15 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
           continue;
         if ((c2->m_ident != ELEM_WITH_PARAM) &&
             (c2->m_ident != ELEM_FALLBACK))
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_NUMBER) {
       // FIXME
     }
-    else if (check_element(child->m_xn,"perform-sort",XSLT_NAMESPACE)) {
+    else if (child->m_ident == ELEM_PERFORM_SORT) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT)
       String select = child->getAttribute(ATTR_SELECT);
 
@@ -865,7 +859,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new PerformSortExpr(selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_PROCESSING_INSTRUCTION) {
       ALLOWED_ATTRIBUTES(child,&ATTR_NAME,&ATTR_SELECT)
@@ -886,7 +880,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       PIExpr *new_sn = new PIExpr(nameExpr,selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_RESULT_DOCUMENT) {
       // FIXME
@@ -910,9 +904,9 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
         if (NODE_ELEMENT != c2->m_type)
           continue;
         if (c2->m_ident != ELEM_FALLBACK)
-          return parse_error(c2->m_xn,"not allowed here");
+          return invalid_element(ei,filename,c2);
       }
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_TEXT) {
       ALLOWED_ATTRIBUTES(child,&ATTR_DISABLE_OUTPUT_ESCAPING)
@@ -970,7 +964,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new ValueOfExpr(selectExpr,expr1);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_VARIABLE) {
       ALLOWED_ATTRIBUTES(child,&ATTR_NAME,&ATTR_SELECT,&ATTR_AS)
@@ -988,7 +982,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new VariableExpr(QName::parse(name),selectExpr);
       add_node(&child_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_PARAM) {
       ASSERT(!"params should already be handled by the parent function/template/stylesheet");
@@ -1005,7 +999,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
           (XSLT_INSTR_APPLY_IMPORTS != sn->m_type) &&
           (XSLT_INSTR_CALL_TEMPLATE != sn->m_type) &&
           (XSLT_INSTR_NEXT_MATCH != sn->m_type))
-        return parse_error(child->m_xn,"not allowed here");
+        return invalid_element(ei,filename,child);
 
       QName qn = QName::parse(name);
       Expression *selectExpr = NULL;
@@ -1022,7 +1016,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       if (tun)
         new_sn->m_flags |= FLAG_TUNNEL;
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident == ELEM_SORT) {
       ALLOWED_ATTRIBUTES(child,&ATTR_SELECT,&ATTR_LANG,&ATTR_ORDER,&ATTR_COLLATION,
@@ -1043,7 +1037,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
           (XSLT_INSTR_FOR_EACH != sn->m_type) &&
           (XSLT_INSTR_FOR_EACH_GROUP != sn->m_type) &&
           (XSLT_INSTR_PERFORM_SORT != sn->m_type))
-        return parse_error(child->m_xn,"not allowed here");
+        return invalid_element(ei,filename,child);
 
       Expression *selectExpr = NULL;
 
@@ -1054,7 +1048,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
       Statement *new_sn = new SortExpr(selectExpr);
       add_node(&sort_ptr,new_sn,filename,child);
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (child->m_ident.m_ns == XSLT_NAMESPACE) {
       return xslt_invalid_element(ei,filename,child);
@@ -1112,7 +1106,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
 //          anode->m_qn.m_prefix = attr->m_xn->ns->prefix;
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,child->firstChild(),ei,filename))
     }
     else if (NODE_TEXT == child->m_type) {
       // @implements(xslt20:literal-text-nodes-1)
@@ -1130,7 +1124,7 @@ static int parse_sequence_constructors(Statement *sn, Node *start, xmlDocPtr doc
   return 0;
 }
 
-static int parse_import_include(Statement *parent, Node *n, xmlDocPtr doc, Error *ei,
+static int parse_import_include(Statement *parent, Node *n, Error *ei,
                                 const String &filename, bool isImport, Statement ***child_ptr)
 {
   Statement *import = new IncludeExpr(isImport);
@@ -1257,7 +1251,7 @@ static int parse_import_include(Statement *parent, Node *n, xmlDocPtr doc, Error
   return 0;
 }
 
-static int parse_strip_preserve(Statement *parent, Node *n, xmlDocPtr doc, Error *ei,
+static int parse_strip_preserve(Statement *parent, Node *n, Error *ei,
                                 const String &filename, bool preserve, Statement ***child_ptr)
 {
   SpaceExpr *space = new SpaceExpr(preserve);
@@ -1279,7 +1273,7 @@ static int parse_strip_preserve(Statement *parent, Node *n, xmlDocPtr doc, Error
   return 0;
 }
 
-static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
+static int parse_decls(Statement *sn, Node *n,
                        Error *ei, const String &filename)
 {
   Node *child = xslt_first_child(n);
@@ -1292,13 +1286,13 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
 
   // FIXME: parse imports here; these come before all other top-level elements
   while (child && (child->m_ident == ELEM_IMPORT)) {
-    CHECK_CALL(parse_import_include(sn,child,doc,ei,filename,true,&child_ptr))
+    CHECK_CALL(parse_import_include(sn,child,ei,filename,true,&child_ptr))
     xslt_next_element(&child);
   }
 
   for (; child; xslt_next_element(&child)) {
     if (child->m_ident == ELEM_INCLUDE) {
-      CHECK_CALL(parse_import_include(sn,child,doc,ei,filename,false,&child_ptr))
+      CHECK_CALL(parse_import_include(sn,child,ei,filename,false,&child_ptr))
     }
     else if (child->m_ident == ELEM_ATTRIBUTE_SET) {
       // FIXME
@@ -1333,7 +1327,9 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
       // @end
       REQUIRED_ATTRIBUTE(child,ATTR_NAME)
 
-      FunctionExpr *new_sn = new FunctionExpr(xml_attr_qname(child->m_xn,"name"));
+      String name = child->getAttribute(ATTR_NAME);
+      QName qn = QName::parse(name);
+      FunctionExpr *new_sn = new FunctionExpr(qn);
       add_node(&child_ptr,new_sn,filename,child);
 
       // @implements(xslt20:stylesheet-functions-5)
@@ -1365,7 +1361,7 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
         if (override == "no")
           new_sn->m_flags &= ~FLAG_OVERRIDE;
         else if (override != "yes")
-          return invalid_attribute_val(ei,filename,child->m_xn,"override");
+          return invalid_attribute_val(ei,filename,child,ATTR_OVERRIDE);
       }
 
       // @implements(xslt20:stylesheet-functions-7)
@@ -1375,11 +1371,11 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
 
       Node *c2 = xslt_first_child(child);
       while (c2 && (c2->m_ident == ELEM_PARAM)) {
-        CHECK_CALL(parse_param(new_sn,c2,doc,ei,filename))
+        CHECK_CALL(parse_param(new_sn,c2,ei,filename))
         xslt_next_element(&c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c2,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c2,ei,filename))
     }
     else if (child->m_ident == ELEM_IMPORT_SCHEMA) {
       // FIXME
@@ -1430,11 +1426,11 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
         new_sn->m_qn = QName::parse(name);
 
       new_sn->m_seroptions = (char**)calloc(SEROPTION_COUNT,sizeof(char*));
-      for (i = 0; i < SEROPTION_COUNT; i++)
-        if (XMLHasNsProp(child->m_xn,df_seroptions::seroption_names[i],String::null()))
-          new_sn->m_seroptions[i] = get_wscollapsed_attr(child->m_xn,
-                                                         df_seroptions::seroption_names[i],
-                                                         String::null()).cstring();
+      for (i = 0; i < SEROPTION_COUNT; i++) {
+        String val = child->getAttribute(NSName(df_seroptions::seroption_names[i]));
+        if (!val.isNull())
+          new_sn->m_seroptions[i] = val.collapseWhitespace().cstring();
+      }
 
       Node *c2;
       if (NULL != (c2 = xslt_first_child(child)))
@@ -1444,10 +1440,10 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
       // FIXME
     }
     else if (child->m_ident == ELEM_PRESERVE_SPACE) {
-      CHECK_CALL(parse_strip_preserve(sn,child,doc,ei,filename,true,&child_ptr))
+      CHECK_CALL(parse_strip_preserve(sn,child,ei,filename,true,&child_ptr))
     }
     else if (child->m_ident == ELEM_STRIP_SPACE) {
-      CHECK_CALL(parse_strip_preserve(sn,child,doc,ei,filename,false,&child_ptr))
+      CHECK_CALL(parse_strip_preserve(sn,child,ei,filename,false,&child_ptr))
     }
     else if (child->m_ident == ELEM_TEMPLATE) {
       // FIXME: support "priority"
@@ -1507,11 +1503,11 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
       // Parse params
       Node *c2 = xslt_first_child(child);
       while (c2 && (c2->m_ident == ELEM_PARAM)) {
-        CHECK_CALL(parse_param(new_sn,c2,doc,ei,filename))
+        CHECK_CALL(parse_param(new_sn,c2,ei,filename))
         xslt_next_element(&c2);
       }
 
-      CHECK_CALL(parse_sequence_constructors(new_sn,c2,doc,ei,filename))
+      CHECK_CALL(parse_sequence_constructors(new_sn,c2,ei,filename))
     }
     else if (child->m_ident == ELEM_VARIABLE) {
       // FIXME
@@ -1570,7 +1566,7 @@ static int parse_decls(Statement *sn, Node *n, xmlDocPtr doc,
   return 0;
 }
 
-static int parse_xslt_module(TransformExpr *sroot, Node *n, xmlDocPtr doc,
+static int parse_xslt_module(TransformExpr *sroot, Node *n,
                              Error *ei, const String &filename)
 {
   sroot->m_uri = filename;
@@ -1601,7 +1597,7 @@ static int parse_xslt_module(TransformExpr *sroot, Node *n, xmlDocPtr doc,
   // @implements(xslt20:default-collation-attribute-5) status { deferred } @end
   // @implements(xslt20:default-collation-attribute-6) status { deferred } @end
 
-  CHECK_CALL(parse_decls(sroot,n,doc,ei,filename))
+  CHECK_CALL(parse_decls(sroot,n,ei,filename))
   add_ns_defs(sroot,n);
   return 0;
 }
@@ -1624,30 +1620,26 @@ int parse_xslt_relative_uri(Error *ei, const String &filename, int line, const c
 static int parse_xslt_uri(Error *ei, const String &filename, int line, const char *errname,
                           const String &full_uri, TransformExpr *sroot, const String &refsource)
 {
-  xmlDocPtr doc;
-  xmlNodePtr node;
+  Node *node = NULL;
+  Node *root = NULL;
+  CHECK_CALL(retrieve_uri_element(ei,filename,line,errname,full_uri,&node,&root,refsource))
 
-  CHECK_CALL(retrieve_uri_element(ei,filename,line,errname,full_uri,&doc,&node,refsource))
-
-  Node *temp = new Node(node);
 
   // FIXME: check version
   // FIXME: support simplified stylsheet modules
-  if ((temp->m_ident != ELEM_TRANSFORM) &&
-      (temp->m_ident != ELEM_STYLESHEET)) {
+  if ((node->m_ident != ELEM_TRANSFORM) &&
+      (node->m_ident != ELEM_STYLESHEET)) {
     error(ei,filename,line,errname,"Expected element {%*}%s or {%*}%s",
           &XS_NAMESPACE,"transform",&XS_NAMESPACE,"schema");
-    xmlFreeDoc(doc);
+    delete root;
     return -1;
   }
 
-  if (0 != parse_xslt_module(sroot,temp,doc,ei,full_uri)) {
-    xmlFreeDoc(doc);
-    delete temp;
+  if (0 != parse_xslt_module(sroot,node,ei,full_uri)) {
+    delete root;
     return -1;
   }
 
-  xmlFreeDoc(doc);
-  delete temp;
+  delete root;
   return 0;
 }
