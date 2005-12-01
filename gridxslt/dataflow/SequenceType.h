@@ -403,6 +403,7 @@ extern const char *df_item_kinds[ITEM_COUNT];
 
 float xpathroundf(float f);
 double xpathround(double d);
+void printDouble(double d, StringBuffer &buf);
 
 };
 

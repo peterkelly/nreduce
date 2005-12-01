@@ -971,7 +971,7 @@ static int xmlwrite_stringbuf(void *context, const char * buffer, int len)
   return len;
 }
 
-static void printDouble(double d, StringBuffer &buf)
+void GridXSLT::printDouble(double d, StringBuffer &buf)
 {
   if (d == double(int(d))) {
     int i = int(d);
