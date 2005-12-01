@@ -8,6 +8,4 @@ Makefile.in
 *.bbg
 *.gcov
 *.da
-binxml
-genbindings
-testxmlschema
+lambda
