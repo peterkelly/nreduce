@@ -1,4 +1,4 @@
-SUBDIRS = util http xmlschema dataflow xslt . src
+SUBDIRS = util http xmlschema dataflow xslt . lambda src
 AUTOMAKE_OPTIONS = foreign
 TESTS = runalltests
 lib_LTLIBRARIES = libgridxslt.la

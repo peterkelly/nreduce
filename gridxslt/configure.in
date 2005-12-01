@@ -20,4 +20,4 @@ CPPFLAGS="-g -Wall -O0"
 CFLAGS=$CPPFLAGS
 CXXFLAGS=$CPPFLAGS
 
-AC_OUTPUT(Makefile util/Makefile http/Makefile xmlschema/Makefile dataflow/Makefile xslt/Makefile src/Makefile)
+AC_OUTPUT(Makefile util/Makefile http/Makefile xmlschema/Makefile dataflow/Makefile xslt/Makefile lambda/Makefile src/Makefile)
