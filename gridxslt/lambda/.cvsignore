@@ -9,3 +9,6 @@ Makefile.in
 *.gcov
 *.da
 lambda
+grammar.tab.cpp
+grammar.tab.h
+lexer.yy.cpp
