@@ -1,0 +1,13 @@
+.deps
+.libs
+Makefile
+Makefile.in
+*.lo
+*.la
+*.bb
+*.bbg
+*.gcov
+*.da
+binxml
+genbindings
+testxmlschema
