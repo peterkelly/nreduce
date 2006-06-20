@@ -204,10 +204,13 @@ sub main {
       print ".put ${edgename}___filled$stepno\n";
     }
 
-    $frameno += 40;
+    my $statuslabel = $dot->{'nodes'}->{'graph'}->{'label'};
+
+    $frameno += 140;
     print ".frame $frameno\n";
     print ".action:\n";
-    print "title.htmlText=\"step $stepno, frame $frameno\";\n";
+#    print "title.htmlText=\"step $stepno, frame $frameno\";\n";
+    print "title.htmlText=\"$statuslabel\";\n";
     print ".end\n";
 
     foreach my $nodename (keys(%$nodes)) {
@@ -216,10 +219,10 @@ sub main {
       }
     }
 
-    $frameno += 10;
+    $frameno += 1;
     print ".frame $frameno\n";
     print ".action:\n";
-    print "title.htmlText=\"step $stepno, frame $frameno\";\n";
+    print "title.htmlText=\"$statuslabel\";\n";
     print ".end\n";
 
     @prevnodes = @thisnodes;
@@ -508,11 +511,17 @@ sub parse_dot {
         $props->{'from'} = $nodename;
         $props->{'to'} = $dest;
 #        print "nodename :$nodename: dest :$dest:\n";
-        $edges->{$name} = $props;
+#        $edges->{$name} = $props;
+        foreach my $propname (keys(%$props)) {
+          $edges->{$name}->{$propname} = $props->{$propname};
+        }
       }
       else {
         $props->{'name'} = $nodename;
-        $nodes->{$nodename} = $props;
+#        $nodes->{$nodename} = $props;
+        foreach my $propname (keys(%$props)) {
+          $nodes->{$nodename}->{$propname} = $props->{$propname};
+        }
       }
 
       $content = $12;

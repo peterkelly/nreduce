@@ -1,3 +1,25 @@
+/*
+ * This file is part of the GridXSLT project
+ * Copyright (C) 2005 Peter Kelly (pmk@cs.adelaide.edu.au)
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * $Id$
+ *
+ */
+
 #include "util/String.h"
 #include "util/Debug.h"
 #include "dataflow/SequenceType.h"
@@ -28,11 +50,12 @@ Graph::Graph()
   step = 0;
   reduction = 0;
   trace = false;
+  rt = NULL;
 }
 
 Graph::~Graph()
 {
-  root->deref();
+//   root->deref();
 }
 
 static void numberRecursive(Cell *c, int *num)
@@ -77,35 +100,35 @@ static void clearPrintedRecursive(Cell *c)
   }
 }
 
-void Graph::clearPrinted()
+void Graph::clearPrinted(Cell *c)
 {
-  clearPrintedRecursive(root);
+  clearPrintedRecursive(c);
 }
 
-void Graph::numberCells()
+void Graph::numberCells(Cell *c)
 {
   int num = 1;
-  numberRecursive(root,&num);
+  numberRecursive(c,&num);
 }
 
-void Graph::outputDotContents(FILE *f, bool numbers)
+void Graph::outputDotContents(Cell *c, FILE *f, bool numbers)
 {
   fmessage(f,"  node[shape=record,fontsize=10,ranksep=0.1,nodesep=0.1]\n");
-  clearPrinted();
-  root->printDot(f,numbers);
+  clearPrinted(c);
+  c->printDot(f,numbers);
 }
 
-void Graph::outputDot(FILE *f, bool numbers)
+void Graph::outputDot(Cell *c, FILE *f, bool numbers)
 {
   fmessage(f,"digraph {\n");
-  outputDotContents(f,numbers);
+  outputDotContents(c,f,numbers);
   fmessage(f,"}");
 }
 
-void Graph::outputTree(FILE *f)
+void Graph::outputTree(Cell *c, FILE *f)
 {
-  clearPrinted();
-  root->printTree(f,0);
+  clearPrinted(c);
+  c->printTree(f,0);
 }
 
 bool Graph::reduce(Cell *r)
@@ -123,14 +146,14 @@ bool Graph::reduce(Cell *r)
   }
 
   c->m_active = true;
-  outputStep(String::format(" - found non-application cell %d",c->num));
+  outputStep(stack,String::format(" - found non-application cell %d",c->num));
 
   switch (c->m_type) {
   case ML_LAMBDA: {
     debug("lambda expression %*: has argument? %d\n",&c->m_value,!stack.isEmpty());
     if (stack.isEmpty()) { // i.e. c == r
       ASSERT(c == r);
-      outputStep(String::format(" - lambda %* @%d has no arguments, leaving as-is",
+      outputStep(stack,String::format(" - lambda %* @%d has no arguments, leaving as-is",
                  &c->m_value,c->num));
       r->m_current = false;
       c->m_active = false;
@@ -142,21 +165,22 @@ bool Graph::reduce(Cell *r)
     Cell *value = appl->m_right;
 
     String lambdaname = c->m_value;
-//    outputStep(String::format(" - before instantiation of lambda %* (appl=%d)",
+//    outputStep(stack,String::format(" - before instantiation of lambda %* (appl=%d)",
 //               &lambdaname,appl->num));
     Cell *ins = c->m_left->instantiate(c->m_value,value);
 
     appl->replace(ins);
-    outputStep(String::format(" - after instantiation of lambda %* (appl=%d)",
+    outputStep(stack,String::format(" - after instantiation of lambda %* (appl=%d)",
                &lambdaname,appl->num));
     ins->deref();
 
     return true;
   }
   case ML_BUILTIN: {
+    String name = c->m_value;
     builtindef *def;
     for (def = builtin_functions; def->fun; def++) {
-      if (def->name == c->m_value)
+      if (def->name == name)
         break;
     }
     if (!def) {
@@ -167,20 +191,51 @@ bool Graph::reduce(Cell *r)
     if (stack.count() >= def->nargs) {
       List<Cell*> args;
       Cell *appl = NULL;
-      for (unsigned int i = 0; i < def->nargs; i++) {
+
+      unsigned int nargs = def->nargs;
+      if ("if" == name)
+        nargs = 3;
+
+      for (unsigned int i = 0; i < nargs; i++) {
         appl = stack.pop();
         ASSERT(ML_APPLICATION == appl->m_type);
         Cell *value = appl->m_right;
-        while (reduce(value)) {
-          // keep reducing
+
+        if (("cons" != name) && ("head" != name) && ("tail" != name) && ("if" != name)) {
+          while (reduce(value)) {
+            // keep reducing
+          }
+        }
+        else if (("head" == name) || ("tail" == name)) {
+          while (reduce(value)) {
+            // keep reducing
+          }
+//            reduce(value); // just once
+        }
+        else {
+//          message("Skipping built-in argument reduction\n");
         }
         args.append(value);
+
       }
       ASSERT(appl);
 
-      debug("calling builtin function %*\n",&c->m_value);
-      if (def->fun(appl,args))
-        exit(1);
+      if ("if" == name) {
+        evaluate(args[0]);
+        if (ML_NIL == args[0]->m_type) {
+          evaluate(args[2]);
+          appl->replace(args[2]);
+        }
+        else {
+          evaluate(args[1]);
+          appl->replace(args[1]);
+        }
+      }
+      else {
+        debug("calling builtin function %*\n",&c->m_value);
+        if (def->fun(appl,args))
+          exit(1);
+      }
     }
 
     // otherwise, application is in WHNF (but unapplied). STOP.
@@ -200,13 +255,22 @@ bool Graph::reduce(Cell *r)
     }
     // otherwise, we are in WHNF. STOP.
   }
-//  outputStep(String::format(" - done reducing cell %d",r->num));
+//  outputStep(stack,String::format(" - done reducing cell %d",r->num));
   r->m_current = false;
   c->m_active = false;
   return false;
 }
 
-void Graph::outputStep(String msg)
+Cell *Graph::evaluate(Cell *r)
+{
+//   message("evaluate\n");
+  while (reduce(r)) {
+    // keep reducing
+  }
+  return r;
+}
+
+void Graph::outputStep(List<Cell*> &stack, String msg)
 {
   if (!trace) {
     step++;
@@ -222,17 +286,28 @@ void Graph::outputStep(String msg)
     exit(1);
   }
 
-  fmessage(f,"digraph {\n");
-  fmessage(f,"  label=\"Step %d%*\";\n",step,&msg);
-  outputDotContents(f,true);
-  fmessage(f,"}");
+  if (rt) {
+    fmessage(f,"digraph {\n");
+    fmessage(f,"  label=\"Step %d%*\";\n",step,&msg);
+    outputDotContents(rt,f,false);
+
+//     fmessage(f,"  stack[label=\"{");
+//     for (unsigned int s = 0; s < stack.count(); s++) {
+//       if (0 < s)
+//         fmessage(f,"|");
+//       fmessage(f,"<s%u>",s);
+//     }
+//     fmessage(f,"}\"];\n");
+
+    fmessage(f,"}");
+  }
 
   fclose(f);
 
   step++;
 }
 
-Graph *GridXSLT::parseGraph(String s)
+Graph *GridXSLT::parseGraph(String s, Cell **rt)
 {
   YY_BUFFER_STATE bufstate;
   int r;
@@ -255,7 +330,7 @@ Graph *GridXSLT::parseGraph(String s)
     return NULL;
 
   Graph *g = new Graph();
-  g->root = rootCell;
+  *rt = rootCell;
   return g;
 }
 
@@ -265,12 +340,18 @@ Cell::Cell()
     m_current(false), m_active(false), m_printed(false),
     m_x(0), m_y(0), m_span(0), m_id(m_nextId++)
 {
+//   message("Cell::Cell() %p\n",this);
+  m_totalCells++;
+  m_numCells++;
+  if (m_maxCells < m_numCells)
+    m_maxCells++;
 }
 
 Cell::~Cell()
 {
-  debug("Cell::~Cell() %p\n",this);
+//   message("Cell::~Cell() %p\n",this);
   clear();
+  m_numCells--;
 }
 
 void Cell::clear()
@@ -534,4 +615,12 @@ void Cell::printTree(FILE *f, int indent)
     m_right->printTree(f,indent+1);
 }
 
+bool Cell::isRedex()
+{
+  return false;
+}
+
 int Cell::m_nextId = 0;
+int Cell::m_numCells = 0;
+int Cell::m_maxCells = 0;
+int Cell::m_totalCells = 0;

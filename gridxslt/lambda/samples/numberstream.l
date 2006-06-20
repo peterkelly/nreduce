@@ -1,0 +1,5 @@
+(!y.(!numbers.numbers 1)
+(y (!numbers.!num.if (< num 1000)
+                     (cons num (cons " " (numbers numbers (+ num 1))))
+                     nil)))
+(!f.f f)

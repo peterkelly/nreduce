@@ -28,7 +28,8 @@ static bool fromBool(Cell *c)
 }
 
 #define CHECK_ARG(_arg,_type) { if ((_type) != (_arg)->m_type) { \
-                                  fmessage(stderr,"Invalid argument\n"); \
+                                  fmessage(stderr,"Invalid argument: got %d, wanted %d\n", \
+                                           (_arg)->m_type,(_type));     \
                                   return -1; \
                                 } \
                               }

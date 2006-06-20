@@ -1,3 +1,25 @@
+/*
+ * This file is part of the GridXSLT project
+ * Copyright (C) 2005 Peter Kelly (pmk@cs.adelaide.edu.au)
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * $Id$
+ *
+ */
+
 #ifndef _LAMBDA_REDUCER_H
 #define _LAMBDA_REDUCER_H
 
@@ -23,22 +45,24 @@ public:
   Graph();
   ~Graph();
 
-  void clearPrinted();
-  void numberCells();
-  void outputDotContents(FILE *f, bool numbers);
-  void outputDot(FILE *f, bool numbers);
-  void outputTree(FILE *f);
+  void clearPrinted(Cell *c);
+  void numberCells(Cell *c);
+  void outputDotContents(Cell *c, FILE *f, bool numbers);
+  void outputDot(Cell *c, FILE *f, bool numbers);
+  void outputTree(Cell *c, FILE *f);
   bool reduce(Cell *r);
-  void outputStep(String msg);
+  Cell *evaluate(Cell *r);
+  void outputStep(List<Cell*> &stack, String msg);
 
-  Cell *root;
+/*   Cell *root; */
 
   int step;
   int reduction;
   bool trace;
+  Cell *rt;
 };
 
-Graph *parseGraph(String s);
+Graph *parseGraph(String s, Cell **rt);
 
 enum CellType {
   ML_INVALID     = 0,
@@ -74,6 +98,8 @@ public:
   void printDot(FILE *f, bool numbers);
   void printTree(FILE *f, int indent);
 
+  bool isRedex();
+
   int num;
 
   CellType m_type;
@@ -91,6 +117,9 @@ public:
   int m_id;
 
   static int m_nextId;
+  static int m_numCells;
+  static int m_maxCells;
+  static int m_totalCells;
 };
 
 };
