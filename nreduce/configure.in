@@ -1,0 +1,13 @@
+AC_INIT(src/nreduce.c)
+AM_INIT_AUTOMAKE(nreduce, 0.1)
+AC_PROG_CC
+AM_PROG_LEX
+AC_PROG_YACC
+AC_PROG_INSTALL
+AC_PROG_LIBTOOL
+
+ALL_LIBS="-lm"
+AC_SUBST(ALL_LIBS)
+CFLAGS="-g -Wall -O0"
+
+AC_OUTPUT(Makefile src/Makefile)
