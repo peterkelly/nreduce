@@ -1,4 +1,4 @@
-#define USE_DISPATCH
+//#define USE_DISPATCH
 
 #include "grammar.tab.h"
 #include "gcode.h"
