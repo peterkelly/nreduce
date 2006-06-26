@@ -6,6 +6,7 @@
 //#define INLINE_RESOLVE_IND
 
 //#define NDEBUG
+#define VERIFICATION
 
 //#define DEBUG_ABSTRACTION
 //#define DEBUG_SHOW_CREATED_SUPERCOMBINATORS
@@ -43,7 +44,7 @@
 
 #define celldouble(c) (*(double*)(&((c)->field1)))
 #define hasfield1str(type) ((TYPE_STRING == (type)) ||   \
-                            (TYPE_VARIABLE == (type)) || \
+                            (TYPE_SYMBOL == (type)) || \
                             (TYPE_LAMBDA == (type)) ||   \
                             (TYPE_VARDEF == (type)))
 
@@ -52,7 +53,7 @@
 #define TYPE_LAMBDA      0x02  /* left: name (char*)       right: body (cell*)     */
 #define TYPE_BUILTIN     0x03  /* left: bif (int)                                  */
 #define TYPE_CONS        0x04  /* left: head (cell*)       right: tail (cell*)     */
-#define TYPE_VARIABLE    0x05  /* left: name (char*)  - a free variable            */
+#define TYPE_SYMBOL      0x05  /* left: name (char*)  - a free variable            */
 #define TYPE_LETREC      0x06  /* left: vars (cell*)       right: body (cell*)     */
 #define TYPE_VARDEF      0x07  /* left: name (char*)       right: body (cell*)     */
 #define TYPE_VARLNK      0x08  /* left: def (cell*)        right: next (cell*)     */
@@ -283,11 +284,14 @@ void fatal(const char *msg);
 void debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
 void cellmsg(FILE *f, cell *c, const char *format, ...);
-void print(char *prefix, cell *c, int indent);
+void print(cell *c);
 void print_dot(FILE *f, cell *c);
 void print_graphdot(char *filename, cell *root);
 void print_codef(FILE *f, cell *c);
 void print_code(cell *c);
+
+/* verify */
+int verify_noneedclear();
 
 /* jit */
 void print_cell(cell *c);

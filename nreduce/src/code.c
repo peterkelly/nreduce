@@ -45,7 +45,7 @@ cell *sub_letrecs(cell *c, scomb *sc)
     break;
   case TYPE_STRING:
     break;
-  case TYPE_VARIABLE: {
+  case TYPE_SYMBOL: {
     int chain = 0;
     int bletrec;
 
@@ -85,12 +85,26 @@ cell *sub_letrecs(cell *c, scomb *sc)
         if (NULL != get_scomb((char*)res->field1))
           break;
 
-        if (res->filename)
-          fprintf(stderr,"%s:%d: ",res->filename,res->lineno);
-        fprintf(stderr,"Variable not bound: %s\n",(char*)res->field1);
+        /* maybe it's a builtin */
+        int i;
+        for (i = 0; i < NUM_BUILTINS; i++) {
+          if (!strcmp((char*)c->field1,builtin_info[i].name)) {
+            free((char*)c->field1);
+            c->field1 = (void*)i;
+            c->tag = (TYPE_BUILTIN | (c->tag & ~TAG_MASK));
+            found = 1;
+            break;
+          }
+        }
 
-  /* FIXME: disable this to support supercombinators */
-        exit(1);
+        if (!found) {
+          if (res->filename)
+            fprintf(stderr,"%s:%d: ",res->filename,res->lineno);
+          fprintf(stderr,"Variable not bound: %s\n",(char*)res->field1);
+
+    /* FIXME: disable this to support supercombinators */
+          exit(1);
+        }
       }
       chain++;
 
@@ -101,7 +115,7 @@ cell *sub_letrecs(cell *c, scomb *sc)
         exit(1);
       }
       prevres = res;
-    } while ((TYPE_VARIABLE == celltype(res)) && bletrec);
+    } while ((TYPE_SYMBOL == celltype(res)) && bletrec);
 
     break;
   }

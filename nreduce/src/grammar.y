@@ -23,7 +23,7 @@ extern struct cell *parse_root;
 
 %start Program
 
-%token<s> VARIABLE
+%token<s> SYMBOL
 %token<b> BUILTIN
 %token LAMBDA
 %token NIL
@@ -48,12 +48,12 @@ extern struct cell *parse_root;
 %type <c> Arguments
 %type <c> Supercombinator
 %type <c> Supercombinators
-%left VARIABLE
+%left SYMBOL
 
 %%
 
 LetVar:
-  VARIABLE SingleExpr                           { $$ = alloc_sourcecell(yyfilename,yylineno);
+  SYMBOL SingleExpr                           { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->field1 = alloc_sourcecell(yyfilename,yylineno);
                                                   ((cell*)$$->field1)->tag = TYPE_VARDEF;
                                                   ((cell*)$$->field1)->field1 = (void*)strdup($1);
@@ -79,8 +79,8 @@ SingleExpr:
 | STRING                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_STRING;
                                                   $$->field1 = (void*)strdup($1); }
-| VARIABLE                                      { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_VARIABLE;
+| SYMBOL                                      { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->tag = TYPE_SYMBOL;
                                                   $$->field1 = (void*)strdup($1); }
 | BUILTIN                                       { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_BUILTIN;
@@ -92,7 +92,7 @@ SingleExpr:
 ;
 
 SingleLambda:
-  LAMBDA VARIABLE  '.'                          { $$ = alloc_sourcecell(yyfilename,yylineno);
+  LAMBDA SYMBOL  '.'                          { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_LAMBDA;
                                                   $$->field1 = (void*)strdup($2);
                                                   $$->field2 = NULL; }
@@ -124,7 +124,7 @@ Expr:
 ;
 
 Arguments:
-  VARIABLE Arguments                            { $$ = alloc_sourcecell(yyfilename,yylineno);
+  SYMBOL Arguments                            { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_VARDEF;
                                                   $$->field1 = strdup($1);
                                                   $$->field2 = $2; }
@@ -132,7 +132,7 @@ Arguments:
 ;
 
 Supercombinator:
-  SUPER '(' VARIABLE Arguments ')' SingleExpr  { scomb *sc = add_scomb($3);
+  SUPER '(' SYMBOL Arguments ')' SingleExpr  { scomb *sc = add_scomb($3);
                                          cell *argc;
                                          int argno;
                                          sc->nargs = 0;

@@ -22,7 +22,10 @@ LETTER     [a-zA-Z]
 
 XINTEGER {DIGITS}
 XDOUBLE {DIGITS}\.{DIGITS}
-IDENT ([a-zA-Z]|_)([a-zA-Z0-9]|_)*
+IDCHAR [\+\-\*\/\%\<\>\=\&\|\[\]\,\:\?a-zA-Z_]
+IDENT {IDCHAR}({IDCHAR}|{DIGIT}|_)*
+
+ /* IDENT ([\+a-zA-Z]|_)([\+a-zA-Z0-9]|_)* */
 
 %%
 
@@ -52,41 +55,10 @@ IDENT ([a-zA-Z]|_)([a-zA-Z0-9]|_)*
 "."     {         return '.'; }
 "("     {         return '('; }
 ")"     {         return ')'; }
-"["     {         return '['; }
-"]"     {         return ']'; }
-","     {         return ','; }
-":"     {         return ':'; }
-"+"     {         yylval.b = B_ADD; return BUILTIN; }
-"-"     {         yylval.b = B_SUBTRACT; return BUILTIN; }
-"*"     {         yylval.b = B_MULTIPLY; return BUILTIN; }
-"/"     {         yylval.b = B_DIVIDE; return BUILTIN; }
-"%"     {         yylval.b = B_MOD; return BUILTIN; }
-"="     {         return EQUALS; }
-"!="    {         yylval.b = B_NE; return BUILTIN; }
-"<"     {         yylval.b = B_LT; return BUILTIN; }
-"<="    {         yylval.b = B_LE; return BUILTIN; }
-">"     {         yylval.b = B_GT; return BUILTIN; }
-">="    {         yylval.b = B_GE; return BUILTIN; }
-"&&"    {         yylval.b = B_AND; return BUILTIN; }
-"||"    {         yylval.b = B_OR; return BUILTIN; }
-"ap"    {         yylval.b = B_AP; return BUILTIN; }
-"if"    {         yylval.b = B_IF; return BUILTIN; }
-"cons"  {         yylval.b = B_CONS; return BUILTIN; }
-"head"  {         yylval.b = B_HEAD; return BUILTIN; }
-"tail"  {         yylval.b = B_TAIL; return BUILTIN; }
-"lambda?" {       yylval.b = B_ISLAMBDA; return BUILTIN; }
-"value?" {        yylval.b = B_ISVALUE; return BUILTIN; }
-"cons?" {         yylval.b = B_ISCONS; return BUILTIN; }
-"nil?"  {         yylval.b = B_ISNIL; return BUILTIN; }
-"int?"  {         yylval.b = B_ISINT; return BUILTIN; }
-"double?"  {      yylval.b = B_ISDOUBLE; return BUILTIN; }
-"string?"  {      yylval.b = B_ISSTRING; return BUILTIN; }
-"sqrt"  {         yylval.b = B_SQRT; return BUILTIN; }
-"neg"  {          yylval.b = B_NEG; return BUILTIN; }
-"union"  {        yylval.b = B_UNION; return BUILTIN; }
-"intersect"  {    yylval.b = B_INTERSECT; return BUILTIN; }
+"!="    {         yylval.s = strdup(yytext);
+                  return SYMBOL; }
 {IDENT} {         yylval.s = strdup(yytext);
-                  return VARIABLE; }
+                  return SYMBOL; }
 
 {XINTEGER} {         yylval.i = atoi(yytext); return INTEGER; }
 {XDOUBLE}  {         yylval.d = atof(yytext); return DOUBLE; }

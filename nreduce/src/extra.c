@@ -24,7 +24,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "LAMBDA",
 "BUILTIN",
 "CONS",
-"VARIABLE",
+"SYMBOL",
 "LETREC",
 "VARDEF",
 "VARLNK",
@@ -146,7 +146,7 @@ void print1(char *prefix, cell *c, int indent)
 /*   } */
 
   push(c);
-  printf("%s#%05d    ",prefix,c->id);
+  printf("%s#%05d    %11s ",prefix,c->id,cell_types[celltype(c)]);
   for (i = 0; i < indent; i++)
     printf("  ");
 
@@ -183,7 +183,7 @@ void print1(char *prefix, cell *c, int indent)
       print1(prefix,(cell*)c->field1,indent+1);
       print1(prefix,(cell*)c->field2,indent+1);
       break;
-    case TYPE_VARIABLE:
+    case TYPE_SYMBOL:
       printf("%s\n",(char*)c->field1);
       break;
     case TYPE_SCREF:
@@ -228,10 +228,10 @@ void print1(char *prefix, cell *c, int indent)
   pop();
 }
 
-void print(char *prefix, cell *c, int indent)
+void print(cell *c)
 {
   clearprinted();
-  print1(prefix,c,indent);
+  print1("",c,0);
 }
 
 void print_escaped(char *t, const char *s)
@@ -293,7 +293,7 @@ void print_dot(FILE *f, cell *c)
     print_dot(f,(cell*)c->field1);
     print_dot(f,(cell*)c->field2);
     break;
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
     sprintf(label,"VAR: %s",(char*)c->field1);
     break;
   case TYPE_SCREF:
@@ -385,10 +385,10 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
       (TYPE_DOUBLE != celltype(c)) &&
       (TYPE_STRING != celltype(c)) &&
       (TYPE_BUILTIN != celltype(c)) &&
-      (TYPE_VARIABLE != celltype(c)) &&
+      (TYPE_SYMBOL != celltype(c)) &&
       (TYPE_SCREF != celltype(c)) &&
       (TYPE_BUILTIN != celltype(c)) &&
-      (TYPE_VARIABLE != celltype(c)) &&
+      (TYPE_SYMBOL != celltype(c)) &&
       (!isvalue(c))) {
     fprintf(f,"###");
   }
@@ -445,8 +445,8 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
       if (!inlist)
         fprintf(f,"]");
       break;
-    case TYPE_VARIABLE:
-      if ((TYPE_VARIABLE == celltype(c)) && !strncmp((char*)c->field1,"__code",6)) {
+    case TYPE_SYMBOL:
+      if ((TYPE_SYMBOL == celltype(c)) && !strncmp((char*)c->field1,"__code",6)) {
         int fno = atoi((char*)c->field1+6);
         assert(0 <= fno);
         assert(fno < NUM_BUILTINS+nscombs);
@@ -590,7 +590,7 @@ void print_scombs2()
 /*     for (i = 0; i < sc->ncells; i++) */
 /*       debug(0," #%05d",sc->cells[i]->id); */
 /*     debug(0,"\n"); */
-    print("",sc->body,0);
+    print(sc->body);
     debug(0,"\n");
   }
   debug(0,"\n");

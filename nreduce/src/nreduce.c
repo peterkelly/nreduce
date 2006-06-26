@@ -192,7 +192,6 @@ void print_compiled(gprogram *gp, array *cpucode)
   fclose(f);
 }
 
-
 void source_code_parsing()
 {
   debug_stage("Source code parsing");
@@ -224,6 +223,7 @@ void source_code_parsing()
   if (trace) {
     print_code(global_root);
     printf("\n");
+    print(global_root);
   }
 }
 

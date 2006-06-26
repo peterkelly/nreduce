@@ -16,6 +16,7 @@ nreduce_SOURCES = assembler.c \
 	gcodeold.c \
 	nreduce.c \
 	super.c \
+	verify.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c

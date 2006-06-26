@@ -6,7 +6,7 @@ letrec
 
   len         (!lst.if lst (+ 1 (len (tail lst))) 0)
   item        (!n.!lst.if (= n 0) (head lst) (item (- n 1) (tail lst)))
-  range       (!min.!max.if (= min max) (cons min nil) (cons min (range (+min 1) max)))
+  range       (!min.!max.if (= min max) (cons min nil) (cons min (range (+ min 1) max)))
 
   sum         (!lst.reduce + 0 lst)
   product     (!lst.reduce * 1 lst)

@@ -113,7 +113,7 @@ void check_r(cell *c, scomb *sc)
   case TYPE_LAMBDA:
     assert(!"lambdas should be removed by this point");
     break;
-  case TYPE_VARIABLE: {
+  case TYPE_SYMBOL: {
     int found = 0;
     int i;
     for (i = 0; (i < sc->nargs) && !found; i++) {
@@ -184,7 +184,7 @@ void add_cells(scomb *sc, cell *c, int *alloc)
   case TYPE_INT:
   case TYPE_DOUBLE:
   case TYPE_STRING:
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
   case TYPE_SCREF:
     break;
   default:
@@ -223,7 +223,7 @@ void check_scombs_nosharing()
             if (clasher->cells[j] == c) {
               printf("\n");
               printf("%s\n",clasher->name);
-              print("",clasher->body,0);
+              print(clasher->body);
               break;
             }
           }
@@ -437,7 +437,7 @@ void unmarkprocessed(cell *c)
   case TYPE_INT:
   case TYPE_DOUBLE:
   case TYPE_STRING:
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
   case TYPE_SCREF:
     break;
   }
@@ -464,7 +464,7 @@ void abstract(cell **k, scomb *lambdasc)
     return;
 
   /* skip duplicate variable abstraction */
-  if (TYPE_VARIABLE == celltype((*k))) {
+  if (TYPE_SYMBOL == celltype((*k))) {
     for (a = lambdasc->abslist; a; a = a->next) {
       if (!strcmp(a->name,(char*)(*k)->field1))
         return;
@@ -513,7 +513,7 @@ void abstract(cell **k, scomb *lambdasc)
     a->next = *ptr;
   *ptr = a;
 
-  if (TYPE_VARIABLE == celltype((*k))) {
+  if (TYPE_SYMBOL == celltype((*k))) {
     a->name = strdup((char*)(*k)->field1);
   }
   else if (TYPE_SCREF == celltype((*k))) {
@@ -526,7 +526,7 @@ void abstract(cell **k, scomb *lambdasc)
 
   a->body = (*k);
   a->replacement = alloc_cell();
-  a->replacement->tag = TYPE_VARIABLE;
+  a->replacement->tag = TYPE_SYMBOL;
   a->replacement->field1 = strdup(a->name);
   a->replacement->field2 = NULL;
   a->replacement->level = level;
@@ -662,7 +662,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     #endif
 
     #ifdef DEBUG_DUMP_TREE_AFTER_CREATING_SUPERCOMBINATOR
-    print("",global_root,0);
+    print(global_root);
     #endif
 
     maxfree = lift_r(k,lambdavar,lroot,lambdasc,lambdadepth,iscopy,level,newscombs);
@@ -670,7 +670,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     free(name);
     break;
   }
-  case TYPE_VARIABLE: {
+  case TYPE_SYMBOL: {
     char *name = (char*)(*k)->field1;
     assert(NULL == get_scomb((char*)(*k)->field1));
     maxfree = ((NULL == lambdavar) || strcmp(name,lambdavar));
@@ -755,7 +755,7 @@ void find_shared(cell *c, scomb *sc, int *shared, int *nshared)
 cell *make_varref(char *varname)
 {
   cell *ref = alloc_cell();
-  ref->tag = TYPE_VARIABLE;
+  ref->tag = TYPE_SYMBOL;
   ref->field1 = strdup(varname);
   ref->field2 = NULL;
   return ref;
@@ -868,7 +868,7 @@ void varused(cell *c, char *name, int *used)
 
   assert(TYPE_IND != celltype(c));
   assert(TYPE_LAMBDA != celltype(c));
-  if ((TYPE_VARIABLE == celltype(c)) && !strcmp((char*)c->field1,name))
+  if ((TYPE_SYMBOL == celltype(c)) && !strcmp((char*)c->field1,name))
     *used = 1;
   if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
     varused((cell*)c->field1,name,used);
@@ -885,7 +885,7 @@ void remove_redundant_scombs()
   for (sc = scombs; sc; sc = sc->next) {
     while ((0 < sc->nargs) &&
            (TYPE_APPLICATION == celltype(sc->body)) &&
-           (TYPE_VARIABLE == celltype((cell*)sc->body->field2)) &&
+           (TYPE_SYMBOL == celltype((cell*)sc->body->field2)) &&
            (!strcmp(sc->argnames[sc->nargs-1],(char*)((cell*)sc->body->field2)->field1))) {
       int used = 0;
       clearflag(FLAG_PROCESSED);
@@ -937,7 +937,7 @@ void fix_partial_applications()
           sc->argnames[i] = (char*)malloc(20);
           sprintf(sc->argnames[i],"N%d",genvar++);
 
-          arg->tag = TYPE_VARIABLE;
+          arg->tag = TYPE_SYMBOL;
           arg->field1 = strdup(sc->argnames[i]);
           arg->field2 = NULL;
 
@@ -971,7 +971,7 @@ void resolve_scvars_r(cell *c)
   case TYPE_LAMBDA:
     resolve_scvars_r((cell*)c->field2);
     break;
-  case TYPE_VARIABLE: {
+  case TYPE_SYMBOL: {
     scomb *sc;
     if (NULL != (sc = get_scomb((char*)c->field1))) {
       free(c->field1);

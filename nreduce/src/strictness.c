@@ -39,7 +39,7 @@ cell *mkbapp(int bif, cell *arg1, cell *arg2)
 }
 
 #define def(name,value,prev) mkcell(TYPE_VARLNK,mkcell(TYPE_VARDEF,strdup(name),value),prev);
-#define var(var) mkcell(TYPE_VARIABLE,strdup(var),NULL)
+#define var(var) mkcell(TYPE_SYMBOL,strdup(var),NULL)
 #define scref(sc) mkcell(TYPE_SCREF,sc,NULL)
 #define letrec(a,b) mkcell(TYPE_LETREC,a,b)
 #define in NULL
@@ -166,8 +166,8 @@ cell *S(cell *c, int iteration)
   case TYPE_CONS:
     assert(0);
     break;
-  case TYPE_VARIABLE: {
-    return mkcell(TYPE_VARIABLE,strdup((char*)c->field1),(void*)1);
+  case TYPE_SYMBOL: {
+    return mkcell(TYPE_SYMBOL,strdup((char*)c->field1),(void*)1);
     break;
   }
   case TYPE_SCREF: {
@@ -481,7 +481,7 @@ void annotate_r(cell *c)
     assert(0);
     break;
   case TYPE_BUILTIN:
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
   case TYPE_SCREF:
   case TYPE_NIL:
   case TYPE_INT:

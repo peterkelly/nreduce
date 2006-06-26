@@ -163,7 +163,7 @@ void free_cell_fields(cell *c)
 /*     free((char*)c->field1); */
   switch (celltype(c)) {
   case TYPE_STRING:
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
   case TYPE_LAMBDA:
   case TYPE_VARDEF:
     free((char*)c->field1);
@@ -434,7 +434,7 @@ void copy_cell(cell *redex, cell *source)
   assert(redex != source);
   copy_raw(redex,source);
   if ((TYPE_STRING == celltype(source)) ||
-      (TYPE_VARIABLE == celltype(source)) ||
+      (TYPE_SYMBOL == celltype(source)) ||
       (TYPE_LAMBDA == celltype(source)) ||
       (TYPE_VARDEF == celltype(source)))
     redex->field1 = strdup((char*)redex->field1);
@@ -509,8 +509,10 @@ void cleargraph_r(cell *c, int flag)
 
 void cleargraph(cell *root, int flag)
 {
+  assert(verify_noneedclear());
   setneedclear_r(root);
   cleargraph_r(root,flag);
+  assert(verify_noneedclear());
 }
 
 void print_stack(int redex, cell **stk, int size, int dir)

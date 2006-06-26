@@ -19,7 +19,7 @@ super (item n lst) (
 super (range min max) (
   if (= min max)
      (cons min nil)
-     (cons min (range (+min 1) max))
+     (cons min (range (+ min 1) max))
 )
 
 super (printcell cell) (

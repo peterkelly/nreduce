@@ -389,7 +389,7 @@ void execute(ginstr *program)
     case OP_JFALSE: {
       cell *test = pop();
       if (TYPE_APPLICATION == celltype(test)) {
-        print("",test,0);
+        print(test);
       }
       assert(TYPE_APPLICATION != celltype(test));
       if (TYPE_NIL == celltype(test))
@@ -444,7 +444,7 @@ void execute(ginstr *program)
 #if 1
       cell *topelem = resolve_ind(stack[stackcount-1]);
       if (TYPE_FUNCTION == celltype(topelem)) {
-        int fno = program[(int)topelem->field2].arg0;
+/*         int fno = program[(int)topelem->field2].arg0; */
         int expargs = (int)topelem->field1;
 
         assert(0 < expargs);

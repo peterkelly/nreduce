@@ -17,7 +17,7 @@ int resolve_var(int oldcount, scomb *sc, cell **k)
 
   assert(TYPE_IND != celltype(var)); /* var comes from the scomb */
 
-  if (TYPE_VARIABLE != celltype(var))
+  if (TYPE_SYMBOL != celltype(var))
     return 0;
   varno = get_scomb_var(sc,(char*)var->field1);
 /*   assert(NULL == var->field2); */
@@ -130,7 +130,7 @@ void instantiate_scomb(cell *dest, cell *source, scomb *sc)
       case TYPE_INT:
       case TYPE_DOUBLE:
       case TYPE_STRING:
-      case TYPE_VARIABLE:
+      case TYPE_SYMBOL:
       case TYPE_SCREF:
         copy_cell(dest,source);
         break;
@@ -249,7 +249,7 @@ void instantiate_scomb2a(cell *dest, cell *source, scomb *sc)
     case TYPE_INT:
     case TYPE_DOUBLE:
     case TYPE_STRING:
-    case TYPE_VARIABLE:
+    case TYPE_SYMBOL:
     case TYPE_SCREF:
       copy_cell(dest,source);
       break;
@@ -375,7 +375,7 @@ void instantiate(cell *dest, cell *source, char *varname, cell *varval, int inde
   case TYPE_STRING:
     copy_cell(dest,source);
     break;
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
     if (!strcmp((char*)source->field1,varname))
       copy_cell(dest,varval);
     else
@@ -400,7 +400,7 @@ void instantiate1(cell *dest, cell *source, char *varname, cell *varval, int ind
   int processed = 0;
 
 /*   printf("instantiate1(#%05d,%s) to #%05d\n",source->id,varname,dest->id); */
-/*   print("",source,0); */
+/*   print(source); */
 
   clearflag(FLAG_PROCESSED);
 
@@ -417,7 +417,7 @@ void too_many_arguments(cell *target)
 
   while (TYPE_APPLICATION == celltype(source))
     source = resolve_source(resolve_ind((cell*)source->field1));
-  if (TYPE_VARIABLE == celltype(source))
+  if (TYPE_SYMBOL == celltype(source))
     fprintf(stderr,"%s: Too many arguments\n",(char*)source->field1);
   else if (TYPE_SCREF == celltype(source))
     fprintf(stderr,"%s: Too many arguments\n",((scomb*)source->field1)->name);
@@ -471,7 +471,7 @@ void reduce()
 /*     printf("==================== REDUCTION ===================\n"); */
 /*     print_code(global_root); */
 /*     printf("\n"); */
-/*     print("",global_root,0); */
+/*     print(global_root); */
 
     target = resolve_ind(redex);
 
@@ -496,7 +496,7 @@ void reduce()
 
     /* A variable. This should correspond to a supercombinator, and if it doesn't it means
        something has gone wrong. */
-    case TYPE_VARIABLE:
+    case TYPE_SYMBOL:
       assert(!"variable encountered during reduction");
       break;
     case TYPE_SCREF: {

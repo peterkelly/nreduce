@@ -595,7 +595,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si, int endfun,
     gprogram_add_ginstr(gp,OP_PUSHCELL,(int)c,0,si);
 /*     evaldresult = 1; */
     break;
-  case TYPE_VARIABLE:
+  case TYPE_SYMBOL:
     push_varref(gp,(char*)c->field1,d,pm,si);
 #ifdef USE_DISPATCH
     if (endfun && (0 < n)) {

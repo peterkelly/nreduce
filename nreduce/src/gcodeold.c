@@ -24,7 +24,7 @@ void ES(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si)
     gprogram_add_ginstr(gp,OP_MKAP,n,0,si);
     gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
     break;
-  case TYPE_VARIABLE: /* E[x] */
+  case TYPE_SYMBOL: /* E[x] */
     push_varref(gp,(char*)c->field1,d,pm,si);
     gprogram_add_ginstr(gp,OP_MKAP,n,0,si);
     gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
@@ -142,7 +142,7 @@ void E(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
     c->tag |= FLAG_PINNED;
     gprogram_add_ginstr(gp,OP_PUSHCELL,(int)c,0,si);
     break;
-  case TYPE_VARIABLE: /* E[x] */
+  case TYPE_SYMBOL: /* E[x] */
     push_varref(gp,(char*)c->field1,d,pm,si);
     gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
     break;
@@ -206,7 +206,7 @@ void E(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
       }
     }
 #ifdef ALLSTRICT
-    else if (TYPE_VARIABLE == celltype(fun)) {
+    else if (TYPE_SYMBOL == celltype(fun)) {
       scomb *sc = (scomb*)fun->field1;
 /*       assert(sc); */
       if (sc && (nargs == sc->nargs)) {
@@ -282,7 +282,7 @@ void RS(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si)
     gprogram_add_ginstr(gp,OP_POP,d-n,0,si);
     gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
     break;
-  case TYPE_VARIABLE: /* RS[x] p d n */
+  case TYPE_SYMBOL: /* RS[x] p d n */
     push_varref(gp,(char*)c->field1,d,pm,si);
     gprogram_add_ginstr(gp,OP_MKAP,n,0,si);
     gprogram_add_ginstr(gp,OP_UPDATE,d-n+1,0,si);
@@ -357,7 +357,7 @@ void RS(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si)
       }
     }
 #ifdef ALLSTRICT
-    else if (TYPE_VARIABLE == celltype(fun)) {
+    else if (TYPE_SYMBOL == celltype(fun)) {
       scomb *sc = (scomb*)fun->field1;
 /*       assert(sc); */
       if (sc && (nargs == sc->nargs)) {
@@ -417,7 +417,7 @@ void R(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
     gprogram_add_ginstr(gp,OP_POP,d,0,si);
     gprogram_add_ginstr(gp,OP_RETURN,0,0,si);
     break;
-  case TYPE_VARIABLE: /* R[x] p d */
+  case TYPE_SYMBOL: /* R[x] p d */
     push_varref(gp,(char*)c->field1,d,pm,si);
     gprogram_add_ginstr(gp,OP_EVAL,0,0,si); /* -- is this necessary? it causes problems... */
     gprogram_add_ginstr(gp,OP_UPDATE,d+1,0,si);
@@ -495,7 +495,7 @@ void R(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
       }
     }
 #ifdef ALLSTRICT
-    else if (TYPE_VARIABLE == celltype(fun)) {
+    else if (TYPE_SYMBOL == celltype(fun)) {
       scomb *sc = (scomb*)fun->field1;
 /*       assert(sc); */
       if (sc && (nargs == sc->nargs)) {
