@@ -223,7 +223,131 @@ void source_code_parsing()
   if (trace) {
     print_code(global_root);
     printf("\n");
-    print(global_root);
+  }
+}
+
+void parse_check(int cond, cell *c, char *msg)
+{
+  if (cond)
+    return;
+  if (NULL != c->filename)
+    fprintf(stderr,"%s:%d: %s\n",c->filename,c->lineno,msg);
+  else
+    fprintf(stderr,"%s\n",msg);
+  exit(1);
+}
+
+void create_letrecs_r(cell *c)
+{
+  if (c->tag & FLAG_PROCESSED)
+    return;
+  c->tag |= FLAG_PROCESSED;
+  switch (celltype(c)) {
+  case TYPE_APPLICATION:
+  case TYPE_CONS:
+
+    if ((TYPE_CONS == celltype(c)) &&
+        (TYPE_SYMBOL == celltype((cell*)c->field1)) &&
+        !strcmp("let",(char*)((cell*)c->field1)->field1)) {
+
+      cell *defs = NULL;
+      cell **lnkptr = NULL;
+
+      cell *let1 = (cell*)c->field2;
+      parse_check(TYPE_CONS == celltype(let1),let1,"let takes 2 parameters");
+
+      cell *iter = (cell*)let1->field1;
+      while (TYPE_CONS == celltype(iter)) {
+        cell *deflist = (cell*)iter->field1;
+        parse_check(TYPE_CONS == celltype(deflist),deflist,"let entry not a cons cell");
+        cell *symbol = (cell*)deflist->field1;
+        parse_check(TYPE_SYMBOL == celltype(symbol),symbol,"let definition expects a symbol");
+        cell *link1 = (cell*)deflist->field2;
+        parse_check(TYPE_CONS == celltype(link1),link1,"let definition should be list of 2");
+        cell *value = (cell*)link1->field1;
+        cell *link2 = (cell*)link1->field2;
+        parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
+
+        cell *vardef = alloc_cell();
+        vardef->tag = TYPE_VARDEF;
+        vardef->field1 = strdup((char*)symbol->field1);
+        vardef->field2 = value;
+
+        cell *newlnk = alloc_cell();
+        newlnk->tag = TYPE_VARLNK;
+        newlnk->field1 = vardef;
+        newlnk->field2 = NULL;
+
+        if (NULL == defs)
+          defs = newlnk;
+        else
+          *lnkptr = newlnk;
+        lnkptr = (cell**)&newlnk->field2;
+
+        iter = (cell*)iter->field2;
+      }
+
+      cell *let2 = (cell*)let1->field2;
+      parse_check(TYPE_CONS == celltype(let2),let2,"let takes 2 parameters");
+      cell *body = (cell*)let2->field1;
+
+      cell *lnk;
+      for (lnk = defs; lnk; lnk = (cell*)lnk->field2) {
+        assert(TYPE_VARLNK == celltype(lnk));
+        cell *def = (cell*)lnk->field1;
+        assert(TYPE_VARDEF == celltype(def));
+        create_letrecs_r((cell*)def->field2);
+      }
+
+      c->tag = (TYPE_LETREC | (c->tag & ~TAG_MASK));
+      c->field1 = defs;
+      c->field2 = body;
+
+      
+
+      create_letrecs_r(body);
+    }
+    else {
+
+      create_letrecs_r((cell*)c->field1);
+      create_letrecs_r((cell*)c->field2);
+    }
+
+    break;
+  case TYPE_LAMBDA:
+    create_letrecs_r((cell*)c->field2);
+    break;
+  case TYPE_SYMBOL:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+  case TYPE_SCREF:
+    break;
+  default:
+    assert(!"invalid cell type");
+    break;
+  }
+}
+
+void create_letrecs(cell *c)
+{
+  cleargraph(c,FLAG_PROCESSED);
+  create_letrecs_r(c);
+}
+
+void letrec_creation()
+{
+  debug_stage("Letrec creation");
+  create_letrecs(global_root);
+
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    create_letrecs(sc->body);
+
+  if (trace) {
+    print_code(global_root);
+    printf("\n");
   }
 }
 
@@ -244,6 +368,92 @@ void letrec_substitution()
   }
 
   assert(0 == stackcount);
+}
+
+void substitute_apps_r(cell *c)
+{
+  if (c->tag & FLAG_PROCESSED)
+    return;
+  c->tag |= FLAG_PROCESSED;
+  switch (celltype(c)) {
+  case TYPE_APPLICATION:
+    substitute_apps_r((cell*)c->field1);
+    substitute_apps_r((cell*)c->field2);
+    break;
+  case TYPE_CONS: {
+    cell *left = (cell*)c->field1;
+    cell *right = (cell*)c->field2;
+
+    if (TYPE_NIL != celltype(right)) {
+      parse_check(TYPE_CONS == celltype(right),right,"expected a cons here");
+
+      cell *lst = right;
+      cell *app = left;
+      cell *next = (cell*)lst->field2;
+
+      while (TYPE_NIL != celltype(next)) {
+        parse_check(TYPE_CONS == celltype(next),next,"expected a cons here");
+        cell *item = (cell*)lst->field1;
+        cell *newapp = alloc_cell();
+        newapp->tag = TYPE_APPLICATION;
+        newapp->field1 = app;
+        newapp->field2 = item;
+        app = newapp;
+
+        lst = next;
+        next = (cell*)lst->field2;
+      }
+
+      cell *lastitem = (cell*)lst->field1;
+      c->tag = TYPE_APPLICATION;
+      c->field1 = app;
+      c->field2 = lastitem;
+
+      substitute_apps_r(c);
+    }
+    else {
+      copy_cell(c,(cell*)c->field1);
+      substitute_apps_r(c);
+    }
+    break;
+  }
+  case TYPE_LAMBDA:
+    substitute_apps_r((cell*)c->field2);
+    break;
+  case TYPE_BUILTIN:
+  case TYPE_SYMBOL:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+  case TYPE_SCREF:
+    break;
+  default:
+    assert(!"invalid cell type");
+    break;
+  }
+}
+
+void substitute_apps(cell *c)
+{
+  cleargraph(c,FLAG_PROCESSED);
+  substitute_apps_r(c);
+}
+
+void app_substitution()
+{
+  debug_stage("Application substitution");
+
+  substitute_apps(global_root);
+
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    substitute_apps(sc->body);
+
+  if (trace) {
+    print_code(global_root);
+    printf("\n");
+  }
 }
 
 void lambda_lifting()
@@ -345,7 +555,9 @@ int main(int argc, char **argv)
   strictdebug = args.strictdebug;
 
   source_code_parsing();
+  letrec_creation();
   letrec_substitution();
+  app_substitution();
   lambda_lifting();
 
   if (ENGINE_REDUCER == args.engine) {

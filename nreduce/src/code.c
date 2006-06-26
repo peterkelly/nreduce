@@ -64,10 +64,14 @@ cell *sub_letrecs(cell *c, scomb *sc)
         }
         else if (TYPE_LETREC == celltype(p)) {
           cell *lnk;
-          for (lnk = (cell*)p->field1; lnk; lnk = (cell*)lnk->field2) {
+          char *refname = (char*)res->field1;
+          for (lnk = (cell*)p->field1; lnk && !found; lnk = (cell*)lnk->field2) {
+            assert(TYPE_VARLNK == celltype(lnk));
             cell *def = (cell*)lnk->field1;
-            if (!strcmp((char*)def->field1,(char*)res->field1)) {
+            assert(TYPE_VARDEF == celltype(def));
+            if (!strcmp((char*)def->field1,refname)) {
               res = (cell*)def->field2;
+
               found = 1;
               bletrec = 1;
             }
@@ -97,14 +101,15 @@ cell *sub_letrecs(cell *c, scomb *sc)
           }
         }
 
-        if (!found) {
-          if (res->filename)
-            fprintf(stderr,"%s:%d: ",res->filename,res->lineno);
-          fprintf(stderr,"Variable not bound: %s\n",(char*)res->field1);
+        if (found)
+          break;
 
-    /* FIXME: disable this to support supercombinators */
-          exit(1);
-        }
+        if (res->filename)
+          fprintf(stderr,"%s:%d: ",res->filename,res->lineno);
+        fprintf(stderr,"Variable not bound: %s\n",(char*)res->field1);
+
+  /* FIXME: disable this to support supercombinators */
+        exit(1);
       }
       chain++;
 

@@ -1,5 +1,5 @@
-letrec
-  printelem  (!indent.!elem.
+(let
+ ((printelem  (!indent.!elem.
                 cons (indentstr indent)
                 (cons "<"
                 (cons (ename elem)
@@ -11,26 +11,25 @@ letrec
                   (cons "</"
                   (cons (ename elem)
                   (cons ">\n" nil)))))
-                  (cons "/>\n" nil))))))
-  printattr  (!attr.liststr (cons " "
+                  (cons "/>\n" nil)))))))
+  (printattr  (!attr.liststr (cons " "
                             (cons (aname attr)
                             (cons "="
                             (cons "\""
                             (cons (avalue attr)
-                            (cons "\"" nil)))))))
-  echildren  (!elem.tail (tail elem))
-  eattrs     (!elem.head (tail elem))
-  ename      (!elem.head elem)
-  mkelem     (!name.!attrs.!children.cons name (cons attrs children))
-  avalue     (!attr.tail attr)
-  aname      (!attr.head attr)
-  mkattr     (!name.!value.cons name value)
-  indentstr  (!indent.if (= indent 0) "" (ap "  " (indentstr (- indent 1))))
-  liststr    (!lst.if lst (ap (head lst) (liststr (tail lst))) "")
-  map        (!f.!lst.if lst (cons (f (head lst)) (map f (tail lst))) nil)
+                            (cons "\"" nil))))))))
+  (echildren  (!elem.tail (tail elem)))
+  (eattrs     (!elem.head (tail elem)))
+  (ename      (!elem.head elem))
+  (mkelem     (!name.!attrs.!children.cons name (cons attrs children)))
+  (avalue     (!attr.tail attr))
+  (aname      (!attr.head attr))
+  (mkattr     (!name.!value.cons name value))
+  (indentstr  (!indent.if (= indent 0) "" (ap "  " (indentstr (- indent 1)))))
+  (liststr    (!lst.if lst (ap (head lst) (liststr (tail lst))) ""))
+  (map        (!f.!lst.if lst (cons (f (head lst)) (map f (tail lst))) nil)))
 
-in
-  printelem
+  (printelem
     0
     (mkelem "people" nil
       (cons (mkelem "person" 
@@ -44,4 +43,4 @@ in
       (cons (mkelem "person" 
         (cons (mkattr "name" "Bob")
         (cons (mkattr "age" "38")
-        (cons (mkattr "occupation" "Manager") nil))) nil) nil))))
+        (cons (mkattr "occupation" "Manager") nil))) nil) nil))))))

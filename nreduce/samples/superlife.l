@@ -61,13 +61,12 @@ super (mkcol pat rows cols startrow endrow startcol endcol row col) (
 )
 
 super (makegrid pat rows cols) (
-  letrec
-    startrow  (/ (- rows (grows pat)) 2)
-    endrow    (+ startrow (grows pat))
-    startcol  (/ (- cols (gcols pat)) 2)
-    endcol    (+ startcol (gcols pat))
-  in
-    map (mkrow pat rows cols startrow endrow startcol endcol) (range 0 (- rows 1))
+  (let
+   ((startrow  (/ (- rows (grows pat)) 2))
+    (endrow    (+ startrow (grows pat)))
+    (startcol  (/ (- cols (gcols pat)) 2))
+    (endcol    (+ startcol (gcols pat))))
+    (map (mkrow pat rows cols startrow endrow startcol endcol) (range 0 (- rows 1))))
 )
 
 super (dorow grid nrows ncols row) (
@@ -75,38 +74,35 @@ super (dorow grid nrows ncols row) (
 )
 
 super (docol grid nrows ncols row col) (
-  letrec
-    curvalue (gcell grid row col)
-    count    (sumnb grid row col)
-  in
-    if (&& (= curvalue 0) (= count 3))
+  (let
+   ((curvalue (gcell grid row col))
+    (count    (sumnb grid row col)))
+    (if (&& (= curvalue 0) (= count 3))
        1
        (if (&& (= curvalue 1) (|| (= count 2) (= count 3)))
            1
-           0)
+           0)))
 )
 
 super (dolife grid) (
-  letrec
-    nrows (grows grid)
-    ncols (gcols grid)
-  in
-    map (dorow grid nrows ncols) (range 0 (- nrows 1))
+  (let
+     ((nrows (grows grid))
+      (ncols (gcols grid)))
+    (map (dorow grid nrows ncols) (range 0 (- nrows 1))))
 )
 
 super (sumnb g row col) (
-  letrec
-    maxrow  (- (grows g) 1)
-    maxcol  (- (gcols g) 1)
-  in
-    (+ (if (&& (> row 0) (> col 0))        (gcell g (- row 1) (- col 1)) 0)
+  (let
+    ((maxrow  (- (grows g) 1))
+     (maxcol  (- (gcols g) 1)))
+   ((+ (if (&& (> row 0) (> col 0))        (gcell g (- row 1) (- col 1)) 0)
     (+ (if (> row 0)                       (gcell g (- row 1) col)       0)
     (+ (if (&& (> row 0) (< col maxcol))   (gcell g (- row 1) (+ col 1)) 0)
     (+ (if (> col 0)                       (gcell g row       (- col 1)) 0)
     (+ (if (< col maxcol)                  (gcell g row       (+ col 1)) 0)
     (+ (if (&& (< row maxrow) (> col 0))   (gcell g (+ row 1) (- col 1)) 0)
     (+ (if (< row maxrow)                  (gcell g (+ row 1) col)       0)
-    (if (&& (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0))))))))
+    (if (&& (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0))))))))))
 )
 
 super (loop iter grid) (
@@ -115,9 +111,9 @@ super (loop iter grid) (
      nil
 )
 
-letrec start  (cons (cons 0 (cons 1 (cons 1 nil)))
+(let ((start  (cons (cons 0 (cons 1 (cons 1 nil)))
               (cons (cons 1 (cons 1 (cons 0 nil)))
-              (cons (cons 0 (cons 1 (cons 0 nil))) nil)))
+              (cons (cons 0 (cons 1 (cons 0 nil))) nil)))))
 
-in
-  loop 50 (makegrid start 20 20)
+  (loop 50 (makegrid start 20 20)))
+

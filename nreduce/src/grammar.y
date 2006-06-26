@@ -108,15 +108,18 @@ Lambdas:
 ;
 
 AppliedExpr:
-  SingleExpr                                    { $$ = $1; }
-| AppliedExpr SingleExpr                        { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_APPLICATION;
+  SingleExpr                                    { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->tag = TYPE_CONS;
+                                                  $$->field1 = $1;
+                                                  $$->field2 = globnil; }
+| SingleExpr AppliedExpr                        { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->tag = TYPE_CONS;
                                                   $$->field1 = $1;
                                                   $$->field2 = $2; }
 ;
 
 Expr:
-  AppliedExpr
+  AppliedExpr                                   { $$ = $1; }
 | Lambdas AppliedExpr                           { cell *c = $1;
                                                   while (c->field2)
                                                     c = (cell*)c->field2;
@@ -124,7 +127,7 @@ Expr:
 ;
 
 Arguments:
-  SYMBOL Arguments                            { $$ = alloc_sourcecell(yyfilename,yylineno);
+  SYMBOL Arguments                              { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_VARDEF;
                                                   $$->field1 = strdup($1);
                                                   $$->field2 = $2; }
@@ -152,7 +155,7 @@ Supercombinators:
 ;
 
 Program:
-  Supercombinators Expr { parse_root = $2; }
+  Supercombinators '(' Expr ')' { parse_root = $3; }
 ;
 
 %%
