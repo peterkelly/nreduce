@@ -565,7 +565,7 @@ int main(int argc, char **argv)
   }
   else {
     graph_optimisation();
-/*     strictness_analysis(); */
+    strictness_analysis();
     gcode_compilation();
 
     if (ENGINE_INTERPRETER == args.engine) {

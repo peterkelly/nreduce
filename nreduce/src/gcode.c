@@ -114,19 +114,12 @@ const char *op_names[OP_COUNT] = {
 "DISPATCH"
 };
 
-void print_comp(cell *c, int n, int endfun, int doeval)
+void print_comp(char *fname, cell *c)
 {
 #ifdef DEBUG_GCODE_COMPILATION
-  debug(cdepth,"C [ ");
+  debug(cdepth,"%s [ ",fname);
   print_code(c);
-  printf(" ]");
-  if (0 < n)
-    printf(" n=%d",n);
-  if (endfun)
-    printf(" endfun");
-  if (doeval)
-    printf(" doeval");
-  printf("\n");
+  printf(" ]\n");
 #endif
 }
 
@@ -152,7 +145,7 @@ void gprogram_free(gprogram *gp)
   free(gp);
 }
 
-void gprogram_add_ginstr(gprogram *gp, int opcode, int arg0, int arg1, stackinfo *si)
+void gprogram_add_ginstr(gprogram *gp, stackinfo *si, int opcode, int arg0, int arg1)
 {
   ginstr *instr;
 
@@ -261,7 +254,7 @@ void gprogram_add_ginstr(gprogram *gp, int opcode, int arg0, int arg1, stackinfo
     break;
   case OP_BIF:
     popstatus(si,builtin_info[arg0].nargs-1);
-    setstatusat(si,si->count-1,builtin_info[arg0].strictres);
+    setstatusat(si,si->count-1,builtin_info[arg0].reswhnf);
     break;
   case OP_JFALSE:
     popstatus(si,1);
@@ -408,7 +401,7 @@ int p(pmap *pm, char *varname)
 void push_varref(gprogram *gp, char *name, int d, pmap *pm, stackinfo *si)
 {
   assert(NULL == get_scomb(name));
-  gprogram_add_ginstr(gp,OP_PUSH,d-p(pm,name),(int)strdup(name),si);
+  gprogram_add_ginstr(gp,si,OP_PUSH,d-p(pm,name),(int)strdup(name));
 }
 
 void push_scref(gprogram *gp, scomb *vsc, int d, pmap *pm, stackinfo *si)
@@ -420,13 +413,13 @@ void push_scref(gprogram *gp, scomb *vsc, int d, pmap *pm, stackinfo *si)
     fno++;
   }
   if (0 == s2->nargs)
-    gprogram_add_ginstr(gp,OP_PUSHGLOBAL,(int)globcells[fno],0,si);
+    gprogram_add_ginstr(gp,si,OP_PUSHGLOBAL,(int)globcells[fno],0);
   else
-    gprogram_add_ginstr(gp,OP_PUSHCELL,(int)globcells[fno],0,si);
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[fno],0);
 }
 
-void C(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si, int endfun, int doeval);
-/* void E(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si); */
+void C(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si);
+void E(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si);
 
 void Cletrec(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
 {
@@ -436,11 +429,11 @@ void Cletrec(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
   for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
     n++;
 
-  gprogram_add_ginstr(gp,OP_ALLOC,n,0,si);
+  gprogram_add_ginstr(gp,si,OP_ALLOC,n,0);
   for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
     cell *def = (cell*)lnk->field1;
-    C(gp,(cell*)def->field2,d,pm,0,si,0,0);
-    gprogram_add_ginstr(gp,OP_UPDATE,d+1-p(pm,(char*)def->field1),0,si);
+    C(gp,(cell*)def->field2,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1-p(pm,(char*)def->field1),0);
   }
 }
 
@@ -473,150 +466,43 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
   }
 }
 
-void C(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si, int endfun, int doeval)
+void C(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
 {
-  /* endfun && (0 == n) corresponds to R */
-  /* endfun && (0 < n)  corresponds to RS */
-  /* doeval && (0 == n) corresponds to E */
-  /* doeval && (0 < n)  corresponds to ES */
-
-  int oldcount = stackcount;
-  int evaldresult = 0;
-  assert(!(endfun && doeval));
-  print_comp(c,n,endfun,doeval);
+  print_comp("C",c);
   cdepth++;
   assert(TYPE_IND != celltype(c));
   switch (celltype(c)) {
   case TYPE_APPLICATION: {
-    cell *fun = c;
-    int nargs;
-
-    if (endfun || doeval) {
-
-      while (TYPE_APPLICATION == celltype(fun)) {
-        push((cell*)fun->field2);
-        fun = (cell*)fun->field1;
-        assert(TYPE_IND != celltype(fun));
-      }
-      nargs = stackcount-oldcount;
-
-      if (TYPE_BUILTIN == celltype(fun)) {
-        int bif = (int)fun->field1;
-
-        if ((B_IF == bif) && (3 == nargs)) {
-          cell *arg0 = stack[stackcount-3];
-          cell *arg1 = stack[stackcount-2];
-          cell *arg2 = stack[stackcount-1];
-          int jfalseaddr;
-          int jendaddr;
-          stackinfo *tempsi;
-
-          C(gp,arg2,d,pm,0,si,0,1);
-          jfalseaddr = gp->count;
-          gprogram_add_ginstr(gp,OP_JFALSE,0,0,si);
-
-          tempsi = stackinfo_new(si);
-          C(gp,arg1,d,pm,0,tempsi,endfun,!endfun);
-          jendaddr = gp->count;
-          if (!endfun)
-            gprogram_add_ginstr(gp,OP_JUMP,0,0,tempsi);
-          stackinfo_free(tempsi);
-
-          gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
-          tempsi = stackinfo_new(si);
-          C(gp,arg0,d,pm,0,tempsi,endfun,!endfun);
-          stackinfo_free(tempsi);
-
-          pushstatus(si,1);
-
-          if (!endfun)
-            gp->ginstrs[jendaddr].arg0 = gp->count-jendaddr;
-          evaldresult = 1;
-          break;
-        }
-        else if (nargs == builtin_info[bif].nargs) {
-          int i;
-          for (i = 0; i < nargs; i++) {
-            if (nargs-i <= builtin_info[bif].nstrict)
-              C(gp,stack[stackcount-nargs+i],d+i,pm,0,si,0,1);
-            else
-              C(gp,stack[stackcount-nargs+i],d+i,pm,0,si,0,0);
-          }
-
-          gprogram_add_ginstr(gp,OP_BIF,bif,0,si);
-
-          if (!builtin_info[bif].strictres)
-            gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
-          evaldresult = 1;
-          break;
-        }
-      }
-      else if (TYPE_SCREF == celltype(fun)) {
-/*         scomb *sc = (scomb*)fun->field1; */
-        /* FIXME */
-      }
-    }
-
-
-    if (endfun || doeval) {
-/*     if (endfun) { */
-      C(gp,(cell*)c->field2,d,pm,0,si,0,doeval);
-      C(gp,(cell*)c->field1,d+1,pm,n+1,si,endfun,doeval);
-      endfun = 0;
-      doeval = 0;
-    }
-    else {
-      C(gp,(cell*)c->field2,d,pm,0,si,0,doeval);
-      C(gp,(cell*)c->field1,d+1,pm,0,si,0,doeval);
-      gprogram_add_ginstr(gp,OP_MKAP,1,0,si);
-    }
+    C(gp,(cell*)c->field2,d,pm,si);
+    C(gp,(cell*)c->field1,d+1,pm,si);
+    gprogram_add_ginstr(gp,si,OP_MKAP,1,0);
+/*     gprogram_add_ginstr(gp,si,OP_ANNOTATE,(int)source->filename,source->lineno); */
     break;
   }
+  case TYPE_LAMBDA:
+    break;
   case TYPE_BUILTIN:
-    gprogram_add_ginstr(gp,OP_PUSHCELL,(int)globcells[(int)c->field1],0,si);
-#ifdef USE_DISPATCH
-    if (endfun && (0 < n)) {
-      gprogram_add_ginstr(gp,OP_SQUEEZE,n+1,d-n,si);
-      gprogram_add_ginstr(gp,OP_DISPATCH,n,0,si);
-      endfun = 0;
-    }
-#endif
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[(int)c->field1],0);
+    break;
+  case TYPE_CONS:
+    assert(!"cons shouldn't occur in a supercombinator body (or should it?...)");
     break;
   case TYPE_NIL:
-    assert(0 == n);
-    gprogram_add_ginstr(gp,OP_PUSHCELL,(int)globnil,0,si);
-    evaldresult = 1;
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globnil,0);
     break;
   case TYPE_INT:
   case TYPE_DOUBLE:
   case TYPE_STRING:
-    assert(0 == n);
     c->tag |= FLAG_PINNED;
-    gprogram_add_ginstr(gp,OP_PUSHCELL,(int)c,0,si);
-/*     evaldresult = 1; */
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)c,0);
     break;
   case TYPE_SYMBOL:
     push_varref(gp,(char*)c->field1,d,pm,si);
-#ifdef USE_DISPATCH
-    if (endfun && (0 < n)) {
-      gprogram_add_ginstr(gp,OP_SQUEEZE,n+1,d-n,si);
-      gprogram_add_ginstr(gp,OP_DISPATCH,n,0,si);
-      endfun = 0;
-    }
-#endif
     break;
   case TYPE_SCREF:
     push_scref(gp,(scomb*)c->field1,d,pm,si);
-#ifdef USE_DISPATCH
-    if (endfun && (0 < n)) {
-      gprogram_add_ginstr(gp,OP_SQUEEZE,n+1,d-n,si);
-      gprogram_add_ginstr(gp,OP_DISPATCH,n,0,si);
-      endfun = 0;
-    }
-#endif
     break;
   case TYPE_LETREC: {
-    assert(0 == n);
     pmap pprime;
     int top = d+1;
     int ndefs = 0;
@@ -624,10 +510,10 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si, int endfun,
 
     Xr(c,pm,d,&pprime,&dprime,&ndefs);
     Cletrec(gp,c,dprime,&pprime,si);
-    C(gp,(cell*)c->field2,dprime,&pprime,0,si,0,0);
+    C(gp,(cell*)c->field2,dprime,&pprime,si);
 
-    gprogram_add_ginstr(gp,OP_UPDATE,dprime+1-top,0,si);
-    gprogram_add_ginstr(gp,OP_POP,ndefs,0,si);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,dprime+1-top,0);
+    gprogram_add_ginstr(gp,si,OP_POP,ndefs,0);
 
     free(pprime.varnames);
     free(pprime.indexes);
@@ -638,32 +524,531 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si, int endfun,
     break;
   }
   cdepth--;
+}
 
-  if (endfun || doeval) {
-/*   if (endfun) { */
-    if (0 < n) {
-      gprogram_add_ginstr(gp,OP_MKAP,n,0,si);
-      evaldresult = 0;
+/* ES [ E ] p d n
+ *
+ * Completes the evaluation of an expression, the top n ribs of which have 
+ * already been put on the stack.
+ *
+ * ES constructs instances of the ribs of E, putting them on the stack, and
+ * then completes the evaluation in the same way as E.
+ */
+void ES(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si)
+{
+/*   print_comp("ES",c); */
+  int oldcount = stackcount;
+  assert(TYPE_IND != celltype(c));
+
+  cdepth++;
+  switch (celltype(c)) {
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING: // E[I]
+    c->tag |= FLAG_PINNED;
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)c,0);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_SYMBOL: // E[x]
+    push_varref(gp,(char*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_SCREF: // E[f]
+    push_scref(gp,(scomb*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_BUILTIN: // another form of E[f]
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[(int)c->field1],0);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_APPLICATION: {
+    cell *fun = c;
+    int nargs;
+
+    while (TYPE_APPLICATION == celltype(fun)) {
+      push((cell*)fun->field2);
+      fun = (cell*)fun->field1;
+      assert(TYPE_IND != celltype(fun));
     }
-  }
+    nargs = stackcount-oldcount;
 
-  if (doeval) {
-    gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
-    evaldresult = 1;
-  }
+    if (TYPE_BUILTIN == celltype(fun)) {
+      int bif = (int)fun->field1;
 
-  if (endfun) {
-    gprogram_add_ginstr(gp,OP_UPDATE,d-n+1,0,si);
-    gprogram_add_ginstr(gp,OP_POP,d-n,0,si);
-    /* OPT: call RETURN here if we know that the thing we just compiled is a constant */
-    if (evaldresult)
-      gprogram_add_ginstr(gp,OP_RETURN,0,0,si);
+      if (0) {}
+      else if ((B_IF == bif) && (3 == nargs)) {
+        cell *ef = stack[stackcount-3];
+        cell *et = stack[stackcount-2];
+        cell *ec = stack[stackcount-1];
+        int jfalseaddr;
+        int jendaddr;
+        stackinfo *tempsi;
+
+        E(gp,ec,d,pm,si);
+        jfalseaddr = gp->count;
+        gprogram_add_ginstr(gp,si,OP_JFALSE,0,0);
+
+        tempsi = stackinfo_new(si);
+        ES(gp,et,d,pm,n,tempsi);
+        jendaddr = gp->count;
+        gprogram_add_ginstr(gp,tempsi,OP_JUMP,0,0);
+        stackinfo_free(tempsi);
+
+        gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+        ES(gp,ef,d,pm,n,si);
+
+        gp->ginstrs[jendaddr].arg0 = gp->count-jendaddr;
+        break;
+      }
+      else if (nargs == builtin_info[bif].nargs) {
+        int i;
+        for (i = 0; i < nargs; i++) {
+          if (i < builtin_info[bif].nstrict)
+            E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+          else
+            C(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        }
+        gprogram_add_ginstr(gp,si,OP_BIF,bif,0);
+        gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+        gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        break;
+      }
+    }
+
+#ifdef ALLSTRICT
+    else if (TYPE_SCREF == celltype(fun)) {
+      scomb *sc = (scomb*)fun->field1;
+/*       assert(sc); */
+      if (sc && (nargs == sc->nargs)) {
+        int i;
+        for (i = 0; i < nargs; i++)
+          E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        gprogram_add_ginstr(gp,si,OP_CALL,NUM_BUILTINS+sc->index,0);
+        gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+        gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        break;
+      }
+    }
+#endif
+
+    if (c->tag & FLAG_STRICT)
+      E(gp,(cell*)c->field2,d,pm,si);
     else
-      gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
+      C(gp,(cell*)c->field2,d,pm,si);
+    ES(gp,(cell*)c->field1,d+1,pm,n+1,si);
+    break;
   }
+  case TYPE_LETREC:
+    assert(!"ES cannot encounter a letrec");
+    break;
+  default:
+    assert(0);
+    break;
+  }
+  cdepth--;
   stackcount = oldcount;
 }
 
+void E(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
+{
+/*   print_comp("E",c); */
+  int oldcount = stackcount;
+  assert(TYPE_IND != celltype(c));
+
+  cdepth++;
+  switch (celltype(c)) {
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING: // E[I]
+    c->tag |= FLAG_PINNED;
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)c,0);
+    break;
+  case TYPE_SYMBOL: // E[x]
+    push_varref(gp,(char*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_SCREF: // E[f]
+    push_scref(gp,(scomb*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    break;
+  case TYPE_BUILTIN: // another form of E[f]
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[(int)c->field1],0);
+    break;
+  case TYPE_APPLICATION: {
+    cell *fun = c;
+    int nargs;
+
+    while (TYPE_APPLICATION == celltype(fun)) {
+      push((cell*)fun->field2);
+      fun = (cell*)fun->field1;
+      assert(TYPE_IND != celltype(fun));
+    }
+    nargs = stackcount-oldcount;
+
+    if (TYPE_BUILTIN == celltype(fun)) {
+      int bif = (int)fun->field1;
+
+      if ((B_IF == bif) && (3 == nargs)) {
+        cell *arg0 = stack[stackcount-3];
+        cell *arg1 = stack[stackcount-2];
+        cell *arg2 = stack[stackcount-1];
+        int jfalseaddr;
+        int jendaddr;
+        stackinfo *tempsi;
+
+        E(gp,arg2,d,pm,si);
+        jfalseaddr = gp->count;
+        gprogram_add_ginstr(gp,si,OP_JFALSE,0,0);
+
+        tempsi = stackinfo_new(si);
+        E(gp,arg1,d,pm,tempsi);
+        jendaddr = gp->count;
+        gprogram_add_ginstr(gp,tempsi,OP_JUMP,0,0);
+        stackinfo_free(tempsi);
+
+        gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+        E(gp,arg0,d,pm,si);
+
+        gp->ginstrs[jendaddr].arg0 = gp->count-jendaddr;
+        break;
+      }
+      else if (nargs == builtin_info[bif].nargs) {
+        int i;
+        for (i = 0; i < nargs; i++) {
+          if (i < builtin_info[bif].nstrict)
+            E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+          else
+            C(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        }
+        gprogram_add_ginstr(gp,si,OP_BIF,bif,0);
+        if (!builtin_info[bif].reswhnf)
+          gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        break;
+      }
+    }
+#ifdef ALLSTRICT
+    else if (TYPE_SYMBOL == celltype(fun)) {
+      scomb *sc = (scomb*)fun->field1;
+/*       assert(sc); */
+      if (sc && (nargs == sc->nargs)) {
+        int i;
+        for (i = 0; i < nargs; i++)
+          E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        gprogram_add_ginstr(gp,si,OP_CALL,NUM_BUILTINS+sc->index,0);
+        gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        break;
+      }
+    }
+#endif
+
+#ifdef ESOPT
+    ES(gp,c,d,pm,0,si);
+#else
+    C(gp,c,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+#endif
+    break;
+  }
+  default:
+    assert(0);
+    break;
+  }
+  cdepth--;
+  stackcount = oldcount;
+}
+
+/* RS [ E ] p d n
+ *
+ * Completes a supercombinator reduction, in which the top n ribs of the body have
+ * already been put on the stack
+ *
+ * RS constructs instances of the ribs of E, putting them on the stack, and then
+ * completes the reduction in the same way as R.
+ */
+void RS(gprogram *gp, cell *c, int d, pmap *pm, int n, stackinfo *si)
+{
+/*   print_comp("RS",c); */
+  int oldcount = stackcount;
+  assert(TYPE_IND != celltype(c));
+
+  cdepth++;
+  switch (celltype(c)) {
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    // note: book mentions constant shouldn't appear here, as that would mean
+    // it was being applied to something
+    c->tag |= FLAG_PINNED;
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)c,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_SYMBOL: // RS[x] p d n
+    push_varref(gp,(char*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_SCREF: // RS[f] p d n
+    push_scref(gp,(scomb*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_BUILTIN: // another form of R[f] p d
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[(int)c->field1],0);
+    gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_CONS:
+    assert(!"cons shouldn't occur in a supercombinator body (or should it?...)");
+    break;
+  case TYPE_APPLICATION: {
+    cell *fun = c;
+    int nargs;
+
+    while (TYPE_APPLICATION == celltype(fun)) {
+      push((cell*)fun->field2);
+      fun = (cell*)fun->field1;
+      assert(TYPE_IND != celltype(fun));
+    }
+    nargs = stackcount-oldcount;
+
+    if (TYPE_BUILTIN == celltype(fun)) {
+      int bif = (int)fun->field1;
+      if ((B_IF == bif) && (3 == nargs)) {
+        cell *arg0 = stack[stackcount-3];
+        cell *arg1 = stack[stackcount-2];
+        cell *arg2 = stack[stackcount-1];
+        int jfalseaddr;
+        stackinfo *tempsi;
+
+        E(gp,arg2,d,pm,si);
+        jfalseaddr = gp->count;
+        gprogram_add_ginstr(gp,si,OP_JFALSE,0,0);
+
+        tempsi = stackinfo_new(si);
+        RS(gp,arg1,d,pm,n,tempsi);
+        stackinfo_free(tempsi);
+
+        gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+        RS(gp,arg0,d,pm,n,si);
+        break;
+      }
+      else if (nargs == builtin_info[bif].nargs) {
+        int i;
+        for (i = 0; i < nargs; i++) {
+          if (i < builtin_info[bif].nstrict)
+            E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+          else
+            C(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        }
+        gprogram_add_ginstr(gp,si,OP_BIF,bif,0);
+        if (!builtin_info[bif].reswhnf)
+          gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+        gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+        gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+        gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+        break;
+      }
+    }
+#ifdef ALLSTRICT
+    else if (TYPE_SYMBOL == celltype(fun)) {
+      scomb *sc = (scomb*)fun->field1;
+/*       assert(sc); */
+      if (sc && (nargs == sc->nargs)) {
+        int i;
+        for (i = 0; i < nargs; i++)
+          E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        gprogram_add_ginstr(gp,si,OP_CALL,NUM_BUILTINS+sc->index,0);
+        gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        gprogram_add_ginstr(gp,si,OP_MKAP,n,0);
+        gprogram_add_ginstr(gp,si,OP_UPDATE,d-n+1,0);
+        gprogram_add_ginstr(gp,si,OP_POP,d-n,0);
+        gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+        break;
+      }
+    }
+#endif
+
+    if (c->tag & FLAG_STRICT)
+      E(gp,(cell*)c->field2,d,pm,si);
+    else
+      C(gp,(cell*)c->field2,d,pm,si);
+    RS(gp,(cell*)c->field1,d+1,pm,n+1,si);
+    break;
+  }
+  case TYPE_LETREC:
+    assert(!"RS cannot encounter a letrec");
+    break;
+  }
+  cdepth--;
+  stackcount = oldcount;
+}
+
+
+
+
+/* R [ E ] p d
+ *
+ * Generates code to apply a supercombinator to its arguments
+ *
+ * Note: there are d arguments
+ */
+void R(gprogram *gp, cell *c, int d, pmap *pm, stackinfo *si)
+{
+/*   print_comp("R",c); */
+  int oldcount = stackcount;
+  assert(TYPE_IND != celltype(c));
+
+  cdepth++;
+  switch (celltype(c)) {
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING: // R[I] p d
+    c->tag |= FLAG_PINNED;
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)c,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d,0);
+    gprogram_add_ginstr(gp,si,OP_RETURN,0,0);
+    break;
+  case TYPE_SYMBOL: // R[x] p d
+    push_varref(gp,(char*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_SCREF: // R[f] p d
+    push_scref(gp,(scomb*)c->field1,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0); // could be a CAF
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_BUILTIN: // another form of R[f] p d
+    gprogram_add_ginstr(gp,si,OP_PUSHCELL,(int)globcells[(int)c->field1],0);
+    gprogram_add_ginstr(gp,si,OP_EVAL,0,0); // is this necessary?
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+    break;
+  case TYPE_CONS:
+    assert(!"cons shouldn't occur in a supercombinator body (or should it?...)");
+    break;
+  case TYPE_APPLICATION: {
+    cell *fun = c;
+    int nargs;
+
+    while (TYPE_APPLICATION == celltype(fun)) {
+      push((cell*)fun->field2);
+      fun = (cell*)fun->field1;
+      assert(TYPE_IND != celltype(fun));
+    }
+    nargs = stackcount-oldcount;
+
+    if (TYPE_BUILTIN == celltype(fun)) {
+      int bif = (int)fun->field1;
+      /* R [ IF Ec Et Ef ] p d */
+      if ((B_IF == bif) && (3 == nargs)) {
+        cell *ef = stack[stackcount-3];
+        cell *et = stack[stackcount-2];
+        cell *ec = stack[stackcount-1];
+        int jfalseaddr;
+        stackinfo *tempsi;
+
+        E(gp,ec,d,pm,si);
+        jfalseaddr = gp->count;
+        gprogram_add_ginstr(gp,si,OP_JFALSE,0,0);
+
+        tempsi = stackinfo_new(si);
+        R(gp,et,d,pm,tempsi);
+        stackinfo_free(tempsi);
+
+        gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+        R(gp,ef,d,pm,si);
+        break;
+      }
+      /* R [ NEG E ] p d */
+      /* R [ CONS E1 E2 ] p d */
+      /* R [ HEAD E ] p d */
+      else if (nargs == builtin_info[bif].nargs) {
+        int i;
+        for (i = 0; i < nargs; i++) {
+          if (i < builtin_info[bif].nstrict)
+            E(gp,stack[stackcount-nargs+i],d+i,pm,si); /* e.g. CONS */
+          else
+            C(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        }
+        gprogram_add_ginstr(gp,si,OP_BIF,bif,0);
+        if (!builtin_info[bif].reswhnf)
+          gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+        gprogram_add_ginstr(gp,si,OP_POP,d,0);
+        gprogram_add_ginstr(gp,si,OP_RETURN,0,0);
+        break;
+      }
+    }
+#ifdef ALLSTRICT
+    else if (TYPE_SYMBOL == celltype(fun)) {
+      scomb *sc = (scomb*)fun->field1;
+/*       assert(sc); */
+      if (sc && (nargs == sc->nargs)) {
+        int i;
+        for (i = 0; i < nargs; i++)
+          E(gp,stack[stackcount-nargs+i],d+i,pm,si);
+        gprogram_add_ginstr(gp,si,OP_CALL,NUM_BUILTINS+sc->index,0);
+        gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+        gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+        gprogram_add_ginstr(gp,si,OP_POP,d,0);
+        gprogram_add_ginstr(gp,si,OP_RETURN,0,0);
+        break;
+      }
+    }
+#endif
+
+    /* R [ E1 E2 ] */
+#ifdef RSOPT
+    RS(gp,c,d,pm,0,si);
+#else
+    C(gp,c,d,pm,si);
+    gprogram_add_ginstr(gp,si,OP_UPDATE,d+1,0);
+    gprogram_add_ginstr(gp,si,OP_POP,d,0);
+    gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
+#endif
+    break;
+  }
+  case TYPE_LETREC: {
+    pmap pprime;
+    int ndefs = 0;
+    int dprime = 0;
+
+    Xr(c,pm,d,&pprime,&dprime,&ndefs);
+    Cletrec(gp,c,dprime,&pprime,si);
+    R(gp,(cell*)c->field2,dprime,&pprime,si);
+
+    free(pprime.varnames);
+    free(pprime.indexes);
+    break;
+  }
+  }
+  cdepth--;
+  stackcount = oldcount;
+}
 
 void F(gprogram *gp, int fno, scomb *sc)
 {
@@ -671,7 +1056,7 @@ void F(gprogram *gp, int fno, scomb *sc)
   int i;
   cell *copy = super_to_letrec(sc);
   stackinfo *si = stackinfo_new(NULL);
-  gprogram_add_ginstr(gp,OP_GLOBSTART,fno,sc->nargs,si);
+  gprogram_add_ginstr(gp,si,OP_GLOBSTART,fno,sc->nargs);
 
   pushstatus(si,0); /* redex */
   for (i = 0; i < sc->nargs; i++) {
@@ -681,7 +1066,7 @@ void F(gprogram *gp, int fno, scomb *sc)
 
   for (i = 0; i < sc->nargs; i++) {
     if (sc->strictin && sc->strictin[i])
-      gprogram_add_ginstr(gp,OP_EVAL,i,0,si);
+      gprogram_add_ginstr(gp,si,OP_EVAL,i,0);
   }
 
 #ifdef DEBUG_GCODE_COMPILATION
@@ -697,11 +1082,10 @@ void F(gprogram *gp, int fno, scomb *sc)
   for (i = 0; i < sc->nargs; i++)
     pm.indexes[i] = sc->nargs-i;
 
-/*   R(gp,copy,sc->nargs,&pm,si); */
+  R(gp,copy,sc->nargs,&pm,si);
 
-  int d = sc->nargs;
-
-  C(gp,copy,d,&pm,0,si,1,0);
+/*   int d = sc->nargs; */
+/*   C(gp,copy,d,&pm,0,si,1,0); */
 
   stackinfo_free(si);
 }
@@ -742,32 +1126,32 @@ void compile(gprogram *gp)
     globcells[i]->field1 = (void*)sc->nargs;
   }
 
-  gprogram_add_ginstr(gp,OP_BEGIN,0,0,topsi);
-  gprogram_add_ginstr(gp,OP_PUSHGLOBAL,(int)globcells[prog_scomb->index+NUM_BUILTINS],1,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_BEGIN,0,0);
+  gprogram_add_ginstr(gp,topsi,OP_PUSHGLOBAL,(int)globcells[prog_scomb->index+NUM_BUILTINS],1);
   evaladdr = gp->count;;
-  gprogram_add_ginstr(gp,OP_EVAL,0,0,topsi);
-  gprogram_add_ginstr(gp,OP_PUSH,0,0,topsi);
-  gprogram_add_ginstr(gp,OP_ISTYPE,TYPE_CONS,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_EVAL,0,0);
+  gprogram_add_ginstr(gp,topsi,OP_PUSH,0,0);
+  gprogram_add_ginstr(gp,topsi,OP_ISTYPE,TYPE_CONS,0);
   jfalseaddr = gp->count;
-  gprogram_add_ginstr(gp,OP_JFALSE,0,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_JFALSE,0,0);
 
   stackinfo *tempsi = NULL; /* stackinfo_new(topsi); */
-  gprogram_add_ginstr(gp,OP_PUSH,0,0,tempsi);
-  gprogram_add_ginstr(gp,OP_BIF,B_HEAD,0,tempsi);
-  gprogram_add_ginstr(gp,OP_PUSH,1,0,tempsi);
-  gprogram_add_ginstr(gp,OP_BIF,B_TAIL,0,tempsi);
-  gprogram_add_ginstr(gp,OP_UPDATE,2,0,tempsi);
-  gprogram_add_ginstr(gp,OP_JUMP,evaladdr-gp->count,0,tempsi);
+  gprogram_add_ginstr(gp,tempsi,OP_PUSH,0,0);
+  gprogram_add_ginstr(gp,tempsi,OP_BIF,B_HEAD,0);
+  gprogram_add_ginstr(gp,tempsi,OP_PUSH,1,0);
+  gprogram_add_ginstr(gp,tempsi,OP_BIF,B_TAIL,0);
+  gprogram_add_ginstr(gp,tempsi,OP_UPDATE,2,0);
+  gprogram_add_ginstr(gp,tempsi,OP_JUMP,evaladdr-gp->count,0);
 /*   stackinfo_free(tempsi); */
 
   gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
-  gprogram_add_ginstr(gp,OP_PRINT,0,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_PRINT,0,0);
   jemptyaddr = gp->count;
-  gprogram_add_ginstr(gp,OP_JEMPTY,0,0,topsi);
-  gprogram_add_ginstr(gp,OP_JUMP,evaladdr-gp->count,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_JEMPTY,0,0);
+  gprogram_add_ginstr(gp,topsi,OP_JUMP,evaladdr-gp->count,0);
 
   gp->ginstrs[jemptyaddr].arg0 = gp->count-jemptyaddr;
-  gprogram_add_ginstr(gp,OP_END,0,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_END,0,0);
 
   for (i = 0; i < NUM_BUILTINS; i++) {
     int argno;
@@ -780,75 +1164,77 @@ void compile(gprogram *gp)
 
     addressmap[i] = gp->count;
     globcells[i]->field2 = (void*)gp->count;
-    gprogram_add_ginstr(gp,OP_GLOBSTART,i,bi->nargs,si);
+    gprogram_add_ginstr(gp,si,OP_GLOBSTART,i,bi->nargs);
 
     if (B_CONS == i) {
-      gprogram_add_ginstr(gp,OP_BIF,B_CONS,0,si);
-      gprogram_add_ginstr(gp,OP_UPDATE,1,0,si);
-      gprogram_add_ginstr(gp,OP_RETURN,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_BIF,B_CONS,0);
+      gprogram_add_ginstr(gp,si,OP_UPDATE,1,0);
+      gprogram_add_ginstr(gp,si,OP_RETURN,0,0);
     }
     else if (B_IF == i) {
       int jfalseaddr;
       int jmpaddr;
 
-      gprogram_add_ginstr(gp,OP_PUSH,0,0,si);
-      gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_PUSH,0,0);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
       jfalseaddr = gp->count;
-      gprogram_add_ginstr(gp,OP_JFALSE,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_JFALSE,0,0);
 
       tempsi = stackinfo_new(si);
-      gprogram_add_ginstr(gp,OP_PUSH,1,0,tempsi);
+      gprogram_add_ginstr(gp,tempsi,OP_PUSH,1,0);
       jmpaddr = gp->count;
-      gprogram_add_ginstr(gp,OP_JUMP,0,0,tempsi);
+      gprogram_add_ginstr(gp,tempsi,OP_JUMP,0,0);
       stackinfo_free(tempsi);
 
       /* label l1 */
       gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
-      gprogram_add_ginstr(gp,OP_PUSH,2,0,si);
+      gprogram_add_ginstr(gp,si,OP_PUSH,2,0);
 
       /* label l2 */
       gp->ginstrs[jmpaddr].arg0 = gp->count-jmpaddr;
-/*       gprogram_add_ginstr(gp,OP_EVAL,0,0,si); */
-      gprogram_add_ginstr(gp,OP_UPDATE,4,0,si);
-      gprogram_add_ginstr(gp,OP_POP,3,0,si);
-      gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+      gprogram_add_ginstr(gp,si,OP_UPDATE,4,0);
+      gprogram_add_ginstr(gp,si,OP_POP,3,0);
+      gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
     }
     else if (B_HEAD == i) {
-      gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
-      gprogram_add_ginstr(gp,OP_BIF,B_HEAD,0,si);
-/*       gprogram_add_ginstr(gp,OP_EVAL,0,0,si); */
-      gprogram_add_ginstr(gp,OP_UPDATE,1,0,si);
-      gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+      gprogram_add_ginstr(gp,si,OP_BIF,B_HEAD,0);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+      gprogram_add_ginstr(gp,si,OP_UPDATE,1,0);
+      gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
     }
     else if (B_TAIL == i) {
-      gprogram_add_ginstr(gp,OP_EVAL,0,0,si);
-      gprogram_add_ginstr(gp,OP_BIF,B_TAIL,0,si);
-/*       gprogram_add_ginstr(gp,OP_EVAL,0,0,si); */
-      gprogram_add_ginstr(gp,OP_UPDATE,1,0,si);
-      gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+      gprogram_add_ginstr(gp,si,OP_BIF,B_TAIL,0);
+      gprogram_add_ginstr(gp,si,OP_EVAL,0,0);
+      gprogram_add_ginstr(gp,si,OP_UPDATE,1,0);
+      gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
     }
     else {
 /* FIXME: this is the new version */
       for (argno = 0; argno < bi->nstrict; argno++)
-        gprogram_add_ginstr(gp,OP_EVAL,argno,0,si);
-      gprogram_add_ginstr(gp,OP_BIF,i,0,si);
-      gprogram_add_ginstr(gp,OP_UPDATE,1,0,si);
-      gprogram_add_ginstr(gp,OP_UNWIND,0,0,si);
-
+        gprogram_add_ginstr(gp,si,OP_EVAL,argno,0);
+      gprogram_add_ginstr(gp,si,OP_BIF,i,0);
+      gprogram_add_ginstr(gp,si,OP_UPDATE,1,0);
+      if (bi->reswhnf) // result is known to be in WHNF and not a function
+        gprogram_add_ginstr(gp,si,OP_RETURN,0,0);
+      else
+        gprogram_add_ginstr(gp,si,OP_UNWIND,0,0);
 
 /* old version */
 /*       for (argno = bi->nargs-1; argno >= bi->nstrict; argno--) { */
-/*         gprogram_add_ginstr(gp,OP_PUSH,bi->nargs-1,0,si); */
+/*         gprogram_add_ginstr(gp,si,OP_PUSH,bi->nargs-1,0); */
 /*       } */
 /*       for (; argno >= 0; argno--) { */
-/*         gprogram_add_ginstr(gp,OP_PUSH,bi->nargs-1,0,si); */
-/*         gprogram_add_ginstr(gp,OP_EVAL,0,0,si); */
+/*         gprogram_add_ginstr(gp,si,OP_PUSH,bi->nargs-1,0); */
+/*         gprogram_add_ginstr(gp,si,OP_EVAL,0,0); */
 /*       } */
 
-/*       gprogram_add_ginstr(gp,OP_BIF,i,0,si); */
-/*       gprogram_add_ginstr(gp,OP_UPDATE,bi->nargs+1,0,si); */
-/*       gprogram_add_ginstr(gp,OP_POP,bi->nargs,0,si); */
-/*       gprogram_add_ginstr(gp,OP_UNWIND,0,0,si); */
+/*       gprogram_add_ginstr(gp,si,OP_BIF,i,0); */
+/*       gprogram_add_ginstr(gp,si,OP_UPDATE,bi->nargs+1,0); */
+/*       gprogram_add_ginstr(gp,si,OP_POP,bi->nargs,0); */
+/*       gprogram_add_ginstr(gp,si,OP_UNWIND,0,0); */
 
 
 
@@ -865,7 +1251,7 @@ void compile(gprogram *gp)
     F(gp,sc->index+NUM_BUILTINS,sc);
   }
 
-  gprogram_add_ginstr(gp,OP_LAST,0,0,topsi);
+  gprogram_add_ginstr(gp,topsi,OP_LAST,0,0);
 /*   stackinfo_free(topsi); */
 
   cur_program = gp;

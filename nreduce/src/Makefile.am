@@ -13,7 +13,6 @@ nreduce_SOURCES = assembler.c \
 	strictness.c \
 	util.c \
 	code.c \
-	gcodeold.c \
 	nreduce.c \
 	super.c \
 	verify.c \

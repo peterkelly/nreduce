@@ -200,7 +200,7 @@ typedef struct builtin {
   char *name;
   int nargs;
   int nstrict;
-  int strictres;
+  int reswhnf;
   builtin_f f;
 } builtin;
 

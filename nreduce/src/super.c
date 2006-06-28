@@ -804,7 +804,11 @@ cell *copy_shared(cell *c, scomb *sc, int *shared, cell **defbodies,
   return ret;
 }
 
-
+// Note: if you consider getting rid of this and just keeping the letrecs during all
+// stages of the compilation process (i.e. no letrec substitution), there is another
+// transformation necessary. See the bottom of IFPL p. 345 (358 in the pdf) which
+// explains that the RS scheme can't handle deep letrecs, and thus all letrecs should
+// be floated up to the top level of a supercombinator body.
 cell *super_to_letrec(scomb *sc)
 {
   int pos = 0;
