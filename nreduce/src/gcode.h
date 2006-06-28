@@ -33,6 +33,12 @@
 #define GINSTR_ARG1     ((int)&((ginstr*)0)->arg1)
 #define GINSTR_CODEADDR ((int)&((ginstr*)0)->codeaddr)
 
+typedef struct stackinfo {
+  int alloc;
+  int count;
+  int *status;
+} stackinfo;
+
 typedef struct ginstr {
   int opcode;
   int arg0;
@@ -50,6 +56,7 @@ typedef struct gprogram {
   ginstr *ginstrs;
   int alloc;
   int count;
+  stackinfo *si;
 } gprogram;
 
 gprogram *gprogram_new();
