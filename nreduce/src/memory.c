@@ -15,7 +15,6 @@ cell *global_root = NULL;
 int trace = 0;
 
 extern cell **globcells;
-extern int *addressmap;
 
 int repl_histogram[NUM_CELLTYPES];
 
@@ -294,6 +293,7 @@ void cleanup()
   }
   free(stack);
   free(addressmap);
+  free(noevaladdressmap);
   free(globcells);
   free(dumpstack);
 }

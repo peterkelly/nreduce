@@ -543,6 +543,10 @@ void execute(gprogram *gp)
       push(c);
       break;
     }
+    case OP_CHECKEVAL: {
+      assert(is_whnf(resolve_ind(stack[stackcount-1-instr->arg0])));
+      break;
+    }
     default:
       assert(0);
       break;

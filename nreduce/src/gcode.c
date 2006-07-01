@@ -45,6 +45,7 @@
 
 cell **globcells = NULL;
 int *addressmap = NULL;
+int *noevaladdressmap = NULL;
 int nfunctions = 0;
 
 int op_usage[OP_COUNT];
@@ -190,10 +191,9 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   ginstr *instr;
 
 #if 1
+  /* Skip the EVAL instruction if we know this stack location has already been evaluated */
   if ((OP_EVAL == opcode) && gp->si && statusat(gp->si,gp->si->count-1-arg0)) {
-    /* This assert is just here to see if this functionality is used... for some reason
-       it doesn't get triggered. This is actually supposed to be called for some optimizations. */
-/*     assert(0); */
+/*     printf("skipping eval (%d)\n",arg0); */
     return;
   }
 #endif
@@ -233,7 +233,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   if (!gp->si)
     return;
 
-#if 1
   switch (opcode) {
   case OP_BEGIN:
     break;
@@ -246,16 +245,12 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     setstatusat(gp->si,gp->si->count-1-arg0,1);
     break;
   case OP_UNWIND:
-    /* FIXME: what to do here? */
-    #ifdef DEBUG_GCODE_COMPILATION
-/*     printf("\n\n\n"); */
-    #endif
+    // after UNWIND we don't know what the stack size will be... but since it's always the
+    // last instruction this is ok
     break;
   case OP_RETURN:
-    /* FIXME: what to do here? */
-    #ifdef DEBUG_GCODE_COMPILATION
-/*     printf("\n\n\n"); */
-    #endif
+    // after RETURN we don't know what the stack size will be... but since it's always the
+    // last instruction this is ok
     break;
   case OP_PUSH:
     assert(0 <= gp->si->count-1-arg0);
@@ -337,14 +332,13 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   case OP_PUSHSTRING:
     pushstatus(gp->si,1);
     break;
+  case OP_CHECKEVAL:
+    assert(statusat(gp->si,gp->si->count-1-arg0));
+    break;
   default:
     assert(0);
     break;
   }
-#endif
-
-/*   debug(8,""); */
-/*   print_ginstr(gp->count-1,&gp->ginstrs[gp->count-1]); */
 }
 
 void print_ginstr(int address, ginstr *instr)
@@ -1175,6 +1169,7 @@ void compile(gprogram *gp)
   nfunctions = NUM_BUILTINS+index;
 
   addressmap = (int*)calloc(nfunctions,sizeof(int));
+  noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
   globcells = (cell**)calloc(nfunctions,sizeof(cell*));
 
   for (i = 0; i < NUM_BUILTINS; i++) {
@@ -1219,7 +1214,7 @@ void compile(gprogram *gp)
   for (sc = scombs; sc; sc = sc->next) {
     globcells[NUM_BUILTINS+sc->index]->field2 = (void*)gp->count;
     clearflag_scomb(FLAG_PROCESSED,sc);
-    F(gp,sc->index+NUM_BUILTINS,sc);
+    F(gp,NUM_BUILTINS+sc->index,sc);
   }
 
   topsi = gp->si;
@@ -1284,7 +1279,6 @@ void compile(gprogram *gp)
       UNWIND();
     }
     else {
-/* FIXME: this is the new version */
       for (argno = 0; argno < bi->nstrict; argno++)
         EVAL(argno);
       BIF(i);

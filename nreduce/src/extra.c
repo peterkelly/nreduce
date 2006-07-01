@@ -419,6 +419,8 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
         fprintf(f,"(");
       print_code1(f,(cell*)c->field1,0,0,indent,c);
       fprintf(f," ");
+      if (c->tag & FLAG_STRICT)
+        fprintf(f,"!");
       print_code1(f,(cell*)c->field2,1,0,indent+1,c);
       if (needbr)
         fprintf(f,")");
@@ -553,11 +555,9 @@ void print_scomb_code(scomb *sc)
   int i;
   debug(0,"%s ",sc->name);
   for (i = 0; i < sc->nargs; i++) {
-    if (sc->mayterminate) {
-      if (!sc->mayterminate[i])
-        debug(0,"#");
-      else
-        debug(0," ");
+    if (sc->strictin) {
+      if (sc->strictin[i])
+        debug(0,"!");
     }
     debug(0,"%s ",sc->argnames[i]);
   }

@@ -371,6 +371,7 @@ void jit_compile(ginstr *program, array *cpucode)
       I_PUSH(reg(EBX));
       break;
     case OP_PUSHGLOBAL:
+      // FIXME: out of date
       I_MOV(reg(ECX),imm((int)instr->arg0));         /* src = (cell*)instr->arg0; */
 
       I_MOV(reg(EAX),imm((int)alloc_cell));          /* c = alloc_cell(); */

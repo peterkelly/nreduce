@@ -104,6 +104,7 @@ void jit_execute(ginstr *program);
 #ifndef GCODE_C
 extern int op_usage[OP_COUNT];
 extern int *addressmap;
+extern int *noevaladdressmap;
 extern int nfunctions;
 extern const char *op_names[OP_COUNT];
 #endif

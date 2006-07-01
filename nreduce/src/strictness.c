@@ -505,8 +505,8 @@ void annotate(scomb *sc)
 /*   } */
 /*   printf("\n"); */
 
-#if 0
-  clearflag_scomb(FLAG_PROCESSED,sc);
+#if 1
+  cleargraph(sc->body,FLAG_PROCESSED);
   annotate_r(sc->body);
 #endif
 }
