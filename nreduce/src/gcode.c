@@ -21,7 +21,6 @@
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
 #define POP(_a)            add_instruction(gp,OP_POP,(_a),0)
 #define UNWIND()           add_instruction(gp,OP_UNWIND,0,0)
-#define PUSHCELL(_a)       add_instruction(gp,OP_PUSHCELL,(_a),0)
 #define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
 #define RETURN()           add_instruction(gp,OP_RETURN,0,0)
 #define PUSH(_a)           add_instruction(gp,OP_PUSH,(_a),0)
@@ -38,6 +37,11 @@
 #define BEGIN()            add_instruction(gp,OP_BEGIN,0,0)
 #define CALL(_a)           add_instruction(gp,OP_CALL,(_a),0)
 #define ALLOC(_a)          add_instruction(gp,OP_ALLOC,(_a),0)
+#define PUSHNIL()          add_instruction(gp,OP_PUSHNIL,0,0)
+#define PUSHINT(_a)        add_instruction(gp,OP_PUSHINT,(_a),0)
+#define PUSHDOUBLE(_a,_b)  add_instruction(gp,OP_PUSHDOUBLE,(_a),(_b))
+#define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
+#define CHECKEVAL(_a)      add_instruction(gp,OP_CHECKEVAL,(_a),0)
 
 cell **globcells = NULL;
 int *addressmap = NULL;
@@ -113,7 +117,6 @@ const char *op_names[OP_COUNT] = {
 "RETURN",
 "PUSH",
 "PUSHGLOBAL",
-"PUSHCELL",
 "MKAP",
 "UPDATE",
 "POP",
@@ -127,7 +130,12 @@ const char *op_names[OP_COUNT] = {
 "ANNOTATE",
 "ALLOC",
 "SQUEEZE",
-"DISPATCH"
+"DISPATCH",
+"PUSHNIL",
+"PUSHINT",
+"PUSHDOUBLE",
+"PUSHSTRING",
+"CHECKEVAL",
 };
 
 void print_comp(char *fname, cell *c)
@@ -146,6 +154,7 @@ gprogram *gprogram_new()
   gp->alloc = 2;
   gp->ginstrs = (ginstr*)malloc(gp->alloc*sizeof(ginstr));
   gp->si = NULL;
+  gp->stringmap = array_new();
   return gp;
 }
 
@@ -158,8 +167,22 @@ void gprogram_free(gprogram *gp)
     free(gp->ginstrs[i].expstatus);
   }
 
+  for (i = 0; i < gp->stringmap->size/sizeof(char*); i++) {
+    char *str = ((char**)gp->stringmap->data)[i];
+    free(str);
+  }
+  array_free(gp->stringmap);
+
   free(gp->ginstrs);
   free(gp);
+}
+
+int add_string(gprogram *gp, char *str)
+{
+  int pos = gp->stringmap->size/sizeof(char*);
+  char *copy = strdup(str);
+  array_append(gp->stringmap,&copy,sizeof(char*));
+  return pos;
 }
 
 void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
@@ -239,17 +262,18 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     pushstatus(gp->si,statusat(gp->si,gp->si->count-1-arg0));
     break;
   case OP_PUSHGLOBAL: {
-    cell *src = (cell*)arg0;
+    int fno = arg0;
+    cell *src = globcells[fno];
     assert(TYPE_FUNCTION == celltype(src));
-    if (0 == (int)src->field1)
+    if ((fno >= NUM_BUILTINS) &&
+        (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
       pushstatus(gp->si,0);
-    else
+    }
+    else {
       pushstatus(gp->si,1);
+    }
     break;
   }
-  case OP_PUSHCELL:
-    pushstatus(gp->si,((cell*)arg0)->tag & FLAG_PINNED);
-    break;
   case OP_MKAP:
     assert(0 <= gp->si->count-1-arg0);
     popstatus(gp->si,arg0);
@@ -301,6 +325,21 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   case OP_DISPATCH:
     /* FIXME: what to do here? */
     break;
+  case OP_PUSHNIL:
+    pushstatus(gp->si,1);
+    break;
+  case OP_PUSHINT:
+    pushstatus(gp->si,1);
+    break;
+  case OP_PUSHDOUBLE:
+    pushstatus(gp->si,1);
+    break;
+  case OP_PUSHSTRING:
+    pushstatus(gp->si,1);
+    break;
+  default:
+    assert(0);
+    break;
   }
 #endif
 
@@ -312,91 +351,82 @@ void print_ginstr(int address, ginstr *instr)
 {
   assert(OP_COUNT > instr->opcode);
 
-  if (OP_GLOBSTART == instr->opcode)
-    printf("\n");
-
-/*   printf("%-6d [s %02d] %-12s %-11d %-11d", */
-/*          address,instr->expcount,op_names[instr->opcode],instr->arg0,instr->arg1); */
   printf("%-6d %-12s %-11d %-11d",
          address,op_names[instr->opcode],instr->arg0,instr->arg1);
+  if (0 <= instr->expcount)
+    printf(" %-11d",instr->expcount);
+  else
+    printf("            ");
   printf("    ");
 
-  switch (instr->opcode) {
-  case OP_BEGIN:
-    break;
-  case OP_END:
-    break;
-  case OP_GLOBSTART: {
+  if (OP_GLOBSTART == instr->opcode) {
     if (NUM_BUILTINS > instr->arg0)
       printf("; Builtin %s",builtin_info[instr->arg0].name);
     else
       printf("; Supercombinator %s",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
-    break;
   }
-  case OP_EVAL:
-    break;
-  case OP_UNWIND:
-    break;
-  case OP_UPDATE:
-    break;
-  case OP_PUSH: {
-    if (instr->arg1)
-      printf("; (%s)",(char*)instr->arg1);
+  else if (OP_PUSH == instr->opcode) {
+
+    if (0 <= instr->expcount) {
+      ginstr *program = instr-address;
+      int funstart = address;
+      while ((0 <= funstart) && (OP_GLOBSTART != program[funstart].opcode))
+        funstart--;
+      if ((OP_GLOBSTART == program[funstart].opcode) &&
+          (NUM_BUILTINS <= program[funstart].arg0)) {
+        scomb *sc = get_scomb_index(program[funstart].arg0-NUM_BUILTINS);
+        int stackpos = instr->expcount-instr->arg0-1;
+        if ((stackpos > 0) && (stackpos <= sc->nargs))
+          printf("; PUSH %s",sc->argnames[sc->nargs-stackpos]);
+      }
+    }
+  }
+  else if (OP_PUSHGLOBAL == instr->opcode) {
+    if (instr->arg0 < NUM_BUILTINS)
+      printf("; PUSHGLOBAL %s",builtin_info[instr->arg0].name);
     else
-      printf("; (unknown)");
-    break;
+      printf("; PUSHGLOBAL %s",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
   }
-  case OP_PUSHGLOBAL:
-    break;
-  case OP_PUSHCELL:
-    printf("; %-12s #%05d ","PUSHCELL",((cell*)instr->arg0)->id);
-    print_code((cell*)instr->arg0);
-    assert(TYPE_IND != celltype((cell*)instr->arg0));
-    break;
-  case OP_MKAP:
-    printf("; %-12s %d","MKAP",instr->arg0);
-    break;
-  case OP_POP:
-    break;
-  case OP_RETURN:
-    break;
-  case OP_LAST:
-    break;
-  case OP_PRINT:
-    break;
-  case OP_BIF:
+  else if (OP_BIF == instr->opcode) {
     printf("; %s",builtin_info[instr->arg0].name);
-    break;
-  case OP_JFALSE:
-    break;
-  case OP_JUMP:
-    break;
-  case OP_JEMPTY:
-    break;
-  case OP_ISTYPE:
-    printf("; ISTYPE %s",cell_types[instr->arg0]);
-    break;
-  case OP_ANNOTATE:
-    printf("; ANNOTATE %s:%d",(char*)instr->arg0,instr->arg1);
-    break;
-  case OP_ALLOC:
-    break;
-  case OP_SQUEEZE:
-    break;
-  case OP_DISPATCH:
-    break;
-  default:
-    assert(0);
-    break;
   }
+  else if (OP_ISTYPE == instr->opcode) {
+    printf("; ISTYPE %s",cell_types[instr->arg0]);
+  }
+  else if (OP_ANNOTATE == instr->opcode) {
+    printf("; ANNOTATE %s:%d",(char*)instr->arg0,instr->arg1);
+  }
+
   printf("\n");
 }
 
-void print_program(gprogram *gp)
+void print_program(gprogram *gp, int builtins)
 {
   int i;
-  for (i = 0; i < gp->count; i++)
+  for (i = 0; i < gp->count; i++) {
+    if (OP_GLOBSTART == gp->ginstrs[i].opcode) {
+      if (NUM_BUILTINS <= gp->ginstrs[i].arg0) {
+        scomb *sc = get_scomb_index(gp->ginstrs[i].arg0-NUM_BUILTINS);
+        printf("\n");
+        print_scomb_code(sc);
+        printf("\n");
+      }
+      else if (!builtins) {
+        break;;
+      }
+      printf("\n");
+    }
     print_ginstr(i,&gp->ginstrs[i]);
+  }
+
+  printf("\n");
+  printf("String map:\n");
+  for (i = 0; i < gp->stringmap->size/sizeof(char*); i++) {
+    char *str = ((char**)gp->stringmap->data)[i];
+    printf("%d: ",i);
+    print_quoted_string(stdout,str);
+    printf("\n");
+  }
 }
 
 typedef struct pmap {
@@ -414,20 +444,6 @@ int p(pmap *pm, char *varname)
   printf("unknown variable: %s\n",varname);
   assert(!"unknown variable");
   return -1;
-}
-
-void push_scref(gprogram *gp, scomb *vsc, int d, pmap *pm)
-{
-  scomb *s2 = scombs;
-  int fno = NUM_BUILTINS;
-  while (s2 != vsc) {
-    s2 = s2->next;
-    fno++;
-  }
-  if (0 == s2->nargs)
-    PUSHGLOBAL((int)globcells[fno],0);
-  else
-    PUSHCELL((int)globcells[fno]);
 }
 
 void C(gprogram *gp, cell *c, int d, pmap *pm);
@@ -490,21 +506,22 @@ void C(gprogram *gp, cell *c, int d, pmap *pm)
                                   break;
   case TYPE_LAMBDA:
     break;
-  case TYPE_BUILTIN:              PUSHCELL((int)globcells[(int)c->field1]);
+  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
                                   break;
   case TYPE_CONS:
     assert(!"cons shouldn't occur in a supercombinator body (or should it?...)");
     break;
-  case TYPE_NIL:                  PUSHCELL((int)globnil);
+  case TYPE_NIL:                  PUSHNIL();
                                   break;
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:               PUSHCELL((int)c);
-                                  c->tag |= FLAG_PINNED;
+  case TYPE_INT:                  PUSHINT((int)c->field1);
+                                  break;
+  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
+                                  break;
+  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
                                   break;
   case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
                                   break;
-  case TYPE_SCREF:                push_scref(gp,(scomb*)c->field1,d,pm);
+  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
                                   break;
   case TYPE_LETREC: {
     pmap pprime;
@@ -547,13 +564,21 @@ void ES(gprogram *gp, cell *c, int d, pmap *pm, int n)
   cdepth++;
   switch (celltype(c)) {
   // E[I]
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:               PUSHCELL((int)c);
+  case TYPE_NIL:                  PUSHNIL();
                                   MKAP(n);
                                   EVAL(0);
-                                  c->tag |= FLAG_PINNED;
+                                  break;
+  case TYPE_INT:                  PUSHINT((int)c->field1);
+                                  MKAP(n);
+                                  EVAL(0);
+                                  break;
+  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
+                                  MKAP(n);
+                                  EVAL(0);
+                                  break;
+  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
+                                  MKAP(n);
+                                  EVAL(0);
                                   break;
   // E[x]
   case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
@@ -561,12 +586,12 @@ void ES(gprogram *gp, cell *c, int d, pmap *pm, int n)
                                   EVAL(0);
                                   break;
   // E[f]
-  case TYPE_SCREF:                push_scref(gp,(scomb*)c->field1,d,pm);
+  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
                                   MKAP(n);
                                   EVAL(0);
                                   break;
   // another form of E[f]
-  case TYPE_BUILTIN:              PUSHCELL((int)globcells[(int)c->field1]);
+  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
                                   MKAP(n);
                                   EVAL(0);
                                   break;
@@ -669,22 +694,24 @@ void E(gprogram *gp, cell *c, int d, pmap *pm)
   cdepth++;
   switch (celltype(c)) {
   // E[I]
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:               PUSHCELL((int)c);
-                                  c->tag |= FLAG_PINNED;
+  case TYPE_NIL:                  PUSHNIL();
+                                  break;
+  case TYPE_INT:                  PUSHINT((int)c->field1);
+                                  break;
+  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
+                                  break;
+  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
                                   break;
   // E[x]
   case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
                                   EVAL(0);
                                   break;
   // E[f]
-  case TYPE_SCREF:                push_scref(gp,(scomb*)c->field1,d,pm);
+  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
                                   EVAL(0);
                                   break;
   // another form of E[f]
-  case TYPE_BUILTIN:              PUSHCELL((int)globcells[(int)c->field1]);
+  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
                                   break;
   case TYPE_APPLICATION: {
     cell *fun = c;
@@ -790,14 +817,25 @@ void RS(gprogram *gp, cell *c, int d, pmap *pm, int n)
   // RS[I] p d n
   // note: book mentions constants shouldn't appear here, as that would mean
   // it was being applied to something
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:               PUSHCELL((int)c);
+  case TYPE_NIL:                  PUSHNIL();
                                   UPDATE(d-n+1);
                                   POP(d-n);
                                   UNWIND();
-                                  c->tag |= FLAG_PINNED;
+                                  break;
+  case TYPE_INT:                  PUSHINT((int)c->field1);
+                                  UPDATE(d-n+1);
+                                  POP(d-n);
+                                  UNWIND();
+                                  break;
+  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
+                                  UPDATE(d-n+1);
+                                  POP(d-n);
+                                  UNWIND();
+                                  break;
+  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
+                                  UPDATE(d-n+1);
+                                  POP(d-n);
+                                  UNWIND();
                                   break;
   // RS[x] p d n
   case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
@@ -807,14 +845,14 @@ void RS(gprogram *gp, cell *c, int d, pmap *pm, int n)
                                   UNWIND();
                                   break;
   // RS[f] p d n
-  case TYPE_SCREF:                push_scref(gp,(scomb*)c->field1,d,pm);
+  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
                                   MKAP(n);
                                   UPDATE(d-n+1);
                                   POP(d-n);
                                   UNWIND();
                                   break;
   // another form of R[f] p d
-  case TYPE_BUILTIN:              PUSHCELL((int)globcells[(int)c->field1]);
+  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
                                   MKAP(n);
                                   UPDATE(d-n+1);
                                   POP(d-n);
@@ -927,14 +965,25 @@ void R(gprogram *gp, cell *c, int d, pmap *pm)
   cdepth++;
   switch (celltype(c)) {
   // R[I] p d
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:               PUSHCELL((int)c);
+  case TYPE_NIL:                  PUSHNIL();
                                   UPDATE(d+1);
                                   POP(d);
                                   RETURN();
-                                  c->tag |= FLAG_PINNED;
+                                  break;
+  case TYPE_INT:                  PUSHINT((int)c->field1);
+                                  UPDATE(d+1);
+                                  POP(d);
+                                  RETURN();
+                                  break;
+  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
+                                  UPDATE(d+1);
+                                  POP(d);
+                                  RETURN();
+                                  break;
+  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
+                                  UPDATE(d+1);
+                                  POP(d);
+                                  RETURN();
                                   break;
   // R[x] p d
   case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
@@ -944,14 +993,14 @@ void R(gprogram *gp, cell *c, int d, pmap *pm)
                                   UNWIND();
                                   break;
   // R[f] p d
-  case TYPE_SCREF:                push_scref(gp,(scomb*)c->field1,d,pm);
+  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
                                   EVAL(0); // could be a CAF
                                   UPDATE(d+1);
                                   POP(d);
                                   UNWIND();
                                   break;
   // another form of R[f] p d
-  case TYPE_BUILTIN:              PUSHCELL((int)globcells[(int)c->field1]);
+  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
                                   EVAL(0); // is this necessary?
                                   UPDATE(d+1);
                                   POP(d);
@@ -1068,6 +1117,8 @@ void F(gprogram *gp, int fno, scomb *sc)
   int i;
   cell *copy = super_to_letrec(sc);
 
+  addressmap[NUM_BUILTINS+sc->index] = gp->count;
+
   stackinfo *oldsi = gp->si;
   gp->si = stackinfo_new(NULL);
   GLOBSTART(fno,sc->nargs);
@@ -1139,7 +1190,7 @@ void compile(gprogram *gp)
   }
 
   BEGIN();
-  PUSHGLOBAL((int)globcells[prog_scomb->index+NUM_BUILTINS],1);
+  PUSHGLOBAL(prog_scomb->index+NUM_BUILTINS,0);
   evaladdr = gp->count;;
   EVAL(0);
   PUSH(0);
@@ -1164,6 +1215,12 @@ void compile(gprogram *gp)
 
   gp->ginstrs[jemptyaddr].arg0 = gp->count-jemptyaddr;
   END();
+
+  for (sc = scombs; sc; sc = sc->next) {
+    globcells[NUM_BUILTINS+sc->index]->field2 = (void*)gp->count;
+    clearflag_scomb(FLAG_PROCESSED,sc);
+    F(gp,sc->index+NUM_BUILTINS,sc);
+  }
 
   topsi = gp->si;
   for (i = 0; i < NUM_BUILTINS; i++) {
@@ -1241,13 +1298,6 @@ void compile(gprogram *gp)
     stackinfo_free(gp->si);
   }
   gp->si = topsi;
-
-  for (sc = scombs; sc; sc = sc->next) {
-    addressmap[NUM_BUILTINS+sc->index] = gp->count;
-    globcells[NUM_BUILTINS+sc->index]->field2 = (void*)gp->count;
-    clearflag_scomb(FLAG_PROCESSED,sc);
-    F(gp,sc->index+NUM_BUILTINS,sc);
-  }
 
   LAST();
 /*   stackinfo_free(gp->si); */

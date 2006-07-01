@@ -11,22 +11,26 @@
 #define OP_RETURN        5
 #define OP_PUSH          6
 #define OP_PUSHGLOBAL    7
-#define OP_PUSHCELL      8
-#define OP_MKAP          9
-#define OP_UPDATE        10
-#define OP_POP           11
-#define OP_LAST          12
-#define OP_PRINT         13
-#define OP_BIF           14
-#define OP_JFALSE        15
-#define OP_JUMP          16
-#define OP_JEMPTY        17
-#define OP_ISTYPE        18
-#define OP_ANNOTATE      19
-#define OP_ALLOC         20
-#define OP_SQUEEZE       21
-#define OP_DISPATCH      22
-#define OP_COUNT         23
+#define OP_MKAP          8
+#define OP_UPDATE        9
+#define OP_POP           10
+#define OP_LAST          11
+#define OP_PRINT         12
+#define OP_BIF           13
+#define OP_JFALSE        14
+#define OP_JUMP          15
+#define OP_JEMPTY        16
+#define OP_ISTYPE        17
+#define OP_ANNOTATE      18
+#define OP_ALLOC         19
+#define OP_SQUEEZE       20
+#define OP_DISPATCH      21
+#define OP_PUSHNIL       22
+#define OP_PUSHINT       23
+#define OP_PUSHDOUBLE    24
+#define OP_PUSHSTRING    25
+#define OP_CHECKEVAL     26
+#define OP_COUNT         27
 
 #define GINSTR_OPCODE   ((int)&((ginstr*)0)->opcode)
 #define GINSTR_ARG0     ((int)&((ginstr*)0)->arg0)
@@ -57,6 +61,7 @@ typedef struct gprogram {
   int alloc;
   int count;
   stackinfo *si;
+  array *stringmap;
 } gprogram;
 
 gprogram *gprogram_new();
@@ -84,12 +89,12 @@ typedef struct dumpentry {
 } dumpentry;
 
 void print_ginstr(int address, ginstr *instr);
-void print_program(gprogram *gp);
+void print_program(gprogram *gp, int builtins);
 void compile(gprogram *gp);
 
 /* gmachine */
 
-void execute(ginstr *program);
+void execute(gprogram *gp);
 
 /* jit */
 

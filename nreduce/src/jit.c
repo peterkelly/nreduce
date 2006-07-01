@@ -385,9 +385,6 @@ void jit_compile(ginstr *program, array *cpucode)
 
       I_PUSH(reg(EBX));                              /* push(c); */
       break;
-    case OP_PUSHCELL:
-      I_PUSH(imm(instr->arg0));
-      break;
     case OP_MKAP: {
 
       int Lloop = as->labels++;
@@ -536,6 +533,9 @@ void jit_compile(ginstr *program, array *cpucode)
       LABEL(Lend);
       break;
     }
+    default:
+      assert(0);
+      break;
     }
 
     instr++;

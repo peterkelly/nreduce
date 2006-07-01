@@ -318,6 +318,8 @@ char *set_empty();
 char *set_intersection(char *a, char *b);
 char *set_union(char *a, char *b);
 
+void print_quoted_string(FILE *f, const char *str);
+
 typedef struct list list;
 
 typedef void (*list_d_t)(void *a);

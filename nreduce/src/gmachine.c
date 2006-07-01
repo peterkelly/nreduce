@@ -211,8 +211,9 @@ void alloc_some(cell *redex, int actual, int n)
   }
 }
 
-void execute(ginstr *program)
+void execute(gprogram *gp)
 {
+  ginstr *program = gp->ginstrs;
   assert(0 == stackbase);
   while (1) {
     ginstr *instr = &program[address];
@@ -310,23 +311,20 @@ void execute(ginstr *program)
       break;
     }
     case OP_PUSHGLOBAL: {
-      cell *c;      /* EBX */
-      cell *src;    /* ECX */
-
-      src = (cell*)instr->arg0;
-
-      assert(TYPE_FUNCTION == celltype(src));
-
-      c = alloc_cell();
-      c->tag = TYPE_FUNCTION;
-      c->field1 = src->field1;
-      c->field2 = src->field2;
-
-      push(c);
-      break;
-    }
-    case OP_PUSHCELL: {
-      push((cell*)instr->arg0);
+      int fno = instr->arg0;
+      if ((fno >= NUM_BUILTINS) &&
+          (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
+        cell *src = globcells[fno];
+        assert(TYPE_FUNCTION == celltype(src));
+        cell *c = alloc_cell();
+        c->tag = TYPE_FUNCTION;
+        c->field1 = src->field1;
+        c->field2 = src->field2;
+        push(c);
+      }
+      else {
+        push(globcells[fno]);
+      }
       break;
     }
     case OP_MKAP: {
@@ -517,6 +515,32 @@ void execute(ginstr *program)
       if (unwind_part2(ebx))
         break;
       do_return();
+      break;
+    }
+    case OP_PUSHNIL:
+      push(globnil);
+      break;
+    case OP_PUSHINT: {
+      cell *c = alloc_cell();
+      c->tag = TYPE_INT;
+      c->field1 = (void*)instr->arg0;
+      push(c);
+      break;
+    }
+    case OP_PUSHDOUBLE: {
+      cell *c = alloc_cell();
+      c->tag = TYPE_DOUBLE;
+      c->field1 = (void*)instr->arg0;
+      c->field2 = (void*)instr->arg1;
+      push(c);
+      break;
+    }
+    case OP_PUSHSTRING: {
+      char *str = ((char**)gp->stringmap->data)[instr->arg0];
+      cell *c = alloc_cell();
+      c->tag = TYPE_STRING;
+      c->field1 = (void*)strdup(str);
+      push(c);
       break;
     }
     default:

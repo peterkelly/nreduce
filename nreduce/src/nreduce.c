@@ -38,6 +38,7 @@ static struct argp_option options[] = {
   {"trace",            't', NULL,    0, "Enable tracing" },
   {"statistics",       's', NULL,    0, "Show statistics" },
   {"just-strictness",  'j', NULL,    0, "Just display strictness information" },
+  {"just-gcode",       'g', NULL,    0, "Just print compiled G-code and exit" },
   {"engine",           'e', "ENGINE",0, "Use execution engine: (r)educer|(i)nterpreter|(n)ative\n"
                                         "(default: interpreter)" },
   {"strictness-debug", 'r', NULL,    0, "Do not run program; show strictness information for all "
@@ -49,6 +50,7 @@ struct arguments {
   int trace;
   int statistics;
   int juststrict;
+  int justgcode;
   int engine;
   char *filename;
   int strictdebug;
@@ -69,6 +71,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     break;
   case 'j':
     arguments->juststrict = 1;
+    break;
+  case 'g':
+    arguments->justgcode = 1;
     break;
   case 'e':
     if (!strncasecmp(arg,"i",1))
@@ -499,8 +504,13 @@ void gcode_compilation()
 
   global_program = gprogram_new();
   compile(global_program);
-  if (trace)
-    print_program(global_program);
+  if (args.justgcode) {
+    print_program(global_program,0);
+    exit(0);
+  }
+  else if (trace) {
+    print_program(global_program,1);
+  }
 }
 
 void machine_code_generation()
@@ -529,7 +539,7 @@ void reduction_engine()
 void gcode_interpreter()
 {
   debug_stage("G-code interpreter");
-  execute(global_program->ginstrs);
+  execute(global_program);
   printf("\n");
   gprogram_free(global_program);
 }

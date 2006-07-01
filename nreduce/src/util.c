@@ -298,3 +298,28 @@ void list_remove_ptr(list **l, void *ptr)
   free(old);
 }
 
+void print_quoted_string(FILE *f, const char *str)
+{
+  fprintf(f,"\"");
+  const char *c;
+  for (c = str; *c; c++) {
+    switch (*c) {
+    case '\n':
+      fprintf(f,"\\n");
+      break;
+    case '\r':
+      fprintf(f,"\\r");
+      break;
+    case '\t':
+      fprintf(f,"\\t");
+      break;
+    case '"':
+      fprintf(f,"\\\"");
+      break;
+    default:
+      fprintf(f,"%c",*c);
+      break;
+    }
+  }
+  fprintf(f,"\"");
+}
