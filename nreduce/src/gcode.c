@@ -663,26 +663,100 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
         }
       }
 
+      /* Application of a supercombinator reference to the correct number of arguments. In this
+         case, we recursively compile each of the arguments, with needseval = true set for
+         those that correspond to a strict application (i.e. the argument is definitely used).
+         Then we can add PUSHGLOBAL with the second parameter set to 1 indicating that when
+         the supercombinator is executed, it should skip the EVAL instructions at the start.
+         Note that this is only done if the result of the supercombinator is definitely needed. */
+      else if (TYPE_SCREF == celltype(fun)) {
+        scomb *sc = (scomb*)fun->field1;
+        if (nargs == sc->nargs) {
+          int i;
+          cell *app = c;
+          for (i = 0; i < nargs; i++) {
+            cell *arg = (cell*)app->field2;
+            if (sc->strictin && sc->strictin[nargs-1-i])
+              C(gp,arg,d+i,pm,0,1,0);
+            else
+              C(gp,arg,d+i,pm,0,0,0);
+            app = (cell*)app->field1;
+          }
+          /* Call PUSHGLOBAL to push a reference to the supercombinator onto the stack, but with
+             the destination address set to skip the initial EVAL instructions */
+          PUSHGLOBAL(sc->index+NUM_BUILTINS,1);
+          /* We don't have the ability to directly call supercombinators yet, so build the
+             application nodes */
+          MKAP(sc->nargs);
+          break;
+        }
+      }
     }
 
-    if (isresult || needseval) { // R, RS, E, ES cases
-      int evalarg = (c->tag & FLAG_STRICT);
-      C(gp,(cell*)c->field2,d,pm,0,evalarg,0);
-      C(gp,(cell*)c->field1,d+1,pm,isresult,needseval,n+1);
-      isresult = 0;
-      needseval = 0;
-      n = 0;
+    // !needseval
+
+    /* Even if the value of the current expression might not be used (i.e. needseval and isresult
+       are both false), it is still safe to do some eager evaluation. Here we treat CONS x y as
+       something that can be executed directly rather than building an intermediate application
+       tree. As neither argument is evaluated there are no side effects from doing this and it's
+       slightly faster than creating the two application cells and also saves a bit of time in
+       case the cons cell is actually needed. */
+    else if (TYPE_BUILTIN == celltype(fun)) {
+      int bif = (int)fun->field1;
+      if ((B_CONS == bif) && (2 == nargs)) {
+        cell *app = c;
+        cell *tail = (cell*)app->field2;
+        app = (cell*)app->field1;
+        cell *head = (cell*)app->field2;
+        C(gp,tail,d,pm,0,0,0);
+        C(gp,head,d+1,pm,0,0,0);
+
+        BIF(B_CONS);
+        break;
+      }
     }
-    else { // C case
-      C(gp,(cell*)c->field2,d,pm,0,0,0);
-      C(gp,(cell*)c->field1,d+1,pm,0,0,0);
-      MKAP(1);
+
+    // FIXME: write more about the fallback option that we do here
+    int evalarg = (c->tag & FLAG_STRICT);
+    C(gp,(cell*)c->field2,d,pm,0,evalarg,0);
+    C(gp,(cell*)c->field1,d+1,pm,isresult,needseval,n+1);
+    isresult = 0;
+    needseval = 0;
+    n = 0;
+    break;
+  }
+  case TYPE_BUILTIN: {
+    /* The current expression is a reference to a built-in function. Normally we would just
+       push this onto the stack and have it later put into a set of application nodes. But
+       if we know that all of the parameters have already been evaluated, then it's safe
+       to execute this. We can determine this by looking at the information that has been
+       recorded during compilation about the expected state of the stack at this point.
+
+       Note: This is mainly intended for arithmentic functions and so forth. If new builtin
+       functions are added that have side-effects or that are not appropriate for this, then
+       they should be marked by another field in the builtin struct. */
+    int bif = (int)c->field1;
+    int direct = (n >= builtin_info[bif].nargs);
+    int i;
+    for (i = 0; direct && (i < builtin_info[bif].nargs); i++)
+      if (!statusat(gp->si,gp->si->count-1-i))
+        direct = 0;
+    if (direct) {
+      /* All parameters have been evaluated - we can execute the function directly. It will
+         pop the appropriate number of items off the stack and then push its result after
+         it has finished executing. */
+      BIF(bif);
+      n -= builtin_info[bif].nargs;
+      resultwhnf = builtin_info[bif].reswhnf;
+    }
+    else {
+      /* Not enough parameters, or one or more of them might not have been evaluated yet. Just
+         push the function reference on to the stack. */
+      PUSHGLOBAL(bif,0);
+      resultwhnf = 1;
     }
     break;
   }
-  case TYPE_BUILTIN:              PUSHGLOBAL((int)c->field1,0);
-                                  resultwhnf = 1;
-                                  break;
   case TYPE_NIL:                  PUSHNIL();
                                   resultwhnf = 1;
                                   break;
@@ -796,6 +870,8 @@ void F(gprogram *gp, int fno, scomb *sc)
   for (i = 0; i < sc->nargs; i++)
     if (sc->strictin && sc->strictin[i])
       EVAL(i);
+  noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
+  GLOBSTART(fno,sc->nargs);
 
 /*   for (i = 0; i < sc->nargs; i++) */
 /*     if (sc->strictin && sc->strictin[i]) */
