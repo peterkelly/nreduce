@@ -55,6 +55,7 @@ typedef struct ginstr {
   int stmtno;
   int expcount;
   int *expstatus;
+  int usage;
 } ginstr;
 
 typedef struct gprogram {
@@ -89,8 +90,9 @@ typedef struct dumpentry {
   struct dumpentry *next;
 } dumpentry;
 
-void print_ginstr(int address, ginstr *instr);
-void print_program(gprogram *gp, int builtins);
+void print_ginstr(int address, ginstr *instr, int usage);
+void print_program(gprogram *gp, int builtins, int usage);
+void print_profiling(gprogram *gp);
 void compile(gprogram *gp);
 
 /* gmachine */

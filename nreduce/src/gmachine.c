@@ -285,7 +285,7 @@ void execute(gprogram *gp)
 #endif
 
     if (trace) {
-      print_ginstr(address,instr);
+      print_ginstr(address,instr,0);
       print_stack(-1,stack,stackcount,0);
     }
 
@@ -302,6 +302,7 @@ void execute(gprogram *gp)
       collect();
 
     op_usage[instr->opcode]++;
+    instr->usage++;
 
     switch (instr->opcode) {
     case OP_BEGIN:
@@ -493,6 +494,7 @@ void execute(gprogram *gp)
         }
         else if (nargs == instr->arg0) {
           ndispexact++;
+/*           printf("%d dispatch: direct\n",address); */
           pop();
           address = (int)fun->field2;
           break;
@@ -505,7 +507,6 @@ void execute(gprogram *gp)
         }
       }
       else {
-/*         printf("dispatch: %s\n",cell_types[celltype(fun)]); */
         ndispother++;
       }
 

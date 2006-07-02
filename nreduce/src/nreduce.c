@@ -37,6 +37,7 @@ static char args_doc[] = "FILENAME\n";
 static struct argp_option options[] = {
   {"trace",            't', NULL,    0, "Enable tracing" },
   {"statistics",       's', NULL,    0, "Show statistics" },
+  {"profiling",        'p', NULL,    0, "Show profiling information" },
   {"just-strictness",  'j', NULL,    0, "Just display strictness information" },
   {"just-gcode",       'g', NULL,    0, "Just print compiled G-code and exit" },
   {"engine",           'e', "ENGINE",0, "Use execution engine: (r)educer|(i)nterpreter|(n)ative\n"
@@ -49,6 +50,7 @@ static struct argp_option options[] = {
 struct arguments {
   int trace;
   int statistics;
+  int profiling;
   int juststrict;
   int justgcode;
   int engine;
@@ -68,6 +70,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     break;
   case 's':
     arguments->statistics = 1;
+    break;
+  case 'p':
+    arguments->profiling = 1;
     break;
   case 'j':
     arguments->juststrict = 1;
@@ -505,11 +510,11 @@ void gcode_compilation()
   global_program = gprogram_new();
   compile(global_program);
   if (args.justgcode) {
-    print_program(global_program,0);
+    print_program(global_program,0,0);
     exit(0);
   }
   else if (trace) {
-    print_program(global_program,1);
+    print_program(global_program,1,0);
   }
 }
 
@@ -541,6 +546,8 @@ void gcode_interpreter()
   debug_stage("G-code interpreter");
   execute(global_program);
   printf("\n");
+  if (args.profiling)
+    print_profiling(global_program);
   gprogram_free(global_program);
 }
 

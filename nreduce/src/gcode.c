@@ -238,7 +238,7 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
 /*     } */
 /*     printf("\n"); */
   }
-  print_ginstr(gp->count-1,instr);
+  print_ginstr(gp->count-1,instr,0);
   #endif
 
   if (!gp->si)
@@ -359,16 +359,18 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   }
 }
 
-void print_ginstr(int address, ginstr *instr)
+void print_ginstr(int address, ginstr *instr, int usage)
 {
   assert(OP_COUNT > instr->opcode);
 
   printf("%-6d %-12s %-11d %-11d",
          address,op_names[instr->opcode],instr->arg0,instr->arg1);
   if (0 <= instr->expcount)
-    printf(" %-11d",instr->expcount);
+    printf(" %-9d",instr->expcount);
   else
     printf("            ");
+  if (usage)
+    printf(" u:%-11d",instr->usage);
   printf("    ");
 
   if (OP_GLOBSTART == instr->opcode) {
@@ -412,7 +414,7 @@ void print_ginstr(int address, ginstr *instr)
   printf("\n");
 }
 
-void print_program(gprogram *gp, int builtins)
+void print_program(gprogram *gp, int builtins, int usage)
 {
   int i;
   int prevfun = -1;
@@ -431,7 +433,7 @@ void print_program(gprogram *gp, int builtins)
       printf("\n");
       prevfun = gp->ginstrs[i].arg0;
     }
-    print_ginstr(i,&gp->ginstrs[i]);
+    print_ginstr(i,&gp->ginstrs[i],usage);
   }
 
   printf("\n");
@@ -442,6 +444,61 @@ void print_program(gprogram *gp, int builtins)
     print_quoted_string(stdout,str);
     printf("\n");
   }
+}
+
+void print_profiling(gprogram *gp)
+{
+  print_program(gp,1,1);
+
+  int index = 0;
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    sc->index = index++;
+
+  int *usage = (int*)calloc((index+1)+NUM_BUILTINS,sizeof(int));
+
+  int prevfun = -1;
+  int fno = -1;
+  int curusage = 0;
+  int totalusage = 0;
+
+  int addr = 0;
+  while (addr <= gp->count) {
+    if ((addr == gp->count) ||
+        ((OP_GLOBSTART == gp->ginstrs[addr].opcode) &&
+         (prevfun != gp->ginstrs[addr].arg0))) {
+      if (0 <= fno) {
+        usage[fno] = curusage;
+      }
+      else {
+        assert(-1 == prevfun);
+        usage[NUM_BUILTINS+index] = curusage;
+      }
+      curusage = 0;
+      fno = gp->ginstrs[addr].arg0;
+      prevfun = fno;
+    }
+    if (addr < gp->count) {
+      curusage += gp->ginstrs[addr].usage;
+      totalusage += gp->ginstrs[addr].usage;
+    }
+    addr++;
+  }
+
+  for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
+    printf("%-9d",usage[fno]);
+    double portion = (((double)usage[fno])/((double)totalusage))*100.0;
+    printf(" %-6.2f",portion);
+    if (fno == NUM_BUILTINS+index)
+      printf("start code");
+    else if (fno < NUM_BUILTINS)
+      printf(" %s",builtin_info[fno].name);
+    else
+      printf(" %s",get_scomb_index(fno-NUM_BUILTINS)->name);
+    printf("\n");
+  }
+
+  free(usage);
 }
 
 typedef struct pmap {

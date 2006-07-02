@@ -119,7 +119,7 @@ void trace_instr(int instrno, char *stacktop)
 {
   int stacksize = (trace_stackbase-stacktop)/4;
 /*   printf("ginstr %d, stack size = %d\n",instrno,stacksize); */
-  print_ginstr(instrno,trace_program+instrno);
+  print_ginstr(instrno,trace_program+instrno,0);
   print_stack(-1,(cell**)stacktop,stacksize,1);
 }
 
