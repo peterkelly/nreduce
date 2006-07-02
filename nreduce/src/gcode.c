@@ -405,8 +405,10 @@ void print_ginstr(int address, ginstr *instr)
 void print_program(gprogram *gp, int builtins)
 {
   int i;
+  int prevfun = -1;
   for (i = 0; i < gp->count; i++) {
-    if (OP_GLOBSTART == gp->ginstrs[i].opcode) {
+    if ((OP_GLOBSTART == gp->ginstrs[i].opcode) &&
+        (prevfun != gp->ginstrs[i].arg0)) {
       if (NUM_BUILTINS <= gp->ginstrs[i].arg0) {
         scomb *sc = get_scomb_index(gp->ginstrs[i].arg0-NUM_BUILTINS);
         printf("\n");
@@ -414,9 +416,10 @@ void print_program(gprogram *gp, int builtins)
         printf("\n");
       }
       else if (!builtins) {
-        break;;
+        break;
       }
       printf("\n");
+      prevfun = gp->ginstrs[i].arg0;
     }
     print_ginstr(i,&gp->ginstrs[i]);
   }
