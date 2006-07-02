@@ -141,6 +141,43 @@ void do_return()
   ebx = resolve_ind(ebx);
 }
 
+void do_mkap(int n)
+{
+  int i;
+  for (i = n-1; i >= 0; i--) {
+    cell *c = alloc_cell();
+    c->tag = TYPE_APPLICATION;
+    c->field1 = stack[stackcount-1];
+    c->field2 = stack[stackcount-2];
+    stackcount--;
+    stack[stackcount-1] = c;
+  }
+}
+
+void do_update(int n)
+{
+  cell *res;     /* EBX */
+  cell *target;  /* ECX */
+  assert(n < stackcount);
+  assert(n > 0);
+
+  res = resolve_ind(stack[stackcount-1-n]);
+
+  if (res->tag & FLAG_PINNED) {
+    stack[stackcount-1-n] = alloc_cell();
+    res = stack[stackcount-1-n];
+  }
+
+  assert(!(res->tag & FLAG_PINNED));
+  free_cell_fields(res);
+  target = res;
+  repl_histogram[celltype(target)]++;
+
+  target->tag = TYPE_IND;
+  target->field1 = resolve_ind(stack[stackcount-1]);
+  stackcount--;
+}
+
 /*
 void alloc_some(cell *redex, int n)
 {
@@ -354,41 +391,12 @@ void execute(gprogram *gp)
       }
       break;
     }
-    case OP_MKAP: {
-      int i;
-      for (i = instr->arg0-1; i >= 0; i--) {
-        cell *c = alloc_cell();
-        c->tag = TYPE_APPLICATION;
-        c->field1 = stack[stackcount-1];
-        c->field2 = stack[stackcount-2];
-        stackcount--;
-        stack[stackcount-1] = c;
-      }
+    case OP_MKAP:
+      do_mkap(instr->arg0);
       break;
-    }
-    case OP_UPDATE: {
-      cell *res;     /* EBX */
-      cell *target;  /* ECX */
-      assert(instr->arg0 < stackcount);
-      assert(instr->arg0 > 0);
-
-      res = resolve_ind(stack[stackcount-1-instr->arg0]);
-
-      if (res->tag & FLAG_PINNED) {
-        stack[stackcount-1-instr->arg0] = alloc_cell();
-        res = stack[stackcount-1-instr->arg0];
-      }
-
-      assert(!(res->tag & FLAG_PINNED));
-      free_cell_fields(res);
-      target = res;
-      repl_histogram[celltype(target)]++;
-
-      target->tag = TYPE_IND;
-      target->field1 = resolve_ind(stack[stackcount-1]);
-      stackcount--;
+    case OP_UPDATE:
+      do_update(instr->arg0);
       break;
-    }
     case OP_POP:
       stackcount -= instr->arg0;
       assert(0 <= stackcount);
@@ -466,77 +474,43 @@ void execute(gprogram *gp)
       break;
     }
     case OP_DISPATCH: {
-#if 1
-      cell *topelem = resolve_ind(stack[stackcount-1]);
-      if (TYPE_FUNCTION == celltype(topelem)) {
-/*         int fno = program[(int)topelem->field2].arg0; */
-        int expargs = (int)topelem->field1;
+      cell *fun = top();
+      if (TYPE_FUNCTION == celltype(fun)) {
+        int nargs = (int)fun->field1;
+        int addr = (int)fun->field2;
+        assert(OP_GLOBSTART == program[addr].opcode);
+/*         int fno = program[addr].arg0; */
 
-        assert(0 < expargs);
+/*         if (NUM_BUILTINS > fno) */
+/*           printf("dispatch(%d): function %s (nargs %d)\n",instr->arg0, */
+/*                   builtin_info[fno].name,nargs); */
+/*         else */
+/*           printf("dispatch(%d): function %s (nargs %d)\n",instr->arg0, */
+/*                   get_scomb_index(instr->arg0-NUM_BUILTINS)->name,nargs); */
 
-        #ifdef PRINT_DISPATCH
-        if (NUM_BUILTINS > fno)
-          printf("top element %s (expects %d args)",builtin_info[fno].name,expargs);
-        else
-          printf("top element %s (expects %d args)",
-                 get_scomb_index(fno-NUM_BUILTINS)->name,expargs);
-        #endif
-
-        if (expargs == instr->arg0) {
-          #ifdef PRINT_DISPATCH
-          printf(" == DISPATCH %d\n",instr->arg0);
-          #endif
-          stackcount--;
-          address = (int)topelem->field2;
+        if (nargs == 0) {
+          ndisp0++;
+        }
+        else if (nargs == instr->arg0) {
+          ndispexact++;
+          pop();
+          address = (int)fun->field2;
           break;
         }
-#if 1
-        else if (expargs < instr->arg0) {
-/*           printf("\n"); */
-          #ifdef PRINT_DISPATCH
-          printf(" < DISPATCH %d\n",instr->arg0);
-          #endif
-
-          cell *redex = resolve_ind(stack[stackcount-2-instr->arg0]);
-          if (redex->tag & FLAG_PINNED) {
-            stack[stackcount-2-instr->arg0] = alloc_cell();
-            redex = stack[stackcount-2-instr->arg0];
-          }
-
-          alloc_some(redex,instr->arg0,instr->arg0-expargs);
-          stackcount--;
-          address = (int)topelem->field2;
-          break;
+        else if (nargs < instr->arg0) {
+          ndispless++;
         }
-        else {
-          #ifdef PRINT_DISPATCH
-          printf("\n");
-          #endif
-/*           printf(" > DISPATCH %d\n",instr->arg0); */
+        else { // nargs > instr->arg0
+          ndispgreater++;
         }
-#endif
       }
-#endif
-
-      assert(1 <= instr->arg0);
-
-      cell *redex = resolve_ind(stack[stackcount-2-instr->arg0]);
-      if (redex->tag & FLAG_PINNED) {
-        stack[stackcount-2-instr->arg0] = alloc_cell();
-        redex = stack[stackcount-2-instr->arg0];
+      else {
+/*         printf("dispatch: %s\n",cell_types[celltype(fun)]); */
+        ndispother++;
       }
 
-      alloc_some(redex,instr->arg0,instr->arg0);
-
-
-
-
-      if (trace) {
-        printf("dispatch: after building spine\n");
-        print_stack(-1,stack,stackcount,0);
-      }
-/*       exit(1); */
-
+      do_mkap(instr->arg0);
+      do_update(1);
 
       cell *ebx = unwind_part1();
       if (unwind_part2(ebx))

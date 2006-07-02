@@ -41,6 +41,7 @@ typedef struct stackinfo {
   int alloc;
   int count;
   int *status;
+  int invalid;
 } stackinfo;
 
 typedef struct ginstr {

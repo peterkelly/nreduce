@@ -369,6 +369,11 @@ extern int ndumpallocs;
 extern int nunwindsvar;
 extern int nunwindswhnf;
 extern int nreductions;
+extern int ndispexact;
+extern int ndispless;
+extern int ndispgreater;
+extern int ndisp0;
+extern int ndispother;
 
 extern cell *globnil;
 extern cell *globtrue;

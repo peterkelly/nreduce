@@ -1,4 +1,4 @@
-//#define USE_DISPATCH
+#define USE_DISPATCH
 
 #include "grammar.tab.h"
 #include "gcode.h"
@@ -42,6 +42,8 @@
 #define PUSHDOUBLE(_a,_b)  add_instruction(gp,OP_PUSHDOUBLE,(_a),(_b))
 #define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
 #define CHECKEVAL(_a)      add_instruction(gp,OP_CHECKEVAL,(_a),0)
+#define SQUEEZE(_a,_b)     add_instruction(gp,OP_SQUEEZE,(_a),(_b))
+#define DISPATCH(_a)       add_instruction(gp,OP_DISPATCH,(_a),0)
 
 cell **globcells = NULL;
 int *addressmap = NULL;
@@ -197,6 +199,7 @@ int add_string(gprogram *gp, char *str)
 void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
 {
   ginstr *instr;
+  assert(!gp->si || !gp->si->invalid);
 
 #if 1
   /* Skip the EVAL instruction if we know this stack location has already been evaluated */
@@ -253,12 +256,16 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     setstatusat(gp->si,gp->si->count-1-arg0,1);
     break;
   case OP_UNWIND:
-    // after UNWIND we don't know what the stack size will be... but since it's always the
-    // last instruction this is ok
+    // After UNWIND we don't know what the stack size will be... but since it's always the
+    // last instruction this is ok. Mark the stackinfo object as invalid to indicate the
+    // information in it can't be relied upon anymore.
+    gp->si->invalid = 1;
     break;
   case OP_RETURN:
-    // after RETURN we don't know what the stack size will be... but since it's always the
-    // last instruction this is ok
+    // After RETURN we don't know what the stack size will be... but since it's always the
+    // last instruction this is ok. Mark the stackinfo object as invalid to indicate the
+    // information in it can't be relied upon anymore.
+    gp->si->invalid = 1;
     break;
   case OP_PUSH:
     assert(0 <= gp->si->count-1-arg0);
@@ -326,7 +333,10 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     gp->si->count -= arg1;
     break;
   case OP_DISPATCH:
-    /* FIXME: what to do here? */
+    // After DISPATCH we don't know what the stack size will be... but since it's always the
+    // last instruction this is ok. Mark the stackinfo object as invalid to indicate the
+    // information in it can't be relied upon anymore.
+    gp->si->invalid = 1;
     break;
   case OP_PUSHNIL:
     pushstatus(gp->si,1);
@@ -666,6 +676,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
         }
       }
 
+#if 0
       /* Application of a supercombinator reference to the correct number of arguments. In this
          case, we recursively compile each of the arguments, with needseval = true set for
          those that correspond to a strict application (i.e. the argument is definitely used).
@@ -694,6 +705,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
           break;
         }
       }
+#endif
     }
 
     // !needseval
@@ -779,7 +791,17 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
                                      is used in the future the value will already be there.
                                      This is to improve the performance of supercombinators
                                      with only a variable in their body (IFPL 20.2) */
-                                  if ((needseval || isresult) && (0 == n)) {
+#ifdef USE_DISPATCH
+                                  if (isresult) {
+                                    SQUEEZE(n+1,d-n);
+                                    DISPATCH(n);
+                                    needseval = 0;
+                                    isresult = 0;
+                                    n = 0;
+                                  }
+                                  else 
+#endif
+                                       if ((needseval || isresult) && (0 == n)) {
                                     EVAL(0);
                                     needseval = 0;
                                   }
@@ -788,7 +810,17 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
                                   /* Evaluate the variable if the result is needed, as for
                                      TYPE_SYMBOL. This is needed in case the supercombinator
                                      is a CAF. */
-                                  if ((needseval || isresult) && (0 == n)) {
+#ifdef USE_DISPATCH
+                                  if (isresult) {
+                                    SQUEEZE(n+1,d-n);
+                                    DISPATCH(n);
+                                    needseval = 0;
+                                    isresult = 0;
+                                    n = 0;
+                                  }
+                                  else 
+#endif
+                                       if ((needseval || isresult) && (0 == n)) {
                                     EVAL(0);
                                     needseval = 0;
                                   }

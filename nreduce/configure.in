@@ -9,5 +9,6 @@ AC_PROG_LIBTOOL
 ALL_LIBS="-lm"
 AC_SUBST(ALL_LIBS)
 CFLAGS="-g -Wall -O0"
+#CFLAGS="-g -Wall -O0 -pg"
 
 AC_OUTPUT(Makefile src/Makefile)

@@ -64,6 +64,11 @@ int ndumpallocs = 0;
 int nunwindsvar = 0;
 int nunwindswhnf = 0;
 int nreductions = 0;
+int ndispexact = 0;
+int ndispless = 0;
+int ndispgreater = 0;
+int ndisp0 = 0;
+int ndispother = 0;
 
 cell *pinned = NULL;
 cell *globnil = NULL;
@@ -372,6 +377,11 @@ void statistics()
   printf("nunwindsvar = %d\n",nunwindsvar);
   printf("nunwindswhnf = %d\n",nunwindswhnf);
   printf("nreductions = %d\n",nreductions);
+  printf("ndispexact = %d\n",ndispexact);
+  printf("ndispless = %d\n",ndispless);
+  printf("ndispgreater = %d\n",ndispgreater);
+  printf("ndisp0 = %d\n",ndisp0);
+  printf("ndispother = %d\n",ndispother);
 
   for (i = 0; i < NUM_CELLTYPES; i++)
     printf("repl_histogram[%s] = %d\n",cell_types[i],repl_histogram[i]);

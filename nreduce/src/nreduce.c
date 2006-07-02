@@ -488,7 +488,7 @@ void graph_optimisation()
 {
   debug_stage("Graph optimisation");
 
-/*   fix_partial_applications(); */
+  fix_partial_applications();
   check_scombs_nosharing();
   check_scombs();
   remove_redundant_scombs();
