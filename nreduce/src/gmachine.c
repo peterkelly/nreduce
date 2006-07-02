@@ -312,6 +312,16 @@ void execute(gprogram *gp)
     }
     case OP_PUSHGLOBAL: {
       int fno = instr->arg0;
+
+/*       if (fno >= NUM_BUILTINS) { */
+/*         scomb *sc = get_scomb_index(fno-NUM_BUILTINS); */
+/*         assert(addressmap[fno] == (int)globcells[fno]->field2); */
+/*       } */
+
+
+      // If the function is a supercombinator with 0 args (i.e. a CAF), then
+      // push a *copy* of the cell. This avoids supercombinators which evaluate
+      // to infinite (or large) lists from not ever being garbage collected.
       if ((fno >= NUM_BUILTINS) &&
           (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
         cell *src = globcells[fno];
@@ -322,6 +332,23 @@ void execute(gprogram *gp)
         c->field2 = src->field2;
         push(c);
       }
+      // If the function is a supercombinator and arg1 is non-zero, this means we
+      // actually want a reference to the "no-eval" part of the supercombinator, i.e.
+      // we skip the EVAL instructions at the start, under the assumption that the
+      // arguments to be passed to it have already been evaluated
+#if 1
+      else if ((fno >= NUM_BUILTINS) && instr->arg1) {
+        cell *src = globcells[fno];
+        assert(TYPE_FUNCTION == celltype(src));
+        cell *c = alloc_cell();
+        c->tag = TYPE_FUNCTION;
+        c->field1 = src->field1;
+        assert((int)src->field2 == addressmap[fno]);
+        c->field2 = (void*)noevaladdressmap[fno];
+/*         c->field2 = (void*)addressmap[fno]; */
+        push(c);
+      }
+#endif
       else {
         push(globcells[fno]);
       }
