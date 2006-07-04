@@ -9,6 +9,8 @@
 #include <stdarg.h>
 #include <math.h>
 #include <argp.h>
+#include <sys/time.h>
+#include <time.h>
 
 #define NREDUCE_C
 
@@ -20,6 +22,8 @@ extern char *yyfilename;
 extern cell *parse_root;
 extern char *code_start;
 extern int resolve_ind_offset;
+
+FILE *statsfile = NULL;
 
 gprogram *global_program = NULL;
 array *global_cpucode = NULL;
@@ -36,7 +40,7 @@ static char args_doc[] = "FILENAME\n";
 
 static struct argp_option options[] = {
   {"trace",            't', NULL,    0, "Enable tracing" },
-  {"statistics",       's', NULL,    0, "Show statistics" },
+  {"statistics",       's', "FILE",  0, "Write statistics to FILE" },
   {"profiling",        'p', NULL,    0, "Show profiling information" },
   {"just-strictness",  'j', NULL,    0, "Just display strictness information" },
   {"just-gcode",       'g', NULL,    0, "Just print compiled G-code and exit" },
@@ -49,7 +53,7 @@ static struct argp_option options[] = {
 
 struct arguments {
   int trace;
-  int statistics;
+  char *statistics;
   int profiling;
   int juststrict;
   int justgcode;
@@ -69,7 +73,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     arguments->trace = 1;
     break;
   case 's':
-    arguments->statistics = 1;
+    arguments->statistics = arg;
     break;
   case 'p':
     arguments->profiling = 1;
@@ -543,12 +547,24 @@ void reduction_engine()
 
 void gcode_interpreter()
 {
+  struct timeval start;
+  struct timeval end;
+
   debug_stage("G-code interpreter");
+
+  gettimeofday(&start,NULL);
   execute(global_program);
+  gettimeofday(&end,NULL);
+
   printf("\n");
   if (args.profiling)
     print_profiling(global_program);
   gprogram_free(global_program);
+
+  int ms = (end.tv_sec - start.tv_sec)*1000 +
+           (end.tv_usec - start.tv_usec)/1000;
+  if (args.statistics)
+    fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
 }
 
 void native_execution_engine()
@@ -561,6 +577,19 @@ void native_execution_engine()
   gprogram_free(global_program);
 }
 
+void open_statistics()
+{
+  if (NULL == (statsfile = fopen(args.statistics,"w"))) {
+    perror(args.statistics);
+    exit(1);
+  }
+}
+
+void close_statistics()
+{
+  fclose(statsfile);
+}
+
 int main(int argc, char **argv)
 {
   setbuf(stdout,NULL);
@@ -570,6 +599,9 @@ int main(int argc, char **argv)
   argp_parse (&argp, argc, argv, 0, 0, &args);
   trace = args.trace;
   strictdebug = args.strictdebug;
+
+  if (args.statistics)
+    open_statistics();
 
   source_code_parsing();
   letrec_creation();
@@ -595,8 +627,10 @@ int main(int argc, char **argv)
   }
 
   collect();
-  if (args.statistics)
-    statistics();
+  if (args.statistics) {
+    statistics(statsfile);
+    close_statistics();
+  }
 
   cleanup();
   return 0;

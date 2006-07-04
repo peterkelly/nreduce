@@ -3,6 +3,9 @@
 %x vstr1 comment comment2 intline
 %{
 
+/* FIXME: Since / is in ident now it causes parse errors for comments in some cases...
+   try //x at the start of a line */
+
 #include "grammar.tab.h"
 #include "nreduce.h"
 #include <string.h>

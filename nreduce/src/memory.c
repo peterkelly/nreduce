@@ -356,44 +356,43 @@ cell *stackat(int s)
   return resolve_ind(stack[s]);
 }
 
-void statistics()
+void statistics(FILE *f)
 {
   int i;
   int total;
-  printf("maxstack = %d\n",maxstack);
-  printf("totalallocs = %d\n",totalallocs);
-  printf("ncells = %d\n",ncells);
-  printf("maxcells = %d\n",maxcells);
-  printf("nblocks = %d\n",nblocks);
-  printf("ncollections = %d\n",ncollections);
-  printf("nscombappls = %d\n",nscombappls);
-  printf("nresindnoch = %d\n",nresindnoch);
-  printf("nresindch = %d\n",nresindch);
-  printf("nALLOCs = %d\n",nALLOCs);
-  printf("nALLOCcells = %d\n",nALLOCcells);
-  printf("resolve_ind() total = %d\n",nresindch+nresindnoch);
-  printf("resolve_ind() ratio = %f\n",((double)nresindch)/((double)nresindnoch));
-  printf("ndumpallocs = %d\n",ndumpallocs);
-  printf("nunwindsvar = %d\n",nunwindsvar);
-  printf("nunwindswhnf = %d\n",nunwindswhnf);
-  printf("nreductions = %d\n",nreductions);
-  printf("ndispexact = %d\n",ndispexact);
-  printf("ndispless = %d\n",ndispless);
-  printf("ndispgreater = %d\n",ndispgreater);
-  printf("ndisp0 = %d\n",ndisp0);
-  printf("ndispother = %d\n",ndispother);
+  fprintf(f,"maxstack = %d\n",maxstack);
+  fprintf(f,"totalallocs = %d\n",totalallocs);
+  fprintf(f,"ncells = %d\n",ncells);
+  fprintf(f,"maxcells = %d\n",maxcells);
+  fprintf(f,"nblocks = %d\n",nblocks);
+  fprintf(f,"ncollections = %d\n",ncollections);
+  fprintf(f,"nscombappls = %d\n",nscombappls);
+  fprintf(f,"nresindnoch = %d\n",nresindnoch);
+  fprintf(f,"nresindch = %d\n",nresindch);
+  fprintf(f,"nALLOCs = %d\n",nALLOCs);
+  fprintf(f,"nALLOCcells = %d\n",nALLOCcells);
+  fprintf(f,"resolve_ind() total = %d\n",nresindch+nresindnoch);
+  fprintf(f,"resolve_ind() ratio = %f\n",((double)nresindch)/((double)nresindnoch));
+  fprintf(f,"ndumpallocs = %d\n",ndumpallocs);
+  fprintf(f,"nunwindsvar = %d\n",nunwindsvar);
+  fprintf(f,"nunwindswhnf = %d\n",nunwindswhnf);
+  fprintf(f,"nreductions = %d\n",nreductions);
+  fprintf(f,"ndispexact = %d\n",ndispexact);
+  fprintf(f,"ndispless = %d\n",ndispless);
+  fprintf(f,"ndispgreater = %d\n",ndispgreater);
+  fprintf(f,"ndisp0 = %d\n",ndisp0);
+  fprintf(f,"ndispother = %d\n",ndispother);
 
   for (i = 0; i < NUM_CELLTYPES; i++)
-    printf("repl_histogram[%s] = %d\n",cell_types[i],repl_histogram[i]);
+    fprintf(f,"repl_histogram[%s] = %d\n",cell_types[i],repl_histogram[i]);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
-    printf("usage(%s) = %d\n",op_names[i],op_usage[i]);
+    fprintf(f,"usage(%s) = %d\n",op_names[i],op_usage[i]);
     total += op_usage[i];
   }
-  printf("usage total = %d\n",total);
+  fprintf(f,"usage total = %d\n",total);
 }
-
 
 cell *resolve_ind2(cell *c)
 {

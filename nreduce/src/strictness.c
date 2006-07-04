@@ -8,6 +8,8 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <sys/time.h>
+#include <time.h>
 
 scomb *sc_lallstrict = NULL;
 scomb *sc_allstrict = NULL;
@@ -139,6 +141,18 @@ void addabsbuiltins()
     else if (1 == info->nargs) {
       assert(1 == info->nstrict);
       body = cons(string("{}"),lambda("a",cons(Sv(var("a")),string("serr"))));
+    }
+    else if ((3 == info->nargs) && (2 == info->nstrict)) {
+      body = cons(string("{}"),lambda("a",
+             cons(string("{}"),lambda("b",
+             cons(string("{}"),lambda("c",
+               cons(un(Sv(var("a")),Sv(var("b"))),string("serr"))))))));
+    }
+    else if ((3 == info->nargs) && (3 == info->nstrict)) {
+      body = cons(string("{}"),lambda("a",
+             cons(string("{}"),lambda("b",
+             cons(string("{}"),lambda("c",
+               cons(un(un(Sv(var("a")),Sv(var("b"))),Sv(var("c"))),string("serr"))))))));
     }
     else {
       assert(0); /* ? */
@@ -520,6 +534,11 @@ void strictness_analysis()
   int nscombs = 0;
   scomb **oldlast = lastsc;
 
+  struct timeval start;
+  struct timeval end;
+
+  gettimeofday(&start,NULL);
+
   if (trace)
     debug_stage("Strictness analysis");
 
@@ -716,6 +735,11 @@ void strictness_analysis()
     annotate(sc);
 /*   if (trace) */
 /*     print_scombs2(); */
+
+  gettimeofday(&end,NULL);
+/*   int ms = (end.tv_sec - start.tv_sec)*1000 + */
+/*            (end.tv_usec - start.tv_usec)/1000; */
+/*   printf("Strictness analysis took %d ms\n",ms); */
 
 #endif
 }

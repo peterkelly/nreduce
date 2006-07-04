@@ -327,9 +327,9 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   }
   case OP_SQUEEZE:
     assert(0 <= gp->si->count-arg0-arg1);
-    memcpy(&gp->si->status[gp->si->count-arg0-arg1],
-           &gp->si->status[gp->si->count-arg0],
-           arg1);
+    memmove(&gp->si->status[gp->si->count-arg0-arg1],
+            &gp->si->status[gp->si->count-arg0],
+            arg0*sizeof(int));
     gp->si->count -= arg1;
     break;
   case OP_DISPATCH:
@@ -606,6 +606,7 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
 void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int n)
 {
   int resultwhnf = 0;
+  assert(d >= n);
 
   print_comp("C",c,d,isresult,needseval,n);
   cdepth++;
@@ -789,7 +790,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
     }
 
     // FIXME: write more about the fallback option that we do here
-    int evalarg = (c->tag & FLAG_STRICT);
+    int evalarg = (needseval && (c->tag & FLAG_STRICT));
     C(gp,(cell*)c->field2,d,pm,0,evalarg,0);
     C(gp,(cell*)c->field1,d+1,pm,isresult,needseval,n+1);
     isresult = 0;
@@ -798,6 +799,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
     break;
   }
   case TYPE_BUILTIN: {
+    // FIXME: move this into the TYPE_APPLICATION case
     /* The current expression is a reference to a built-in function. Normally we would just
        push this onto the stack and have it later put into a set of application nodes. But
        if we know that all of the parameters have already been evaluated, then it's safe
@@ -808,25 +810,26 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
        functions are added that have side-effects or that are not appropriate for this, then
        they should be marked by another field in the builtin struct. */
     int bif = (int)c->field1;
-    int direct = (n >= builtin_info[bif].nargs);
-    int i;
-    for (i = 0; direct && (i < builtin_info[bif].nargs); i++)
-      if (!statusat(gp->si,gp->si->count-1-i))
-        direct = 0;
-    if (direct) {
+/*     int direct = (n >= builtin_info[bif].nargs); */
+/*     int i; */
+/*     for (i = 0; direct && (i < builtin_info[bif].nargs); i++) */
+/*       if (!statusat(gp->si,gp->si->count-1-i)) */
+/*         direct = 0; */
+/*     if (direct) { */
       /* All parameters have been evaluated - we can execute the function directly. It will
          pop the appropriate number of items off the stack and then push its result after
          it has finished executing. */
-      BIF(bif);
-      n -= builtin_info[bif].nargs;
-      resultwhnf = builtin_info[bif].reswhnf;
-    }
-    else {
+/*       BIF(bif); */
+/*       n -= (builtin_info[bif].nargs-1); */
+/*       d -= (builtin_info[bif].nargs-1); */
+/*       resultwhnf = builtin_info[bif].reswhnf; */
+/*     } */
+/*     else { */
       /* Not enough parameters, or one or more of them might not have been evaluated yet. Just
          push the function reference on to the stack. */
       PUSHGLOBAL(bif,0);
       resultwhnf = 1;
-    }
+/*     } */
     break;
   }
   case TYPE_NIL:                  PUSHNIL();
@@ -927,7 +930,7 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
        redex. The only exception to this is if the result is known to be in WHNF (e.g. if
        it's an integer or reference to a built-in function) - then we can execute RETURN
        instead, as there is no need to perform any further reductions on the redex. */
-    if (resultwhnf)
+    if (resultwhnf && (0 == n))
       RETURN();
     else
       UNWIND();
