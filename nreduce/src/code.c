@@ -184,7 +184,7 @@ cell *suball_letrecs(cell *root, scomb *sc)
                x 4
         in * foo 2
   */
-  clearflag(FLAG_PROCESSED);
+  cleargraph(root,FLAG_PROCESSED);
   root = sub_letrecs(root,sc);
   return root;
 }

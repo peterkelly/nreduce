@@ -83,7 +83,7 @@ void addsc(const char *s)
 
 void addallstrict()
 {
-  scomb *sc = add_scomb("lallstrict");
+  scomb *sc = add_scomb("lallstrict",NULL);
   sc_lallstrict = sc;
   sc->nargs = 1;
   sc->argnames = (char**)malloc(sizeof(char*));
@@ -92,7 +92,7 @@ void addallstrict()
   sc->internal = 1;
   scomb_calc_cells(sc);
 
-  sc = add_scomb("allstrict");
+  sc = add_scomb("allstrict",NULL);
   sc_allstrict = sc;
   sc->body = cons(string("{*}"),scref(sc_lallstrict));
   sc->internal = 1;
@@ -101,7 +101,7 @@ void addallstrict()
 
 void addnostrict()
 {
-  scomb *sc = add_scomb("lnostrict");
+  scomb *sc = add_scomb("lnostrict",NULL);
   sc_lnostrict = sc;
   sc->nargs = 1;
   sc->argnames = (char**)malloc(sizeof(char*));
@@ -110,7 +110,7 @@ void addnostrict()
   sc->internal = 1;
   scomb_calc_cells(sc);
 
-  sc = add_scomb("nostrict");
+  sc = add_scomb("nostrict",NULL);
   sc_nostrict = sc;
   sc->body = cons(string("{}"),scref(sc_lnostrict));
   sc->internal = 1;
@@ -119,7 +119,7 @@ void addnostrict()
 
 void addspint()
 {
-  scomb *sc = add_scomb("spint");
+  scomb *sc = add_scomb("spint",NULL);
   sc_spint = sc;
   sc->nargs = 3;
   sc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
@@ -591,7 +591,7 @@ void strictness_analysis()
   if (strictdebug) {
     for (scno = 0; scno < nscombs; scno++) {
       sc = sctotest[scno];
-      if (!isgr[scno] && strcmp(sc->name,"PROG")) {
+      if (!isgr[scno] && strcmp(sc->name,"main")) {
 /*         printf("%s#0 is strict in {*}\n",sc->name); */
 
 /*         printf("%s#0 is strict in {",sc->name); */
@@ -647,7 +647,7 @@ void strictness_analysis()
 /*         converged = 0; */
 
 
-      if (!isgr[scno] && strcmp(sc->name,"PROG")) {
+      if (!isgr[scno] && strcmp(sc->name,"main")) {
         compute_strictness(approx,sc);
 
 
@@ -706,7 +706,7 @@ void strictness_analysis()
   if (strictdebug) {
     for (scno = 0; scno < nscombs; scno++) {
       sc = sctotest[scno];
-      if (!isgr[scno] && strcmp(sc->name,"PROG")) {
+      if (!isgr[scno] && strcmp(sc->name,"main")) {
         scomb *approx = get_fscomb("%s#%d",sc->name,usediter);
         printf("%s is strict in {",approx->name);
         int a;

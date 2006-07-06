@@ -34,7 +34,6 @@
 
 scomb *scombs = NULL;
 scomb **lastsc = &scombs;
-scomb *prog_scomb = NULL;
 
 int genvar = 0;
 int nscombs = 0;
@@ -289,38 +288,6 @@ int scomb_isgraph(scomb *sc)
   return scomb_isgraph_r(sc->body);
 }
 
-void mkprogsuper(cell *root)
-{
-  scomb *sc = (scomb*)calloc(1,sizeof(scomb));
-/*   scomb **ptr = &scombs; */
-  cell *old;
-  prog_scomb = sc;
-  sc->name = strdup("PROG");
-  sc->nargs = 0;
-  sc->argnames = NULL;
-  sc->body = alloc_cell();
-  copy_cell(sc->body,root);
-  sc->body->source = root;
-  nscombs++;
-
-  sc->next = NULL;
-/*   while (*ptr) */
-/*     ptr = &((*ptr)->next); */
-/*   *ptr = sc; */
-
-  *lastsc = sc;
-  lastsc = &sc->next;
-
-  old = alloc_cell();
-  copy_raw(old,root); /* so the contents get freed */
-
-  /* FIXME: free root (could be any type of cell...) 
-     - maybe make copy_cell() do this if it's passed a non-EMPTY cell */
-  root->tag = TYPE_SCREF;
-  root->field1 = sc;
-  root->field2 = NULL;
-}
-
 int liftdepth = 0;
 
 int scomb_count()
@@ -332,7 +299,7 @@ int scomb_count()
   return count;
 }
 
-scomb *add_scomb(char *name)
+scomb *add_scomb(char *name, char *prefix)
 {
   scomb *sc = (scomb*)calloc(1,sizeof(scomb));
 
@@ -341,11 +308,8 @@ scomb *add_scomb(char *name)
     nscombs++;
   }
   else {
-    sc->name = (char*)malloc(100);
-    if (26 > nscombs)
-      sprintf(sc->name,"%c",'A'+nscombs++);
-    else
-      sprintf(sc->name,"super%d",(nscombs++)-26);
+    sc->name = (char*)malloc(strlen(prefix)+20);
+    sprintf(sc->name,"%s__%d",prefix,nscombs++);
     assert(NULL == get_scomb(sc->name));
   }
 
@@ -380,7 +344,7 @@ scomb *build_scomb(cell *body, int nargs, char **argnames, int iscopy, int inter
   vsprintf(name,name_format,ap);
   va_end(ap);
 
-  sc = add_scomb(name);
+  sc = add_scomb(name,NULL);
   free(name);
 
   sc->nargs = nargs;
@@ -394,7 +358,7 @@ scomb *build_scomb(cell *body, int nargs, char **argnames, int iscopy, int inter
   sc->index = -1;
   sc->iscopy = iscopy;
   sc->internal = internal;
-  lift(&sc->body,1,1);
+  lift(&sc->body,1,1,"__sc__");
   scomb_calc_cells(sc);
 
   return sc;
@@ -571,7 +535,7 @@ void print_level(cell *c, int level)
 
 
 int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdadepth,
-         int iscopy, int *level, list **newscombs)
+         int iscopy, int *level, list **newscombs, char *prefix)
 {
   int maxfree = 1;
   abstraction *a;
@@ -601,9 +565,9 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     int level1 = 0;
     int level2 = 0;
     int mf1 = lift_r((cell**)&((*k)->field1),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level1,
-                     newscombs);
+                     newscombs,prefix);
     int mf2 = lift_r((cell**)&((*k)->field2),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level2,
-                     newscombs);
+                     newscombs,prefix);
     if (level1 > level2)
       *level = level1;
     else
@@ -621,7 +585,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     break;
   }
   case TYPE_LAMBDA: {
-    scomb *sc = add_scomb(NULL);
+    scomb *sc = add_scomb(NULL,prefix);
     char *name = strdup((char*)(*k)->field1);
     abstraction *a;
     int argno;
@@ -637,7 +601,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     #endif
 
     push(*k);
-    if (lift_r((cell**)&((*k)->field2),name,*k,sc,lambdadepth+1,iscopy,level,newscombs)) {
+    if (lift_r((cell**)&((*k)->field2),name,*k,sc,lambdadepth+1,iscopy,level,newscombs,prefix)) {
       abstract((cell**)&(*k)->field2,sc);
     }
     pop(*k);
@@ -670,7 +634,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     }
 
     #ifdef DEBUG_SHOW_CREATED_SUPERCOMBINATORS
-    printf("Created supercombinator %s",sc->name);
+    printf("Created supercombinator ");
     print_scomb_code(sc);
     printf("\n");
 
@@ -687,7 +651,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     print(global_root);
     #endif
 
-    maxfree = lift_r(k,lambdavar,lroot,lambdasc,lambdadepth,iscopy,level,newscombs);
+    maxfree = lift_r(k,lambdavar,lroot,lambdasc,lambdadepth,iscopy,level,newscombs,prefix);
 
     free(name);
     break;
@@ -728,14 +692,14 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
   return maxfree;
 }
 
-void lift(cell **k, int iscopy, int calccells)
+void lift(cell **k, int iscopy, int calccells, char *prefix)
 {
   int level = 0;
   list *newscombs = NULL;
   list *l;
 
   cleargraph(*k,FLAG_PROCESSED);
-  lift_r(k,NULL,NULL,NULL,0,iscopy,&level,&newscombs);
+  lift_r(k,NULL,NULL,NULL,0,iscopy,&level,&newscombs,prefix);
   if (calccells) {
     for (l = newscombs; l; l = l->next)
       scomb_calc_cells((scomb*)l->data);

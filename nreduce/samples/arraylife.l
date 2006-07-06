@@ -1,3 +1,4 @@
+(main ()
 (let
   ((map        (!f.!lst.if lst (cons (f (head lst)) (map f (tail lst))) nil))
    (foreach    (!lst.!f.map f lst))
@@ -79,4 +80,4 @@
                 (cons (printgrid grid) (cons "\n" (loop (- iter 1) (dolife grid))))
                 nil)))
 
-(loop 50 (makegrid start 40 40)))
+(loop 50 (makegrid start 40 40))))

@@ -293,7 +293,7 @@ scomb *get_fscomb(const char *name_format, ...);
 scomb *get_scomb_origlambda(cell *lambda);
 int get_scomb_var(scomb *sc, const char *name);
 int scomb_count();
-scomb *add_scomb(char *name);
+scomb *add_scomb(char *name, char *prefix);
 scomb *build_scomb(cell *body, int nargs, char **argnames, int iscopy, int internal, 
                    char *name_format, ...);
 void scomb_free_list(scomb **list);
@@ -306,8 +306,7 @@ void print_scomb_code(scomb *sc);
 void print_scombs1();
 void print_scombs2();
 int scomb_isgraph(scomb *sc);
-void mkprogsuper(cell *root);
-void lift(cell **k, int iscopy, int calccells);
+void lift(cell **k, int iscopy, int calccells, char *prefix);
 void clearflag_scomb(int flag, scomb *sc);
 cell *super_to_letrec(scomb *sc);
 void remove_redundant_scombs();
@@ -426,7 +425,6 @@ extern char *collect_esp;
 #ifndef SUPER_C
 extern scomb *scombs;
 extern scomb **lastsc;
-extern scomb *prog_scomb;
 extern int nscombs;
 #endif
 

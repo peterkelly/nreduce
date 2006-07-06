@@ -1024,10 +1024,8 @@ void compile(gprogram *gp)
   int jemptyaddr;
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
 
-  if (NULL == prog_scomb) {
-    fprintf(stderr,"G-code implementation only works if supercombinators are enabled\n");
-    exit(1);
-  }
+  scomb *mainsc = get_scomb("main");
+  assert(mainsc);
 
   for (sc = scombs; sc; sc = sc->next)
     sc->index = index++;
@@ -1051,7 +1049,7 @@ void compile(gprogram *gp)
   }
 
   BEGIN();
-  PUSHGLOBAL(prog_scomb->index+NUM_BUILTINS,0);
+  PUSHGLOBAL(mainsc->index+NUM_BUILTINS,0);
   evaladdr = gp->count;;
   EVAL(0);
   PUSH(0);

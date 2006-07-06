@@ -537,8 +537,16 @@ void setneedclear_r(cell *c)
   case TYPE_IND:
     setneedclear_r((cell*)c->field1);
     break;
-  case TYPE_LETREC:
+  case TYPE_LETREC: {
+    cell *lnk;
+    for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
+      setneedclear_r((cell*)lnk->field1);
+    setneedclear_r((cell*)c->field2);
+    break;
+  }
   case TYPE_VARDEF:
+    setneedclear_r((cell*)c->field2);
+    break;
   case TYPE_VARLNK:
     assert(0);
     break;
@@ -564,8 +572,16 @@ void cleargraph_r(cell *c, int flag)
   case TYPE_IND:
     cleargraph_r((cell*)c->field1,flag);
     break;
-  case TYPE_LETREC:
+  case TYPE_LETREC: {
+    cell *lnk;
+    for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
+      cleargraph_r((cell*)lnk->field1,flag);
+    cleargraph_r((cell*)c->field2,flag);
+    break;
+  }
   case TYPE_VARDEF:
+    cleargraph_r((cell*)c->field2,flag);
+    break;
   case TYPE_VARLNK:
     assert(0);
     break;

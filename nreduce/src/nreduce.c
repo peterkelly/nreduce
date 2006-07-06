@@ -228,6 +228,29 @@ void print_compiled(gprogram *gp, array *cpucode)
   fclose(f);
 }
 
+int conslist_length(cell *list)
+{
+  int count = 0;
+  while (TYPE_CONS == celltype(list)) {
+    count++;
+    list = (cell*)list->field2;
+  }
+  if (TYPE_NIL != celltype(list))
+    return -1;
+  return count;
+}
+
+cell *conslist_item(cell *list, int index)
+{
+  while ((0 < index) && (TYPE_CONS == celltype(list))) {
+    index--;
+    list = (cell*)list->field2;
+  }
+  if (TYPE_CONS != celltype(list))
+    return NULL;
+  return (cell*)list->field1;
+}
+
 void source_code_parsing()
 {
   debug_stage("Source code parsing");
@@ -244,22 +267,63 @@ void source_code_parsing()
 
   fclose(yyin);
 
-  global_root = parse_root;
+  cell *funlist = parse_root;
+  int gotmain = 0;
 
-  scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
-    cell *lambda;
-    clearflag_scomb(FLAG_PROCESSED,sc);
-    if (NULL != (lambda = check_for_lambda(sc->body))) {
-      cellmsg(stderr,lambda,"Supercombinators cannot contain lambda expressions\n");
+  while (TYPE_CONS == celltype(funlist)) {
+    cell *fundef = (cell*)funlist->field1;
+
+    cell *name = conslist_item(fundef,0);
+    cell *args = conslist_item(fundef,1);
+    cell *body = conslist_item(fundef,2);
+    if ((NULL == name) || (NULL == args) || (NULL == body)) {
+      fprintf(stderr,"Invalid function definition\n");
       exit(1);
     }
+
+    if (TYPE_SYMBOL != celltype(name)) {
+      fprintf(stderr,"Invalid function name\n");
+      exit(1);
+    }
+    char *namestr = (char*)name->field1;
+
+    int nargs = conslist_length(args);
+    if (0 > nargs) {
+      fprintf(stderr,"Invalid argument list\n");
+      exit(1);
+    }
+
+    scomb *sc = add_scomb(namestr,NULL);
+    sc->nargs = nargs;
+    sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
+    int i = 0;
+    while (TYPE_CONS == celltype(args)) {
+      cell *argname = (cell*)args->field1;
+      if (TYPE_SYMBOL != celltype(argname)) {
+        fprintf(stderr,"Invalid argument name\n");
+        exit(1);
+      }
+      sc->argnames[i++] = (char*)strdup((char*)argname->field1);
+      args = (cell*)args->field2;
+    }
+
+    sc->body = body;
+
+    if (!strcmp(namestr,"main"))
+      gotmain = 1;
+
+    funlist = (cell*)funlist->field2;
   }
 
-  if (trace) {
-    print_code(global_root);
-    printf("\n");
+  if (!gotmain) {
+    fprintf(stderr,"No \"main\" function defined\n");
+    exit(1);
   }
+
+  if (trace)
+    print_scombs1();
+
+  global_root = NULL;
 }
 
 void parse_check(int cond, cell *c, char *msg)
@@ -375,33 +439,27 @@ void create_letrecs(cell *c)
 void letrec_creation()
 {
   debug_stage("Letrec creation");
-  create_letrecs(global_root);
 
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     create_letrecs(sc->body);
 
-  if (trace) {
-    print_code(global_root);
-    printf("\n");
-  }
+  if (trace)
+    print_scombs1();
 }
 
 void letrec_substitution()
 {
   debug_stage("Letrec substitution");
 
-  global_root = suball_letrecs(global_root,NULL);
-  resolve_scvars(global_root);
-
-  clearflag(FLAG_PROCESSED);
-  clearflag(FLAG_MAXFREE);
-
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
     sc->body = suball_letrecs(sc->body,sc);
     resolve_scvars(sc->body);
   }
+
+  if (trace)
+    print_scombs1();
 
   assert(0 == stackcount);
 }
@@ -480,26 +538,29 @@ void app_substitution()
 {
   debug_stage("Application substitution");
 
-  substitute_apps(global_root);
-
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     substitute_apps(sc->body);
 
-  if (trace) {
-    print_code(global_root);
-    printf("\n");
-  }
+  if (trace)
+    print_scombs1();
 }
 
 void lambda_lifting()
 {
   debug_stage("Lambda lifting");
 
-  lift(&global_root,0,0);
-  assert(0 == stackcount);
+  scomb *sc;
+  scomb *last = NULL;
+  for (sc = scombs; sc; sc = sc->next)
+    last = sc;
 
-  mkprogsuper(global_root);
+  scomb *prev = NULL;
+  for (sc = scombs; prev != last; sc = sc->next) {
+    lift(&sc->body,0,0,sc->name);
+    prev = sc;
+  }
+  assert(0 == stackcount);
 
   if (trace)
     print_scombs1();

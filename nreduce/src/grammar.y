@@ -66,9 +66,6 @@ extern struct cell *parse_root;
 %type <c> Lambdas
 %type <c> LetVar
 %type <c> LetVars
-%type <c> Arguments
-%type <c> Supercombinator
-%type <c> Supercombinators
 %left SYMBOL
 
 %%
@@ -91,6 +88,7 @@ LetVars:
 
 SingleExpr:
   NIL                                           { $$ = globnil; }
+| '(' ')'                                       { $$ = globnil; }
 | INTEGER                                       { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_INT;
                                                   $$->field1 = (void*)$1; }
@@ -147,36 +145,8 @@ Expr:
                                                   c->field2 = $2; }
 ;
 
-Arguments:
-  SYMBOL Arguments                              { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_VARDEF;
-                                                  $$->field1 = strdup($1);
-                                                  $$->field2 = $2; }
-| { $$ = NULL; }
-;
-
-Supercombinator:
-  SUPER '(' SYMBOL Arguments ')' SingleExpr  { scomb *sc = add_scomb($3);
-                                         cell *argc;
-                                         int argno;
-                                         sc->nargs = 0;
-                                         for (argc = $4; argc; argc = (cell*)argc->field2)
-                                           sc->nargs++;
-                                         sc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
-                                         argno = 0;
-                                         for (argc = $4; argc; argc = (cell*)argc->field2)
-                                           sc->argnames[argno++] = strdup((char*)argc->field1);
-                                         sc->body = $6;
-                                         $$ = NULL; }
-;
-
-Supercombinators:
-  Supercombinator Supercombinators {}
-| {}
-;
-
 Program:
-  Supercombinators '(' Expr ')' { parse_root = $3; }
+  AppliedExpr { parse_root = $1; }
 ;
 
 %%

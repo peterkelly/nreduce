@@ -1,3 +1,4 @@
+(main ()
 (let
  ((printelem  (!indent.!elem.
                 cons (indentstr indent)
@@ -43,4 +44,4 @@
       (cons (mkelem "person" 
         (cons (mkattr "name" "Bob")
         (cons (mkattr "age" "38")
-        (cons (mkattr "occupation" "Manager") nil))) nil) nil))))))
+        (cons (mkattr "occupation" "Manager") nil))) nil) nil)))))))
