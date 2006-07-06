@@ -73,6 +73,7 @@ int ndispother = 0;
 cell *pinned = NULL;
 cell *globnil = NULL;
 cell *globtrue = NULL;
+cell *globzero = NULL;
 
 void initmem()
 {
@@ -83,6 +84,9 @@ void initmem()
   globtrue = alloc_cell();
   globtrue->tag = TYPE_INT | FLAG_PINNED;
   globtrue->field1 = (void*)1;
+  globzero = alloc_cell();
+  globzero->tag = TYPE_INT | FLAG_PINNED;
+  globzero->field1 = (void*)0;
 }
 
 cell *alloc_cell()
@@ -127,7 +131,7 @@ int nreachable = 0;
 void mark(cell *c)
 {
   assert(TYPE_EMPTY != celltype(c));
-  if (!c || (c->tag & FLAG_MARKED))
+  if (c->tag & FLAG_MARKED)
     return;
   c->tag |= FLAG_MARKED;
   nreachable++;
@@ -156,6 +160,29 @@ void mark(cell *c)
     mark((cell*)c->field1);
     mark((cell*)c->field2);
     break;
+  case TYPE_AREF: {
+    cell *arrcell = (cell*)c->field1;
+    carray *arr = (carray*)arrcell->field1;
+    int index = (int)c->field2;
+    assert(index < arr->size);
+    assert(arr->refs[index] == c);
+
+    mark((cell*)c->field1);
+    break;
+  }
+  case TYPE_ARRAY: {
+    carray *arr = (carray*)c->field1;
+    int i;
+    for (i = 0; i < arr->size; i++) {
+      mark(arr->cells[i]);
+      if (arr->refs[i])
+        mark(arr->refs[i]);
+    }
+    mark(arr->tail);
+    if (arr->sizecell)
+      mark(arr->sizecell);
+    break;
+  }
   default:
     break;
   }
@@ -172,6 +199,13 @@ void free_cell_fields(cell *c)
   case TYPE_VARDEF:
     free((char*)c->field1);
     break;
+  case TYPE_ARRAY: {
+    carray *arr = (carray*)c->field1;
+    free(arr->cells);
+    free(arr->refs);
+    free(arr);
+    break;
+  }
   }
 }
 

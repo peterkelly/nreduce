@@ -178,10 +178,6 @@ void gprogram_free(gprogram *gp)
     free(gp->ginstrs[i].expstatus);
   }
 
-  for (i = 0; i < gp->stringmap->size/sizeof(char*); i++) {
-    char *str = ((char**)gp->stringmap->data)[i];
-    free(str);
-  }
   array_free(gp->stringmap);
 
   free(gp->ginstrs);
@@ -190,9 +186,11 @@ void gprogram_free(gprogram *gp)
 
 int add_string(gprogram *gp, char *str)
 {
-  int pos = gp->stringmap->size/sizeof(char*);
-  char *copy = strdup(str);
-  array_append(gp->stringmap,&copy,sizeof(char*));
+  int pos = gp->stringmap->size/sizeof(cell*);
+  cell *c = alloc_cell();
+  c->tag = TYPE_STRING | FLAG_PINNED;
+  c->field1 = strdup(str);
+  array_append(gp->stringmap,&c,sizeof(cell*));
   return pos;
 }
 
@@ -438,10 +436,11 @@ void print_program(gprogram *gp, int builtins, int usage)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < gp->stringmap->size/sizeof(char*); i++) {
-    char *str = ((char**)gp->stringmap->data)[i];
+  for (i = 0; i < gp->stringmap->size/sizeof(cell*); i++) {
+    cell *strcell = ((cell**)gp->stringmap->data)[i];
+    assert(TYPE_STRING == celltype(strcell));
     printf("%d: ",i);
-    print_quoted_string(stdout,str);
+    print_quoted_string(stdout,(char*)strcell->field1);
     printf("\n");
   }
 }

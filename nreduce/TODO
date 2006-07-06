@@ -1,0 +1,49 @@
+Arrays
+  - Make sure array references with index > 0 can be used everywhere (e.g. arraystore)
+  - More testing to ensure they're completely transparent
+  - Allow parts of arrays to be collected, e.g. if the first reference in memory
+    has index = 1000, then elements 0-999 can be removed. This can be done with a
+    memmove on arr->cells and arr->refs, an adjustment of arr->size, as well as
+    adjusting the indexes on each reference
+
+Safety
+  - Make all G-code instructions to the appropriate checks e.g. not popping too many
+    elements off the stack, or not updating a stack entry below 0
+  - Add a field to struct builtin to specify the expected type of each argument
+  - Better error handling for when invalid argument types/values are passed to
+    builtin functions
+
+Modules
+  - Decide on how the module system will work
+  - How to specify supercombinators in each module
+  - Dynamic linking
+  - Module storage format incl. bytecode serialization
+
+G-code Compiler
+  - Finish the optimizations that are incomplete (e.g. eager evaluation with BIFs)
+  - Do type annotations on the supercombinator graphs so that specific operations e.g.
+    arithmetic can be optimised
+  - Use a faster strictness analyzer (lower accuracy is ok as long as it's safe)
+
+G-machine
+  - Handle errors properly that are related to insufficient parameters being passed
+    to a builtin function/supercombinator
+  - Change the code to be sane C code, rather than just a C version of the assembler code
+  - Analyse where indirection nodes can and can't be encountered, so that less resolve_ind()s
+    are necessary
+
+Code parsing/lambda lifting
+  - Choose supercombinator names such that they can't conflict with user-defined
+    variables/functions
+  - Make sure variable scoping is handled correctly e.g. when a new variable is
+    declared within a scope where an ancestor scope has the same variable
+  - Fix comment parsing bug (see top of lexer.l)
+
+JIT compiler
+  - Get this working again with the new/changed G-code instructions
+  - Add safety checks
+
+Strings
+
+File access
+

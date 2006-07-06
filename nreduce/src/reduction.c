@@ -541,6 +541,7 @@ void reduce()
       continue;
     }
     case TYPE_CONS:
+    case TYPE_AREF:
     case TYPE_NIL:
     case TYPE_INT:
     case TYPE_DOUBLE:

@@ -31,7 +31,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "IND",
 "FUNCTION",
 "SCREF",
-"RES3",
+"AREF",
 "RES4",
 "RES5",
 "RES6",
@@ -39,6 +39,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "INT",
 "DOUBLE",
 "STRING",
+"ARRAY",
  };
 
 void fatal(const char *msg)
@@ -531,6 +532,25 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
         fprintf(f,"[fun %d/%d]",(int)c->field1,(int)c->field2);
       }
       break;
+    case TYPE_AREF: {
+      cell *arrcell = (cell*)c->field1;
+      carray *arr = (carray*)arrcell->field1;
+      int index = (int)c->field2;
+      fprintf(f,"(array ref %d/%d)",index,arr->size);
+      break;
+    }
+    case TYPE_ARRAY: {
+      carray *arr = (carray*)c->field1;
+      printf("ARRAY[");
+      int i;
+      for (i = 0; i < arr->size; i++) {
+        if (i > 0)
+          printf(",");
+        print_code1(f,arr->cells[i],0,0,indent,c);
+      }
+      printf("]");
+      break;
+    }
     default:
       assert(0);
       break;

@@ -538,11 +538,8 @@ void execute(gprogram *gp)
       break;
     }
     case OP_PUSHSTRING: {
-      char *str = ((char**)gp->stringmap->data)[instr->arg0];
-      cell *c = alloc_cell();
-      c->tag = TYPE_STRING;
-      c->field1 = (void*)strdup(str);
-      push(c);
+      cell *str = ((cell**)gp->stringmap->data)[instr->arg0];
+      push(str);
       break;
     }
     case OP_CHECKEVAL: {

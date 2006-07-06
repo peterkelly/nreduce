@@ -41,6 +41,7 @@
 #define BLOCK_SIZE 1024
 /* #define COLLECT_THRESHOLD 1024000 */
 #define COLLECT_THRESHOLD 102400
+//#define COLLECT_THRESHOLD 100
 
 #define celldouble(c) (*(double*)(&((c)->field1)))
 #define hasfield1str(type) ((TYPE_STRING == (type)) ||   \
@@ -60,7 +61,7 @@
 #define TYPE_IND         0x09  /* left: tgt (cell*)                                */
 #define TYPE_FUNCTION    0x0A  /* left: nargs(int)         right: address          */
 #define TYPE_SCREF       0x0B  /* left: scomb (scomb*)                             */
-#define TYPE_RES3        0x0C  /*                                                  */
+#define TYPE_AREF        0x0C  /* left: array (cell*)      right: index            */
 #define TYPE_RES4        0x0D  /*                                                  */
 #define TYPE_RES5        0x0E  /*                                                  */
 #define TYPE_RES6        0x0F  /*                                                  */
@@ -68,7 +69,8 @@
 #define TYPE_INT         0x11  /*                                                  */
 #define TYPE_DOUBLE      0x12  /*                                                  */
 #define TYPE_STRING      0x13  /*                                                  */
-#define NUM_CELLTYPES    0x14
+#define TYPE_ARRAY       0x14  /* left: array (carray*)                            */
+#define NUM_CELLTYPES    0x15
 
 #define VALUE_FIELD      0x10
 
@@ -91,25 +93,33 @@
 #define B_GE             10
 #define B_AND            11
 #define B_OR             12
+#define B_NOT            13
 
-#define B_AP             13
+#define B_AP             14
 
-#define B_IF             14
-#define B_CONS           15
-#define B_HEAD           16
-#define B_TAIL           17
-#define B_ISLAMBDA       18
-#define B_ISVALUE        19
-#define B_ISCONS         20
-#define B_ISNIL          21
-#define B_ISINT          22
-#define B_ISDOUBLE       23
-#define B_ISSTRING       24
-#define B_SQRT           25
-#define B_NEG            26
-#define B_UNION          27
-#define B_INTERSECT      28
-#define NUM_BUILTINS     29
+#define B_IF             15
+#define B_CONS           16
+#define B_HEAD           17
+#define B_TAIL           18
+#define B_ISLAMBDA       19
+#define B_ISVALUE        20
+#define B_ISCONS         21
+#define B_ISNIL          22
+#define B_ISINT          23
+#define B_ISDOUBLE       24
+#define B_ISSTRING       25
+#define B_SQRT           26
+#define B_NEG            27
+#define B_UNION          28
+#define B_INTERSECT      29
+#define B_CONVERTARRAY   30
+#define B_ARRAYITEM      31
+#define B_ARRAYHAS       32
+#define B_ARRAYEXT       33
+#define B_ARRAYSIZE      34
+#define B_ARRAYTAIL      35
+#define B_ARRAYOPTLEN    36
+#define NUM_BUILTINS     37
 
 #define TAG_MASK         0xFF
 
@@ -141,6 +151,15 @@ typedef struct cell {
 } cell;
 
 #define celltype(_c) ((_c)->tag & TAG_MASK)
+
+typedef struct carray {
+  int alloc;
+  int size;
+  cell **cells;
+  cell **refs;
+  cell *tail;
+  cell *sizecell;
+} carray;
 
 typedef struct array {
   int alloc;
@@ -219,7 +238,7 @@ void insert(cell *c, int pos);
 cell *pop();
 cell *top();
 cell *stackat(int s);
-void statistics();
+void statistics(FILE *f);
 cell *resolve_source(cell *c);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
@@ -377,6 +396,7 @@ extern int ndispother;
 
 extern cell *globnil;
 extern cell *globtrue;
+extern cell *globzero;
 extern char *collect_ebp;
 extern char *collect_esp;
 #endif

@@ -23,10 +23,16 @@ void print_cell(cell *c)
 /*   printf("\nprint_cell done\n"); */
   c = resolve_ind(c);
 
-  assert(isvalue(c));
   if (trace)
     debug(0,"<============ ");
 
+  if (TYPE_AREF == celltype(c)) {
+    print_code(c);
+    printf("\n");
+    return;
+  }
+
+  assert(isvalue(c));
   switch (celltype(c)) {
   case TYPE_NIL:
     break;

@@ -179,6 +179,17 @@ void b_gt() { b_other(B_GT); }
 void b_ge() { b_other(B_GE); }
 void b_and() { b_other(B_AND); }
 void b_or() { b_other(B_OR); }
+
+void b_not()
+{
+  cell *arg = stack[stackcount-1];
+  assert(TYPE_IND != celltype(arg));
+  if (TYPE_NIL == celltype(stack[stackcount-1]))
+    stack[stackcount-1] = globtrue;
+  else
+    stack[stackcount-1] = globnil;
+}
+
 void b_ap() { b_other(B_AP); }
 
 void b_if()
@@ -213,22 +224,59 @@ void b_cons()
 
 void b_head()
 {
-  cell *cons = stack[stackcount-1];
-  assert(TYPE_IND != celltype(cons));
-  if (TYPE_CONS != celltype(cons))
+  cell *arg = stack[stackcount-1];
+  assert(TYPE_IND != celltype(arg));
+  if (TYPE_CONS == celltype(arg)) {
+    stack[stackcount-1] = (cell*)arg->field1;
+  }
+  else if (TYPE_AREF == celltype(arg)) {
+    cell *arrcell = (cell*)arg->field1;
+    carray *arr = (carray*)arrcell->field1;
+    int index = (int)arg->field2;
+    assert(index < arr->size);
+    stack[stackcount-1] = (cell*)arr->cells[index];
+  }
+  else {
     assert(!"head: expected a cons cell");
+  }
+}
 
-  stack[stackcount-1] = (cell*)cons->field1;
+cell *get_tail(cell *arrcell, int index)
+{
+  carray *arr = (carray*)arrcell->field1;
+  assert(index < arr->size);
+  if (index+1 == arr->size) {
+    return arr->tail;
+  }
+  else {
+    cell *ref = arr->refs[index+1];
+    if (NULL == ref) {
+      ref = alloc_cell();
+      ref->tag = TYPE_AREF;
+      ref->field1 = arrcell;
+      ref->field2 = (void*)(index+1);
+      arr->refs[index+1] = ref;
+      assert(index+1 < arr->size);
+    }
+    return ref;
+  }
 }
 
 void b_tail()
 {
-  cell *cons = stack[stackcount-1];
-  assert(TYPE_IND != celltype(cons));
-  if (TYPE_CONS != celltype(cons))
+  cell *arg = stack[stackcount-1];
+  assert(TYPE_IND != celltype(arg));
+  if (TYPE_CONS == celltype(arg)) {
+    stack[stackcount-1] = (cell*)arg->field2;
+  }
+  else if (TYPE_AREF == celltype(arg)) {
+    cell *arrcell = (cell*)arg->field1;
+    int index = (int)arg->field2;
+    stack[stackcount-1] = get_tail(arrcell,index);
+  }
+  else {
     assert(!"tail: expected a cons cell");
-
-  stack[stackcount-1] = (cell*)cons->field2;
+  }
 }
 
 void b_islambda()
@@ -249,7 +297,7 @@ void b_iscons()
 {
   cell *val = stack[stackcount-1];
   assert(TYPE_IND != celltype(val));
-  setbool(TYPE_CONS == celltype(val));
+  setbool((TYPE_CONS == celltype(val)) || (TYPE_AREF == celltype(val)));
 }
 
 void b_isnil()
@@ -399,6 +447,297 @@ void b_intersect()
   stack[stackcount-1]->field1 = set_intersection((char*)set1->field1,(char*)set2->field1);
 }
 
+void b_convertarray()
+{
+  cell *retcell = (cell*)stack[stackcount-1];
+  stackcount--;
+
+  if (TYPE_INT != celltype(retcell)) {
+    printf("convertarray: first arg should be an int, got ");
+    print_code(retcell);
+    printf("\n");
+    abort();
+  }
+
+  // FIXME: this doesn't correctly handle cyclic lists at present!
+  cell *top = stack[stackcount-1];
+  assert(TYPE_IND != celltype(top));
+  int size = 0;
+
+  if (TYPE_AREF == celltype(top))
+    return;
+
+  cell *c = top;
+  while (TYPE_CONS == celltype(c)) {
+    c = resolve_ind((cell*)c->field2);
+    size++;
+  }
+
+  if (TYPE_APPLICATION == celltype(c)) {
+    printf("convertarray: list is not fully evaluated\n");
+    abort();
+  }
+  else if (TYPE_NIL != celltype(c)) {
+    printf("convertarray: found non-cons within list: ");
+    print_code(c);
+    printf("\n");
+    abort();
+  }
+
+  carray *arr = (carray*)calloc(1,sizeof(carray));
+  arr->alloc = size;
+  arr->size = size;
+  arr->cells = (cell**)calloc(arr->alloc,sizeof(cell*));
+  arr->refs = (cell**)calloc(arr->alloc,sizeof(cell*));
+  arr->tail = globnil;
+
+  int i;
+  c = top;
+  for (i = 0; i < arr->size; i++) {
+    arr->cells[i] = c->field1;
+    c = resolve_ind((cell*)c->field2);
+  }
+
+  cell *arrcell = alloc_cell();
+  arrcell->tag = TYPE_ARRAY;
+  arrcell->field1 = arr;
+
+  // return value is what is passed in, but now it points to an array
+  top->tag = TYPE_AREF;
+  top->field1 = arrcell;
+  top->field2 = 0;
+  arr->refs[0] = top;
+
+  stack[stackcount-1] = retcell;
+}
+
+void b_arrayitem()
+{
+  cell *refcell = stack[stackcount-2];
+  cell *indexcell = stack[stackcount-1];
+  assert(TYPE_IND != celltype(refcell));
+  assert(TYPE_IND != celltype(indexcell));
+
+  if (TYPE_INT != celltype(indexcell)) {
+    printf("arrayitem: index must be an integer, got ");
+    print_code(indexcell);
+    printf("\n");
+    abort();
+  }
+  if (TYPE_AREF != celltype(refcell)) {
+    printf("arrayitem: expected an array reference, got ");
+    print_code(refcell);
+    printf("\n");
+    abort();
+  }
+
+  int index = (int)indexcell->field1;
+  stackcount--;
+
+  cell *arrcell = (cell*)refcell->field1;
+  carray *arr = (carray*)arrcell->field1;
+  int refindex = (int)refcell->field2;
+  assert(refindex+index < arr->size);
+  stack[stackcount-1] = (cell*)arr->cells[refindex+index];
+}
+
+void b_arrayhas()
+{
+  cell *refcell = stack[stackcount-2];
+  cell *indexcell = stack[stackcount-1];
+  assert(TYPE_IND != celltype(refcell));
+  assert(TYPE_IND != celltype(indexcell));
+  stackcount--;
+
+  if (TYPE_INT != celltype(indexcell)) {
+    printf("arrayhas: index must be an integer, got ");
+    print_code(indexcell);
+    printf("\n");
+    abort();
+  }
+
+  if (TYPE_AREF != celltype(refcell)) {
+    stack[stackcount-1] = globnil;
+    return;
+  }
+
+  int index = (int)indexcell->field1;
+
+  cell *arrcell = (cell*)refcell->field1;
+  carray *arr = (carray*)arrcell->field1;
+  int refindex = (int)refcell->field2;
+  if (refindex+index < arr->size)
+    stack[stackcount-1] = globtrue;
+  else
+    stack[stackcount-1] = globnil;
+}
+
+void b_arrayext()
+{
+  cell *lstcell = stack[stackcount-2];
+  cell *ncell = stack[stackcount-1];
+  assert(TYPE_IND != celltype(lstcell));
+  assert(TYPE_IND != celltype(ncell));
+  stackcount--;
+
+  if (TYPE_INT != celltype(ncell)) {
+    printf("arrayext: n must be an integer, got ");
+    print_code(ncell);
+    printf("\n");
+    abort();
+  }
+  int n = (int)ncell->field1;
+  assert(0 <= n);
+
+  cell *arrcell = NULL;
+  carray *arr = NULL;
+  int base = 0; // FIXME: make sure this is respected
+  int pos = 0;
+  cell *cons = NULL;
+  char *mode = NULL;
+  int existing = 0;
+  if (TYPE_AREF == celltype(lstcell)) {
+    mode = "existing";
+    arrcell = (cell*)lstcell->field1;
+    arr = (carray*)arrcell->field1;
+    base = (int)lstcell->field2;
+
+    assert(base < arr->size);
+    assert(0 == base); // FIXME: lift this restriction
+
+    pos = arr->size;
+    cons = arr->tail;
+    existing = 1;
+  }
+  else {
+    mode = "new";
+    assert(TYPE_CONS == celltype(lstcell));
+    arr = (carray*)calloc(1,sizeof(carray));
+    arr->alloc = 16; // FIXME
+    arr->size = 0;
+    arr->cells = (cell**)calloc(arr->alloc,sizeof(cell*));
+    arr->refs = (cell**)calloc(arr->alloc,sizeof(cell*));
+    arr->tail = NULL;
+
+    arrcell = alloc_cell();
+    arrcell->tag = TYPE_ARRAY;
+    arrcell->field1 = arr;
+    cons = lstcell;
+  }
+
+  int oldalloc = arr->alloc;
+  while (base+n >= arr->alloc)
+    arr->alloc *= 2;
+  if (oldalloc != arr->alloc) {
+    arr->cells = (cell**)realloc(arr->cells,arr->alloc*sizeof(cell*));
+    arr->refs = (cell**)realloc(arr->refs,arr->alloc*sizeof(cell*));
+    memset(&arr->cells[oldalloc],0,(arr->alloc-oldalloc)*sizeof(cell*));
+    memset(&arr->refs[oldalloc],0,(arr->alloc-oldalloc)*sizeof(cell*));
+  }
+
+  assert(pos == arr->size);
+  while (pos <= n) {
+    cons = resolve_ind(cons);
+    assert(TYPE_CONS == celltype(cons));
+
+    assert(pos < arr->alloc);
+
+    arr->cells[pos] = (cell*)cons->field1;
+    arr->tail = (cell*)cons->field2;
+    cons = (cell*)cons->field2;
+
+    pos++;
+    arr->size++;
+    assert(pos == arr->size);
+  }
+
+  if (TYPE_CONS == celltype(lstcell)) {
+    lstcell->tag = TYPE_AREF;
+    lstcell->field1 = arrcell;
+    lstcell->field2 = 0;
+    arr->refs[0] = lstcell;
+  }
+
+  assert(n == (int)ncell->field1);
+  assert(pos == n+1);
+  assert(arr->cells[n]);
+
+  stack[stackcount-1] = arr->cells[n];
+}
+
+void b_arraysize()
+{
+  cell *refcell = stack[stackcount-1];
+  if (TYPE_AREF == celltype(refcell)) {
+    cell *arrcell = (cell*)refcell->field1;
+    assert(0 == (int)refcell->field2);
+    carray *arr = (carray*)arrcell->field1;
+
+    if ((NULL == arr->sizecell) ||
+        (arr->size != (int)arr->sizecell->field1)) {
+      arr->sizecell = alloc_cell();
+      arr->sizecell->tag = TYPE_INT;
+      arr->sizecell->field1 = (void*)arr->size;
+    }
+
+    stack[stackcount-1] = arr->sizecell;
+  }
+  else if (TYPE_CONS == celltype(refcell)) {
+    stack[stackcount-1] = globzero; // FIXME: should this be nil, like arrayoptlen?
+  }
+  else {
+    printf("arraysize: expected aref or cons, got ");
+    print_code(refcell);
+    printf("\n");
+    abort();
+  }
+}
+
+void b_arraytail()
+{
+  cell *refcell = stack[stackcount-1];
+  if (TYPE_AREF == celltype(refcell)) {
+    cell *arrcell = (cell*)refcell->field1;
+    assert(0 == (int)refcell->field2);
+    carray *arr = (carray*)arrcell->field1;
+
+    stack[stackcount-1] = arr->tail;
+  }
+  else if (TYPE_CONS == celltype(refcell)) {
+    // leave item on top of stack as is; it's the list
+  }
+  else {
+    printf("arraytail: expected aref or cons, got ");
+    print_code(refcell);
+    printf("\n");
+    abort();
+  }
+}
+
+void b_arrayoptlen()
+{
+  cell *refcell = stack[stackcount-1];
+  if (TYPE_AREF == celltype(refcell)) {
+    cell *arrcell = (cell*)refcell->field1;
+    assert(0 == (int)refcell->field2);
+    carray *arr = (carray*)arrcell->field1;
+
+    if (TYPE_NIL == celltype(arr->tail))
+      b_arraysize();
+    else
+      stack[stackcount-1] = globnil;
+  }
+  else if (TYPE_CONS == celltype(refcell)) {
+    stack[stackcount-1] = globnil;
+  }
+  else {
+    printf("arrayoptlen: expected aref or cons, got ");
+    print_code(refcell);
+    printf("\n");
+    abort();
+  }
+}
+
 const builtin builtin_info[NUM_BUILTINS] = {
 { "+",          2, 2, 1, b_add      },
 { "-",          2, 2, 1, b_subtract },
@@ -413,6 +752,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { ">=",         2, 2, 1, b_ge       },
 { "&&",         2, 2, 1, b_and      },
 { "||",         2, 2, 1, b_or       },
+{ "not",        1, 1, 1, b_not      },
 { "ap",         2, 2, 1, b_ap       },
 
 { "if",         3, 1, 0, b_if       },
@@ -431,8 +771,16 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "neg",        1, 1, 1, b_neg      },
 
-{ "union",      2, 2, 1, b_union  },
-{ "intersect",  2, 2, 1, b_intersect  },
+{ "union",      2, 2, 1, b_union    },
+{ "intersect",  2, 2, 1, b_intersect},
+
+{ "convertarray",   2, 2, 1, b_convertarray   },
+{ "arrayitem",      2, 2, 0, b_arrayitem      },
+{ "arrayhas",       2, 2, 1, b_arrayhas       },
+{ "arrayext",       2, 2, 1, b_arrayext       },
+{ "arraysize",      1, 1, 1, b_arraysize      },
+{ "arraytail",      1, 1, 1, b_arraytail      },
+{ "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
 
 };
 
