@@ -16,11 +16,60 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id$
+ * $Id: strictness.c 267 2006-07-06 14:07:53Z pmkelly $
  *
  */
 
-#define STRICTNESS_C
+/**
+ * \file
+ *
+ * Strictness analyser
+ *
+ * The strictness analyser is responsible for determining which arguments a function is "strict"
+ * in, i.e. which of its arguments will definitely be evaluated if the function is called,
+ * regardless of which code path is taken. This information is important for generating efficient
+ * code, as it allows the compiler to evaluate expressions directly in many cases, rather than
+ * generating a set of application nodes at run-time.
+ *
+ * We use a fairly simple analysis procedure here, which will detect obvious cases of strictness.
+ * Examples of these cases include:
+ * - An argument which is passed to a built-in function which is strict in all its arguments
+ *   e.g. f x y = + x y will be strict in both arguments since + definitely requires them to
+ *   be evaluated
+ * - An argument which is evaluated by the conditional expression of an if statement, or is used
+ *   in a strict context in *both* the true and false branches (not just one)
+ *   e.g. f a b c d = if (= 0 a) (+ b c) (- c d) will be strict in a and c, but not b or d
+ * - An argument which is passed to a supercombinator which is strict in the relevant argument
+ *   position, in the same manner as for built-in functions. This relies on the strictness
+ *   information having already been discovered in a previous iteration of the analysis process.
+ *
+ * In the above examples the term "strict context" means an expression that definitely needs to
+ * be evaluated. For example, in (head E), the expression E is a strict context and any variables
+ * within it must be evaluated if the function call occurs. In (cons E1 E2), neither expression
+ * is a strict context, as cons doesn't require either of its arguments to be evaluated.
+ *
+ * Performing strictness analysis in the general case is a very complex problem, and has been
+ * treated extensively in the literature. A more sophisticated algorithm based on abstract
+ * interpretation was previously used in nreduce, but this proved too slow for practical usage as
+ * its execution time for a given supercombinator was exponential in the number of arguments. For
+ * the time being we content ourselves with a faster but less complete method which should catch
+ * most of the cases we are interested in.
+ *
+ * Note that it's safe to assume a function is not strict in an argument when it actually is, but
+ * not the other way round. If there is any chance that the value of an argument may not be needed
+ * by a function, then it should not be evaluated, as doing so could result in expressions being
+ * lazily evaluated when they should not be. This could lead to infinite loops in some cases, e.g.
+ * the following function:
+ *
+ *   f x y = if (x) (len y) 0
+ *
+ * where nil (false) is passed for x, and y is an infinite list. Lazy evaluation would not cause
+ * y to be evaluated in this case (as the false branch is taken), and therefore we would be
+ * changing the semantics of evaluation by trying to evaluate (len y) before we call the function.
+ * So if there is any doubt about whether a function is strict in a particular argument, we assume
+ * that it is not, and thus the G-code compiler would generate MKAP instructions instead of
+ * evaluating the expression for that argument directly.
+ */
 
 #include "nreduce.h"
 #include <stdio.h>
@@ -30,494 +79,159 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#include <sys/time.h>
-#include <time.h>
 
-scomb *sc_lallstrict = NULL;
-scomb *sc_allstrict = NULL;
-scomb *sc_lnostrict = NULL;
-scomb *sc_nostrict = NULL;
-scomb *sc_spint = NULL;
-scomb *sc_builtins[NUM_BUILTINS];
-
-int tempdebug = 0;
-int ntestreductions = 0;
-int strictdebug = 0;
-
-cell *mkcell(int type, void *field1, void *field2)
+/**
+ * Determine the number of arguments required by the function referenced by the specified cell.
+ *
+ * @param c Cell representing a function. Must be either a supercombinator reference or built-in
+ *          function
+ */
+static int fun_nargs(cell *c)
 {
-  cell *c = alloc_cell();
-  c->tag = type;
-  c->field1 = field1;
-  c->field2 = field2;
-  return c;
-}
-
-cell *mkbapp(int bif, cell *arg1, cell *arg2)
-{
-  cell *bifcell = mkcell(TYPE_BUILTIN,(void*)bif,NULL);
-  cell *app = mkcell(TYPE_APPLICATION,bifcell,arg1);
-  if (arg2)
-    app = mkcell(TYPE_APPLICATION,app,arg2);
-  return app;
-}
-
-#define def(name,value,prev) mkcell(TYPE_VARLNK,mkcell(TYPE_VARDEF,strdup(name),value),prev);
-#define var(var) mkcell(TYPE_SYMBOL,strdup(var),NULL)
-#define scref(sc) mkcell(TYPE_SCREF,sc,NULL)
-#define letrec(a,b) mkcell(TYPE_LETREC,a,b)
-#define in NULL
-#define cons(a,b) mkbapp(B_CONS,a,b)
-#define un(a,b) mkbapp(B_UNION,a,b)
-#define intersect(a,b) mkbapp(B_INTERSECT,a,b)
-#define spintersect(a,b) app(app(scref(sc_spint),a),b)
-#define lambda(varname,expr) mkcell(TYPE_LAMBDA,strdup(varname),expr)
-#define Sv(a) mkbapp(B_HEAD,a,NULL)
-#define Sf(a) mkbapp(B_TAIL,a,NULL)
-#define string(x) mkcell(TYPE_STRING,strdup(x),NULL)
-#define app(a,b) mkcell(TYPE_APPLICATION,a,b)
-
-void addsc(const char *s)
-{
-}
-
-void addallstrict()
-{
-  scomb *sc = add_scomb("lallstrict",NULL);
-  sc_lallstrict = sc;
-  sc->nargs = 1;
-  sc->argnames = (char**)malloc(sizeof(char*));
-  sc->argnames[0] = strdup("x");
-  sc->body = cons(string("{*}"),scref(sc_lallstrict));
-  sc->internal = 1;
-  scomb_calc_cells(sc);
-
-  sc = add_scomb("allstrict",NULL);
-  sc_allstrict = sc;
-  sc->body = cons(string("{*}"),scref(sc_lallstrict));
-  sc->internal = 1;
-  scomb_calc_cells(sc);
-}
-
-void addnostrict()
-{
-  scomb *sc = add_scomb("lnostrict",NULL);
-  sc_lnostrict = sc;
-  sc->nargs = 1;
-  sc->argnames = (char**)malloc(sizeof(char*));
-  sc->argnames[0] = strdup("x");
-  sc->body = cons(string("{}"),scref(sc_lnostrict));
-  sc->internal = 1;
-  scomb_calc_cells(sc);
-
-  sc = add_scomb("nostrict",NULL);
-  sc_nostrict = sc;
-  sc->body = cons(string("{}"),scref(sc_lnostrict));
-  sc->internal = 1;
-  scomb_calc_cells(sc);
-}
-
-void addspint()
-{
-  scomb *sc = add_scomb("spint",NULL);
-  sc_spint = sc;
-  sc->nargs = 3;
-  sc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
-  sc->argnames[0] = strdup("e1");
-  sc->argnames[1] = strdup("e2");
-  sc->argnames[2] = strdup("x");
-
-  cell *e1x = app(var("e1"),var("x"));
-  cell *e2x = app(var("e2"),var("x"));
-
-  sc->body = cons(intersect(Sv(e1x),Sv(e2x)),app(app(scref(sc_spint),Sf(e1x)),Sf(e2x)));
-  sc->internal = 1;
-  scomb_calc_cells(sc);
-}
-
-void addabsbuiltins()
-{
-  /* FIXME: ideally this should be extended to support arbitrary nargs/nstrict, to allow
-     additional builtin functions to be added in the future */
-  int i;
-  for (i = 0; i < NUM_BUILTINS; i++) {
-    const builtin *info = &builtin_info[i];
-    cell *body = NULL;
-    if (B_IF == i) {
-      body = cons(string("{}"),lambda("a",
-             cons(string("{}"),lambda("b",
-             cons(string("{}"),lambda("c",
-               cons(un(Sv(var("a")),intersect(Sv(var("b")),Sv(var("c")))),
-                    spintersect(Sf(var("b")),Sf(var("c"))))))))));
-    }
-    else if ((2 == info->nargs) && (2 == info->nstrict)) {
-      body = cons(string("{}"),lambda("a",
-             cons(string("{}"),lambda("b",
-               cons(un(Sv(var("a")),Sv(var("b"))),string("serr"))))));
-    }
-    else if ((2 == info->nargs) && (0 == info->nstrict)) {
-      body = cons(string("{}"),lambda("a",
-             cons(string("{}"),lambda("b",
-               cons(string("{}"),string("serr"))))));
-    }
-    else if (1 == info->nargs) {
-      assert(1 == info->nstrict);
-      body = cons(string("{}"),lambda("a",cons(Sv(var("a")),string("serr"))));
-    }
-    else if ((3 == info->nargs) && (2 == info->nstrict)) {
-      body = cons(string("{}"),lambda("a",
-             cons(string("{}"),lambda("b",
-             cons(string("{}"),lambda("c",
-               cons(un(Sv(var("a")),Sv(var("b"))),string("serr"))))))));
-    }
-    else if ((3 == info->nargs) && (3 == info->nstrict)) {
-      body = cons(string("{}"),lambda("a",
-             cons(string("{}"),lambda("b",
-             cons(string("{}"),lambda("c",
-               cons(un(un(Sv(var("a")),Sv(var("b"))),Sv(var("c"))),string("serr"))))))));
-    }
-    else {
-      assert(0); /* ? */
-    }
-    sc_builtins[i] = build_scomb(body,0,NULL,0,1,"%s#",info->name);
-  }
-}
-
-cell *S(cell *c, int iteration)
-{
-  switch (celltype(c)) {
-  case TYPE_APPLICATION: {
-    cell *e1pair = S((cell*)c->field1,iteration);
-    cell *e2pair = S((cell*)c->field2,iteration);
-    cell *app = mkcell(TYPE_APPLICATION,Sf(e1pair),e2pair);
-    return cons(un(Sv(e1pair),Sv(app)),Sf(app));
-    break;
-  }
-  case TYPE_LAMBDA:
-    return cons(string("{}"),lambda((char*)c->field1,S((cell*)c->field2,iteration)));
-    break;
-  case TYPE_BUILTIN:
-    return scref(sc_builtins[(int)c->field1]);
-    break;
-  case TYPE_CONS:
-    assert(0);
-    break;
-  case TYPE_SYMBOL: {
-    return mkcell(TYPE_SYMBOL,strdup((char*)c->field1),(void*)1);
-    break;
-  }
-  case TYPE_SCREF: {
-    scomb *vsc = (scomb*)c->field1;
-    scomb *realsc = get_fscomb("%s#%d",vsc->name,iteration);
-    assert(realsc);
-    return mkcell(TYPE_SCREF,realsc,NULL);
-    break;
-  }
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:
-    return cons(string("{}"),string("serr"));
-    break;
-  default:
-    break;
-  }
-  assert(0);
-  return NULL;
-}
-
-void compute_strictness(scomb *approx, scomb *orig)
-{
-  int i;
-  cell *app = scref(approx);
-  scomb **oldlastsc = lastsc;
-
-  for (i = 0; i < orig->nargs; i++) {
-    char *str = (char*)malloc(strlen(orig->argnames[i])+3);
-    sprintf(str,"{%s}",orig->argnames[i]);
-    cell *arg = cons(string(str),globnil);
-    arg->field2 = lambda("x",arg);
-    free(str);
-/*     assert(NULL == get_fscomb("%s_arg%d",approx->name,i)); */
-
-    scomb *argsc = build_scomb(arg,0,NULL,1,0,"%s_arg%d",approx->name,i);
-    
-    app = mkcell(TYPE_APPLICATION,Sf(app),scref(argsc));
-  }
-  app = Sv(app);
-  global_root = app;
-  push(app);
-
-  global_root = app;
-  ntestreductions++;
-  reduce();
-  app = pop();
-
-  assert(TYPE_STRING == celltype(app));
-
-  lastsc = oldlastsc;
-  scomb_free_list(lastsc);
-  assert(NULL == *lastsc);
-
-/*   printf("%s",(char*)app->field1); */
-
-  approx->strictin = (int*)malloc(orig->nargs*sizeof(int));
-  memset(approx->strictin,0,orig->nargs*sizeof(int));
-  for (i = 0; i < orig->nargs; i++) {
-    if (set_contains((char*)app->field1,orig->argnames[i]))
-      approx->strictin[i] = 1;
-  }
-
-/*   printf(" ("); */
-/*   for (i = 0; i < orig->nargs; i++) { */
-/*     printf("%d",approx->strictin[i]); */
-/*   } */
-/*   printf(") "); */
-}
-
-flist *flist_new(int nargs)
-{
-  flist *fl = (flist*)calloc(1,sizeof(flist));
-  fl->nargs = nargs;
-  return fl;
-}
-
-void flist_free(flist *fl)
-{
-  if (!fl)
-    return;
-  int i;
-  for (i = 0; i < fl->count; i++)
-    free(fl->item[i]);
-  free(fl);
-}
-
-void flist_add(flist *fl, int *front)
-{
-  if (fl->alloc == fl->count) {
-    if (0 == fl->alloc)
-      fl->alloc = 2;
-    else
-      fl->alloc *= 2;
-    fl->item = (int**)realloc(fl->item,fl->alloc*sizeof(int*));
-  }
-
-  int *copy = (int*)malloc(fl->nargs*sizeof(int));
-  memcpy(copy,front,fl->nargs*sizeof(int));
-
-  fl->item[fl->count++] = copy;
-}
-
-int flist_contains(flist *fl, int *front)
-{
-  int i;
-  for (i = 0; i < fl->count; i++) {
-    if (!memcmp(fl->item[i],front,fl->nargs*sizeof(int)))
-      return 1;
-  }
-  return 0;
-}
-
-flist *flist_copy(flist *src)
-{
-  flist *dst = flist_new(src->nargs);
-  int i;
-  dst->count = src->count;
-  dst->alloc = src->alloc;
-  dst->item = (int**)malloc(dst->alloc*sizeof(int*));
-  for (i = 0; i < src->count; i++) {
-    dst->item[i] = malloc(dst->nargs*sizeof(int));
-    memcpy(dst->item[i],src->item[i],dst->nargs*sizeof(int));
-  }
-  return dst;
-}
-
-
-int check_mayterminate(scomb *sc, int nargs, int *args)
-{
-  int i;
-  cell *app = scref(sc);
-  for (i = 0; i < nargs; i++) {
-    cell *arg;
-    if (args[i])
-      arg = scref(sc_nostrict);
-    else
-      arg = scref(sc_allstrict);
-    app = mkcell(TYPE_APPLICATION,Sf(app),arg);
-  }
-  app = Sv(app);
-  global_root = app;
-  push(app);
-
-  global_root = app;
-  ntestreductions++;
-  reduce();
-  app = pop();
-
-  assert(TYPE_STRING == celltype(app));
-
-  if (strcmp((char*)app->field1,"{}")) {
-    /* the set of variables in which this function is strict is not empty - so this is
-       non-termination */
-    return 0;
-  }
+  if (TYPE_SCREF == celltype(c))
+    return ((scomb*)(c->field1))->nargs;
+  else if (TYPE_BUILTIN == celltype(c))
+    return builtin_info[(int)c->field1].nargs;
   else
-    return 1;
+    abort();
 }
 
-void print_front(int nargs, int *args)
+/**
+ * Determine whether or not the function referenced by the cell is strict in the specified argument
+ *
+ * @param c Cell representing a function. Must be either a supercombinator reference or built-in
+ *          function
+ */
+static int fun_strictin(cell *c, int argno)
 {
-  int i;
-  for (i = 0; i < nargs; i++)
-    printf("%d",args[i]);
+  assert(argno < fun_nargs(c));
+  if (TYPE_SCREF == celltype(c))
+    return ((scomb*)(c->field1))->strictin[argno];
+  else if (TYPE_BUILTIN == celltype(c))
+    return (argno < builtin_info[(int)c->field1].nstrict);
+  else
+    abort();
 }
 
-void print_frontier(flist *fl, int nargs)
-{
-  int f;
-  for (f = 0; f < fl->count; f++) {
-    if (0 < f)
-      printf(" ");
-    print_front(fl->nargs,fl->item[f]);
-  }
-}
-
-
-int within_frontier(flist *fl, int nargs, int *args)
-{
-  int i;
-  for (i = 0; i < fl->count; i++) {
-    if (!memcmp(fl->item[i],args,nargs*sizeof(int)))
-      return 1;
-  }
-  for (i = 0; i < nargs; i++) {
-    if (!args[i]) {
-      args[i] = 1;
-      int checked = within_frontier(fl,nargs,args);
-      args[i] = 0;
-      if (checked)
-        return 1;
-    }
-  }
-  return 0;
-}
-
-void calc_single(flist *fl, scomb *sc, int nargs, flist *tocheck, int *args, flist *checked)
-{
-  /* Note: A node is only checked if its parent was a 1-node */
-
-  /* Have we already checked this node? If so, we don't want to check it again. */
-  if (flist_contains(checked,args)) {
-#ifdef DEBUG_FRONTIERS
-    printf("  %s: ",sc->name);
-    print_front(nargs,args);
-    printf(" already checked\n");
-#endif
-    return;
-  }
-  flist_add(checked,args);
-
-  /* Is this node below and existing 0-node? If so, we know its value will be 0 so we can
-     skip checking */
-  if (within_frontier(fl,nargs,args)) {
-#ifdef DEBUG_FRONTIERS
-    printf("  %s: ",sc->name);
-    print_front(nargs,args);
-    printf(" already within frontier\n");
-#endif
-    return;
-  }
-
-  /* Find out if this node is an 0-node or a 1-node */
-  int checkres = check_mayterminate(sc,nargs,args);
-
-#ifdef DEBUG_FRONTIERS
-  printf("  %s: ",sc->name);
-  print_front(nargs,args);
-  printf(" -> %d",checkres);
-#endif
-
-  if (0 == checkres) {
-    /* All nodes below this will be 0 nodes, so we don't need to check any of the children */
-#ifdef DEBUG_FRONTIERS
-    printf(", adding to frontier\n");
-#endif
-    flist_add(fl,args);
-  }
-  else {
-    /* It is a 1 node - therefore we want to check all of its children to see if they are
-       0-nodes */
-    int i;
-#ifdef DEBUG_FRONTIERS
-    printf(", adding children\n");
-#endif
-    for (i = 0; i < nargs; i++) {
-      if (args[i]) {
-        args[i] = 0;
-        if (!within_frontier(fl,nargs,args))
-          flist_add(tocheck,args);
-        args[i] = 1;
-      }
-    }
-  }
-}
-
-flist *calc_frontier(scomb *sc, flist *prevfrontier)
-{
-  flist *tocheck = flist_copy(prevfrontier);
-  int nargs = prevfrontier->nargs;
-  flist *checked = flist_new(nargs);
-  flist *fl = flist_new(nargs);
-
-  int pos;
-  for (pos = 0; pos < tocheck->count; pos++) {
-    int *check = tocheck->item[pos];
-    calc_single(fl,sc,nargs,tocheck,check,checked);
-  }
-  return fl;
-}
-
-int flist_equals(flist *a, flist *b)
-{
-  assert(a->nargs == b->nargs);
-  if (a->count != b->count)
-    return 0;
-  int i;
-  for (i = 0; i < a->count; i++)
-    if (memcmp(a->item[i],b->item[i],a->nargs*sizeof(int)))
-      return 0;
-  return 1;
-}
-
-void annotate_r(cell *c)
+/**
+ * Recursively perform strictness analysis on an expression.
+ *
+ * This function does two things:
+ * - Records which arguments will definitely be evaluated, assuming this expression is evaluated
+ * - Marks any application nodes corresponding to an expression being passed as an argument to
+ *   a supercombinator or built-in function which is strict in that argument
+ *
+ * @param sc      The supercombinator being processed
+ *
+ * @param c       The expression to analysed
+ *
+ * @param used    An array of sc->nargs integers which indicate which arguments are used by the
+ *                expression
+ *
+ * @param changed A pointer to an integer that is set to true if a change was made to the
+ *                strictness flag of one or more application nodes. Changes to used are not
+ *                recorded here; this is the responsibility of check_strictness().
+ */
+static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
 {
   if (c->tag & FLAG_PROCESSED)
     return;
   c->tag |= FLAG_PROCESSED;
-
   switch (celltype(c)) {
   case TYPE_APPLICATION: {
-    cell *target = (cell*)c->field1;
-    int count = 0;
-    while (TYPE_APPLICATION == celltype(target)) {
-      target = (cell*)target->field1;
-      count++;
-    }
-    if (TYPE_SCREF == celltype(target)) {
-      scomb *fun = (scomb*)target->field1;
-      if ((count < fun->nargs) && fun->strictin[count])
-        c->tag |= FLAG_STRICT;
+    cell *fun;
+    int nargs = 0;
+    for (fun = c; TYPE_APPLICATION == celltype(fun); fun = (cell*)fun->field1)
+      nargs++;
+
+    /* We have discovered the item at the bottom of the spine, which is the function to be called.
+       However we can only perform strictness analysis if we know statically what that function
+       is - i.e. if the cell is a supercombinator reference of built-in function.
+
+       It is also possible that it could be a symbol, corresponding to a higher-order function
+       passed in as an argument, but since we don't know anything about it we skip this case.
+
+       Additionally, we will wait until we have an application to the right number of arguments
+       before doing the analysis - if this is not the case yet we'll just do a recursive call
+       to the next item in the application chain and handle it later. */
+    if (((TYPE_SCREF == celltype(fun)) || (TYPE_BUILTIN == celltype(fun))) &&
+        (nargs == fun_nargs(fun))) {
+
+      /* Follow the left branches down the tree, inspecting each argument and treating it as
+         strict or not depending on what we know about the appropriate argument to the function. */
+      cell *app = c;
+      int argno;
+      for (argno = nargs-1; 0 <= argno; argno--) {
+
+        /* If the function is strict in this argument, mark the application node with FLAG_STRICT.
+           This will provide a hint to the G-code compiler that it may compile the expression
+           directly instead of adding MKAP instructions to create application nodes at runtime. */
+        if (fun_strictin(fun,argno)) {
+          *changed = (*changed || !(app->tag & FLAG_STRICT));
+          app->tag |= FLAG_STRICT;
+
+          /* The expression will definitely need to be evaluated, i.e. it is in a strictness
+             context. Perform the analysis recursively. */
+          check_strictness_r(sc,(cell*)app->field2,used,changed);
+        }
+
+        app = (cell*)app->field1;
+      }
+
+      /* If statements need special treatment. The first argument (i.e. the conditional) is strict
+         since this is always evaluated. But the second and third arguments (i.e. true and false)
+         branches are not strict, since we don't know which will be needed until after the
+         conditional is evaluated at runtime. A variable is only considered strict on the branches
+         of an if in the case where it is used in a strict context in *both* branches.
+
+         Despite 2nd and 3rd arguments to if not being strict, we treat the *contents* of these
+         expressions as being so. Whichever branch is taken will definitely need to return a value,
+         so they are treated as a strict context and analysed with another recursive call to
+         check_strictness_r(). This information is still relevant to the G-code compiler due to
+         the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
+
+         Note that due to the fact that the supercombinator body is a graph and the recursive
+         calls to this function may find it's already evaluated, we may miss some variable uses -
+         but that's ok. It just means potentially missing out on a few (rare) opportunitites for
+         optimisation. */
+      if ((TYPE_BUILTIN == celltype(fun)) && (B_IF == (int)fun->field1)) {
+        cell *falsebranch = (cell*)c->field2;
+        cell *truebranch = (cell*)((cell*)c->field1)->field2;
+
+        int *trueused = (int*)alloca(sc->nargs*sizeof(int));
+        int *falseused = (int*)alloca(sc->nargs*sizeof(int));
+        memset(trueused,0,sc->nargs*sizeof(int));
+        memset(falseused,0,sc->nargs*sizeof(int));
+
+        check_strictness_r(sc,truebranch,trueused,changed);
+        check_strictness_r(sc,falsebranch,falseused,changed);
+
+        /* Merge the argument usage information from both branches, keeping only those arguments
+           which appear in both. */
+        int i;
+        for (i = 0; i < sc->nargs; i++)
+          if (trueused[i] && falseused[i])
+            used[i] = 1;
+      }
     }
 
-    annotate_r((cell*)c->field1);
-    annotate_r((cell*)c->field2);
+    /* The expression representing the thing being called is in a strict context, as we definitely
+       need the function. */
+    check_strictness_r(sc,(cell*)c->field1,used,changed);
     break;
   }
-  case TYPE_CONS:
-    assert(0);
+  case TYPE_SYMBOL: {
+    /* We are in a strict context and have an encountered a symbol, which must correspond to
+       one of the supercombinator's arguments. Mark the appropriate entry in the usage array to
+       indicate that this argument will definitely be evaluated. */
+    char *symbol = (char*)c->field1;
+    int i;
+    for (i = 0; i < sc->nargs; i++)
+      if (!strcmp(sc->argnames[i],symbol))
+        used[i] = 1;
     break;
+  }
   case TYPE_BUILTIN:
-  case TYPE_SYMBOL:
   case TYPE_SCREF:
   case TYPE_NIL:
   case TYPE_INT:
@@ -530,238 +244,91 @@ void annotate_r(cell *c)
   }
 }
 
-void annotate(scomb *sc)
+/**
+ * Perform strictness analysis for the specified supercombinator.
+ *
+ * The main thing this does is to call through to call through to check_strictness_r(). It also
+ * compares the new argument usage information with the old, and sets *changed to true of there
+ * is any difference.
+ *
+ * @param sc      The supercombinator being processed
+ *
+ * @param changed Pointer to an integer which will be set to true if there is any change to
+ *                the strictness flags or usage information (thus necessitating another iteration)
+ */
+static void check_strictness(scomb *sc, int *changed)
 {
-/*   int i; */
-/*   printf("annotate(%s): strict in",sc->name); */
-/*   if (sc->strictin) { */
-/*     for (i = 0; i < sc->nargs; i++) */
-/*       if (sc->strictin[i]) */
-/*         printf(" %s",sc->argnames[i]); */
-/*   } */
-/*   printf("\n"); */
+  int *used = (int*)alloca(sc->nargs*sizeof(int));
+  memset(used,0,sc->nargs*sizeof(int));
 
-#if 1
   cleargraph(sc->body,FLAG_PROCESSED);
-  annotate_r(sc->body);
-#endif
+  check_strictness_r(sc,sc->body,used,changed);
+
+  if (memcmp(sc->strictin,used,sc->nargs*sizeof(int)))
+    *changed = 1;
+
+  memcpy(sc->strictin,used,sc->nargs*sizeof(int));
 }
 
-#define MAXITER 15
+/**
+ * Print strictness information about all supercobminators to standard output
+ */
+void dump_strictinfo()
+{
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next) {
+    printf("%s ",sc->name);
+    int i;
+    for (i = 0; i < sc->nargs; i++) {
+      if (sc->strictin) {
+        if (sc->strictin[i])
+          printf("!");
+        else
+          printf(" ");
+      }
+      printf("%s ",sc->argnames[i]);
+    }
+    printf("\n");
+  }
+}
+
+/**
+ * Perform strictness analysis on a set of supercombinators.
+ *
+ * The analysis process operates in an iterative manner. On each iteration, all supercombinators
+ * are examined to determine which arguments they are strict in, and to mark appropriate
+ * application nodes with the strictness flag. If any changes to the strictness information or
+ * flag values occurs during this process, then another iteration will be performed, as additional
+ * cases of strictness may become apparent where arguments are applied to a supercombinator that
+ * is now known to be strict in some of its arguments.
+ *
+ * The process terminates when no changes to the argument strictness or application flags have
+ * occurred.
+ */
 void strictness_analysis()
 {
-#ifdef STRICTNESS_ANALYSIS
-  scomb *sc;
-  int iteration;
-  int nscombs = 0;
-  scomb **oldlast = lastsc;
-
-  struct timeval start;
-  struct timeval end;
-
-  gettimeofday(&start,NULL);
-
   if (trace)
-    debug_stage("Strictness analysis");
+    debug_stage("Strictness analysis (new version)");
 
-  /* FIXME: just calculate isgraph once for each scomb! */
-
+  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
-    nscombs++;
+    sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
 
-  scomb **sctotest = (scomb**)calloc(nscombs,sizeof(scomb*));
-  int *isgr = (int*)calloc(nscombs,sizeof(int));
+  /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
+     known to be strict. This will change as we perform the analysis. */
+  int changed;
+  int iteration = 0;
+  do {
+    changed = 0;
+    for (sc = scombs; sc; sc = sc->next)
+      check_strictness(sc,&changed);
+    iteration++;
 
-  int scno = 0;
-  for (sc = scombs; sc; sc = sc->next) {
-    sctotest[scno] = sc;
-    isgr[scno] = scomb_isgraph(sc);
-/*     if (isgr[scno]) */
-/*       printf("WARNING: skipping strictness analysis for %s; it's a graph\n",sc->name); */
-    scno++;
-  }
-
-  addallstrict();
-  addnostrict();
-  addspint();
-  addabsbuiltins();
-
-  /* Print strictness information for initial approximation (#0), i.e. which is strict
-     in all args */
-  if (strictdebug) {
-    for (scno = 0; scno < nscombs; scno++) {
-      sc = sctotest[scno];
-      if (!isgr[scno] && strcmp(sc->name,"main")) {
-/*         printf("%s#0 is strict in {*}\n",sc->name); */
-
-/*         printf("%s#0 is strict in {",sc->name); */
-/*         int i; */
-/*         for (i = 0; i < sc->nargs; i++) */
-/*           printf("%s%s",i > 0 ? "," : "",sc->argnames[i]); */
-/*         printf("}\n"); */
-      }
-    }
-  }
-
-  /* Create the initial frontier for each supercombinator */
-  flist **frontiers = (flist**)calloc(1,MAXITER*nscombs*sizeof(flist*));
-  int **strictins = (int**)calloc(1,MAXITER*nscombs*sizeof(int*));
-  for (scno = 0; scno < nscombs; scno++) {
-    sc = sctotest[scno];
-    cell *body = scref(sc_allstrict);
-    scomb *approx = build_scomb(body,0,NULL,1,0,"%s#0",sc->name);
-    int *initfront = (int*)alloca(sc->nargs*sizeof(int));
-    int i;
-    approx->strictin = (int*)malloc(sc->nargs*sizeof(int));
-    strictins[scno] = approx->strictin;
-    for (i = 0; i < sc->nargs; i++) {
-      initfront[i] = 1;
-      approx->strictin[i] = 1;
-    }
-    frontiers[scno] = flist_new(sc->nargs);
-    flist_add(frontiers[scno],initfront);
-  }
-
-  /* Create successive approximations in the ascending kleene chain, and compute the
-     frontier for each */
-  for (iteration = 1; iteration < MAXITER; iteration++) {
-    int converged = 1;
-    for (scno = 0; scno < nscombs; scno++) {
-      sc = sctotest[scno];
-      int i;
-      cell *body = sc->body;
-      for (i = sc->nargs-1; i >= 0; i--)
-        body = lambda(sc->argnames[i],body);
-      cell *spfun = isgr[scno] ? scref(sc_nostrict) : S(body,iteration-1);
-      scomb *approx = build_scomb(spfun,0,NULL,1,0,"%s#%d",sc->name,iteration);
-
-/*       if (trace) */
-/*         printf("Built approximation %s\n",approx->name); */
-
-
-/*       frontiers[iteration*nscombs+scno] = */
-/*         calc_frontier(approx,frontiers[(iteration-1)*nscombs+scno]); */
-
-/*       if (!flist_equals(frontiers[iteration*nscombs+scno], */
-/*                         frontiers[(iteration-1)*nscombs+scno])) */
-/*         converged = 0; */
-
-
-      if (!isgr[scno] && strcmp(sc->name,"main")) {
-        compute_strictness(approx,sc);
-
-
-        if (trace) {
-          printf("%s is strict in {",approx->name);
-          int a;
-          int nstrict = 0;
-          for (a = 0; a < sc->nargs; a++) {
-            if (approx->strictin[a]) {
-              if (0 < nstrict++)
-                printf(",");
-              printf("%s",sc->argnames[a]);
-            }
-          }
-          printf("}");
-          printf("\n");
-        }
-
-        strictins[iteration*nscombs+scno] = approx->strictin;
-
-        int nprev = 0;
-        while (nprev < iteration) {
-          if (!memcmp(strictins[iteration*nscombs+scno],
-                      strictins[(iteration-nprev-1)*nscombs+scno],
-                      sc->nargs*sizeof(int))) {
-            nprev++;
-          }
-          else {
-            break;
-          }
-        }
-/*         printf(" - same as %d prev iterations",nprev); */
-/*         printf("\n"); */
-
-        if (nprev < 2)
-          converged = 0;
-
-
-/*         if (NULL != frontiers[iteration*nscombs+scno]) { */
-/*           printf(" -- frontier "); */
-/*           print_frontier(frontiers[iteration*nscombs+scno],sc->nargs); */
-/*         } */
-      }
-    }
-
-#if 1
-    if (converged) {
-/*       printf("Frontiers have converged\n"); */
-      iteration++;
-      break;
-    }
-#endif
-  }
-  int usediter = iteration-1;
-
-  if (strictdebug) {
-    for (scno = 0; scno < nscombs; scno++) {
-      sc = sctotest[scno];
-      if (!isgr[scno] && strcmp(sc->name,"main")) {
-        scomb *approx = get_fscomb("%s#%d",sc->name,usediter);
-        printf("%s is strict in {",approx->name);
-        int a;
-        int nstrict = 0;
-        for (a = 0; a < sc->nargs; a++) {
-          if (approx->strictin[a]) {
-            if (0 < nstrict++)
-              printf(",");
-            printf("%s",sc->argnames[a]);
-          }
-        }
-        printf("}\n");
-      }
-    }
-  }
-
-  for (scno = 0; scno < nscombs; scno++) {
-    sc = sctotest[scno];
-    assert(!sc->strictin);
-    sc->strictin = (int*)malloc(sc->nargs*sizeof(int));
-    scomb *approx = get_fscomb("%s#%d",sc->name,usediter);
-    assert(approx);
-
-    if (approx->strictin)
-      memcpy(sc->strictin,approx->strictin,sc->nargs*sizeof(int));
-    else
-      memset(sc->strictin,0,sc->nargs*sizeof(int));
-  }
-
-  if (strictdebug)
-    exit(0);
-
-  for (iteration--; 0 <= iteration; iteration--) {
-    for (scno = 0; scno < nscombs; scno++)
-      flist_free(frontiers[iteration*nscombs+scno]);
-  }
-
-/*   printf("ntestreductions = %d\n",ntestreductions); */
-/*   printf("# scombs = %d\n",scomb_count()); */
-  free(frontiers);
-  free(sctotest);
-  free(isgr);
-
-  scomb_free_list(oldlast);
-  lastsc = oldlast;
-
-  for (sc = scombs; sc; sc = sc->next)
-    annotate(sc);
-/*   if (trace) */
-/*     print_scombs2(); */
-
-  gettimeofday(&end,NULL);
-/*   int ms = (end.tv_sec - start.tv_sec)*1000 + */
-/*            (end.tv_usec - start.tv_usec)/1000; */
-/*   printf("Strictness analysis took %d ms\n",ms); */
-
-#endif
+    /* If there was any changes, we have to go back through and check the graphs again. One or
+       more of the supercombinators is now known to be strict in one of its arguments that
+       we didn't know about before. Applications of this supercombinator will now be marked where
+       appropriate. We have to keep doing this until there are no more changes, as the effects
+       can trickle up to other supercombinators which call the one that changed, and then others
+       that call them and so forth. */
+  } while (changed);
 }

@@ -338,11 +338,8 @@ void print_cell(cell *c);
 
 /* strictness */
 
+void dump_strictinfo();
 void strictness_analysis();
-
-#ifndef STRICTNESS_C
-extern int strictdebug;
-#endif
 
 /* util */
 

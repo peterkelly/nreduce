@@ -681,7 +681,6 @@ int main(int argc, char **argv)
   memset(&args,0,sizeof(args));
   argp_parse (&argp, argc, argv, 0, 0, &args);
   trace = args.trace;
-  strictdebug = args.strictdebug;
 
   if (args.statistics)
     open_statistics();
@@ -697,7 +696,13 @@ int main(int argc, char **argv)
   }
   else {
     graph_optimisation();
+
     strictness_analysis();
+    if (args.strictdebug) {
+      dump_strictinfo();
+      exit(0);
+    }
+
     gcode_compilation();
 
     if (ENGINE_INTERPRETER == args.engine) {
