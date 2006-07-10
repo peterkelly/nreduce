@@ -188,12 +188,50 @@ void b_not()
     stack[stackcount-1] = globnil;
 }
 
-void b_bitand() { abort(); }
-void b_bitor() { abort(); }
-void b_bitxor() { abort(); }
-void b_bitnot() { abort(); }
-void b_bitshl() { abort(); }
-void b_bitshr() { abort(); }
+void b_bitop(int bif)
+{
+  cell *cell2 = stack[stackcount-2];
+  cell *cell1 = stack[stackcount-1];
+
+  assert(TYPE_IND != celltype(cell2));
+  assert(TYPE_IND != celltype(cell1));
+
+  if ((TYPE_INT != celltype(cell1)) || (TYPE_INT != celltype(cell2))) {
+    fprintf(stderr,"%s: incompatible arguments (must be int)\n",builtin_info[bif].name);
+    exit(1);
+  }
+
+  int a = (int)cell1->field1;
+  int b = (int)cell2->field1;
+  stackcount--;
+
+  switch (bif) {
+  case B_BITSHL:  setint(a << b);  break;
+  case B_BITSHR:  setint(a >> b);  break;
+  case B_BITAND:  setint(a & b);   break;
+  case B_BITOR:   setint(a | b);   break;
+  case B_BITXOR:  setint(a ^ b);   break;
+  default:        assert(0);       break;
+  }
+}
+
+void b_bitshl() { b_bitop(B_BITSHL); }
+void b_bitshr() { b_bitop(B_BITSHR); }
+void b_bitand() { b_bitop(B_BITAND); }
+void b_bitor() { b_bitop(B_BITOR); }
+void b_bitxor() { b_bitop(B_BITXOR); }
+
+void b_bitnot()
+{
+  cell *arg = stack[stackcount-1];
+  assert(TYPE_IND != celltype(arg));
+  if (TYPE_INT != celltype(arg)) {
+    fprintf(stderr,"~: incompatible argument (must be an int)\n");
+    exit(1);
+  }
+  int val = (int)arg->field1;
+  setint(~val);
+}
 
 void b_if()
 {
@@ -640,12 +678,12 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "or",             2, 2, 1, b_or             },
 { "not",            1, 1, 1, b_not            },
 
+{ "<<",             2, 2, 1, b_bitshl         },
+{ ">>",             2, 2, 1, b_bitshr         },
 { "&",              2, 2, 1, b_bitand         },
 { "|",              2, 2, 1, b_bitor          },
 { "^",              2, 2, 1, b_bitxor         },
 { "~",              1, 1, 1, b_bitnot         },
-{ "<<",             2, 2, 1, b_bitshl         },
-{ ">>",             2, 2, 1, b_bitshr         },
 
 { "if",             3, 1, 0, b_if             },
 { "cons",           2, 0, 1, b_cons           },

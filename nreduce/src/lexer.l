@@ -1,6 +1,6 @@
 %option noyywrap
 %option outfile="lexer.yy.c"
-%x vstr1 comment comment2 intline
+%x string comment comment2 intline
 %{
 /*
  * This file is part of the GridXSLT project
@@ -24,106 +24,104 @@
  *
  */
 
-/* FIXME: Since / is in ident now it causes parse errors for comments in some cases...
-   try //x at the start of a line */
-
 #include "grammar.tab.h"
 #include "nreduce.h"
 #include <string.h>
 
-#define MAX_STR_CONST 1024 /* FIXME: allow bigger strings! */
-
-char string_buf[MAX_STR_CONST];
-char *string_buf_ptr;
-
+array *lexstring = NULL;
 char *yyfilename = NULL;
 int yylineno;
 
 %}
 
-DIGIT      [0-9]
-DIGITS     {DIGIT}+
-LETTER     [a-zA-Z]
+DIGIT                   [0-9]
+DIGITS                  {DIGIT}+
+HEXDIGIT                [0-9a-fA-F]
+HEXDIGITS               {HEXDIGIT}+
 
-
-XINTEGER {DIGITS}
-XDOUBLE {DIGITS}\.{DIGITS}
-IDCHAR [\+\-\*\/\%\<\>\=\&\|\[\]\,\:\?a-zA-Z_]
-IDENT {IDCHAR}({IDCHAR}|{DIGIT}|_)*
-
- /* IDENT ([\+a-zA-Z]|_)([\+a-zA-Z0-9]|_)* */
+INTEGER                  \-?{DIGITS}
+HEX                      \-?0[xX]{HEXDIGIT}+
+DOUBLE                   \-?{DIGITS}\.{DIGITS}
+IDCHAR                   [a-zA-Z_?]
+IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 
 %%
 
-
-
-"/*"         BEGIN(comment);
-
-<comment>[^*\n]*        /* eat anything that's not a '*' */
-<comment>"*"+[^*/\n]*   /* eat up '*'s not followed by '/'s */
+"/*"                     { BEGIN(comment); }
+<comment>[^*\n]*         { }
+<comment>"*"+[^*/\n]*    { }
 <comment>\n             
-<comment>"*"+"/"        { BEGIN(INITIAL); }
+<comment>"*"+"/"         { BEGIN(INITIAL); }
 
 "//"                     { BEGIN(comment2); }
-<comment2>[^\n]*
-<comment2>\n              { BEGIN(INITIAL); }
+<comment2>[^\n]*         { }
+<comment2>\n             { BEGIN(INITIAL); }
 
-"#!"                      { BEGIN(intline); }
-<intline>[^\n]*
-<intline>\n               { BEGIN(INITIAL); }
+"#!"                     { BEGIN(intline); }
+<intline>[^\n]*          { }
+<intline>\n              { BEGIN(INITIAL); }
 
-"progstart"  {           return PROGSTART; }
-"!"     {         return LAMBDA; }
-"nil"   {         return NIL; }
-"super" {         return SUPER; }
-"letrec" {        return LETREC; }
-"in"    {         return IN; }
-"."     {         return '.'; }
-"("     {         return '('; }
-")"     {         return ')'; }
-"!="    {         yylval.s = strdup(yytext);
-                  return SYMBOL; }
-{IDENT} {         yylval.s = strdup(yytext);
-                  return SYMBOL; }
+\"                       { BEGIN(string);
+                           if (NULL == lexstring)
+                             lexstring = array_new();
+                           lexstring->size = 0; }
+<string>\"               { BEGIN(INITIAL);
+                           char c = '\0';
+                           array_append(lexstring,&c,1);
+                           yylval.s = strdup(lexstring->data);
+                           return STRING; }
+<string>\\n              { char c = '\n'; array_append(lexstring,&c,1); }
+<string>\\t              { char c = '\t'; array_append(lexstring,&c,1); }
+<string>\\r              { char c = '\r'; array_append(lexstring,&c,1); }
+<string>\\b              { char c = '\b'; array_append(lexstring,&c,1); }
+<string>\\f              { char c = '\f'; array_append(lexstring,&c,1); }
 
-{XINTEGER} {         yylval.i = atoi(yytext); return INTEGER; }
-{XDOUBLE}  {         yylval.d = atof(yytext); return DOUBLE; }
+<string>\\(.|\n)         { array_append(lexstring,&yytext[1],1); }
+<string>[^\\\n\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
 
+"progstart"              { return PROGSTART; }
+"!"                      { return LAMBDA; }
+"nil"                    { return NIL; }
+"super"                  { return SUPER; }
+"letrec"                 { return LETREC; }
+"in"                     { return IN; }
+"."                      { return '.'; }
+"("                      { return '('; }
+")"                      { return ')'; }
+"+"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"-"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"*"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"/"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"%"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"="                      { yylval.s = strdup(yytext); return SYMBOL; }
+"!="                     { yylval.s = strdup(yytext); return SYMBOL; }
+"<"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"<="                     { yylval.s = strdup(yytext); return SYMBOL; }
+">"                      { yylval.s = strdup(yytext); return SYMBOL; }
+">="                     { yylval.s = strdup(yytext); return SYMBOL; }
+"<<"                     { yylval.s = strdup(yytext); return SYMBOL; }
+">>"                     { yylval.s = strdup(yytext); return SYMBOL; }
+"&"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"|"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"^"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"~"                      { yylval.s = strdup(yytext); return SYMBOL; }
+{IDENT}                  { yylval.s = strdup(yytext); return SYMBOL; }
+{HEX}                    { yylval.i = strtol(yytext,NULL,0); return INTEGER; }
+{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
+{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
+                           if ('\0' != *endptr)
+                             return -1;
+                           return INTEGER; }
 
+(" "|\n|\t)+             { char *c;
+                           for (c = yytext; *c; c++)
+                             if ('\n' == *c)
+                               yylineno++; }
+.                        { printf("Unrecognised string: \"%s\"\n",yytext);
+                           return -1;
 
-
-
-\"      string_buf_ptr = string_buf; BEGIN(vstr1);
-
-<vstr1>\"         { /* saw closing quote - all done */
-                  BEGIN(INITIAL);
-                  *string_buf_ptr = '\0';
-                  yylval.s = strdup(string_buf);
-                  return STRING;
-                }
-
-<vstr1>\\n        *string_buf_ptr++ = '\n';
-<vstr1>\\t        *string_buf_ptr++ = '\t';
-<vstr1>\\r        *string_buf_ptr++ = '\r';
-<vstr1>\\b        *string_buf_ptr++ = '\b';
-<vstr1>\\f        *string_buf_ptr++ = '\f';
-
-<vstr1>\\(.|\n)   *string_buf_ptr++ = yytext[1];
-
-<vstr1>[^\\\n\"]+ {
-                  char *yptr = yytext;
-
-                  while ( *yptr )
-                    *string_buf_ptr++ = *yptr++;
-                }
-(" "|\n|\t)+ { 
-char *c;
-for (c = yytext; *c; c++)
-  if ('\n' == *c)
-    yylineno++;
-}
-. { printf("Unrecognised string: \"%s\"\n",yytext); return -1;
-if (0); yyunput(0,0); /* hide warning about yyunput not being used */  }
+                           // hide warning about yyunput not being used
+                           if (0)
+                             yyunput(0,0); }
 
 %%
-

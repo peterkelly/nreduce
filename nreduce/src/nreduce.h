@@ -115,12 +115,12 @@
 #define B_OR             12
 #define B_NOT            13
 
-#define B_BITAND         14
-#define B_BITOR          15
-#define B_BITXOR         16
-#define B_BITNOT         17
-#define B_BITSHL         18
-#define B_BITSHR         19
+#define B_BITSHL         14
+#define B_BITSHR         15
+#define B_BITAND         16
+#define B_BITOR          17
+#define B_BITXOR         18
+#define B_BITNOT         19
 
 #define B_IF             20
 #define B_CONS           21

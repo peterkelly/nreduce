@@ -37,6 +37,7 @@ cell *global_root = NULL;
 int trace = 0;
 
 extern cell **globcells;
+extern array *lexstring;
 
 int repl_histogram[NUM_CELLTYPES];
 
@@ -357,6 +358,8 @@ void cleanup()
   free(noevaladdressmap);
   free(globcells);
   free(dumpstack);
+  if (lexstring)
+    array_free(lexstring);
 }
 
 void growstack()
