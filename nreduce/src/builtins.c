@@ -772,8 +772,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "<=",         2, 2, 1, b_le       },
 { ">",          2, 2, 1, b_gt       },
 { ">=",         2, 2, 1, b_ge       },
-{ "&&",         2, 2, 1, b_and      },
-{ "||",         2, 2, 1, b_or       },
+{ "and",        2, 2, 1, b_and      },
+{ "or",         2, 2, 1, b_or       },
 { "not",        1, 1, 1, b_not      },
 { "ap",         2, 2, 1, b_ap       },
 

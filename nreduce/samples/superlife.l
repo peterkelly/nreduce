@@ -10,7 +10,7 @@
               alen
               (convertarray (forceall lst 0) lst))))
 (forcelist (n lst)
-           (if (&& lst (= n 0))
+           (if (and lst (= n 0))
                nil
                (forcelist (- n 1) (tail lst))))
 
@@ -41,8 +41,8 @@
                   (endcol    (+ startcol (gcols pat))))
             (for 0 (- rows 1) (!row.
               (for 0 (- cols 1) (!col.
-                (if (&& (>= row startrow) (&& (< row endrow)
-                    (&& (>= col startcol) (< col endcol))))
+                (if (and (>= row startrow) (and (< row endrow)
+                    (and (>= col startcol) (< col endcol))))
                     (gcell pat (- row startrow) (- col startcol)) 0)))))))
 (dolife     (grid)
             (let ((nrows (grows grid))
@@ -51,22 +51,22 @@
               (for 0 (- ncols 1) (!col.
                 (let ((curvalue  (gcell grid row col))
                       (count     (sumnb grid row col)))
-                     (if (&& (= curvalue 0) (= count 3))
+                     (if (and (= curvalue 0) (= count 3))
                          1
-                     (if (&& (= curvalue 1) (|| (= count 2) (= count 3)))
+                     (if (and (= curvalue 1) (or (= count 2) (= count 3)))
                          1
                          0)))))))))
 (sumnb      (g row col)
             (let ((maxrow  (- (grows g) 1))
                   (maxcol  (- (gcols g) 1)))
-            ((+ (if (&& (> row 0) (> col 0))        (gcell g (- row 1) (- col 1)) 0)
+            ((+ (if (and (> row 0) (> col 0))        (gcell g (- row 1) (- col 1)) 0)
              (+ (if (> row 0)                       (gcell g (- row 1) col)       0)
-             (+ (if (&& (> row 0) (< col maxcol))   (gcell g (- row 1) (+ col 1)) 0)
+             (+ (if (and (> row 0) (< col maxcol))   (gcell g (- row 1) (+ col 1)) 0)
              (+ (if (> col 0)                       (gcell g row       (- col 1)) 0)
              (+ (if (< col maxcol)                  (gcell g row       (+ col 1)) 0)
-             (+ (if (&& (< row maxrow) (> col 0))   (gcell g (+ row 1) (- col 1)) 0)
+             (+ (if (and (< row maxrow) (> col 0))   (gcell g (+ row 1) (- col 1)) 0)
              (+ (if (< row maxrow)                  (gcell g (+ row 1) col)       0)
-             (if (&& (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0)))))))))))
+             (if (and (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0)))))))))))
 (start      ()
             (cons (cons 0 (cons 1 (cons 1 nil)))
             (cons (cons 1 (cons 1 (cons 0 nil)))
