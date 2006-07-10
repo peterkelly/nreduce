@@ -50,16 +50,8 @@ void setdouble(double val)
 
 void setbool(int b)
 {
-  stack[stackcount-1] = alloc_cell();
-  if (b) {
-    stack[stackcount-1]->tag = TYPE_INT;
-    stack[stackcount-1]->field1 = (void*)1;
-  }
-  else {
-    stack[stackcount-1]->tag = TYPE_NIL;
-  }
+  stack[stackcount-1] = (b ? globtrue : globnil);
 }
-
 
 void intop(int bif, int a, int b)
 {
@@ -167,24 +159,8 @@ void b_other(int bif)
   case B_OR:
     setbool((TYPE_NIL != celltype(cell1)) || (TYPE_NIL != celltype(cell2)));
     break;
-
-  case B_AP:
-    if ((TYPE_STRING == celltype(cell1)) && (TYPE_STRING == celltype(cell2))) {
-      char *a1 = (char*)cell1->field1;
-      char *a2 = (char*)cell2->field1;
-      stack[stackcount-1] = alloc_cell();
-      stack[stackcount-1]->tag = TYPE_STRING;
-      stack[stackcount-1]->field1 = malloc(strlen(a1)+strlen(a2)+1);
-      sprintf((char*)stack[stackcount-1]->field1,"%s%s",a1,a2);
-    }
-    else {
-      fprintf(stderr,"%s: incompatible arguments: (%s,%s)\n",
-                      builtin_info[bif].name,
-                      cell_types[celltype(cell1)],
-                      cell_types[celltype(cell2)]);
-      exit(1);
-    }
-    break;
+  default:
+    assert(0);
   }
 }
 
@@ -212,7 +188,12 @@ void b_not()
     stack[stackcount-1] = globnil;
 }
 
-void b_ap() { b_other(B_AP); }
+void b_bitand() { abort(); }
+void b_bitor() { abort(); }
+void b_bitxor() { abort(); }
+void b_bitnot() { abort(); }
+void b_bitshl() { abort(); }
+void b_bitshr() { abort(); }
 
 void b_if()
 {
@@ -348,125 +329,6 @@ void b_isstring()
   cell *val = stack[stackcount-1];
   assert(TYPE_IND != celltype(val));
   setbool(TYPE_STRING == celltype(val));
-}
-
-void b_sqrt()
-{
-  cell *num = stack[stackcount-1];
-  assert(TYPE_IND != celltype(num));
-/*   printf("sqrt\n"); */
-
-  if (TYPE_INT == celltype(num)) {
-    setdouble(sqrt((double)((int)num->field1)));
-  }
-  else if (TYPE_DOUBLE == celltype(num)) {
-    setdouble(sqrt(celldouble(num)));
-  }
-  else {
-    fprintf(stderr,"sqrt: invalid argument type: (%s)\n",
-            cell_types[celltype(num)]);
-    exit(1);
-  }
-}
-
-void b_neg()
-{
-  cell *num = stack[stackcount-1];
-  assert(TYPE_IND != celltype(num));
-
-  if (TYPE_INT == celltype(num)) {
-    setint(-((int)num->field1));
-  }
-  else if (TYPE_DOUBLE == celltype(num)) {
-    setdouble(-celldouble(num));
-  }
-  else {
-    fprintf(stderr,"neg: invalid argument type: (%s)\n",
-            cell_types[celltype(num)]);
-    exit(1);
-  }
-}
-
-void check_strlist(cell *lst)
-{
-  cell *c;
-  for (c = lst; TYPE_NIL != celltype(c); c = (cell*)c->field2) {
-    printf("type %s\n",cell_types[celltype(c)]);
-    assert(TYPE_CONS == celltype(c));
-    assert(TYPE_STRING == celltype((cell*)c->field1));
-  }
-}
-
-int have_str(cell *lst, char *str)
-{
-  cell *c;
-  for (c = lst; TYPE_NIL != celltype(c); c = (cell*)c->field2) {
-    cell *strcell = (cell*)c->field1;
-    if (!strcmp((char*)strcell->field1,str))
-      return 1;
-  }
-  return 0;
-}
-
-void add_str(cell ***ptr, char *str)
-{
-  cell *newstr = alloc_cell();
-  newstr->tag = TYPE_STRING;
-  newstr->field1 = strdup(str);
-  (**ptr) = alloc_cell();
-  (**ptr)->tag = TYPE_CONS;
-  (**ptr)->field1 = newstr;
-  *ptr = (cell**)&((**ptr)->field2);
-}
-
-void b_union()
-{
-  cell *set1 = stack[stackcount-1];
-  cell *set2 = stack[stackcount-2];
-
-  if ((TYPE_STRING != celltype(set1)) || !is_set((char*)set1->field1)) {
-    fprintf(stderr,"Invalid first argument for union: ");
-    print_codef(stderr,set1);
-    fprintf(stderr,"\n");
-    exit(1);
-  }
-
-  if ((TYPE_STRING != celltype(set2)) || !is_set((char*)set2->field1)) {
-    fprintf(stderr,"Invalid second argument for union: ");
-    print_codef(stderr,set2);
-    fprintf(stderr,"\n");
-    exit(1);
-  }
-
-  stackcount -= 1;
-  stack[stackcount-1] = alloc_cell();
-  stack[stackcount-1]->tag = TYPE_STRING;
-  stack[stackcount-1]->field1 = set_union((char*)set1->field1,(char*)set2->field1);
-}
-
-void b_intersect()
-{
-  cell *set1 = stack[stackcount-1];
-  cell *set2 = stack[stackcount-2];
-
-  if ((TYPE_STRING != celltype(set1)) || !is_set((char*)set1->field1)) {
-    fprintf(stderr,"Invalid first argument for intersection: ");
-    print_codef(stderr,set1);
-    fprintf(stderr,"\n");
-    exit(1);
-  }
-
-  if ((TYPE_STRING != celltype(set2)) || !is_set((char*)set2->field1)) {
-    fprintf(stderr,"Invalid second argument for intersection: ");
-    print_codef(stderr,set2);
-    fprintf(stderr,"\n");
-    exit(1);
-  }
-
-  stackcount -= 1;
-  stack[stackcount-1] = alloc_cell();
-  stack[stackcount-1]->tag = TYPE_STRING;
-  stack[stackcount-1]->field1 = set_intersection((char*)set1->field1,(char*)set2->field1);
 }
 
 void b_convertarray()
@@ -761,40 +623,42 @@ void b_arrayoptlen()
 }
 
 const builtin builtin_info[NUM_BUILTINS] = {
-{ "+",          2, 2, 1, b_add      },
-{ "-",          2, 2, 1, b_subtract },
-{ "*",          2, 2, 1, b_multiply },
-{ "/",          2, 2, 1, b_divide   },
-{ "%",          2, 2, 1, b_mod      },
-{ "=",          2, 2, 1, b_eq       },
-{ "!=",         2, 2, 1, b_ne       },
-{ "<",          2, 2, 1, b_lt       },
-{ "<=",         2, 2, 1, b_le       },
-{ ">",          2, 2, 1, b_gt       },
-{ ">=",         2, 2, 1, b_ge       },
-{ "and",        2, 2, 1, b_and      },
-{ "or",         2, 2, 1, b_or       },
-{ "not",        1, 1, 1, b_not      },
-{ "ap",         2, 2, 1, b_ap       },
+{ "+",              2, 2, 1, b_add            },
+{ "-",              2, 2, 1, b_subtract       },
+{ "*",              2, 2, 1, b_multiply       },
+{ "/",              2, 2, 1, b_divide         },
+{ "%",              2, 2, 1, b_mod            },
 
-{ "if",         3, 1, 0, b_if       },
-{ "cons",       2, 0, 1, b_cons     },
-{ "head",       1, 1, 0, b_head     },
-{ "tail",       1, 1, 0, b_tail     },
+{ "=",              2, 2, 1, b_eq             },
+{ "!=",             2, 2, 1, b_ne             },
+{ "<",              2, 2, 1, b_lt             },
+{ "<=",             2, 2, 1, b_le             },
+{ ">",              2, 2, 1, b_gt             },
+{ ">=",             2, 2, 1, b_ge             },
 
-{ "lambda?",    1, 1, 1, b_islambda },
-{ "value?",     1, 1, 1, b_isvalue  },
-{ "cons?",      1, 1, 1, b_iscons   },
-{ "nil?",       1, 1, 1, b_isnil    },
-{ "int?",       1, 1, 1, b_isint    },
-{ "double?",    1, 1, 1, b_isdouble },
-{ "string?",    1, 1, 1, b_isstring },
-{ "sqrt",       1, 1, 1, b_sqrt     },
+{ "and",            2, 2, 1, b_and            },
+{ "or",             2, 2, 1, b_or             },
+{ "not",            1, 1, 1, b_not            },
 
-{ "neg",        1, 1, 1, b_neg      },
+{ "&",              2, 2, 1, b_bitand         },
+{ "|",              2, 2, 1, b_bitor          },
+{ "^",              2, 2, 1, b_bitxor         },
+{ "~",              1, 1, 1, b_bitnot         },
+{ "<<",             2, 2, 1, b_bitshl         },
+{ ">>",             2, 2, 1, b_bitshr         },
 
-{ "union",      2, 2, 1, b_union    },
-{ "intersect",  2, 2, 1, b_intersect},
+{ "if",             3, 1, 0, b_if             },
+{ "cons",           2, 0, 1, b_cons           },
+{ "head",           1, 1, 0, b_head           },
+{ "tail",           1, 1, 0, b_tail           },
+
+{ "lambda?",        1, 1, 1, b_islambda       },
+{ "value?",         1, 1, 1, b_isvalue        },
+{ "cons?",          1, 1, 1, b_iscons         },
+{ "nil?",           1, 1, 1, b_isnil          },
+{ "int?",           1, 1, 1, b_isint          },
+{ "double?",        1, 1, 1, b_isdouble       },
+{ "string?",        1, 1, 1, b_isstring       },
 
 { "convertarray",   2, 2, 1, b_convertarray   },
 { "arrayitem",      2, 2, 0, b_arrayitem      },

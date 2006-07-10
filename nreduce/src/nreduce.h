@@ -98,50 +98,52 @@
 
 #define isvalue(c) ((c)->tag & VALUE_FIELD)
 
-#define VALUE_NIL        0
-#define VALUE_INT        1
-#define VALUE_DOUBLE
-
 #define B_ADD            0
 #define B_SUBTRACT       1
 #define B_MULTIPLY       2
 #define B_DIVIDE         3
 #define B_MOD            4
+
 #define B_EQ             5
 #define B_NE             6
 #define B_LT             7
 #define B_LE             8
 #define B_GT             9
 #define B_GE             10
+
 #define B_AND            11
 #define B_OR             12
 #define B_NOT            13
 
-#define B_AP             14
+#define B_BITAND         14
+#define B_BITOR          15
+#define B_BITXOR         16
+#define B_BITNOT         17
+#define B_BITSHL         18
+#define B_BITSHR         19
 
-#define B_IF             15
-#define B_CONS           16
-#define B_HEAD           17
-#define B_TAIL           18
-#define B_ISLAMBDA       19
-#define B_ISVALUE        20
-#define B_ISCONS         21
-#define B_ISNIL          22
-#define B_ISINT          23
-#define B_ISDOUBLE       24
-#define B_ISSTRING       25
-#define B_SQRT           26
-#define B_NEG            27
-#define B_UNION          28
-#define B_INTERSECT      29
-#define B_CONVERTARRAY   30
-#define B_ARRAYITEM      31
-#define B_ARRAYHAS       32
-#define B_ARRAYEXT       33
-#define B_ARRAYSIZE      34
-#define B_ARRAYTAIL      35
-#define B_ARRAYOPTLEN    36
-#define NUM_BUILTINS     37
+#define B_IF             20
+#define B_CONS           21
+#define B_HEAD           22
+#define B_TAIL           23
+
+#define B_ISLAMBDA       24
+#define B_ISVALUE        25
+#define B_ISCONS         26
+#define B_ISNIL          27
+#define B_ISINT          28
+#define B_ISDOUBLE       29
+#define B_ISSTRING       30
+
+#define B_CONVERTARRAY   31
+#define B_ARRAYITEM      32
+#define B_ARRAYHAS       33
+#define B_ARRAYEXT       34
+#define B_ARRAYSIZE      35
+#define B_ARRAYTAIL      36
+#define B_ARRAYOPTLEN    37
+
+#define NUM_BUILTINS     38
 
 #define TAG_MASK         0xFF
 
