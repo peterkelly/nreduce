@@ -36,7 +36,6 @@
 //#define DEBUG_GCODE_COMPILATION
 #define DEBUG_SHOW_STRICTNESS_ANALYSIS
 //#define DEBUG_SHOW_STRICTNESS_ANALYSIS2
-//#define DEBUG_REDUCTION
 //#define STACK_MODEL_SANITY_CHECK
 //#define DEBUG_FRONTIERS
 
@@ -56,7 +55,7 @@
 // Misc
 
 //#define LAMBDAS_ARE_MAXFREE_BEFORE_PROCESSING
-//#define CHECK_FOR_SUPERCOMBINATOR_SHARED_CELLS
+#define CHECK_FOR_SUPERCOMBINATOR_SHARED_CELLS
 
 #define HISTOGRAM_SIZE 10
 
@@ -165,13 +164,7 @@ typedef struct cell {
   int tag;
   void *field1;
   void *field2;
-  int id;
-  struct cell *source;
-  const char *filename;
-  int lineno;
   int level;
-
-  struct cell *dest;
 } cell;
 
 #define celltype(_c) ((_c)->tag & TAG_MASK)
@@ -253,6 +246,7 @@ struct dumpentry *pushdump();
 
 void initmem();
 cell *alloc_cell();
+cell *alloc_cell2(int tag, void *field1, void *field2);
 cell *alloc_sourcecell(const char *filename, int lineno);
 void collect();
 void free_scomb(scomb *sc);
@@ -263,7 +257,6 @@ cell *pop();
 cell *top();
 cell *stackat(int s);
 void statistics(FILE *f);
-cell *resolve_source(cell *c);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
 void clearflag(int flag);
@@ -272,7 +265,6 @@ void free_cell_fields(cell *c);
 void print_stack(int redex, cell **stk, int size, int dir);
 void adjust_stack(int nargs);
 
-cell *resolve_ind2(cell *c);
 #ifdef INLINE_RESOLVE_IND
 #define resolve_ind(expr) ({ cell *_rc = (expr); \
                              while (TYPE_IND == celltype(_rc)) \
@@ -307,9 +299,7 @@ void scomb_calc_cells(scomb *sc);
 void print_scomb_code(scomb *sc);
 void print_scombs1();
 void print_scombs2();
-int scomb_isgraph(scomb *sc);
 void lift(cell **k, int iscopy, int calccells, char *prefix);
-void clearflag_scomb(int flag, scomb *sc);
 cell *super_to_letrec(scomb *sc);
 void remove_redundant_scombs();
 void fix_partial_applications();
@@ -317,7 +307,6 @@ void resolve_scvars(cell *c);
 
 /* reduction */
 
-void too_many_arguments(cell *target);
 void reduce();
 
 /* extra */
@@ -331,9 +320,6 @@ void print_dot(FILE *f, cell *c);
 void print_graphdot(char *filename, cell *root);
 void print_codef(FILE *f, cell *c);
 void print_code(cell *c);
-
-/* verify */
-int verify_noneedclear();
 
 /* jit */
 void print_cell(cell *c);
@@ -350,12 +336,6 @@ int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);
 void array_append(array *arr, const void *data, int size);
 void array_free(array *arr);
-
-int is_set(char *s);
-int set_contains(char *s, char *item);
-char *set_empty();
-char *set_intersection(char *a, char *b);
-char *set_union(char *a, char *b);
 
 void print_quoted_string(FILE *f, const char *str);
 

@@ -126,8 +126,6 @@ cell *sub_letrecs(cell *c, scomb *sc)
         if (found)
           break;
 
-        if (res->filename)
-          fprintf(stderr,"%s:%d: ",res->filename,res->lineno);
         fprintf(stderr,"Variable not bound: %s\n",(char*)res->field1);
 
   /* FIXME: disable this to support supercombinators */

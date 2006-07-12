@@ -132,22 +132,23 @@ cell *alloc_cell()
   if (maxcells < ncells)
     maxcells = ncells;
   nallocs++;
-  c->id = totalallocs;
-  c->source = NULL;
-  c->filename = NULL;
-  c->lineno = -1;
   c->level = -1;
   totalallocs++;
-/*   printf("allocated #%05d\n",c->id); */
+  return c;
+}
+
+cell *alloc_cell2(int tag, void *field1, void *field2)
+{
+  cell *c = alloc_cell();
+  c->tag = tag;
+  c->field1 = field1;
+  c->field2 = field2;
   return c;
 }
 
 cell *alloc_sourcecell(const char *filename, int lineno)
 {
-  cell *c = alloc_cell();
-  c->filename = filename;
-  c->lineno = lineno;
-  return c;
+  return alloc_cell();
 }
 
 int nreachable = 0;
@@ -453,13 +454,6 @@ void statistics(FILE *f)
   fprintf(f,"usage total = %d\n",total);
 }
 
-cell *resolve_ind2(cell *c)
-{
-  while (TYPE_IND == celltype(c))
-    c = (cell*)c->field1;
-  return c;
-}
-
 #ifndef INLINE_RESOLVE_IND
 cell *resolve_ind(cell *c)
 {
@@ -480,15 +474,6 @@ cell *resolve_ind(cell *c)
   return c;
 }
 #endif
-
-cell *resolve_source(cell *c)
-{
-  while (c->source) {
-    assert(c->source != c);
-    c = c->source;
-  }
-  return c;
-}
 
 void copy_raw(cell *dest, cell *source)
 {
@@ -593,10 +578,8 @@ void cleargraph_r(cell *c, int flag)
 
 void cleargraph(cell *root, int flag)
 {
-  assert(verify_noneedclear());
   setneedclear_r(root);
   cleargraph_r(root,flag);
-  assert(verify_noneedclear());
 }
 
 void print_stack(int redex, cell **stk, int size, int dir)
@@ -639,8 +622,7 @@ void print_stack(int redex, cell **stk, int size, int dir)
     if (!wasdump)
       debug(0,"      ");
 
-/*     debug(0,"%2d: %p/#%05d #%05d %12s ",pos,stk[i],stk[i]->id,c->id,cell_types[celltype(c)]); */
-    debug(0,"%2d: #%05d %12s ",pos,c->id,cell_types[celltype(c)]);
+    debug(0,"%2d: %p %12s ",pos,c,cell_types[celltype(c)]);
     print_code(c);
     if (i == redex)
       debug(0," <----- redex");

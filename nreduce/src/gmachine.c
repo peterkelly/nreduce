@@ -20,7 +20,6 @@
  *
  */
 
-//#define PRINT_DISPATCH
 #include "grammar.tab.h"
 #include "gcode.h"
 #include "nreduce.h"
@@ -33,6 +32,10 @@
 #include <math.h>
 
 extern cell **globcells;
+extern int repl_histogram[NUM_CELLTYPES];
+
+static int address = 0;
+static int exec_stackbase = 0;
 
 int get_fno_from_address(int address)
 {
@@ -61,10 +64,7 @@ void trace_address(ginstr *program, int address, int nargs)
 void insufficient_args(ginstr *program, int address, cell *target, int nargs)
 {
   int fno = get_fno_from_address(address);
-  cell *source = resolve_source(target);
   int reqargs = program[address].arg1;
-  if (source && source->filename)
-    fprintf(stderr,"%s:%d: ",source->filename,source->lineno);
   if (NUM_BUILTINS > fno)
     fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
             builtin_info[fno].name,reqargs,nargs);
@@ -73,8 +73,6 @@ void insufficient_args(ginstr *program, int address, cell *target, int nargs)
     get_scomb_index(fno-NUM_BUILTINS)->name,reqargs,nargs);
   exit(1);
 }
-
-extern int repl_histogram[NUM_CELLTYPES];
 
 int is_whnf(cell *c)
 {
@@ -94,92 +92,92 @@ int is_whnf(cell *c)
   return 1;
 }
 
+void check_stack(gprogram *gp, int address)
+{
+  ginstr *instr = &gp->ginstrs[address];
+  if (0 > instr->expcount)
+    return;
+
+  if (stackcount-exec_stackbase != instr->expcount) {
+    printf("Instruction %d expects stack frame size %d, actually %d\n",
+           address,instr->expcount,stackcount-exec_stackbase);
+    abort();
+  }
+
+  int i;
+  for (i = 0; i < instr->expcount; i++) {
+    cell *c = stackat(exec_stackbase+i);
+    int actualstatus = is_whnf(c);
+    if (instr->expstatus[i] && !actualstatus) {
+      printf("Instruction %d expects stack frame entry %d (%d) to be evald but it's "
+             "actually a %s\n",address,i,exec_stackbase+i,cell_types[celltype(c)]);
+      abort();
+    }
+  }
+}
+
 cell *unwind_part1()
 {
   stackcount = stackbase+1;
-  cell *ebx = stack[stackcount-1];
-  ebx = resolve_ind(ebx);
-  while (TYPE_APPLICATION == celltype(ebx)) {
-    ebx = (cell*)ebx->field1;
-    ebx = resolve_ind(ebx);
-    push(ebx);
+  cell *c = stack[stackcount-1];
+  c = resolve_ind(c);
+  while (TYPE_APPLICATION == celltype(c)) {
+    c = resolve_ind((cell*)c->field1);
+    push(c);
   }
-  return ebx;
+  return c;
 }
 
-int address = 0;
-int exec_stackbase = 0;
-
-int unwind_part2(cell *ebx)
+int unwind_part2(cell *bottom)
 {
-  if (TYPE_FUNCTION == celltype(ebx)) {
-    int argspos = stackcount-(int)ebx->field1;
-    if (argspos >= stackbase+1) {
-      int funaddr = (int)ebx->field2;
-      int edx;
+  if (TYPE_FUNCTION != celltype(bottom))
+    return 0;
 
-      assert(!is_whnf(stack[argspos-1]));
+  int argspos = stackcount-(int)bottom->field1;
+  if (argspos < stackbase+1)
+    return 0;
 
-      for (edx = stackcount-1; edx >= argspos; edx--) {
-        ebx = stack[edx-1];
-        ebx = resolve_ind(ebx);
-
-        ebx = (cell*)ebx->field2;
-        ebx = resolve_ind(ebx);
-        stack[edx] = ebx;
-      }
-
-      ebx = stack[argspos-1];
-      ebx = resolve_ind(ebx);
-      stack[argspos-1] = ebx;
-
-      address = funaddr;
-      exec_stackbase = argspos-1;
-      return 1;
-    }
+  int funaddr = (int)bottom->field2;
+  int pos;
+  assert(!is_whnf(stack[argspos-1]));
+  for (pos = stackcount-1; pos >= argspos; pos--) {
+    cell *argval = resolve_ind(stack[pos-1]);
+    stack[pos] = resolve_ind((cell*)argval->field2);
   }
-  return 0;
+
+  stack[argspos-1] = resolve_ind(stack[argspos-1]);
+
+  address = funaddr;
+  exec_stackbase = argspos-1;
+  return 1;
 }
 
 void do_return()
 {
   dumpentry *edx = &dumpstack[dumpcount-1];
-/**/  if (trace) {
-/**/    debug(0,"!!!!! UNWIND: result is in WHNF; dump: next address %d, next stackcount %d\n",
-/**/          dumpstack[dumpcount-1].address+1,dumpstack[dumpcount-1].stackcount);
-/**/  }
-
   assert(is_whnf(stack[stackcount-1]));
-
   stackbase = edx->stackbase;
   stackcount = edx->stackcount;
   address = edx->address;
   exec_stackbase = edx->sb;
   dumpcount--;
-
   assert(0 <= dumpcount);
-
-  cell *ebx = stack[stackcount-1];
-  ebx = resolve_ind(ebx);
 }
 
 void do_mkap(int n)
 {
-  int i;
-  for (i = n-1; i >= 0; i--) {
-    cell *c = alloc_cell();
-    c->tag = TYPE_APPLICATION;
-    c->field1 = stack[stackcount-1];
-    c->field2 = stack[stackcount-2];
+  for (n--; n >= 0; n--) {
+    cell *left = stack[stackcount-1];
+    cell *right = stack[stackcount-2];
     stackcount--;
-    stack[stackcount-1] = c;
+    stack[stackcount-1] = alloc_cell2(TYPE_APPLICATION,left,right);
   }
 }
 
 void do_update(int n)
 {
-  cell *res;     /* EBX */
-  cell *target;  /* ECX */
+  cell *res;
+  cell *target;
   assert(n < stackcount);
   assert(n > 0);
 
@@ -200,125 +198,20 @@ void do_update(int n)
   stackcount--;
 }
 
-/*
-void alloc_some(cell *redex, int n)
-{
-  cell *app = alloc_cell();
-  free_cell_fields(redex);
-  redex->tag = TYPE_IND;
-  redex->field1 = app;
-
-  int base = stackcount-1-n;
-
-  app->tag = TYPE_APPLICATION;
-  app->field1 = globnil;
-  app->field2 = stack[base];
-
-  int i;
-  for (i = 1; i < n; i++) {
-    cell *newapp = alloc_cell();
-    newapp->tag = TYPE_APPLICATION;
-    newapp->field1 = globnil;
-    newapp->field2 = stack[base+i];
-    stack[base+i-1] = newapp;
-    app->field1 = newapp;
-    app = newapp;
-  }
-  app->field1 = stack[base+i];
-  stack[base+i-1] = stack[base+i];
-  stackcount--;
-}
-*/
-
-void alloc_some(cell *redex, int actual, int n)
-{
-  cell *app = alloc_cell();
-  free_cell_fields(redex);
-  redex->tag = TYPE_IND;
-  redex->field1 = app;
-
-  int base = stackcount-1-actual;
-
-  app->tag = TYPE_APPLICATION;
-  app->field1 = globnil;
-  app->field2 = stack[base];
-
-  int i;
-  for (i = 1; i < n; i++) {
-    cell *newapp = alloc_cell();
-    newapp->tag = TYPE_APPLICATION;
-    newapp->field1 = globnil;
-    newapp->field2 = stack[base+i];
-    stack[base+i-1] = newapp;
-    app->field1 = newapp;
-    app = newapp;
-  }
-  if (n == actual) {
-    app->field1 = stack[base+i];
-    stack[base+i-1] = stack[base+i];
-    stackcount--;
-  }
-  else {
-    cell *hole = alloc_cell();
-/*     hole->tag = TYPE_STRING; */
-/*     hole->field1 = strdup("HOLE"); */
-
-    hole->tag = TYPE_NIL;
-
-    app->field1 = hole;
-    stack[base+i-1] = hole;
-  }
-}
-
 void execute(gprogram *gp)
 {
-  ginstr *program = gp->ginstrs;
   assert(0 == stackbase);
   while (1) {
-    ginstr *instr = &program[address];
-/*     int chkno; */
-/*     int i; */
+    ginstr *instr = &gp->ginstrs[address];
 
 #ifdef STACK_MODEL_SANITY_CHECK
-    if (0 <= instr->expcount) {
-/*       printf("stack frame size = %d-%d = %d\n",stackcount,exec_stackbase,stackcount-exec_stackbase); */
-      if (stackcount-exec_stackbase != instr->expcount) {
-        printf("Instruction %d expects stack frame size %d, actually %d\n",
-               address,instr->expcount,stackcount-exec_stackbase);
-      }
-      assert(stackcount-exec_stackbase == instr->expcount);
-
-      int i;
-      for (i = 0; i < instr->expcount; i++) {
-        cell *c = stackat(exec_stackbase+i);
-/*         int actualstatus = (isvalue(c) || */
-/*                             (TYPE_CONS == celltype(c)) || */
-/*                             (TYPE_FUNCTION == celltype(c))); */
-        int actualstatus = is_whnf(c);
-
-        if (instr->expstatus[i] && !actualstatus) {
-          printf("Instruction %d expects stack frame entry %d (%d) to be evald but it's "
-                 "actually a %s\n",
-                 address,i,exec_stackbase+i,cell_types[celltype(c)]);
-        }
-        assert(!instr->expstatus[i] || actualstatus);
-      }
-    }
+    check_stack(gp,address);
 #endif
 
     if (trace) {
       print_ginstr(address,instr,0);
       print_stack(-1,stack,stackcount,0);
     }
-
-/*     for (chkno = 0; chkno < dumpcount; chkno++) { */
-/*       if (stackcount <= dumpstack[chkno].stackcount) { */
-/*         debug(0,"fatal: stackcount %d is at or below dump entry %d's stackcount %d\n", */
-/*               stackcount,chkno,dumpstack[chkno].stackcount); */
-/*         assert(0); */
-/*       } */
-/*       chkno++; */
-/*     } */
 
     if (nallocs > COLLECT_THRESHOLD)
       collect();
@@ -373,12 +266,6 @@ void execute(gprogram *gp)
     case OP_PUSHGLOBAL: {
       int fno = instr->arg0;
 
-/*       if (fno >= NUM_BUILTINS) { */
-/*         scomb *sc = get_scomb_index(fno-NUM_BUILTINS); */
-/*         assert(addressmap[fno] == (int)globcells[fno]->field2); */
-/*       } */
-
-
       // If the function is a supercombinator with 0 args (i.e. a CAF), then
       // push a *copy* of the cell. This avoids supercombinators which evaluate
       // to infinite (or large) lists from not ever being garbage collected.
@@ -386,29 +273,18 @@ void execute(gprogram *gp)
           (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
         cell *src = globcells[fno];
         assert(TYPE_FUNCTION == celltype(src));
-        cell *c = alloc_cell();
-        c->tag = TYPE_FUNCTION;
-        c->field1 = src->field1;
-        c->field2 = src->field2;
-        push(c);
+        push(alloc_cell2(TYPE_FUNCTION,src->field1,src->field2));
       }
       // If the function is a supercombinator and arg1 is non-zero, this means we
       // actually want a reference to the "no-eval" part of the supercombinator, i.e.
       // we skip the EVAL instructions at the start, under the assumption that the
       // arguments to be passed to it have already been evaluated
-#if 1
       else if ((fno >= NUM_BUILTINS) && instr->arg1) {
         cell *src = globcells[fno];
         assert(TYPE_FUNCTION == celltype(src));
-        cell *c = alloc_cell();
-        c->tag = TYPE_FUNCTION;
-        c->field1 = src->field1;
         assert((int)src->field2 == addressmap[fno]);
-        c->field2 = (void*)noevaladdressmap[fno];
-/*         c->field2 = (void*)addressmap[fno]; */
-        push(c);
+        push(alloc_cell2(TYPE_FUNCTION,src->field1,(void*)noevaladdressmap[fno]));
       }
-#endif
       else {
         push(globcells[fno]);
       }
@@ -424,12 +300,10 @@ void execute(gprogram *gp)
       stackcount -= instr->arg0;
       assert(0 <= stackcount);
       break;
-    case OP_PRINT: {
-      cell *c = top();
-      print_cell(c);
+    case OP_PRINT:
+      print_cell(resolve_ind(stack[stackcount-1]));
       stackcount--;
       break;
-    }
     case OP_BIF: {
       int i;
       assert(0 <= builtin_info[instr->arg0].nargs); /* should we support 0-arg bifs? */
@@ -443,13 +317,11 @@ void execute(gprogram *gp)
       break;
     }
     case OP_JFALSE: {
-      cell *test = pop();
-      if (TYPE_APPLICATION == celltype(test)) {
-        print(test);
-      }
+      cell *test = resolve_ind(stack[stackcount-1]);
       assert(TYPE_APPLICATION != celltype(test));
       if (TYPE_NIL == celltype(test))
         address += instr->arg0-1;
+      stackcount--;
       break;
     }
     case OP_JUMP:
@@ -459,30 +331,19 @@ void execute(gprogram *gp)
       if (0 == stackcount)
         address += instr->arg0-1;
       break;
-    case OP_ISTYPE: {
-      if (celltype(top()) == instr->arg0)
+    case OP_ISTYPE:
+      if (celltype(resolve_ind(stack[stackcount-1])) == instr->arg0)
         stack[stackcount-1] = globtrue;
       else
         stack[stackcount-1] = globnil;
       break;
-    }
-    case OP_ANNOTATE: {
-      cell *c;
-      assert(0 < stackcount);
-      c = top();
-      c->filename = (char*)instr->arg0;
-      c->lineno = instr->arg1;
-      break;
-    }
     case OP_ALLOC: {
       int i;
       /* FIXME: perhaps we should make a HOLE type instead of using nil here... then it
          should be save to use globnil everywhere we normally use TYPE_NIL */
       nALLOCs++;
       for (i = 0; i < instr->arg0; i++) {
-        cell *c = alloc_cell();
-        c->tag = TYPE_NIL;
-        push(c);
+        push(alloc_cell2(TYPE_NIL,NULL,NULL));
         nALLOCcells++;
       }
       break;
@@ -497,27 +358,18 @@ void execute(gprogram *gp)
       break;
     }
     case OP_DISPATCH: {
-      cell *fun = top();
+      cell *fun = resolve_ind(stack[stackcount-1]);
       if (TYPE_FUNCTION == celltype(fun)) {
         int nargs = (int)fun->field1;
         int addr = (int)fun->field2;
-        assert(OP_GLOBSTART == program[addr].opcode);
-/*         int fno = program[addr].arg0; */
-
-/*         if (NUM_BUILTINS > fno) */
-/*           printf("dispatch(%d): function %s (nargs %d)\n",instr->arg0, */
-/*                   builtin_info[fno].name,nargs); */
-/*         else */
-/*           printf("dispatch(%d): function %s (nargs %d)\n",instr->arg0, */
-/*                   get_scomb_index(instr->arg0-NUM_BUILTINS)->name,nargs); */
+        assert(OP_GLOBSTART == gp->ginstrs[addr].opcode);
 
         if (nargs == 0) {
           ndisp0++;
         }
         else if (nargs == instr->arg0) {
           ndispexact++;
-/*           printf("%d dispatch: direct\n",address); */
-          pop();
+          stackcount--;
           address = (int)fun->field2;
           break;
         }
@@ -535,8 +387,8 @@ void execute(gprogram *gp)
       do_mkap(instr->arg0);
       do_update(1);
 
-      cell *ebx = unwind_part1();
-      if (unwind_part2(ebx))
+      cell *bottom = unwind_part1();
+      if (unwind_part2(bottom))
         break;
       do_return();
       break;
@@ -544,30 +396,15 @@ void execute(gprogram *gp)
     case OP_PUSHNIL:
       push(globnil);
       break;
-    case OP_PUSHINT: {
-      cell *c = alloc_cell();
-      c->tag = TYPE_INT;
-      c->field1 = (void*)instr->arg0;
-      push(c);
+    case OP_PUSHINT:
+      push(alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL));
       break;
-    }
-    case OP_PUSHDOUBLE: {
-      cell *c = alloc_cell();
-      c->tag = TYPE_DOUBLE;
-      c->field1 = (void*)instr->arg0;
-      c->field2 = (void*)instr->arg1;
-      push(c);
+    case OP_PUSHDOUBLE:
+      push(alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1));
       break;
-    }
-    case OP_PUSHSTRING: {
-      cell *str = ((cell**)gp->stringmap->data)[instr->arg0];
-      push(str);
+    case OP_PUSHSTRING:
+      push(((cell**)gp->stringmap->data)[instr->arg0]);
       break;
-    }
-    case OP_CHECKEVAL: {
-      assert(is_whnf(resolve_ind(stack[stackcount-1-instr->arg0])));
-      break;
-    }
     default:
       assert(0);
       break;

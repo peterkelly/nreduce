@@ -166,7 +166,6 @@ void stream(cell *c)
       push((cell*)c->field1);
     }
     else if (TYPE_APPLICATION == celltype(c)) {
-/*       too_many_arguments(c); */ /* + 2 3 4 causes this to infinitely loop in resolve_source() */
       fprintf(stderr,"Too many arguments applied to function\n");
       exit(1);
     }
@@ -330,10 +329,7 @@ void parse_check(int cond, cell *c, char *msg)
 {
   if (cond)
     return;
-  if (NULL != c->filename)
-    fprintf(stderr,"%s:%d: %s\n",c->filename,c->lineno,msg);
-  else
-    fprintf(stderr,"%s\n",msg);
+  fprintf(stderr,"%s\n",msg);
   exit(1);
 }
 
@@ -624,7 +620,9 @@ void reduction_engine()
 {
   debug_stage("Reduction engine");
   calc_all_scomb_cells();
-  stream(global_root);
+  scomb *mainsc = get_scomb("main");
+  cell *root = mainsc->body;
+  stream(root);
   printf("\n");
 }
 

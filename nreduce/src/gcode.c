@@ -63,7 +63,6 @@
 #define PUSHINT(_a)        add_instruction(gp,OP_PUSHINT,(_a),0)
 #define PUSHDOUBLE(_a,_b)  add_instruction(gp,OP_PUSHDOUBLE,(_a),(_b))
 #define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
-#define CHECKEVAL(_a)      add_instruction(gp,OP_CHECKEVAL,(_a),0)
 #define SQUEEZE(_a,_b)     add_instruction(gp,OP_SQUEEZE,(_a),(_b))
 #define DISPATCH(_a)       add_instruction(gp,OP_DISPATCH,(_a),0)
 
@@ -152,7 +151,6 @@ const char *op_names[OP_COUNT] = {
 "JUMP",
 "JEMPTY",
 "ISTYPE",
-"ANNOTATE",
 "ALLOC",
 "SQUEEZE",
 "DISPATCH",
@@ -160,7 +158,6 @@ const char *op_names[OP_COUNT] = {
 "PUSHINT",
 "PUSHDOUBLE",
 "PUSHSTRING",
-"CHECKEVAL",
 };
 
 void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
@@ -337,8 +334,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   case OP_ISTYPE:
     setstatusat(gp->si,gp->si->count-1,1);
     break;
-  case OP_ANNOTATE:
-    break;
   case OP_ALLOC: {
     int i;
     for (i = 0; i < arg0; i++)
@@ -370,9 +365,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   case OP_PUSHSTRING:
     pushstatus(gp->si,1);
     break;
-  case OP_CHECKEVAL:
-    assert(statusat(gp->si,gp->si->count-1-arg0));
-    break;
   default:
     assert(0);
     break;
@@ -400,7 +392,6 @@ void print_ginstr(int address, ginstr *instr, int usage)
       printf("; Supercombinator %s",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
   }
   else if (OP_PUSH == instr->opcode) {
-
     if (0 <= instr->expcount) {
       ginstr *program = instr-address;
       int funstart = address;
@@ -426,9 +417,6 @@ void print_ginstr(int address, ginstr *instr, int usage)
   }
   else if (OP_ISTYPE == instr->opcode) {
     printf("; ISTYPE %s",cell_types[instr->arg0]);
-  }
-  else if (OP_ANNOTATE == instr->opcode) {
-    printf("; ANNOTATE %s:%d",(char*)instr->arg0,instr->arg1);
   }
 
   printf("\n");
@@ -989,11 +977,6 @@ void F(gprogram *gp, int fno, scomb *sc)
   noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
   GLOBSTART(fno,sc->nargs);
 
-/*   for (i = 0; i < sc->nargs; i++) */
-/*     if (sc->strictin && sc->strictin[i]) */
-/*       CHECKEVAL(i); */
-
-
 #ifdef DEBUG_GCODE_COMPILATION
   printf("\n");
   printf("Compiling supercombinator ");
@@ -1077,7 +1060,7 @@ void compile(gprogram *gp)
 
   for (sc = scombs; sc; sc = sc->next) {
     globcells[NUM_BUILTINS+sc->index]->field2 = (void*)gp->count;
-    clearflag_scomb(FLAG_PROCESSED,sc);
+    cleargraph(sc->body,FLAG_PROCESSED);
     F(gp,NUM_BUILTINS+sc->index,sc);
   }
 

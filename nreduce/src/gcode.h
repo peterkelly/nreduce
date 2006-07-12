@@ -43,16 +43,14 @@
 #define OP_JUMP          15
 #define OP_JEMPTY        16
 #define OP_ISTYPE        17
-#define OP_ANNOTATE      18
-#define OP_ALLOC         19
-#define OP_SQUEEZE       20
-#define OP_DISPATCH      21
-#define OP_PUSHNIL       22
-#define OP_PUSHINT       23
-#define OP_PUSHDOUBLE    24
-#define OP_PUSHSTRING    25
-#define OP_CHECKEVAL     26
-#define OP_COUNT         27
+#define OP_ALLOC         18
+#define OP_SQUEEZE       19
+#define OP_DISPATCH      20
+#define OP_PUSHNIL       21
+#define OP_PUSHINT       22
+#define OP_PUSHDOUBLE    23
+#define OP_PUSHSTRING    24
+#define OP_COUNT         25
 
 #define GINSTR_OPCODE   ((int)&((ginstr*)0)->opcode)
 #define GINSTR_ARG0     ((int)&((ginstr*)0)->arg0)

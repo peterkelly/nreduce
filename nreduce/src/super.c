@@ -161,7 +161,7 @@ void check_scombs()
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
-    clearflag_scomb(FLAG_PROCESSED,sc);
+    cleargraph(sc->body,FLAG_PROCESSED);
     check_r(sc->body,sc);
   }
   /* FIXME: check that cells are not shared between supercombinators... each should
@@ -235,8 +235,8 @@ void check_scombs_nosharing()
       cell *c = sc->cells[i];
       if (c->tag & FLAG_PROCESSED) {
         scomb *clasher;
-        printf("Supercombinator %s contains cell #%05d shared with another "
-                "supercombinator\n",sc->name,c->id);
+        printf("Supercombinator %s contains cell %p shared with another "
+                "supercombinator\n",sc->name,c);
 
         for (clasher = scombs; clasher; clasher = clasher->next) {
           int j;
@@ -256,36 +256,6 @@ void check_scombs_nosharing()
     }
   }
 #endif
-}
-
-int scomb_isgraph_r(cell *c)
-{
-  if (c->tag & FLAG_PROCESSED)
-    return 1;
-
-  c->tag |= FLAG_PROCESSED;
-
-  switch (celltype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
-    return (scomb_isgraph_r((cell*)c->field1) ||
-            scomb_isgraph_r((cell*)c->field2));
-    break;
-  case TYPE_LAMBDA:
-    return scomb_isgraph_r((cell*)c->field2);
-  case TYPE_LETREC:
-    assert(0);
-    break;
-  case TYPE_IND:
-    return scomb_isgraph_r((cell*)c->field1);
-  }
-  return 0;
-}
-
-int scomb_isgraph(scomb *sc)
-{
-  clearflag_scomb(FLAG_PROCESSED,sc);
-  return scomb_isgraph_r(sc->body);
 }
 
 int liftdepth = 0;
@@ -477,7 +447,7 @@ void abstract(cell **k, scomb *lambdasc)
     /* instead abstract the arguments */
     for (c = *k; TYPE_APPLICATION == celltype(c); c = (cell*)c->field1) {
       #ifdef DEBUG_ABSTRACTION
-      printf("  %s: Abstracting arg #%05d ",lambdasc->name,((cell*)c->field2)->id);
+      printf("  %s: Abstracting arg %p ",lambdasc->name,c->field2);
       print_code((cell*)c->field2);
       printf("\n");
       #endif
@@ -487,7 +457,7 @@ void abstract(cell **k, scomb *lambdasc)
   }
 
   #ifdef DEBUG_ABSTRACTION
-  printf("%s: Abstracting expr #%05d ",lambdasc->name,(*k)->id);
+  printf("%s: Abstracting expr %p ",lambdasc->name,*k);
   print_code(*k);
   printf("\n");
   #endif
@@ -528,7 +498,7 @@ void abstract(cell **k, scomb *lambdasc)
 
 void print_level(cell *c, int level)
 {
-/*   debug(liftdepth,"#%05d: level %d: ",c->id,level); */
+/*   debug(liftdepth,"%p: level %d: ",c,level); */
 /*   print_code(c); */
 /*   debug(0,"\n"); */
 }
@@ -707,13 +677,6 @@ void lift(cell **k, int iscopy, int calccells, char *prefix)
   list_free(newscombs,NULL);
 }
 
-void clearflag_scomb(int flag, scomb *sc)
-{
-  int i;
-  for (i = 0; i < sc->ncells; i++)
-    sc->cells[i]->tag &= ~flag;
-}
-
 void find_shared(cell *c, scomb *sc, int *shared, int *nshared)
 {
   if (c->tag & FLAG_PROCESSED) {
@@ -780,7 +743,6 @@ cell *copy_shared(cell *c, scomb *sc, int *shared, cell **defbodies,
   }
 
   copy_cell(copy,c);
-  copy->source = c;
 
   if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
     copy->field1 = copy_shared((cell*)c->field1,sc,shared,defbodies,varnames,pos);
@@ -807,7 +769,7 @@ cell *super_to_letrec(scomb *sc)
   cell **lnkptr;
   int i;
 
-  clearflag_scomb(FLAG_PROCESSED,sc);
+  cleargraph(sc->body,FLAG_PROCESSED);
   memset(shared,0,sc->ncells*sizeof(int));
   find_shared(sc->body,sc,shared,&nshared);
 
@@ -821,7 +783,7 @@ cell *super_to_letrec(scomb *sc)
     sprintf(varnames[i],"L%d",genvar++);
   }
 
-  clearflag_scomb(FLAG_PROCESSED,sc);
+  cleargraph(sc->body,FLAG_PROCESSED);
   root = copy_shared(sc->body,sc,shared,defbodies,varnames,&pos);
 
   letrec = alloc_cell();

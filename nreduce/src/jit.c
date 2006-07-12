@@ -532,10 +532,6 @@ void jit_compile(ginstr *program, array *cpucode)
       LABEL(Lend);
       break;
     }
-    case OP_ANNOTATE:
-      /* FIXME */
-      I_NOP();
-      break;
     case OP_ALLOC: {
       int Lloopstart = as->labels++;
       int Lend = as->labels++;

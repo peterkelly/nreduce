@@ -139,10 +139,7 @@ void cleardir(char *dirname)
 
 void cellmsg(FILE *f, cell *c, const char *format, ...)
 {
-  cell *source = resolve_source(c);
   va_list ap;
-  if (source && source->filename)
-    fprintf(f,"%s:%d: ",source->filename,source->lineno);
   va_start(ap,format);
   vfprintf(f,format,ap);
   va_end(ap);
@@ -161,20 +158,13 @@ void print1(char *prefix, cell *c, int indent)
 {
   int i;
 
-/*   if (c->filename) { */
-/*     printf("%-16s:%-3d ",c->filename,c->lineno); */
-/*   } */
-/*   else { */
-/*     printf("%-16s:%-3s ","",""); */
-/*   } */
-
   push(c);
-  printf("%s#%05d    %11s ",prefix,c->id,cell_types[celltype(c)]);
+  printf("%s%p    %11s ",prefix,c,cell_types[celltype(c)]);
   for (i = 0; i < indent; i++)
     printf("  ");
 
   if (c->tag & FLAG_PRINTED) {
-    printf("#%05d\n",c->id);
+    printf("%p\n",c);
   }
   else {
     c->tag |= FLAG_PRINTED;
@@ -362,7 +352,7 @@ void print_dot(FILE *f, cell *c)
   }
 
 /*   fprintf(f,"  cell%p [label=\"{{<top>%p\\n%s}|{<left>|<right>}}\"",c,c,label); */
-/*   fprintf(f,"  cell%p [label=\"{{<top>%d\\n%s}|{<left>|<right>}}\"",c,c->id,label); */
+/*   fprintf(f,"  cell%p [label=\"{{<top>%p\\n%s}|{<left>|<right>}}\"",c,c,label); */
 /*   fprintf(f,"  cell%p [label=\"{{<top>%s}|{<left>|<right>}}\"",c,label); */
   fprintf(f,"  cell%p [label=\"%s\"",c,label);
   if (c->tag & FLAG_STRICT)
@@ -630,7 +620,7 @@ void print_scombs2()
     debug(0,"\n");
 /*     debug(0,"Cells:"); */
 /*     for (i = 0; i < sc->ncells; i++) */
-/*       debug(0," #%05d",sc->cells[i]->id); */
+/*       debug(0," %p",sc->cells[i]); */
 /*     debug(0,"\n"); */
     print(sc->body);
     debug(0,"\n");
