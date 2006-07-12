@@ -46,7 +46,7 @@ int get_fno_from_address(int address)
   return fno;
 }
 
-void trace_address(ginstr *program, int address, int nargs)
+void trace_address(stack *s, ginstr *program, int address, int nargs)
 {
   int fno = get_fno_from_address(address);
 
@@ -57,7 +57,7 @@ void trace_address(ginstr *program, int address, int nargs)
     else
       debug(0,"0      Function %d = %s",fno,get_scomb_index(fno-NUM_BUILTINS)->name);
     debug(0,", address %d, nargs = %d, stackbase = %d\n",
-          address,nargs,stackbase);
+          address,nargs,s->base);
   }
 }
 
@@ -92,21 +92,21 @@ int is_whnf(cell *c)
   return 1;
 }
 
-void check_stack(gprogram *gp, int address)
+void check_stack(stack *s, gprogram *gp, int address)
 {
   ginstr *instr = &gp->ginstrs[address];
   if (0 > instr->expcount)
     return;
 
-  if (stackcount-exec_stackbase != instr->expcount) {
+  if (s->count-exec_stackbase != instr->expcount) {
     printf("Instruction %d expects stack frame size %d, actually %d\n",
-           address,instr->expcount,stackcount-exec_stackbase);
+           address,instr->expcount,s->count-exec_stackbase);
     abort();
   }
 
   int i;
   for (i = 0; i < instr->expcount; i++) {
-    cell *c = stackat(exec_stackbase+i);
+    cell *c = stack_at(s,exec_stackbase+i);
     int actualstatus = is_whnf(c);
     if (instr->expstatus[i] && !actualstatus) {
       printf("Instruction %d expects stack frame entry %d (%d) to be evald but it's "
@@ -116,76 +116,76 @@ void check_stack(gprogram *gp, int address)
   }
 }
 
-cell *unwind_part1()
+cell *unwind_part1(stack *s)
 {
-  stackcount = stackbase+1;
-  cell *c = stack[stackcount-1];
+  s->count = s->base+1;
+  cell *c = s->data[s->count-1];
   c = resolve_ind(c);
   while (TYPE_APPLICATION == celltype(c)) {
     c = resolve_ind((cell*)c->field1);
-    push(c);
+    stack_push(s,c);
   }
   return c;
 }
 
-int unwind_part2(cell *bottom)
+int unwind_part2(stack *s, cell *bottom)
 {
   if (TYPE_FUNCTION != celltype(bottom))
     return 0;
 
-  int argspos = stackcount-(int)bottom->field1;
-  if (argspos < stackbase+1)
+  int argspos = s->count-(int)bottom->field1;
+  if (argspos < s->base+1)
     return 0;
 
   int funaddr = (int)bottom->field2;
   int pos;
-  assert(!is_whnf(stack[argspos-1]));
-  for (pos = stackcount-1; pos >= argspos; pos--) {
-    cell *argval = resolve_ind(stack[pos-1]);
-    stack[pos] = resolve_ind((cell*)argval->field2);
+  assert(!is_whnf(s->data[argspos-1]));
+  for (pos = s->count-1; pos >= argspos; pos--) {
+    cell *argval = resolve_ind(s->data[pos-1]);
+    s->data[pos] = resolve_ind((cell*)argval->field2);
   }
 
-  stack[argspos-1] = resolve_ind(stack[argspos-1]);
+  s->data[argspos-1] = resolve_ind(s->data[argspos-1]);
 
   address = funaddr;
   exec_stackbase = argspos-1;
   return 1;
 }
 
-void do_return()
+void do_return(stack *s)
 {
   dumpentry *edx = &dumpstack[dumpcount-1];
-  assert(is_whnf(stack[stackcount-1]));
-  stackbase = edx->stackbase;
-  stackcount = edx->stackcount;
+  assert(is_whnf(s->data[s->count-1]));
+  s->base = edx->stackbase;
+  s->count = edx->stackcount;
   address = edx->address;
   exec_stackbase = edx->sb;
   dumpcount--;
   assert(0 <= dumpcount);
 }
 
-void do_mkap(int n)
+void do_mkap(stack *s, int n)
 {
   for (n--; n >= 0; n--) {
-    cell *left = stack[stackcount-1];
-    cell *right = stack[stackcount-2];
-    stackcount--;
-    stack[stackcount-1] = alloc_cell2(TYPE_APPLICATION,left,right);
+    cell *left = s->data[s->count-1];
+    cell *right = s->data[s->count-2];
+    s->count--;
+    s->data[s->count-1] = alloc_cell2(TYPE_APPLICATION,left,right);
   }
 }
 
-void do_update(int n)
+void do_update(stack *s, int n)
 {
   cell *res;
   cell *target;
-  assert(n < stackcount);
+  assert(n < s->count);
   assert(n > 0);
 
-  res = resolve_ind(stack[stackcount-1-n]);
+  res = resolve_ind(s->data[s->count-1-n]);
 
   if (res->tag & FLAG_PINNED) {
-    stack[stackcount-1-n] = alloc_cell();
-    res = stack[stackcount-1-n];
+    s->data[s->count-1-n] = alloc_cell();
+    res = s->data[s->count-1-n];
   }
 
   assert(!(res->tag & FLAG_PINNED));
@@ -194,23 +194,24 @@ void do_update(int n)
   repl_histogram[celltype(target)]++;
 
   target->tag = TYPE_IND;
-  target->field1 = resolve_ind(stack[stackcount-1]);
-  stackcount--;
+  target->field1 = resolve_ind(s->data[s->count-1]);
+  s->count--;
 }
 
 void execute(gprogram *gp)
 {
-  assert(0 == stackbase);
+  stack *s = stack_new();
+
   while (1) {
     ginstr *instr = &gp->ginstrs[address];
 
 #ifdef STACK_MODEL_SANITY_CHECK
-    check_stack(gp,address);
+    check_stack(s,gp,address);
 #endif
 
     if (trace) {
       print_ginstr(address,instr,0);
-      print_stack(-1,stack,stackcount,0);
+      print_stack(-1,s->data,s->count,0);
     }
 
     if (nallocs > COLLECT_THRESHOLD)
@@ -223,24 +224,25 @@ void execute(gprogram *gp)
     case OP_BEGIN:
       break;
     case OP_END:
+      stack_free(s);
       return;
     case OP_GLOBSTART:
       break;
     case OP_EVAL: {
       cell *c;
-      assert(0 <= stackcount-1-instr->arg0);
-      c = resolve_ind(stack[stackcount-1-instr->arg0]);
+      assert(0 <= s->count-1-instr->arg0);
+      c = resolve_ind(s->data[s->count-1-instr->arg0]);
       if ((TYPE_APPLICATION == celltype(c)) ||
           (TYPE_FUNCTION == celltype(c))) {
         dumpentry *de = pushdump();
         ndumpallocs++;
-        de->stackbase = stackbase;
-        de->stackcount = stackcount;
+        de->stackbase = s->base;
+        de->stackcount = s->count;
         de->address = address;
         de->sb = exec_stackbase;
-        push(stack[stackcount-1-instr->arg0]);
-        stackbase = stackcount-1;
-        exec_stackbase = stackbase;
+        stack_push(s,s->data[s->count-1-instr->arg0]);
+        s->base = s->count-1;
+        exec_stackbase = s->base;
       }
       else {
         break;
@@ -248,19 +250,19 @@ void execute(gprogram *gp)
       /* fall through */
     }
     case OP_UNWIND: {
-      cell *ebx = unwind_part1();
-      if (unwind_part2(ebx))
+      cell *ebx = unwind_part1(s);
+      if (unwind_part2(s,ebx))
         break;
 
       /* fall through */
     }
     case OP_RETURN: {
-      do_return();
+      do_return(s);
       break;
     }
     case OP_PUSH: {
-      assert(instr->arg0 < stackcount);
-      push(resolve_ind(stack[stackcount-1-instr->arg0]));
+      assert(instr->arg0 < s->count);
+      stack_push(s,resolve_ind(s->data[s->count-1-instr->arg0]));
       break;
     }
     case OP_PUSHGLOBAL: {
@@ -273,7 +275,7 @@ void execute(gprogram *gp)
           (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
         cell *src = globcells[fno];
         assert(TYPE_FUNCTION == celltype(src));
-        push(alloc_cell2(TYPE_FUNCTION,src->field1,src->field2));
+        stack_push(s,alloc_cell2(TYPE_FUNCTION,src->field1,src->field2));
       }
       // If the function is a supercombinator and arg1 is non-zero, this means we
       // actually want a reference to the "no-eval" part of the supercombinator, i.e.
@@ -283,59 +285,59 @@ void execute(gprogram *gp)
         cell *src = globcells[fno];
         assert(TYPE_FUNCTION == celltype(src));
         assert((int)src->field2 == addressmap[fno]);
-        push(alloc_cell2(TYPE_FUNCTION,src->field1,(void*)noevaladdressmap[fno]));
+        stack_push(s,alloc_cell2(TYPE_FUNCTION,src->field1,(void*)noevaladdressmap[fno]));
       }
       else {
-        push(globcells[fno]);
+        stack_push(s,globcells[fno]);
       }
       break;
     }
     case OP_MKAP:
-      do_mkap(instr->arg0);
+      do_mkap(s,instr->arg0);
       break;
     case OP_UPDATE:
-      do_update(instr->arg0);
+      do_update(s,instr->arg0);
       break;
     case OP_POP:
-      stackcount -= instr->arg0;
-      assert(0 <= stackcount);
+      s->count -= instr->arg0;
+      assert(0 <= s->count);
       break;
     case OP_PRINT:
-      print_cell(resolve_ind(stack[stackcount-1]));
-      stackcount--;
+      print_cell(resolve_ind(s->data[s->count-1]));
+      s->count--;
       break;
     case OP_BIF: {
       int i;
       assert(0 <= builtin_info[instr->arg0].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[instr->arg0].nstrict; i++) {
-        stack[stackcount-1-i] = resolve_ind(stack[stackcount-1-i]); /* bifs expect it */
-        assert(TYPE_APPLICATION != celltype(stack[stackcount-1-i]));
+        s->data[s->count-1-i] = resolve_ind(s->data[s->count-1-i]); /* bifs expect it */
+        assert(TYPE_APPLICATION != celltype(s->data[s->count-1-i]));
       }
       if (trace)
         debug(0,"  builtin %s\n",builtin_info[instr->arg0].name);
-      builtin_info[instr->arg0].f();
+      builtin_info[instr->arg0].f(s);
       break;
     }
     case OP_JFALSE: {
-      cell *test = resolve_ind(stack[stackcount-1]);
+      cell *test = resolve_ind(s->data[s->count-1]);
       assert(TYPE_APPLICATION != celltype(test));
       if (TYPE_NIL == celltype(test))
         address += instr->arg0-1;
-      stackcount--;
+      s->count--;
       break;
     }
     case OP_JUMP:
       address += instr->arg0-1;
       break;
     case OP_JEMPTY:
-      if (0 == stackcount)
+      if (0 == s->count)
         address += instr->arg0-1;
       break;
     case OP_ISTYPE:
-      if (celltype(resolve_ind(stack[stackcount-1])) == instr->arg0)
-        stack[stackcount-1] = globtrue;
+      if (celltype(resolve_ind(s->data[s->count-1])) == instr->arg0)
+        s->data[s->count-1] = globtrue;
       else
-        stack[stackcount-1] = globnil;
+        s->data[s->count-1] = globnil;
       break;
     case OP_ALLOC: {
       int i;
@@ -343,22 +345,22 @@ void execute(gprogram *gp)
          should be save to use globnil everywhere we normally use TYPE_NIL */
       nALLOCs++;
       for (i = 0; i < instr->arg0; i++) {
-        push(alloc_cell2(TYPE_NIL,NULL,NULL));
+        stack_push(s,alloc_cell2(TYPE_NIL,NULL,NULL));
         nALLOCcells++;
       }
       break;
     }
     case OP_SQUEEZE: {
-      assert(0 <= stackcount-instr->arg0-instr->arg1);
-      int base = stackcount-instr->arg0-instr->arg1;
+      assert(0 <= s->count-instr->arg0-instr->arg1);
+      int base = s->count-instr->arg0-instr->arg1;
       int i;
       for (i = 0; i <= instr->arg0; i++)
-        stack[base+i] = stack[base+i+instr->arg1];
-      stackcount -= instr->arg1;
+        s->data[base+i] = s->data[base+i+instr->arg1];
+      s->count -= instr->arg1;
       break;
     }
     case OP_DISPATCH: {
-      cell *fun = resolve_ind(stack[stackcount-1]);
+      cell *fun = resolve_ind(s->data[s->count-1]);
       if (TYPE_FUNCTION == celltype(fun)) {
         int nargs = (int)fun->field1;
         int addr = (int)fun->field2;
@@ -369,7 +371,7 @@ void execute(gprogram *gp)
         }
         else if (nargs == instr->arg0) {
           ndispexact++;
-          stackcount--;
+          s->count--;
           address = (int)fun->field2;
           break;
         }
@@ -384,26 +386,26 @@ void execute(gprogram *gp)
         ndispother++;
       }
 
-      do_mkap(instr->arg0);
-      do_update(1);
+      do_mkap(s,instr->arg0);
+      do_update(s,1);
 
-      cell *bottom = unwind_part1();
-      if (unwind_part2(bottom))
+      cell *bottom = unwind_part1(s);
+      if (unwind_part2(s,bottom))
         break;
-      do_return();
+      do_return(s);
       break;
     }
     case OP_PUSHNIL:
-      push(globnil);
+      stack_push(s,globnil);
       break;
     case OP_PUSHINT:
-      push(alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL));
+      stack_push(s,alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL));
       break;
     case OP_PUSHDOUBLE:
-      push(alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1));
+      stack_push(s,alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1));
       break;
     case OP_PUSHSTRING:
-      push(((cell**)gp->stringmap->data)[instr->arg0]);
+      stack_push(s,((cell**)gp->stringmap->data)[instr->arg0]);
       break;
     default:
       assert(0);

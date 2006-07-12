@@ -39,6 +39,8 @@ int trace = 0;
 extern cell **globcells;
 extern array *lexstring;
 
+stack *active_stacks = NULL;
+
 int repl_histogram[NUM_CELLTYPES];
 
 
@@ -64,11 +66,6 @@ dumpentry *pushdump()
 /*   printf("pushdump: dumpstack = %p, dumpcount = %d\n",dumpstack,dumpcount); */
   return &dumpstack[dumpcount-1];
 }
-
-cell **stack = NULL;
-int stackalloc = 0;
-int stackcount = 0;
-int stackbase = 0;
 
 block *blocks = NULL;
 int nblocks = 0;
@@ -278,9 +275,12 @@ void collect()
     }
   }
   else {
-    for (i = 0; i < stackcount; i++) {
-      stack[i] = resolve_ind(stack[i]);
-      mark(stack[i]);
+    stack *s;
+    for (s = active_stacks; s; s = s->next) {
+      for (i = 0; i < s->count; i++) {
+        s->data[i] = resolve_ind(s->data[i]);
+        mark(s->data[i]);
+      }
     }
   }
   for (sc = scombs; sc; sc = sc->next)
@@ -339,7 +339,6 @@ void cleanup()
 /*   scombs = NULL; */
    scomb_free_list(&scombs);
 
-  stackcount = 0;
   global_root = NULL;
 
   for (bl = blocks; bl; bl = bl->next)
@@ -354,7 +353,6 @@ void cleanup()
     free(bl);
     bl = next;
   }
-  free(stack);
   free(addressmap);
   free(noevaladdressmap);
   free(globcells);
@@ -363,57 +361,72 @@ void cleanup()
     array_free(lexstring);
 }
 
-void growstack()
+stack *stack_new()
 {
-  if (0 == stackalloc)
-    stackalloc = 16;
-  else
-    stackalloc *= 2;
-  stack = (cell**)realloc(stack,stackalloc*sizeof(cell*));
+  stack *s = (stack*)calloc(1,sizeof(stack));
+  s->alloc = 4;
+  s->count = 0;
+  s->base = 0;
+  s->data = (cell**)malloc(s->alloc*sizeof(cell*));
+  s->next = active_stacks;
+  active_stacks = s;
+  return s;
 }
 
-void push(cell *c)
+void stack_free(stack *s)
 {
-/*   printf("PUSH %p\n",c); */
-  if (stackcount == stackalloc) {
-    if (stackcount >= STACK_LIMIT) {
+  stack **ptr = &active_stacks;
+  while (*ptr != s)
+    ptr = &((*ptr)->next);
+  *ptr = s->next;
+  free(s->data);
+  free(s);
+}
+
+void stack_grow(stack *s)
+{
+  s->alloc *= 2;
+  s->data = (cell**)realloc(s->data,s->alloc*sizeof(cell*));
+}
+
+void stack_push(stack *s, cell *c)
+{
+  if (s->count == s->alloc) {
+    if (s->count >= STACK_LIMIT) {
       fprintf(stderr,"Out of stack space\n");
       exit(1);
     }
-    growstack();
+    stack_grow(s);
   }
-  stack[stackcount++] = c;
-  if (maxstack < stackcount)
-    maxstack = stackcount;
+  s->data[s->count++] = c;
 }
 
-void insert(cell *c, int pos)
+void stack_insert(stack *s, cell *c, int pos)
 {
-  if (stackcount == stackalloc)
-    growstack();
-  memmove(&stack[pos+1],&stack[pos],(stackcount-pos)*sizeof(cell*));
-  stackcount++;
-  stack[pos] = c;
+  if (s->count == s->alloc)
+    stack_grow(s);
+  memmove(&s->data[pos+1],&s->data[pos],(s->count-pos)*sizeof(cell*));
+  s->count++;
+  s->data[pos] = c;
 }
 
-cell *pop()
+cell *stack_pop(stack *s)
 {
-  assert(0 < stackcount);
-/*   printf("POP %p\n",stack[stackcount-1]); */
-  return resolve_ind(stack[--stackcount]);
+  assert(0 < s->count);
+  return resolve_ind(s->data[--s->count]);
 }
 
-cell *top()
+cell *stack_top(stack *s)
 {
-  assert(0 < stackcount);
-  return resolve_ind(stack[stackcount-1]);
+  assert(0 < s->count);
+  return resolve_ind(s->data[s->count-1]);
 }
 
-cell *stackat(int s)
+cell *stack_at(stack *s, int pos)
 {
-  assert(0 <= s);
-  assert(s < stackcount);
-  return resolve_ind(stack[s]);
+  assert(0 <= pos);
+  assert(pos < s->count);
+  return resolve_ind(s->data[pos]);
 }
 
 void statistics(FILE *f)
@@ -634,13 +647,3 @@ void print_stack(int redex, cell **stk, int size, int dir)
       i++;
   }
 }
-
-void adjust_stack(int nargs)
-{
-  int i;
-  for (i = stackcount-1; i >= stackcount-nargs; i--) {
-    assert(TYPE_APPLICATION == celltype(stackat(i-1)));
-    stack[i] = (cell*)stackat(i-1)->field2;
-  }
-}
-

@@ -142,12 +142,13 @@ extern FILE *yyin;
 
 void stream(cell *c)
 {
-  push(c);
-  while (0 < stackcount) {
+  stack *s = stack_new();
+  stack_push(s,c);
+  while (0 < s->count) {
     cell *c;
-    reduce();
+    reduce(s);
 
-    c = pop();
+    c = stack_pop(s);
     c = resolve_ind(c);
     if (TYPE_NIL == celltype(c)) {
       /* nothing */
@@ -162,8 +163,8 @@ void stream(cell *c)
       printf("%s",(char*)c->field1);
     }
     else if (TYPE_CONS == celltype(c)) {
-      push((cell*)c->field2);
-      push((cell*)c->field1);
+      stack_push(s,(cell*)c->field2);
+      stack_push(s,(cell*)c->field1);
     }
     else if (TYPE_APPLICATION == celltype(c)) {
       fprintf(stderr,"Too many arguments applied to function\n");
@@ -174,6 +175,7 @@ void stream(cell *c)
       exit(1);
     }
   }
+  stack_free(s);
 }
 
 void print_compiled(gprogram *gp, array *cpucode)
@@ -456,8 +458,6 @@ void letrec_substitution()
 
   if (trace)
     print_scombs1();
-
-  assert(0 == stackcount);
 }
 
 void substitute_apps_r(cell *c)
@@ -556,7 +556,6 @@ void lambda_lifting()
     lift(&sc->body,0,0,sc->name);
     prev = sc;
   }
-  assert(0 == stackcount);
 
   if (trace)
     print_scombs1();

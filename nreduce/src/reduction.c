@@ -30,7 +30,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-int resolve_var(int oldcount, scomb *sc, cell **k)
+int resolve_var(stack *s, int oldcount, scomb *sc, cell **k)
 {
   int varno;
   cell *var = *k;
@@ -45,20 +45,20 @@ int resolve_var(int oldcount, scomb *sc, cell **k)
   if (0 <= varno) {
     int stackpos = oldcount-1-varno;
     assert(0 <= stackpos);
-    *k = (cell*)stackat(stackpos);
+    *k = (cell*)stack_at(s,stackpos);
     return 1;
   }
   return 0;
 }
 
-void inschild(int oldcount, scomb *sc, int base, cell **dt, cell *source)
+void inschild(stack *s, int oldcount, scomb *sc, int base, cell **dt, cell *source)
 {
   cell *oldsource;
   assert(TYPE_IND != celltype(source)); /* source comes from the scomb */
 
   oldsource = source;
 
-  resolve_var(oldcount,sc,&source);
+  resolve_var(s,oldcount,sc,&source);
   if (oldsource != source) {
     (*dt) = source;
   }
@@ -66,11 +66,11 @@ void inschild(int oldcount, scomb *sc, int base, cell **dt, cell *source)
     int b;
     int found = 0;
     for (b = oldcount; b < base; b += 2) {
-      cell *d = stackat(b);
-      cell *s = stackat(b+1);
-      assert(s->tag & FLAG_PROCESSED);
-      if (s == source) {
-        (*dt) = d;
+      cell *de = stack_at(s,b);
+      cell *so = stack_at(s,b+1);
+      assert(so->tag & FLAG_PROCESSED);
+      if (so == source) {
+        (*dt) = de;
         found = 1;
         break;
       }
@@ -79,30 +79,30 @@ void inschild(int oldcount, scomb *sc, int base, cell **dt, cell *source)
   }
   else {
     (*dt) = alloc_cell();
-    insert(source,base);
-    insert((*dt),base);
+    stack_insert(s,source,base);
+    stack_insert(s,(*dt),base);
   }
 }
 
-void instantiate_scomb(cell *dest, cell *source, scomb *sc)
+void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
 {
-  int oldcount = stackcount;
-  int base = stackcount;
+  int oldcount = s->count;
+  int base = s->count;
   assert(TYPE_IND != celltype(source)); /* source comes from the scomb */
   assert(TYPE_EMPTY != celltype(source));
 
-  push(dest);
-  push(source);
+  stack_push(s,dest);
+  stack_push(s,source);
   assert(sc->cells);
   cleargraph(sc->body,FLAG_PROCESSED);
-  while (base < stackcount) {
+  while (base < s->count) {
     int wasarg;
 
-    dest = stackat(base++);
+    dest = stack_at(s,base++);
 
-    assert(TYPE_IND != celltype(stack[base])); /* stack[base] comes from the scomb */
-    wasarg = resolve_var(oldcount,sc,&stack[base]);
-    source = stackat(base++);
+    assert(TYPE_IND != celltype(s->data[base])); /* s->data[base] comes from the scomb */
+    wasarg = resolve_var(s,oldcount,sc,&s->data[base]);
+    source = stack_at(s,base++);
     assert(TYPE_IND != celltype(source));
 
     source->tag |= FLAG_PROCESSED;
@@ -119,15 +119,15 @@ void instantiate_scomb(cell *dest, cell *source, scomb *sc)
         free_cell_fields(dest);
         dest->tag = celltype(source);
 
-        inschild(oldcount,sc,base,(cell**)(&dest->field1),(cell*)source->field1);
-        inschild(oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
+        inschild(s,oldcount,sc,base,(cell**)(&dest->field1),(cell*)source->field1);
+        inschild(s,oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
 
         break;
       case TYPE_LAMBDA:
         free_cell_fields(dest);
         dest->tag = TYPE_LAMBDA;
         dest->field1 = strdup((char*)source->field1);
-        inschild(oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
+        inschild(s,oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
         break;
       case TYPE_BUILTIN:
       case TYPE_NIL:
@@ -146,16 +146,16 @@ void instantiate_scomb(cell *dest, cell *source, scomb *sc)
     }
   }
 
-  stackcount = oldcount;
+  s->count = oldcount;
 }
 
-void reduce()
+void reduce(stack *s)
 {
   int reductions = 0;
 
   /* REPEAT */
   while (1) {
-    int oldtop = stackcount;
+    int oldtop = s->count;
     cell *target;
     cell *redex;
 
@@ -166,17 +166,17 @@ void reduce()
     if (nallocs > COLLECT_THRESHOLD)
       collect();
 
-    redex = stack[stackcount-1];
+    redex = s->data[s->count-1];
     reductions++;
 
     target = resolve_ind(redex);
 
     /* 1. Unwind the spine until something other than an application node is encountered. */
-    push(target);
+    stack_push(s,target);
 
     while (TYPE_APPLICATION == celltype(target)) {
       target = resolve_ind((cell*)target->field1);
-      push(target);
+      stack_push(s,target);
     }
 
     /* 2. Examine the cell  at the tip of the spine */
@@ -194,28 +194,28 @@ void reduce()
       int destno;
       cell *dest;
 
-      destno = stackcount-1-sc->nargs;
-      dest = stackat(destno);
+      destno = s->count-1-sc->nargs;
+      dest = stack_at(s,destno);
 
       nscombappls++;
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
-      if (stackcount-1-oldtop < sc->nargs) {
-        stackcount = oldtop;
+      if (s->count-1-oldtop < sc->nargs) {
+        s->count = oldtop;
         return;
       }
 
       /* We have enough arguments present to instantiate the supercombinator */
-      for (i = stackcount-1; i >= stackcount-sc->nargs; i--) {
+      for (i = s->count-1; i >= s->count-sc->nargs; i--) {
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype(stackat(i-1)));
-        stack[i] = (cell*)stackat(i-1)->field2;
+        assert(TYPE_APPLICATION == celltype(stack_at(s,i-1)));
+        s->data[i] = (cell*)stack_at(s,i-1)->field2;
       }
 
-      instantiate_scomb(dest,sc->body,sc);
+      instantiate_scomb(s,dest,sc->body,sc);
 
-      stackcount = oldtop;
+      s->count = oldtop;
       continue;
     }
     case TYPE_CONS:
@@ -227,14 +227,14 @@ void reduce()
       /* The item at the tip of the spine is a value; this means the expression is in WHNF.
          If there are one or more arguments "applied" to this value then it's considered an
          error, e.g. caused by an attempt to pass more arguments to a function than it requires. */
-      if (1 < stackcount-oldtop) {
-        printf("Attempt to apply %d arguments to a value: ",stackcount-oldtop-1);
+      if (1 < s->count-oldtop) {
+        printf("Attempt to apply %d arguments to a value: ",s->count-oldtop-1);
         print_code(target);
         printf("\n");
         exit(1);
       }
 
-      stackcount = oldtop;
+      s->count = oldtop;
       return;
       /* b. A built-in function. Check the number of arguments available. If there are too few
          arguments the expression is in WHNF so STOP. Otherwise evaluate any arguments required,
@@ -251,36 +251,36 @@ void reduce()
       reqargs = builtin_info[bif].nargs;
       strictargs = builtin_info[bif].nstrict;
 
-      if (stackcount-1 < reqargs + oldtop) {
+      if (s->count-1 < reqargs + oldtop) {
         fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
-                builtin_info[bif].name,reqargs,stackcount-1-oldtop);
+                builtin_info[bif].name,reqargs,s->count-1-oldtop);
         exit(1);
       }
 
-      for (i = stackcount-1; i >= stackcount-reqargs; i--) {
+      for (i = s->count-1; i >= s->count-reqargs; i--) {
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype(stackat(i-1)));
-        stack[i] = (cell*)stackat(i-1)->field2;
+        assert(TYPE_APPLICATION == celltype(stack_at(s,i-1)));
+        s->data[i] = (cell*)stack_at(s,i-1)->field2;
       }
 
       assert(strictargs <= reqargs);
       for (i = 0; i < strictargs; i++) {
-        push(stack[stackcount-1-i]);
-        reduce();
-        stack[stackcount-1-i] = pop();
+        stack_push(s,s->data[s->count-1-i]);
+        reduce(s);
+        s->data[s->count-1-i] = stack_pop(s);
       }
 
-      builtin_info[bif].f();
+      builtin_info[bif].f(s);
 
       /* UPDATE */
 
-      stack[stackcount-1] = resolve_ind(stack[stackcount-1]);
+      s->data[s->count-1] = resolve_ind(s->data[s->count-1]);
 
-      free_cell_fields(stack[stackcount-2]);
-      stack[stackcount-2]->tag = TYPE_IND;
-      stack[stackcount-2]->field1 = stack[stackcount-1];
+      free_cell_fields(s->data[s->count-2]);
+      s->data[s->count-2]->tag = TYPE_IND;
+      s->data[s->count-2]->field1 = s->data[s->count-1];
 
-      stackcount--;
+      s->count--;
       break;
     }
     default:
@@ -288,7 +288,7 @@ void reduce()
       break;
     }
 
-    stackcount = oldtop;
+    s->count = oldtop;
   }
   /* END */
 }

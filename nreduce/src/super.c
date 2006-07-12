@@ -504,8 +504,8 @@ void print_level(cell *c, int level)
 }
 
 
-int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdadepth,
-         int iscopy, int *level, list **newscombs, char *prefix)
+int lift_r(stack *s, cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdadepth,
+           int iscopy, int *level, list **newscombs, char *prefix)
 {
   int maxfree = 1;
   abstraction *a;
@@ -534,9 +534,9 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
   case TYPE_CONS: {
     int level1 = 0;
     int level2 = 0;
-    int mf1 = lift_r((cell**)&((*k)->field1),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level1,
+    int mf1 = lift_r(s,(cell**)&((*k)->field1),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level1,
                      newscombs,prefix);
-    int mf2 = lift_r((cell**)&((*k)->field2),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level2,
+    int mf2 = lift_r(s,(cell**)&((*k)->field2),lambdavar,lroot,lambdasc,lambdadepth,iscopy,&level2,
                      newscombs,prefix);
     if (level1 > level2)
       *level = level1;
@@ -570,11 +570,11 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     (*k)->tag &= ~FLAG_MAXFREE;
     #endif
 
-    push(*k);
-    if (lift_r((cell**)&((*k)->field2),name,*k,sc,lambdadepth+1,iscopy,level,newscombs,prefix)) {
+    stack_push(s,*k);
+    if (lift_r(s,(cell**)&((*k)->field2),name,*k,sc,lambdadepth+1,iscopy,level,newscombs,prefix)) {
       abstract((cell**)&(*k)->field2,sc);
     }
-    pop(*k);
+    stack_pop(s);
     *level = lambdadepth+1;
     print_level(*k,*level);
 
@@ -621,7 +621,7 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     print(global_root);
     #endif
 
-    maxfree = lift_r(k,lambdavar,lroot,lambdasc,lambdadepth,iscopy,level,newscombs,prefix);
+    maxfree = lift_r(s,k,lambdavar,lroot,lambdasc,lambdadepth,iscopy,level,newscombs,prefix);
 
     free(name);
     break;
@@ -631,9 +631,9 @@ int lift_r(cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, int lambdade
     assert(NULL == get_scomb((char*)(*k)->field1));
     maxfree = ((NULL == lambdavar) || strcmp(name,lambdavar));
     int i;
-    for (i = stackcount-1; i >= 0; i--) {
-      assert(TYPE_LAMBDA == celltype(stack[i]));
-      if (!strcmp((char*)stack[i]->field1,name)) {
+    for (i = s->count-1; i >= 0; i--) {
+      assert(TYPE_LAMBDA == celltype(s->data[i]));
+      if (!strcmp((char*)s->data[i]->field1,name)) {
         *level = i+1;
         break;
       }
@@ -667,14 +667,16 @@ void lift(cell **k, int iscopy, int calccells, char *prefix)
   int level = 0;
   list *newscombs = NULL;
   list *l;
+  stack *s = stack_new();
 
   cleargraph(*k,FLAG_PROCESSED);
-  lift_r(k,NULL,NULL,NULL,0,iscopy,&level,&newscombs,prefix);
+  lift_r(s,k,NULL,NULL,NULL,0,iscopy,&level,&newscombs,prefix);
   if (calccells) {
     for (l = newscombs; l; l = l->next)
       scomb_calc_cells((scomb*)l->data);
   }
   list_free(newscombs,NULL);
+  stack_free(s);
 }
 
 void find_shared(cell *c, scomb *sc, int *shared, int *nshared)

@@ -178,6 +178,14 @@ typedef struct carray {
   cell *sizecell;
 } carray;
 
+typedef struct stack {
+  int alloc;
+  int count;
+  int base;
+  cell **data;
+  struct stack *next;
+} stack;
+
 typedef struct array {
   int alloc;
   int size;
@@ -230,7 +238,7 @@ typedef struct block {
   cell cells[BLOCK_SIZE];
 } block;
 
-typedef void (*builtin_f)();
+typedef void (*builtin_f)(stack *s);
 
 typedef struct builtin {
   char *name;
@@ -251,11 +259,15 @@ cell *alloc_sourcecell(const char *filename, int lineno);
 void collect();
 void free_scomb(scomb *sc);
 void cleanup();
-void push(cell *c);
-void insert(cell *c, int pos);
-cell *pop();
-cell *top();
-cell *stackat(int s);
+
+stack *stack_new();
+void stack_free(stack *s);
+void stack_push(stack *s, cell *c);
+void stack_insert(stack *s, cell *c, int pos);
+cell *stack_pop(stack *s);
+cell *stack_top(stack *s);
+cell *stack_at(stack *s, int pos);
+
 void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
@@ -263,7 +275,6 @@ void clearflag(int flag);
 void cleargraph(cell *root, int flag);
 void free_cell_fields(cell *c);
 void print_stack(int redex, cell **stk, int size, int dir);
-void adjust_stack(int nargs);
 
 #ifdef INLINE_RESOLVE_IND
 #define resolve_ind(expr) ({ cell *_rc = (expr); \
@@ -307,7 +318,7 @@ void resolve_scvars(cell *c);
 
 /* reduction */
 
-void reduce();
+void reduce(stack *s);
 
 /* extra */
 
@@ -374,10 +385,6 @@ extern int dumpcount;
 extern int trace;
 extern cell *global_root;
 extern struct dumpentry *dump;
-extern cell **stack;
-extern int stackalloc;
-extern int stackcount;
-extern int stackbase;
 extern block *blocks;
 extern int nblocks;
 extern int nallocs;

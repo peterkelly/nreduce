@@ -158,7 +158,6 @@ void print1(char *prefix, cell *c, int indent)
 {
   int i;
 
-  push(c);
   printf("%s%p    %11s ",prefix,c,cell_types[celltype(c)]);
   for (i = 0; i < indent; i++)
     printf("  ");
@@ -238,7 +237,6 @@ void print1(char *prefix, cell *c, int indent)
       break;
     }
   }
-  pop();
 }
 
 void print(cell *c)
@@ -274,8 +272,6 @@ void print_dot(FILE *f, cell *c)
     return;
 
   c->tag |= FLAG_PRINTED;
-
-  push(c);
 
   switch (celltype(c)) {
   case TYPE_IND:
@@ -358,8 +354,6 @@ void print_dot(FILE *f, cell *c)
   if (c->tag & FLAG_STRICT)
     fprintf(f,",fontcolor=\"#FF0000\",color=\"#FF0000\"");
   fprintf(f,"];\n");
-
-  pop();
 }
 
 void print_graphdot(char *filename, cell *root)
@@ -390,7 +384,6 @@ void print_code_indent(FILE *f, int indent)
 void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
 {
   c = resolve_ind(c);
-/*   push(c); */
   if (1 && (c->tag & FLAG_PRINTED) &&
       (c != globnil) &&
       (TYPE_NIL != celltype(c)) &&
@@ -569,7 +562,6 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
     }
     }
   }
-/*   pop(); */
 }
 
 void print_codef(FILE *f, cell *c)

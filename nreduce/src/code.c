@@ -30,7 +30,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-cell *sub_letrecs(cell *c, scomb *sc)
+cell *sub_letrecs(stack *s, cell *c, scomb *sc)
 {
   cell *res = c;
 
@@ -39,7 +39,7 @@ cell *sub_letrecs(cell *c, scomb *sc)
 
   c->tag |= FLAG_PROCESSED;
 
-  push(c);
+  stack_push(s,c);
   switch (celltype(c)) {
   case TYPE_IND:
     assert(0);
@@ -47,17 +47,17 @@ cell *sub_letrecs(cell *c, scomb *sc)
   case TYPE_EMPTY:
     break;
   case TYPE_APPLICATION:
-    c->field1 = sub_letrecs((cell*)c->field1,sc);
-    c->field2 = sub_letrecs((cell*)c->field2,sc);
+    c->field1 = sub_letrecs(s,(cell*)c->field1,sc);
+    c->field2 = sub_letrecs(s,(cell*)c->field2,sc);
     break;
   case TYPE_LAMBDA:
-    c->field2 = sub_letrecs((cell*)c->field2,sc);
+    c->field2 = sub_letrecs(s,(cell*)c->field2,sc);
     break;
   case TYPE_BUILTIN:
     break;
   case TYPE_CONS:
-    c->field1 = sub_letrecs((cell*)c->field1,sc);
-    c->field2 = sub_letrecs((cell*)c->field2,sc);
+    c->field1 = sub_letrecs(s,(cell*)c->field1,sc);
+    c->field2 = sub_letrecs(s,(cell*)c->field2,sc);
     break;
   case TYPE_NIL:
     break;
@@ -73,13 +73,13 @@ cell *sub_letrecs(cell *c, scomb *sc)
 
     cell *prevres = NULL;
     do {
-      int st = stackcount-2;
+      int st = s->count-2;
       int found = 0;
 
       bletrec = 0;
 
       while ((0 <= st) && !found) {
-        cell *p = stackat(st);
+        cell *p = stack_at(s,st);
         if (TYPE_LAMBDA == celltype(p)) {
           if (!strcmp((char*)p->field1,(char*)res->field1))
             found = 1;
@@ -150,9 +150,9 @@ cell *sub_letrecs(cell *c, scomb *sc)
     cell *lnk;
     for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
       cell *def = (cell*)lnk->field1;
-      sub_letrecs((cell*)def->field2,sc);
+      sub_letrecs(s,(cell*)def->field2,sc);
     }
-    res = sub_letrecs((cell*)c->field2,sc);
+    res = sub_letrecs(s,(cell*)c->field2,sc);
     break;
   }
   case TYPE_VARDEF:
@@ -162,7 +162,7 @@ cell *sub_letrecs(cell *c, scomb *sc)
     assert(0);
     break;
   }
-  pop();
+  stack_pop(s);
   return res;
 }
 
@@ -183,6 +183,8 @@ cell *suball_letrecs(cell *root, scomb *sc)
         in * foo 2
   */
   cleargraph(root,FLAG_PROCESSED);
-  root = sub_letrecs(root,sc);
+  stack *s = stack_new();
+  root = sub_letrecs(s,root,sc);
+  stack_free(s);
   return root;
 }

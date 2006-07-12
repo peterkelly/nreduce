@@ -166,6 +166,7 @@ void compile_trace(x86_assembly *as, int instrno)
 
 char *run_bif(int bif, char *esp)
 {
+#if 0
   int nargs = builtin_info[bif].nargs;
   int i;
   int oldcount;
@@ -180,7 +181,7 @@ char *run_bif(int bif, char *esp)
     push(resolve_ind(*cp));
   }
   oldcount = stackcount;
-  builtin_info[bif].f();
+  builtin_info[bif].f(NULL);
   newesp = esp + (oldcount-stackcount)*4;
   for (i = 0; i < stackcount; i++) {
     cell **cp = (cell**)(newesp+i*4);
@@ -188,6 +189,8 @@ char *run_bif(int bif, char *esp)
   }
   stackcount = 0;
   return newesp;
+#endif
+  abort();
 }
 
 char *code_start = NULL;
