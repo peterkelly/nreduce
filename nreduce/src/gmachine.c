@@ -307,6 +307,8 @@ void execute(gprogram *gp)
       s->count--;
       break;
     case OP_BIF: {
+      int bif = instr->arg0;
+      int nargs = builtin_info[bif].nargs;
       int i;
       assert(0 <= builtin_info[instr->arg0].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[instr->arg0].nstrict; i++) {
@@ -315,7 +317,13 @@ void execute(gprogram *gp)
       }
       if (trace)
         debug(0,"  builtin %s\n",builtin_info[instr->arg0].name);
-      builtin_info[instr->arg0].f(s);
+
+
+      for (i = 0; i < nargs; i++)
+        assert(TYPE_IND != celltype((cell*)s->data[s->count-1-i]));
+
+      builtin_info[bif].f((cell**)(&s->data[s->count-nargs]));
+      s->count -= (nargs-1);
       break;
     }
     case OP_JFALSE: {

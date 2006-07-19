@@ -34,79 +34,73 @@
 
 const builtin builtin_info[NUM_BUILTINS];
 
-void setint(stack *s, int val)
+void setint(cell **cptr, int val)
 {
-  s->data[s->count-1] = alloc_cell();
-  s->data[s->count-1]->tag = TYPE_INT;
-  s->data[s->count-1]->field1 = (void*)val;
+  *cptr = alloc_cell();
+  (*cptr)->tag = TYPE_INT;
+  (*cptr)->field1 = (void*)val;
 }
 
-void setdouble(stack *s, double val)
+void setdouble(cell **cptr, double val)
 {
-  s->data[s->count-1] = alloc_cell();
-  s->data[s->count-1]->tag = TYPE_DOUBLE;
-  celldouble(s->data[s->count-1]) = val;
+  *cptr = alloc_cell();
+  (*cptr)->tag = TYPE_DOUBLE;
+  celldouble(*cptr) = val;
 }
 
-void setbool(stack *s, int b)
+void setbool(cell **cptr, int b)
 {
-  s->data[s->count-1] = (b ? globtrue : globnil);
+  *cptr = (b ? globtrue : globnil);
 }
 
-void intop(stack *s, int bif, int a, int b)
+void intop(cell **cptr, int bif, int a, int b)
 {
   switch (bif) {
-  case B_ADD:       setint(s,a +  b);  break;
-  case B_SUBTRACT:  setint(s,a -  b);  break;
-  case B_MULTIPLY:  setint(s,a *  b);  break;
+  case B_ADD:       setint(cptr,a +  b);  break;
+  case B_SUBTRACT:  setint(cptr,a -  b);  break;
+  case B_MULTIPLY:  setint(cptr,a *  b);  break;
   case B_DIVIDE:    if (0 == b) {
                       fprintf(stderr,"Divide by zero\n");
                       exit(1);
                     }
-                    setint(s,a /  b);  break;
-  case B_MOD:       setint(s,a %  b);  break;
-  case B_EQ:       setbool(s,a == b);  break;
-  case B_NE:       setbool(s,a != b);  break;
-  case B_LT:       setbool(s,a <  b);  break;
-  case B_LE:       setbool(s,a <= b);  break;
-  case B_GT:       setbool(s,a >  b);  break;
-  case B_GE:       setbool(s,a >= b);  break;
+                    setint(cptr,a /  b);  break;
+  case B_MOD:       setint(cptr,a %  b);  break;
+  case B_EQ:       setbool(cptr,a == b);  break;
+  case B_NE:       setbool(cptr,a != b);  break;
+  case B_LT:       setbool(cptr,a <  b);  break;
+  case B_LE:       setbool(cptr,a <= b);  break;
+  case B_GT:       setbool(cptr,a >  b);  break;
+  case B_GE:       setbool(cptr,a >= b);  break;
   default:         assert(0);        break;
   }
 }
 
-void doubleop(stack *s, int bif, double a, double b)
+void doubleop(cell **cptr, int bif, double a, double b)
 {
   switch (bif) {
-  case B_ADD:       setdouble(s,a +  b);  break;
-  case B_SUBTRACT:  setdouble(s,a -  b);  break;
-  case B_MULTIPLY:  setdouble(s,a *  b);  break;
+  case B_ADD:       setdouble(cptr,a +  b);  break;
+  case B_SUBTRACT:  setdouble(cptr,a -  b);  break;
+  case B_MULTIPLY:  setdouble(cptr,a *  b);  break;
   case B_DIVIDE:    if (0.0 == b) {
                       fprintf(stderr,"Divide by zero\n");
                       exit(1);
                     }
-                    setdouble(s,a /  b);  break;
-  case B_MOD:       setdouble(s,fmod(a,b));  break;
-  case B_EQ:       setbool(s,a == b);  break;
-  case B_NE:       setbool(s,a != b);  break;
-  case B_LT:       setbool(s,a <  b);  break;
-  case B_LE:       setbool(s,a <= b);  break;
-  case B_GT:       setbool(s,a >  b);  break;
-  case B_GE:       setbool(s,a >= b);  break;
+                    setdouble(cptr,a /  b);  break;
+  case B_MOD:       setdouble(cptr,fmod(a,b));  break;
+  case B_EQ:       setbool(cptr,a == b);  break;
+  case B_NE:       setbool(cptr,a != b);  break;
+  case B_LT:       setbool(cptr,a <  b);  break;
+  case B_LE:       setbool(cptr,a <= b);  break;
+  case B_GT:       setbool(cptr,a >  b);  break;
+  case B_GE:       setbool(cptr,a >= b);  break;
   default:         assert(0);        break;
   }
 }
 
-void b_other(stack *s, int bif)
+void b_other(cell **argstack, int bif)
 {
-  cell *cell2 = s->data[s->count-2];
-  cell *cell1 = s->data[s->count-1];
-
-  assert(TYPE_IND != celltype(cell2));
-  assert(TYPE_IND != celltype(cell1));
-
-
-  s->count--;
+  cell *cell2 = argstack[0];
+  cell *cell1 = argstack[1];
 
   switch (bif) {
   case B_EQ:
@@ -118,12 +112,12 @@ void b_other(stack *s, int bif)
     if ((TYPE_STRING == celltype(cell1)) && (TYPE_STRING == celltype(cell2))) {
       int cmp = strcmp((char*)cell1->field1,(char*)cell2->field1);
       switch (bif) {
-      case B_EQ: setbool(s,0 == cmp); break;
-      case B_NE: setbool(s,0 != cmp); break;
-      case B_LT: setbool(s,0 > cmp); break;
-      case B_LE: setbool(s,0 >= cmp); break;
-      case B_GT: setbool(s,0 < cmp); break;
-      case B_GE: setbool(s,0 <= cmp); break;
+      case B_EQ: setbool(&argstack[0],0 == cmp); break;
+      case B_NE: setbool(&argstack[0],0 != cmp); break;
+      case B_LT: setbool(&argstack[0],0 > cmp); break;
+      case B_LE: setbool(&argstack[0],0 >= cmp); break;
+      case B_GT: setbool(&argstack[0],0 < cmp); break;
+      case B_GE: setbool(&argstack[0],0 <= cmp); break;
       }
       return;
     }
@@ -134,16 +128,16 @@ void b_other(stack *s, int bif)
   case B_DIVIDE:
   case B_MOD:
     if ((TYPE_INT == celltype(cell1)) && (TYPE_INT == celltype(cell2))) {
-      intop(s,bif,(int)cell1->field1,(int)cell2->field1);
+      intop(&argstack[0],bif,(int)cell1->field1,(int)cell2->field1);
     }
     else if ((TYPE_DOUBLE == celltype(cell1)) && (TYPE_DOUBLE == celltype(cell2))) {
-      doubleop(s,bif,celldouble(cell1),celldouble(cell2));
+      doubleop(&argstack[0],bif,celldouble(cell1),celldouble(cell2));
     }
     else if ((TYPE_INT == celltype(cell1)) && (TYPE_DOUBLE == celltype(cell2))) {
-      doubleop(s,bif,(double)((int)cell1->field1),celldouble(cell2));
+      doubleop(&argstack[0],bif,(double)((int)cell1->field1),celldouble(cell2));
     }
     else if ((TYPE_DOUBLE == celltype(cell1)) && (TYPE_INT == celltype(cell2))) {
-      doubleop(s,bif,celldouble(cell1),(double)((int)cell2->field1));
+      doubleop(&argstack[0],bif,celldouble(cell1),(double)((int)cell2->field1));
     }
     else {
       fprintf(stderr,"%s: incompatible arguments: (%s,%s)\n",
@@ -154,47 +148,42 @@ void b_other(stack *s, int bif)
     }
     break;
   case B_AND:
-    setbool(s,(TYPE_NIL != celltype(cell1)) && (TYPE_NIL != celltype(cell2)));
+    setbool(&argstack[0],(TYPE_NIL != celltype(cell1)) && (TYPE_NIL != celltype(cell2)));
     break;
   case B_OR:
-    setbool(s,(TYPE_NIL != celltype(cell1)) || (TYPE_NIL != celltype(cell2)));
+    setbool(&argstack[0],(TYPE_NIL != celltype(cell1)) || (TYPE_NIL != celltype(cell2)));
     break;
   default:
     assert(0);
   }
 }
 
-void b_add(stack *s) { b_other(s,B_ADD); }
-void b_subtract(stack *s) { b_other(s,B_SUBTRACT); }
-void b_multiply(stack *s) { b_other(s,B_MULTIPLY); }
-void b_divide(stack *s) { b_other(s,B_DIVIDE); }
-void b_mod(stack *s) { b_other(s,B_MOD); }
-void b_eq(stack *s) { b_other(s,B_EQ); }
-void b_ne(stack *s) { b_other(s,B_NE); }
-void b_lt(stack *s) { b_other(s,B_LT); }
-void b_le(stack *s) { b_other(s,B_LE); }
-void b_gt(stack *s) { b_other(s,B_GT); }
-void b_ge(stack *s) { b_other(s,B_GE); }
-void b_and(stack *s) { b_other(s,B_AND); }
-void b_or(stack *s) { b_other(s,B_OR); }
+void b_add(cell **argstack) { b_other(argstack,B_ADD); }
+void b_subtract(cell **argstack) { b_other(argstack,B_SUBTRACT); }
+void b_multiply(cell **argstack) { b_other(argstack,B_MULTIPLY); }
+void b_divide(cell **argstack) { b_other(argstack,B_DIVIDE); }
+void b_mod(cell **argstack) { b_other(argstack,B_MOD); }
+void b_eq(cell **argstack) { b_other(argstack,B_EQ); }
+void b_ne(cell **argstack) { b_other(argstack,B_NE); }
+void b_lt(cell **argstack) { b_other(argstack,B_LT); }
+void b_le(cell **argstack) { b_other(argstack,B_LE); }
+void b_gt(cell **argstack) { b_other(argstack,B_GT); }
+void b_ge(cell **argstack) { b_other(argstack,B_GE); }
+void b_and(cell **argstack) { b_other(argstack,B_AND); }
+void b_or(cell **argstack) { b_other(argstack,B_OR); }
 
-void b_not(stack *s)
+void b_not(cell **argstack)
 {
-  cell *arg = s->data[s->count-1];
-  assert(TYPE_IND != celltype(arg));
-  if (TYPE_NIL == celltype(s->data[s->count-1]))
-    s->data[s->count-1] = globtrue;
+  if (TYPE_NIL == celltype(argstack[0]))
+    argstack[0] = globtrue;
   else
-    s->data[s->count-1] = globnil;
+    argstack[0] = globnil;
 }
 
-void b_bitop(stack *s, int bif)
+void b_bitop(cell **argstack, int bif)
 {
-  cell *cell2 = s->data[s->count-2];
-  cell *cell1 = s->data[s->count-1];
-
-  assert(TYPE_IND != celltype(cell2));
-  assert(TYPE_IND != celltype(cell1));
+  cell *cell2 = argstack[0];
+  cell *cell1 = argstack[1];
 
   if ((TYPE_INT != celltype(cell1)) || (TYPE_INT != celltype(cell2))) {
     fprintf(stderr,"%s: incompatible arguments (must be int)\n",builtin_info[bif].name);
@@ -203,79 +192,70 @@ void b_bitop(stack *s, int bif)
 
   int a = (int)cell1->field1;
   int b = (int)cell2->field1;
-  s->count--;
 
   switch (bif) {
-  case B_BITSHL:  setint(s,a << b);  break;
-  case B_BITSHR:  setint(s,a >> b);  break;
-  case B_BITAND:  setint(s,a & b);   break;
-  case B_BITOR:   setint(s,a | b);   break;
-  case B_BITXOR:  setint(s,a ^ b);   break;
+  case B_BITSHL:  setint(&argstack[0],a << b);  break;
+  case B_BITSHR:  setint(&argstack[0],a >> b);  break;
+  case B_BITAND:  setint(&argstack[0],a & b);   break;
+  case B_BITOR:   setint(&argstack[0],a | b);   break;
+  case B_BITXOR:  setint(&argstack[0],a ^ b);   break;
   default:        assert(0);       break;
   }
 }
 
-void b_bitshl(stack *s) { b_bitop(s,B_BITSHL); }
-void b_bitshr(stack *s) { b_bitop(s,B_BITSHR); }
-void b_bitand(stack *s) { b_bitop(s,B_BITAND); }
-void b_bitor(stack *s) { b_bitop(s,B_BITOR); }
-void b_bitxor(stack *s) { b_bitop(s,B_BITXOR); }
+void b_bitshl(cell **argstack) { b_bitop(argstack,B_BITSHL); }
+void b_bitshr(cell **argstack) { b_bitop(argstack,B_BITSHR); }
+void b_bitand(cell **argstack) { b_bitop(argstack,B_BITAND); }
+void b_bitor(cell **argstack) { b_bitop(argstack,B_BITOR); }
+void b_bitxor(cell **argstack) { b_bitop(argstack,B_BITXOR); }
 
-void b_bitnot(stack *s)
+void b_bitnot(cell **argstack)
 {
-  cell *arg = s->data[s->count-1];
-  assert(TYPE_IND != celltype(arg));
+  cell *arg = argstack[0];
   if (TYPE_INT != celltype(arg)) {
     fprintf(stderr,"~: incompatible argument (must be an int)\n");
     exit(1);
   }
   int val = (int)arg->field1;
-  setint(s,~val);
+  setint(&argstack[0],~val);
 }
 
-void b_if(stack *s)
+void b_if(cell **argstack)
 {
-  cell *ifc = s->data[s->count-1];
+  cell *ifc = argstack[2];
   cell *source;
 
-  assert(TYPE_IND != celltype(ifc));
-
   if (TYPE_NIL == celltype(ifc))
-    source = s->data[s->count-3];
+    source = argstack[0];
   else
-    source = s->data[s->count-2];
+    source = argstack[1];
 
-  s->count -= 2;
-  s->data[s->count-1] = source;
+  argstack[0] = source;
 }
 
-void b_cons(stack *s)
+void b_cons(cell **argstack)
 {
-  cell *head = s->data[s->count-1];
-  cell *tail = s->data[s->count-2];
-/*   assert(TYPE_IND != celltype(head)); */
-/*   assert(TYPE_IND != celltype(tail)); */
+  cell *head = argstack[1];
+  cell *tail = argstack[0];
 
-  s->count -= 1;
-  s->data[s->count-1] = alloc_cell();
-  s->data[s->count-1]->tag = TYPE_CONS;
-  s->data[s->count-1]->field1 = head;
-  s->data[s->count-1]->field2 = tail;
+  argstack[0] = alloc_cell();
+  argstack[0]->tag = TYPE_CONS;
+  argstack[0]->field1 = head;
+  argstack[0]->field2 = tail;
 }
 
-void b_head(stack *s)
+void b_head(cell **argstack)
 {
-  cell *arg = s->data[s->count-1];
-  assert(TYPE_IND != celltype(arg));
+  cell *arg = argstack[0];
   if (TYPE_CONS == celltype(arg)) {
-    s->data[s->count-1] = (cell*)arg->field1;
+    argstack[0] = (cell*)arg->field1;
   }
   else if (TYPE_AREF == celltype(arg)) {
     cell *arrcell = (cell*)arg->field1;
     carray *arr = (carray*)arrcell->field1;
     int index = (int)arg->field2;
     assert(index < arr->size);
-    s->data[s->count-1] = (cell*)arr->cells[index];
+    argstack[0] = (cell*)arr->cells[index];
   }
   else {
     assert(!"head: expected a cons cell");
@@ -303,76 +283,67 @@ cell *get_tail(cell *arrcell, int index)
   }
 }
 
-void b_tail(stack *s)
+void b_tail(cell **argstack)
 {
-  cell *arg = s->data[s->count-1];
-  assert(TYPE_IND != celltype(arg));
+  cell *arg = argstack[0];
   if (TYPE_CONS == celltype(arg)) {
-    s->data[s->count-1] = (cell*)arg->field2;
+    argstack[0] = (cell*)arg->field2;
   }
   else if (TYPE_AREF == celltype(arg)) {
     cell *arrcell = (cell*)arg->field1;
     int index = (int)arg->field2;
-    s->data[s->count-1] = get_tail(arrcell,index);
+    argstack[0] = get_tail(arrcell,index);
   }
   else {
     assert(!"tail: expected a cons cell");
   }
 }
 
-void b_islambda(stack *s)
+void b_islambda(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,TYPE_LAMBDA == celltype(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],TYPE_LAMBDA == celltype(val));
 }
 
-void b_isvalue(stack *s)
+void b_isvalue(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,isvalue(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],isvalue(val));
 }
 
-void b_iscons(stack *s)
+void b_iscons(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,(TYPE_CONS == celltype(val)) || (TYPE_AREF == celltype(val)));
+  cell *val = argstack[0];
+  setbool(&argstack[0],(TYPE_CONS == celltype(val)) || (TYPE_AREF == celltype(val)));
 }
 
-void b_isnil(stack *s)
+void b_isnil(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,TYPE_NIL == celltype(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],TYPE_NIL == celltype(val));
 }
 
-void b_isint(stack *s)
+void b_isint(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,TYPE_INT == celltype(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],TYPE_INT == celltype(val));
 }
 
-void b_isdouble(stack *s)
+void b_isdouble(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,TYPE_DOUBLE == celltype(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],TYPE_DOUBLE == celltype(val));
 }
 
-void b_isstring(stack *s)
+void b_isstring(cell **argstack)
 {
-  cell *val = s->data[s->count-1];
-  assert(TYPE_IND != celltype(val));
-  setbool(s,TYPE_STRING == celltype(val));
+  cell *val = argstack[0];
+  setbool(&argstack[0],TYPE_STRING == celltype(val));
 }
 
-void b_convertarray(stack *s)
+void b_convertarray(cell **argstack)
 {
-  cell *retcell = (cell*)s->data[s->count-1];
-  s->count--;
+  cell *retcell = (cell*)argstack[1];
 
   if (TYPE_INT != celltype(retcell)) {
     printf("convertarray: first arg should be an int, got ");
@@ -382,8 +353,7 @@ void b_convertarray(stack *s)
   }
 
   // FIXME: this doesn't correctly handle cyclic lists at present!
-  cell *top = s->data[s->count-1];
-  assert(TYPE_IND != celltype(top));
+  cell *top = argstack[0];
   int size = 0;
 
   if (TYPE_AREF == celltype(top))
@@ -430,15 +400,13 @@ void b_convertarray(stack *s)
   top->field2 = 0;
   arr->refs[0] = top;
 
-  s->data[s->count-1] = retcell;
+  argstack[0] = retcell;
 }
 
-void b_arrayitem(stack *s)
+void b_arrayitem(cell **argstack)
 {
-  cell *refcell = s->data[s->count-2];
-  cell *indexcell = s->data[s->count-1];
-  assert(TYPE_IND != celltype(refcell));
-  assert(TYPE_IND != celltype(indexcell));
+  cell *refcell = argstack[0];
+  cell *indexcell = argstack[1];
 
   if (TYPE_INT != celltype(indexcell)) {
     printf("arrayitem: index must be an integer, got ");
@@ -454,22 +422,18 @@ void b_arrayitem(stack *s)
   }
 
   int index = (int)indexcell->field1;
-  s->count--;
 
   cell *arrcell = (cell*)refcell->field1;
   carray *arr = (carray*)arrcell->field1;
   int refindex = (int)refcell->field2;
   assert(refindex+index < arr->size);
-  s->data[s->count-1] = (cell*)arr->cells[refindex+index];
+  argstack[0] = (cell*)arr->cells[refindex+index];
 }
 
-void b_arrayhas(stack *s)
+void b_arrayhas(cell **argstack)
 {
-  cell *refcell = s->data[s->count-2];
-  cell *indexcell = s->data[s->count-1];
-  assert(TYPE_IND != celltype(refcell));
-  assert(TYPE_IND != celltype(indexcell));
-  s->count--;
+  cell *refcell = argstack[0];
+  cell *indexcell = argstack[1];
 
   if (TYPE_INT != celltype(indexcell)) {
     printf("arrayhas: index must be an integer, got ");
@@ -479,7 +443,7 @@ void b_arrayhas(stack *s)
   }
 
   if (TYPE_AREF != celltype(refcell)) {
-    s->data[s->count-1] = globnil;
+    argstack[0] = globnil;
     return;
   }
 
@@ -489,18 +453,15 @@ void b_arrayhas(stack *s)
   carray *arr = (carray*)arrcell->field1;
   int refindex = (int)refcell->field2;
   if (refindex+index < arr->size)
-    s->data[s->count-1] = globtrue;
+    argstack[0] = globtrue;
   else
-    s->data[s->count-1] = globnil;
+    argstack[0] = globnil;
 }
 
-void b_arrayext(stack *s)
+void b_arrayext(cell **argstack)
 {
-  cell *lstcell = s->data[s->count-2];
-  cell *ncell = s->data[s->count-1];
-  assert(TYPE_IND != celltype(lstcell));
-  assert(TYPE_IND != celltype(ncell));
-  s->count--;
+  cell *lstcell = argstack[0];
+  cell *ncell = argstack[1];
 
   if (TYPE_INT != celltype(ncell)) {
     printf("arrayext: n must be an integer, got ");
@@ -584,12 +545,12 @@ void b_arrayext(stack *s)
   assert(pos == n+1);
   assert(arr->cells[n]);
 
-  s->data[s->count-1] = arr->cells[n];
+  argstack[0] = arr->cells[n];
 }
 
-void b_arraysize(stack *s)
+void b_arraysize(cell **argstack)
 {
-  cell *refcell = s->data[s->count-1];
+  cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
     assert(0 == (int)refcell->field2);
@@ -602,10 +563,10 @@ void b_arraysize(stack *s)
       arr->sizecell->field1 = (void*)arr->size;
     }
 
-    s->data[s->count-1] = arr->sizecell;
+    argstack[0] = arr->sizecell;
   }
   else if (TYPE_CONS == celltype(refcell)) {
-    s->data[s->count-1] = globzero; // FIXME: should this be nil, like arrayoptlen?
+    argstack[0] = globzero; // FIXME: should this be nil, like arrayoptlen?
   }
   else {
     printf("arraysize: expected aref or cons, got ");
@@ -615,15 +576,15 @@ void b_arraysize(stack *s)
   }
 }
 
-void b_arraytail(stack *s)
+void b_arraytail(cell **argstack)
 {
-  cell *refcell = s->data[s->count-1];
+  cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
     assert(0 == (int)refcell->field2);
     carray *arr = (carray*)arrcell->field1;
 
-    s->data[s->count-1] = arr->tail;
+    argstack[0] = arr->tail;
   }
   else if (TYPE_CONS == celltype(refcell)) {
     // leave item on top of stack as is; it's the list
@@ -636,21 +597,21 @@ void b_arraytail(stack *s)
   }
 }
 
-void b_arrayoptlen(stack *s)
+void b_arrayoptlen(cell **argstack)
 {
-  cell *refcell = s->data[s->count-1];
+  cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
     assert(0 == (int)refcell->field2);
     carray *arr = (carray*)arrcell->field1;
 
     if (TYPE_NIL == celltype(arr->tail))
-      b_arraysize(s);
+      b_arraysize(argstack);
     else
-      s->data[s->count-1] = globnil;
+      argstack[0] = globnil;
   }
   else if (TYPE_CONS == celltype(refcell)) {
-    s->data[s->count-1] = globnil;
+    argstack[0] = globnil;
   }
   else {
     printf("arrayoptlen: expected aref or cons, got ");

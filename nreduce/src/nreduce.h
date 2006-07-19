@@ -238,7 +238,7 @@ typedef struct block {
   cell cells[BLOCK_SIZE];
 } block;
 
-typedef void (*builtin_f)(stack *s);
+typedef void (*builtin_f)(cell **argstack);
 
 typedef struct builtin {
   char *name;

@@ -270,7 +270,11 @@ void reduce(stack *s)
         s->data[s->count-1-i] = stack_pop(s);
       }
 
-      builtin_info[bif].f(s);
+      for (i = 0; i < strictargs; i++)
+        assert(TYPE_IND != celltype((cell*)s->data[s->count-1-i]));
+
+      builtin_info[bif].f((cell**)&s->data[s->count-reqargs]);
+      s->count -= (reqargs-1);
 
       /* UPDATE */
 
