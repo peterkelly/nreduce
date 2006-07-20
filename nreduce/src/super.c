@@ -57,36 +57,6 @@ scomb *get_scomb(const char *name)
   return NULL;
 }
 
-scomb *get_fscomb(const char *name_format, ...)
-{
-  va_list ap;
-  int len;
-  char *name;
-  scomb *sc;
-
-  va_start(ap,name_format);
-  len = vsnprintf(NULL,0,name_format,ap);
-  va_end(ap);
-
-  name = (char*)malloc(len+1);
-  va_start(ap,name_format);
-  vsprintf(name,name_format,ap);
-  va_end(ap);
-
-  sc = get_scomb(name);
-  free(name);
-  return sc;
-}
-
-scomb *get_scomb_origlambda(cell *lambda)
-{
-  scomb *sc;
-  for (sc = scombs; sc; sc = sc->next)
-    if (sc->origlambda == lambda)
-      return sc;
-  return NULL;
-}
-
 int get_scomb_var(scomb *sc, const char *name)
 {
   int i;
@@ -94,26 +64,6 @@ int get_scomb_var(scomb *sc, const char *name)
     if (sc->argnames[i] && !strcmp(sc->argnames[i],name))
       return i;
   return -1;
-}
-
-cell *check_for_lambda(cell *c)
-{
-  if (c->tag & FLAG_PROCESSED)
-    return NULL;
-  c->tag |= FLAG_PROCESSED;
-
-  if (TYPE_LAMBDA == celltype(c))
-    return c;
-
-  if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
-    cell *lambda;
-    if (NULL != (lambda = check_for_lambda((cell*)c->field1)))
-      return lambda;
-    if (NULL != (lambda = check_for_lambda((cell*)c->field2)))
-      return lambda;
-  }
-
-  return NULL;
 }
 
 void check_r(cell *c, scomb *sc)
@@ -283,53 +233,8 @@ scomb *add_scomb(char *name, char *prefix)
     assert(NULL == get_scomb(sc->name));
   }
 
-/*   sc->next = scombs; */
-/*   scombs = sc; */
-
-/*   scomb **ptr = &scombs; */
-/*   while (*ptr) */
-/*     ptr = &((*ptr)->next); */
-/*   *ptr = sc; */
   *lastsc = sc;
   lastsc = &sc->next;
-
-  return sc;
-}
-
-scomb *build_scomb(cell *body, int nargs, char **argnames, int iscopy, int internal, 
-                   char *name_format, ...)
-{
-  va_list ap;
-  int len;
-  char *name;
-  scomb *sc;
-  int i;
-
-  va_start(ap,name_format);
-  len = vsnprintf(NULL,0,name_format,ap);
-  va_end(ap);
-
-  name = (char*)malloc(len+1);
-  va_start(ap,name_format);
-  vsprintf(name,name_format,ap);
-  va_end(ap);
-
-  sc = add_scomb(name,NULL);
-  free(name);
-
-  sc->nargs = nargs;
-  sc->argnames = (char**)calloc(nargs,sizeof(char*));
-  for (i = 0; i < nargs; i++)
-    sc->argnames[i] = strdup(argnames[i]);
-  sc->lambda = NULL;
-  sc->body = body;
-  sc->origlambda = NULL;
-  sc->abslist = NULL;
-  sc->index = -1;
-  sc->iscopy = iscopy;
-  sc->internal = internal;
-  lift(&sc->body,1,1,"__sc__");
-  scomb_calc_cells(sc);
 
   return sc;
 }
@@ -632,8 +537,8 @@ int lift_r(stack *s, cell **k, char *lambdavar, cell *lroot, scomb *lambdasc, in
     maxfree = ((NULL == lambdavar) || strcmp(name,lambdavar));
     int i;
     for (i = s->count-1; i >= 0; i--) {
-      assert(TYPE_LAMBDA == celltype(s->data[i]));
-      if (!strcmp((char*)s->data[i]->field1,name)) {
+      assert(TYPE_LAMBDA == celltype((cell*)s->data[i]));
+      if (!strcmp((char*)((cell*)s->data[i])->field1,name)) {
         *level = i+1;
         break;
       }

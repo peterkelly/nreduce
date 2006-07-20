@@ -100,8 +100,8 @@ void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
 
     dest = stack_at(s,base++);
 
-    assert(TYPE_IND != celltype(s->data[base])); /* s->data[base] comes from the scomb */
-    wasarg = resolve_var(s,oldcount,sc,&s->data[base]);
+    assert(TYPE_IND != celltype((cell*)s->data[base])); /* s->data[base] comes from the scomb */
+    wasarg = resolve_var(s,oldcount,sc,(cell**)(&s->data[base]));
     source = stack_at(s,base++);
     assert(TYPE_IND != celltype(source));
 
@@ -209,8 +209,8 @@ void reduce(stack *s)
       /* We have enough arguments present to instantiate the supercombinator */
       for (i = s->count-1; i >= s->count-sc->nargs; i--) {
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype(stack_at(s,i-1)));
-        s->data[i] = (cell*)stack_at(s,i-1)->field2;
+        assert(TYPE_APPLICATION == celltype((cell*)stack_at(s,i-1)));
+        s->data[i] = (cell*)((cell*)stack_at(s,i-1))->field2;
       }
 
       instantiate_scomb(s,dest,sc->body,sc);
@@ -259,8 +259,8 @@ void reduce(stack *s)
 
       for (i = s->count-1; i >= s->count-reqargs; i--) {
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype(stack_at(s,i-1)));
-        s->data[i] = (cell*)stack_at(s,i-1)->field2;
+        assert(TYPE_APPLICATION == celltype((cell*)stack_at(s,i-1)));
+        s->data[i] = (cell*)((cell*)stack_at(s,i-1))->field2;
       }
 
       assert(strictargs <= reqargs);
@@ -281,8 +281,8 @@ void reduce(stack *s)
       s->data[s->count-1] = resolve_ind(s->data[s->count-1]);
 
       free_cell_fields(s->data[s->count-2]);
-      s->data[s->count-2]->tag = TYPE_IND;
-      s->data[s->count-2]->field1 = s->data[s->count-1];
+      ((cell*)s->data[s->count-2])->tag = TYPE_IND;
+      ((cell*)s->data[s->count-2])->field1 = s->data[s->count-1];
 
       s->count--;
       break;

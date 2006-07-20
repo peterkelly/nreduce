@@ -367,7 +367,7 @@ stack *stack_new()
   s->alloc = 4;
   s->count = 0;
   s->base = 0;
-  s->data = (cell**)malloc(s->alloc*sizeof(cell*));
+  s->data = malloc(s->alloc*sizeof(void*));
   s->next = active_stacks;
   active_stacks = s;
   return s;
@@ -386,10 +386,10 @@ void stack_free(stack *s)
 void stack_grow(stack *s)
 {
   s->alloc *= 2;
-  s->data = (cell**)realloc(s->data,s->alloc*sizeof(cell*));
+  s->data = realloc(s->data,s->alloc*sizeof(void*));
 }
 
-void stack_push(stack *s, cell *c)
+void stack_push(stack *s, void *c)
 {
   if (s->count == s->alloc) {
     if (s->count >= STACK_LIMIT) {
@@ -401,7 +401,7 @@ void stack_push(stack *s, cell *c)
   s->data[s->count++] = c;
 }
 
-void stack_insert(stack *s, cell *c, int pos)
+void stack_insert(stack *s, void *c, int pos)
 {
   if (s->count == s->alloc)
     stack_grow(s);
@@ -410,19 +410,19 @@ void stack_insert(stack *s, cell *c, int pos)
   s->data[pos] = c;
 }
 
-cell *stack_pop(stack *s)
+void *stack_pop(stack *s)
 {
   assert(0 < s->count);
   return resolve_ind(s->data[--s->count]);
 }
 
-cell *stack_top(stack *s)
+void *stack_top(stack *s)
 {
   assert(0 < s->count);
   return resolve_ind(s->data[s->count-1]);
 }
 
-cell *stack_at(stack *s, int pos)
+void *stack_at(stack *s, int pos)
 {
   assert(0 <= pos);
   assert(pos < s->count);

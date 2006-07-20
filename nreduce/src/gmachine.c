@@ -211,7 +211,7 @@ void execute(gprogram *gp)
 
     if (trace) {
       print_ginstr(address,instr,0);
-      print_stack(-1,s->data,s->count,0);
+      print_stack(-1,(cell**)s->data,s->count,0);
     }
 
     if (nallocs > COLLECT_THRESHOLD)
@@ -313,7 +313,7 @@ void execute(gprogram *gp)
       assert(0 <= builtin_info[instr->arg0].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[instr->arg0].nstrict; i++) {
         s->data[s->count-1-i] = resolve_ind(s->data[s->count-1-i]); /* bifs expect it */
-        assert(TYPE_APPLICATION != celltype(s->data[s->count-1-i]));
+        assert(TYPE_APPLICATION != celltype((cell*)s->data[s->count-1-i]));
       }
       if (trace)
         debug(0,"  builtin %s\n",builtin_info[instr->arg0].name);

@@ -182,7 +182,7 @@ typedef struct stack {
   int alloc;
   int count;
   int base;
-  cell **data;
+  void **data;
   struct stack *next;
 } stack;
 
@@ -199,19 +199,6 @@ typedef struct abstraction {
   cell *replacement;
   int level;
 } abstraction;
-
-typedef struct flist {
-  int **item;
-  int alloc;
-  int count;
-  int nargs;
-} flist;
-
-flist *flist_new(int nargs);
-void flist_free(flist *fl);
-void flist_add(flist *fl, int *front);
-int flist_contains(flist *fl, int *front);
-flist *flist_copy(flist *src);
 
 typedef struct scomb {
   char *name;
@@ -262,11 +249,11 @@ void cleanup();
 
 stack *stack_new();
 void stack_free(stack *s);
-void stack_push(stack *s, cell *c);
-void stack_insert(stack *s, cell *c, int pos);
-cell *stack_pop(stack *s);
-cell *stack_top(stack *s);
-cell *stack_at(stack *s, int pos);
+void stack_push(stack *s, void *c);
+void stack_insert(stack *s, void *c, int pos);
+void *stack_pop(stack *s);
+void *stack_top(stack *s);
+void *stack_at(stack *s, int pos);
 
 void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
@@ -294,16 +281,11 @@ cell *suball_letrecs(cell *root, scomb *sc);
 
 scomb *get_scomb_index(int index);
 scomb *get_scomb(const char *name);
-scomb *get_fscomb(const char *name_format, ...);
-scomb *get_scomb_origlambda(cell *lambda);
 int get_scomb_var(scomb *sc, const char *name);
 int scomb_count();
 scomb *add_scomb(char *name, char *prefix);
-scomb *build_scomb(cell *body, int nargs, char **argnames, int iscopy, int internal, 
-                   char *name_format, ...);
 void scomb_free_list(scomb **list);
 void scomb_free(scomb *sc);
-cell *check_for_lambda(cell *c);
 void check_scombs();
 void check_scombs_nosharing();
 void scomb_calc_cells(scomb *sc);
