@@ -553,7 +553,7 @@ void lambda_lifting()
 
   scomb *prev = NULL;
   for (sc = scombs; prev != last; sc = sc->next) {
-    lift(&sc->body,0,0,sc->name);
+    lift(sc);
     prev = sc;
   }
 

@@ -30,9 +30,6 @@
 //#define NDEBUG
 #define VERIFICATION
 
-//#define DEBUG_ABSTRACTION
-//#define DEBUG_SHOW_CREATED_SUPERCOMBINATORS
-//#define DEBUG_DUMP_TREE_AFTER_CREATING_SUPERCOMBINATOR
 //#define DEBUG_GCODE_COMPILATION
 #define DEBUG_SHOW_STRICTNESS_ANALYSIS
 //#define DEBUG_SHOW_STRICTNESS_ANALYSIS2
@@ -43,10 +40,6 @@
 
 
 
-// Optimizations that work
-
-#define DONT_ABSTRACT_PARTIAL_BUILTINS
-
 // Optimizations that don't work (yet)
 
 //#define REMOVE_REDUNDANT_SUPERCOMBINATORS
@@ -54,7 +47,6 @@
 
 // Misc
 
-//#define LAMBDAS_ARE_MAXFREE_BEFORE_PROCESSING
 #define CHECK_FOR_SUPERCOMBINATOR_SHARED_CELLS
 
 #define HISTOGRAM_SIZE 10
@@ -96,6 +88,7 @@
 #define VALUE_FIELD      0x10
 
 #define isvalue(c) ((c)->tag & VALUE_FIELD)
+#define isvaluefun(c) (isvalue(c) || (TYPE_BUILTIN == celltype(c) || (TYPE_SCREF == celltype(c))))
 
 #define B_ADD            0
 #define B_SUBTRACT       1
@@ -192,31 +185,15 @@ typedef struct array {
   void *data;
 } array;
 
-typedef struct abstraction {
-  struct abstraction *next;
-  cell *body;
-  char *name;
-  cell *replacement;
-  int level;
-} abstraction;
-
 typedef struct scomb {
   char *name;
   int nargs;
   char **argnames;
-  int *mayterminate;
-  cell *lambda;
   cell *body;
-  cell *origlambda;
-  abstraction *abslist;
   int ncells;
   cell **cells;
   int index;
-  int iscopy;
-  int internal;
-
   int *strictin;
-
   struct scomb *next;
 } scomb;
 
@@ -292,11 +269,14 @@ void scomb_calc_cells(scomb *sc);
 void print_scomb_code(scomb *sc);
 void print_scombs1();
 void print_scombs2();
-void lift(cell **k, int iscopy, int calccells, char *prefix);
 cell *super_to_letrec(scomb *sc);
 void remove_redundant_scombs();
 void fix_partial_applications();
 void resolve_scvars(cell *c);
+
+/* lifting */
+
+void lift(scomb *sc);
 
 /* reduction */
 
