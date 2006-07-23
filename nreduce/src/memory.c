@@ -33,7 +33,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-cell *global_root = NULL;
 int trace = 0;
 
 extern cell **globcells;
@@ -211,8 +210,6 @@ void mark(cell *c)
 
 void free_cell_fields(cell *c)
 {
-/*   if (hasfield1str(celltype(c))) */
-/*     free((char*)c->field1); */
   switch (celltype(c)) {
   case TYPE_STRING:
   case TYPE_SYMBOL:
@@ -239,13 +236,6 @@ void collect()
   block *bl;
   int i;
   scomb *sc;
-/*   int npinned = 0; */
-/*   int ninuse = 0; */
-/*   int nind = 0; */
-/*   int histogram[NUM_CELLTYPES]; */
-/*   memset(&histogram,0,NUM_CELLTYPES*sizeof(int)); */
-
-/*   printf("collect()\n"); */
 
   ncollections++;
   nallocs = 0;
@@ -257,20 +247,15 @@ void collect()
   nreachable = 0;
 
   /* mark phase */
-/*   mark(global_root); */
 
   if (NULL != collect_ebp) {
     char *p;
     /* native stack */
     assert(collect_ebp >= collect_esp);
-/*     printf("collect(): stack bytes = %d\n",collect_ebp-collect_esp); */
     for (p = collect_ebp-4; p >= collect_esp; p -= 4) {
       cell *cp;
-
       *((cell**)p) = resolve_ind(*((cell**)p));
-
       cp = *((cell**)p);
-/*       printf("collect(): p = %p, cp = %p\n",p,cp); */
       mark(cp);
     }
   }
@@ -295,51 +280,22 @@ void collect()
 
         
         if (!(bl->cells[i].tag & FLAG_PINNED)) {
-/*           printf("  free #%05d\n",bl->cells[i].id); */
-/*           debug(0,"collect(): freeing #%05d\n",bl->cells[i].id); */
           free_cell_fields(&bl->cells[i]);
           bl->cells[i].tag = TYPE_EMPTY;
           bl->cells[i].field1 = freeptr;
           freeptr = &bl->cells[i];
           ncells--;
         }
-/*         else { */
-/*           npinned++; */
-/*           printf("pinned: "); */
-/*           print_code(&bl->cells[i]); */
-/*           printf("\n"); */
-/*         } */
       }
-/*       else if (TYPE_EMPTY != celltype(&bl->cells[i])) { */
-/*         if (TYPE_IND == celltype(&bl->cells[i])) */
-/*           nind++; */
-/*         ninuse++; */
-/*         histogram[celltype(&bl->cells[i])]++; */
-/*       } */
     }
   }
-/*   printf("collect(): npinned = %d\n",npinned); */
-/*   printf("collect(): ninuse = %d\n",ninuse); */
-/*   printf("collect(): nind = %d\n",nind); */
-/*   for (i = 0; i < NUM_CELLTYPES; i++) { */
-/*     printf("# remaining %-12s = %d\n",cell_types[i],histogram[i]); */
-/*   } */
 }
 
 void cleanup()
 {
   block *bl;
   int i;
-/*   scomb *sc = scombs; */
-/*   while (sc) { */
-/*     scomb *next = sc->next; */
-/*     scomb_free(sc); */
-/*     sc = next; */
-/*   } */
-/*   scombs = NULL; */
-   scomb_free_list(&scombs);
-
-  global_root = NULL;
+  scomb_free_list(&scombs);
 
   for (bl = blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
@@ -467,26 +423,12 @@ void statistics(FILE *f)
   fprintf(f,"usage total = %d\n",total);
 }
 
-#ifndef INLINE_RESOLVE_IND
 cell *resolve_ind(cell *c)
 {
-/*   cell *orig = c; */
-/*   int n = 0; */
-  while (TYPE_IND == celltype(c)) {
-/*     assert(c->field1 != c); */
+  while (TYPE_IND == celltype(c))
     c = (cell*)c->field1;
-/*     n++; */
-  }
-
-/*   if (orig == c) */
-/*     nresindnoch++; */
-/*   else */
-/*     nresindch++; */
-
-/*   printf("resolve_ind: n = %d\n",n); */
   return c;
 }
-#endif
 
 void copy_raw(cell *dest, cell *source)
 {
@@ -504,20 +446,6 @@ void copy_cell(cell *redex, cell *source)
       (TYPE_LAMBDA == celltype(source)) ||
       (TYPE_VARDEF == celltype(source)))
     redex->field1 = strdup((char*)redex->field1);
-}
-
-void clearflag(int flag)
-{
-  block *bl;
-  int i;
-  int count = 0;
-  for (bl = blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      bl->cells[i].tag &= ~flag;
-      count++;
-    }
-  }
-/*   printf("clearflag: processed %d cells\n",count); */
 }
 
 void setneedclear_r(cell *c)
@@ -598,11 +526,6 @@ void cleargraph(cell *root, int flag)
 void print_stack(int redex, cell **stk, int size, int dir)
 {
   int i;
-/*   dumpentry *de; */
-/*   int dumpcount = 0; */
-
-/*   for (de = dump; de; de = de->next) */
-/*     dumpcount++; */
 
   if (dir)
     i = size-1;

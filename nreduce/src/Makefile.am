@@ -19,7 +19,6 @@ nreduce_SOURCES = assembler.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c
-#	lifel.c
 #	testasm.c
 
 CLEANFILES = *.da *.bb *.bbg *.gcov grammar.tab.c lexer.yy.c grammar.tab.h

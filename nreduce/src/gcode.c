@@ -957,7 +957,7 @@ void F(gprogram *gp, int fno, scomb *sc)
 {
   pmap pm;
   int i;
-  cell *copy = super_to_letrec(sc);
+  cell *copy = graph_to_letrec(sc->body);
 
   addressmap[NUM_BUILTINS+sc->index] = gp->count;
 

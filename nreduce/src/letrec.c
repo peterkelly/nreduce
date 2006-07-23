@@ -30,6 +30,8 @@
 #include <stdarg.h>
 #include <math.h>
 
+extern int genvar;
+
 static int lookup(stack *bound, const char *sym, cell **val)
 {
   *val = NULL;
@@ -162,4 +164,186 @@ void letrecs_to_graph(cell **root, scomb *sc)
   stack *bound = stack_new();
   sub_letrecs(bound,root,sc);
   stack_free(bound);
+}
+
+static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
+{
+  int i;
+  for (i = 0; i < (*ncells); i++)
+    if ((*cells)[i] == c)
+      return;
+
+  if ((*ncells) == *alloc) {
+    (*alloc) *= 2;
+    (*cells) = (cell**)realloc((*cells),(*alloc)*sizeof(cell*));
+  }
+  (*cells)[(*ncells)++] = c;
+
+  switch (celltype(c)) {
+  case TYPE_IND:
+    assert(0);
+    break;
+  case TYPE_APPLICATION:
+  case TYPE_CONS:
+    add_cells(cells,ncells,(cell*)c->field1,alloc);
+    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    break;
+  case TYPE_LAMBDA:
+    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    break;
+  case TYPE_BUILTIN:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+  case TYPE_SYMBOL:
+  case TYPE_SCREF:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+static void find_graph_cells(cell ***cells, int *ncells, cell *root)
+{
+  int alloc = 4;
+  *ncells = 0;
+  *cells = (cell**)malloc(alloc*sizeof(cell*));
+  add_cells(cells,ncells,root,&alloc);
+}
+
+static void find_shared(cell *c, cell **cells, int ncells, int *shared, int *nshared)
+{
+  if (c->tag & FLAG_PROCESSED) {
+    int i;
+    for (i = 0; i < ncells; i++) {
+      if (c == cells[i]) {
+        if (!shared[i]) {
+          shared[i] = ++(*nshared);
+          nshared++;
+        }
+        return;
+      }
+    }
+    assert(0);
+    return;
+  }
+  c->tag |= FLAG_PROCESSED;
+
+  if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
+    find_shared((cell*)c->field1,cells,ncells,shared,nshared);
+    find_shared((cell*)c->field2,cells,ncells,shared,nshared);
+  }
+}
+
+static cell *make_varref(char *varname)
+{
+  cell *ref = alloc_cell2(TYPE_SYMBOL,strdup(varname),NULL);
+  return ref;
+}
+
+static cell *copy_shared(cell *c, cell **cells, int *shared, cell **defbodies,
+                  char **varnames, int *pos)
+{
+  int thispos = *pos;
+  cell *copy;
+  cell *ret;
+
+  if (c->tag & FLAG_PROCESSED) {
+    int i;
+    for (i = 0; i < *pos; i++) {
+      if (cells[i] == c) {
+        assert(shared[i]);
+        return make_varref(varnames[shared[i]-1]);
+      }
+    }
+    assert(!"can't find copy");
+    return NULL;
+  }
+
+  c->tag |= FLAG_PROCESSED;
+  (*pos)++;
+
+  copy = alloc_cell();
+
+  if (shared[thispos]) {
+    defbodies[shared[thispos]-1] = copy;
+    ret = make_varref(varnames[shared[thispos]-1]);
+  }
+  else {
+    ret = copy;
+  }
+
+  copy_cell(copy,c);
+
+  if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
+    copy->field1 = copy_shared((cell*)c->field1,cells,shared,defbodies,varnames,pos);
+    copy->field2 = copy_shared((cell*)c->field2,cells,shared,defbodies,varnames,pos);
+  }
+
+  return ret;
+}
+
+// Note: if you consider getting rid of this and just keeping the letrecs during all
+// stages of the compilation process (i.e. no letrec substitution), there is another
+// transformation necessary. See the bottom of IFPL p. 345 (358 in the pdf) which
+// explains that the RS scheme can't handle deep letrecs, and thus all letrecs should
+// be floated up to the top level of a supercombinator body.
+cell *graph_to_letrec(cell *root)
+{
+  cell **cells = NULL;
+  int ncells = 0;
+  find_graph_cells(&cells,&ncells,root);
+
+  int pos = 0;
+  int *shared = (int*)alloca(ncells*sizeof(int));
+  int nshared = 0;
+  cell **defbodies;
+  char **varnames;
+  cell *letrec;
+  cell **lnkptr;
+  int i;
+
+  cleargraph(root,FLAG_PROCESSED);
+  memset(shared,0,ncells*sizeof(int));
+  find_shared(root,cells,ncells,shared,&nshared);
+
+  if (0 == nshared)
+    return root;
+
+  defbodies = (cell**)calloc(nshared,sizeof(cell*));
+  varnames = (char**)calloc(nshared,sizeof(char*));
+  for (i = 0; i < nshared; i++) {
+    varnames[i] = (char*)malloc(20);
+    sprintf(varnames[i],"L%d",genvar++);
+  }
+
+  cleargraph(root,FLAG_PROCESSED);
+
+  letrec = alloc_cell();
+  letrec->tag = TYPE_LETREC;
+  letrec->field1 = NULL;
+  letrec->field2 = copy_shared(root,cells,shared,defbodies,varnames,&pos);
+  lnkptr = (cell**)&letrec->field1;
+
+  for (i = 0; i < nshared; i++) {
+    cell *def = alloc_cell();
+    cell *lnk = alloc_cell();
+
+    def->tag = TYPE_VARDEF;
+    def->field1 = varnames[i];
+    def->field2 = defbodies[i];
+
+    lnk->tag = TYPE_VARLNK;
+    lnk->field1 = def;
+    lnk->field2 = NULL;
+    *lnkptr = lnk;
+    lnkptr = (cell**)&lnk->field2;
+  }
+
+  free(defbodies);
+  free(varnames);
+
+  return letrec;
 }

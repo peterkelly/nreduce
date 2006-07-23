@@ -310,8 +310,14 @@ void source_code_parsing()
 
     sc->body = body;
 
-    if (!strcmp(namestr,"main"))
+    if (!strcmp(namestr,"main")) {
       gotmain = 1;
+
+      if (0 != sc->nargs) {
+        fprintf(stderr,"Supercombinator \"main\" must have 0 arguments\n");
+        exit(1);
+      }
+    }
 
     funlist = (cell*)funlist->field2;
   }
@@ -323,8 +329,6 @@ void source_code_parsing()
 
   if (trace)
     print_scombs1();
-
-  global_root = NULL;
 }
 
 void parse_check(int cond, cell *c, char *msg)
@@ -559,25 +563,12 @@ void lambda_lifting()
     print_scombs1();
 }
 
-void calc_all_scomb_cells()
-{
-  scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
-    if (!sc->cells) {
-      scomb_calc_cells(sc);
-    }
-  }
-}
-
 void graph_optimisation()
 {
   debug_stage("Graph optimisation");
 
   fix_partial_applications();
-  check_scombs_nosharing();
-  check_scombs();
   remove_redundant_scombs();
-  calc_all_scomb_cells();
 
   if (trace)
     print_scombs1();
@@ -616,7 +607,6 @@ void machine_code_generation()
 void reduction_engine()
 {
   debug_stage("Reduction engine");
-  calc_all_scomb_cells();
   scomb *mainsc = get_scomb("main");
   cell *root = mainsc->body;
   stream(root);
@@ -645,6 +635,7 @@ void gcode_interpreter()
     fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
 }
 
+typedef void (jitfun)();
 void native_execution_engine()
 {
   debug_stage("Native execution engine");

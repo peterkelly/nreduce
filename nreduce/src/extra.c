@@ -96,65 +96,7 @@ void debug_stage(const char *name)
   printf("\n");
 }
 
-
-void cleardir(char *dirname)
-{
-  DIR *dir;
-  struct dirent *entry;
-  struct stat statbuf;
-
-  if (NULL == (dir = opendir(dirname)))
-    return;
-
-  while (NULL != (entry = readdir(dir))) {
-    char *path = (char*)malloc(strlen(dirname)+1+strlen(entry->d_name)+1);
-    sprintf(path,"%s/%s",dirname,entry->d_name);
-    if (0 != stat(path,&statbuf)) {
-      fprintf(stderr,"Can't stat %s: %s\n",path,strerror(errno));
-      exit(1);
-    }
-    if (S_ISREG(statbuf.st_mode)) {
-      if (0 != unlink(path)) {
-        fprintf(stderr,"Can't delete %s: %s\n",path,strerror(errno));
-        exit(1);
-      }
-    }
-    free(path);
-  }
-
-  closedir(dir);
-
-  if (0 != rmdir(dirname)) {
-    fprintf(stderr,"Can't remove directory %s: %s\n",dirname,strerror(errno));
-    exit(1);
-  }
-}
-
-
-
-
-
-
-
-
-void cellmsg(FILE *f, cell *c, const char *format, ...)
-{
-  va_list ap;
-  va_start(ap,format);
-  vfprintf(f,format,ap);
-  va_end(ap);
-}
-
-void clearprinted()
-{
-  block *bl;
-  int i;
-  for (bl = blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      bl->cells[i].tag &= ~FLAG_PRINTED;
-}
-
-void print1(char *prefix, cell *c, int indent)
+static void print1(char *prefix, cell *c, int indent)
 {
   int i;
 
@@ -241,147 +183,18 @@ void print1(char *prefix, cell *c, int indent)
 
 void print(cell *c)
 {
-  clearprinted();
+  cleargraph(c,FLAG_PRINTED);
   print1("",c,0);
 }
 
-void print_escaped(char *t, const char *s)
-{
-  for (; *s; s++) {
-    if ('\n' == *s) {
-      *(t++) = '\\';
-      *(t++) = '\n';
-    }
-    else if (('\"' == *s) || ('<' == *s) || ('>' == *s)) {
-      *(t++) = '\\';
-      *(t++) = *s;
-    }
-    else  {
-      *(t++) = *s;
-    }
-  }
-  *t = '\0';
-}
-
-void print_dot(FILE *f, cell *c)
-{
-  char label[1024];
-  c = resolve_ind(c);
-
-  if (!c || (c->tag & FLAG_PRINTED))
-    return;
-
-  c->tag |= FLAG_PRINTED;
-
-  switch (celltype(c)) {
-  case TYPE_IND:
-    assert(0);
-    break;
-  case TYPE_EMPTY:
-    sprintf(label,"empty");
-    break;
-  case TYPE_APPLICATION:
-    sprintf(label,"@");
-    fprintf(f,"  cell%p:left -> cell%p:top\n",c,(cell*)c->field1);
-    fprintf(f,"  cell%p:right -> cell%p:top\n",c,(cell*)c->field2);
-    print_dot(f,(cell*)c->field1);
-    print_dot(f,(cell*)c->field2);
-    break;
-  case TYPE_LAMBDA:
-    sprintf(label,"!%s",(char*)c->field1);
-    fprintf(f,"  cell%p:right -> cell%p:top\n",c,(cell*)c->field2);
-    print_dot(f,(cell*)c->field2);
-    break;
-  case TYPE_BUILTIN:
-    print_escaped(label,builtin_info[(int)c->field1].name);
-    break;
-  case TYPE_CONS:
-    sprintf(label,":");
-    fprintf(f,"  cell%p:left -> cell%p:top\n",c,(cell*)c->field1);
-    fprintf(f,"  cell%p:right -> cell%p:top\n",c,(cell*)c->field2);
-    print_dot(f,(cell*)c->field1);
-    print_dot(f,(cell*)c->field2);
-    break;
-  case TYPE_SYMBOL:
-    sprintf(label,"VAR: %s",(char*)c->field1);
-    break;
-  case TYPE_SCREF:
-    sprintf(label,"SCOMB: %s",((scomb*)c->field1)->name);
-    break;
-  case TYPE_LETREC: {
-    cell *lnk;
-
-    sprintf(label,"LETREC");
-    for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
-      print_dot(f,(cell*)lnk->field1);
-      fprintf(f,"  cell%p:left -> cell%p:top\n",c,(cell*)lnk->field1);
-    }
-
-    print_dot(f,(cell*)c->field2);
-    fprintf(f,"  cell%p:right -> cell%p:top\n",c,(cell*)c->field2);
-
-    break;
-  }
-  case TYPE_VARDEF:
-    sprintf(label,"%s",(char*)c->field1);
-    print_dot(f,(cell*)c->field2);
-    fprintf(f,"  cell%p:left -> cell%p:top\n",c,(cell*)c->field2);
-    break;
-  case TYPE_NIL:
-    sprintf(label,"nil");
-    break;
-  case TYPE_INT:
-    sprintf(label,"%d",(int)c->field1);
-    break;
-  case TYPE_DOUBLE:
-    sprintf(label,"%f",celldouble(c));
-    break;
-  case TYPE_STRING:
-    print_escaped(label,(char*)c->field1);
-    break;
-  case TYPE_VARLNK:
-    sprintf(label,"VARLNK");
-    break;
-  default:
-    assert(0);
-    break;
-  }
-
-/*   fprintf(f,"  cell%p [label=\"{{<top>%p\\n%s}|{<left>|<right>}}\"",c,c,label); */
-/*   fprintf(f,"  cell%p [label=\"{{<top>%p\\n%s}|{<left>|<right>}}\"",c,c,label); */
-/*   fprintf(f,"  cell%p [label=\"{{<top>%s}|{<left>|<right>}}\"",c,label); */
-  fprintf(f,"  cell%p [label=\"%s\"",c,label);
-  if (c->tag & FLAG_STRICT)
-    fprintf(f,",fontcolor=\"#FF0000\",color=\"#FF0000\"");
-  fprintf(f,"];\n");
-}
-
-void print_graphdot(char *filename, cell *root)
-{
-  FILE *f = fopen(filename,"w");
-  if (NULL == f) {
-    perror(filename);
-    exit(1);
-  }
-  fprintf(f,"digraph {\n");
-/*   fprintf(f,"  node [shape=record,color=\"#E0E0E0\",fontname=courier,fontsize=8];\n"); */
-  fprintf(f,"  node [shape=box,color=\"#FFFFFF\",fontname=helvetica,fontsize=24];\n");
-/*   fprintf(f,"  ranksep=0.1;\n"); */
-/*   fprintf(f,"  edge [arrowsize=0.6];\n"); */
-  clearflag(FLAG_PRINTED);
-  print_dot(f,root);
-  fprintf(f,"}\n");
-  fclose(f);
-}
-
-void print_code_indent(FILE *f, int indent)
+static void print_code_indent(FILE *f, int indent)
 {
   int i;
   for (i = 0; i < indent; i++)
     fprintf(f,"  ");
 }
 
-void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
+static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
 {
   c = resolve_ind(c);
   if (1 && (c->tag & FLAG_PRINTED) &&
@@ -566,7 +379,7 @@ void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *par
 
 void print_codef(FILE *f, cell *c)
 {
-  clearprinted();
+  cleargraph(c,FLAG_PRINTED);
   print_code1(f,c,0,0,0,NULL);
 }
 void print_code(cell *c)
@@ -610,13 +423,8 @@ void print_scombs2()
     debug(0,"= ");
     print_code(sc->body);
     debug(0,"\n");
-/*     debug(0,"Cells:"); */
-/*     for (i = 0; i < sc->ncells; i++) */
-/*       debug(0," %p",sc->cells[i]); */
-/*     debug(0,"\n"); */
     print(sc->body);
     debug(0,"\n");
   }
   debug(0,"\n");
 }
-

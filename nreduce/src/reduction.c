@@ -30,7 +30,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-int resolve_var(stack *s, int oldcount, scomb *sc, cell **k)
+static int resolve_var(stack *s, int oldcount, scomb *sc, cell **k)
 {
   int varno;
   cell *var = *k;
@@ -51,7 +51,7 @@ int resolve_var(stack *s, int oldcount, scomb *sc, cell **k)
   return 0;
 }
 
-void inschild(stack *s, int oldcount, scomb *sc, int base, cell **dt, cell *source)
+static void inschild(stack *s, int oldcount, scomb *sc, int base, cell **dt, cell *source)
 {
   cell *oldsource;
   assert(TYPE_IND != celltype(source)); /* source comes from the scomb */
@@ -84,7 +84,7 @@ void inschild(stack *s, int oldcount, scomb *sc, int base, cell **dt, cell *sour
   }
 }
 
-void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
+static void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
 {
   int oldcount = s->count;
   int base = s->count;
@@ -93,7 +93,6 @@ void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
 
   stack_push(s,dest);
   stack_push(s,source);
-  assert(sc->cells);
   cleargraph(sc->body,FLAG_PROCESSED);
   while (base < s->count) {
     int wasarg;

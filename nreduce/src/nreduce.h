@@ -25,42 +25,20 @@
 
 #include <stdio.h>
 
-//#define INLINE_RESOLVE_IND
-
-//#define NDEBUG
-#define VERIFICATION
-
 //#define DEBUG_GCODE_COMPILATION
-#define DEBUG_SHOW_STRICTNESS_ANALYSIS
-//#define DEBUG_SHOW_STRICTNESS_ANALYSIS2
 //#define STACK_MODEL_SANITY_CHECK
-//#define DEBUG_FRONTIERS
-
-#define STACK_LIMIT 10240
-
-
 
 // Optimizations that don't work (yet)
 
 //#define REMOVE_REDUNDANT_SUPERCOMBINATORS
-#define STRICTNESS_ANALYSIS
 
 // Misc
 
-#define CHECK_FOR_SUPERCOMBINATOR_SHARED_CELLS
-
-#define HISTOGRAM_SIZE 10
-
 #define BLOCK_SIZE 1024
-/* #define COLLECT_THRESHOLD 1024000 */
 #define COLLECT_THRESHOLD 102400
-//#define COLLECT_THRESHOLD 100
+#define STACK_LIMIT 10240
 
 #define celldouble(c) (*(double*)(&((c)->field1)))
-#define hasfield1str(type) ((TYPE_STRING == (type)) ||   \
-                            (TYPE_SYMBOL == (type)) || \
-                            (TYPE_LAMBDA == (type)) ||   \
-                            (TYPE_VARDEF == (type)))
 
 #define TYPE_EMPTY       0x00
 #define TYPE_APPLICATION 0x01  /* left: function (cell*)   right: argument (cell*) */
@@ -147,8 +125,6 @@
 #define FLAG_STRICT     0x2000
 #define FLAG_NEEDCLEAR  0x4000
 
-typedef void (jitfun)();
-
 #define CELL_TAG    ((int)&((cell*)0)->tag)
 #define CELL_FIELD1 ((int)&((cell*)0)->field1)
 #define CELL_FIELD2 ((int)&((cell*)0)->field2)
@@ -190,8 +166,6 @@ typedef struct scomb {
   int nargs;
   char **argnames;
   cell *body;
-  int ncells;
-  cell **cells;
   int index;
   int *strictin;
   struct scomb *next;
@@ -235,19 +209,11 @@ void *stack_at(stack *s, int pos);
 void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
-void clearflag(int flag);
 void cleargraph(cell *root, int flag);
 void free_cell_fields(cell *c);
 void print_stack(int redex, cell **stk, int size, int dir);
 
-#ifdef INLINE_RESOLVE_IND
-#define resolve_ind(expr) ({ cell *_rc = (expr); \
-                             while (TYPE_IND == celltype(_rc)) \
-                               _rc = (cell*)_rc->field1; \
-                             _rc; })
-#else
 cell *resolve_ind(cell *c);
-#endif
 
 char *def_name(cell *lnk);
 cell *def_value(cell *lnk);
@@ -257,23 +223,15 @@ cell *letrec_body(cell *letrec);
 /* letrec */
 
 void letrecs_to_graph(cell **root, scomb *sc);
+cell *graph_to_letrec(cell *root);
 
 /* super */
 
 scomb *get_scomb_index(int index);
 scomb *get_scomb(const char *name);
 int get_scomb_var(scomb *sc, const char *name);
-int scomb_count();
 scomb *add_scomb(char *name, char *prefix);
 void scomb_free_list(scomb **list);
-void scomb_free(scomb *sc);
-void check_scombs();
-void check_scombs_nosharing();
-void scomb_calc_cells(scomb *sc);
-void print_scomb_code(scomb *sc);
-void print_scombs1();
-void print_scombs2();
-cell *super_to_letrec(scomb *sc);
 void remove_redundant_scombs();
 void fix_partial_applications();
 
@@ -290,12 +248,12 @@ void reduce(stack *s);
 void fatal(const char *msg);
 void debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
-void cellmsg(FILE *f, cell *c, const char *format, ...);
 void print(cell *c);
-void print_dot(FILE *f, cell *c);
-void print_graphdot(char *filename, cell *root);
 void print_codef(FILE *f, cell *c);
 void print_code(cell *c);
+void print_scomb_code(scomb *sc);
+void print_scombs1();
+void print_scombs2();
 
 /* jit */
 void print_cell(cell *c);
@@ -340,8 +298,6 @@ int list_contains_string(list *l, const char *str);
 int list_contains_ptr(list *l, const void *data);
 void list_remove_ptr(list **l, void *ptr);
 
-
-
 #ifndef EXTRA_C
 extern const char *cell_types[NUM_CELLTYPES];
 #endif
@@ -352,7 +308,6 @@ extern int dumpalloc;
 extern int dumpcount;
 
 extern int trace;
-extern cell *global_root;
 extern struct dumpentry *dump;
 extern block *blocks;
 extern int nblocks;
