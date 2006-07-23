@@ -45,10 +45,10 @@
 #define TYPE_LAMBDA      0x02  /* left: name (char*)       right: body (cell*)     */
 #define TYPE_BUILTIN     0x03  /* left: bif (int)                                  */
 #define TYPE_CONS        0x04  /* left: head (cell*)       right: tail (cell*)     */
-#define TYPE_SYMBOL      0x05  /* left: name (char*)  - a free variable            */
-#define TYPE_LETREC      0x06  /* left: vars (cell*)       right: body (cell*)     */
-#define TYPE_VARDEF      0x07  /* left: name (char*)       right: body (cell*)     */
-#define TYPE_VARLNK      0x08  /* left: def (cell*)        right: next (cell*)     */
+#define TYPE_SYMBOL      0x05  /* left: name (char*)                               */
+#define TYPE_LETREC      0x06  /* left: defs (letrec*)     right: body (cell*)     */
+#define TYPE_RES2        0x07  /*                                                  */
+#define TYPE_RES3        0x08  /*                                                  */
 #define TYPE_IND         0x09  /* left: tgt (cell*)                                */
 #define TYPE_FUNCTION    0x0A  /* left: nargs(int)         right: address          */
 #define TYPE_SCREF       0x0B  /* left: scomb (scomb*)                             */
@@ -138,6 +138,15 @@ typedef struct cell {
 
 #define celltype(_c) ((_c)->tag & TAG_MASK)
 
+typedef struct letrec {
+  int a;
+  int b;
+  int c;
+  char *name;
+  cell *value;
+  struct letrec *next;
+} letrec;
+
 typedef struct carray {
   int alloc;
   int size;
@@ -214,11 +223,6 @@ void free_cell_fields(cell *c);
 void print_stack(int redex, cell **stk, int size, int dir);
 
 cell *resolve_ind(cell *c);
-
-char *def_name(cell *lnk);
-cell *def_value(cell *lnk);
-cell *letrec_defs(cell *letrec);
-cell *letrec_body(cell *letrec);
 
 /* letrec */
 

@@ -44,10 +44,10 @@ static int lookup(stack *bound, const char *sym, cell **val)
     }
     else {
       assert(TYPE_LETREC == celltype(p));
-      cell *lnk;
-      for (lnk = (cell*)p->field1; lnk; lnk = (cell*)lnk->field2) {
-        if (!strcmp(def_name(lnk),sym)) {
-          *val = def_value(lnk);
+      letrec *rec;
+      for (rec = (letrec*)p->field1; rec; rec = rec->next) {
+        if (!strcmp(rec->name,sym)) {
+          *val = rec->value;
           return 1;
         }
       }
@@ -85,13 +85,9 @@ static void sub_letrecs(stack *bound, cell **k, scomb *sc)
     break;
   case TYPE_LETREC: {
     stack_push(bound,*k);
-    cell *lnk;
-    for (lnk = letrec_defs(*k); lnk; lnk = (cell*)lnk->field2) {
-      assert(TYPE_VARLNK == celltype(lnk));
-      cell *def = (cell*)lnk->field1;
-      assert(TYPE_VARDEF == celltype(def));
-      sub_letrecs(bound,(cell**)&def->field2,sc);
-    }
+    letrec *rec;
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+      sub_letrecs(bound,&rec->value,sc);
     sub_letrecs(bound,(cell**)&(*k)->field2,sc);
     *k = (cell*)(*k)->field2;
     stack_pop(bound);
@@ -301,16 +297,17 @@ cell *graph_to_letrec(cell *root)
   int nshared = 0;
   cell **defbodies;
   char **varnames;
-  cell *letrec;
-  cell **lnkptr;
+  cell *lrcell;
   int i;
 
   cleargraph(root,FLAG_PROCESSED);
   memset(shared,0,ncells*sizeof(int));
   find_shared(root,cells,ncells,shared,&nshared);
 
-  if (0 == nshared)
+  if (0 == nshared) {
+    free(cells);
     return root;
+  }
 
   defbodies = (cell**)calloc(nshared,sizeof(cell*));
   varnames = (char**)calloc(nshared,sizeof(char*));
@@ -321,29 +318,24 @@ cell *graph_to_letrec(cell *root)
 
   cleargraph(root,FLAG_PROCESSED);
 
-  letrec = alloc_cell();
-  letrec->tag = TYPE_LETREC;
-  letrec->field1 = NULL;
-  letrec->field2 = copy_shared(root,cells,shared,defbodies,varnames,&pos);
-  lnkptr = (cell**)&letrec->field1;
+  lrcell = alloc_cell();
+  lrcell->tag = TYPE_LETREC;
+  lrcell->field1 = NULL;
+  lrcell->field2 = copy_shared(root,cells,shared,defbodies,varnames,&pos);
+  letrec **lnkptr = (letrec**)&lrcell->field1;
 
   for (i = 0; i < nshared; i++) {
-    cell *def = alloc_cell();
-    cell *lnk = alloc_cell();
+    letrec *rec = calloc(1,sizeof(letrec));
+    rec->name = varnames[i];
+    rec->value = defbodies[i];
 
-    def->tag = TYPE_VARDEF;
-    def->field1 = varnames[i];
-    def->field2 = defbodies[i];
-
-    lnk->tag = TYPE_VARLNK;
-    lnk->field1 = def;
-    lnk->field2 = NULL;
-    *lnkptr = lnk;
-    lnkptr = (cell**)&lnk->field2;
+    *lnkptr = rec;
+    lnkptr = &rec->next;
   }
 
   free(defbodies);
   free(varnames);
+  free(cells);
 
-  return letrec;
+  return lrcell;
 }

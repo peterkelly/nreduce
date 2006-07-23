@@ -48,8 +48,8 @@ const char *cell_types[NUM_CELLTYPES] = {
 "CONS",
 "SYMBOL",
 "LETREC",
-"VARDEF",
-"VARLNK",
+"RES2",
+"RES3",
 "IND",
 "FUNCTION",
 "SCREF",
@@ -144,21 +144,18 @@ static void print1(char *prefix, cell *c, int indent)
       printf("%s\n",((scomb*)c->field1)->name);
       break;
     case TYPE_LETREC: {
-      cell *lnk;
       printf("LETREC\n");
-      for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
-        print1(prefix,(cell*)lnk->field1,indent+1);
+      letrec *rec;
+      for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+        printf("%s             %11s ",prefix,"def");
+        for (i = 0; i < indent+1; i++)
+          printf("  ");
+        printf("%s\n",rec->name);
+        print1(prefix,rec->value,indent+2);
       }
       print1(prefix,(cell*)c->field2,indent+1);
       break;
     }
-    case TYPE_VARDEF:
-      printf("%s\n",(char*)c->field1);
-      print1(prefix,(cell*)c->field2,indent+1);
-      break;
-    case TYPE_VARLNK:
-      assert(0);
-      break;
     case TYPE_NIL:
       printf("nil\n"); break;
     case TYPE_INT:
@@ -286,23 +283,19 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       fprintf(f,"%s",((scomb*)c->field1)->name);
       break;
     case TYPE_LETREC: {
-      cell *lnk = (cell*)c->field1;
+      letrec *rec = (letrec*)c->field1;
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         fprintf(f,"(");
       fprintf(f,"\n");
       print_code_indent(f,indent);
       fprintf(f,"letrec ");
-      while (lnk) {
-        cell *def = (cell*)lnk->field1;
-        char *name = (char*)def->field1;
-        cell *expr = (cell*)def->field2;
-
+      while (rec) {
         fprintf(f,"\n");
         print_code_indent(f,indent+1);
-        fprintf(f,"%s (",name);
-        print_code1(f,expr,0,0,indent+2,c);
+        fprintf(f,"%s (",rec->name);
+        print_code1(f,rec->value,0,0,indent+2,c);
 
-        lnk = (cell*)lnk->field2;
+        rec = rec->next;
         fprintf(f,")");
       }
       fprintf(f,"\n");

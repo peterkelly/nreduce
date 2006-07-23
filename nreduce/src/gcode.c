@@ -531,24 +531,16 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
 
 void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
 {
-  cell *lnk;
+  letrec *rec;
   int n = 1;
 
-  for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
-
-/*     cell *def = (cell*)lnk->field1; */
-/*     printf("generated letrec %s = ",(char*)def->field1); */
-/*     print_code((cell*)def->field2); */
-/*     printf("\n"); */
-
+  for (rec = (letrec*)c->field1; rec; rec = rec->next)
     n++;
-  }
 
   ALLOC(n);
-  for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
-    cell *def = (cell*)lnk->field1;
-    C(gp,(cell*)def->field2,d,pm,0,0,0);
-    UPDATE(d+1-p(pm,(char*)def->field1));
+  for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+    C(gp,rec->value,d,pm,0,0,0);
+    UPDATE(d+1-p(pm,rec->name));
   }
 }
 
@@ -556,10 +548,10 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
 {
   int ndefs = 0;
   int i = 0;
-  cell *lnk;
+  letrec *rec;
   int top;
 
-  for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
+  for (rec = (letrec*)c->field1; rec; rec = rec->next)
     ndefs++;
 
   *ndefs2 = ndefs;
@@ -573,9 +565,8 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
   *d2 = dold;
 
   top = ++(*d2); /* __top - to be replaced with supercombinator body */
-  for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2) {
-    cell *def = (cell*)lnk->field1;
-    pprime->varnames[pm->count+i] = (char*)def->field1;
+  for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+    pprime->varnames[pm->count+i] = rec->name;
     pprime->indexes[pm->count+i] = ++(*d2);
     i++;
   }

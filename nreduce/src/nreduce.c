@@ -352,8 +352,8 @@ void create_letrecs_r(cell *c)
         (TYPE_SYMBOL == celltype((cell*)c->field1)) &&
         !strcmp("let",(char*)((cell*)c->field1)->field1)) {
 
-      cell *defs = NULL;
-      cell **lnkptr = NULL;
+      letrec *defs = NULL;
+      letrec **lnkptr = NULL;
 
       cell *let1 = (cell*)c->field2;
       parse_check(TYPE_CONS == celltype(let1),let1,"let takes 2 parameters");
@@ -370,21 +370,15 @@ void create_letrecs_r(cell *c)
         cell *link2 = (cell*)link1->field2;
         parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
 
-        cell *vardef = alloc_cell();
-        vardef->tag = TYPE_VARDEF;
-        vardef->field1 = strdup((char*)symbol->field1);
-        vardef->field2 = value;
-
-        cell *newlnk = alloc_cell();
-        newlnk->tag = TYPE_VARLNK;
-        newlnk->field1 = vardef;
-        newlnk->field2 = NULL;
+        letrec *newlnk = (letrec*)calloc(1,sizeof(letrec));
+        newlnk->name = strdup((char*)symbol->field1);
+        newlnk->value = value;
 
         if (NULL == defs)
           defs = newlnk;
         else
           *lnkptr = newlnk;
-        lnkptr = (cell**)&newlnk->field2;
+        lnkptr = &newlnk->next;
 
         iter = (cell*)iter->field2;
       }
@@ -393,19 +387,14 @@ void create_letrecs_r(cell *c)
       parse_check(TYPE_CONS == celltype(let2),let2,"let takes 2 parameters");
       cell *body = (cell*)let2->field1;
 
-      cell *lnk;
-      for (lnk = defs; lnk; lnk = (cell*)lnk->field2) {
-        assert(TYPE_VARLNK == celltype(lnk));
-        cell *def = (cell*)lnk->field1;
-        assert(TYPE_VARDEF == celltype(def));
-        create_letrecs_r((cell*)def->field2);
+      letrec *lnk;
+      for (lnk = defs; lnk; lnk = lnk->next) {
+        create_letrecs_r(lnk->value);
       }
 
       c->tag = (TYPE_LETREC | (c->tag & ~TAG_MASK));
       c->field1 = defs;
       c->field2 = body;
-
-      
 
       create_letrecs_r(body);
     }

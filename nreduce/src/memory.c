@@ -169,17 +169,13 @@ void mark(cell *c)
   case TYPE_LAMBDA:
     mark((cell*)c->field2);
     break;
-  case TYPE_LETREC:
-    mark((cell*)c->field1);
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      mark(rec->value);
     mark((cell*)c->field2);
     break;
-  case TYPE_VARDEF:
-    mark((cell*)c->field2);
-    break;
-  case TYPE_VARLNK:
-    mark((cell*)c->field1);
-    mark((cell*)c->field2);
-    break;
+  }
   case TYPE_AREF: {
     cell *arrcell = (cell*)c->field1;
     carray *arr = (carray*)arrcell->field1;
@@ -214,9 +210,18 @@ void free_cell_fields(cell *c)
   case TYPE_STRING:
   case TYPE_SYMBOL:
   case TYPE_LAMBDA:
-  case TYPE_VARDEF:
     free((char*)c->field1);
     break;
+  case TYPE_LETREC: {
+    letrec *rec = (letrec*)c->field1;
+    while (rec) {
+      letrec *next = rec->next;
+      free(rec->name);
+      free(rec);
+      rec = next;
+    }
+    break;
+  }
   case TYPE_ARRAY: {
     carray *arr = (carray*)c->field1;
     free(arr->cells);
@@ -443,8 +448,7 @@ void copy_cell(cell *redex, cell *source)
   copy_raw(redex,source);
   if ((TYPE_STRING == celltype(source)) ||
       (TYPE_SYMBOL == celltype(source)) ||
-      (TYPE_LAMBDA == celltype(source)) ||
-      (TYPE_VARDEF == celltype(source)))
+      (TYPE_LAMBDA == celltype(source)))
     redex->field1 = strdup((char*)redex->field1);
 }
 
@@ -467,18 +471,12 @@ void setneedclear_r(cell *c)
     setneedclear_r((cell*)c->field1);
     break;
   case TYPE_LETREC: {
-    cell *lnk;
-    for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
-      setneedclear_r((cell*)lnk->field1);
+    letrec *rec;
+    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      setneedclear_r(rec->value);
     setneedclear_r((cell*)c->field2);
     break;
   }
-  case TYPE_VARDEF:
-    setneedclear_r((cell*)c->field2);
-    break;
-  case TYPE_VARLNK:
-    assert(0);
-    break;
   }
 }
 
@@ -502,18 +500,12 @@ void cleargraph_r(cell *c, int flag)
     cleargraph_r((cell*)c->field1,flag);
     break;
   case TYPE_LETREC: {
-    cell *lnk;
-    for (lnk = (cell*)c->field1; lnk; lnk = (cell*)lnk->field2)
-      cleargraph_r((cell*)lnk->field1,flag);
+    letrec *rec;
+    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      cleargraph_r(rec->value,flag);
     cleargraph_r((cell*)c->field2,flag);
     break;
   }
-  case TYPE_VARDEF:
-    cleargraph_r((cell*)c->field2,flag);
-    break;
-  case TYPE_VARLNK:
-    assert(0);
-    break;
   }
 }
 
@@ -569,32 +561,4 @@ void print_stack(int redex, cell **stk, int size, int dir)
     else
       i++;
   }
-}
-
-char *def_name(cell *lnk)
-{
-  assert(TYPE_VARLNK == celltype(lnk));
-  cell *def = (cell*)lnk->field1;
-  char *name = (char*)def->field1;
-  return name;
-}
-
-cell *def_value(cell *lnk)
-{
-  assert(TYPE_VARLNK == celltype(lnk));
-  cell *def = (cell*)lnk->field1;
-  cell *value = (cell*)def->field2;
-  return value;
-}
-
-cell *letrec_defs(cell *letrec)
-{
-  assert(TYPE_LETREC == celltype(letrec));
-  return (cell*)letrec->field1;
-}
-
-cell *letrec_body(cell *letrec)
-{
-  assert(TYPE_LETREC == celltype(letrec));
-  return (cell*)letrec->field2;
 }

@@ -64,27 +64,9 @@ extern struct cell *parse_root;
 %type <c> Expr
 %type <c> SingleLambda
 %type <c> Lambdas
-%type <c> LetVar
-%type <c> LetVars
 %left SYMBOL
 
 %%
-
-LetVar:
-  SYMBOL SingleExpr                           { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->field1 = alloc_sourcecell(yyfilename,yylineno);
-                                                  ((cell*)$$->field1)->tag = TYPE_VARDEF;
-                                                  ((cell*)$$->field1)->field1 = (void*)strdup($1);
-                                                  ((cell*)$$->field1)->field2 = $2;
-                                                  $$->field2 = NULL;
-                                                  $$->tag = TYPE_VARLNK; }
-;
-
-LetVars:
-  LetVar                                        { $$ = $1; }
-| LetVar LetVars                                { $$ = $1;
-                                                  $$->field2 = $2; }
-;
 
 SingleExpr:
   NIL                                           { $$ = globnil; }
@@ -114,10 +96,6 @@ SingleLambda:
   LAMBDA SYMBOL  '.'                          { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_LAMBDA;
                                                   $$->field1 = (void*)strdup($2);
-                                                  $$->field2 = NULL; }
-| LETREC LetVars IN                             { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_LETREC;
-                                                  $$->field1 = $2;
                                                   $$->field2 = NULL; }
 ;
 
