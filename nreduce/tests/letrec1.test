@@ -1,0 +1,21 @@
+This test is to ensure that variable scope is treated properly when constructing
+a graph from a series of letrec definitions.
+
+In the code below, the bar function uses the definition f, which is set to
++ x 1. In this case, the x should refer to the x defined in the letrec, i.e. 4.
+
+The bar also contains a reference to x, but in this case it should use the
+argument that is supplied to the function, i.e. 2.
+
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+(main () (let ((foo (+ x 1))
+               (x 4)
+               (bar (!x.- foo x)))
+              (bar 2)))
+==================================== OUTPUT ====================================
+3
+================================== RETURN CODE =================================
+0

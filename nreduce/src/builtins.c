@@ -621,6 +621,15 @@ void b_arrayoptlen(cell **argstack)
   }
 }
 
+int get_builtin(const char *name)
+{
+  int i;
+  for (i = 0; i < NUM_BUILTINS; i++)
+    if (!strcmp(name,builtin_info[i].name))
+      return i;
+  return -1;
+}
+
 const builtin builtin_info[NUM_BUILTINS] = {
 { "+",              2, 2, 1, b_add            },
 { "-",              2, 2, 1, b_subtract       },

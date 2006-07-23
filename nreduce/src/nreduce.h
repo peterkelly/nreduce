@@ -249,10 +249,14 @@ void print_stack(int redex, cell **stk, int size, int dir);
 cell *resolve_ind(cell *c);
 #endif
 
+char *def_name(cell *lnk);
+cell *def_value(cell *lnk);
+cell *letrec_defs(cell *letrec);
+cell *letrec_body(cell *letrec);
 
-/* code */
+/* letrec */
 
-cell *suball_letrecs(cell *root, scomb *sc);
+void letrecs_to_graph(cell **root, scomb *sc);
 
 /* super */
 
@@ -272,7 +276,6 @@ void print_scombs2();
 cell *super_to_letrec(scomb *sc);
 void remove_redundant_scombs();
 void fix_partial_applications();
-void resolve_scvars(cell *c);
 
 /* lifting */
 
@@ -301,6 +304,10 @@ void print_cell(cell *c);
 
 void dump_strictinfo();
 void strictness_analysis();
+
+/* builtin */
+
+int get_builtin(const char *name);
 
 /* util */
 

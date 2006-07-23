@@ -1,0 +1,18 @@
+This test is to ensure that variable scope is treated properly when constructing
+a graph from a series of letrec definitions.
+
+The letrec in this code defines a variable x of value 4, which is in scope only
+for the (* foo 2) expression. The second usage of x should use the value bound
+by the lambda expression, which has the value 11.
+
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+(main () ((!x.- (let ((x 4))
+                     (* x 2))
+                x) 3))
+==================================== OUTPUT ====================================
+5
+================================== RETURN CODE =================================
+0

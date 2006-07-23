@@ -486,39 +486,3 @@ void fix_partial_applications()
 /*   printf("Done fixing partial applications\n"); */
 #endif
 }
-
-void resolve_scvars_r(cell *c)
-{
-  if (c->tag & FLAG_PROCESSED)
-    return;
-  c->tag |= FLAG_PROCESSED;
-
-  switch (celltype(c)) {
-  case TYPE_LETREC:
-  case TYPE_IND:
-    break;
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
-    resolve_scvars_r((cell*)c->field1);
-    resolve_scvars_r((cell*)c->field2);
-    break;
-  case TYPE_LAMBDA:
-    resolve_scvars_r((cell*)c->field2);
-    break;
-  case TYPE_SYMBOL: {
-    scomb *sc;
-    if (NULL != (sc = get_scomb((char*)c->field1))) {
-      free(c->field1);
-      c->tag = TYPE_SCREF;
-      c->field1 = sc;
-    }
-    break;
-  }
-  }
-}
-
-void resolve_scvars(cell *c)
-{
-  cleargraph(c,FLAG_PROCESSED);
-  resolve_scvars_r(c);
-}

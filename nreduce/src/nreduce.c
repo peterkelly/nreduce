@@ -451,10 +451,8 @@ void letrec_substitution()
   debug_stage("Letrec substitution");
 
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
-    sc->body = suball_letrecs(sc->body,sc);
-    resolve_scvars(sc->body);
-  }
+  for (sc = scombs; sc; sc = sc->next)
+    letrecs_to_graph(&sc->body,sc);
 
   if (trace)
     print_scombs1();

@@ -647,3 +647,31 @@ void print_stack(int redex, cell **stk, int size, int dir)
       i++;
   }
 }
+
+char *def_name(cell *lnk)
+{
+  assert(TYPE_VARLNK == celltype(lnk));
+  cell *def = (cell*)lnk->field1;
+  char *name = (char*)def->field1;
+  return name;
+}
+
+cell *def_value(cell *lnk)
+{
+  assert(TYPE_VARLNK == celltype(lnk));
+  cell *def = (cell*)lnk->field1;
+  cell *value = (cell*)def->field2;
+  return value;
+}
+
+cell *letrec_defs(cell *letrec)
+{
+  assert(TYPE_LETREC == celltype(letrec));
+  return (cell*)letrec->field1;
+}
+
+cell *letrec_body(cell *letrec)
+{
+  assert(TYPE_LETREC == celltype(letrec));
+  return (cell*)letrec->field2;
+}

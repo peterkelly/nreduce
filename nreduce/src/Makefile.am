@@ -12,7 +12,7 @@ nreduce_SOURCES = assembler.c \
 	memory.c \
 	strictness.c \
 	util.c \
-	code.c \
+	letrec.c \
 	nreduce.c \
 	super.c \
 	lifting.c \
