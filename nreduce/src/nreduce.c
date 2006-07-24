@@ -601,8 +601,18 @@ void reduction_engine()
   debug_stage("Reduction engine");
   scomb *mainsc = get_scomb("main");
   cell *root = mainsc->body;
+  struct timeval start;
+  struct timeval end;
+
+  gettimeofday(&start,NULL);
   stream(root);
+  gettimeofday(&end,NULL);
+
   printf("\n");
+  int ms = (end.tv_sec - start.tv_sec)*1000 +
+           (end.tv_usec - start.tv_usec)/1000;
+  if (args.statistics)
+    fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
 }
 
 void gcode_interpreter()
