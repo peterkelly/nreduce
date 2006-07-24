@@ -452,69 +452,6 @@ void copy_cell(cell *redex, cell *source)
     redex->field1 = strdup((char*)redex->field1);
 }
 
-void setneedclear_r(cell *c)
-{
-  if (c->tag & FLAG_NEEDCLEAR)
-    return;
-  c->tag |= FLAG_NEEDCLEAR;
-
-  switch (celltype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
-    setneedclear_r((cell*)c->field1);
-    setneedclear_r((cell*)c->field2);
-    break;
-  case TYPE_LAMBDA:
-    setneedclear_r((cell*)c->field2);
-    break;
-  case TYPE_IND:
-    setneedclear_r((cell*)c->field1);
-    break;
-  case TYPE_LETREC: {
-    letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
-      setneedclear_r(rec->value);
-    setneedclear_r((cell*)c->field2);
-    break;
-  }
-  }
-}
-
-void cleargraph_r(cell *c, int flag)
-{
-  if (!(c->tag & FLAG_NEEDCLEAR))
-    return;
-  c->tag &= ~FLAG_NEEDCLEAR;
-  c->tag &= ~flag;
-
-  switch (celltype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
-    cleargraph_r((cell*)c->field1,flag);
-    cleargraph_r((cell*)c->field2,flag);
-    break;
-  case TYPE_LAMBDA:
-    cleargraph_r((cell*)c->field2,flag);
-    break;
-  case TYPE_IND:
-    cleargraph_r((cell*)c->field1,flag);
-    break;
-  case TYPE_LETREC: {
-    letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
-      cleargraph_r(rec->value,flag);
-    cleargraph_r((cell*)c->field2,flag);
-    break;
-  }
-  }
-}
-
-void cleargraph(cell *root, int flag)
-{
-  setneedclear_r(root);
-  cleargraph_r(root,flag);
-}
-
 void print_stack(int redex, cell **stk, int size, int dir)
 {
   int i;

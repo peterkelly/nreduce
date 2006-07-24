@@ -195,3 +195,64 @@ void fix_partial_applications()
     }
   }
 }
+
+void shared_error(cell ***cells, int *ncells, cell *shared)
+{
+  fprintf(stderr,"Shared cell: ");
+  print_codef(stderr,shared);
+  fprintf(stderr,"\n");
+  fprintf(stderr,"Present in supercombinators:\n");
+  int i = 0;
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next) {
+    int j;
+    for (j = 0; j < ncells[i]; j++) {
+      if (cells[i][j] == shared)
+        fprintf(stderr,"%s\n",sc->name);
+    }
+    i++;
+  }
+  abort();
+}
+
+void check_scombs_nosharing()
+{
+  int count = 0;
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    count++;
+
+  cell ***cells = (cell***)calloc(count,sizeof(cell**));
+  int *ncells = (int*)calloc(count,sizeof(cell**));
+  int i = 0;
+  for (sc = scombs; sc; sc = sc->next) {
+    find_graph_cells(&cells[i],&ncells[i],sc->body);
+    i++;
+  }
+
+  i = 0;
+  for (sc = scombs; sc; sc = sc->next) {
+    int j;
+    for (j = 0; j < ncells[i]; j++)
+      cells[i][j]->tag &= ~FLAG_PROCESSED;
+    i++;
+  }
+
+  i = 0;
+  for (sc = scombs; sc; sc = sc->next) {
+    int j;
+    for (j = 0; j < ncells[i]; j++) {
+      /* we allow globnil to be shared - could it still cause problems? */
+      if ((cells[i][j]->tag & FLAG_PROCESSED) && (cells[i][j] != globnil)) {
+        shared_error(cells,ncells,cells[i][j]);
+      }
+      cells[i][j]->tag |= FLAG_PROCESSED;
+    }
+    i++;
+  }
+
+  for (i = 0; i < count; i++)
+    free(cells[i]);
+  free(cells);
+  free(ncells);
+}

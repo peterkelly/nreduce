@@ -104,11 +104,11 @@ static void print1(char *prefix, cell *c, int indent)
   for (i = 0; i < indent; i++)
     printf("  ");
 
-  if (c->tag & FLAG_PRINTED) {
+  if (c->tag & FLAG_TMP) {
     printf("%p\n",c);
   }
   else {
-    c->tag |= FLAG_PRINTED;
+    c->tag |= FLAG_TMP;
     switch (celltype(c)) {
     case TYPE_IND:
       printf("IND\n");
@@ -180,7 +180,7 @@ static void print1(char *prefix, cell *c, int indent)
 
 void print(cell *c)
 {
-  cleargraph(c,FLAG_PRINTED);
+  cleargraph(c,FLAG_TMP);
   print1("",c,0);
 }
 
@@ -194,7 +194,7 @@ static void print_code_indent(FILE *f, int indent)
 static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
 {
   c = resolve_ind(c);
-  if (1 && (c->tag & FLAG_PRINTED) &&
+  if (1 && (c->tag & FLAG_TMP) &&
       (c != globnil) &&
       (TYPE_NIL != celltype(c)) &&
       (TYPE_INT != celltype(c)) &&
@@ -209,7 +209,7 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
     fprintf(f,"###");
   }
   else {
-    c->tag |= FLAG_PRINTED;
+    c->tag |= FLAG_TMP;
 
 /*     if (TYPE_APPLICATION != celltype(c)) { */
 /*       if (c->tag & FLAG_STRICT) */
@@ -372,7 +372,7 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
 
 void print_codef(FILE *f, cell *c)
 {
-  cleargraph(c,FLAG_PRINTED);
+  cleargraph(c,FLAG_TMP);
   print_code1(f,c,0,0,0,NULL);
 }
 void print_code(cell *c)

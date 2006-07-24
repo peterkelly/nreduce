@@ -119,7 +119,7 @@
 
 #define FLAG_MARKED      0x100
 #define FLAG_PROCESSED   0x200
-#define FLAG_PRINTED     0x400
+#define FLAG_TMP         0x400
 #define FLAG_MAXFREE     0x800
 #define FLAG_PINNED     0x1000
 #define FLAG_STRICT     0x2000
@@ -218,7 +218,6 @@ void *stack_at(stack *s, int pos);
 void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
-void cleargraph(cell *root, int flag);
 void free_cell_fields(cell *c);
 void print_stack(int redex, cell **stk, int size, int dir);
 
@@ -228,6 +227,7 @@ cell *resolve_ind(cell *c);
 
 void letrecs_to_graph(cell **root, scomb *sc);
 cell *graph_to_letrec(cell *root);
+void find_graph_cells(cell ***cells, int *ncells, cell *root);
 
 /* super */
 
@@ -238,14 +238,23 @@ scomb *add_scomb(char *name, char *prefix);
 void scomb_free_list(scomb **list);
 void remove_redundant_scombs();
 void fix_partial_applications();
+void check_scombs_nosharing();
 
 /* lifting */
 
 void lift(scomb *sc);
+void applift(scomb *sc);
 
 /* reduction */
 
 void reduce(stack *s);
+
+/* graph */
+
+void cleargraph(cell *root, int flag);
+int graph_size(cell *c);
+cell *copy_graph(cell *c);
+void find_graph_cells(cell ***cells, int *ncells, cell *root);
 
 /* extra */
 

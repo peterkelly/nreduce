@@ -548,6 +548,9 @@ void lambda_lifting()
     prev = sc;
   }
 
+  for (sc = scombs; sc; sc = sc->next)
+    sc->body = copy_graph(sc->body);
+
   if (trace)
     print_scombs1();
 }
@@ -665,6 +668,7 @@ int main(int argc, char **argv)
   letrec_substitution();
   app_substitution();
   lambda_lifting();
+  check_scombs_nosharing();
 
   if (ENGINE_REDUCER == args.engine) {
     reduction_engine();

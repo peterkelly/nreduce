@@ -162,53 +162,6 @@ void letrecs_to_graph(cell **root, scomb *sc)
   stack_free(bound);
 }
 
-static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
-{
-  int i;
-  for (i = 0; i < (*ncells); i++)
-    if ((*cells)[i] == c)
-      return;
-
-  if ((*ncells) == *alloc) {
-    (*alloc) *= 2;
-    (*cells) = (cell**)realloc((*cells),(*alloc)*sizeof(cell*));
-  }
-  (*cells)[(*ncells)++] = c;
-
-  switch (celltype(c)) {
-  case TYPE_IND:
-    assert(0);
-    break;
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
-    add_cells(cells,ncells,(cell*)c->field1,alloc);
-    add_cells(cells,ncells,(cell*)c->field2,alloc);
-    break;
-  case TYPE_LAMBDA:
-    add_cells(cells,ncells,(cell*)c->field2,alloc);
-    break;
-  case TYPE_BUILTIN:
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:
-  case TYPE_SYMBOL:
-  case TYPE_SCREF:
-    break;
-  default:
-    assert(0);
-    break;
-  }
-}
-
-static void find_graph_cells(cell ***cells, int *ncells, cell *root)
-{
-  int alloc = 4;
-  *ncells = 0;
-  *cells = (cell**)malloc(alloc*sizeof(cell*));
-  add_cells(cells,ncells,root,&alloc);
-}
-
 static void find_shared(cell *c, cell **cells, int ncells, int *shared, int *nshared)
 {
   if (c->tag & FLAG_PROCESSED) {
