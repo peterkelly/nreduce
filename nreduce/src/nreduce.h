@@ -28,10 +28,6 @@
 //#define DEBUG_GCODE_COMPILATION
 //#define STACK_MODEL_SANITY_CHECK
 
-// Optimizations that don't work (yet)
-
-//#define REMOVE_REDUNDANT_SUPERCOMBINATORS
-
 // Misc
 
 #define BLOCK_SIZE 1024
@@ -348,7 +344,6 @@ extern char *collect_esp;
 #ifndef SUPER_C
 extern scomb *scombs;
 extern scomb **lastsc;
-extern int nscombs;
 #endif
 
 #ifndef BUILTINS_C

@@ -267,7 +267,6 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       if ((TYPE_SYMBOL == celltype(c)) && !strncmp((char*)c->field1,"__code",6)) {
         int fno = atoi((char*)c->field1+6);
         assert(0 <= fno);
-        assert(fno < NUM_BUILTINS+nscombs);
 /*         fprintf(f,"%s [",(char*)c->fiedl1); */
         if (NUM_BUILTINS > fno)
           fprintf(f,"%s",builtin_info[fno].name);

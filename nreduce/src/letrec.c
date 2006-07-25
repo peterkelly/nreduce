@@ -32,6 +32,8 @@
 
 extern int genvar;
 
+list *all_letrecs = NULL;
+
 static int lookup(stack *bound, const char *sym, cell **val)
 {
   *val = NULL;
@@ -84,6 +86,7 @@ static void sub_letrecs(stack *bound, cell **k, scomb *sc)
     stack_pop(bound);
     break;
   case TYPE_LETREC: {
+    list_push(&all_letrecs,(letrec*)(*k)->field1);
     stack_push(bound,*k);
     letrec *rec;
     for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)

@@ -31,6 +31,7 @@
 #include <math.h>
 
 extern int genvar;
+extern list *all_letrecs;
 
 typedef struct abstraction {
   struct abstraction *next;
@@ -99,7 +100,8 @@ static void abstract(cell **k, list **abslist)
   /* Don't abstract partial applications of builtin functions */
   /* FIXME: can we do this for supercombinators also? They may not have their nargs
      computed yet... */
-  if ((TYPE_BUILTIN == celltype(c)) && (nargs < builtin_info[(int)c->field1].nargs)) {
+  if (((TYPE_BUILTIN == celltype(c)) && (nargs < builtin_info[(int)c->field1].nargs)) ||
+      ((TYPE_SCREF == celltype(c)) && (nargs < ((scomb*)c->field1)->nargs))) {
     for (c = *k; TYPE_APPLICATION == celltype(c); c = (cell*)c->field1)
       abstract((cell**)&c->field2,abslist);
     return;
@@ -153,7 +155,23 @@ static int lift_r(stack *boundvars, cell **k, char *lambdavar, list **abslist,
     break;
   }
   case TYPE_LAMBDA: {
-    scomb *sc = add_scomb(NULL,prefix);
+    list *l;
+    char *realname = NULL;
+    for (l = all_letrecs; l; l = l->next) {
+      letrec *rec;
+      for (rec = (letrec*)l->data; rec; rec = rec->next) {
+        if ((rec->value == *k) && (NULL == get_scomb(rec->name))) {
+          realname = rec->name;
+          prefix = rec->name;
+        }
+      }
+    }
+
+    scomb *sc;
+    if (realname)
+      sc = add_scomb(realname,NULL);
+    else
+      sc = add_scomb(NULL,prefix);
     char *name = strdup((char*)(*k)->field1);
     list *newabs = NULL;
 
@@ -169,7 +187,6 @@ static int lift_r(stack *boundvars, cell **k, char *lambdavar, list **abslist,
     sc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
 
     int argno = 0;
-    list *l;
     for (l = newabs; l; l = l->next) {
       abstraction *a = (abstraction*)l->data;
       sc->argnames[argno++] = strdup(a->name);

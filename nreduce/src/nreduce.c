@@ -560,7 +560,6 @@ void graph_optimisation()
   debug_stage("Graph optimisation");
 
   fix_partial_applications();
-  remove_redundant_scombs();
 
   if (trace)
     print_scombs1();
@@ -678,6 +677,7 @@ int main(int argc, char **argv)
   letrec_substitution();
   app_substitution();
   lambda_lifting();
+  remove_redundant_scombs();
   check_scombs_nosharing();
 
   if (ENGINE_REDUCER == args.engine) {

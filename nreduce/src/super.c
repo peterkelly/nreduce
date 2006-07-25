@@ -36,7 +36,6 @@ scomb *scombs = NULL;
 scomb **lastsc = &scombs;
 
 int genvar = 0;
-int nscombs = 0;
 
 scomb *get_scomb_index(int index)
 {
@@ -72,12 +71,17 @@ scomb *add_scomb(char *name, char *prefix)
 
   if (NULL != name) {
     sc->name = strdup(name);
-    nscombs++;
   }
   else {
-    sc->name = (char*)malloc(strlen(prefix)+20);
-    sprintf(sc->name,"%s__%d",prefix,nscombs++);
-    assert(NULL == get_scomb(sc->name));
+    int num = 1;
+    while (1) {
+      sc->name = (char*)malloc(strlen(prefix)+20);
+      sprintf(sc->name,"%s%d",prefix,num);
+      if (NULL == get_scomb(sc->name))
+        break;
+      free(sc->name);
+      num++;
+    }
   }
 
   *lastsc = sc;
@@ -107,53 +111,97 @@ void scomb_free_list(scomb **list)
   }
 }
 
-void varused(cell *c, char *name, int *used)
+void replace_redundant(cell *c)
 {
   if (c->tag & FLAG_PROCESSED)
     return;
   c->tag |= FLAG_PROCESSED;
 
-  assert(TYPE_IND != celltype(c));
-  assert(TYPE_LAMBDA != celltype(c));
-  if ((TYPE_SYMBOL == celltype(c)) && !strcmp((char*)c->field1,name))
-    *used = 1;
-  if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
-    varused((cell*)c->field1,name,used);
-    varused((cell*)c->field2,name,used);
+  switch (celltype(c)) {
+  case TYPE_APPLICATION:
+    replace_redundant((cell*)c->field1);
+    replace_redundant((cell*)c->field2);
+    break;
+  case TYPE_SCREF: {
+    scomb *sc = (scomb*)c->field1;
+    while (TYPE_SCREF == celltype(sc->body))
+      sc = (scomb*)sc->body->field1;
+    c->field1 = sc;
+    break;
+  }
+  case TYPE_SYMBOL:
+  case TYPE_BUILTIN:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  default:
+    assert(0);
+    break;
   }
 }
 
 void remove_redundant_scombs()
 {
-#ifdef REMOVE_REDUNDANT_SUPERCOMBINATORS
+  debug_stage("Removing redundant supercombinators");
+
   scomb *sc;
-  printf("Removing redundant arguments\n");
+  int count = 0;
+  for (sc = scombs; sc; sc = sc->next)
+    count++;
 
+  int *redundant = (int*)calloc(count,sizeof(int));
+
+  int scno = 0;
   for (sc = scombs; sc; sc = sc->next) {
-    while ((0 < sc->nargs) &&
-           (TYPE_APPLICATION == celltype(sc->body)) &&
-           (TYPE_SYMBOL == celltype((cell*)sc->body->field2)) &&
-           (!strcmp(sc->argnames[sc->nargs-1],(char*)((cell*)sc->body->field2)->field1))) {
-      int used = 0;
-      cleargraph(sc->body,FLAG_PROCESSED);
-      varused((cell*)sc->body->field1,sc->argnames[sc->nargs-1],&used);
-
-      if (used) {
-        printf("%s: NOT removing %s\n",sc->name,sc->argnames[sc->nargs-1]);
+    int matching = 0;
+    int argno = 0;
+    cell *c;
+    for (c = sc->body; TYPE_APPLICATION == celltype(c); c = (cell*)c->field1) {
+      cell *arg = (cell*)c->field2;
+      if ((argno < sc->nargs) && (TYPE_SYMBOL == celltype(arg)) &&
+          !strcmp((char*)arg->field1,sc->argnames[sc->nargs-1-argno]))
+        matching++;
+      else
         break;
-      }
-      else {
-        printf("%s: removing %s\n",sc->name,sc->argnames[sc->nargs-1]);
-        /* FIXME: we can only remove the parameter if it isn't used elsewhere in the body! */
-        free(sc->argnames[sc->nargs-1]);
-        sc->nargs--;
-        sc->body = (cell*)sc->body->field1;
-      }
+      argno++;
+    }
+
+    if ((matching == sc->nargs) && (TYPE_SCREF == celltype(c))) {
+      int i;
+      for (i = 0; i < sc->nargs; i++)
+        free(sc->argnames[i]);
+      sc->nargs = 0;
+      sc->body = c;
+      redundant[scno] = 1;
+
+      char *tmp = ((scomb*)c->field1)->name;
+      ((scomb*)c->field1)->name = sc->name;
+      sc->name = tmp;
+    }
+    scno++;
+  }
+
+  scno = 0;
+  for (sc = scombs; sc; sc = sc->next) {
+    cleargraph(sc->body,FLAG_PROCESSED);
+    replace_redundant(sc->body);
+    scno++;
+  }
+
+  scomb **ptr = &scombs;
+  for (scno = 0; scno < count; scno++) {
+    if (redundant[scno]) {
+      *ptr = (*ptr)->next;
+    }
+    else {
+      ptr = &((*ptr)->next);
     }
   }
 
-  printf("Removing redundant supercombinators\n");
-#endif
+  if (trace)
+    print_scombs1();
 }
 
 void fix_partial_applications()
