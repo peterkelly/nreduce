@@ -168,3 +168,98 @@ void lift(scomb *sc)
   lift_r(boundvars,&sc->body,NULL,NULL,sc->name);
   stack_free(boundvars);
 }
+
+void find_vars_r(cell *c, int *pos, char **names)
+{
+  if (c->tag & FLAG_PROCESSED)
+    return;
+  c->tag |= FLAG_PROCESSED;
+
+  switch (celltype(c)) {
+  case TYPE_APPLICATION:
+    find_vars_r((cell*)c->field1,pos,names);
+    find_vars_r((cell*)c->field2,pos,names);
+    break;
+  case TYPE_SYMBOL: {
+    char *sym = (char*)c->field1;
+    int i;
+    for (i = 0; i < *pos; i++)
+      if (!strcmp(sym,names[i]))
+        return;
+    names[(*pos)++] = strdup(sym);
+    break;
+  }
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+void find_vars(cell *c, int *pos, char **names)
+{
+  cleargraph(c,FLAG_PROCESSED);
+  find_vars_r(c,pos,names);
+}
+
+void applift_r(cell **k, scomb *sc)
+{
+  if ((*k)->tag & FLAG_PROCESSED)
+    return;
+  (*k)->tag |= FLAG_PROCESSED;
+
+  switch (celltype(*k)) {
+  case TYPE_APPLICATION: {
+    cell *fun = *k;
+    int nargs = 0;
+    while (TYPE_APPLICATION == celltype(fun)) {
+      fun = (cell*)fun->field1;
+      nargs++;
+    }
+    if ((TYPE_SYMBOL == celltype(fun)) ||
+        ((TYPE_SCREF == celltype(fun)) && (nargs > ((scomb*)fun->field1)->nargs)) ||
+        ((TYPE_BUILTIN == celltype(fun)) && (nargs > builtin_info[(int)fun->field1].nargs))) {
+      scomb *newsc = add_scomb(sc->name);
+      newsc->body = copy_graph(*k);
+      newsc->nargs = 0;
+      newsc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
+      find_vars(newsc->body,&newsc->nargs,newsc->argnames);
+      assert(newsc->nargs <= sc->nargs);
+
+      (*k) = alloc_cell2(TYPE_SCREF,newsc,NULL);
+      int i;
+      for (i = 0; i < newsc->nargs; i++) {
+        cell *varref = alloc_cell2(TYPE_SYMBOL,strdup(newsc->argnames[i]),NULL);
+        cell *app = alloc_cell2(TYPE_APPLICATION,*k,varref);
+        *k = app;
+      }
+    }
+    else {
+      applift_r((cell**)&((*k)->field1),sc);
+      applift_r((cell**)&((*k)->field2),sc);
+    }
+    break;
+  }
+  case TYPE_SYMBOL:
+    break;
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  }
+}
+
+void applift(scomb *sc)
+{
+  cleargraph(sc->body,FLAG_PROCESSED);
+  applift_r(&sc->body,sc);
+}

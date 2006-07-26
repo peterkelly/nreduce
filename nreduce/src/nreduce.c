@@ -572,6 +572,25 @@ void lambda_lifting()
     print_scombs1();
 }
 
+void app_lifting()
+{
+  debug_stage("Application lifting");
+
+  scomb *sc;
+  scomb *last = NULL;
+  for (sc = scombs; sc; sc = sc->next)
+    last = sc;
+
+  scomb *prev = NULL;
+  for (sc = scombs; prev != last; sc = sc->next) {
+    applift(sc);
+    prev = sc;
+  }
+
+  if (trace)
+    print_scombs1();
+}
+
 void graph_optimisation()
 {
   debug_stage("Graph optimisation");
@@ -696,6 +715,8 @@ int main(int argc, char **argv)
 
   app_substitution();
   lambda_lifting();
+  check_scombs_nosharing();
+  app_lifting();
   check_scombs_nosharing();
 
   if (ENGINE_REDUCER == args.engine) {
