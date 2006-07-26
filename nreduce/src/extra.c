@@ -55,7 +55,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "FUNCTION",
 "SCREF",
 "AREF",
-"RES4",
+"HOLE",
 "RES5",
 "RES6",
 "NIL",
@@ -157,6 +157,8 @@ static void print1(char *prefix, cell *c, int indent)
       print1(prefix,(cell*)c->field2,indent+1);
       break;
     }
+    case TYPE_HOLE:
+      printf("(hole)\n"); break;
     case TYPE_NIL:
       printf("nil\n"); break;
     case TYPE_INT:
@@ -348,6 +350,9 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       print_code1(f,(cell*)c->field2,0,0,indent+1,c);
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         fprintf(f,")");
+      break;
+    case TYPE_HOLE:
+      fprintf(f,"(hole)");
       break;
     case TYPE_NIL:
       fprintf(f,"nil");

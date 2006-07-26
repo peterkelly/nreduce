@@ -41,6 +41,7 @@
 
 #define MKAP(_a)           add_instruction(gp,OP_MKAP,(_a),0)
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
+#define REPLACE(_a)        add_instruction(gp,OP_REPLACE,(_a),0)
 #define POP(_a)            add_instruction(gp,OP_POP,(_a),0)
 #define UNWIND()           add_instruction(gp,OP_UNWIND,0,0)
 #define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
@@ -143,6 +144,7 @@ const char *op_names[OP_COUNT] = {
 "PUSHGLOBAL",
 "MKAP",
 "UPDATE",
+"REPLACE",
 "POP",
 "LAST",
 "PRINT",
@@ -307,6 +309,11 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     setstatusat(gp->si,gp->si->count-1,0);
     break;
   case OP_UPDATE:
+    assert(0 <= gp->si->count-1-arg0);
+    setstatusat(gp->si,gp->si->count-1-arg0,statusat(gp->si,gp->si->count-1));
+    popstatus(gp->si,1);
+    break;
+  case OP_REPLACE:
     assert(0 <= gp->si->count-1-arg0);
     setstatusat(gp->si,gp->si->count-1-arg0,statusat(gp->si,gp->si->count-1));
     popstatus(gp->si,1);
@@ -1036,7 +1043,7 @@ void compile(gprogram *gp)
   BIF(B_HEAD);
   PUSH(1);
   BIF(B_TAIL);
-  UPDATE(2);
+  REPLACE(2);
   JUMP(evaladdr-gp->count);
   gp->si = topsi;
 

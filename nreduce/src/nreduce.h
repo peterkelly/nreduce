@@ -50,7 +50,7 @@
 #define TYPE_FUNCTION    0x0A  /* left: nargs(int)         right: address          */
 #define TYPE_SCREF       0x0B  /* left: scomb (scomb*)                             */
 #define TYPE_AREF        0x0C  /* left: array (cell*)      right: index            */
-#define TYPE_RES4        0x0D  /*                                                  */
+#define TYPE_HOLE        0x0D  /*                                                  */
 #define TYPE_RES5        0x0E  /*                                                  */
 #define TYPE_RES6        0x0F  /*                                                  */
 #define TYPE_NIL         0x10  /*                                                  */

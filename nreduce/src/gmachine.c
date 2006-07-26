@@ -32,7 +32,6 @@
 #include <math.h>
 
 extern cell **globcells;
-extern int repl_histogram[NUM_CELLTYPES];
 
 static int address = 0;
 static int exec_stackbase = 0;
@@ -176,23 +175,17 @@ void do_mkap(stack *s, int n)
 
 void do_update(stack *s, int n)
 {
-  cell *res;
   cell *target;
   assert(n < s->count);
   assert(n > 0);
 
-  res = resolve_ind(s->data[s->count-1-n]);
+  target = resolve_ind(s->data[s->count-1-n]);
+  assert((TYPE_APPLICATION == celltype(target)) ||
+         (TYPE_FUNCTION == celltype(target)) ||
+         (TYPE_HOLE == celltype(target)));
+  assert(!(target->tag & FLAG_PINNED));
 
-  if (res->tag & FLAG_PINNED) {
-    s->data[s->count-1-n] = alloc_cell();
-    res = s->data[s->count-1-n];
-  }
-
-  assert(!(res->tag & FLAG_PINNED));
-  free_cell_fields(res);
-  target = res;
-  repl_histogram[celltype(target)]++;
-
+  free_cell_fields(target);
   target->tag = TYPE_IND;
   target->field1 = resolve_ind(s->data[s->count-1]);
   s->count--;
@@ -298,6 +291,14 @@ void execute(gprogram *gp)
     case OP_UPDATE:
       do_update(s,instr->arg0);
       break;
+    case OP_REPLACE: {
+      int n = instr->arg0;
+      assert(n < s->count);
+      assert(n > 0);
+      s->data[s->count-1-n] = s->data[s->count-1];
+      s->count--;
+      break;
+    }
     case OP_POP:
       s->count -= instr->arg0;
       assert(0 <= s->count);
@@ -353,7 +354,7 @@ void execute(gprogram *gp)
          should be save to use globnil everywhere we normally use TYPE_NIL */
       nALLOCs++;
       for (i = 0; i < instr->arg0; i++) {
-        stack_push(s,alloc_cell2(TYPE_NIL,NULL,NULL));
+        stack_push(s,alloc_cell2(TYPE_HOLE,NULL,NULL));
         nALLOCcells++;
       }
       break;

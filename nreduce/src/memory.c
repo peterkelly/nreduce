@@ -41,11 +41,6 @@ extern array *oldnames;
 extern list *all_letrecs;
 
 stack *active_stacks = NULL;
-
-int repl_histogram[NUM_CELLTYPES];
-
-
-
 cell *freeptr = NULL;
 
 /* dumpentry *dump = NULL; */
@@ -98,7 +93,6 @@ cell *globzero = NULL;
 
 void initmem()
 {
-  memset(&repl_histogram,0,NUM_CELLTYPES*sizeof(int));
   memset(&op_usage,0,OP_COUNT*sizeof(int));
   globnil = alloc_cell();
   globnil->tag = TYPE_NIL | FLAG_PINNED;
@@ -422,9 +416,6 @@ void statistics(FILE *f)
   fprintf(f,"ndispgreater = %d\n",ndispgreater);
   fprintf(f,"ndisp0 = %d\n",ndisp0);
   fprintf(f,"ndispother = %d\n",ndispother);
-
-  for (i = 0; i < NUM_CELLTYPES; i++)
-    fprintf(f,"repl_histogram[%s] = %d\n",cell_types[i],repl_histogram[i]);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
