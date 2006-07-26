@@ -17,6 +17,7 @@ nreduce_SOURCES = assembler.c \
 	super.c \
 	lifting.c \
 	graph.c \
+	renaming.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c

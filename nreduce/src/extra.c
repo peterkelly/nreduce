@@ -39,6 +39,7 @@
 
 cell *parse_root = NULL;
 extern gprogram *cur_program;
+extern array *oldnames;
 
 const char *cell_types[NUM_CELLTYPES] = {
 "EMPTY",
@@ -191,6 +192,45 @@ static void print_code_indent(FILE *f, int indent)
     fprintf(f,"  ");
 }
 
+const char *real_varname(const char *sym)
+{
+#ifdef SHOW_SUBSTITUTED_NAMES
+  return sym;
+#else
+  if (!strncmp(sym,"_v",2)) {
+    int varno = atoi(sym+2);
+    assert(oldnames);
+    assert(varno <= (oldnames->size-1)*sizeof(char*));
+    return ((char**)oldnames->data)[varno];
+  }
+  else {
+    return sym;
+  }
+#endif
+}
+
+char *real_scname(const char *sym)
+{
+#ifdef SHOW_SUBSTITUTED_NAMES
+  return strdup(sym);
+#else
+  if (!strncmp(sym,"_v",2)) {
+    char *end = NULL;
+    int varno = strtol(sym+2,&end,10);
+    assert(end);
+    assert(oldnames);
+    assert(varno <= (oldnames->size-1)*sizeof(char*));
+    char *old = ((char**)oldnames->data)[varno];
+    char *fullname = (char*)malloc(strlen(old)+strlen(sym)+1);
+    sprintf(fullname,"%s%s",old,end);
+    return fullname;
+  }
+  else {
+    return strdup(sym);
+  }
+#endif
+}
+
 static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
 {
   c = resolve_ind(c);
@@ -244,7 +284,7 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
     case TYPE_LAMBDA:
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         fprintf(f,"(");
-      fprintf(f,"!%s.",(char*)c->field1);
+      fprintf(f,"!%s.",real_varname((char*)c->field1));
       print_code1(f,(cell*)c->field2,0,0,indent,c);
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         fprintf(f,")");
@@ -263,24 +303,27 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       if (!inlist)
         fprintf(f,"]");
       break;
-    case TYPE_SYMBOL:
-      if ((TYPE_SYMBOL == celltype(c)) && !strncmp((char*)c->field1,"__code",6)) {
-        int fno = atoi((char*)c->field1+6);
+    case TYPE_SYMBOL: {
+      char *sym = (char*)c->field1;
+      if (!strncmp(sym,"__code",6)) {
+        int fno = atoi(sym+6);
         assert(0 <= fno);
-/*         fprintf(f,"%s [",(char*)c->fiedl1); */
         if (NUM_BUILTINS > fno)
           fprintf(f,"%s",builtin_info[fno].name);
         else
           fprintf(f,"%s",get_scomb_index(fno-NUM_BUILTINS)->name);
-/*         fprintf(f,"]"); */
       }
       else {
-        fprintf(f,"%s",(char*)c->field1);
+        fprintf(f,"%s",real_varname(sym));
       }
       break;
-    case TYPE_SCREF:
-      fprintf(f,"%s",((scomb*)c->field1)->name);
+    }
+    case TYPE_SCREF: {
+      char *scname = real_scname(((scomb*)c->field1)->name);
+      fprintf(f,"%s",scname);
+      free(scname);
       break;
+    }
     case TYPE_LETREC: {
       letrec *rec = (letrec*)c->field1;
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
@@ -291,7 +334,7 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       while (rec) {
         fprintf(f,"\n");
         print_code_indent(f,indent+1);
-        fprintf(f,"%s (",rec->name);
+        fprintf(f,"%s (",real_varname(rec->name));
         print_code1(f,rec->value,0,0,indent+2,c);
 
         rec = rec->next;
@@ -382,13 +425,15 @@ void print_code(cell *c)
 void print_scomb_code(scomb *sc)
 {
   int i;
-  debug(0,"%s ",sc->name);
+  char *scname = real_scname(sc->name);
+  debug(0,"%s ",scname);
+  free(scname);
   for (i = 0; i < sc->nargs; i++) {
     if (sc->strictin) {
       if (sc->strictin[i])
         debug(0,"!");
     }
-    debug(0,"%s ",sc->argnames[i]);
+    debug(0,"%s ",real_varname(sc->argnames[i]));
   }
   debug(0,"= ");
   print_code(sc->body);

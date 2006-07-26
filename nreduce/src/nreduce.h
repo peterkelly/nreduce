@@ -27,6 +27,7 @@
 
 //#define DEBUG_GCODE_COMPILATION
 //#define STACK_MODEL_SANITY_CHECK
+//#define SHOW_SUBSTITUTED_NAMES
 
 // Misc
 
@@ -129,15 +130,11 @@ typedef struct cell {
   int tag;
   void *field1;
   void *field2;
-  int level;
 } cell;
 
 #define celltype(_c) ((_c)->tag & TAG_MASK)
 
 typedef struct letrec {
-  int a;
-  int b;
-  int c;
   char *name;
   cell *value;
   struct letrec *next;
@@ -230,9 +227,8 @@ void find_graph_cells(cell ***cells, int *ncells, cell *root);
 scomb *get_scomb_index(int index);
 scomb *get_scomb(const char *name);
 int get_scomb_var(scomb *sc, const char *name);
-scomb *add_scomb(char *name, char *prefix);
+scomb *add_scomb(const char *name);
 void scomb_free_list(scomb **list);
-void remove_redundant_scombs();
 void fix_partial_applications();
 void check_scombs_nosharing();
 
@@ -252,6 +248,10 @@ int graph_size(cell *c);
 cell *copy_graph(cell *c);
 void find_graph_cells(cell ***cells, int *ncells, cell *root);
 
+/* new */
+
+void rename_variables(scomb *sc);
+
 /* extra */
 
 void fatal(const char *msg);
@@ -263,6 +263,8 @@ void print_code(cell *c);
 void print_scomb_code(scomb *sc);
 void print_scombs1();
 void print_scombs2();
+const char *real_varname(const char *sym);
+char *real_scname(const char *sym);
 
 /* jit */
 void print_cell(cell *c);

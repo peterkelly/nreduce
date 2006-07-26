@@ -37,6 +37,8 @@ int trace = 0;
 
 extern cell **globcells;
 extern array *lexstring;
+extern array *oldnames;
+extern list *all_letrecs;
 
 stack *active_stacks = NULL;
 
@@ -128,7 +130,6 @@ cell *alloc_cell()
   if (maxcells < ncells)
     maxcells = ncells;
   nallocs++;
-  c->level = -1;
   totalallocs++;
   return c;
 }
@@ -320,6 +321,11 @@ void cleanup()
   free(dumpstack);
   if (lexstring)
     array_free(lexstring);
+  if (oldnames) {
+    for (i = 0; i < oldnames->size/sizeof(char*); i++)
+      free(((char**)oldnames->data)[i]);
+    array_free(oldnames);
+  }
 }
 
 stack *stack_new()

@@ -44,6 +44,8 @@ extern char *yyfilename;
 extern cell *parse_root;
 extern char *code_start;
 extern int resolve_ind_offset;
+extern array *oldnames;
+extern list *all_letrecs;
 
 FILE *statsfile = NULL;
 
@@ -294,7 +296,7 @@ void source_code_parsing()
       exit(1);
     }
 
-    scomb *sc = add_scomb(namestr,NULL);
+    scomb *sc = add_scomb(namestr);
     sc->nargs = nargs;
     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
     int i = 0;
@@ -439,6 +441,18 @@ void letrec_creation()
     print_scombs1();
 }
 
+void variable_renaming()
+{
+  debug_stage("Variable renaming");
+
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    rename_variables(sc);
+
+  if (trace)
+    print_scombs1();
+}
+
 void letrec_substitution()
 {
   debug_stage("Letrec substitution");
@@ -550,6 +564,9 @@ void lambda_lifting()
 
   for (sc = scombs; sc; sc = sc->next)
     sc->body = copy_graph(sc->body);
+
+  list_free(all_letrecs,NULL);
+  all_letrecs = NULL;
 
   if (trace)
     print_scombs1();
@@ -674,10 +691,11 @@ int main(int argc, char **argv)
 
   source_code_parsing();
   letrec_creation();
+  variable_renaming();
   letrec_substitution();
+
   app_substitution();
   lambda_lifting();
-  remove_redundant_scombs();
   check_scombs_nosharing();
 
   if (ENGINE_REDUCER == args.engine) {
