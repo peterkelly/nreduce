@@ -35,33 +35,17 @@
 
 int trace = 0;
 
-extern cell **globcells;
+static int framecount = 0;
+static int active_framecount = 0;
+static int framecellcount = 0;
+static frame *freeframe = NULL;
+
 extern array *lexstring;
 extern array *oldnames;
 extern list *all_letrecs;
 
-stack *active_stacks = NULL;
+frame *active_frames = NULL;
 cell *freeptr = NULL;
-
-/* dumpentry *dump = NULL; */
-
-dumpentry *dumpstack = NULL;
-int dumpalloc = 0;
-int dumpcount = 0;
-
-dumpentry *pushdump()
-{
-  if (dumpalloc <= dumpcount) {
-    if (0 == dumpalloc)
-      dumpalloc = 2;
-    else
-      dumpalloc *= 2;
-    dumpstack = (dumpentry*)realloc(dumpstack,dumpalloc*sizeof(dumpentry));
-  }
-  dumpcount++;
-/*   printf("pushdump: dumpstack = %p, dumpcount = %d\n",dumpstack,dumpcount); */
-  return &dumpstack[dumpcount-1];
-}
 
 block *blocks = NULL;
 int nblocks = 0;
@@ -76,7 +60,6 @@ int nresindnoch = 0;
 int nresindch = 0;
 int nALLOCs = 0;
 int nALLOCcells = 0;
-int ndumpallocs = 0;
 int nunwindsvar = 0;
 int nunwindswhnf = 0;
 int nreductions = 0;
@@ -85,6 +68,9 @@ int ndispless = 0;
 int ndispgreater = 0;
 int ndisp0 = 0;
 int ndispother = 0;
+int nframes = 0;
+int maxdepth = 0;
+int maxframes = 0;
 
 cell *pinned = NULL;
 cell *globnil = NULL;
@@ -134,12 +120,35 @@ cell *alloc_cell2(int tag, void *field1, void *field2)
   c->tag = tag;
   c->field1 = field1;
   c->field2 = field2;
+  if (TYPE_FRAME == tag)
+    framecellcount++;
   return c;
 }
 
 cell *alloc_sourcecell(const char *filename, int lineno)
 {
   return alloc_cell();
+}
+
+void mark(cell *c);
+void mark_frame(frame *f)
+{
+/*   printf("mark_frame %p (cell %p)\n",f,f->c); */
+  if (f->completed) {
+    assert(!"completed frame referenced from here");
+  }
+  if (f->c)
+    mark(f->c);
+  int i;
+  for (i = 0; i < f->s->count; i++)
+    mark(f->s->data[i]);
+}
+
+void mark_cap(cap *c)
+{
+  int i;
+  for (i = 0; i < c->s->count; i++)
+    mark(c->s->data[i]);
 }
 
 int nreachable = 0;
@@ -194,6 +203,12 @@ void mark(cell *c)
       mark(arr->sizecell);
     break;
   }
+  case TYPE_FRAME:
+    mark_frame((frame*)c->field1);
+    break;
+  case TYPE_CAP:
+    mark_cap((cap*)c->field1);
+    break;
   default:
     break;
   }
@@ -223,6 +238,23 @@ void free_cell_fields(cell *c)
     free(arr->refs);
     free(arr);
     break;
+  }
+  case TYPE_FRAME: {
+/*     printf("here at frame\n"); */
+    /* note: we don't necessarily free frames here... this is only safe to do after the frame
+       has finished executing */
+    frame *f = (frame*)c->field1;
+    f->c = NULL;
+    if (!f->active)
+      frame_dealloc(f);
+    else printf("free_cell_fields: frame still active\n");
+
+    framecellcount--;
+    break;
+  }
+  case TYPE_CAP: {
+    cap *cp = (cap*)c->field1;
+    cap_dealloc(cp);
   }
   }
 }
@@ -260,13 +292,9 @@ void collect()
     }
   }
   else {
-    stack *s;
-    for (s = active_stacks; s; s = s->next) {
-      for (i = 0; i < s->count; i++) {
-        s->data[i] = resolve_ind(s->data[i]);
-        mark(s->data[i]);
-      }
-    }
+    frame *f;
+    for (f = active_frames; f; f = f->next)
+      mark_frame(f);
   }
   for (sc = scombs; sc; sc = sc->next)
     mark(sc->body);
@@ -303,6 +331,14 @@ void cleanup()
 
   collect();
 
+  frame *f = freeframe;
+  while (f) {
+    frame *next = f->freelnk;
+    f->c = NULL;
+    frame_free(f);
+    f = next;
+  }
+
   bl = blocks;
   while (bl) {
     block *next = bl->next;
@@ -311,8 +347,6 @@ void cleanup()
   }
   free(addressmap);
   free(noevaladdressmap);
-  free(globcells);
-  free(dumpstack);
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
@@ -320,26 +354,134 @@ void cleanup()
       free(((char**)oldnames->data)[i]);
     array_free(oldnames);
   }
+  list_free(all_letrecs,NULL);
+}
+
+void add_active_frame(frame *f)
+{
+  assert(!f->active);
+  assert(NULL == f->next);
+  f->active = 1;
+  f->next = active_frames;
+  active_frames = f;
+  active_framecount++;
+}
+
+void remove_active_frame(frame *f)
+{
+  assert(f->active);
+  f->active = 0;
+  f->completed = 1;
+  frame **ptr = &active_frames;
+  while (*ptr != f)
+    ptr = &((*ptr)->next);
+  *ptr = f->next;
+  f->next = NULL;
+  active_framecount--;
+
+  assert(NULL == f->c);
+  frame_dealloc(f);
+
+#if 0
+  if (NULL == f->c) {
+    frame_dealloc(f);
+  }
+  else {
+    printf("remove_active_frame %p (cell %p): still referenced\n",f,f->c);
+    assert(TYPE_FRAME == celltype(f->c));
+    assert(f == f->c->field1);
+    assert(!(f->c->tag & FLAG_PINNED));
+/*     f->c = NULL; */
+/*     frame_dealloc(f); */
+  }
+#endif
+}
+
+frame *frame_new(int fno)
+{
+  frame *f = (frame*)calloc(1,sizeof(frame));
+  f->fno = fno;
+  f->s = stack_new();
+  nframes++;
+  framecount++;
+/*   printf("framecount = %d, cells = %d, active = %d\n",framecount,framecellcount,active_framecount); */
+  if (framecount > maxframes)
+    maxframes = framecount;
+  return f;
+}
+
+void frame_free(frame *f)
+{
+  assert(NULL == f->c);
+  assert(!f->active);
+  stack_free(f->s);
+  free(f);
+  framecount--;
+}
+
+frame *frame_alloc(int fno)
+{
+  if (freeframe) {
+    frame *f = freeframe;
+    freeframe = freeframe->freelnk;
+    f->c = NULL;
+    f->fno = fno;
+    f->address = 0;
+    f->d = NULL;
+    f->s->count = 0;
+    f->next = NULL;
+    f->active = 0;
+    f->completed = 0;
+    f->freelnk = NULL;
+    return f;
+  }
+  else {
+    return frame_new(fno);
+  }
+}
+
+void frame_dealloc(frame *f)
+{
+  f->freelnk = freeframe;
+  freeframe = f;
+/*   frame_free(f); */
+}
+
+int frame_depth(frame *f)
+{
+  int depth = 0;
+  while (f) {
+    depth++;
+    f = f->d;
+  }
+  return depth;
+}
+
+cap *cap_alloc()
+{
+  cap *c = (cap*)calloc(1,sizeof(cap));
+  c->s = stack_new();
+  return c;
+}
+
+void cap_dealloc(cap *c)
+{
+  stack_free(c->s);
+  free(c);
 }
 
 stack *stack_new()
 {
   stack *s = (stack*)calloc(1,sizeof(stack));
-  s->alloc = 4;
+  s->alloc = 1;
   s->count = 0;
   s->base = 0;
   s->data = malloc(s->alloc*sizeof(void*));
-  s->next = active_stacks;
-  active_stacks = s;
   return s;
 }
 
 void stack_free(stack *s)
 {
-  stack **ptr = &active_stacks;
-  while (*ptr != s)
-    ptr = &((*ptr)->next);
-  *ptr = s->next;
   free(s->data);
   free(s);
 }
@@ -407,7 +549,6 @@ void statistics(FILE *f)
   fprintf(f,"nALLOCcells = %d\n",nALLOCcells);
   fprintf(f,"resolve_ind() total = %d\n",nresindch+nresindnoch);
   fprintf(f,"resolve_ind() ratio = %f\n",((double)nresindch)/((double)nresindnoch));
-  fprintf(f,"ndumpallocs = %d\n",ndumpallocs);
   fprintf(f,"nunwindsvar = %d\n",nunwindsvar);
   fprintf(f,"nunwindswhnf = %d\n",nunwindswhnf);
   fprintf(f,"nreductions = %d\n",nreductions);
@@ -416,6 +557,9 @@ void statistics(FILE *f)
   fprintf(f,"ndispgreater = %d\n",ndispgreater);
   fprintf(f,"ndisp0 = %d\n",ndisp0);
   fprintf(f,"ndispother = %d\n",ndispother);
+  fprintf(f,"nframes = %d\n",nframes);
+  fprintf(f,"maxdepth = %d\n",maxdepth);
+  fprintf(f,"maxframes = %d\n",maxframes);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
@@ -449,7 +593,7 @@ void copy_cell(cell *redex, cell *source)
     redex->field1 = strdup((char*)redex->field1);
 }
 
-void print_stack(int redex, cell **stk, int size, int dir)
+void print_stack(cell **stk, int size, int dir)
 {
   int i;
 
@@ -460,10 +604,8 @@ void print_stack(int redex, cell **stk, int size, int dir)
 
 
   while (1) {
-    int wasdump = 0;
     cell *c;
     int pos = dir ? (size-1-i) : i;
-    int dpos;
 
     if (dir && i < 0)
       break;
@@ -472,22 +614,9 @@ void print_stack(int redex, cell **stk, int size, int dir)
       break;
 
     c = resolve_ind(stk[i]);
-
-    for (dpos = 0; dpos < dumpcount; dpos++) {
-      if (dumpstack[dpos].stackcount-1 == i) {
-        debug(0,"  D%-2d ",dumpcount-1-dpos);
-        wasdump = 1;
-        break;
-      }
-    }
-
-    if (!wasdump)
-      debug(0,"      ");
-
-    debug(0,"%2d: %p %12s ",pos,c,cell_types[celltype(c)]);
+/*     debug(0,"%2d: %p %12s ",pos,c,cell_types[celltype(c)]); */
+    debug(0,"%2d: %12s ",pos,cell_types[celltype(c)]);
     print_code(c);
-    if (i == redex)
-      debug(0," <----- redex");
     debug(0,"\n");
 
     if (dir)

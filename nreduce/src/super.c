@@ -65,8 +65,13 @@ int get_scomb_var(scomb *sc, const char *name)
   return -1;
 }
 
-scomb *add_scomb(const char *name)
+scomb *add_scomb(const char *name1)
 {
+  char *name = strdup(name1);
+  char *hashpos = strchr(name,'#');
+  if (hashpos)
+    *hashpos = '\0';
+
   scomb *sc = (scomb*)calloc(1,sizeof(scomb));
   int num = 0;
   while (1) {
@@ -84,6 +89,7 @@ scomb *add_scomb(const char *name)
   *lastsc = sc;
   lastsc = &sc->next;
 
+  free(name);
   return sc;
 }
 

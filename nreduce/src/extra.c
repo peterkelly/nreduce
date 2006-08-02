@@ -52,12 +52,12 @@ const char *cell_types[NUM_CELLTYPES] = {
 "RES2",
 "RES3",
 "IND",
-"FUNCTION",
+"RES1",
 "SCREF",
 "AREF",
 "HOLE",
-"RES5",
-"RES6",
+"FRAME",
+"CAP",
 "NIL",
 "INT",
 "DOUBLE",
@@ -170,9 +170,6 @@ static void print1(char *prefix, cell *c, int indent)
     case TYPE_STRING:
       printf("%s\n",(char*)c->field1);
       break;
-    case TYPE_FUNCTION:
-      printf("f/%d/%d\n",(int)c->field1,(int)c->field2);
-      break;
     default:
       printf("**** INVALID\n");
       assert(0);
@@ -231,6 +228,23 @@ char *real_scname(const char *sym)
     return strdup(sym);
   }
 #endif
+}
+
+static void print_abbrev_stack(stack *s)
+{
+  int i;
+  for (i = 0; i < s->count; i++) {
+    if (0 < i)
+      printf(" ");
+    cell *c = resolve_ind((cell*)s->data[i]);
+    if ((TYPE_NIL == celltype(c)) ||
+        (TYPE_INT == celltype(c)) ||
+        (TYPE_DOUBLE == celltype(c)) ||
+        (TYPE_STRING == celltype(c)))
+      print_code(c);
+    else
+      printf("?");
+  }
 }
 
 static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, cell *parent)
@@ -377,19 +391,6 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       fprintf(f,"\"");
       break;
     }
-    case TYPE_FUNCTION:
-      if (NULL != cur_program) {
-        ginstr *instr = &cur_program->ginstrs[(int)c->field2];
-        assert(OP_GLOBSTART == instr->opcode);
-        if (NUM_BUILTINS > instr->arg0)
-          fprintf(f,"[%s]",builtin_info[instr->arg0].name);
-        else
-          fprintf(f,"[%s]",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
-      }
-      else {
-        fprintf(f,"[fun %d/%d]",(int)c->field1,(int)c->field2);
-      }
-      break;
     case TYPE_AREF: {
       cell *arrcell = (cell*)c->field1;
       carray *arr = (carray*)arrcell->field1;
@@ -411,6 +412,22 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
     }
     default:
       assert(0);
+      break;
+    }
+    case TYPE_FRAME: {
+      frame *f = (frame*)c->field1;
+/*       printf("(FRAME %d %s)",f->s->count,function_name(f->fno)); */
+      printf("(FRAME (");
+      print_abbrev_stack(f->s);
+      printf(") %s)",function_name(f->fno));
+      break;
+    }
+    case TYPE_CAP: {
+      cap *cp = (cap*)c->field1;
+/*       printf("(CAP %d %s)",cp->s->count,function_name(cp->fno)); */
+      printf("(CAP (");
+      print_abbrev_stack(cp->s);
+      printf(") %s)",function_name(cp->fno));
       break;
     }
     }

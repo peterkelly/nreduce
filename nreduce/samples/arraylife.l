@@ -5,7 +5,7 @@
    (reduce     (!f.!init.!lst.if lst (f (head lst) (reduce f init (tail lst))) init))
    (for        (!min.!max.!f.map f (range min max)))
 
-   (forceall   (!lst.!total.if lst (forceall (tail lst) (+ total 1)) total))
+   (forceall   (!lst.!total.if total (if lst (forceall (tail lst) (+ total 1)) total) nil))
    (len        (!lst.
      (let ((alen (arrayoptlen lst)))
           (if (alen)

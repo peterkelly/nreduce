@@ -20,8 +20,6 @@
  *
  */
 
-#define USE_DISPATCH
-
 #include "grammar.tab.h"
 #include "gcode.h"
 #include "nreduce.h"
@@ -35,28 +33,23 @@
 
 #define GCODE_C
 
-#define RSOPT
-#define ESOPT
-//#define ALLSTRICT
-
-#define MKAP(_a)           add_instruction(gp,OP_MKAP,(_a),0)
+#define MKCAP(_a,_b)       add_instruction(gp,OP_MKCAP,(_a),(_b))
+#define MKFRAME(_a,_b)     add_instruction(gp,OP_MKFRAME,(_a),(_b))
+#define JFUN(_a)           add_instruction(gp,OP_JFUN,(_a),0)
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
 #define REPLACE(_a)        add_instruction(gp,OP_REPLACE,(_a),0)
 #define POP(_a)            add_instruction(gp,OP_POP,(_a),0)
-#define UNWIND()           add_instruction(gp,OP_UNWIND,0,0)
+#define DO()               add_instruction(gp,OP_DO,0,0)
 #define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
 #define RETURN()           add_instruction(gp,OP_RETURN,0,0)
 #define PUSH(_a)           add_instruction(gp,OP_PUSH,(_a),0)
 #define LAST()             add_instruction(gp,OP_LAST,0,0)
 #define BIF(_a)            add_instruction(gp,OP_BIF,(_a),0)
-#define JUMP(_a)           add_instruction(gp,OP_JUMP,(_a),0)
-#define JFALSE(_a)         add_instruction(gp,OP_JFALSE,(_a),0)
+#define JUMPrel(_a)        add_instruction(gp,OP_JUMP,(_a),0)
 #define GLOBSTART(_a,_b)   add_instruction(gp,OP_GLOBSTART,(_a),(_b))
 #define END()              add_instruction(gp,OP_END,0,0)
-#define JEMPTY(_a)         add_instruction(gp,OP_JEMPTY,(_a),0)
 #define PRINT()            add_instruction(gp,OP_PRINT,0,0)
 #define ISTYPE(_a)         add_instruction(gp,OP_ISTYPE,(_a),0)
-#define PUSHGLOBAL(_a,_b)  add_instruction(gp,OP_PUSHGLOBAL,(_a),(_b))
 #define BEGIN()            add_instruction(gp,OP_BEGIN,0,0)
 #define CALL(_a)           add_instruction(gp,OP_CALL,(_a),0)
 #define ALLOC(_a)          add_instruction(gp,OP_ALLOC,(_a),0)
@@ -65,15 +58,19 @@
 #define PUSHDOUBLE(_a,_b)  add_instruction(gp,OP_PUSHDOUBLE,(_a),(_b))
 #define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
 #define SQUEEZE(_a,_b)     add_instruction(gp,OP_SQUEEZE,(_a),(_b))
-#define DISPATCH(_a)       add_instruction(gp,OP_DISPATCH,(_a),0)
 
-cell **globcells = NULL;
+#define JFALSE(addr)       { addr = gp->count; add_instruction(gp,OP_JFALSE,0,0); }
+#define JUMP(addr)         { addr = gp->count; add_instruction(gp,OP_JUMP,0,0); }
+#define JEMPTY(addr)       { addr = gp->count; add_instruction(gp,OP_JEMPTY,0,0); }
+#define LABEL(addr)        { gp->ginstrs[addr].arg0 = gp->count-addr; }
+
 int *addressmap = NULL;
 int *noevaladdressmap = NULL;
 int nfunctions = 0;
+int evaldoaddr = 0;
 
 int op_usage[OP_COUNT];
-int cdepth = 0;
+int cdepth = -1;
 
 
 stackinfo *stackinfo_new(stackinfo *source)
@@ -126,36 +123,41 @@ void popstatus(stackinfo *si, int n)
   assert(0 <= si->count);
 }
 
+void stackinfo_newswap(stackinfo **si, stackinfo **tmp)
+{
+  *tmp = *si;
+  *si = stackinfo_new(*si);
+}
 
-
-
-
-
-
+void stackinfo_freeswap(stackinfo **si, stackinfo **tmp)
+{
+  stackinfo_free(*si);
+  *si = *tmp;
+}
 
 const char *op_names[OP_COUNT] = {
 "BEGIN",
 "END",
+"LAST",
 "GLOBSTART",
 "EVAL",
-"UNWIND",
 "RETURN",
-"PUSH",
-"PUSHGLOBAL",
-"MKAP",
-"UPDATE",
-"REPLACE",
-"POP",
-"LAST",
-"PRINT",
-"BIF",
+"DO",
+"JFUN",
 "JFALSE",
 "JUMP",
 "JEMPTY",
-"ISTYPE",
+"PUSH",
+"POP",
+"UPDATE",
+"REPLACE",
 "ALLOC",
 "SQUEEZE",
-"DISPATCH",
+"MKCAP",
+"MKFRAME",
+"BIF",
+"PRINT",
+"ISTYPE",
 "PUSHNIL",
 "PUSHINT",
 "PUSHDOUBLE",
@@ -175,6 +177,41 @@ void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
     printf(" (e)");
   if (0 < n)
     printf(" %d",n);
+  printf("\n");
+#endif
+}
+
+void print_comp2(char *fname, cell *c, int n, const char *format, ...)
+{
+#ifdef DEBUG_GCODE_COMPILATION
+  debug(cdepth,"%s [ ",fname);
+  print_code(c);
+  printf(" ]");
+  printf(" %d",n);
+  va_list ap;
+  va_start(ap,format);
+  vprintf(format,ap);
+  va_end(ap);
+  printf("\n");
+#endif
+}
+
+void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...)
+{
+#ifdef DEBUG_GCODE_COMPILATION
+  debug(cdepth,"%s [ ",fname);
+  int i;
+  for (i = exprs->count-1; 0 <= i; i--) {
+    if (i < exprs->count-1)
+      printf(", ");
+    print_code((cell*)exprs->data[i]);
+  }
+  printf(" ]");
+  printf(" %d",n);
+  va_list ap;
+  va_start(ap,format);
+  vprintf(format,ap);
+  va_end(ap);
   printf("\n");
 #endif
 }
@@ -248,8 +285,14 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   }
 
   #ifdef DEBUG_GCODE_COMPILATION
-  if (gp->si) {
-    printf(":%d ",gp->si->count);
+  if (gp->si && (0 <= cdepth)) {
+    int i;
+    for (i = 0; i < cdepth; i++)
+      printf("  ");
+    printf("==> ");
+    for (i = 0; i < 6-cdepth; i++)
+      printf("  ");
+    printf("%d ",gp->si->count);
 /*     printf("stackinfo"); */
 /*     int i; */
 /*     for (i = 0; i < gp->si->count; i++) { */
@@ -257,7 +300,7 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
 /*     } */
 /*     printf("\n"); */
   }
-  print_ginstr(gp->count-1,instr,0);
+  print_ginstr(gp,gp->count-1,instr,0);
   #endif
 
   if (!gp->si)
@@ -268,17 +311,13 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     break;
   case OP_END:
     break;
+  case OP_LAST:
+    break;
   case OP_GLOBSTART:
     break;
   case OP_EVAL:
     assert(0 <= gp->si->count-1-arg0);
     setstatusat(gp->si,gp->si->count-1-arg0,1);
-    break;
-  case OP_UNWIND:
-    // After UNWIND we don't know what the stack size will be... but since it's always the
-    // last instruction this is ok. Mark the stackinfo object as invalid to indicate the
-    // information in it can't be relied upon anymore.
-    gp->si->invalid = 1;
     break;
   case OP_RETURN:
     // After RETURN we don't know what the stack size will be... but since it's always the
@@ -286,27 +325,26 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     // information in it can't be relied upon anymore.
     gp->si->invalid = 1;
     break;
+  case OP_DO:
+    gp->si->invalid = 1;
+    break;
+  case OP_JFUN:
+    gp->si->invalid = 1;
+    break;
+  case OP_JFALSE:
+    popstatus(gp->si,1);
+    break;
+  case OP_JUMP:
+    break;
+  case OP_JEMPTY:
+    break;
   case OP_PUSH:
     assert(0 <= gp->si->count-1-arg0);
     pushstatus(gp->si,statusat(gp->si,gp->si->count-1-arg0));
     break;
-  case OP_PUSHGLOBAL: {
-    int fno = arg0;
-    cell *src = globcells[fno];
-    assert(TYPE_FUNCTION == celltype(src));
-    if ((fno >= NUM_BUILTINS) &&
-        (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
-      pushstatus(gp->si,0);
-    }
-    else {
-      pushstatus(gp->si,1);
-    }
-    break;
-  }
-  case OP_MKAP:
+  case OP_POP:
     assert(0 <= gp->si->count-1-arg0);
     popstatus(gp->si,arg0);
-    setstatusat(gp->si,gp->si->count-1,0);
     break;
   case OP_UPDATE:
     assert(0 <= gp->si->count-1-arg0);
@@ -317,29 +355,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     assert(0 <= gp->si->count-1-arg0);
     setstatusat(gp->si,gp->si->count-1-arg0,statusat(gp->si,gp->si->count-1));
     popstatus(gp->si,1);
-    break;
-  case OP_POP:
-    assert(0 <= gp->si->count-1-arg0);
-    popstatus(gp->si,arg0);
-    break;
-  case OP_LAST:
-    break;
-  case OP_PRINT:
-    popstatus(gp->si,1);
-    break;
-  case OP_BIF:
-    popstatus(gp->si,builtin_info[arg0].nargs-1);
-    setstatusat(gp->si,gp->si->count-1,builtin_info[arg0].reswhnf);
-    break;
-  case OP_JFALSE:
-    popstatus(gp->si,1);
-    break;
-  case OP_JUMP:
-    break;
-  case OP_JEMPTY:
-    break;
-  case OP_ISTYPE:
-    setstatusat(gp->si,gp->si->count-1,1);
     break;
   case OP_ALLOC: {
     int i;
@@ -354,11 +369,25 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
             arg0*sizeof(int));
     gp->si->count -= arg1;
     break;
-  case OP_DISPATCH:
-    // After DISPATCH we don't know what the stack size will be... but since it's always the
-    // last instruction this is ok. Mark the stackinfo object as invalid to indicate the
-    // information in it can't be relied upon anymore.
-    gp->si->invalid = 1;
+  case OP_MKCAP:
+    assert(0 <= gp->si->count-arg1);
+    popstatus(gp->si,arg1);
+    pushstatus(gp->si,0);
+    break;
+  case OP_MKFRAME:
+    assert(0 <= gp->si->count-arg1);
+    popstatus(gp->si,arg1);
+    pushstatus(gp->si,0);
+    break;
+  case OP_BIF:
+    popstatus(gp->si,builtin_info[arg0].nargs-1);
+    setstatusat(gp->si,gp->si->count-1,builtin_info[arg0].reswhnf);
+    break;
+  case OP_PRINT:
+    popstatus(gp->si,1);
+    break;
+  case OP_ISTYPE:
+    setstatusat(gp->si,gp->si->count-1,1);
     break;
   case OP_PUSHNIL:
     pushstatus(gp->si,1);
@@ -378,27 +407,64 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   }
 }
 
-void print_ginstr(int address, ginstr *instr, int usage)
+int cell_fno(cell *c)
+{
+  assert((TYPE_BUILTIN == celltype(c)) ||
+         (TYPE_SCREF == celltype(c)));
+  if (TYPE_BUILTIN == celltype(c))
+    return (int)c->field1;
+  else if (TYPE_SCREF == celltype(c))
+    return ((scomb*)c->field1)->index+NUM_BUILTINS;
+  else
+    return -1;
+}
+
+const char *function_name(int fno)
+{
+  /* FIXME: this leaks memory, since real_scname makes a copy */
+  if (0 > fno)
+    return "(unknown)";
+  else if (NUM_BUILTINS > fno)
+    return builtin_info[fno].name;
+  else
+    return real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
+}
+
+int function_nargs(int fno)
+{
+  assert(0 <= fno);
+  if (NUM_BUILTINS > fno)
+    return builtin_info[fno].nargs;
+  else
+    return get_scomb_index(fno-NUM_BUILTINS)->nargs;
+}
+
+void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
 {
   assert(OP_COUNT > instr->opcode);
 
-  printf("%-6d %-12s %-11d %-11d",
+  printf("%-6d %-12s %-6d %-6d",
          address,op_names[instr->opcode],instr->arg0,instr->arg1);
   if (0 <= instr->expcount)
-    printf(" %-9d",instr->expcount);
+    printf(" %-4d",instr->expcount);
   else
-    printf("            ");
+    printf("       ");
   if (usage)
-    printf(" u:%-11d",instr->usage);
+    printf(" u:%-6d",instr->usage);
   printf("    ");
 
-  if (OP_GLOBSTART == instr->opcode) {
-    if (NUM_BUILTINS > instr->arg0)
+  switch (instr->opcode) {
+  case OP_GLOBSTART:
+    if (NUM_BUILTINS > instr->arg0) {
       printf("; Builtin %s",builtin_info[instr->arg0].name);
-    else
-      printf("; Supercombinator %s",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
-  }
-  else if (OP_PUSH == instr->opcode) {
+    }
+    else {
+      char *name = real_scname(get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
+      printf("; Supercombinator %s",name);
+      free(name);
+    }
+    break;
+  case OP_PUSH:
     if (0 <= instr->expcount) {
       ginstr *program = instr-address;
       int funstart = address;
@@ -409,21 +475,30 @@ void print_ginstr(int address, ginstr *instr, int usage)
         scomb *sc = get_scomb_index(program[funstart].arg0-NUM_BUILTINS);
         int stackpos = instr->expcount-instr->arg0-1;
         if ((stackpos > 0) && (stackpos <= sc->nargs))
-          printf("; PUSH %s",sc->argnames[sc->nargs-stackpos]);
+          printf("; PUSH %s",real_varname(sc->argnames[sc->nargs-stackpos]));
       }
     }
-  }
-  else if (OP_PUSHGLOBAL == instr->opcode) {
-    if (instr->arg0 < NUM_BUILTINS)
-      printf("; PUSHGLOBAL %s",builtin_info[instr->arg0].name);
-    else
-      printf("; PUSHGLOBAL %s",get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
-  }
-  else if (OP_BIF == instr->opcode) {
+    break;
+  case OP_PUSHSTRING:
+    printf("; PUSHSTRING \"%s\"",(char*)(((cell**)gp->stringmap->data)[instr->arg0])->field1);
+    break;
+  case OP_MKFRAME:
+    printf("; MKFRAME %s %d",function_name(instr->arg0),instr->arg1);
+    break;
+  case OP_MKCAP:
+    printf("; MKCAP %s %d",function_name(instr->arg0),instr->arg1);
+    break;
+  case OP_JFUN:
+    printf("; JFUN %s",function_name(instr->arg0));
+    break;
+  case OP_BIF:
     printf("; %s",builtin_info[instr->arg0].name);
-  }
-  else if (OP_ISTYPE == instr->opcode) {
+    break;
+  case OP_ISTYPE:
     printf("; ISTYPE %s",cell_types[instr->arg0]);
+    break;
+  default:
+    break;
   }
 
   printf("\n");
@@ -448,7 +523,7 @@ void print_program(gprogram *gp, int builtins, int usage)
       printf("\n");
       prevfun = gp->ginstrs[i].arg0;
     }
-    print_ginstr(i,&gp->ginstrs[i],usage);
+    print_ginstr(gp,i,&gp->ginstrs[i],usage);
   }
 
   printf("\n");
@@ -523,7 +598,7 @@ typedef struct pmap {
   int *indexes;
 } pmap;
 
-int p(pmap *pm, char *varname)
+int presolve(pmap *pm, char *varname)
 {
   int i;
   for (i = 0; i < pm->count; i++)
@@ -534,20 +609,19 @@ int p(pmap *pm, char *varname)
   return -1;
 }
 
-void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int n);
-
+void C(gprogram *gp, cell *c, pmap *p, int n);
 void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
 {
   letrec *rec;
-  int n = 1;
+  int n = 0;
 
   for (rec = (letrec*)c->field1; rec; rec = rec->next)
     n++;
 
   ALLOC(n);
   for (rec = (letrec*)c->field1; rec; rec = rec->next) {
-    C(gp,rec->value,d,pm,0,0,0);
-    UPDATE(d+1-p(pm,rec->name));
+    C(gp,rec->value,pm,d);
+    UPDATE(d+1-presolve(pm,rec->name));
   }
 }
 
@@ -556,7 +630,6 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
   int ndefs = 0;
   int i = 0;
   letrec *rec;
-  int top;
 
   for (rec = (letrec*)c->field1; rec; rec = rec->next)
     ndefs++;
@@ -571,7 +644,6 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
 
   *d2 = dold;
 
-  top = ++(*d2); /* __top - to be replaced with supercombinator body */
   for (rec = (letrec*)c->field1; rec; rec = rec->next) {
     pprime->varnames[pm->count+i] = rec->name;
     pprime->indexes[pm->count+i] = ++(*d2);
@@ -579,336 +651,207 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
   }
 }
 
-/**
- * Main compilation scheme. Recursively compiles the code for the given cell, applying
- * optimisations as appropriate
- *
- * @param gp Data structure representing the compiled code
- *
- * @param c The cell to recursively compile
- *
- * @param d Depth of the current stack frame
- *
- * @param p Map from variable name to position from frame start
- *
- * @param isresult If true, then the code compiled for the current cell constitutes
- *                 the results of the function, i.e. there will be no operations performed
- *                 after this. The compiler should therefore generate the instructions
- *                 necessary to complete execution of the current function, either directly
- *                 or as part of a recursive call with isresult also set to true.
- *                 This corresponds to the R and RS schemes in IFPL.
- *
- * @param needseval If true, the caller expects that after executing the code compiled by this
- *                  function, the top element in the stack will be evaluated to WHNF. In the
- *                  simplest case, this simply corresponds to executing an EVAL after the
- *                  rest of the instructions, however in many cases this can be avoided if
- *                  the result of what is compiled for the expression is known to be WHNF.
- *                  This corresponds to the E and ES schemes.
- *
- * @param n         The number of ribs that have already been pushed onto the stack. At the end
- *                  of the generated code sequence, the appropriate number of MKAPs will be
- *                  executed.
- *                  Where n > 0, this corresponds to the RS and ES schemes.
- */
-void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int n)
+void E(gprogram *gp, cell *c, pmap *p, int n)
 {
-  int resultwhnf = 0;
-  assert(d >= n);
-
-  print_comp("C",c,d,isresult,needseval,n);
   cdepth++;
-  assert(TYPE_IND != celltype(c));
+  print_comp2("E",c,n,"");
   switch (celltype(c)) {
   case TYPE_APPLICATION: {
-    cell *fun = c;
-    int nargs = 0;
-    while (TYPE_APPLICATION == celltype(fun)) {
-      fun = (cell*)fun->field1;
-      assert(TYPE_IND != celltype(fun));
-      nargs++;
+    int m = 0;
+    cell *app;
+    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1)
+      m++;
+
+    assert(TYPE_SYMBOL != celltype(app)); /* should be lifted into separate scomb otherwise */
+    parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
+                app,"Non-function applied to args");
+
+    int fno = cell_fno(app);
+    int k = function_nargs(fno);
+    assert(m <= k); /* should be lifted into separate supercombinator otherwise */
+
+    if ((TYPE_BUILTIN == celltype(app)) &&
+        (B_IF == (int)app->field1) &&
+        (3 == m)) {
+      cell *app = c;
+      cell *falsebranch = (cell*)app->field2;
+      app = (cell*)app->field1;
+      cell *truebranch = (cell*)app->field2;
+      app = (cell*)app->field1;
+      cell *cond = (cell*)app->field2;
+
+      E(gp,cond,p,n);
+      int label;
+      JFALSE(label);
+
+      stackinfo *oldsi;
+      stackinfo_newswap(&gp->si,&oldsi);
+      E(gp,truebranch,p,n);
+      int end;
+      JUMP(end);
+      stackinfo_freeswap(&gp->si,&oldsi);
+
+      LABEL(label);
+      stackinfo_newswap(&gp->si,&oldsi);
+      E(gp,falsebranch,p,n);
+      stackinfo_freeswap(&gp->si,&oldsi);
+
+      LABEL(end);
+      pushstatus(gp->si,1);
     }
+    else {
+      m = 0;
+      for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
+        if (app->tag & FLAG_STRICT)
+          E(gp,(cell*)app->field2,p,n+m);
+        else
+          C(gp,(cell*)app->field2,p,n+m);
+        m++;
+      }
 
-    if (needseval || isresult) {
-      /* If the result of the current expression (c) definitely needs to be evaluated, and
-         the expression is an application of a function to the correct number of arguments,
-         then we can just execute the function directory, instead of building an intermediate
-         graph structure. */
-      if (TYPE_BUILTIN == celltype(fun)) {
-        int bif = (int)fun->field1;
+      if (m == k) {
 
-        /* We treat IF as a special case. First we evaluate the first argument, and based on
-           that we jump to one code section or the other in order to evaluate the true or
-           false branch. The branch called is also compiled with needseval=1, reflecting the
-           fact that the result of the if expression is the result of whatever branch is taken. */
-        if ((B_IF == bif) && (3 == nargs)) {
-          cell *app = c;
-          cell *ef = (cell*)app->field2;
-          app = (cell*)app->field1;
-          cell *et = (cell*)app->field2;
-          app = (cell*)app->field1;
-          cell *ec = (cell*)app->field2;
-
-          int jfalseaddr;
-          int jendaddr;
-
-          /* Compile the code to compute the result of the conditional */
-          C(gp,ec,d,pm,0,1,0);
-
-          /* Add a JFALSE instruction to jump past the next bit of code (the true branch) if
-             the conditional evaluates to false. Note that we can't give the instruction the
-             (relative) address to jump to yet, because it will depend on how many instructions
-             are taken up by the true branch. For this reason, we record the current address
-             and will update the JFALSE instruction afterwards once we know how many instructions
-             it needs to skip. */
-          jfalseaddr = gp->count;
-          JFALSE(0);
-
-          /* Compile the true branch. Note that it's necessary to temporarily create a new
-             stackinfo object here. At each point during the compilation, this records the
-             expected stack depth, and because we've just had a JFALSE instruction, the
-             expected depth at the point that JFALSE jumps to may be different to the depth
-             had the true branch been executed. This can only happen if isresult is true,
-             since in this case the VM will return from the current function. Otherwise, the
-             stack depth should be the same at the end regardless of which branch is taken. */
-          stackinfo *oldsi = gp->si;
-          gp->si = stackinfo_new(oldsi);
-          C(gp,et,d,pm,isresult,needseval,n);
-          jendaddr = gp->count;
-          if (!isresult)
-            JUMP(0);
-          stackinfo_free(gp->si);
-          gp->si = oldsi;
-
-          /* Now we know how many instructions the JFALSE needs to skip ahead, and can update
-             the instruction we added earlier. */
-          gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
-
-          /* Compile the false branch. No temporary stackinfo is used here as in the case of
-             isresult = true, it won't be used again anway. */
-          C(gp,ef,d,pm,isresult,needseval,n);
-
-          /* We update the JUMP instruction with the address as before. It is *only* safe to do
-             this if isresult = false, as this is the only case above where the JUMP instruction
-             is added. */
-          if (!isresult)
-            gp->ginstrs[jendaddr].arg0 = gp->count-jendaddr;
-
-          /* If isresult = true, then set it to false, as the true or false branch (whichever
-             is executed) will have taken care of executing the UPDATE/POP/UNWIND instructions.
-             We also set n to 0, as if it was > 0 then the true or falsh branch would also have
-             executed the MKAP n instruction. */
-          isresult = 0;
-          n = 0;
-
-          break;
-        }
-
-        /* All other built-in functions are handled by this case. If we have the correct number
-           of arguments, then we just compile the expressions directly here and then execute
-           the appropriate builtin function. Note that, as with IF, this will *only* be done if
-           the result of this expression is definitely needed. */
-        else if (nargs == builtin_info[bif].nargs) {
-          int i;
-          cell *app = c;
-          for (i = 0; i < nargs; i++) {
-            cell *arg = (cell*)app->field2;
-
-            /* Whether or not we compile the expression with needseval = true depends on whether
-               the builtin function is strict in that argument. For example, things like + and >
-               require both their arguments to be evaluated, but cons does not. */
-            if (nargs-1-i < builtin_info[bif].nstrict)
-              C(gp,arg,d+i,pm,0,1,0);
-            else
-              C(gp,arg,d+i,pm,0,0,0);
-            app = (cell*)app->field1;
-          }
-
-          /* Now execute the builtin function */
-          BIF(bif);
-
-          /* If the caller expects the compiled code to return an evaluated expression, add
-             an EVAL instruction here. This is only necessary however if we can't guarantee
-             that the builtin function returns a WHNF value. Most - such as the arithmetic
-             operators - do. But some may not, such as HEAD, which in the case of a list containing
-             elements that are yet to be evaluated could return one of these values. */
-          if (!builtin_info[bif].reswhnf) {
+        if (TYPE_BUILTIN == celltype(app)) {
+          BIF(fno);
+          if (!builtin_info[fno].reswhnf)
             EVAL(0);
-            if (0 == n)
-              needseval = 0;
-          }
-          resultwhnf = builtin_info[bif].reswhnf;
-          break;
+        }
+        else {
+          MKFRAME(fno,k);
+          EVAL(0);
         }
       }
+      else {
+        MKCAP(fno,m);
+        EVAL(0);
+      }
+    }
+    break;
+  }
+  default:
+    C(gp,c,p,n);
+    EVAL(0);
+    break;
+  }
+  cdepth--;
+}
 
-#if 0
-      /* Application of a supercombinator reference to the correct number of arguments. In this
-         case, we recursively compile each of the arguments, with needseval = true set for
-         those that correspond to a strict application (i.e. the argument is definitely used).
-         Then we can add PUSHGLOBAL with the second parameter set to 1 indicating that when
-         the supercombinator is executed, it should skip the EVAL instructions at the start.
-         Note that this is only done if the result of the supercombinator is definitely needed. */
-      else if (TYPE_SCREF == celltype(fun)) {
-        scomb *sc = (scomb*)fun->field1;
-        if (nargs == sc->nargs) {
-          int i;
-          cell *app = c;
-          for (i = 0; i < nargs; i++) {
-            cell *arg = (cell*)app->field2;
-            if (sc->strictin && sc->strictin[nargs-1-i])
-              C(gp,arg,d+i,pm,0,1,0);
-            else
-              C(gp,arg,d+i,pm,0,0,0);
-            app = (cell*)app->field1;
-          }
-          /* Call PUSHGLOBAL to push a reference to the supercombinator onto the stack, but with
-             the destination address set to skip the initial EVAL instructions */
-          PUSHGLOBAL(sc->index+NUM_BUILTINS,1);
-          /* We don't have the ability to directly call supercombinators yet, so build the
-             application nodes */
-          MKAP(sc->nargs);
-          break;
+void S(gprogram *gp, stack *exprs, stack *strict, pmap *p, int n)
+{
+  print_comp2_stack("S",exprs,n,"");
+  int m;
+  for (m = 0; m < exprs->count; m++) {
+    if (strict->data[m])
+      E(gp,(cell*)exprs->data[m],p,n+m);
+    else
+      C(gp,(cell*)exprs->data[m],p,n+m);
+  }
+  SQUEEZE(m,n);
+}
+
+void R(gprogram *gp, cell *c, pmap *p, int n)
+{
+  cdepth++;
+  print_comp2("R",c,n,"");
+  switch (celltype(c)) {
+  case TYPE_APPLICATION: {
+    stack *args = stack_new();
+    stack *argstrict = stack_new();
+    cell *app;
+    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
+      stack_push(args,app->field2);
+      stack_push(argstrict,(void*)(app->tag & FLAG_STRICT));
+    }
+    int m = args->count;
+    if (TYPE_SYMBOL == celltype(app)) {
+      stack_push(args,app);
+      stack_push(argstrict,0);
+      S(gp,args,argstrict,p,n);
+      EVAL(0);
+      DO();
+    }
+    else if ((TYPE_BUILTIN == celltype(app)) ||
+             (TYPE_SCREF == celltype(app))) {
+      int fno = cell_fno(app);
+      int k = function_nargs(fno);
+      if (m > k) {
+        S(gp,args,argstrict,p,n);
+        MKFRAME(fno,k);
+        EVAL(0);
+        DO();
+      }
+      else if (m == k) {
+        if ((TYPE_BUILTIN == celltype(app)) &&
+            (B_IF == (int)app->field1)) {
+          cell *falsebranch = args->data[0];
+          cell *truebranch = args->data[1];
+          cell *cond = args->data[2];
+
+          E(gp,cond,p,n);
+          int label;
+          JFALSE(label);
+
+          stackinfo *oldsi;
+          stackinfo_newswap(&gp->si,&oldsi);
+          R(gp,truebranch,p,n);
+          stackinfo_freeswap(&gp->si,&oldsi);
+
+          LABEL(label);
+          stackinfo_newswap(&gp->si,&oldsi);
+          R(gp,falsebranch,p,n);
+          stackinfo_freeswap(&gp->si,&oldsi);
+        }
+        else {
+          S(gp,args,argstrict,p,n);
+          JFUN(fno);
         }
       }
-#endif
-    }
-
-    // !needseval
-
-    /* Even if the value of the current expression might not be used (i.e. needseval and isresult
-       are both false), it is still safe to do some eager evaluation. Here we treat CONS x y as
-       something that can be executed directly rather than building an intermediate application
-       tree. As neither argument is evaluated there are no side effects from doing this and it's
-       slightly faster than creating the two application cells and also saves a bit of time in
-       case the cons cell is actually needed. */
-    else if (TYPE_BUILTIN == celltype(fun)) {
-      int bif = (int)fun->field1;
-      if ((B_CONS == bif) && (2 == nargs)) {
-        cell *app = c;
-        cell *tail = (cell*)app->field2;
-        app = (cell*)app->field1;
-        cell *head = (cell*)app->field2;
-        C(gp,tail,d,pm,0,0,0);
-        C(gp,head,d+1,pm,0,0,0);
-
-        BIF(B_CONS);
-        break;
+      else { /* m < k */
+        for (m = 0; m < args->count; m++)
+          C(gp,(cell*)args->data[m],p,n+m);
+        MKCAP(fno,m);
+        RETURN();
       }
     }
-
-    // FIXME: write more about the fallback option that we do here
-    int evalarg = (needseval && (c->tag & FLAG_STRICT));
-    C(gp,(cell*)c->field2,d,pm,0,evalarg,0);
-    C(gp,(cell*)c->field1,d+1,pm,isresult,needseval,n+1);
-    isresult = 0;
-    needseval = 0;
-    n = 0;
+    else {
+      fprintf(stderr,"%s can't be applied to anything\n",cell_types[celltype(app)]);
+      assert(0);
+    }
+    stack_free(args);
+    stack_free(argstrict);
     break;
   }
-  case TYPE_BUILTIN: {
-    // FIXME: move this into the TYPE_APPLICATION case
-    /* The current expression is a reference to a built-in function. Normally we would just
-       push this onto the stack and have it later put into a set of application nodes. But
-       if we know that all of the parameters have already been evaluated, then it's safe
-       to execute this. We can determine this by looking at the information that has been
-       recorded during compilation about the expected state of the stack at this point.
-
-       Note: This is mainly intended for arithmentic functions and so forth. If new builtin
-       functions are added that have side-effects or that are not appropriate for this, then
-       they should be marked by another field in the builtin struct. */
-    int bif = (int)c->field1;
-/*     int direct = (n >= builtin_info[bif].nargs); */
-/*     int i; */
-/*     for (i = 0; direct && (i < builtin_info[bif].nargs); i++) */
-/*       if (!statusat(gp->si,gp->si->count-1-i)) */
-/*         direct = 0; */
-/*     if (direct) { */
-      /* All parameters have been evaluated - we can execute the function directly. It will
-         pop the appropriate number of items off the stack and then push its result after
-         it has finished executing. */
-/*       BIF(bif); */
-/*       n -= (builtin_info[bif].nargs-1); */
-/*       d -= (builtin_info[bif].nargs-1); */
-/*       resultwhnf = builtin_info[bif].reswhnf; */
-/*     } */
-/*     else { */
-      /* Not enough parameters, or one or more of them might not have been evaluated yet. Just
-         push the function reference on to the stack. */
-      PUSHGLOBAL(bif,0);
-      resultwhnf = 1;
-/*     } */
+  case TYPE_SYMBOL:
+    C(gp,c,p,n);
+    SQUEEZE(1,n);
+    EVAL(0);
+    RETURN();
     break;
-  }
-  case TYPE_NIL:                  PUSHNIL();
-                                  resultwhnf = 1;
-                                  break;
-  case TYPE_INT:                  PUSHINT((int)c->field1);
-                                  resultwhnf = 1;
-                                  break;
-  case TYPE_DOUBLE:               PUSHDOUBLE((int)c->field1,(int)c->field2);
-                                  resultwhnf = 1;
-                                  break;
-  case TYPE_STRING:               PUSHSTRING(add_string(gp,(char*)c->field1));
-                                  resultwhnf = 1;
-                                  break;
-  case TYPE_SYMBOL:               PUSH(d-p(pm,(char*)c->field1));
-                                  /* If needseval is true, we know that the value of this
-                                     variable *definitely* needs to be evaluated. Let's
-                                     evaluate it now before we update the redex, so when it
-                                     is used in the future the value will already be there.
-                                     This is to improve the performance of supercombinators
-                                     with only a variable in their body (IFPL 20.2) */
-#ifdef USE_DISPATCH
-                                  if (isresult) {
-                                    SQUEEZE(n+1,d-n);
-                                    DISPATCH(n);
-                                    needseval = 0;
-                                    isresult = 0;
-                                    n = 0;
-                                  }
-                                  else 
-#endif
-                                       if ((needseval || isresult) && (0 == n)) {
-                                    EVAL(0);
-                                    needseval = 0;
-                                  }
-                                  break;
-  case TYPE_SCREF:                PUSHGLOBAL(((scomb*)c->field1)->index+NUM_BUILTINS,0);
-                                  /* Evaluate the variable if the result is needed, as for
-                                     TYPE_SYMBOL. This is needed in case the supercombinator
-                                     is a CAF. */
-#ifdef USE_DISPATCH
-                                  if (isresult) {
-                                    SQUEEZE(n+1,d-n);
-                                    DISPATCH(n);
-                                    needseval = 0;
-                                    isresult = 0;
-                                    n = 0;
-                                  }
-                                  else 
-#endif
-                                       if ((needseval || isresult) && (0 == n)) {
-                                    EVAL(0);
-                                    needseval = 0;
-                                  }
-                                  break;
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:
+    if (0 == function_nargs(cell_fno(c))) {
+      JFUN(cell_fno(c));
+    }
+    else {
+      MKCAP(cell_fno(c),0);
+      RETURN();
+    }
+    break;
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    C(gp,c,p,n);
+    RETURN();
+    break;
   case TYPE_LETREC: {
     pmap pprime;
-    int top = d+1;
     int ndefs = 0;
-    int dprime = 0;
+    int nprime = 0;
 
-    assert(0 == n);
-
-    Xr(c,pm,d,&pprime,&dprime,&ndefs);
-    Cletrec(gp,c,dprime,&pprime);
-    C(gp,(cell*)c->field2,dprime,&pprime,isresult,needseval,0);
-
-    if (!isresult) {
-      UPDATE(dprime+1-top);
-      POP(ndefs);
-    }
-    isresult = 0; // final instructions already added; don't want to do it here
+    Xr(c,p,n,&pprime,&nprime,&ndefs);
+    Cletrec(gp,c,nprime,&pprime);
+    R(gp,(cell*)c->field2,&pprime,nprime);
 
     free(pprime.varnames);
     free(pprime.indexes);
@@ -918,60 +861,79 @@ void C(gprogram *gp, cell *c, int d, pmap *pm, int isresult, int needseval, int 
     assert(0);
     break;
   }
-
-  if (0 < n)
-    MKAP(n);
-
-  if (needseval && (!resultwhnf || (0 < n)))
-    EVAL(0);
-
-  if (isresult) {
-    /* We're at the end of the function and should generate the instructions necessary for
-       the program to continue execution. The value at the top of the stack is the result
-       of the function, and therefore we use UPDATE to overwrite the root of the redex. */
-    UPDATE(d-n+1);
-    POP(d-n);
-
-    /* We then POP all the stack entries corresponding to the current frame, and execute
-       the UNWIND operation to continue reduction of the graph based on the new value in the
-       redex. The only exception to this is if the result is known to be in WHNF (e.g. if
-       it's an integer or reference to a built-in function) - then we can execute RETURN
-       instead, as there is no need to perform any further reductions on the redex. */
-    if (resultwhnf && (0 == n))
-      RETURN();
-    else
-      UNWIND();
-  }
-
   cdepth--;
 }
 
-void R(gprogram *gp, cell *c, int d, pmap *pm)
+void C(gprogram *gp, cell *c, pmap *p, int n)
 {
-  C(gp,c,d,pm,1,0,0);
+  cdepth++;
+  print_comp2("C",c,n,"");
+  switch (celltype(c)) {
+  case TYPE_APPLICATION: {
+    int m = 0;
+    cell *app;
+    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
+      C(gp,(cell*)app->field2,p,n+m);
+      m++;
+    }
+
+    assert(TYPE_SYMBOL != celltype(app)); /* should be lifted into separate scomb otherwise */
+    parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
+                app,"Non-function applied to args");
+
+    int fno = cell_fno(app);
+    int k = function_nargs(fno);
+    assert(m <= k); /* should be lifted into separate supercombinator otherwise */
+
+    if (m == k)
+      MKFRAME(fno,k);
+    else
+      MKCAP(fno,m);
+    break;
+  }
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:   if (0 == function_nargs(cell_fno(c)))
+                       MKFRAME(cell_fno(c),0);
+                     else
+                       MKCAP(cell_fno(c),0);
+                     break;
+  case TYPE_SYMBOL:  PUSH(n-presolve(p,(char*)c->field1));         break;
+  case TYPE_NIL:     PUSHNIL();                                    break;
+  case TYPE_INT:     PUSHINT((int)c->field1);                      break;
+  case TYPE_DOUBLE:  PUSHDOUBLE((int)c->field1,(int)c->field2);    break;
+  case TYPE_STRING:  PUSHSTRING(add_string(gp,(char*)c->field1));  break;
+  default:           assert(0);                                    break;
+  }
+  cdepth--;
 }
+
+
 
 void F(gprogram *gp, int fno, scomb *sc)
 {
   pmap pm;
   int i;
   cell *copy = graph_to_letrec(sc->body);
+/*   cell *copy = sc->body; */
+
+  cleargraph(sc->body,FLAG_PROCESSED);
 
   addressmap[NUM_BUILTINS+sc->index] = gp->count;
 
   stackinfo *oldsi = gp->si;
   gp->si = stackinfo_new(NULL);
-  GLOBSTART(fno,sc->nargs);
 
-  pushstatus(gp->si,0); /* redex */
+/*   pushstatus(gp->si,0); // redex */
   for (i = 0; i < sc->nargs; i++) {
     /* FIXME: add evals here */
     pushstatus(gp->si,0);
   }
 
+  GLOBSTART(fno,sc->nargs);
   for (i = 0; i < sc->nargs; i++)
     if (sc->strictin && sc->strictin[i])
       EVAL(i);
+
   noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
   GLOBSTART(fno,sc->nargs);
 
@@ -988,10 +950,14 @@ void F(gprogram *gp, int fno, scomb *sc)
   for (i = 0; i < sc->nargs; i++)
     pm.indexes[i] = sc->nargs-i;
 
-  R(gp,copy,sc->nargs,&pm);
+/*   R(gp,copy,sc->nargs,&pm); */
+  R(gp,copy,&pm,sc->nargs);
 
   stackinfo_free(gp->si);
   gp->si = oldsi;
+#ifdef DEBUG_GCODE_COMPILATION
+  printf("\n\n");
+#endif
 }
 
 gprogram *cur_program = NULL;
@@ -1001,8 +967,6 @@ void compile(gprogram *gp)
   int index = 0;
   int i;
   int evaladdr;
-  int jfalseaddr;
-  int jemptyaddr;
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
 
   scomb *mainsc = get_scomb("main");
@@ -1015,28 +979,15 @@ void compile(gprogram *gp)
 
   addressmap = (int*)calloc(nfunctions,sizeof(int));
   noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
-  globcells = (cell**)calloc(nfunctions,sizeof(cell*));
-
-  for (i = 0; i < NUM_BUILTINS; i++) {
-    globcells[i] = alloc_cell();
-    globcells[i]->tag = TYPE_FUNCTION | FLAG_PINNED;
-    globcells[i]->field1 = (void*)builtin_info[i].nargs;
-  }
-
-  for (sc = scombs; sc; sc = sc->next, i++) {
-    globcells[i] = alloc_cell();
-    globcells[i]->tag = TYPE_FUNCTION | FLAG_PINNED;
-    globcells[i]->field1 = (void*)sc->nargs;
-  }
 
   BEGIN();
-  PUSHGLOBAL(mainsc->index+NUM_BUILTINS,0);
+  MKFRAME(mainsc->index+NUM_BUILTINS,0);
   evaladdr = gp->count;;
   EVAL(0);
   PUSH(0);
   ISTYPE(TYPE_CONS);
-  jfalseaddr = gp->count;
-  JFALSE(0);
+  int notlist_target;
+  JFALSE(notlist_target);
 
   topsi = gp->si;
   PUSH(0);
@@ -1044,23 +995,24 @@ void compile(gprogram *gp)
   PUSH(1);
   BIF(B_TAIL);
   REPLACE(2);
-  JUMP(evaladdr-gp->count);
+  JUMPrel(evaladdr-gp->count);
   gp->si = topsi;
 
-  gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+  LABEL(notlist_target);
   PRINT();
-  jemptyaddr = gp->count;
-  JEMPTY(0);
-  JUMP(evaladdr-gp->count);
+  int empty;
+  JEMPTY(empty);
+  JUMPrel(evaladdr-gp->count);
 
-  gp->ginstrs[jemptyaddr].arg0 = gp->count-jemptyaddr;
+  LABEL(empty);
   END();
 
-  for (sc = scombs; sc; sc = sc->next) {
-    globcells[NUM_BUILTINS+sc->index]->field2 = (void*)gp->count;
-    cleargraph(sc->body,FLAG_PROCESSED);
+  evaldoaddr = gp->count;
+  EVAL(0);
+  DO();
+
+  for (sc = scombs; sc; sc = sc->next)
     F(gp,NUM_BUILTINS+sc->index,sc);
-  }
 
   topsi = gp->si;
   for (i = 0; i < NUM_BUILTINS; i++) {
@@ -1068,70 +1020,59 @@ void compile(gprogram *gp)
     const builtin *bi = &builtin_info[i];
     gp->si = stackinfo_new(NULL);
 
-    pushstatus(gp->si,0); /* redex */
+/*     pushstatus(gp->si,0); // redex */
     for (argno = 0; argno < bi->nargs; argno++)
       pushstatus(gp->si,0);
 
     addressmap[i] = gp->count;
-    globcells[i]->field2 = (void*)gp->count;
     GLOBSTART(i,bi->nargs);
 
     if (B_CONS == i) {
       BIF(B_CONS);
-      UPDATE(1);
       RETURN();
     }
     else if (B_IF == i) {
-      int jfalseaddr;
-      int jmpaddr;
-
       PUSH(0);
       EVAL(0);
-      jfalseaddr = gp->count;
-      JFALSE(0);
+      int label1;
+      JFALSE(label1);
 
       stackinfo *oldsi = gp->si;
       gp->si = stackinfo_new(oldsi);
       PUSH(1);
-      jmpaddr = gp->count;
-      JUMP(0);
+      int label2;
+      JUMP(label2);
       stackinfo_free(gp->si);
       gp->si = oldsi;
 
       /* label l1 */
-      gp->ginstrs[jfalseaddr].arg0 = gp->count-jfalseaddr;
+      LABEL(label1);
       PUSH(2);
 
       /* label l2 */
-      gp->ginstrs[jmpaddr].arg0 = gp->count-jmpaddr;
+      LABEL(label2);
       EVAL(0);
-      UPDATE(4);
-      POP(3);
-      UNWIND();
+      RETURN();
     }
     else if (B_HEAD == i) {
       EVAL(0);
       BIF(B_HEAD);
       EVAL(0);
-      UPDATE(1);
-      UNWIND();
+      RETURN();
     }
     else if (B_TAIL == i) {
       EVAL(0);
       BIF(B_TAIL);
       EVAL(0);
-      UPDATE(1);
-      UNWIND();
+      RETURN();
     }
     else {
       for (argno = 0; argno < bi->nstrict; argno++)
         EVAL(argno);
       BIF(i);
-      UPDATE(1);
-      if (bi->reswhnf) // result is known to be in WHNF and not a function
-        RETURN();
-      else
-        UNWIND();
+      if (!bi->reswhnf)
+        EVAL(0);
+      RETURN();
     }
 
     stackinfo_free(gp->si);

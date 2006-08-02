@@ -31,181 +31,102 @@
 #include <stdarg.h>
 #include <math.h>
 
-extern cell **globcells;
-
-static int address = 0;
-static int exec_stackbase = 0;
-
-int get_fno_from_address(int address)
-{
-  int fno = 0;
-  while ((fno < nfunctions) && (addressmap[fno] != address))
-    fno++;
-  assert(fno < nfunctions);
-  return fno;
-}
-
-void trace_address(stack *s, ginstr *program, int address, int nargs)
-{
-  int fno = get_fno_from_address(address);
-
-  if (trace) {
-    debug(0,"\n");
-    if (NUM_BUILTINS > fno)
-      debug(0,"0      Function %d = %s",fno,builtin_info[fno].name);
-    else
-      debug(0,"0      Function %d = %s",fno,get_scomb_index(fno-NUM_BUILTINS)->name);
-    debug(0,", address %d, nargs = %d, stackbase = %d\n",
-          address,nargs,s->base);
-  }
-}
-
-void insufficient_args(ginstr *program, int address, cell *target, int nargs)
-{
-  int fno = get_fno_from_address(address);
-  int reqargs = program[address].arg1;
-  if (NUM_BUILTINS > fno)
-    fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
-            builtin_info[fno].name,reqargs,nargs);
-  else
-    fprintf(stderr,"Supercombinator %s requires %d args; have only %d\n",
-    get_scomb_index(fno-NUM_BUILTINS)->name,reqargs,nargs);
-  exit(1);
-}
+extern int evaldoaddr;
 
 int is_whnf(cell *c)
 {
   c = resolve_ind(c);
-  if ((TYPE_APPLICATION == celltype(c)) ||
-      (TYPE_FUNCTION == celltype(c))) {
+
+  if (TYPE_FRAME == celltype(c))
+    return 0;
+
+  if (TYPE_CAP == celltype(c))
+    return 1;
+
+  if (TYPE_APPLICATION == celltype(c)) {
     int nargs = 0;
     while (TYPE_APPLICATION == celltype(c)) {
       c = resolve_ind((cell*)c->field1);
       nargs++;
     }
-    if (TYPE_FUNCTION == celltype(c)) {
-      if (nargs >= (int)c->field1)
+
+    if (TYPE_FRAME == celltype(c)) {
+      return 0;
+    }
+    else {
+      assert(TYPE_CAP == celltype(c));
+      cap *cp = (cap*)c->field1;
+      if (nargs+cp->s->count >= cp->arity)
         return 0;
     }
   }
   return 1;
 }
 
-void check_stack(stack *s, gprogram *gp, int address)
+void check_stack(frame *curf, gprogram *gp)
 {
-  ginstr *instr = &gp->ginstrs[address];
+  ginstr *instr = &gp->ginstrs[curf->address];
   if (0 > instr->expcount)
     return;
 
-  if (s->count-exec_stackbase != instr->expcount) {
+  if (curf->s->count != instr->expcount) {
     printf("Instruction %d expects stack frame size %d, actually %d\n",
-           address,instr->expcount,s->count-exec_stackbase);
+           curf->address,instr->expcount,curf->s->count);
     abort();
   }
 
   int i;
   for (i = 0; i < instr->expcount; i++) {
-    cell *c = stack_at(s,exec_stackbase+i);
+    cell *c = stack_at(curf->s,i);
     int actualstatus = is_whnf(c);
     if (instr->expstatus[i] && !actualstatus) {
       printf("Instruction %d expects stack frame entry %d (%d) to be evald but it's "
-             "actually a %s\n",address,i,exec_stackbase+i,cell_types[celltype(c)]);
+             "actually a %s\n",curf->address,i,i,cell_types[celltype(c)]);
       abort();
     }
   }
 }
 
-cell *unwind_part1(stack *s)
-{
-  s->count = s->base+1;
-  cell *c = s->data[s->count-1];
-  c = resolve_ind(c);
-  while (TYPE_APPLICATION == celltype(c)) {
-    c = resolve_ind((cell*)c->field1);
-    stack_push(s,c);
-  }
-  return c;
-}
-
-int unwind_part2(stack *s, cell *bottom)
-{
-  if (TYPE_FUNCTION != celltype(bottom))
-    return 0;
-
-  int argspos = s->count-(int)bottom->field1;
-  if (argspos < s->base+1)
-    return 0;
-
-  int funaddr = (int)bottom->field2;
-  int pos;
-  assert(!is_whnf(s->data[argspos-1]));
-  for (pos = s->count-1; pos >= argspos; pos--) {
-    cell *argval = resolve_ind(s->data[pos-1]);
-    s->data[pos] = resolve_ind((cell*)argval->field2);
-  }
-
-  s->data[argspos-1] = resolve_ind(s->data[argspos-1]);
-
-  address = funaddr;
-  exec_stackbase = argspos-1;
-  return 1;
-}
-
-void do_return(stack *s)
-{
-  dumpentry *edx = &dumpstack[dumpcount-1];
-  assert(is_whnf(s->data[s->count-1]));
-  s->base = edx->stackbase;
-  s->count = edx->stackcount;
-  address = edx->address;
-  exec_stackbase = edx->sb;
-  dumpcount--;
-  assert(0 <= dumpcount);
-}
-
-void do_mkap(stack *s, int n)
-{
-  for (n--; n >= 0; n--) {
-    cell *left = s->data[s->count-1];
-    cell *right = s->data[s->count-2];
-    s->count--;
-    s->data[s->count-1] = alloc_cell2(TYPE_APPLICATION,left,right);
-  }
-}
-
-void do_update(stack *s, int n)
-{
-  cell *target;
-  assert(n < s->count);
-  assert(n > 0);
-
-  target = resolve_ind(s->data[s->count-1-n]);
-  assert((TYPE_APPLICATION == celltype(target)) ||
-         (TYPE_FUNCTION == celltype(target)) ||
-         (TYPE_HOLE == celltype(target)));
-  assert(!(target->tag & FLAG_PINNED));
-
-  free_cell_fields(target);
-  target->tag = TYPE_IND;
-  target->field1 = resolve_ind(s->data[s->count-1]);
-  s->count--;
-}
-
 void execute(gprogram *gp)
 {
-  stack *s = stack_new();
+  frame *curf = frame_alloc(-1);
+  add_active_frame(curf);
+
+  int lines = -1;
+  if (getenv("LINES"))
+    lines = atoi(getenv("LINES"));
 
   while (1) {
-    ginstr *instr = &gp->ginstrs[address];
+    int done = 0;
+    ginstr *instr = &gp->ginstrs[curf->address];
+
+/*     int depth = 0; */
+/*     frame *tmp; */
+/*     for (tmp = curf; tmp; tmp = tmp->d) */
+/*       depth++; */
+/*     if (depth > maxdepth) { */
+/*       maxdepth = depth; */
+
+/*       printf("new maxdepth: %d\n",depth); */
+/*       int i = depth; */
+/*       for (tmp = curf; tmp; tmp = tmp->d) { */
+/*         printf("%d: %s\n",i,function_name(tmp->fno)); */
+/*         i--; */
+/*       } */
+/*       printf("\n"); */
+/*     } */
+
+    int printed = 0;
+    if (trace) {
+      printf("[d %d] ",frame_depth(curf));
+      print_ginstr(gp,curf->address,instr,0);
+      print_stack((cell**)curf->s->data,curf->s->count,0);
+      printed += curf->s->count+1;
+    }
 
 #ifdef STACK_MODEL_SANITY_CHECK
-    check_stack(s,gp,address);
+    check_stack(curf,gp);
 #endif
-
-    if (trace) {
-      print_ginstr(address,instr,0);
-      print_stack(-1,(cell**)s->data,s->count,0);
-    }
 
     if (nallocs > COLLECT_THRESHOLD)
       collect();
@@ -217,210 +138,344 @@ void execute(gprogram *gp)
     case OP_BEGIN:
       break;
     case OP_END:
-      stack_free(s);
-      return;
+      remove_active_frame(curf);
+      curf = NULL;
+      done = 1;
+      break;
+    case OP_LAST:
+      break;
     case OP_GLOBSTART:
       break;
     case OP_EVAL: {
       cell *c;
-      assert(0 <= s->count-1-instr->arg0);
-      c = resolve_ind(s->data[s->count-1-instr->arg0]);
-      if ((TYPE_APPLICATION == celltype(c)) ||
-          (TYPE_FUNCTION == celltype(c))) {
-        dumpentry *de = pushdump();
-        ndumpallocs++;
-        de->stackbase = s->base;
-        de->stackcount = s->count;
-        de->address = address;
-        de->sb = exec_stackbase;
-        stack_push(s,s->data[s->count-1-instr->arg0]);
-        s->base = s->count-1;
-        exec_stackbase = s->base;
-      }
-      else {
-        break;
-      }
-      /* fall through */
-    }
-    case OP_UNWIND: {
-      cell *ebx = unwind_part1(s);
-      if (unwind_part2(s,ebx))
-        break;
+      assert(0 <= curf->s->count-1-instr->arg0);
+      c = resolve_ind(curf->s->data[curf->s->count-1-instr->arg0]);
 
-      /* fall through */
+      if (TYPE_FRAME == celltype(c)) {
+        frame *newf = (frame*)c->field1;
+
+        assert(NULL == newf->d);
+        assert(OP_GLOBSTART == gp->ginstrs[newf->address].opcode);
+
+        newf->d = curf;
+        curf = newf;
+        // curf->address--; /* so we process the GLOBSTART */
+        add_active_frame(curf);
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("EVAL(%d): entering new frame\n",instr->arg0);
+          printed++;
+        }
+        #endif
+      }
+      break;
     }
     case OP_RETURN: {
-      do_return(s);
-      break;
-    }
-    case OP_PUSH: {
-      assert(instr->arg0 < s->count);
-      stack_push(s,resolve_ind(s->data[s->count-1-instr->arg0]));
-      break;
-    }
-    case OP_PUSHGLOBAL: {
-      int fno = instr->arg0;
+      assert(0 < curf->s->count);
+      assert(NULL != curf->c);
+      assert(TYPE_FRAME == celltype(curf->c));
+      curf->c->tag = TYPE_IND;
+      curf->c->field1 = curf->s->data[curf->s->count-1];
+      curf->c = NULL;
 
-      // If the function is a supercombinator with 0 args (i.e. a CAF), then
-      // push a *copy* of the cell. This avoids supercombinators which evaluate
-      // to infinite (or large) lists from not ever being garbage collected.
-      if ((fno >= NUM_BUILTINS) &&
-          (0 == get_scomb_index(fno-NUM_BUILTINS)->nargs)) {
-        cell *src = globcells[fno];
-        assert(TYPE_FUNCTION == celltype(src));
-        stack_push(s,alloc_cell2(TYPE_FUNCTION,src->field1,src->field2));
+      frame *old = curf;
+      curf = old->d;
+      remove_active_frame(old);
+      assert(curf);
+      #ifdef EXTRA_TRACE
+      if (trace) {
+        printf("RETURN: exiting old frame\n");
+        printed++;
       }
-      // If the function is a supercombinator and arg1 is non-zero, this means we
-      // actually want a reference to the "no-eval" part of the supercombinator, i.e.
-      // we skip the EVAL instructions at the start, under the assumption that the
-      // arguments to be passed to it have already been evaluated
-      else if ((fno >= NUM_BUILTINS) && instr->arg1) {
-        cell *src = globcells[fno];
-        assert(TYPE_FUNCTION == celltype(src));
-        assert((int)src->field2 == addressmap[fno]);
-        stack_push(s,alloc_cell2(TYPE_FUNCTION,src->field1,(void*)noevaladdressmap[fno]));
-      }
-      else {
-        stack_push(s,globcells[fno]);
-      }
+      #endif
       break;
     }
-    case OP_MKAP:
-      do_mkap(s,instr->arg0);
-      break;
-    case OP_UPDATE:
-      do_update(s,instr->arg0);
-      break;
-    case OP_REPLACE: {
-      int n = instr->arg0;
-      assert(n < s->count);
-      assert(n > 0);
-      s->data[s->count-1-n] = s->data[s->count-1];
-      s->count--;
-      break;
-    }
-    case OP_POP:
-      s->count -= instr->arg0;
-      assert(0 <= s->count);
-      break;
-    case OP_PRINT:
-      print_cell(resolve_ind(s->data[s->count-1]));
-      s->count--;
-      break;
-    case OP_BIF: {
-      int bif = instr->arg0;
-      int nargs = builtin_info[bif].nargs;
-      int i;
-      assert(0 <= builtin_info[instr->arg0].nargs); /* should we support 0-arg bifs? */
-      for (i = 0; i < builtin_info[instr->arg0].nstrict; i++) {
-        s->data[s->count-1-i] = resolve_ind(s->data[s->count-1-i]); /* bifs expect it */
-        assert(TYPE_APPLICATION != celltype((cell*)s->data[s->count-1-i]));
+    case OP_DO: {
+      assert(0 < curf->s->count);
+      cell *capcell = resolve_ind((cell*)curf->s->data[curf->s->count-1]);
+      curf->s->count--;
+
+      assert(TYPE_CAP == celltype(capcell));
+
+      cap *cp = (cap*)capcell->field1;
+      int s = curf->s->count;
+      int s1 = cp->s->count;
+      int a1 = cp->arity;
+
+      if (s+s1 < a1) {
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("DO: %d+%d < %d\n",s,s1,a1);
+          printed++;
+        }
+        #endif
+
+        /* create a new CAP with the existing CAPs arguments and those from the current
+           FRAME's stack */
+        cap *newcp = cap_alloc();
+        newcp->arity = cp->arity;
+        newcp->address = cp->address;
+        newcp->fno = cp->fno;
+        int i;
+        for (i = 0; i < curf->s->count; i++)
+          stack_push(newcp->s,curf->s->data[i]);
+        for (i = 0; i < cp->s->count; i++)
+          stack_push(newcp->s,cp->s->data[i]);
+
+        /* replace the current FRAME with the new CAP */
+        cell *replace = curf->c;
+        curf->c = NULL;
+        replace->tag = TYPE_CAP;
+        replace->field1 = newcp;
+
+        /* return to caller */
+        frame *old = curf;
+        curf = old->d;
+        remove_active_frame(old);
+        assert(curf);
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("DO: exiting old frame\n");
+          printed++;
+        }
+        #endif
       }
-      if (trace)
-        debug(0,"  builtin %s\n",builtin_info[instr->arg0].name);
+      else if (s+s1 == a1) {
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("DO: %d+%d == %d\n",s,s1,a1);
+          printed++;
+        }
+        #endif
 
+        int i;
+        for (i = 0; i < cp->s->count; i++)
+          stack_push(curf->s,cp->s->data[i]);
+        curf->address = cp->address;
+        curf->fno = cp->fno;
+        // curf->address--; /* so we process the GLOBSTART */
 
-      for (i = 0; i < nargs; i++)
-        assert(TYPE_IND != celltype((cell*)s->data[s->count-1-i]));
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("DO: jumping to function %s\n",function_name(curf->fno));
+          printed++;
+        }
+        #endif
+      }
+      else { /* s+s1 > a1 */
+        #ifdef EXTRA_TRACE
+        if (trace) {
+          printf("DO: %d+%d > %d\n",s,s1,a1);
+          printed++;
+        }
+        #endif
 
-      builtin_info[bif].f((cell**)(&s->data[s->count-nargs]));
-      s->count -= (nargs-1);
+        frame *newf = frame_alloc(cp->fno);
+        newf->address = cp->address;
+        int i;
+        int extra = a1-s1;
+        for (i = curf->s->count-extra; i < curf->s->count; i++)
+          stack_push(newf->s,curf->s->data[i]);
+        for (i = 0; i < cp->s->count; i++)
+          stack_push(newf->s,cp->s->data[i]);
+
+        newf->c = alloc_cell2(TYPE_FRAME,newf,NULL);
+
+        curf->s->count -= extra;
+        stack_push(curf->s,newf->c);
+
+        curf->address = evaldoaddr-1;
+      }
+
       break;
     }
+    case OP_JFUN:
+      curf->address = addressmap[instr->arg0];
+      // curf->address--; /* so we process the GLOBSTART */
+      break;
     case OP_JFALSE: {
-      cell *test = resolve_ind(s->data[s->count-1]);
+      cell *test = resolve_ind(curf->s->data[curf->s->count-1]);
       assert(TYPE_APPLICATION != celltype(test));
+      assert(TYPE_CAP != celltype(test));
+      assert(TYPE_FRAME != celltype(test));
       if (TYPE_NIL == celltype(test))
-        address += instr->arg0-1;
-      s->count--;
+        curf->address += instr->arg0-1;
+      curf->s->count--;
       break;
     }
     case OP_JUMP:
-      address += instr->arg0-1;
+      curf->address += instr->arg0-1;
       break;
     case OP_JEMPTY:
-      if (0 == s->count)
-        address += instr->arg0-1;
+      if (0 == curf->s->count)
+        curf->address += instr->arg0-1;
       break;
-    case OP_ISTYPE:
-      if (celltype(resolve_ind(s->data[s->count-1])) == instr->arg0)
-        s->data[s->count-1] = globtrue;
-      else
-        s->data[s->count-1] = globnil;
+    case OP_PUSH: {
+      assert(instr->arg0 < curf->s->count);
+      stack_push(curf->s,resolve_ind(curf->s->data[curf->s->count-1-instr->arg0]));
       break;
+    }
+    case OP_POP:
+      curf->s->count -= instr->arg0;
+      assert(0 <= curf->s->count);
+      break;
+    case OP_UPDATE: {
+      int n = instr->arg0;
+      cell *target;
+      assert(n < curf->s->count);
+      assert(n > 0);
+
+      target = resolve_ind(curf->s->data[curf->s->count-1-n]);
+
+      /* FIXME: this check can probably just become TYPE_HOLE once the (v,g) scheme is
+         in place, as I think UPDATE is only used for letrecs */
+      assert((TYPE_APPLICATION == celltype(target)) ||
+             (TYPE_FRAME == celltype(target)) ||
+             (TYPE_HOLE == celltype(target)));
+      assert(!(target->tag & FLAG_PINNED));
+
+      if (TYPE_FRAME == celltype(target))
+        ((frame*)target->field1)->c = NULL;
+
+      target->tag = TYPE_IND;
+      target->field1 = resolve_ind(curf->s->data[curf->s->count-1]);
+      curf->s->count--;
+      break;
+    }
+    case OP_REPLACE: {
+      int n = instr->arg0;
+      assert(n < curf->s->count);
+      assert(n > 0);
+      curf->s->data[curf->s->count-1-n] = curf->s->data[curf->s->count-1];
+      curf->s->count--;
+      break;
+    }
     case OP_ALLOC: {
       int i;
-      /* FIXME: perhaps we should make a HOLE type instead of using nil here... then it
-         should be save to use globnil everywhere we normally use TYPE_NIL */
       nALLOCs++;
       for (i = 0; i < instr->arg0; i++) {
-        stack_push(s,alloc_cell2(TYPE_HOLE,NULL,NULL));
+        stack_push(curf->s,alloc_cell2(TYPE_HOLE,NULL,NULL));
         nALLOCcells++;
       }
       break;
     }
     case OP_SQUEEZE: {
-      assert(0 <= s->count-instr->arg0-instr->arg1);
-      int base = s->count-instr->arg0-instr->arg1;
+      int count = instr->arg0;
+      int remove = instr->arg1;
+      int base = curf->s->count-count-remove;
+      assert(0 <= base);
       int i;
-      for (i = 0; i <= instr->arg0; i++)
-        s->data[base+i] = s->data[base+i+instr->arg1];
-      s->count -= instr->arg1;
+      for (i = 0; i < count; i++)
+        curf->s->data[base+i] = curf->s->data[base+i+remove];
+      curf->s->count -= remove;
       break;
     }
-    case OP_DISPATCH: {
-      cell *fun = resolve_ind(s->data[s->count-1]);
-      if (TYPE_FUNCTION == celltype(fun)) {
-        int nargs = (int)fun->field1;
-        int addr = (int)fun->field2;
-        assert(OP_GLOBSTART == gp->ginstrs[addr].opcode);
+    case OP_MKCAP: {
+      int fno = instr->arg0;
+      int n = instr->arg1;
 
-        if (nargs == 0) {
-          ndisp0++;
-        }
-        else if (nargs == instr->arg0) {
-          ndispexact++;
-          s->count--;
-          address = (int)fun->field2;
-          break;
-        }
-        else if (nargs < instr->arg0) {
-          ndispless++;
-        }
-        else { // nargs > instr->arg0
-          ndispgreater++;
-        }
-      }
-      else {
-        ndispother++;
-      }
+      cap *c = cap_alloc();
+      c->address = addressmap[fno];
+      if (NUM_BUILTINS > fno)
+        c->arity = builtin_info[fno].nargs;
+      else
+        c->arity = get_scomb_index(fno-NUM_BUILTINS)->nargs;
+      assert(0 < c->arity); /* MKCAP should not be called for CAFs */
+      c->fno = fno;
 
-      do_mkap(s,instr->arg0);
-      do_update(s,1);
+      int i;
+      for (i = curf->s->count-n; i < curf->s->count; i++)
+        stack_push(c->s,curf->s->data[i]);
+      curf->s->count -= n;
 
-      cell *bottom = unwind_part1(s);
-      if (unwind_part2(s,bottom))
-        break;
-      do_return(s);
+      cell *capcell = alloc_cell2(TYPE_CAP,c,NULL);
+      stack_push(curf->s,capcell);
       break;
     }
+    case OP_MKFRAME: {
+      int fno = instr->arg0;
+      int n = instr->arg1;
+
+      frame *newf = frame_alloc(fno);
+      newf->address = addressmap[fno];
+      newf->d = NULL;
+
+      cell *newfcell = alloc_cell2(TYPE_FRAME,newf,NULL);
+      newf->c = newfcell;
+
+      int i;
+      for (i = curf->s->count-n; i < curf->s->count; i++)
+        stack_push(newf->s,curf->s->data[i]);;
+      curf->s->count -= n;
+      stack_push(curf->s,newfcell);
+      break;
+    }
+    case OP_BIF: {
+      int bif = instr->arg0;
+      int nargs = builtin_info[bif].nargs;
+      int i;
+      assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
+      for (i = 0; i < builtin_info[bif].nstrict; i++) {
+        curf->s->data[curf->s->count-1-i] = resolve_ind(curf->s->data[curf->s->count-1-i]); /* bifs expect it */
+        assert(TYPE_APPLICATION != celltype((cell*)curf->s->data[curf->s->count-1-i]));
+        assert(TYPE_CAP != celltype((cell*)curf->s->data[curf->s->count-1-i]));
+        assert(TYPE_FRAME != celltype((cell*)curf->s->data[curf->s->count-1-i]));
+      }
+
+      #ifdef EXTRA_TRACE
+      if (trace) {
+        printf("builtin %s\n",builtin_info[bif].name);
+        printed++;
+      }
+      #endif
+
+
+      for (i = 0; i < nargs; i++)
+        assert(TYPE_IND != celltype((cell*)curf->s->data[curf->s->count-1-i]));
+
+      builtin_info[bif].f((cell**)(&curf->s->data[curf->s->count-nargs]));
+      curf->s->count -= (nargs-1);
+      break;
+    }
+    case OP_PRINT:
+      print_cell(resolve_ind(curf->s->data[curf->s->count-1]));
+      printed++;
+      curf->s->count--;
+      break;
+    case OP_ISTYPE:
+      if (celltype(resolve_ind(curf->s->data[curf->s->count-1])) == instr->arg0)
+        curf->s->data[curf->s->count-1] = globtrue;
+      else
+        curf->s->data[curf->s->count-1] = globnil;
+      break;
     case OP_PUSHNIL:
-      stack_push(s,globnil);
+      stack_push(curf->s,globnil);
       break;
     case OP_PUSHINT:
-      stack_push(s,alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL));
+      stack_push(curf->s,alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL));
       break;
     case OP_PUSHDOUBLE:
-      stack_push(s,alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1));
+      stack_push(curf->s,alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1));
       break;
     case OP_PUSHSTRING:
-      stack_push(s,((cell**)gp->stringmap->data)[instr->arg0]);
+      stack_push(curf->s,((cell**)gp->stringmap->data)[instr->arg0]);
       break;
     default:
       assert(0);
       break;
     }
 
-    address++;
+    #ifdef EXTRA_TRACE
+    if (trace) {
+      int ln;
+      for (ln = printed; ln < lines-1; ln++)
+        printf("\n");
+    }
+    #endif
+
+    if (done)
+      break;
+
+    curf->address++;
   }
 }

@@ -145,10 +145,12 @@ ginstr *trace_program = NULL;
 char *trace_stackbase = NULL;
 void trace_instr(int instrno, char *stacktop)
 {
+#if 0
   int stacksize = (trace_stackbase-stacktop)/4;
 /*   printf("ginstr %d, stack size = %d\n",instrno,stacksize); */
   print_ginstr(instrno,trace_program+instrno,0);
-  print_stack(-1,(cell**)stacktop,stacksize,1);
+  print_stack((cell**)stacktop,stacksize,1);
+#endif
 }
 
 void compile_trace(x86_assembly *as, int instrno)
@@ -197,6 +199,7 @@ char *code_start = NULL;
 
 void jit_compile(ginstr *program, array *cpucode)
 {
+#if 0
   ginstr *instr = NULL;
   x86_assembly *as = x86_assembly_new();
   int Lstart = as->labels++;
@@ -581,5 +584,6 @@ void jit_compile(ginstr *program, array *cpucode)
   resolve_ind_offset = as->instructions[resolve_ind_stmtno].addr;
 
   x86_assembly_free(as);
+#endif
 }
 

@@ -28,6 +28,7 @@
 //#define DEBUG_GCODE_COMPILATION
 //#define STACK_MODEL_SANITY_CHECK
 //#define SHOW_SUBSTITUTED_NAMES
+//#define EXTRA_TRACE
 
 // Misc
 
@@ -47,12 +48,12 @@
 #define TYPE_RES2        0x07  /*                                                  */
 #define TYPE_RES3        0x08  /*                                                  */
 #define TYPE_IND         0x09  /* left: tgt (cell*)                                */
-#define TYPE_FUNCTION    0x0A  /* left: nargs(int)         right: address          */
+#define TYPE_RES1        0x0A  /*                                                  */
 #define TYPE_SCREF       0x0B  /* left: scomb (scomb*)                             */
 #define TYPE_AREF        0x0C  /* left: array (cell*)      right: index            */
 #define TYPE_HOLE        0x0D  /*                                                  */
-#define TYPE_RES5        0x0E  /*                                                  */
-#define TYPE_RES6        0x0F  /*                                                  */
+#define TYPE_FRAME       0x0E  /* left: frame (frame*)                             */
+#define TYPE_CAP         0x0F  /* left: cap (cap*)                                 */
 #define TYPE_NIL         0x10  /*                                                  */
 #define TYPE_INT         0x11  /*                                                  */
 #define TYPE_DOUBLE      0x12  /*                                                  */
@@ -154,7 +155,6 @@ typedef struct stack {
   int count;
   int base;
   void **data;
-  struct stack *next;
 } stack;
 
 typedef struct array {
@@ -188,9 +188,27 @@ typedef struct builtin {
   builtin_f f;
 } builtin;
 
-/* memory */
+typedef struct cap {
+  int arity;
+  int address;
+  stack *s;
+  int fno; /* temp */
+} cap;
 
-struct dumpentry *pushdump();
+typedef struct frame {
+  int address;
+  struct frame *d;
+  stack *s;
+
+  cell *c;
+  int fno; /* temp */
+  int active;
+  int completed;
+  struct frame *next;
+  struct frame *freelnk;
+} frame;
+
+/* memory */
 
 void initmem();
 cell *alloc_cell();
@@ -199,6 +217,17 @@ cell *alloc_sourcecell(const char *filename, int lineno);
 void collect();
 void free_scomb(scomb *sc);
 void cleanup();
+
+void add_active_frame(frame *f);
+void remove_active_frame(frame *f);
+frame *frame_new(int fno);
+void frame_free(frame *f);
+frame *frame_alloc(int fno);
+void frame_dealloc(frame *f);
+int frame_depth(frame *f);
+
+cap *cap_alloc();
+void cap_dealloc(cap *c);
 
 stack *stack_new();
 void stack_free(stack *s);
@@ -212,7 +241,7 @@ void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
 void copy_cell(cell *redex, cell *source);
 void free_cell_fields(cell *c);
-void print_stack(int redex, cell **stk, int size, int dir);
+void print_stack(cell **stk, int size, int dir);
 
 cell *resolve_ind(cell *c);
 
@@ -235,6 +264,7 @@ void check_scombs_nosharing();
 /* lifting */
 
 void lift(scomb *sc);
+void letreclift(scomb *sc);
 void applift(scomb *sc);
 
 /* reduction */
@@ -287,6 +317,7 @@ void array_append(array *arr, const void *data, int size);
 void array_free(array *arr);
 
 void print_quoted_string(FILE *f, const char *str);
+void parse_check(int cond, cell *c, char *msg);
 
 typedef struct list list;
 
@@ -314,19 +345,13 @@ extern const char *cell_types[NUM_CELLTYPES];
 #endif
 
 #ifndef MEMORY_C
-extern struct dumpentry *dumpstack;
-extern int dumpalloc;
-extern int dumpcount;
-
 extern int trace;
-extern struct dumpentry *dump;
 extern block *blocks;
 extern int nblocks;
 extern int nallocs;
 extern int nscombappls;
 extern int nALLOCs;
 extern int nALLOCcells;
-extern int ndumpallocs;
 extern int nunwindsvar;
 extern int nunwindswhnf;
 extern int nreductions;
@@ -335,6 +360,9 @@ extern int ndispless;
 extern int ndispgreater;
 extern int ndisp0;
 extern int ndispother;
+extern int nframes;
+extern int maxdepth;
+extern int maxframes;
 
 extern cell *globnil;
 extern cell *globtrue;

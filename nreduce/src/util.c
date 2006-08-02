@@ -190,3 +190,11 @@ void print_quoted_string(FILE *f, const char *str)
   }
   fprintf(f,"\"");
 }
+
+void parse_check(int cond, cell *c, char *msg)
+{
+  if (cond)
+    return;
+  fprintf(stderr,"%s\n",msg);
+  exit(1);
+}

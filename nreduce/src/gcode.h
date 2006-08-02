@@ -27,26 +27,26 @@
 
 #define OP_BEGIN         0
 #define OP_END           1
-#define OP_GLOBSTART     2
-#define OP_EVAL          3
-#define OP_UNWIND        4
+#define OP_LAST          2
+#define OP_GLOBSTART     3
+#define OP_EVAL          4
 #define OP_RETURN        5
-#define OP_PUSH          6
-#define OP_PUSHGLOBAL    7
-#define OP_MKAP          8
-#define OP_UPDATE        9
-#define OP_REPLACE       10
-#define OP_POP           11
-#define OP_LAST          12
-#define OP_PRINT         13
-#define OP_BIF           14
-#define OP_JFALSE        15
-#define OP_JUMP          16
-#define OP_JEMPTY        17
-#define OP_ISTYPE        18
-#define OP_ALLOC         19
-#define OP_SQUEEZE       20
-#define OP_DISPATCH      21
+#define OP_DO            6
+#define OP_JFUN          7
+#define OP_JFALSE        8
+#define OP_JUMP          9
+#define OP_JEMPTY        10
+#define OP_PUSH          11
+#define OP_POP           12
+#define OP_UPDATE        13
+#define OP_REPLACE       14
+#define OP_ALLOC         15
+#define OP_SQUEEZE       16
+#define OP_MKCAP         17
+#define OP_MKFRAME       18
+#define OP_BIF           19
+#define OP_PRINT         20
+#define OP_ISTYPE        21
 #define OP_PUSHNIL       22
 #define OP_PUSHINT       23
 #define OP_PUSHDOUBLE    24
@@ -90,28 +90,9 @@ typedef struct gprogram {
 gprogram *gprogram_new();
 void gprogram_free(gprogram *gp);
 
-#define DE_STACKBASE  ((int)&((dumpentry*)0)->stackbase)
-#define DE_STACKCOUNT ((int)&((dumpentry*)0)->stackcount)
-#define DE_ADDRESS    ((int)&((dumpentry*)0)->address)
-#define DE_NEXT       ((int)&((dumpentry*)0)->next)
-
-/* FIXME: For uniformity, we should really store this stuff on the main stack like x86.
-   This would either require the allocation of cells to hold the integer values, or storing
-   the values directly on the stack (i.e. not as cell pointers).
-
-   The latter would require support for a stack containing different types of values, which is
-   actually required anyway for some of the operations described in the latter optimisation
-   sections of IFPL which operate directly on numerical values. */
-
-typedef struct dumpentry {
-  int stackbase;
-  int stackcount;
-  int address;
-  int sb;
-  struct dumpentry *next;
-} dumpentry;
-
-void print_ginstr(int address, ginstr *instr, int usage);
+const char *function_name(int fno);
+int function_nargs(int fno);
+void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage);
 void print_program(gprogram *gp, int builtins, int usage);
 void print_profiling(gprogram *gp);
 void compile(gprogram *gp);

@@ -67,8 +67,8 @@
  * y to be evaluated in this case (as the false branch is taken), and therefore we would be
  * changing the semantics of evaluation by trying to evaluate (len y) before we call the function.
  * So if there is any doubt about whether a function is strict in a particular argument, we assume
- * that it is not, and thus the G-code compiler would generate MKAP instructions instead of
- * evaluating the expression for that argument directly.
+ * that it is not, and thus the G-code compiler would generate MKFRAME/MKCAP instructions instead
+ * of evaluating the expression for that argument directly.
  */
 
 #include "nreduce.h"
@@ -313,6 +313,9 @@ void strictness_analysis()
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+
+  for (sc = scombs; sc; sc = sc->next)
+    letrecs_to_graph(&sc->body,sc);
 
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */

@@ -169,7 +169,12 @@ void lift(scomb *sc)
   stack_free(boundvars);
 }
 
-void find_vars_r(cell *c, int *pos, char **names)
+void letreclift(scomb *sc)
+{
+  sc->body = graph_to_letrec(sc->body);
+}
+
+void find_vars_r(cell *c, int *pos, char **names, letrec *ignore)
 {
   if (c->tag & FLAG_PROCESSED)
     return;
@@ -177,15 +182,22 @@ void find_vars_r(cell *c, int *pos, char **names)
 
   switch (celltype(c)) {
   case TYPE_APPLICATION:
-    find_vars_r((cell*)c->field1,pos,names);
-    find_vars_r((cell*)c->field2,pos,names);
+    find_vars_r((cell*)c->field1,pos,names,ignore);
+    find_vars_r((cell*)c->field2,pos,names,ignore);
     break;
   case TYPE_SYMBOL: {
     char *sym = (char*)c->field1;
+
     int i;
     for (i = 0; i < *pos; i++)
       if (!strcmp(sym,names[i]))
         return;
+
+    letrec *rec;
+    for (rec = ignore; rec; rec = rec->next)
+      if (!strcmp(sym,rec->name))
+        return;
+
     names[(*pos)++] = strdup(sym);
     break;
   }
@@ -202,10 +214,10 @@ void find_vars_r(cell *c, int *pos, char **names)
   }
 }
 
-void find_vars(cell *c, int *pos, char **names)
+void find_vars(cell *c, int *pos, char **names, letrec *ignore)
 {
   cleargraph(c,FLAG_PROCESSED);
-  find_vars_r(c,pos,names);
+  find_vars_r(c,pos,names,ignore);
 }
 
 void applift_r(cell **k, scomb *sc)
@@ -223,14 +235,32 @@ void applift_r(cell **k, scomb *sc)
       nargs++;
     }
     if ((TYPE_SYMBOL == celltype(fun)) ||
-        ((TYPE_SCREF == celltype(fun)) && (nargs > ((scomb*)fun->field1)->nargs)) ||
+         ((TYPE_SCREF == celltype(fun)) && (nargs > ((scomb*)fun->field1)->nargs)) ||
         ((TYPE_BUILTIN == celltype(fun)) && (nargs > builtin_info[(int)fun->field1].nargs))) {
+
+      if (*k == sc->body) {
+        /* just do the arguments */
+        cell *app;
+        for (app = *k; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1)
+          applift_r((cell**)&app->field2,sc);
+        break;
+      }
+
+
+      int maxvars = sc->nargs;
+      if (TYPE_LETREC == celltype(sc->body)) {
+        letrec *rec;
+        for (rec = (letrec*)sc->body->field1; rec; rec = rec->next)
+          maxvars++;
+      }
+
       scomb *newsc = add_scomb(sc->name);
+
       newsc->body = copy_graph(*k);
       newsc->nargs = 0;
-      newsc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
-      find_vars(newsc->body,&newsc->nargs,newsc->argnames);
-      assert(newsc->nargs <= sc->nargs);
+      newsc->argnames = (char**)malloc(maxvars*sizeof(char*));
+      find_vars(newsc->body,&newsc->nargs,newsc->argnames,NULL);
+      assert(newsc->nargs <= maxvars);
 
       (*k) = alloc_cell2(TYPE_SCREF,newsc,NULL);
       int i;
@@ -239,6 +269,14 @@ void applift_r(cell **k, scomb *sc)
         cell *app = alloc_cell2(TYPE_APPLICATION,*k,varref);
         *k = app;
       }
+
+/*       char *rn = real_scname(newsc->name); */
+/*       printf("applift_r(): lifted %s = ",rn); */
+/*       print_code(newsc->body); */
+/*       printf("\n"); */
+/*       free(rn); */
+
+      applift(newsc);
     }
     else {
       applift_r((cell**)&((*k)->field1),sc);
@@ -248,6 +286,13 @@ void applift_r(cell **k, scomb *sc)
   }
   case TYPE_SYMBOL:
     break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+      applift_r(&rec->value,sc);
+    applift_r((cell**)&((*k)->field2),sc);
+    break;
+  }
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
@@ -260,6 +305,10 @@ void applift_r(cell **k, scomb *sc)
 
 void applift(scomb *sc)
 {
+/*   char *tmp = real_scname(sc->name); */
+/*   printf("applift() %s\n",tmp); */
+/*   free(tmp); */
+
   cleargraph(sc->body,FLAG_PROCESSED);
   applift_r(&sc->body,sc);
 }

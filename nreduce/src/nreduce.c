@@ -333,14 +333,6 @@ void source_code_parsing()
     print_scombs1();
 }
 
-void parse_check(int cond, cell *c, char *msg)
-{
-  if (cond)
-    return;
-  fprintf(stderr,"%s\n",msg);
-  exit(1);
-}
-
 void create_letrecs_r(cell *c)
 {
   if (c->tag & FLAG_PROCESSED)
@@ -573,6 +565,24 @@ void lambda_lifting()
     print_scombs1();
 }
 
+void letrec_lifting()
+{
+  debug_stage("Letrec lifting");
+
+  scomb *sc;
+  scomb *last = NULL;
+  for (sc = scombs; sc; sc = sc->next)
+    last = sc;
+
+  scomb *prev = NULL;
+  for (sc = scombs; prev != last; sc = sc->next) {
+    letreclift(sc);
+    prev = sc;
+  }
+
+  if (trace)
+    print_scombs1();
+}
 void app_lifting()
 {
   debug_stage("Application lifting");
@@ -717,6 +727,8 @@ int main(int argc, char **argv)
   app_substitution();
   lambda_lifting();
   check_scombs_nosharing();
+  letrec_lifting();
+  check_scombs_nosharing();
   app_lifting();
   check_scombs_nosharing();
 
@@ -724,7 +736,7 @@ int main(int argc, char **argv)
     reduction_engine();
   }
   else {
-    graph_optimisation();
+/*     graph_optimisation(); */
 
     strictness_analysis();
     if (args.strictdebug) {

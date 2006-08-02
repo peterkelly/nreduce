@@ -228,6 +228,8 @@ static cell *copy_shared(cell *c, cell **cells, int *shared, cell **defbodies,
   }
 
   copy_cell(copy,c);
+  if (c->tag & FLAG_STRICT)
+    copy->tag |= FLAG_STRICT;
 
   if ((TYPE_APPLICATION == celltype(c)) || (TYPE_CONS == celltype(c))) {
     copy->field1 = copy_shared((cell*)c->field1,cells,shared,defbodies,varnames,pos);

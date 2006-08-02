@@ -23,6 +23,7 @@ G-code Compiler
   - Finish the optimizations that are incomplete (e.g. eager evaluation with BIFs)
   - Do type annotations on the supercombinator graphs so that specific operations e.g.
     arithmetic can be optimised
+  - Add common subexpression elimination (e.g. as arises in sumnb)
 
 G-machine
   - Handle errors properly that are related to insufficient parameters being passed

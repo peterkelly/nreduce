@@ -218,6 +218,13 @@ static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
   case TYPE_LAMBDA:
     add_cells(cells,ncells,(cell*)c->field2,alloc);
     break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      add_cells(cells,ncells,rec->value,alloc);
+    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    break;
+  }
   case TYPE_BUILTIN:
   case TYPE_NIL:
   case TYPE_INT:
