@@ -352,7 +352,8 @@ void create_letrecs_r(cell *c)
 
     if ((TYPE_CONS == celltype(c)) &&
         (TYPE_SYMBOL == celltype((cell*)c->field1)) &&
-        !strcmp("let",(char*)((cell*)c->field1)->field1)) {
+        (!strcmp("let",(char*)((cell*)c->field1)->field1) ||
+         !strcmp("letrec",(char*)((cell*)c->field1)->field1))) {
 
       letrec *defs = NULL;
       letrec **lnkptr = NULL;

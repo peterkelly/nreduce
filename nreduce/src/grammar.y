@@ -49,7 +49,6 @@ extern struct cell *parse_root;
 %token LAMBDA
 %token NIL
 %token SUPER
-%token LETREC
 %token IN
 %token PROGSTART
 %token EQUALS

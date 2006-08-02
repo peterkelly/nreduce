@@ -83,7 +83,6 @@ IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 "!"                      { return LAMBDA; }
 "nil"                    { return NIL; }
 "super"                  { return SUPER; }
-"letrec"                 { return LETREC; }
 "in"                     { return IN; }
 "."                      { return '.'; }
 "("                      { return '('; }
