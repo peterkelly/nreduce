@@ -202,6 +202,17 @@ static cell *copy_shared(cell *c, cell **cells, int *shared, cell **defbodies,
   cell *copy;
   cell *ret;
 
+  if (TYPE_APPLICATION != celltype(c)) {
+    assert(isvaluefun(c) || (TYPE_SYMBOL == celltype(c)));
+    if (!(c->tag & FLAG_PROCESSED)) {
+      c->tag |= FLAG_PROCESSED;
+      (*pos)++;
+    }
+    copy = alloc_cell();
+    copy_cell(copy,c);
+    return copy;
+  }
+
   if (c->tag & FLAG_PROCESSED) {
     int i;
     for (i = 0; i < *pos; i++) {
@@ -276,19 +287,29 @@ cell *graph_to_letrec(cell *root)
 
   cleargraph(root,FLAG_PROCESSED);
 
-  lrcell = alloc_cell();
-  lrcell->tag = TYPE_LETREC;
-  lrcell->field1 = NULL;
-  lrcell->field2 = copy_shared(root,cells,shared,defbodies,varnames,&pos);
-  letrec **lnkptr = (letrec**)&lrcell->field1;
+  letrec *reclist = NULL;
+  letrec **lnkptr = &reclist;
+  cell *newbody = copy_shared(root,cells,shared,defbodies,varnames,&pos);;
 
   for (i = 0; i < nshared; i++) {
-    letrec *rec = calloc(1,sizeof(letrec));
-    rec->name = varnames[i];
-    rec->value = defbodies[i];
+    if (defbodies[i]) {
+      letrec *rec = calloc(1,sizeof(letrec));
+      rec->name = varnames[i];
+      rec->value = defbodies[i];
 
-    *lnkptr = rec;
-    lnkptr = &rec->next;
+      *lnkptr = rec;
+      lnkptr = &rec->next;
+    }
+  }
+
+  if (reclist) {
+    lrcell = alloc_cell();
+    lrcell->tag = TYPE_LETREC;
+    lrcell->field1 = reclist;
+    lrcell->field2 = newbody;
+  }
+  else {
+    lrcell = newbody;
   }
 
   free(defbodies);
