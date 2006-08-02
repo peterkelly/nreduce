@@ -112,8 +112,9 @@
 #define B_ARRAYOPTLEN    37
 
 #define B_ECHO           38
+#define B_PRINT          39
 
-#define NUM_BUILTINS     39
+#define NUM_BUILTINS     40
 
 #define TAG_MASK         0xFF
 

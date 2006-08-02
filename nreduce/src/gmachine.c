@@ -437,17 +437,6 @@ void execute(gprogram *gp)
       curf->s->count -= (nargs-1);
       break;
     }
-    case OP_PRINT:
-      print_cell(resolve_ind(curf->s->data[curf->s->count-1]));
-      printed++;
-      curf->s->count--;
-      break;
-    case OP_ISTYPE:
-      if (celltype(resolve_ind(curf->s->data[curf->s->count-1])) == instr->arg0)
-        curf->s->data[curf->s->count-1] = globtrue;
-      else
-        curf->s->data[curf->s->count-1] = globnil;
-      break;
     case OP_PUSHNIL:
       stack_push(curf->s,globnil);
       break;

@@ -45,13 +45,11 @@
 #define OP_MKCAP         17
 #define OP_MKFRAME       18
 #define OP_BIF           19
-#define OP_PRINT         20
-#define OP_ISTYPE        21
-#define OP_PUSHNIL       22
-#define OP_PUSHINT       23
-#define OP_PUSHDOUBLE    24
-#define OP_PUSHSTRING    25
-#define OP_COUNT         26
+#define OP_PUSHNIL       20
+#define OP_PUSHINT       21
+#define OP_PUSHDOUBLE    22
+#define OP_PUSHSTRING    23
+#define OP_COUNT         24
 
 #define GINSTR_OPCODE   ((int)&((ginstr*)0)->opcode)
 #define GINSTR_ARG0     ((int)&((ginstr*)0)->arg0)

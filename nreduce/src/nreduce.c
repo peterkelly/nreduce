@@ -40,6 +40,14 @@
 #define ENGINE_NATIVE      1
 #define ENGINE_REDUCER     2
 
+const char *internal_functions =
+"(__printer (val) (if (cons? val)"
+"                   (if (__printer (head val))"
+"                       nil"
+"                       (__printer (tail val)))"
+"                   (print val)))"
+"(__start () (__printer main))";
+
 extern char *yyfilename;
 extern cell *parse_root;
 extern char *code_start;
@@ -142,6 +150,15 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 
 extern int yyparse();
 extern FILE *yyin;
+
+#define YY_BUF_SIZE 16384
+
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+YY_BUFFER_STATE yy_create_buffer(FILE *file,int size);
+YY_BUFFER_STATE yy_scan_string(const char *str);
+void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
+void yy_delete_buffer(YY_BUFFER_STATE buffer);
+int yylex_destroy(void);
 
 void stream(cell *c)
 {
@@ -256,24 +273,9 @@ cell *conslist_item(cell *list, int index)
   return (cell*)list->field1;
 }
 
-void source_code_parsing()
+void parse_post_processing(cell *root)
 {
-  debug_stage("Source code parsing");
-
-  if (NULL == (yyin = fopen(args.filename,"r"))) {
-    perror(args.filename);
-    exit(1);
-  }
-
-  yyfilename = args.filename;
-
-  if (0 != yyparse())
-    exit(1);
-
-  fclose(yyin);
-
   cell *funlist = parse_root;
-  int gotmain = 0;
 
   while (TYPE_CONS == celltype(funlist)) {
     cell *fundef = (cell*)funlist->field1;
@@ -298,6 +300,11 @@ void source_code_parsing()
       exit(1);
     }
 
+    if (NULL != get_scomb(namestr)) {
+      fprintf(stderr,"Duplicate supercombinator: %s\n",namestr);
+      exit(1);
+    }
+
     scomb *sc = add_scomb(namestr);
     sc->nargs = nargs;
     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
@@ -314,7 +321,18 @@ void source_code_parsing()
 
     sc->body = body;
 
-    if (!strcmp(namestr,"main")) {
+    funlist = (cell*)funlist->field2;
+  }
+}
+
+void check_for_main()
+{
+  int gotmain = 0;
+
+  scomb *sc;
+
+  for (sc = scombs; sc; sc = sc->next) {
+    if (!strcmp(sc->name,"main")) {
       gotmain = 1;
 
       if (0 != sc->nargs) {
@@ -322,14 +340,59 @@ void source_code_parsing()
         exit(1);
       }
     }
-
-    funlist = (cell*)funlist->field2;
   }
 
   if (!gotmain) {
     fprintf(stderr,"No \"main\" function defined\n");
     exit(1);
   }
+}
+
+void parse_file(char *filename)
+{
+  if (NULL == (yyin = fopen(filename,"r"))) {
+    perror(filename);
+    exit(1);
+  }
+
+  yyfilename = filename;
+
+  YY_BUFFER_STATE bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
+  yy_switch_to_buffer(bufstate);
+  if (0 != yyparse())
+    exit(1);
+  yy_delete_buffer(bufstate);
+  yylex_destroy();
+
+  fclose(yyin);
+
+  parse_post_processing(parse_root);
+}
+
+void parse_string(const char *str)
+{
+
+  yyfilename = "(string)";
+
+  YY_BUFFER_STATE bufstate = yy_scan_string(str);
+  yy_switch_to_buffer(bufstate);
+
+  if (0 != yyparse())
+    exit(1);
+
+  yy_delete_buffer(bufstate);
+  yylex_destroy();
+
+  parse_post_processing(parse_root);
+}
+
+void source_code_parsing()
+{
+  debug_stage("Source code parsing");
+
+  parse_string(internal_functions);
+  parse_file(args.filename);
+  check_for_main();
 
   if (trace)
     print_scombs1();
@@ -366,6 +429,14 @@ void create_letrecs_r(cell *c)
         cell *value = (cell*)link1->field1;
         cell *link2 = (cell*)link1->field2;
         parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
+
+        letrec *check;
+        for (check = defs; check; check = check->next) {
+          if (!strcmp(check->name,(char*)symbol->field1)) {
+            fprintf(stderr,"Duplicate letrec definition: %s\n",check->name);
+            exit(1);
+          }
+        }
 
         letrec *newlnk = (letrec*)calloc(1,sizeof(letrec));
         newlnk->name = strdup((char*)symbol->field1);

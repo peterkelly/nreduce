@@ -630,6 +630,12 @@ void b_echo(cell **argstack)
   argstack[0] = globnil;
 }
 
+void b_print(cell **argstack)
+{
+  print_cell(argstack[0]);
+  argstack[0] = globnil;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -686,6 +692,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
 
 { "echo",           1, 1, 1, b_echo           },
+{ "print",          1, 1, 1, b_print          },
 
 };
 

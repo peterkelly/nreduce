@@ -48,8 +48,6 @@
 #define JUMPrel(_a)        add_instruction(gp,OP_JUMP,(_a),0)
 #define GLOBSTART(_a,_b)   add_instruction(gp,OP_GLOBSTART,(_a),(_b))
 #define END()              add_instruction(gp,OP_END,0,0)
-#define PRINT()            add_instruction(gp,OP_PRINT,0,0)
-#define ISTYPE(_a)         add_instruction(gp,OP_ISTYPE,(_a),0)
 #define BEGIN()            add_instruction(gp,OP_BEGIN,0,0)
 #define CALL(_a)           add_instruction(gp,OP_CALL,(_a),0)
 #define ALLOC(_a)          add_instruction(gp,OP_ALLOC,(_a),0)
@@ -156,8 +154,6 @@ const char *op_names[OP_COUNT] = {
 "MKCAP",
 "MKFRAME",
 "BIF",
-"PRINT",
-"ISTYPE",
 "PUSHNIL",
 "PUSHINT",
 "PUSHDOUBLE",
@@ -383,12 +379,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     popstatus(gp->si,builtin_info[arg0].nargs-1);
     setstatusat(gp->si,gp->si->count-1,builtin_info[arg0].reswhnf);
     break;
-  case OP_PRINT:
-    popstatus(gp->si,1);
-    break;
-  case OP_ISTYPE:
-    setstatusat(gp->si,gp->si->count-1,1);
-    break;
   case OP_PUSHNIL:
     pushstatus(gp->si,1);
     break;
@@ -493,9 +483,6 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
     break;
   case OP_BIF:
     printf("; %s",builtin_info[instr->arg0].name);
-    break;
-  case OP_ISTYPE:
-    printf("; ISTYPE %s",cell_types[instr->arg0]);
     break;
   default:
     break;
@@ -987,11 +974,10 @@ void compile(gprogram *gp)
   scomb *sc;
   int index = 0;
   int i;
-  int evaladdr;
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
 
-  scomb *mainsc = get_scomb("main");
-  assert(mainsc);
+  scomb *startsc = get_scomb("__start");
+  assert(startsc);
 
   for (sc = scombs; sc; sc = sc->next)
     sc->index = index++;
@@ -1001,32 +987,14 @@ void compile(gprogram *gp)
   addressmap = (int*)calloc(nfunctions,sizeof(int));
   noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
 
+  gp->si = stackinfo_new(NULL);
   BEGIN();
-  MKFRAME(mainsc->index+NUM_BUILTINS,0);
-  evaladdr = gp->count;;
+  MKFRAME(startsc->index+NUM_BUILTINS,0);
   EVAL(0);
-  PUSH(0);
-  ISTYPE(TYPE_CONS);
-  int notlist_target;
-  JFALSE(notlist_target);
-
-  topsi = gp->si;
-  PUSH(0);
-  BIF(B_HEAD);
-  PUSH(1);
-  BIF(B_TAIL);
-  REPLACE(2);
-  JUMPrel(evaladdr-gp->count);
-  gp->si = topsi;
-
-  LABEL(notlist_target);
-  PRINT();
-  int empty;
-  JEMPTY(empty);
-  JUMPrel(evaladdr-gp->count);
-
-  LABEL(empty);
+  POP(0);
   END();
+  stackinfo_free(gp->si);
+  gp->si = NULL;
 
   evaldoaddr = gp->count;
   EVAL(0);
