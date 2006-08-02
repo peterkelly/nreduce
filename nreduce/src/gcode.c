@@ -580,12 +580,17 @@ void print_profiling(gprogram *gp)
     printf("%-9d",usage[fno]);
     double portion = (((double)usage[fno])/((double)totalusage))*100.0;
     printf(" %-6.2f",portion);
-    if (fno == NUM_BUILTINS+index)
+    if (fno == NUM_BUILTINS+index) {
       printf("start code");
-    else if (fno < NUM_BUILTINS)
+    }
+    else if (fno < NUM_BUILTINS) {
       printf(" %s",builtin_info[fno].name);
-    else
-      printf(" %s",get_scomb_index(fno-NUM_BUILTINS)->name);
+    }
+    else {
+      char *name = real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
+      printf(" %s",name);
+      free(name);
+    }
     printf("\n");
   }
 
@@ -804,6 +809,19 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
           stackinfo_newswap(&gp->si,&oldsi);
           R(gp,falsebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
+        }
+        else if ((TYPE_BUILTIN == celltype(app)) && (B_IF != (int)app->field1)) {
+          S(gp,args,argstrict,p,n);
+          int bif = (int)app->field1;
+          const builtin *bi = &builtin_info[bif];
+          int argno;
+          assert(gp->si->count >= bi->nstrict);
+          for (argno = 0; argno < bi->nstrict; argno++)
+            assert(statusat(gp->si,gp->si->count-1-argno));
+          BIF(bif);
+          if (!bi->reswhnf)
+            EVAL(0);
+          RETURN();
         }
         else {
           S(gp,args,argstrict,p,n);
@@ -1030,11 +1048,7 @@ void compile(gprogram *gp)
     addressmap[i] = gp->count;
     GLOBSTART(i,bi->nargs);
 
-    if (B_CONS == i) {
-      BIF(B_CONS);
-      RETURN();
-    }
-    else if (B_IF == i) {
+    if (B_IF == i) {
       PUSH(0);
       EVAL(0);
       int label1;
@@ -1054,18 +1068,6 @@ void compile(gprogram *gp)
 
       /* label l2 */
       LABEL(label2);
-      EVAL(0);
-      RETURN();
-    }
-    else if (B_HEAD == i) {
-      EVAL(0);
-      BIF(B_HEAD);
-      EVAL(0);
-      RETURN();
-    }
-    else if (B_TAIL == i) {
-      EVAL(0);
-      BIF(B_TAIL);
       EVAL(0);
       RETURN();
     }
