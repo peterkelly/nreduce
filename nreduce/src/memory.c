@@ -46,6 +46,7 @@ extern list *all_letrecs;
 
 frame *active_frames = NULL;
 cell *freeptr = NULL;
+stack *streamstack = NULL;
 
 block *blocks = NULL;
 int nblocks = 0;
@@ -279,6 +280,10 @@ void collect()
   nreachable = 0;
 
   /* mark phase */
+
+  if (streamstack)
+    for (i = 0; i < streamstack->count; i++)
+      mark((cell*)streamstack->data[i]);
 
   if (NULL != collect_ebp) {
     char *p;

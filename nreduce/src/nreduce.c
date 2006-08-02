@@ -46,6 +46,7 @@ extern char *code_start;
 extern int resolve_ind_offset;
 extern array *oldnames;
 extern list *all_letrecs;
+extern stack *streamstack;
 
 FILE *statsfile = NULL;
 
@@ -144,13 +145,13 @@ extern FILE *yyin;
 
 void stream(cell *c)
 {
-  stack *s = stack_new();
-  stack_push(s,c);
-  while (0 < s->count) {
+  streamstack = stack_new();
+  stack_push(streamstack,c);
+  while (0 < streamstack->count) {
     cell *c;
-    reduce(s);
+    reduce(streamstack);
 
-    c = stack_pop(s);
+    c = stack_pop(streamstack);
     c = resolve_ind(c);
     if (TYPE_NIL == celltype(c)) {
       /* nothing */
@@ -165,8 +166,8 @@ void stream(cell *c)
       printf("%s",(char*)c->field1);
     }
     else if (TYPE_CONS == celltype(c)) {
-      stack_push(s,(cell*)c->field2);
-      stack_push(s,(cell*)c->field1);
+      stack_push(streamstack,(cell*)c->field2);
+      stack_push(streamstack,(cell*)c->field1);
     }
     else if (TYPE_APPLICATION == celltype(c)) {
       fprintf(stderr,"Too many arguments applied to function\n");
@@ -177,7 +178,8 @@ void stream(cell *c)
       exit(1);
     }
   }
-  stack_free(s);
+  stack_free(streamstack);
+  streamstack = NULL;
 }
 
 void print_compiled(gprogram *gp, array *cpucode)
@@ -647,10 +649,14 @@ void reduction_engine()
 {
   debug_stage("Reduction engine");
   scomb *mainsc = get_scomb("main");
-  cell *root = mainsc->body;
   struct timeval start;
   struct timeval end;
 
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    letrecs_to_graph(&sc->body,sc);
+
+  cell *root = mainsc->body;
   gettimeofday(&start,NULL);
   stream(root);
   gettimeofday(&end,NULL);
