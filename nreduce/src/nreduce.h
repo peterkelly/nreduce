@@ -140,6 +140,7 @@ typedef struct cell {
 typedef struct letrec {
   char *name;
   cell *value;
+  int strict;
   struct letrec *next;
 } letrec;
 

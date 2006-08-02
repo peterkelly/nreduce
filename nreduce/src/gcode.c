@@ -474,8 +474,8 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
           (NUM_BUILTINS <= program[funstart].arg0)) {
         scomb *sc = get_scomb_index(program[funstart].arg0-NUM_BUILTINS);
         int stackpos = instr->expcount-instr->arg0-1;
-        if ((stackpos > 0) && (stackpos <= sc->nargs))
-          printf("; PUSH %s",real_varname(sc->argnames[sc->nargs-stackpos]));
+        if (stackpos < sc->nargs)
+          printf("; PUSH %s",real_varname(sc->argnames[sc->nargs-1-stackpos]));
       }
     }
     break;
@@ -610,6 +610,7 @@ int presolve(pmap *pm, char *varname)
 }
 
 void C(gprogram *gp, cell *c, pmap *p, int n);
+void E(gprogram *gp, cell *c, pmap *p, int n);
 void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
 {
   letrec *rec;
@@ -620,7 +621,10 @@ void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
 
   ALLOC(n);
   for (rec = (letrec*)c->field1; rec; rec = rec->next) {
-    C(gp,rec->value,pm,d);
+    if (rec->strict)
+      E(gp,rec->value,pm,d);
+    else
+      C(gp,rec->value,pm,d);
     UPDATE(d+1-presolve(pm,rec->name));
   }
 }
@@ -913,8 +917,7 @@ void F(gprogram *gp, int fno, scomb *sc)
 {
   pmap pm;
   int i;
-  cell *copy = graph_to_letrec(sc->body);
-/*   cell *copy = sc->body; */
+  cell *copy = sc->body;
 
   cleargraph(sc->body,FLAG_PROCESSED);
 

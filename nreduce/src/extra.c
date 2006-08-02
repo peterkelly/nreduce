@@ -151,7 +151,10 @@ static void print1(char *prefix, cell *c, int indent)
         printf("%s             %11s ",prefix,"def");
         for (i = 0; i < indent+1; i++)
           printf("  ");
-        printf("%s\n",rec->name);
+        if (rec->strict)
+          printf("!%s\n",rec->name);
+        else
+          printf(" %s\n",rec->name);
         print1(prefix,rec->value,indent+2);
       }
       print1(prefix,(cell*)c->field2,indent+1);
@@ -350,7 +353,10 @@ static void print_code1(FILE *f, cell *c, int needbr, int inlist, int indent, ce
       while (rec) {
         fprintf(f,"\n");
         print_code_indent(f,indent+1);
-        fprintf(f,"%s (",real_varname(rec->name));
+        if (rec->strict)
+          fprintf(f,"!%s (",real_varname(rec->name));
+        else
+          fprintf(f," %s (",real_varname(rec->name));
         print_code1(f,rec->value,0,0,indent+2,c);
 
         rec = rec->next;

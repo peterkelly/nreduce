@@ -229,6 +229,14 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
     for (i = 0; i < sc->nargs; i++)
       if (!strcmp(sc->argnames[i],symbol))
         used[i] = 1;
+    if (TYPE_LETREC == celltype(sc->body)) {
+      letrec *rec;
+      for (rec = (letrec*)sc->body->field1; rec; rec = rec->next) {
+        if (!strcmp(rec->name,symbol))
+          used[i] = 1;
+        i++;
+      }
+    }
     break;
   }
   case TYPE_BUILTIN:
@@ -242,6 +250,12 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
     assert(0);
     break;
   }
+}
+
+void merge_used(int *dest, int *source, int n)
+{
+  for (n--; 0 <= n; n--)
+    dest[n] |= source[n];
 }
 
 /**
@@ -258,11 +272,68 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
  */
 static void check_strictness(scomb *sc, int *changed)
 {
-  int *used = (int*)alloca(sc->nargs*sizeof(int));
-  memset(used,0,sc->nargs*sizeof(int));
+  int nvars = sc->nargs;
+  cell *body = sc->body;
+  letrec *rec;
+
+  if (TYPE_LETREC == celltype(sc->body)) {
+    for (rec = (letrec*)sc->body->field1; rec; rec = rec->next)
+      nvars++;
+    body = (cell*)body->field2;
+  }
+
+  int *used = (int*)alloca(nvars*sizeof(int));
+  memset(used,0,nvars*sizeof(int));
 
   cleargraph(sc->body,FLAG_PROCESSED);
-  check_strictness_r(sc,sc->body,used,changed);
+  check_strictness_r(sc,body,used,changed);
+
+  /* If the body is a letrec expression, compute strictnerss information for each letrec definition,
+     but *only* if that variable is used within the main body. This takes into account cases where
+     arguments to the supercombinator are used in expressions bound by the letrec but not in the
+     main body.
+
+     Additionally, we mark letrec bindings that will definitely be evaluated by the body as strict.
+     During G-code compilation, these expressions will be evaluated directly rather than delayed.
+     HOWEVER, we can only do this safely where we are sure that the expression will not access
+     any of the HOLE cells temporarily created for letrec construction. To be on the safe side
+     we just avoid marking a letrec strict if it references any other letrec variables at all.
+
+     e.g. the following case would not be safe to optimize:
+
+       letrec 
+         L1 (+ L0 1)
+         L0 (+ 2 3)
+       in 
+         * (+ L1 L0) (+ L1 L0)
+
+     because a PUSH L0; PUSH 1; BIF + would cause the engine to add HOLE to +, which is invalid. */
+
+  if (TYPE_LETREC == celltype(sc->body)) {
+    int i = sc->nargs;
+    for (rec = (letrec*)sc->body->field1; rec; rec = rec->next) {
+      if (used[i]) {
+
+        int *valused = (int*)alloca(nvars*sizeof(int));
+        memset(valused,0,nvars*sizeof(int));
+        check_strictness_r(sc,rec->value,valused,changed);
+
+        /* only safe to treat this as strict if it doesn't reference any other letrec vars */
+        int useslvar = 0;
+        int j;
+        for (j = sc->nargs; j < nvars; j++)
+          if (valused[j])
+            useslvar = 1;
+
+        if (!useslvar)
+          rec->strict = 1;
+
+        for (j = 0; j < nvars; j++)
+          used[j] |= valused[j];
+      }
+      i++;
+    }
+  }
 
   if (memcmp(sc->strictin,used,sc->nargs*sizeof(int)))
     *changed = 1;
@@ -314,9 +385,6 @@ void strictness_analysis()
   for (sc = scombs; sc; sc = sc->next)
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
 
-  for (sc = scombs; sc; sc = sc->next)
-    letrecs_to_graph(&sc->body,sc);
-
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
   int changed;
@@ -334,4 +402,7 @@ void strictness_analysis()
        can trickle up to other supercombinators which call the one that changed, and then others
        that call them and so forth. */
   } while (changed);
+
+  if (trace)
+    print_scombs1();
 }
