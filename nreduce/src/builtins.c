@@ -680,7 +680,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "convertarray",   2, 2, 1, b_convertarray   },
 { "arrayitem",      2, 2, 0, b_arrayitem      },
 { "arrayhas",       2, 2, 1, b_arrayhas       },
-{ "arrayext",       2, 2, 1, b_arrayext       },
+{ "arrayext",       2, 2, 0, b_arrayext       },
 { "arraysize",      1, 1, 1, b_arraysize      },
 { "arraytail",      1, 1, 0, b_arraytail      },
 { "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
