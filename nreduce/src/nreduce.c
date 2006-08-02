@@ -458,19 +458,19 @@ void letrec_substitution()
     print_scombs1();
 }
 
-void substitute_apps_r(cell *c)
+void substitute_apps_r(cell **k)
 {
-  if (c->tag & FLAG_PROCESSED)
+  if ((*k)->tag & FLAG_PROCESSED)
     return;
-  c->tag |= FLAG_PROCESSED;
-  switch (celltype(c)) {
+  (*k)->tag |= FLAG_PROCESSED;
+  switch (celltype(*k)) {
   case TYPE_APPLICATION:
-    substitute_apps_r((cell*)c->field1);
-    substitute_apps_r((cell*)c->field2);
+    substitute_apps_r((cell**)&(*k)->field1);
+    substitute_apps_r((cell**)&(*k)->field2);
     break;
   case TYPE_CONS: {
-    cell *left = (cell*)c->field1;
-    cell *right = (cell*)c->field2;
+    cell *left = (cell*)(*k)->field1;
+    cell *right = (cell*)(*k)->field2;
 
     if (TYPE_NIL != celltype(right)) {
       parse_check(TYPE_CONS == celltype(right),right,"expected a cons here");
@@ -493,20 +493,21 @@ void substitute_apps_r(cell *c)
       }
 
       cell *lastitem = (cell*)lst->field1;
-      c->tag = TYPE_APPLICATION;
-      c->field1 = app;
-      c->field2 = lastitem;
+      (*k)->tag = TYPE_APPLICATION;
+      (*k)->field1 = app;
+      (*k)->field2 = lastitem;
 
-      substitute_apps_r(c);
+      substitute_apps_r(k);
     }
     else {
-      copy_cell(c,(cell*)c->field1);
-      substitute_apps_r(c);
+      (*k)->tag &= ~FLAG_PROCESSED;
+      *k = (cell*)(*k)->field1;
+      substitute_apps_r(k);
     }
     break;
   }
   case TYPE_LAMBDA:
-    substitute_apps_r((cell*)c->field2);
+    substitute_apps_r((cell**)&(*k)->field2);
     break;
   case TYPE_BUILTIN:
   case TYPE_SYMBOL:
@@ -522,10 +523,10 @@ void substitute_apps_r(cell *c)
   }
 }
 
-void substitute_apps(cell *c)
+void substitute_apps(cell **k)
 {
-  cleargraph(c,FLAG_PROCESSED);
-  substitute_apps_r(c);
+  cleargraph(*k,FLAG_PROCESSED);
+  substitute_apps_r(k);
 }
 
 void app_substitution()
@@ -534,7 +535,7 @@ void app_substitution()
 
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
-    substitute_apps(sc->body);
+    substitute_apps(&sc->body);
 
   if (trace)
     print_scombs1();

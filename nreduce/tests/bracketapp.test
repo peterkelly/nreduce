@@ -1,0 +1,14 @@
+The expression (echo "side effect\n") should only be evaluated once in this
+expression, despite the fact that it is used twice in the program (via the x
+binding).
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+(main () (let ((x (echo "side effect\n")))
+              (if (x) nil x)))
+==================================== OUTPUT ====================================
+side effect
+
+================================== RETURN CODE =================================
+0
