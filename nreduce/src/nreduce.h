@@ -111,7 +111,9 @@
 #define B_ARRAYTAIL      36
 #define B_ARRAYOPTLEN    37
 
-#define NUM_BUILTINS     38
+#define B_ECHO           38
+
+#define NUM_BUILTINS     39
 
 #define TAG_MASK         0xFF
 

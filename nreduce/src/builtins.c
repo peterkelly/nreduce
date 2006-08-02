@@ -621,6 +621,15 @@ void b_arrayoptlen(cell **argstack)
   }
 }
 
+void b_echo(cell **argstack)
+{
+  if (TYPE_STRING == celltype(argstack[0]))
+    printf("%s",(char*)argstack[0]->field1);
+  else
+    print_code(argstack[0]);
+  argstack[0] = globnil;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -675,6 +684,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "arraysize",      1, 1, 1, b_arraysize      },
 { "arraytail",      1, 1, 0, b_arraytail      },
 { "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
+
+{ "echo",           1, 1, 1, b_echo           },
 
 };
 
