@@ -636,6 +636,25 @@ void b_print(cell **argstack)
   argstack[0] = globnil;
 }
 
+void b_sqrt(cell **argstack)
+{
+  double d = 0.0;
+
+  cell *c = argstack[0];
+  if (TYPE_INT == celltype(c)) {
+    d = (double)((int)c->field1);
+  }
+  else if (TYPE_DOUBLE == celltype(c)) {
+    d = celldouble(c);
+  }
+  else {
+    fprintf(stderr,"sqrt: incompatible argument: %s\n",cell_types[celltype(c)]);
+    exit(1);
+  }
+
+  setdouble(&argstack[0],sqrt(d));
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -693,6 +712,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "echo",           1, 1, 1, b_echo           },
 { "print",          1, 1, 1, b_print          },
+
+{ "sqrt",           1, 1, 1, b_sqrt           },
 
 };
 

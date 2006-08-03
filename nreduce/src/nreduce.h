@@ -114,7 +114,9 @@
 #define B_ECHO           38
 #define B_PRINT          39
 
-#define NUM_BUILTINS     40
+#define B_SQRT           40
+
+#define NUM_BUILTINS     41
 
 #define TAG_MASK         0xFF
 
