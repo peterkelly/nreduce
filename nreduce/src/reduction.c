@@ -43,9 +43,9 @@ static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *v
   case TYPE_SYMBOL: {
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
-      if (!strcmp((char*)stack_at(names,pos),(char*)source->field1)) {
+      if (!strcmp((char*)names->data[pos],(char*)source->field1)) {
         dest->tag = TYPE_IND;
-        dest->field1 = (cell*)stack_at(values,pos);
+        dest->field1 = (cell*)values->data[pos];
         return;
       }
     }
@@ -61,7 +61,7 @@ static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *v
     }
     int i = 0;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
-      cell *val = (cell*)stack_at(values,oldcount+i);
+      cell *val = (cell*)values->data[oldcount+i];
       instantiate_scomb_r(val,rec->value,names,values);
       i++;
     }
