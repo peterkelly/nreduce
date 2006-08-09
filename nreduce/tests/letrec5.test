@@ -4,6 +4,6 @@ nreduce runtests.tmp/test.l
 test.l
 (main () (let ((x y) (y z) (z x)) nil))
 ==================================== OUTPUT ====================================
-Invalid letrec recursion: x
+Attempt to update cell with itself
 ================================== RETURN CODE =================================
 1

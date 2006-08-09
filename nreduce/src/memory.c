@@ -42,7 +42,6 @@ static frame *freeframe = NULL;
 
 extern array *lexstring;
 extern array *oldnames;
-extern list *all_letrecs;
 
 frame *active_frames = NULL;
 cell *freeptr = NULL;
@@ -359,7 +358,6 @@ void cleanup()
       free(((char**)oldnames->data)[i]);
     array_free(oldnames);
   }
-  list_free(all_letrecs,NULL);
 }
 
 void add_active_frame(frame *f)

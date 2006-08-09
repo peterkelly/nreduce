@@ -1,11 +1,13 @@
 =================================== PROGRAM ====================================
-nreduce runtests.tmp/test.l
+nreduce -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 (foo (a b c d e f g) (+ b (+ d (+ e f))))
 (bar (x) (* x 2))
 (main () (foo (bar 1) (bar 2) (bar 3) (bar 4) (bar 5) (bar 6) (bar 7)))
 ==================================== OUTPUT ====================================
-34
+foo a !b c !d !e !f g = + b (+ d (+ e f))
+bar !x = * x 2
+main = foo (bar 1) (bar 2) (bar 3) (bar 4) (bar 5) (bar 6) (bar 7)
 ================================== RETURN CODE =================================
 0

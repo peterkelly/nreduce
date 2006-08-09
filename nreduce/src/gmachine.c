@@ -337,8 +337,13 @@ void execute(gprogram *gp)
       if (TYPE_FRAME == celltype(target))
         ((frame*)target->field1)->c = NULL;
 
+      cell *res = resolve_ind(curf->s->data[curf->s->count-1]);
+      if (target == res) {
+        fprintf(stderr,"Attempt to update cell with itself\n");
+        exit(1);
+      }
       target->tag = TYPE_IND;
-      target->field1 = resolve_ind(curf->s->data[curf->s->count-1]);
+      target->field1 = res;
       curf->s->count--;
       break;
     }

@@ -12,12 +12,12 @@ nreduce_SOURCES = assembler.c \
 	memory.c \
 	strictness.c \
 	util.c \
-	letrec.c \
 	nreduce.c \
 	super.c \
 	lifting.c \
 	graph.c \
 	renaming.c \
+	resolve.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c

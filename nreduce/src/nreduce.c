@@ -53,7 +53,6 @@ extern cell *parse_root;
 extern char *code_start;
 extern int resolve_ind_offset;
 extern array *oldnames;
-extern list *all_letrecs;
 extern stack *streamstack;
 
 FILE *statsfile = NULL;
@@ -81,6 +80,7 @@ static struct argp_option options[] = {
                                         "(default: interpreter)" },
   {"strictness-debug", 'r', NULL,    0, "Do not run program; show strictness information for all "
                                         "supercombinators" },
+  {"lambda-debug",     'l', NULL,    0, "Do not run program; just show results of lambda lifting" },
   { 0 }
 };
 
@@ -93,6 +93,7 @@ struct arguments {
   int engine;
   char *filename;
   int strictdebug;
+  int lambdadebug;
 };
 
 struct arguments args;
@@ -129,6 +130,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     break;
   case 'r':
     arguments->strictdebug = 1;
+    break;
+  case 'l':
+    arguments->lambdadebug = 1;
     break;
   case ARGP_KEY_ARG:
     if (0 == state->arg_num)
@@ -400,8 +404,7 @@ void source_code_parsing()
 
 void create_letrecs_r(cell *c)
 {
-  if (c->tag & FLAG_PROCESSED)
-    return;
+  assert((c == globnil) || !(c->tag & FLAG_PROCESSED)); /* should not be a graph */
   c->tag |= FLAG_PROCESSED;
   switch (celltype(c)) {
   case TYPE_APPLICATION:
@@ -519,13 +522,13 @@ void variable_renaming()
     print_scombs1();
 }
 
-void letrec_substitution()
+void symbol_resolution()
 {
-  debug_stage("Letrec substitution");
+  debug_stage("Symbol resolution");
 
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
-    letrecs_to_graph(&sc->body,sc);
+    resolve_refs(sc);
 
   if (trace)
     print_scombs1();
@@ -533,8 +536,7 @@ void letrec_substitution()
 
 void substitute_apps_r(cell **k)
 {
-  if ((*k)->tag & FLAG_PROCESSED)
-    return;
+  assert((*k == globnil) || !((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
   (*k)->tag |= FLAG_PROCESSED;
   switch (celltype(*k)) {
   case TYPE_APPLICATION:
@@ -582,6 +584,13 @@ void substitute_apps_r(cell **k)
   case TYPE_LAMBDA:
     substitute_apps_r((cell**)&(*k)->field2);
     break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+      substitute_apps_r(&rec->value);
+    substitute_apps_r((cell**)&(*k)->field2);
+    break;
+  }
   case TYPE_BUILTIN:
   case TYPE_SYMBOL:
   case TYPE_NIL:
@@ -629,34 +638,10 @@ void lambda_lifting()
     prev = sc;
   }
 
-  for (sc = scombs; sc; sc = sc->next)
-    sc->body = copy_graph(sc->body);
-
-  list_free(all_letrecs,NULL);
-  all_letrecs = NULL;
-
   if (trace)
     print_scombs1();
 }
 
-void letrec_lifting()
-{
-  debug_stage("Letrec lifting");
-
-  scomb *sc;
-  scomb *last = NULL;
-  for (sc = scombs; sc; sc = sc->next)
-    last = sc;
-
-  scomb *prev = NULL;
-  for (sc = scombs; prev != last; sc = sc->next) {
-    letreclift(sc);
-    prev = sc;
-  }
-
-  if (trace)
-    print_scombs1();
-}
 void app_lifting()
 {
   debug_stage("Application lifting");
@@ -723,11 +708,7 @@ void reduction_engine()
   struct timeval start;
   struct timeval end;
 
-  scomb *sc;
-  for (sc = scombs; sc; sc = sc->next)
-    letrecs_to_graph(&sc->body,sc);
-
-  cell *root = mainsc->body;
+  cell *root = alloc_cell2(TYPE_SCREF,mainsc,NULL);
   gettimeofday(&start,NULL);
   stream(root);
   gettimeofday(&end,NULL);
@@ -800,12 +781,17 @@ int main(int argc, char **argv)
   source_code_parsing();
   letrec_creation();
   variable_renaming();
-  letrec_substitution();
 
   app_substitution();
+
+  symbol_resolution();
   lambda_lifting();
   check_scombs_nosharing();
-  letrec_lifting();
+  if (args.lambdadebug) {
+    print_scombs1();
+    exit(0);
+  }
+
   check_scombs_nosharing();
   app_lifting();
   check_scombs_nosharing();

@@ -69,6 +69,13 @@
  * So if there is any doubt about whether a function is strict in a particular argument, we assume
  * that it is not, and thus the G-code compiler would generate MKFRAME/MKCAP instructions instead
  * of evaluating the expression for that argument directly.
+ *
+ * We also try to detect the "strictness" of letrec bindings, so that when constructing a letrec
+ * graph during G-code execution we can in some cases evaluate expressions directly rather than
+ * creating FRAME or CAP cells for them. For this reason, struct letrec contains a "strict" field
+ * which indicates that the expression is definitely used in the body of the letrec expression.
+ * Note however that we can only evaluate it directly if it does not depend on later bindings
+ * in the letrec expression; graphs constructed using a letrec must be evaluated lazily.
  */
 
 #include "nreduce.h"
@@ -114,30 +121,106 @@ static int fun_strictin(cell *c, int argno)
 }
 
 /**
+ * Add the specified variable to a list, maintaining the correct sort order
+ *
+ * @param vars The list to add to
+ * @param name The name to add
+ */
+static void add_var(list **vars, char *name)
+{
+  list **ptr = vars;
+  int cmp = -1;
+  while (*ptr && (0 > (cmp = strcmp((char*)(*ptr)->data,name)))) {
+    ptr = &(*ptr)->next;
+  }
+  if (cmp)
+    list_push(ptr,name);
+}
+
+/**
+ * Add all names which appear in *both* a and b to the specified list.
+ *
+ * @param vars The list to add to
+ * @param a The first list to take names from. This list must be sorted.
+ * @param b The second list to take names from. This list must be sorted.
+ */
+static void add_union(list **dest, list *a, list *b)
+{
+  while (a && b) {
+    int cmp = strcmp((char*)a->data,(char*)b->data);
+
+    if (cmp < 0) {
+      a = a->next;
+    }
+    else if (cmp > 0) {
+      b = b->next;
+    }
+    else {
+      add_var(dest,(char*)a->data);
+      a = a->next;
+      b = b->next;
+    }
+  }
+}
+
+/**
  * Recursively perform strictness analysis on an expression.
  *
- * This function does two things:
+ * This function does three things:
  * - Records which arguments will definitely be evaluated, assuming this expression is evaluated
  * - Marks any application nodes corresponding to an expression being passed as an argument to
  *   a supercombinator or built-in function which is strict in that argument
+ * - Marks any letrec bindings used within the expression as strict
  *
  * @param sc      The supercombinator being processed
  *
  * @param c       The expression to analysed
  *
- * @param used    An array of sc->nargs integers which indicate which arguments are used by the
- *                expression
+ * @param used    A (sorted) list of strings indicating the variables that are used in a strict
+ *                context within the expression. This list is updated by the function if any new
+ *                ones are encountered.
  *
  * @param changed A pointer to an integer that is set to true if a change was made to the
  *                strictness flag of one or more application nodes. Changes to used are not
  *                recorded here; this is the responsibility of check_strictness().
  */
-static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
+static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
 {
-  if (c->tag & FLAG_PROCESSED)
-    return;
-  c->tag |= FLAG_PROCESSED;
   switch (celltype(c)) {
+  case TYPE_LETREC: {
+    letrec *rec;
+    list *bodyused = NULL;
+
+    int again;
+    do {
+      again = 0;
+      for (rec = (letrec*)c->field1; rec; rec = rec->next)
+        if (rec->strict)
+          check_strictness_r(sc,rec->value,&bodyused,changed);
+      check_strictness_r(sc,(cell*)c->field2,&bodyused,changed);
+
+      for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+        if (!rec->strict && list_contains_string(bodyused,rec->name)) {
+          rec->strict = 1;
+          again = 1;
+          *changed = 1;
+        }
+      }
+    } while (again);
+
+    list *l;
+    for (l = bodyused; l; l = l->next) {
+      int isrec = 0;
+      for (rec = (letrec*)c->field1; rec && !isrec; rec = rec->next)
+        if (!strcmp((char*)l->data,rec->name))
+          isrec = 1;
+      if (!isrec) {
+        add_var(used,(char*)l->data);
+      }
+    }
+    list_free(bodyused,NULL);
+    break;
+  }
   case TYPE_APPLICATION: {
     cell *fun;
     int nargs = 0;
@@ -184,34 +267,28 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
          conditional is evaluated at runtime. A variable is only considered strict on the branches
          of an if in the case where it is used in a strict context in *both* branches.
 
-         Despite 2nd and 3rd arguments to if not being strict, we treat the *contents* of these
+         Despite the 2nd and 3rd arguments to if not being strict, we treat the *contents* of these
          expressions as being so. Whichever branch is taken will definitely need to return a value,
          so they are treated as a strict context and analysed with another recursive call to
          check_strictness_r(). This information is still relevant to the G-code compiler due to
          the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
-
-         Note that due to the fact that the supercombinator body is a graph and the recursive
-         calls to this function may find it's already evaluated, we may miss some variable uses -
-         but that's ok. It just means potentially missing out on a few (rare) opportunitites for
-         optimisation. */
+         We also annotate application nodes within the true/false branches with FLAG_STRICT
+         where appropriate. */
       if ((TYPE_BUILTIN == celltype(fun)) && (B_IF == (int)fun->field1)) {
         cell *falsebranch = (cell*)c->field2;
         cell *truebranch = (cell*)((cell*)c->field1)->field2;
 
-        int *trueused = (int*)alloca(sc->nargs*sizeof(int));
-        int *falseused = (int*)alloca(sc->nargs*sizeof(int));
-        memset(trueused,0,sc->nargs*sizeof(int));
-        memset(falseused,0,sc->nargs*sizeof(int));
+        list *trueused = NULL;
+        list *falseused = NULL;
 
-        check_strictness_r(sc,truebranch,trueused,changed);
-        check_strictness_r(sc,falsebranch,falseused,changed);
+        check_strictness_r(sc,truebranch,&trueused,changed);
+        check_strictness_r(sc,falsebranch,&falseused,changed);
 
         /* Merge the argument usage information from both branches, keeping only those arguments
            which appear in both. */
-        int i;
-        for (i = 0; i < sc->nargs; i++)
-          if (trueused[i] && falseused[i])
-            used[i] = 1;
+        add_union(used,trueused,falseused);
+        list_free(trueused,NULL);
+        list_free(falseused,NULL);
       }
     }
 
@@ -220,25 +297,12 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
     check_strictness_r(sc,(cell*)c->field1,used,changed);
     break;
   }
-  case TYPE_SYMBOL: {
+  case TYPE_SYMBOL:
     /* We are in a strict context and have an encountered a symbol, which must correspond to
-       one of the supercombinator's arguments. Mark the appropriate entry in the usage array to
-       indicate that this argument will definitely be evaluated. */
-    char *symbol = (char*)c->field1;
-    int i;
-    for (i = 0; i < sc->nargs; i++)
-      if (!strcmp(sc->argnames[i],symbol))
-        used[i] = 1;
-    if (TYPE_LETREC == celltype(sc->body)) {
-      letrec *rec;
-      for (rec = (letrec*)sc->body->field1; rec; rec = rec->next) {
-        if (!strcmp(rec->name,symbol))
-          used[i] = 1;
-        i++;
-      }
-    }
+       one of the supercombinator's arguments or a letrec binding. Add the variable to the list
+       to indicate that this argument will definitely be evaluated. */
+    add_var(used,(char*)c->field1);
     break;
-  }
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
@@ -250,12 +314,6 @@ static void check_strictness_r(scomb *sc, cell *c, int *used, int *changed)
     assert(0);
     break;
   }
-}
-
-void merge_used(int *dest, int *source, int n)
-{
-  for (n--; 0 <= n; n--)
-    dest[n] |= source[n];
 }
 
 /**
@@ -272,73 +330,19 @@ void merge_used(int *dest, int *source, int n)
  */
 static void check_strictness(scomb *sc, int *changed)
 {
-  int nvars = sc->nargs;
-  cell *body = sc->body;
-  letrec *rec;
+  list *used = NULL;
+  check_strictness_r(sc,sc->body,&used,changed);
 
-  if (TYPE_LETREC == celltype(sc->body)) {
-    for (rec = (letrec*)sc->body->field1; rec; rec = rec->next)
-      nvars++;
-    body = (cell*)body->field2;
-  }
+  int *strictin = (int*)alloca(sc->nargs*sizeof(int));
+  int i;
+  for (i = 0; i < sc->nargs; i++)
+    strictin[i] = list_contains_string(used,sc->argnames[i]);
 
-  int *used = (int*)alloca(nvars*sizeof(int));
-  memset(used,0,nvars*sizeof(int));
-
-  cleargraph(sc->body,FLAG_PROCESSED);
-  check_strictness_r(sc,body,used,changed);
-
-  /* If the body is a letrec expression, compute strictnerss information for each letrec definition,
-     but *only* if that variable is used within the main body. This takes into account cases where
-     arguments to the supercombinator are used in expressions bound by the letrec but not in the
-     main body.
-
-     Additionally, we mark letrec bindings that will definitely be evaluated by the body as strict.
-     During G-code compilation, these expressions will be evaluated directly rather than delayed.
-     HOWEVER, we can only do this safely where we are sure that the expression will not access
-     any of the HOLE cells temporarily created for letrec construction. To be on the safe side
-     we just avoid marking a letrec strict if it references any other letrec variables at all.
-
-     e.g. the following case would not be safe to optimize:
-
-       letrec 
-         L1 (+ L0 1)
-         L0 (+ 2 3)
-       in 
-         * (+ L1 L0) (+ L1 L0)
-
-     because a PUSH L0; PUSH 1; BIF + would cause the engine to add HOLE to +, which is invalid. */
-
-  if (TYPE_LETREC == celltype(sc->body)) {
-    int i = sc->nargs;
-    for (rec = (letrec*)sc->body->field1; rec; rec = rec->next) {
-      if (used[i]) {
-
-        int *valused = (int*)alloca(nvars*sizeof(int));
-        memset(valused,0,nvars*sizeof(int));
-        check_strictness_r(sc,rec->value,valused,changed);
-
-        /* only safe to treat this as strict if it doesn't reference any other letrec vars */
-        int useslvar = 0;
-        int j;
-        for (j = sc->nargs; j < nvars; j++)
-          if (valused[j])
-            useslvar = 1;
-
-        if (!useslvar)
-          rec->strict = 1;
-
-        for (j = 0; j < nvars; j++)
-          used[j] |= valused[j];
-      }
-      i++;
-    }
-  }
-
-  if (memcmp(sc->strictin,used,sc->nargs*sizeof(int)))
+  if (memcmp(sc->strictin,strictin,sc->nargs*sizeof(int)))
     *changed = 1;
 
-  memcpy(sc->strictin,used,sc->nargs*sizeof(int));
+  memcpy(sc->strictin,strictin,sc->nargs*sizeof(int));
+  list_free(used,NULL);
 }
 
 /**
@@ -348,17 +352,9 @@ void dump_strictinfo()
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
-    printf("%s ",sc->name);
-    int i;
-    for (i = 0; i < sc->nargs; i++) {
-      if (sc->strictin) {
-        if (sc->strictin[i])
-          printf("!");
-        else
-          printf(" ");
-      }
-      printf("%s ",sc->argnames[i]);
-    }
+    if (!strncmp(sc->name,"__",2))
+      continue;
+    print_scomb_code(sc);
     printf("\n");
   }
 }
@@ -388,12 +384,10 @@ void strictness_analysis()
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
   int changed;
-  int iteration = 0;
   do {
     changed = 0;
     for (sc = scombs; sc; sc = sc->next)
       check_strictness(sc,&changed);
-    iteration++;
 
     /* If there was any changes, we have to go back through and check the graphs again. One or
        more of the supercombinators is now known to be strict in one of its arguments that

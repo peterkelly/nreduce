@@ -144,6 +144,7 @@ typedef struct letrec {
   char *name;
   cell *value;
   int strict;
+  struct scomb *sc;
   struct letrec *next;
 } letrec;
 
@@ -251,11 +252,9 @@ void print_stack(cell **stk, int size, int dir);
 
 cell *resolve_ind(cell *c);
 
-/* letrec */
+/* resolve */
 
-void letrecs_to_graph(cell **root, scomb *sc);
-cell *graph_to_letrec(cell *root);
-void find_graph_cells(cell ***cells, int *ncells, cell *root);
+void resolve_refs(scomb *sc);
 
 /* super */
 
@@ -270,7 +269,6 @@ void check_scombs_nosharing();
 /* lifting */
 
 void lift(scomb *sc);
-void letreclift(scomb *sc);
 void applift(scomb *sc);
 
 /* reduction */
@@ -291,9 +289,12 @@ void rename_variables(scomb *sc);
 /* extra */
 
 void fatal(const char *msg);
-void debug(int depth, const char *format, ...);
+int debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
+int count_args(cell *c);
+cell *get_arg(cell *c, int argno);
 void print(cell *c);
+void print_codef2(FILE *f, cell *c, int pos);
 void print_codef(FILE *f, cell *c);
 void print_code(cell *c);
 void print_scomb_code(scomb *sc);
@@ -340,6 +341,7 @@ void list_append(list **l, void *data);
 void list_push(list **l, void *data);
 void *list_pop(list **l);
 int list_count(list *l);
+void *list_item(list *l, int item);
 void list_free(list *l, list_d_t d);
 
 int list_contains_string(list *l, const char *str);

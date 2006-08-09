@@ -1,0 +1,23 @@
+foo should be strict in b and c, because they are used in the conditional
+expression
+
+foo should also be strict in e and g (because they are used in both the true
+and false branches), but *not* in d, f, h, or i (as these variables are used
+in only one or other branch)
+=================================== PROGRAM ====================================
+nreduce -r runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+(foo (a b c d e f g h i j k l)
+  (if (= b c)
+      (+ (* d e) (* f g))
+      (+ (* e g) (* h i))))
+
+(main () nil)
+==================================== OUTPUT ====================================
+foo a !b !c d !e f !g h i j k l = if (= b c) 
+                                     (+ (* d e) (* f g)) 
+                                     (+ (* e g) (* h i))
+main = nil
+================================== RETURN CODE =================================
+0

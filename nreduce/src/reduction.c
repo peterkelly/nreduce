@@ -30,122 +30,74 @@
 #include <stdarg.h>
 #include <math.h>
 
-static int resolve_var(stack *s, int oldcount, scomb *sc, cell **k)
+static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *values)
 {
-  int varno;
-  cell *var = *k;
-
-  assert(TYPE_IND != celltype(var)); /* var comes from the scomb */
-
-  if (TYPE_SYMBOL != celltype(var))
-    return 0;
-  varno = get_scomb_var(sc,(char*)var->field1);
-/*   assert(NULL == var->field2); */
-
-  if (0 <= varno) {
-    int stackpos = oldcount-1-varno;
-    assert(0 <= stackpos);
-    *k = (cell*)stack_at(s,stackpos);
-    return 1;
-  }
-  return 0;
-}
-
-static void inschild(stack *s, int oldcount, scomb *sc, int base, cell **dt, cell *source)
-{
-  cell *oldsource;
-  assert(TYPE_IND != celltype(source)); /* source comes from the scomb */
-
-  oldsource = source;
-
-  resolve_var(s,oldcount,sc,&source);
-  if (oldsource != source) {
-    (*dt) = source;
-  }
-  else if (source->tag & FLAG_PROCESSED) {
-    int b;
-    int found = 0;
-    for (b = oldcount; b < base; b += 2) {
-      cell *de = stack_at(s,b);
-      cell *so = stack_at(s,b+1);
-      assert(so->tag & FLAG_PROCESSED);
-      if (so == source) {
-        (*dt) = de;
-        found = 1;
-        break;
+  switch (celltype(source)) {
+  case TYPE_APPLICATION:
+    dest->tag = TYPE_APPLICATION;
+    dest->field1 = alloc_cell();
+    dest->field2 = alloc_cell();
+    instantiate_scomb_r((cell*)dest->field1,(cell*)source->field1,names,values);
+    instantiate_scomb_r((cell*)dest->field2,(cell*)source->field2,names,values);
+    break;
+  case TYPE_SYMBOL: {
+    int pos;
+    for (pos = names->count-1; 0 <= pos; pos--) {
+      if (!strcmp((char*)stack_at(names,pos),(char*)source->field1)) {
+        dest->tag = TYPE_IND;
+        dest->field1 = (cell*)stack_at(values,pos);
+        return;
       }
     }
-    assert(found);
+    fprintf(stderr,"Unknown variable: %s\n",(char*)source->field1);
+    break;
   }
-  else {
-    (*dt) = alloc_cell();
-    stack_insert(s,source,base);
-    stack_insert(s,(*dt),base);
+  case TYPE_LETREC: {
+    int oldcount = names->count;
+    letrec *rec;
+    for (rec = (letrec*)source->field1; rec; rec = rec->next) {
+      stack_push(names,(char*)rec->name);
+      stack_push(values,alloc_cell());
+    }
+    int i = 0;
+    for (rec = (letrec*)source->field1; rec; rec = rec->next) {
+      cell *val = (cell*)stack_at(values,oldcount+i);
+      instantiate_scomb_r(val,rec->value,names,values);
+      i++;
+    }
+    instantiate_scomb_r(dest,(cell*)source->field2,names,values);
+    names->count = oldcount;
+    values->count = oldcount;
+    break;
+  }
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    copy_cell(dest,source);
+    break;
   }
 }
 
 static void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
 {
-  int oldcount = s->count;
-  int base = s->count;
-  assert(TYPE_IND != celltype(source)); /* source comes from the scomb */
-  assert(TYPE_EMPTY != celltype(source));
+  stack *names = stack_new();
+  stack *values = stack_new();
 
-  stack_push(s,dest);
-  stack_push(s,source);
-  cleargraph(sc->body,FLAG_PROCESSED);
-  while (base < s->count) {
-    int wasarg;
-
-    dest = stack_at(s,base++);
-
-    assert(TYPE_IND != celltype((cell*)s->data[base])); /* s->data[base] comes from the scomb */
-    wasarg = resolve_var(s,oldcount,sc,(cell**)(&s->data[base]));
-    source = stack_at(s,base++);
-    assert(TYPE_IND != celltype(source));
-
-    source->tag |= FLAG_PROCESSED;
-
-    if (wasarg) {
-      free_cell_fields(dest);
-      dest->tag = TYPE_IND;
-      dest->field1 = source;
-    }
-    else {
-      switch (celltype(source)) {
-      case TYPE_APPLICATION:
-      case TYPE_CONS:
-        free_cell_fields(dest);
-        dest->tag = celltype(source);
-
-        inschild(s,oldcount,sc,base,(cell**)(&dest->field1),(cell*)source->field1);
-        inschild(s,oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
-
-        break;
-      case TYPE_LAMBDA:
-        free_cell_fields(dest);
-        dest->tag = TYPE_LAMBDA;
-        dest->field1 = strdup((char*)source->field1);
-        inschild(s,oldcount,sc,base,(cell**)(&dest->field2),(cell*)source->field2);
-        break;
-      case TYPE_BUILTIN:
-      case TYPE_NIL:
-      case TYPE_INT:
-      case TYPE_DOUBLE:
-      case TYPE_STRING:
-      case TYPE_SYMBOL:
-      case TYPE_SCREF:
-        copy_cell(dest,source);
-        break;
-      default:
-        printf("instantiate_scomb: unknown cell type %d\n",celltype(source));
-        assert(0);
-        break;
-      }
-    }
+  int i;
+  for (i = 0; i < sc->nargs; i++) {
+    int pos = s->count-1-i;
+    assert(0 <= pos);
+    stack_push(names,(char*)sc->argnames[i]);
+    stack_push(values,(cell*)stack_at(s,pos));
   }
 
-  s->count = oldcount;
+  instantiate_scomb_r(dest,source,names,values);
+
+  stack_free(names);
+  stack_free(values);
 }
 
 void reduce(stack *s)
@@ -287,6 +239,7 @@ void reduce(stack *s)
       break;
     }
     default:
+      fprintf(stderr,"Encountered %s\n",cell_types[celltype(target)]);
       assert(0);
       break;
     }

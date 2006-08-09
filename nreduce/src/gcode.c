@@ -596,14 +596,14 @@ int presolve(pmap *pm, char *varname)
   for (i = 0; i < pm->count; i++)
     if (!strcmp(pm->varnames[i],varname))
       return pm->indexes[i];
-  printf("unknown variable: %s\n",varname);
+  printf("unknown variable: %s\n",real_varname(varname));
   assert(!"unknown variable");
   return -1;
 }
 
 void C(gprogram *gp, cell *c, pmap *p, int n);
 void E(gprogram *gp, cell *c, pmap *p, int n);
-void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
+void Cletrec(gprogram *gp, cell *c, int d, pmap *pm, int strictcontext)
 {
   letrec *rec;
   int n = 0;
@@ -613,15 +613,15 @@ void Cletrec(gprogram *gp, cell *c, int d, pmap *pm)
 
   ALLOC(n);
   for (rec = (letrec*)c->field1; rec; rec = rec->next) {
-    if (rec->strict)
-      E(gp,rec->value,pm,d);
-    else
+/*     if (rec->strict) */
+/*       E(gp,rec->value,pm,d); */
+/*     else */
       C(gp,rec->value,pm,d);
     UPDATE(d+1-presolve(pm,rec->name));
   }
 }
 
-void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
+void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2)
 {
   int ndefs = 0;
   int i = 0;
@@ -629,8 +629,6 @@ void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2, int *ndefs2)
 
   for (rec = (letrec*)c->field1; rec; rec = rec->next)
     ndefs++;
-
-  *ndefs2 = ndefs;
 
   pprime->count = pm->count+ndefs;
   pprime->varnames = (char**)malloc(pprime->count*sizeof(char*));
@@ -722,6 +720,19 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
         EVAL(0);
       }
     }
+    break;
+  }
+  case TYPE_LETREC: {
+    pmap pprime;
+    int nprime = 0;
+
+    Xr(c,p,n,&pprime,&nprime);
+    Cletrec(gp,c,nprime,&pprime,1);
+    E(gp,(cell*)c->field2,&pprime,nprime);
+    SQUEEZE(1,nprime-n);
+
+    free(pprime.varnames);
+    free(pprime.indexes);
     break;
   }
   default:
@@ -855,11 +866,10 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     break;
   case TYPE_LETREC: {
     pmap pprime;
-    int ndefs = 0;
     int nprime = 0;
 
-    Xr(c,p,n,&pprime,&nprime,&ndefs);
-    Cletrec(gp,c,nprime,&pprime);
+    Xr(c,p,n,&pprime,&nprime);
+    Cletrec(gp,c,nprime,&pprime,0);
     R(gp,(cell*)c->field2,&pprime,nprime);
 
     free(pprime.varnames);
@@ -911,6 +921,19 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
   case TYPE_INT:     PUSHINT((int)c->field1);                      break;
   case TYPE_DOUBLE:  PUSHDOUBLE((int)c->field1,(int)c->field2);    break;
   case TYPE_STRING:  PUSHSTRING(add_string(gp,(char*)c->field1));  break;
+  case TYPE_LETREC: {
+    pmap pprime;
+    int nprime = 0;
+
+    Xr(c,p,n,&pprime,&nprime);
+    Cletrec(gp,c,nprime,&pprime,0);
+    C(gp,(cell*)c->field2,&pprime,nprime);
+    SQUEEZE(1,nprime-n);
+
+    free(pprime.varnames);
+    free(pprime.indexes);
+    break;
+  }
   default:           assert(0);                                    break;
   }
   cdepth--;
@@ -923,8 +946,6 @@ void F(gprogram *gp, int fno, scomb *sc)
   pmap pm;
   int i;
   cell *copy = sc->body;
-
-  cleargraph(sc->body,FLAG_PROCESSED);
 
   addressmap[NUM_BUILTINS+sc->index] = gp->count;
 

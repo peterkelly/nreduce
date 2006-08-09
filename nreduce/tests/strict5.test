@@ -1,0 +1,52 @@
+c is not strict because it is only used in a non-strict context, a single branch
+of the first inner if statement. The first x binding is not strict either,
+although the others are. These are *separate*, unrelated bindings.
+
+d and e are strict because they are used the inner conditional of the if
+statement that constitutes the body of the letrec expression in the outer
+conditional
+
+f is strict because it is used from the second and third x bindings, which
+are in a strict context because they will definitely be evaluated by both
+the true and false branches.
+
+g and h, while also used in the second and third x bindings, are not strict,
+because each of them is only used in one of the top-level if branches
+
+k is strict because it is used (indirectly) in the body of the letrec expression
+appearing in both top-level if branches
+
+a, b, i, j, and l are not strict as they do not appear in the supercombinator
+body at all
+
+=================================== PROGRAM ====================================
+nreduce -r runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+(foo (a b c d e f g h i j k l)
+  (if (let ((x (+ c d))
+            (y (+ d e)))
+           (if y x d))
+      (let ((x (+ f g))
+            (y (+ x k)))
+            (* y 2))
+      (let ((x (+ f h))
+            (y (+ x k)))
+            (* y 2))))
+
+(main () nil)
+==================================== OUTPUT ====================================
+foo a b c !d !e !f g h i j !k l = if (let ((x (+ c d))
+                                           (y! (+ d e)))
+                                          (if y 
+                                              x 
+                                              d))
+                                     (let ((x! (+ f g))
+                                           (y! (+ x k)))
+                                          (* y 2))
+                                     (let ((x! (+ f h))
+                                           (y! (+ x k)))
+                                          (* y 2))
+main = nil
+================================== RETURN CODE =================================
+0

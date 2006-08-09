@@ -126,6 +126,16 @@ int list_count(list *l)
   return count;
 }
 
+void *list_item(list *l, int item)
+{
+  while (0 < item) {
+    assert(l->next);
+    l = l->next;
+    item--;
+  }
+  return l->data;
+}
+
 void list_free(list *l, list_d_t d)
 {
   while (l) {

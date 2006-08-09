@@ -30,120 +30,280 @@
 #include <stdarg.h>
 #include <math.h>
 
-extern list *all_letrecs;
-
-typedef struct abstraction {
+typedef struct binding {
   char *name;
-  int level;
-  struct abstraction *next;
-} abstraction;
+  letrec *rec;
+} binding;
 
-static void abstract(const char *name, int level, abstraction **abslist)
+binding *binding_new(const char *name, letrec *rec)
 {
-  abstraction *a;
-  /* skip duplicate variable abstraction */
-  for (a = *abslist; a; a = a->next)
-    if (!strcmp(a->name,name))
-      return;
-
-  a = (abstraction*)calloc(1,sizeof(abstraction));
-  a->name = strdup(name);
-  a->level = level;
-
-  abstraction **ptr = abslist;
-  while (*ptr && ((*ptr)->level < level))
-    ptr = &((*ptr)->next);
-
-  a->next = *ptr;
-  *ptr = a;
+  binding *bnd = (binding*)calloc(1,sizeof(binding));
+  bnd->name = strdup(name);
+  bnd->rec = rec;
+  return bnd;
 }
 
-static void lift_r(stack *boundvars, cell **k, abstraction **abslist, list *noabsvars, char *prefix)
+void bindings_setcount(stack *boundvars, int count)
 {
-  if ((*k)->tag & FLAG_PROCESSED)
-    return;
-  (*k)->tag |= FLAG_PROCESSED;
+  while (count < boundvars->count) {
+    binding *bnd = (binding*)boundvars->data[--boundvars->count];
+    free(bnd->name);
+    free(bnd);
+  }
+}
 
+int binding_level(stack *boundvars, const char *sym)
+{
+  int i;
+  for (i = boundvars->count-1; 0 <= i; i--) {
+    binding *bnd = (binding*)boundvars->data[i];
+    if (!strcmp(bnd->name,sym)) {
+      if (bnd->rec && (TYPE_LAMBDA == celltype(bnd->rec->value)))
+        return -1;
+      else
+        return i+1;
+    }
+  }
+
+  return 0; /* top-level def */
+}
+
+void abstract(stack *boundvars, const char *sym, int level, cell **lambda, int *changed)
+{
+  assert(lambda);
+  int appdepth = 0;
+  cell **reall = lambda;
+  while (TYPE_APPLICATION == celltype(*reall)) {
+    reall = (cell**)&(*reall)->field1;
+    appdepth++;
+  }
+
+  while ((TYPE_LAMBDA == celltype(*reall)) &&
+         (level > binding_level(boundvars,(char*)(*reall)->field1))) {
+    reall = (cell**)&(*reall)->field2;
+    appdepth--;
+  }
+  if (strcmp(sym,(char*)(*reall)->field1)) {
+    *reall = alloc_cell2(TYPE_LAMBDA,strdup(sym),*reall);
+    *changed = 1;
+  }
+}
+
+static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const char *prefix)
+{
   switch (celltype(*k)) {
-  case TYPE_APPLICATION: {
-    lift_r(boundvars,(cell**)&((*k)->field1),abslist,noabsvars,prefix);
-    lift_r(boundvars,(cell**)&((*k)->field2),abslist,noabsvars,prefix);
+  case TYPE_APPLICATION:
+    create_scombs(boundvars,(cell**)&((*k)->field1),NULL,prefix);
+    create_scombs(boundvars,(cell**)&((*k)->field2),NULL,prefix);
+    break;
+  case TYPE_LETREC: {
+    int oldcount = boundvars->count;
+    letrec *rec;
+
+    /* Add a binding entry for each definition, and in the process create an empty supercombinator
+       for those which correspond to lambda abstractions. These should now have no free variables,
+       and the recursive call to create_scombs() will fill in the supercombinator with the
+       appropriate arguments and body. */
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next) {
+      if (TYPE_LAMBDA == celltype(rec->value))
+        rec->sc = add_scomb(rec->name);
+      stack_push(boundvars,binding_new(rec->name,rec));
+    }
+
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+      create_scombs(boundvars,&rec->value,rec,prefix);
+    create_scombs(boundvars,(cell**)&((*k)->field2),NULL,prefix);
+
+    /* Remove any definitions that have been converted into supercombinators (all references
+       to them should have been replaced by this point */
+    letrec **ptr = (letrec**)&(*k)->field1;
+    while (*ptr) {
+      if ((*ptr)->sc) {
+        letrec *old = *ptr;
+        *ptr = (*ptr)->next;
+        free(old->name);
+        free(old);
+      }
+      else {
+        ptr = &(*ptr)->next;
+      }
+    }
+
+    /* If we have no definitions left, simply replace the letrec with its body */
+    if (NULL == (*k)->field1)
+      *k = (*k)->field2;
+
+    bindings_setcount(boundvars,oldcount);
     break;
   }
   case TYPE_LAMBDA: {
-    list *l;
-    letrec *rec;
-    char *name = NULL;
-    for (l = all_letrecs; l && !name; l = l->next)
-      for (rec = (letrec*)l->data; rec && !name; rec = rec->next)
-        if ((rec->value == *k) && (NULL == get_scomb(rec->name)))
-          name = rec->name;
-    if (!name)
-      name = prefix;
-
-    scomb *sc = add_scomb(name);
     int oldcount = boundvars->count;
-    cell **body = k;
-    list *lambdavars = NULL;
-    abstraction *newabs = NULL;
-    abstraction *a;
-    while (TYPE_LAMBDA == celltype(*body)) {
-      stack_push(boundvars,strdup((char*)(*body)->field1));
-      list_append(&lambdavars,strdup((char*)(*body)->field1));
-      body = (cell**)&(*body)->field2;
+    scomb *newsc = inletrec ? inletrec->sc : add_scomb(prefix);
+
+    cell **tmp;
+    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = (cell**)&(*tmp)->field2) {
+      stack_push(boundvars,binding_new((char*)(*tmp)->field1,NULL));
+      newsc->nargs++;
     }
-    sc->body = *body;
+    newsc->body = *tmp;
+    newsc->argnames = (char**)malloc(newsc->nargs*sizeof(char*));
+    int argno = 0;
+    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = (cell**)&(*tmp)->field2)
+      newsc->argnames[argno++] = strdup((char*)(*tmp)->field1);
 
-    lift_r(boundvars,body,&newabs,lambdavars,name);
+    create_scombs(boundvars,tmp,NULL,newsc->name);
+    *k = alloc_cell2(TYPE_SCREF,newsc,NULL);
 
-    while (oldcount < boundvars->count)
-      free(boundvars->data[--boundvars->count]);
-
-    sc->nargs = 0;
-    for (a = newabs; a; a = a->next)
-      sc->nargs++;
-    sc->nargs += list_count(lambdavars);
-    sc->argnames = (char**)malloc(sc->nargs*sizeof(char*));
-    int i = 0;
-    for (a = newabs; a; a = a->next)
-      sc->argnames[i++] = strdup(a->name);
-    for (l = lambdavars; l; l = l->next)
-      sc->argnames[i++] = strdup((char*)l->data);
-
-    free((*k)->field1);
-    (*k)->tag = TYPE_SCREF;
-    (*k)->field1 = sc;
-    (*k)->field2 = NULL;
-
-    a = newabs;
-    while (a) {
-      abstraction *next = a->next;
-      cell *fun = alloc_cell();
-      copy_raw(fun,*k);
-      (*k)->tag = TYPE_APPLICATION;
-      (*k)->field1 = fun;
-      (*k)->field2 = alloc_cell2(TYPE_SYMBOL,a->name,NULL);
-      free(a);
-      a = next;
-    }
-
-    list_free(lambdavars,free);
-
-    lift_r(boundvars,k,abslist,noabsvars,prefix);
+    bindings_setcount(boundvars,oldcount);
     break;
   }
   case TYPE_SYMBOL: {
     char *sym = (char*)(*k)->field1;
-    if (abslist && !list_contains_string(noabsvars,sym)) {
-      int i;
-      int level = 0;
-      for (i = boundvars->count-1; 0 <= i; i--) {
-        if (!strcmp((char*)boundvars->data[i],sym)) {
-          level = i+1;
-          break;
-        }
+    int i;
+    for (i = boundvars->count-1; 0 <= i; i--) {
+      binding *bnd = (binding*)boundvars->data[i];
+      if (!strcmp(bnd->name,sym)) {
+        if (bnd->rec && bnd->rec->sc)
+          *k = alloc_cell2(TYPE_SCREF,bnd->rec->sc,NULL);
+        break;
       }
-      abstract(sym,level,abslist);
+    }
+    break;
+  }
+  case TYPE_SCREF:
+  case TYPE_BUILTIN:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+static void make_app(cell **k, list *args)
+{
+  list *l;
+  for (l = args; l; l = l->next) {
+    char *argname = (char*)l->data;
+    cell *varref = alloc_cell2(TYPE_SYMBOL,strdup(argname),NULL);
+    *k = alloc_cell2(TYPE_APPLICATION,*k,varref);
+  }
+}
+
+static void replace_usage(cell **k, const char *fun, cell *extra, list *args)
+{
+  switch (celltype(*k)) {
+  case TYPE_APPLICATION:
+    replace_usage((cell**)&((*k)->field1),fun,extra,args);
+    replace_usage((cell**)&((*k)->field2),fun,extra,args);
+    break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+      replace_usage(&rec->value,fun,extra,args);
+    replace_usage((cell**)&((*k)->field2),fun,extra,args);
+    break;
+  }
+  case TYPE_LAMBDA:
+    replace_usage((cell**)&((*k)->field2),fun,extra,args);
+    break;
+  case TYPE_SYMBOL: {
+    char *sym = (char*)(*k)->field1;
+    if (!strcmp(sym,fun))
+      make_app(k,args);
+    break;
+  }
+  case TYPE_SCREF:
+  case TYPE_BUILTIN:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
+                   int *changed, letrec *inletrec)
+{
+  switch (celltype(*k)) {
+  case TYPE_APPLICATION:
+    lift_r(boundvars,(cell**)&((*k)->field1),noabsvars,lambda,changed,NULL);
+    lift_r(boundvars,(cell**)&((*k)->field2),noabsvars,lambda,changed,NULL);
+    break;
+  case TYPE_LETREC: {
+    int oldcount = boundvars->count;
+    list *newnoabs = NULL;
+    letrec *rec;
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next) {
+      stack_push(boundvars,binding_new(rec->name,rec));
+      list_push(&newnoabs,strdup(rec->name));
+    }
+    list *l;
+    for (l = noabsvars; l; l = l->next)
+      list_push(&newnoabs,strdup((char*)l->data));
+
+    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next) {
+      int islambda = (TYPE_LAMBDA == celltype(rec->value));
+      cell *oldval = rec->value;
+
+      lift_r(boundvars,&rec->value,newnoabs,lambda,changed,rec);
+
+      if (islambda && (oldval != rec->value)) {
+        list *vars = NULL;
+        cell *tmp;
+        for (tmp = rec->value; tmp != oldval; tmp = (cell*)tmp->field2) {
+          assert(TYPE_LAMBDA == celltype(tmp));
+          list_append(&vars,tmp->field1);
+        }
+        replace_usage(k,rec->name,rec->value,vars);
+        list_free(vars,NULL);
+      }
+    }
+    lift_r(boundvars,(cell**)&((*k)->field2),newnoabs,lambda,changed,NULL);
+
+    bindings_setcount(boundvars,oldcount);
+    list_free(newnoabs,free);
+    break;
+  }
+  case TYPE_LAMBDA: {
+    int oldcount = boundvars->count;
+    list *lambdavars = NULL;
+    cell **tmp;
+    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = (cell**)&(*tmp)->field2) {
+      stack_push(boundvars,binding_new((char*)(*tmp)->field1,NULL));
+      list_append(&lambdavars,strdup((char*)(*tmp)->field1));
+    }
+
+    cell *oldlambda = *k;
+    lift_r(boundvars,tmp,lambdavars,k,changed,NULL);
+    if (!inletrec && (oldlambda != *k)) {
+      list *args = NULL;
+      for (tmp = k; *tmp != oldlambda; tmp = (cell**)&(*tmp)->field2)
+        list_append(&args,(char*)(*tmp)->field1);
+      make_app(k,args);
+      list_free(args,NULL);
+    }
+
+    bindings_setcount(boundvars,oldcount);
+
+    for (tmp = k; TYPE_APPLICATION == celltype(*tmp); tmp = (cell**)&(*tmp)->field1)
+      lift_r(boundvars,(cell**)&(*tmp)->field2,noabsvars,lambda,changed,NULL);
+    list_free(lambdavars,free);
+    break;
+  }
+  case TYPE_SYMBOL: {
+    char *sym = (char*)(*k)->field1;
+    if (lambda && !list_contains_string(noabsvars,sym)) {
+      int level = binding_level(boundvars,sym);
+      if (0 <= level)
+        abstract(boundvars,sym,level,lambda,changed);
     }
     break;
   }
@@ -163,21 +323,26 @@ static void lift_r(stack *boundvars, cell **k, abstraction **abslist, list *noab
 void lift(scomb *sc)
 {
   stack *boundvars = stack_new();
+  int changed;
+  do {
+    changed = 0;
+    int i;
+    for (i = 0; i < sc->nargs; i++)
+      stack_push(boundvars,binding_new(sc->argnames[i],NULL));
+    lift_r(boundvars,&sc->body,NULL,NULL,&changed,NULL);
+    bindings_setcount(boundvars,0);
 
-  cleargraph(sc->body,FLAG_PROCESSED);
-  lift_r(boundvars,&sc->body,NULL,NULL,sc->name);
+    if (!changed)
+      break;
+  } while (changed);
+
+  create_scombs(boundvars,&sc->body,NULL,sc->name);
   stack_free(boundvars);
-}
-
-void letreclift(scomb *sc)
-{
-  sc->body = graph_to_letrec(sc->body);
 }
 
 void find_vars_r(cell *c, int *pos, char **names, letrec *ignore)
 {
-  if (c->tag & FLAG_PROCESSED)
-    return;
+  assert((c == globnil) || !(c->tag & FLAG_PROCESSED)); /* should not be a graph */
   c->tag |= FLAG_PROCESSED;
 
   switch (celltype(c)) {
@@ -222,8 +387,7 @@ void find_vars(cell *c, int *pos, char **names, letrec *ignore)
 
 void applift_r(cell **k, scomb *sc)
 {
-  if ((*k)->tag & FLAG_PROCESSED)
-    return;
+  assert((*k == globnil) || !((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
   (*k)->tag |= FLAG_PROCESSED;
 
   switch (celltype(*k)) {
