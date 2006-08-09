@@ -8,19 +8,21 @@ nreduce -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 (foo (a b c d e f g h i j k l)
-  (let ((u (+ k l))
-        (v (* u (+ i j)))
+  (let ((v (* u (+ i j)))
+        (u (+ k l))
         (w (* u (+ g h)))
         (x (* w (+ e f))))
-        (+ b x)))
+        (+ b (if x v 0))))
 
 (main () nil)
 ==================================== OUTPUT ====================================
-foo a !b c d !e !f !g !h i j !k !l = let ((u! (+ k l))
-                                          (v (* u (+ i j)))
+foo a !b c d !e !f !g !h i j !k !l = let ((v (* u (+ i j)))
+                                          (u! (+ k l))
                                           (w! (* u (+ g h)))
                                           (x! (* w (+ e f))))
-                                         (+ b x)
+                                         (+ b (if x 
+                                                  v 
+                                                  0))
 main = nil
 ================================== RETURN CODE =================================
 0

@@ -435,7 +435,7 @@ void execute(gprogram *gp)
       #endif
 
 
-      for (i = 0; i < nargs; i++)
+      for (i = 0; i < builtin_info[bif].nstrict; i++)
         assert(TYPE_IND != celltype((cell*)curf->s->data[curf->s->count-1-i]));
 
       builtin_info[bif].f((cell**)(&curf->s->data[curf->s->count-nargs]));

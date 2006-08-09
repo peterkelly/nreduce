@@ -585,63 +585,115 @@ void print_profiling(gprogram *gp)
 }
 
 typedef struct pmap {
-  int count;
-  char **varnames;
-  int *indexes;
+  stack *names;
+  stack *indexes;
 } pmap;
 
 int presolve(pmap *pm, char *varname)
 {
+  assert(pm->names->count == pm->indexes->count);
   int i;
-  for (i = 0; i < pm->count; i++)
-    if (!strcmp(pm->varnames[i],varname))
-      return pm->indexes[i];
+  for (i = 0; i < pm->names->count; i++)
+    if (!strcmp((char*)pm->names->data[i],varname))
+      return (int)pm->indexes->data[i];
   printf("unknown variable: %s\n",real_varname(varname));
-  assert(!"unknown variable");
+  abort();
   return -1;
+}
+
+void presize(pmap *pm, int count)
+{
+  assert(pm->names->count == pm->indexes->count);
+  assert(count <= pm->names->count);
+  pm->names->count = count;
+  pm->indexes->count = count;
+}
+
+int pcount(pmap *pm)
+{
+  assert(pm->names->count == pm->indexes->count);
+  return pm->names->count;
+}
+
+void getusage(cell *c, list **used)
+{
+  switch (celltype(c)) {
+  case TYPE_APPLICATION:
+    getusage((cell*)c->field1,used);
+    getusage((cell*)c->field2,used);
+    break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      getusage(rec->value,used);
+    getusage((cell*)c->field2,used);
+    break;
+  }
+  case TYPE_SYMBOL:
+    if (!list_contains_string(*used,(char*)c->field1))
+      list_push(used,(char*)c->field1);
+    break;
+  case TYPE_BUILTIN:
+  case TYPE_SCREF:
+  case TYPE_NIL:
+  case TYPE_INT:
+  case TYPE_DOUBLE:
+  case TYPE_STRING:
+    break;
+  }
+}
+
+int letrecs_used(cell *expr, letrec *first)
+{
+  int count = 0;
+  list *used = NULL;
+  getusage(expr,&used);
+
+  letrec *rec;
+  for (rec = first; rec; rec = rec->next)
+    if (list_contains_string(used,rec->name))
+      count++;
+
+  list_free(used,NULL);
+  return count;
 }
 
 void C(gprogram *gp, cell *c, pmap *p, int n);
 void E(gprogram *gp, cell *c, pmap *p, int n);
-void Cletrec(gprogram *gp, cell *c, int d, pmap *pm, int strictcontext)
+void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
-  int n = 0;
-
-  for (rec = (letrec*)c->field1; rec; rec = rec->next)
-    n++;
-
-  ALLOC(n);
+  int count = 0;
   for (rec = (letrec*)c->field1; rec; rec = rec->next) {
-/*     if (rec->strict) */
-/*       E(gp,rec->value,pm,d); */
-/*     else */
-      C(gp,rec->value,pm,d);
-    UPDATE(d+1-presolve(pm,rec->name));
+    count++;
+    stack_push(p->names,rec->name);
+    stack_push(p->indexes,(void*)(n+count));
   }
-}
 
-void Xr(cell *c, pmap *pm, int dold, pmap *pprime, int *d2)
-{
-  int ndefs = 0;
-  int i = 0;
-  letrec *rec;
+  rec = (letrec*)c->field1;
+  for (; rec; rec = rec->next) {
+    if (strictcontext && rec->strict && (0 == letrecs_used(rec->value,rec))) {
+      E(gp,rec->value,p,n);
+      n++;
+      count--;
+    }
+    else {
+      break;
+    }
+  }
 
-  for (rec = (letrec*)c->field1; rec; rec = rec->next)
-    ndefs++;
+  if (0 == count)
+    return;
 
-  pprime->count = pm->count+ndefs;
-  pprime->varnames = (char**)malloc(pprime->count*sizeof(char*));
-  pprime->indexes = (int*)malloc(pprime->count*sizeof(int));
-  memcpy(pprime->varnames,pm->varnames,pm->count*sizeof(char*));
-  memcpy(pprime->indexes,pm->indexes,pm->count*sizeof(int));
+  ALLOC(count);
+  n += count;
 
-  *d2 = dold;
-
-  for (rec = (letrec*)c->field1; rec; rec = rec->next) {
-    pprime->varnames[pm->count+i] = rec->name;
-    pprime->indexes[pm->count+i] = ++(*d2);
-    i++;
+  for (; rec; rec = rec->next) {
+    if (strictcontext && rec->strict && (0 == letrecs_used(rec->value,rec)))
+      E(gp,rec->value,p,n);
+    else
+      C(gp,rec->value,p,n);
+    UPDATE(n+1-presolve(p,rec->name));
   }
 }
 
@@ -723,16 +775,12 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     break;
   }
   case TYPE_LETREC: {
-    pmap pprime;
-    int nprime = 0;
-
-    Xr(c,p,n,&pprime,&nprime);
-    Cletrec(gp,c,nprime,&pprime,1);
-    E(gp,(cell*)c->field2,&pprime,nprime);
-    SQUEEZE(1,nprime-n);
-
-    free(pprime.varnames);
-    free(pprime.indexes);
+    int oldcount = p->names->count;
+    Cletrec(gp,c,n,p,1);
+    n += pcount(p)-oldcount;
+    E(gp,(cell*)c->field2,p,n);
+    SQUEEZE(1,pcount(p)-oldcount);
+    presize(p,oldcount);
     break;
   }
   default:
@@ -865,15 +913,11 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     RETURN();
     break;
   case TYPE_LETREC: {
-    pmap pprime;
-    int nprime = 0;
-
-    Xr(c,p,n,&pprime,&nprime);
-    Cletrec(gp,c,nprime,&pprime,0);
-    R(gp,(cell*)c->field2,&pprime,nprime);
-
-    free(pprime.varnames);
-    free(pprime.indexes);
+    int oldcount = p->names->count;
+    Cletrec(gp,c,n,p,1);
+    n += pcount(p)-oldcount;
+    R(gp,(cell*)c->field2,p,n);
+    presize(p,oldcount);
     break;
   }
   default:
@@ -922,16 +966,12 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
   case TYPE_DOUBLE:  PUSHDOUBLE((int)c->field1,(int)c->field2);    break;
   case TYPE_STRING:  PUSHSTRING(add_string(gp,(char*)c->field1));  break;
   case TYPE_LETREC: {
-    pmap pprime;
-    int nprime = 0;
-
-    Xr(c,p,n,&pprime,&nprime);
-    Cletrec(gp,c,nprime,&pprime,0);
-    C(gp,(cell*)c->field2,&pprime,nprime);
-    SQUEEZE(1,nprime-n);
-
-    free(pprime.varnames);
-    free(pprime.indexes);
+    int oldcount = p->names->count;
+    Cletrec(gp,c,n,p,0);
+    n += pcount(p)-oldcount;
+    C(gp,(cell*)c->field2,p,n);
+    SQUEEZE(1,pcount(p)-oldcount);
+    presize(p,oldcount);
     break;
   }
   default:           assert(0);                                    break;
@@ -943,7 +983,6 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
 
 void F(gprogram *gp, int fno, scomb *sc)
 {
-  pmap pm;
   int i;
   cell *copy = sc->body;
 
@@ -973,14 +1012,20 @@ void F(gprogram *gp, int fno, scomb *sc)
   printf("\n");
 #endif
 
-  pm.count = sc->nargs;
-  pm.varnames = sc->argnames;
-  pm.indexes = (int*)alloca(sc->nargs*sizeof(int));
-  for (i = 0; i < sc->nargs; i++)
-    pm.indexes[i] = sc->nargs-i;
+  pmap pm;
+
+  pm.names = stack_new();
+  pm.indexes = stack_new();
+  for (i = 0; i < sc->nargs; i++) {
+    stack_push(pm.names,sc->argnames[i]);
+    stack_push(pm.indexes,(void*)(sc->nargs-i));
+  }
 
 /*   R(gp,copy,sc->nargs,&pm); */
   R(gp,copy,&pm,sc->nargs);
+
+  stack_free(pm.names);
+  stack_free(pm.indexes);
 
   stackinfo_free(gp->si);
   gp->si = oldsi;

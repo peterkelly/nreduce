@@ -148,6 +148,12 @@ typedef struct letrec {
   struct letrec *next;
 } letrec;
 
+typedef struct list list;
+struct list {
+  void *data;
+  list *next;
+};
+
 typedef struct carray {
   int alloc;
   int size;
@@ -222,6 +228,7 @@ cell *alloc_cell();
 cell *alloc_cell2(int tag, void *field1, void *field2);
 cell *alloc_sourcecell(const char *filename, int lineno);
 void collect();
+void free_letrec(letrec *rec);
 void free_scomb(scomb *sc);
 void cleanup();
 
@@ -255,6 +262,10 @@ cell *resolve_ind(cell *c);
 /* resolve */
 
 void resolve_refs(scomb *sc);
+
+/* reorder */
+
+void reorder_letrecs(cell *c);
 
 /* super */
 
@@ -326,15 +337,8 @@ void array_free(array *arr);
 void print_quoted_string(FILE *f, const char *str);
 void parse_check(int cond, cell *c, char *msg);
 
-typedef struct list list;
-
 typedef void (*list_d_t)(void *a);
 typedef void* (*list_copy_t)(void *a);
-
-struct list {
-  void *data;
-  list *next;
-};
 
 list *list_copy(list *orig, list_copy_t copy);
 void list_append(list **l, void *data);

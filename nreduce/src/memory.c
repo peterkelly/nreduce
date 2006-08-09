@@ -214,6 +214,12 @@ void mark(cell *c)
   }
 }
 
+void free_letrec(letrec *rec)
+{
+  free(rec->name);
+  free(rec);
+}
+
 void free_cell_fields(cell *c)
 {
   switch (celltype(c)) {
@@ -226,8 +232,7 @@ void free_cell_fields(cell *c)
     letrec *rec = (letrec*)c->field1;
     while (rec) {
       letrec *next = rec->next;
-      free(rec->name);
-      free(rec);
+      free_letrec(rec);
       rec = next;
     }
     break;

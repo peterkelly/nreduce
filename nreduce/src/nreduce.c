@@ -81,6 +81,8 @@ static struct argp_option options[] = {
   {"strictness-debug", 'r', NULL,    0, "Do not run program; show strictness information for all "
                                         "supercombinators" },
   {"lambda-debug",     'l', NULL,    0, "Do not run program; just show results of lambda lifting" },
+  {"reorder-debug",    'o', NULL,    0, "Do not run program; just show results of "
+                                        "letrec reordering" },
   { 0 }
 };
 
@@ -94,6 +96,7 @@ struct arguments {
   char *filename;
   int strictdebug;
   int lambdadebug;
+  int reorderdebug;
 };
 
 struct arguments args;
@@ -133,6 +136,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     break;
   case 'l':
     arguments->lambdadebug = 1;
+    break;
+  case 'o':
+    arguments->reorderdebug = 1;
     break;
   case ARGP_KEY_ARG:
     if (0 == state->arg_num)
@@ -661,6 +667,18 @@ void app_lifting()
     print_scombs1();
 }
 
+void letrec_reordering()
+{
+  debug_stage("Letrec reordering");
+
+  scomb *sc;
+  for (sc = scombs; sc; sc = sc->next)
+    reorder_letrecs(sc->body);
+
+  if (trace)
+    print_scombs1();
+}
+
 void graph_optimisation()
 {
   debug_stage("Graph optimisation");
@@ -795,6 +813,12 @@ int main(int argc, char **argv)
   check_scombs_nosharing();
   app_lifting();
   check_scombs_nosharing();
+
+  letrec_reordering();
+  if (args.reorderdebug) {
+    print_scombs1();
+    exit(0);
+  }
 
   if (ENGINE_REDUCER == args.engine) {
     reduction_engine();
