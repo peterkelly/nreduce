@@ -34,7 +34,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#include <argp.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -66,30 +65,6 @@ array *global_cpucode = NULL;
 
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
-static char doc[] = "nreduce";
-
-const char *argp_program_version = "nreduce 0.1";
-
-const char *argp_program_bug_address = "pmk@cs.adelaide.edu.au";
-
-static char args_doc[] = "FILENAME\n";
-
-static struct argp_option options[] = {
-  {"trace",            't', NULL,    0, "Enable tracing" },
-  {"statistics",       's', "FILE",  0, "Write statistics to FILE" },
-  {"profiling",        'p', NULL,    0, "Show profiling information" },
-  {"just-strictness",  'j', NULL,    0, "Just display strictness information" },
-  {"just-gcode",       'g', NULL,    0, "Just print compiled G-code and exit" },
-  {"engine",           'e', "ENGINE",0, "Use execution engine: (r)educer|(i)nterpreter|(n)ative\n"
-                                        "(default: interpreter)" },
-  {"strictness-debug", 'r', NULL,    0, "Do not run program; show strictness information for all "
-                                        "supercombinators" },
-  {"lambda-debug",     'l', NULL,    0, "Do not run program; just show results of lambda lifting" },
-  {"reorder-debug",    'o', NULL,    0, "Do not run program; just show results of "
-                                        "letrec reordering" },
-  { 0 }
-};
-
 struct arguments {
   int trace;
   char *statistics;
@@ -105,62 +80,89 @@ struct arguments {
 
 struct arguments args;
 
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
+void usage()
 {
-  struct arguments *arguments = (struct arguments*)state->input;
-
-  switch (key) {
-  case 't':
-    arguments->trace = 1;
-    break;
-  case 's':
-    arguments->statistics = arg;
-    break;
-  case 'p':
-    arguments->profiling = 1;
-    break;
-  case 'j':
-    arguments->juststrict = 1;
-    break;
-  case 'g':
-    arguments->justgcode = 1;
-    break;
-  case 'e':
-    if (!strncasecmp(arg,"i",1))
-      arguments->engine = ENGINE_INTERPRETER;
-    else if (!strncasecmp(arg,"n",1))
-      arguments->engine = ENGINE_NATIVE;
-    else if (!strncasecmp(arg,"r",1))
-      arguments->engine = ENGINE_REDUCER;
-    else
-      argp_usage (state);
-    break;
-  case 'r':
-    arguments->strictdebug = 1;
-    break;
-  case 'l':
-    arguments->lambdadebug = 1;
-    break;
-  case 'o':
-    arguments->reorderdebug = 1;
-    break;
-  case ARGP_KEY_ARG:
-    if (0 == state->arg_num)
-      arguments->filename = arg;
-    else
-      argp_usage (state);
-    break;
-  case ARGP_KEY_END:
-    if (1 > state->arg_num)
-      argp_usage (state);
-    break;
-  default:
-    return ARGP_ERR_UNKNOWN;
-  }
-  return 0;
+  printf(
+"Usage: nreduce [OPTIONS] FILENAME\n"
+"\n"
+"where OPTIONS includes zero or more of the following:\n"
+"\n"
+"  -h, --help              Help (this message)\n"
+"  -t, --trace             Enable tracing\n"
+"  -s, --statistics FILE   Write statistics to FILE\n"
+"  -p, --profiling         Show profiling information\n"
+"  -j, --just-strictness   Just display strictness information\n"
+"  -g, --just-gcode        Just print compiled G-code and exit\n"
+"  -e, --engine ENGINE     Use execution engine:\n"
+"                          (r)educer|(i)nterpreter|(n)ative\n"
+"                          (default: interpreter)\n"
+"  -r, --strictness-debug  Do not run program; show strictness information for\n"
+"                          all supercombinators\n"
+"  -l, --lambdadebug       Do not run program; just show results of lambda\n"
+"                          lifting\n"
+"  -o, --reorder-debug     Do not run program; just show results of letrec\n"
+"                          reordering\n");
+  exit(1);
 }
 
-static struct argp argp = { options, parse_opt, args_doc, doc };
+void parse_args(int argc, char **argv)
+{
+  if (1 >= argc)
+    usage();
+
+  int i;
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i],"-h") || !strcmp(argv[i],"--help")) {
+      usage();
+    }
+    else if (!strcmp(argv[i],"-t") || !strcmp(argv[i],"--trace")) {
+      args.trace = 1;
+    }
+    else if (!strcmp(argv[i],"-s") || !strcmp(argv[i],"--statistics")) {
+      if (++i >= argc)
+        usage();
+      args.statistics = argv[i];
+    }
+    else if (!strcmp(argv[i],"-p") || !strcmp(argv[i],"--profiling")) {
+      args.profiling = 1;
+    }
+    else if (!strcmp(argv[i],"-j") || !strcmp(argv[i],"--just-strictness")) {
+      args.juststrict = 1;
+    }
+    else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-gcode")) {
+      args.justgcode = 1;
+    }
+    else if (!strcmp(argv[i],"-e") || !strcmp(argv[i],"--engine")) {
+      if (++i >= argc)
+        usage();
+      if (!strncasecmp(argv[i],"i",1))
+        args.engine = ENGINE_INTERPRETER;
+      else if (!strncasecmp(argv[i],"n",1))
+        args.engine = ENGINE_NATIVE;
+      else if (!strncasecmp(argv[i],"r",1))
+        args.engine = ENGINE_REDUCER;
+      else
+        usage();
+    }
+    else if (!strcmp(argv[i],"-r") || !strcmp(argv[i],"--strictness-debug")) {
+      args.strictdebug = 1;
+    }
+    else if (!strcmp(argv[i],"-l") || !strcmp(argv[i],"--lambda-debug")) {
+      args.lambdadebug = 1;
+    }
+    else if (!strcmp(argv[i],"-o") || !strcmp(argv[i],"--reorder-debug")) {
+      args.reorderdebug = 1;
+    }
+    else {
+      args.filename = argv[i];
+      if (++i < argc)
+        usage();
+    }
+  }
+
+  if (NULL == args.filename)
+    usage();
+}
 
 extern int yyparse();
 extern FILE *yyin;
@@ -801,7 +803,8 @@ int main(int argc, char **argv)
   initmem();
 
   memset(&args,0,sizeof(args));
-  argp_parse (&argp, argc, argv, 0, 0, &args);
+  parse_args(argc,argv);
+
   trace = args.trace;
 
   if (args.statistics)
