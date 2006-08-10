@@ -340,15 +340,12 @@ void lift(scomb *sc)
   stack_free(boundvars);
 }
 
-void find_vars_r(cell *c, int *pos, char **names, letrec *ignore)
+void find_vars(cell *c, int *pos, char **names, letrec *ignore)
 {
-  assert((c == globnil) || !(c->tag & FLAG_PROCESSED)); /* should not be a graph */
-  c->tag |= FLAG_PROCESSED;
-
   switch (celltype(c)) {
   case TYPE_APPLICATION:
-    find_vars_r((cell*)c->field1,pos,names,ignore);
-    find_vars_r((cell*)c->field2,pos,names,ignore);
+    find_vars((cell*)c->field1,pos,names,ignore);
+    find_vars((cell*)c->field2,pos,names,ignore);
     break;
   case TYPE_SYMBOL: {
     char *sym = (char*)c->field1;
@@ -379,17 +376,8 @@ void find_vars_r(cell *c, int *pos, char **names, letrec *ignore)
   }
 }
 
-void find_vars(cell *c, int *pos, char **names, letrec *ignore)
-{
-  cleargraph(c,FLAG_PROCESSED);
-  find_vars_r(c,pos,names,ignore);
-}
-
 void applift_r(cell **k, scomb *sc)
 {
-  assert((*k == globnil) || !((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
-  (*k)->tag |= FLAG_PROCESSED;
-
   switch (celltype(*k)) {
   case TYPE_APPLICATION: {
     cell *fun = *k;
@@ -420,7 +408,7 @@ void applift_r(cell **k, scomb *sc)
 
       scomb *newsc = add_scomb(sc->name);
 
-      newsc->body = copy_graph(*k);
+      newsc->body = *k;
       newsc->nargs = 0;
       newsc->argnames = (char**)malloc(maxvars*sizeof(char*));
       find_vars(newsc->body,&newsc->nargs,newsc->argnames,NULL);
@@ -433,12 +421,6 @@ void applift_r(cell **k, scomb *sc)
         cell *app = alloc_cell2(TYPE_APPLICATION,*k,varref);
         *k = app;
       }
-
-/*       char *rn = real_scname(newsc->name); */
-/*       printf("applift_r(): lifted %s = ",rn); */
-/*       print_code(newsc->body); */
-/*       printf("\n"); */
-/*       free(rn); */
 
       applift(newsc);
     }
@@ -469,10 +451,5 @@ void applift_r(cell **k, scomb *sc)
 
 void applift(scomb *sc)
 {
-/*   char *tmp = real_scname(sc->name); */
-/*   printf("applift() %s\n",tmp); */
-/*   free(tmp); */
-
-  cleargraph(sc->body,FLAG_PROCESSED);
   applift_r(&sc->body,sc);
 }

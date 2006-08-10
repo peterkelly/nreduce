@@ -93,113 +93,8 @@ void cleargraph(cell *root, int flag)
   cleargraph_r(root,flag);
 }
 
-static int graph_size_r(cell *c)
-{
-  if (c->tag & FLAG_TMP)
-    return 0;
-  c->tag |= FLAG_TMP;
-
-  switch (celltype(c)) {
-  case TYPE_APPLICATION: {
-    int size1 = graph_size_r((cell*)c->field1);
-    int size2 = graph_size_r((cell*)c->field2);
-    return 1+size1+size2;
-  }
-  case TYPE_LAMBDA:
-    return 1+graph_size_r((cell*)c->field2);
-  case TYPE_SYMBOL:
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:
-    return 1;
-  default:
-    assert(0);
-    break;
-  }
-  return 0;
-}
-
-int graph_size(cell *c)
-{
-  cleargraph(c,FLAG_TMP);
-  return graph_size_r(c);
-}
-
-static cell *copy_graph_r(cell *c, int *pos, cell **source, cell **dest)
-{
-  if (c->tag & FLAG_TMP) {
-    int i;
-    for (i = 0; i < *pos; i++)
-      if (source[i] == c)
-        return dest[i];
-    assert(0);
-    return NULL;
-  }
-  c->tag |= FLAG_TMP;
-
-  int thispos = (*pos)++;
-  source[thispos] = c;
-
-  switch (celltype(c)) {
-  case TYPE_APPLICATION:
-    dest[thispos] = alloc_cell();
-    dest[thispos]->tag = TYPE_APPLICATION;
-    dest[thispos]->field1 = copy_graph_r((cell*)c->field1,pos,source,dest);
-    dest[thispos]->field2 = copy_graph_r((cell*)c->field2,pos,source,dest);
-    break;
-  case TYPE_LAMBDA:
-    dest[thispos] = alloc_cell();
-    dest[thispos]->tag = TYPE_LAMBDA;
-    dest[thispos]->field1 = strdup((char*)c->field1);
-    dest[thispos]->field2 = copy_graph_r((cell*)c->field2,pos,source,dest);
-    break;
-  case TYPE_SYMBOL:
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
-  case TYPE_STRING:
-    dest[thispos] = alloc_cell();
-    copy_cell(dest[thispos],c);
-    break;
-  default:
-    assert(0);
-    break;
-  }
-
-  return dest[thispos];
-}
-
-cell *copy_graph(cell *c)
-{
-  int size = graph_size(c);
-  cell **source = (cell**)calloc(1,size*sizeof(cell));
-  cell **dest = (cell**)calloc(1,size*sizeof(cell));
-  int pos = 0;
-
-  cleargraph(c,FLAG_TMP);
-  cell *copy = copy_graph_r(c,&pos,source,dest);
-  assert(pos == size);
-
-  free(source);
-  free(dest);
-  return copy;
-}
-
 static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
 {
-  if (c->tag & FLAG_TMP) {
-    int i;
-    for (i = 0; i < (*ncells); i++)
-      if ((*cells)[i] == c)
-        return;
-  }
-  c->tag |= FLAG_TMP;
-
   if ((*ncells) == *alloc) {
     (*alloc) *= 2;
     (*cells) = (cell**)realloc((*cells),(*alloc)*sizeof(cell*));
@@ -207,9 +102,6 @@ static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
   (*cells)[(*ncells)++] = c;
 
   switch (celltype(c)) {
-  case TYPE_IND:
-    assert(0);
-    break;
   case TYPE_APPLICATION:
   case TYPE_CONS:
     add_cells(cells,ncells,(cell*)c->field1,alloc);
@@ -244,6 +136,5 @@ void find_graph_cells(cell ***cells, int *ncells, cell *root)
   int alloc = 4;
   *ncells = 0;
   *cells = (cell**)malloc(alloc*sizeof(cell*));
-  cleargraph(root,FLAG_TMP);
   add_cells(cells,ncells,root,&alloc);
 }

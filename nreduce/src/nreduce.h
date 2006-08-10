@@ -289,8 +289,6 @@ void reduce(stack *s);
 /* graph */
 
 void cleargraph(cell *root, int flag);
-int graph_size(cell *c);
-cell *copy_graph(cell *c);
 void find_graph_cells(cell ***cells, int *ncells, cell *root);
 
 /* new */
