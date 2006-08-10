@@ -68,10 +68,6 @@ typedef struct ginstr {
   int arg0;
   int arg1;
   int codeaddr;
-/*   int codesize; */
-/*   int jmppos; */
-  int label;
-  int stmtno;
   int expcount;
   int *expstatus;
   int usage;
@@ -108,6 +104,7 @@ void jit_execute(ginstr *program);
 extern int op_usage[OP_COUNT];
 extern int *addressmap;
 extern int *noevaladdressmap;
+extern int *stacksizes;
 extern int nfunctions;
 extern const char *op_names[OP_COUNT];
 #endif

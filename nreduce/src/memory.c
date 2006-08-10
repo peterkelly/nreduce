@@ -58,16 +58,7 @@ int totalallocs = 0;
 int nscombappls = 0;
 int nresindnoch = 0;
 int nresindch = 0;
-int nALLOCs = 0;
-int nALLOCcells = 0;
-int nunwindsvar = 0;
-int nunwindswhnf = 0;
 int nreductions = 0;
-int ndispexact = 0;
-int ndispless = 0;
-int ndispgreater = 0;
-int ndisp0 = 0;
-int ndispother = 0;
 int nframes = 0;
 int maxdepth = 0;
 int maxframes = 0;
@@ -140,15 +131,15 @@ void mark_frame(frame *f)
   if (f->c)
     mark(f->c);
   int i;
-  for (i = 0; i < f->s->count; i++)
-    mark(f->s->data[i]);
+  for (i = 0; i < f->count; i++)
+    mark(f->data[i]);
 }
 
 void mark_cap(cap *c)
 {
   int i;
-  for (i = 0; i < c->s->count; i++)
-    mark(c->s->data[i]);
+  for (i = 0; i < c->count; i++)
+    mark(c->data[i]);
 }
 
 int nreachable = 0;
@@ -267,6 +258,9 @@ void free_cell_fields(cell *c)
 char *collect_ebp = NULL;
 char *collect_esp = NULL;
 
+extern cell **gstack;
+extern int gstackcount;
+
 int ncollections = 0;
 void collect()
 {
@@ -288,6 +282,10 @@ void collect()
   if (streamstack)
     for (i = 0; i < streamstack->count; i++)
       mark((cell*)streamstack->data[i]);
+
+  if (gstack)
+    for (i = 0; i < gstackcount; i++)
+      mark(gstack[i]);
 
   if (NULL != collect_ebp) {
     char *p;
@@ -356,6 +354,7 @@ void cleanup()
   }
   free(addressmap);
   free(noevaladdressmap);
+  free(stacksizes);
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
@@ -405,11 +404,10 @@ void remove_active_frame(frame *f)
 #endif
 }
 
-frame *frame_new(int fno)
+frame *frame_new()
 {
   frame *f = (frame*)calloc(1,sizeof(frame));
-  f->fno = fno;
-  f->s = stack_new();
+  f->fno = -1;
   nframes++;
   framecount++;
 /*   printf("framecount = %d, cells = %d, active = %d\n",framecount,framecellcount,active_framecount); */
@@ -422,21 +420,26 @@ void frame_free(frame *f)
 {
   assert(NULL == f->c);
   assert(!f->active);
-  stack_free(f->s);
+  if (f->data)
+    free(f->data);
   free(f);
   framecount--;
 }
 
-frame *frame_alloc(int fno)
+frame *frame_alloc()
 {
   if (freeframe) {
     frame *f = freeframe;
     freeframe = freeframe->freelnk;
     f->c = NULL;
-    f->fno = fno;
+    f->fno = -1;
     f->address = 0;
     f->d = NULL;
-    f->s->count = 0;
+
+    f->alloc = 0;
+    f->count = 0;
+    f->data = NULL;
+
     f->next = NULL;
     f->active = 0;
     f->completed = 0;
@@ -444,12 +447,15 @@ frame *frame_alloc(int fno)
     return f;
   }
   else {
-    return frame_new(fno);
+    return frame_new();
   }
 }
 
 void frame_dealloc(frame *f)
 {
+  if (f->data)
+    free(f->data);
+  f->data = NULL;
   f->freelnk = freeframe;
   freeframe = f;
 /*   frame_free(f); */
@@ -465,25 +471,37 @@ int frame_depth(frame *f)
   return depth;
 }
 
-cap *cap_alloc()
+cap *cap_alloc(int arity, int address, int fno)
 {
   cap *c = (cap*)calloc(1,sizeof(cap));
-  c->s = stack_new();
+  c->arity = arity;
+  c->address = address;
+  c->fno = fno;
+  assert(0 < c->arity); /* MKCAP should not be called for CAFs */
   return c;
 }
 
 void cap_dealloc(cap *c)
 {
-  stack_free(c->s);
+  if (c->data)
+    free(c->data);
   free(c);
 }
 
-stack *stack_new()
+stack *stack_new(void)
 {
   stack *s = (stack*)calloc(1,sizeof(stack));
   s->alloc = 1;
   s->count = 0;
-  s->base = 0;
+  s->data = malloc(s->alloc*sizeof(void*));
+  return s;
+}
+
+stack *stack_new2(int alloc)
+{
+  stack *s = (stack*)calloc(1,sizeof(stack));
+  s->alloc = alloc;
+  s->count = 0;
   s->data = malloc(s->alloc*sizeof(void*));
   return s;
 }
@@ -494,10 +512,18 @@ void stack_free(stack *s)
   free(s);
 }
 
-void stack_grow(stack *s)
+void stack_grow(int *alloc, void ***data, int size)
 {
-  s->alloc *= 2;
-  s->data = realloc(s->data,s->alloc*sizeof(void*));
+  if (*alloc < size) {
+    *alloc = size;
+    *data = realloc(*data,(*alloc)*sizeof(void*));
+  }
+}
+
+void stack_push2(stack *s, void *c)
+{
+  assert(s->count+1 <= s->alloc);
+  s->data[s->count++] = c;
 }
 
 void stack_push(stack *s, void *c)
@@ -507,7 +533,7 @@ void stack_push(stack *s, void *c)
       fprintf(stderr,"Out of stack space\n");
       exit(1);
     }
-    stack_grow(s);
+    stack_grow(&s->alloc,&s->data,s->alloc*2);
   }
   s->data[s->count++] = c;
 }
@@ -515,7 +541,7 @@ void stack_push(stack *s, void *c)
 void stack_insert(stack *s, void *c, int pos)
 {
   if (s->count == s->alloc)
-    stack_grow(s);
+    stack_grow(&s->alloc,&s->data,s->alloc*2);
   memmove(&s->data[pos+1],&s->data[pos],(s->count-pos)*sizeof(cell*));
   s->count++;
   s->data[pos] = c;
@@ -553,18 +579,9 @@ void statistics(FILE *f)
   fprintf(f,"nscombappls = %d\n",nscombappls);
   fprintf(f,"nresindnoch = %d\n",nresindnoch);
   fprintf(f,"nresindch = %d\n",nresindch);
-  fprintf(f,"nALLOCs = %d\n",nALLOCs);
-  fprintf(f,"nALLOCcells = %d\n",nALLOCcells);
   fprintf(f,"resolve_ind() total = %d\n",nresindch+nresindnoch);
   fprintf(f,"resolve_ind() ratio = %f\n",((double)nresindch)/((double)nresindnoch));
-  fprintf(f,"nunwindsvar = %d\n",nunwindsvar);
-  fprintf(f,"nunwindswhnf = %d\n",nunwindswhnf);
   fprintf(f,"nreductions = %d\n",nreductions);
-  fprintf(f,"ndispexact = %d\n",ndispexact);
-  fprintf(f,"ndispless = %d\n",ndispless);
-  fprintf(f,"ndispgreater = %d\n",ndispgreater);
-  fprintf(f,"ndisp0 = %d\n",ndisp0);
-  fprintf(f,"ndispother = %d\n",ndispother);
   fprintf(f,"nframes = %d\n",nframes);
   fprintf(f,"maxdepth = %d\n",maxdepth);
   fprintf(f,"maxframes = %d\n",maxframes);

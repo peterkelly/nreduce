@@ -25,15 +25,19 @@
 
 #include <stdio.h>
 
+//#define NDEBUG
+
 //#define DEBUG_GCODE_COMPILATION
 //#define STACK_MODEL_SANITY_CHECK
 //#define SHOW_SUBSTITUTED_NAMES
-//#define EXTRA_TRACE
+//#define EXECUTION_TRACE
+//#define PROFILING
 
 // Misc
 
 #define BLOCK_SIZE 1024
 #define COLLECT_THRESHOLD 102400
+//#define COLLECT_THRESHOLD 1024
 #define STACK_LIMIT 10240
 
 #define celldouble(c) (*(double*)(&((c)->field1)))
@@ -166,7 +170,6 @@ typedef struct carray {
 typedef struct stack {
   int alloc;
   int count;
-  int base;
   void **data;
 } stack;
 
@@ -204,14 +207,19 @@ typedef struct builtin {
 typedef struct cap {
   int arity;
   int address;
-  stack *s;
   int fno; /* temp */
+
+  cell **data;
+  int count;
 } cap;
 
 typedef struct frame {
   int address;
   struct frame *d;
-  stack *s;
+
+  int alloc;
+  int count;
+  cell **data;
 
   cell *c;
   int fno; /* temp */
@@ -234,22 +242,25 @@ void cleanup();
 
 void add_active_frame(frame *f);
 void remove_active_frame(frame *f);
-frame *frame_new(int fno);
+frame *frame_new();
 void frame_free(frame *f);
-frame *frame_alloc(int fno);
+frame *frame_alloc();
 void frame_dealloc(frame *f);
 int frame_depth(frame *f);
 
-cap *cap_alloc();
+cap *cap_alloc(int arity, int address, int fno);
 void cap_dealloc(cap *c);
 
-stack *stack_new();
+stack *stack_new(void);
+stack *stack_new2(int alloc);
 void stack_free(stack *s);
+void stack_push2(stack *s, void *c);
 void stack_push(stack *s, void *c);
 void stack_insert(stack *s, void *c, int pos);
 void *stack_pop(stack *s);
 void *stack_top(stack *s);
 void *stack_at(stack *s, int pos);
+void stack_grow(int *alloc, void ***data, int size);
 
 void statistics(FILE *f);
 void copy_raw(cell *dest, cell *source);
@@ -360,16 +371,7 @@ extern block *blocks;
 extern int nblocks;
 extern int nallocs;
 extern int nscombappls;
-extern int nALLOCs;
-extern int nALLOCcells;
-extern int nunwindsvar;
-extern int nunwindswhnf;
 extern int nreductions;
-extern int ndispexact;
-extern int ndispless;
-extern int ndispgreater;
-extern int ndisp0;
-extern int ndispother;
 extern int nframes;
 extern int maxdepth;
 extern int maxframes;

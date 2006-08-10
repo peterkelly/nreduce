@@ -64,6 +64,7 @@
 
 int *addressmap = NULL;
 int *noevaladdressmap = NULL;
+int *stacksizes = NULL;
 int nfunctions = 0;
 int evaldoaddr = 0;
 
@@ -1034,6 +1035,28 @@ void F(gprogram *gp, int fno, scomb *sc)
 #endif
 }
 
+void compute_stacksizes(gprogram *gp)
+{
+  int fno = -1;
+  int addr = 0;
+  int stacksize = 0;
+  while (addr <= gp->count) {
+    if ((addr == gp->count) ||
+        ((OP_GLOBSTART == gp->ginstrs[addr].opcode) && (fno != gp->ginstrs[addr].arg0))) {
+      if (0 <= fno)
+        stacksizes[fno] = stacksize;
+      if (addr == gp->count)
+        return;
+      fno = gp->ginstrs[addr].arg0;
+      stacksize = gp->ginstrs[addr].expcount;
+    }
+    else if (stacksize < gp->ginstrs[addr].expcount) {
+      stacksize = gp->ginstrs[addr].expcount;
+    }
+    addr++;
+  }
+}
+
 gprogram *cur_program = NULL;
 void compile(gprogram *gp)
 {
@@ -1052,6 +1075,7 @@ void compile(gprogram *gp)
 
   addressmap = (int*)calloc(nfunctions,sizeof(int));
   noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
+  stacksizes = (int*)calloc(nfunctions,sizeof(int));
 
   gp->si = stackinfo_new(NULL);
   BEGIN();
@@ -1120,6 +1144,11 @@ void compile(gprogram *gp)
 
   LAST();
 /*   stackinfo_free(gp->si); */
+
+  compute_stacksizes(gp);
+/*   for (i = 0; i < NUM_BUILTINS+index; i++) { */
+/*     printf("stacksizes[%s] = %d\n",function_name(i),stacksizes[i]); */
+/*   } */
 
   cur_program = gp;
 }

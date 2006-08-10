@@ -262,13 +262,13 @@ char *real_scname(const char *sym)
 
 static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col);
 
-static void print_abbrev_stack(FILE *f, stack *s, cell *parent, int *line, int *col)
+static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, int *line, int *col)
 {
   int i;
-  for (i = 0; i < s->count; i++) {
+  for (i = 0; i < count; i++) {
     if (0 < i)
       printf(" ");
-    cell *c = resolve_ind((cell*)s->data[i]);
+    cell *c = resolve_ind(data[i]);
     if ((TYPE_NIL == celltype(c)) ||
         (TYPE_INT == celltype(c)) ||
         (TYPE_DOUBLE == celltype(c)) ||
@@ -477,14 +477,14 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     case TYPE_FRAME: {
       frame *frm = (frame*)c->field1;
       *col += printf("(FRAME (");
-      print_abbrev_stack(f,frm->s,c,line,col);
+      print_abbrev_stack(f,frm->data,frm->count,c,line,col);
       *col += printf(") %s)",function_name(frm->fno));
       break;
     }
     case TYPE_CAP: {
       cap *cp = (cap*)c->field1;
       *col += printf("(CAP (");
-      print_abbrev_stack(f,cp->s,c,line,col);
+      print_abbrev_stack(f,(cell**)cp->data,cp->count,c,line,col);
       *col += printf(") %s)",function_name(cp->fno));
       break;
     }
