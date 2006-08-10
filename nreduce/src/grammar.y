@@ -60,8 +60,6 @@ extern struct cell *parse_root;
 %token<d> DOUBLE
 %token<s> STRING
 
-%debug
-
 %type <c> SingleExpr
 %type <c> AppliedExpr
 %type <c> Expr

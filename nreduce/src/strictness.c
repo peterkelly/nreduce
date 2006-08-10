@@ -90,6 +90,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <alloca.h>
 
 /**
  * Determine the number of arguments required by the function referenced by the specified cell.

@@ -1,17 +1,25 @@
 AC_INIT(src/nreduce.c)
 AM_CONFIG_HEADER(config.h)
 AM_INIT_AUTOMAKE(nreduce, 0.1)
-AC_PROG_CC
-AM_PROG_LEX
+
+AC_PROG_LEX
+if test "$LEX" != flex; then
+  AC_MSG_ERROR([You must install flex to compile this program. See http://flex.sourceforge.net/])
+fi
+
 AC_PROG_YACC
+if test "$YACC" != "bison -y"; then
+  AC_MSG_ERROR([You must install bison to compile this program. See http://www.gnu.org/software/bison/])
+fi
+
+AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
-
 
 AC_MSG_CHECKING([for yylex_destroy])
 echo -e "%%\n%%" > conftest.l
 flex conftest.l
-if grep -q yylex_destroy lex.yy.c
+if grep yylex_destroy > /dev/null lex.yy.c
 then
   AC_MSG_RESULT([yes])
   AC_DEFINE([HAVE_YYLEX_DESTROY],[1],[Whether or not flex generates the yylex_destroy function])
