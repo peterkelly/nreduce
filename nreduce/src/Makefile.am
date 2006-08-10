@@ -2,6 +2,7 @@ LDADD = @ALL_LIBS@
 noinst_PROGRAMS = nreduce
 noinst_HEADERS = assembler.h gcode.h nreduce.h
 BUILT_SOURCES = grammar.tab.c lexer.yy.c
+EXTRA_DIST = grammar.y lexer.l grammar.tab.h
 nreduce_SOURCES = assembler.c \
 	extra.c \
 	gmachine.c \
@@ -27,9 +28,6 @@ nreduce_SOURCES = assembler.c \
 CLEANFILES = *.da *.bb *.bbg *.gcov grammar.tab.c lexer.yy.c grammar.tab.h
 
 grammar.tab.c: grammar.y
-	bison -d grammar.y
-
-grammar.tab.h: grammar.y
 	bison -d grammar.y
 
 lexer.yy.c: lexer.l
