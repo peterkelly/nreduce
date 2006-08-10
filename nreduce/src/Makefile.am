@@ -34,4 +34,3 @@ grammar.tab.h: grammar.y
 
 lexer.yy.c: lexer.l
 	flex lexer.l
-

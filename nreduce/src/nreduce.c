@@ -20,6 +20,10 @@
  *
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "grammar.tab.h"
 #include "gcode.h"
 #include "nreduce.h"
@@ -169,6 +173,9 @@ YY_BUFFER_STATE yy_scan_string(const char *str);
 void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
 void yy_delete_buffer(YY_BUFFER_STATE buffer);
 int yylex_destroy(void);
+#if HAVE_YYLEX_DESTROY
+int yylex_destroy(void);
+#endif
 
 void stream(cell *c)
 {
@@ -372,7 +379,9 @@ void parse_file(char *filename)
   if (0 != yyparse())
     exit(1);
   yy_delete_buffer(bufstate);
+#if HAVE_YYLEX_DESTROY
   yylex_destroy();
+#endif
 
   fclose(yyin);
 
@@ -391,7 +400,9 @@ void parse_string(const char *str)
     exit(1);
 
   yy_delete_buffer(bufstate);
+#if HAVE_YYLEX_DESTROY
   yylex_destroy();
+#endif
 
   parse_post_processing(parse_root);
 }

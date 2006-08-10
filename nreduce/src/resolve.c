@@ -20,6 +20,10 @@
  *
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "grammar.tab.h"
 #include "nreduce.h"
 #include <stdio.h>
