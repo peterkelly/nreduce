@@ -344,20 +344,12 @@ void execute(gprogram *gp)
     case OP_JUMP:
       curf->address += instr->arg0-1;
       break;
-    case OP_JEMPTY:
-      if (0 == stcount)
-        curf->address += instr->arg0-1;
-      break;
     case OP_PUSH: {
       assert(instr->arg0 < stcount);
       stdata[stcount] = stdata[stcount-1-instr->arg0];
       stcount++;
       break;
     }
-    case OP_POP:
-      stcount -= instr->arg0;
-      assert(0 <= stcount);
-      break;
     case OP_UPDATE: {
       int n = instr->arg0;
       cell *target;

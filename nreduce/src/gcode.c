@@ -42,7 +42,6 @@
 #define JFUN(_a)           add_instruction(gp,OP_JFUN,(_a),0)
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
 #define REPLACE(_a)        add_instruction(gp,OP_REPLACE,(_a),0)
-#define POP(_a)            add_instruction(gp,OP_POP,(_a),0)
 #define DO()               add_instruction(gp,OP_DO,0,0)
 #define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
 #define RETURN()           add_instruction(gp,OP_RETURN,0,0)
@@ -63,7 +62,6 @@
 
 #define JFALSE(addr)       { addr = gp->count; add_instruction(gp,OP_JFALSE,0,0); }
 #define JUMP(addr)         { addr = gp->count; add_instruction(gp,OP_JUMP,0,0); }
-#define JEMPTY(addr)       { addr = gp->count; add_instruction(gp,OP_JEMPTY,0,0); }
 #define LABEL(addr)        { gp->ginstrs[addr].arg0 = gp->count-addr; }
 
 int *addressmap = NULL;
@@ -149,9 +147,7 @@ const char *op_names[OP_COUNT] = {
 "JFUN",
 "JFALSE",
 "JUMP",
-"JEMPTY",
 "PUSH",
-"POP",
 "UPDATE",
 "REPLACE",
 "ALLOC",
@@ -337,15 +333,9 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     break;
   case OP_JUMP:
     break;
-  case OP_JEMPTY:
-    break;
   case OP_PUSH:
     assert(0 <= gp->si->count-1-arg0);
     pushstatus(gp->si,statusat(gp->si,gp->si->count-1-arg0));
-    break;
-  case OP_POP:
-    assert(0 <= gp->si->count-1-arg0);
-    popstatus(gp->si,arg0);
     break;
   case OP_UPDATE:
     assert(0 <= gp->si->count-1-arg0);
@@ -1096,7 +1086,6 @@ void compile(gprogram *gp)
   BEGIN();
   MKFRAME(startsc->index+NUM_BUILTINS,0);
   EVAL(0);
-  POP(0);
   END();
   stackinfo_free(gp->si);
   gp->si = NULL;
