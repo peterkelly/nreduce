@@ -58,8 +58,9 @@ int is_whnf(cell *c)
       return 0;
     }
     else {
+      cap *cp;
       assert(TYPE_CAP == celltype(c));
-      cap *cp = (cap*)c->field1;
+      cp = (cap*)c->field1;
       if (nargs+cp->count >= cp->arity)
         return 0;
     }
@@ -84,6 +85,8 @@ int end_addr(gprogram *gp, int fno)
 
 void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
 {
+  ginstr *instr;
+  int i;
   if (0 <= curf->fno) {
     if ((curf->address < start_addr(gp,curf->fno)) ||
         (curf->address > end_addr(gp,curf->fno))) {
@@ -95,7 +98,7 @@ void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
     }
   }
 
-  ginstr *instr = &gp->ginstrs[curf->address];
+  instr = &gp->ginstrs[curf->address];
   if (0 > instr->expcount)
     return;
 
@@ -105,7 +108,6 @@ void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
     abort();
   }
 
-  int i;
   for (i = 0; i < instr->expcount; i++) {
     cell *c = resolve_ind(stackdata[i]);
     int actualstatus = is_whnf(c);
@@ -140,23 +142,22 @@ void swapstack_out(frame *curf, cell ***stdata, int *stcount)
 
 void execute(gprogram *gp)
 {
+  int stcount = 0;
+  cell **stdata = (cell**)malloc(sizeof(cell));
+  int lines = -1;
+
   frame *curf = frame_alloc();
   curf->fno = -1;
   add_active_frame(curf);
 
-  int stcount = 0;
   curf->alloc = 1;
-  cell **stdata = malloc(sizeof(cell));
 
-  int lines = -1;
   if (getenv("LINES"))
     lines = atoi(getenv("LINES"));
 
   while (1) {
     int done = 0;
     ginstr *instr = &gp->ginstrs[curf->address];
-
-
 
     #ifdef EXECUTION_TRACE
     int printed = 0;
@@ -224,6 +225,7 @@ void execute(gprogram *gp)
       break;
     }
     case OP_RETURN: {
+      frame *old;
       assert(0 < stcount);
       assert(NULL != curf->c);
       assert(TYPE_FRAME == celltype(curf->c));
@@ -231,7 +233,7 @@ void execute(gprogram *gp)
       curf->c->field1 = stdata[stcount-1];
       curf->c = NULL;
 
-      frame *old = curf;
+      old = curf;
 
       swapstack_in(curf,stdata,stcount);
       curf = old->d;
@@ -242,37 +244,44 @@ void execute(gprogram *gp)
       break;
     }
     case OP_DO: {
+      cell *capcell;
+      cap *cp;
+      int s;
+      int s1;
+      int a1;
       assert(0 < stcount);
-      cell *capcell = resolve_ind((cell*)stdata[stcount-1]);
+      capcell = resolve_ind((cell*)stdata[stcount-1]);
       stcount--;
 
       assert(TYPE_CAP == celltype(capcell));
 
-      cap *cp = (cap*)capcell->field1;
-      int s = stcount;
-      int s1 = cp->count;
-      int a1 = cp->arity;
+      cp = (cap*)capcell->field1;
+      s = stcount;
+      s1 = cp->count;
+      a1 = cp->arity;
 
       if (s+s1 < a1) {
         /* create a new CAP with the existing CAPs arguments and those from the current
            FRAME's stack */
         cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
+        int i;
+        cell *replace;
+        frame *old;
         newcp->data = (cell**)malloc((stcount+cp->count)*sizeof(cell*));
         newcp->count = 0;
-        int i;
         for (i = 0; i < stcount; i++)
           newcp->data[newcp->count++] = stdata[i];
         for (i = 0; i < cp->count; i++)
           newcp->data[newcp->count++] = cp->data[i];
 
         /* replace the current FRAME with the new CAP */
-        cell *replace = curf->c;
+        replace = curf->c;
         curf->c = NULL;
         replace->tag = TYPE_CAP;
         replace->field1 = newcp;
 
         /* return to caller */
-        frame *old = curf;
+        old = curf;
 
         swapstack_in(curf,stdata,stcount);
         curf = old->d;
@@ -292,13 +301,14 @@ void execute(gprogram *gp)
       }
       else { /* s+s1 > a1 */
         frame *newf = frame_alloc();
+        int i;
+        int extra;
         newf->alloc = stacksizes[cp->fno];
         newf->data = (cell**)malloc(newf->alloc*sizeof(cell*));
         newf->count = 0;
         newf->address = cp->address;
         newf->fno = cp->fno;
-        int i;
-        int extra = a1-s1;
+        extra = a1-s1;
         for (i = stcount-extra; i < stcount; i++)
           newf->data[newf->count++] = stdata[i];
         for (i = 0; i < cp->count; i++)
@@ -350,16 +360,18 @@ void execute(gprogram *gp)
       break;
     case OP_UPDATE: {
       int n = instr->arg0;
+      cell *target;
+      cell *res;
       assert(n < stcount);
       assert(n > 0);
 
-      cell *target = resolve_ind(stdata[stcount-1-n]);
+      target = resolve_ind(stdata[stcount-1-n]);
 
       /* FIXME: this check can probably just become TYPE_HOLE once the (v,g) scheme is
          in place, as I think UPDATE is only used for letrecs */
       assert(TYPE_HOLE == celltype(target));
 
-      cell *res = resolve_ind(stdata[stcount-1]);
+      res = resolve_ind(stdata[stcount-1]);
       if (target == res) {
         fprintf(stderr,"Attempt to update cell with itself\n");
         exit(1);
@@ -387,8 +399,8 @@ void execute(gprogram *gp)
       int count = instr->arg0;
       int remove = instr->arg1;
       int base = stcount-count-remove;
-      assert(0 <= base);
       int i;
+      assert(0 <= base);
       for (i = 0; i < count; i++)
         stdata[base+i] = stdata[base+i+remove];
       stcount -= remove;
@@ -397,11 +409,10 @@ void execute(gprogram *gp)
     case OP_MKCAP: {
       int fno = instr->arg0;
       int n = instr->arg1;
-
+      int i;
       cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
       c->data = (cell**)malloc(n*sizeof(cell*));
       c->count = 0;
-      int i;
       for (i = stcount-n; i < stcount; i++)
         c->data[c->count++] = stdata[i];
       stcount -= n;
@@ -412,7 +423,8 @@ void execute(gprogram *gp)
     case OP_MKFRAME: {
       int fno = instr->arg0;
       int n = instr->arg1;
-
+      cell *newfcell;
+      int i;
       frame *newf = frame_alloc();
       newf->alloc = stacksizes[fno];
       newf->data = (cell**)malloc(newf->alloc*sizeof(cell*));
@@ -422,10 +434,9 @@ void execute(gprogram *gp)
       newf->fno = fno;
       newf->d = NULL;
 
-      cell *newfcell = alloc_cell2(TYPE_FRAME,newf,NULL);
+      newfcell = alloc_cell2(TYPE_FRAME,newf,NULL);
       newf->c = newfcell;
 
-      int i;
       for (i = stcount-n; i < stcount; i++)
         newf->data[newf->count++] = stdata[i];
       stcount -= n;

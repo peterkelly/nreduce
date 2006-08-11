@@ -38,6 +38,11 @@
 
 const char *reg_names[8] = { "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI" };
 
+ginstr *trace_program = NULL;
+char *trace_stackbase = NULL;
+char *code_start = NULL;
+int resolve_ind_offset = -1;
+
 void print_cell(cell *c)
 {
 /*   printf("print_cell\n"); */
@@ -76,6 +81,7 @@ void print_cell(cell *c)
     debug(0,"\n");
 }
 
+#if 0
 void print_reg(x86_assembly *as, char *msg, int r)
 {
   I_PUSHAD();
@@ -119,8 +125,6 @@ void print_reg_code(x86_assembly *as, char *msg, int r)
   print_msg(as,"\n");
 }
 
-int resolve_ind_offset = -1;
-
 void compile_resolve_ind(x86_assembly *as)
 {
   int Lcheckind = as->labels++;
@@ -145,16 +149,12 @@ void compile_resolve_ind(x86_assembly *as)
   I_RET();
 }
 
-ginstr *trace_program = NULL;
-char *trace_stackbase = NULL;
 void trace_instr(int instrno, char *stacktop)
 {
-#if 0
   int stacksize = (trace_stackbase-stacktop)/4;
 /*   printf("ginstr %d, stack size = %d\n",instrno,stacksize); */
   print_ginstr(instrno,trace_program+instrno,0);
   print_stack((cell**)stacktop,stacksize,1);
-#endif
 }
 
 void compile_trace(x86_assembly *as, int instrno)
@@ -172,7 +172,6 @@ void compile_trace(x86_assembly *as, int instrno)
 
 char *run_bif(int bif, char *esp)
 {
-#if 0
   int nargs = builtin_info[bif].nargs;
   int i;
   int oldcount;
@@ -195,11 +194,9 @@ char *run_bif(int bif, char *esp)
   }
   stackcount = 0;
   return newesp;
-#endif
   abort();
 }
-
-char *code_start = NULL;
+#endif
 
 void jit_compile(ginstr *program, array *cpucode)
 {

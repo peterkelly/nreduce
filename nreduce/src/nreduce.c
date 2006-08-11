@@ -34,8 +34,10 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#ifdef TIMING
 #include <sys/time.h>
 #include <time.h>
+#endif
 
 #define NREDUCE_C
 
@@ -107,10 +109,10 @@ void usage()
 
 void parse_args(int argc, char **argv)
 {
+  int i;
   if (1 >= argc)
     usage();
 
-  int i;
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i],"-h") || !strcmp(argv[i],"--help")) {
       usage();
@@ -135,11 +137,11 @@ void parse_args(int argc, char **argv)
     else if (!strcmp(argv[i],"-e") || !strcmp(argv[i],"--engine")) {
       if (++i >= argc)
         usage();
-      if (!strncasecmp(argv[i],"i",1))
+      if (!strcmp(argv[i],"i") || !strcmp(argv[i],"interpreter"))
         args.engine = ENGINE_INTERPRETER;
-      else if (!strncasecmp(argv[i],"n",1))
+      else if (!strcmp(argv[i],"n") || !strcmp(argv[i],"native"))
         args.engine = ENGINE_NATIVE;
-      else if (!strncasecmp(argv[i],"r",1))
+      else if (!strcmp(argv[i],"r") || !strcmp(argv[i],"reducer"))
         args.engine = ENGINE_REDUCER;
       else
         usage();
@@ -297,6 +299,10 @@ void parse_post_processing(cell *root)
   cell *funlist = parse_root;
 
   while (TYPE_CONS == celltype(funlist)) {
+    char *namestr;
+    int nargs;
+    scomb *sc;
+    int i;
     cell *fundef = (cell*)funlist->field1;
 
     cell *name = conslist_item(fundef,0);
@@ -311,9 +317,9 @@ void parse_post_processing(cell *root)
       fprintf(stderr,"Invalid function name\n");
       exit(1);
     }
-    char *namestr = (char*)name->field1;
+    namestr = (char*)name->field1;
 
-    int nargs = conslist_length(args);
+    nargs = conslist_length(args);
     if (0 > nargs) {
       fprintf(stderr,"Invalid argument list\n");
       exit(1);
@@ -324,10 +330,10 @@ void parse_post_processing(cell *root)
       exit(1);
     }
 
-    scomb *sc = add_scomb(namestr);
+    sc = add_scomb(namestr);
     sc->nargs = nargs;
     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
-    int i = 0;
+    i = 0;
     while (TYPE_CONS == celltype(args)) {
       cell *argname = (cell*)args->field1;
       if (TYPE_SYMBOL != celltype(argname)) {
@@ -369,6 +375,7 @@ void check_for_main()
 
 void parse_file(char *filename)
 {
+  YY_BUFFER_STATE bufstate;
   if (NULL == (yyin = fopen(filename,"r"))) {
     perror(filename);
     exit(1);
@@ -376,7 +383,7 @@ void parse_file(char *filename)
 
   yyfilename = filename;
 
-  YY_BUFFER_STATE bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
+  bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
   yy_switch_to_buffer(bufstate);
   if (0 != yyparse())
     exit(1);
@@ -392,10 +399,10 @@ void parse_file(char *filename)
 
 void parse_string(const char *str)
 {
-
+  YY_BUFFER_STATE bufstate;
   yyfilename = "(string)";
 
-  YY_BUFFER_STATE bufstate = yy_scan_string(str);
+  bufstate = yy_scan_string(str);
   yy_switch_to_buffer(bufstate);
 
   if (0 != yyparse())
@@ -436,23 +443,36 @@ void create_letrecs_r(cell *c)
 
       letrec *defs = NULL;
       letrec **lnkptr = NULL;
+      cell *iter;
+      cell *let1;
+      cell *let2;
+      cell *body;
+      letrec *lnk;
 
-      cell *let1 = (cell*)c->field2;
+      let1 = (cell*)c->field2;
       parse_check(TYPE_CONS == celltype(let1),let1,"let takes 2 parameters");
 
-      cell *iter = (cell*)let1->field1;
+      iter = (cell*)let1->field1;
       while (TYPE_CONS == celltype(iter)) {
-        cell *deflist = (cell*)iter->field1;
+        letrec *check;
+        letrec *newlnk;
+
+        cell *deflist;
+        cell *symbol;
+        cell *link1;
+        cell *value;
+        cell *link2;
+
+        deflist = (cell*)iter->field1;
         parse_check(TYPE_CONS == celltype(deflist),deflist,"let entry not a cons cell");
-        cell *symbol = (cell*)deflist->field1;
+        symbol = (cell*)deflist->field1;
         parse_check(TYPE_SYMBOL == celltype(symbol),symbol,"let definition expects a symbol");
-        cell *link1 = (cell*)deflist->field2;
+        link1 = (cell*)deflist->field2;
         parse_check(TYPE_CONS == celltype(link1),link1,"let definition should be list of 2");
-        cell *value = (cell*)link1->field1;
-        cell *link2 = (cell*)link1->field2;
+        value = (cell*)link1->field1;
+        link2 = (cell*)link1->field2;
         parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
 
-        letrec *check;
         for (check = defs; check; check = check->next) {
           if (!strcmp(check->name,(char*)symbol->field1)) {
             fprintf(stderr,"Duplicate letrec definition: %s\n",check->name);
@@ -460,7 +480,7 @@ void create_letrecs_r(cell *c)
           }
         }
 
-        letrec *newlnk = (letrec*)calloc(1,sizeof(letrec));
+        newlnk = (letrec*)calloc(1,sizeof(letrec));
         newlnk->name = strdup((char*)symbol->field1);
         newlnk->value = value;
 
@@ -473,11 +493,10 @@ void create_letrecs_r(cell *c)
         iter = (cell*)iter->field2;
       }
 
-      cell *let2 = (cell*)let1->field2;
+      let2 = (cell*)let1->field2;
       parse_check(TYPE_CONS == celltype(let2),let2,"let takes 2 parameters");
-      cell *body = (cell*)let2->field1;
+      body = (cell*)let2->field1;
 
-      letrec *lnk;
       for (lnk = defs; lnk; lnk = lnk->next) {
         create_letrecs_r(lnk->value);
       }
@@ -519,9 +538,9 @@ void create_letrecs(cell *c)
 
 void letrec_creation()
 {
+  scomb *sc;
   debug_stage("Letrec creation");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     create_letrecs(sc->body);
 
@@ -531,9 +550,9 @@ void letrec_creation()
 
 void variable_renaming()
 {
+  scomb *sc;
   debug_stage("Variable renaming");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     rename_variables(sc);
 
@@ -543,9 +562,9 @@ void variable_renaming()
 
 void symbol_resolution()
 {
+  scomb *sc;
   debug_stage("Symbol resolution");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     resolve_refs(sc);
 
@@ -567,16 +586,22 @@ void substitute_apps_r(cell **k)
     cell *right = (cell*)(*k)->field2;
 
     if (TYPE_NIL != celltype(right)) {
+      cell *lst;
+      cell *app;
+      cell *next;
+      cell *lastitem;
       parse_check(TYPE_CONS == celltype(right),right,"expected a cons here");
 
-      cell *lst = right;
-      cell *app = left;
-      cell *next = (cell*)lst->field2;
+      lst = right;
+      app = left;
+      next = (cell*)lst->field2;
 
       while (TYPE_NIL != celltype(next)) {
+        cell *item;
+        cell *newapp;
         parse_check(TYPE_CONS == celltype(next),next,"expected a cons here");
-        cell *item = (cell*)lst->field1;
-        cell *newapp = alloc_cell();
+        item = (cell*)lst->field1;
+        newapp = alloc_cell();
         newapp->tag = TYPE_APPLICATION;
         newapp->field1 = app;
         newapp->field2 = item;
@@ -586,7 +611,7 @@ void substitute_apps_r(cell **k)
         next = (cell*)lst->field2;
       }
 
-      cell *lastitem = (cell*)lst->field1;
+      lastitem = (cell*)lst->field1;
       (*k)->tag = TYPE_APPLICATION;
       (*k)->field1 = app;
       (*k)->field2 = lastitem;
@@ -632,9 +657,9 @@ void substitute_apps(cell **k)
 
 void app_substitution()
 {
+  scomb *sc;
   debug_stage("Application substitution");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     substitute_apps(&sc->body);
 
@@ -644,14 +669,16 @@ void app_substitution()
 
 void lambda_lifting()
 {
+  scomb *sc;
+  scomb *last;
+  scomb *prev;
   debug_stage("Lambda lifting");
 
-  scomb *sc;
-  scomb *last = NULL;
+  last = NULL;
   for (sc = scombs; sc; sc = sc->next)
     last = sc;
 
-  scomb *prev = NULL;
+  prev = NULL;
   for (sc = scombs; prev != last; sc = sc->next) {
     lift(sc);
     prev = sc;
@@ -663,14 +690,16 @@ void lambda_lifting()
 
 void app_lifting()
 {
+  scomb *sc;
+  scomb *last;
+  scomb *prev;
   debug_stage("Application lifting");
 
-  scomb *sc;
-  scomb *last = NULL;
+  last = NULL;
   for (sc = scombs; sc; sc = sc->next)
     last = sc;
 
-  scomb *prev = NULL;
+  prev = NULL;
   for (sc = scombs; prev != last; sc = sc->next) {
     applift(sc);
     prev = sc;
@@ -682,9 +711,9 @@ void app_lifting()
 
 void letrec_reordering()
 {
+  scomb *sc;
   debug_stage("Letrec reordering");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     reorder_letrecs(sc->body);
 
@@ -719,13 +748,13 @@ void gcode_compilation()
 
 void machine_code_generation()
 {
+  int i;
   debug_stage("Machine code generation");
   global_cpucode = array_new();
   jit_compile(global_program->ginstrs,global_cpucode);
 
   print_compiled(global_program,global_cpucode);
 
-  int i;
   for (i = 0; i < global_program->count; i++)
     global_program->ginstrs[i].codeaddr += (int)global_cpucode->data;
 
@@ -734,43 +763,59 @@ void machine_code_generation()
 
 void reduction_engine()
 {
-  debug_stage("Reduction engine");
-  scomb *mainsc = get_scomb("main");
+  scomb *mainsc;
+  cell *root;
+#ifdef TIMING
   struct timeval start;
   struct timeval end;
+  int ms;
+#endif
 
-  cell *root = alloc_cell2(TYPE_SCREF,mainsc,NULL);
+  debug_stage("Reduction engine");
+  mainsc = get_scomb("main");
+
+  root = alloc_cell2(TYPE_SCREF,mainsc,NULL);
+#ifdef TIMING
   gettimeofday(&start,NULL);
+#endif
   stream(root);
+#ifdef TIMING
   gettimeofday(&end,NULL);
-
-  printf("\n");
-  int ms = (end.tv_sec - start.tv_sec)*1000 +
-           (end.tv_usec - start.tv_usec)/1000;
+  ms = (end.tv_sec - start.tv_sec)*1000 +
+       (end.tv_usec - start.tv_usec)/1000;
   if (args.statistics)
     fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
+#endif
+
+  printf("\n");
 }
 
 void gcode_interpreter()
 {
+#ifdef TIMING
   struct timeval start;
   struct timeval end;
+  int ms;
+#endif
 
   debug_stage("G-code interpreter");
 
+#ifdef TIMING
   gettimeofday(&start,NULL);
+#endif
   execute(global_program);
+#ifdef TIMING
   gettimeofday(&end,NULL);
+  ms = (end.tv_sec - start.tv_sec)*1000 +
+       (end.tv_usec - start.tv_usec)/1000;
+  if (args.statistics)
+    fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
+#endif
 
   printf("\n");
   if (args.profiling)
     print_profiling(global_program);
   gprogram_free(global_program);
-
-  int ms = (end.tv_sec - start.tv_sec)*1000 +
-           (end.tv_usec - start.tv_usec)/1000;
-  if (args.statistics)
-    fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
 }
 
 typedef void (jitfun)();

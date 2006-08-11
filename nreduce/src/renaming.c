@@ -68,10 +68,11 @@ void mappings_set_count(stack *mappings, int count)
 
 char *next_var(const char *oldname)
 {
-  char *name = malloc(20);
+  char *name = (char*)malloc(20);
+  char *copy;
   sprintf(name,"_v%d",varno++);
 
-  char *copy = strdup(oldname);
+  copy = strdup(oldname);
   array_append(oldnames,&copy,sizeof(char*));
 
   return name;
@@ -139,11 +140,12 @@ void rename_variables_r(cell *c, stack *mappings)
 
 void rename_variables(scomb *sc)
 {
+  stack *mappings = stack_new();
+  int i;
+
   if (NULL == oldnames)
     oldnames = array_new();
 
-  stack *mappings = stack_new();
-  int i;
   for (i = 0; i < sc->nargs; i++)
     stack_push(mappings,mapping_new(sc->argnames[i],sc->argnames[i]));
 

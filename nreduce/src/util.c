@@ -60,7 +60,7 @@ void array_mkroom(array *arr, const int size)
 void array_append(array *arr, const void *data, int size)
 {
   array_mkroom(arr,size);
-  memmove(arr->data+arr->size,data,size);
+  memmove((char*)(arr->data)+arr->size,data,size);
   arr->size += size;
 }
 
@@ -181,8 +181,8 @@ void list_remove_ptr(list **l, void *ptr)
 
 void print_quoted_string(FILE *f, const char *str)
 {
-  fprintf(f,"\"");
   const char *c;
+  fprintf(f,"\"");
   for (c = str; *c; c++) {
     switch (*c) {
     case '\n':

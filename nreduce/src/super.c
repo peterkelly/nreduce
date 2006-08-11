@@ -73,11 +73,14 @@ scomb *add_scomb(const char *name1)
 {
   char *name = strdup(name1);
   char *hashpos = strchr(name,'#');
+  scomb *sc;
+  int num;
+
   if (hashpos)
     *hashpos = '\0';
 
-  scomb *sc = (scomb*)calloc(1,sizeof(scomb));
-  int num = 0;
+  sc = (scomb*)calloc(1,sizeof(scomb));
+  num = 0;
   while (1) {
     sc->name = (char*)malloc(strlen(name)+20);
     if (0 < num)
@@ -160,12 +163,12 @@ void fix_partial_applications()
 
 void shared_error(cell ***cells, int *ncells, cell *shared)
 {
+  int i = 0;
+  scomb *sc;
   fprintf(stderr,"Shared cell: ");
   print_codef(stderr,shared);
   fprintf(stderr,"\n");
   fprintf(stderr,"Present in supercombinators:\n");
-  int i = 0;
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
     int j;
     for (j = 0; j < ncells[i]; j++) {
@@ -181,12 +184,16 @@ void check_scombs_nosharing()
 {
   int count = 0;
   scomb *sc;
+  cell ***cells;
+  int *ncells;
+  int i;
+
   for (sc = scombs; sc; sc = sc->next)
     count++;
 
-  cell ***cells = (cell***)calloc(count,sizeof(cell**));
-  int *ncells = (int*)calloc(count,sizeof(cell**));
-  int i = 0;
+  cells = (cell***)calloc(count,sizeof(cell**));
+  ncells = (int*)calloc(count,sizeof(cell**));
+  i = 0;
   for (sc = scombs; sc; sc = sc->next) {
     find_graph_cells(&cells[i],&ncells[i],sc->body);
     i++;

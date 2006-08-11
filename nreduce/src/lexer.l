@@ -31,6 +31,7 @@
 #include "grammar.tab.h"
 #include "nreduce.h"
 #include <string.h>
+#include <stdlib.h>
 
 array *lexstring = NULL;
 char *yyfilename = NULL;
@@ -69,8 +70,8 @@ IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
                            if (NULL == lexstring)
                              lexstring = array_new();
                            lexstring->size = 0; }
-<string>\"               { BEGIN(INITIAL);
-                           char c = '\0';
+<string>\"               { char c = '\0';
+                           BEGIN(INITIAL);
                            array_append(lexstring,&c,1);
                            yylval.s = strdup(lexstring->data);
                            return STRING; }

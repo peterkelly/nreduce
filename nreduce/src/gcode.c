@@ -185,11 +185,11 @@ void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
 void print_comp2(char *fname, cell *c, int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
+  va_list ap;
   debug(cdepth,"%s [ ",fname);
   print_code(c);
   printf(" ]");
   printf(" %d",n);
-  va_list ap;
   va_start(ap,format);
   vprintf(format,ap);
   va_end(ap);
@@ -200,8 +200,9 @@ void print_comp2(char *fname, cell *c, int n, const char *format, ...)
 void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
-  debug(cdepth,"%s [ ",fname);
   int i;
+  va_list ap;
+  debug(cdepth,"%s [ ",fname);
   for (i = exprs->count-1; 0 <= i; i--) {
     if (i < exprs->count-1)
       printf(", ");
@@ -209,7 +210,6 @@ void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...
   }
   printf(" ]");
   printf(" %d",n);
-  va_list ap;
   va_start(ap,format);
   vprintf(format,ap);
   va_end(ap);
@@ -520,7 +520,7 @@ void print_program(gprogram *gp, int builtins, int usage)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < gp->stringmap->size/sizeof(cell*); i++) {
+  for (i = 0; i < (int)(gp->stringmap->size/sizeof(cell*)); i++) {
     cell *strcell = ((cell**)gp->stringmap->data)[i];
     assert(TYPE_STRING == celltype(strcell));
     printf("%d: ",i);
@@ -531,21 +531,22 @@ void print_program(gprogram *gp, int builtins, int usage)
 
 void print_profiling(gprogram *gp)
 {
-  print_program(gp,1,1);
-
   int index = 0;
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next)
-    sc->index = index++;
-
-  int *usage = (int*)calloc((index+1)+NUM_BUILTINS,sizeof(int));
-
+  int *usage;
   int prevfun = -1;
   int fno = -1;
   int curusage = 0;
   int totalusage = 0;
-
   int addr = 0;
+
+  print_program(gp,1,1);
+
+  for (sc = scombs; sc; sc = sc->next)
+    sc->index = index++;
+
+  usage = (int*)calloc((index+1)+NUM_BUILTINS,sizeof(int));
+
   while (addr <= gp->count) {
     if ((addr == gp->count) ||
         ((OP_GLOBSTART == gp->ginstrs[addr].opcode) &&
@@ -569,8 +570,8 @@ void print_profiling(gprogram *gp)
   }
 
   for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
-    printf("%-9d",usage[fno]);
     double portion = (((double)usage[fno])/((double)totalusage))*100.0;
+    printf("%-9d",usage[fno]);
     printf(" %-6.2f",portion);
     if (fno == NUM_BUILTINS+index) {
       printf("start code");
@@ -596,8 +597,8 @@ typedef struct pmap {
 
 int presolve(pmap *pm, char *varname)
 {
-  assert(pm->names->count == pm->indexes->count);
   int i;
+  assert(pm->names->count == pm->indexes->count);
   for (i = 0; i < pm->names->count; i++)
     if (!strcmp((char*)pm->names->data[i],varname))
       return (int)pm->indexes->data[i];
@@ -652,9 +653,9 @@ int letrecs_used(cell *expr, letrec *first)
 {
   int count = 0;
   list *used = NULL;
+  letrec *rec;
   getusage(expr,&used);
 
-  letrec *rec;
   for (rec = first; rec; rec = rec->next)
     if (list_contains_string(used,rec->name))
       count++;
@@ -710,6 +711,8 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
   case TYPE_APPLICATION: {
     int m = 0;
     cell *app;
+    int fno;
+    int k;
     for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1)
       m++;
 
@@ -717,28 +720,31 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
                 app,"Non-function applied to args");
 
-    int fno = cell_fno(app);
-    int k = function_nargs(fno);
+    fno = cell_fno(app);
+    k = function_nargs(fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if ((TYPE_BUILTIN == celltype(app)) &&
         (B_IF == (int)app->field1) &&
         (3 == m)) {
+      cell *falsebranch;
+      cell *truebranch;
+      cell *cond;
       cell *app = c;
-      cell *falsebranch = (cell*)app->field2;
+      int label;
+      stackinfo *oldsi;
+      int end;
+      falsebranch = (cell*)app->field2;
       app = (cell*)app->field1;
-      cell *truebranch = (cell*)app->field2;
+      truebranch = (cell*)app->field2;
       app = (cell*)app->field1;
-      cell *cond = (cell*)app->field2;
+      cond = (cell*)app->field2;
 
       E(gp,cond,p,n);
-      int label;
       JFALSE(label);
 
-      stackinfo *oldsi;
       stackinfo_newswap(&gp->si,&oldsi);
       E(gp,truebranch,p,n);
-      int end;
       JUMP(end);
       stackinfo_freeswap(&gp->si,&oldsi);
 
@@ -798,8 +804,8 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
 
 void S(gprogram *gp, stack *exprs, stack *strict, pmap *p, int n)
 {
-  print_comp2_stack("S",exprs,n,"");
   int m;
+  print_comp2_stack("S",exprs,n,"");
   for (m = 0; m < exprs->count; m++) {
     if (strict->data[m])
       E(gp,(cell*)exprs->data[m],p,n+m);
@@ -818,11 +824,12 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     stack *args = stack_new();
     stack *argstrict = stack_new();
     cell *app;
+    int m;
     for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
       stack_push(args,app->field2);
       stack_push(argstrict,(void*)(app->tag & FLAG_STRICT));
     }
-    int m = args->count;
+    m = args->count;
     if (TYPE_SYMBOL == celltype(app)) {
       stack_push(args,app);
       stack_push(argstrict,0);
@@ -843,15 +850,15 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
       else if (m == k) {
         if ((TYPE_BUILTIN == celltype(app)) &&
             (B_IF == (int)app->field1)) {
-          cell *falsebranch = args->data[0];
-          cell *truebranch = args->data[1];
-          cell *cond = args->data[2];
+          cell *falsebranch = (cell*)args->data[0];
+          cell *truebranch = (cell*)args->data[1];
+          cell *cond = (cell*)args->data[2];
+          int label;
+          stackinfo *oldsi;
 
           E(gp,cond,p,n);
-          int label;
           JFALSE(label);
 
-          stackinfo *oldsi;
           stackinfo_newswap(&gp->si,&oldsi);
           R(gp,truebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
@@ -862,10 +869,12 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
           stackinfo_freeswap(&gp->si,&oldsi);
         }
         else if ((TYPE_BUILTIN == celltype(app)) && (B_IF != (int)app->field1)) {
-          S(gp,args,argstrict,p,n);
-          int bif = (int)app->field1;
-          const builtin *bi = &builtin_info[bif];
+          int bif;
+          const builtin *bi;
           int argno;
+          S(gp,args,argstrict,p,n);
+          bif = (int)app->field1;
+          bi = &builtin_info[bif];
           assert(gp->si->count >= bi->nstrict);
           for (argno = 0; argno < bi->nstrict; argno++)
             assert(statusat(gp->si,gp->si->count-1-argno));
@@ -940,6 +949,8 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
   case TYPE_APPLICATION: {
     int m = 0;
     cell *app;
+    int fno;
+    int k;
     for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
       C(gp,(cell*)app->field2,p,n+m);
       m++;
@@ -949,8 +960,8 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
     parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
                 app,"Non-function applied to args");
 
-    int fno = cell_fno(app);
-    int k = function_nargs(fno);
+    fno = cell_fno(app);
+    k = function_nargs(fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if (m == k)
@@ -990,10 +1001,12 @@ void F(gprogram *gp, int fno, scomb *sc)
 {
   int i;
   cell *copy = sc->body;
+  stackinfo *oldsi;
+  pmap pm;
 
   addressmap[NUM_BUILTINS+sc->index] = gp->count;
 
-  stackinfo *oldsi = gp->si;
+  oldsi = gp->si;
   gp->si = stackinfo_new(NULL);
 
 /*   pushstatus(gp->si,0); // redex */
@@ -1016,8 +1029,6 @@ void F(gprogram *gp, int fno, scomb *sc)
   print_scomb_code(sc);
   printf("\n");
 #endif
-
-  pmap pm;
 
   pm.names = stack_new();
   pm.indexes = stack_new();
@@ -1111,15 +1122,16 @@ void compile(gprogram *gp)
     GLOBSTART(i,bi->nargs);
 
     if (B_IF == i) {
+      int label1;
+      stackinfo *oldsi;
+      int label2;
       PUSH(0);
       EVAL(0);
-      int label1;
       JFALSE(label1);
 
-      stackinfo *oldsi = gp->si;
+      oldsi = gp->si;
       gp->si = stackinfo_new(oldsi);
       PUSH(1);
-      int label2;
       JUMP(label2);
       stackinfo_free(gp->si);
       gp->si = oldsi;

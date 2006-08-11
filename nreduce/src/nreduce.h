@@ -25,6 +25,12 @@
 
 #include <stdio.h>
 
+#ifdef WIN32
+#define YY_NO_UNISTD_H
+#else
+#define TIMING
+#endif
+
 //#define NDEBUG
 
 //#define DEBUG_GCODE_COMPILATION
@@ -257,9 +263,9 @@ void stack_free(stack *s);
 void stack_push2(stack *s, void *c);
 void stack_push(stack *s, void *c);
 void stack_insert(stack *s, void *c, int pos);
-void *stack_pop(stack *s);
-void *stack_top(stack *s);
-void *stack_at(stack *s, int pos);
+cell *stack_pop(stack *s);
+cell *stack_top(stack *s);
+cell *stack_at(stack *s, int pos);
 void stack_grow(int *alloc, void ***data, int size);
 
 void statistics(FILE *f);

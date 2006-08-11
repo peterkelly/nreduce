@@ -59,11 +59,12 @@ static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *v
   case TYPE_LETREC: {
     int oldcount = names->count;
     letrec *rec;
+    int i;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
       stack_push(names,(char*)rec->name);
       stack_push(values,alloc_cell());
     }
-    int i = 0;
+    i = 0;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
       cell *val = (cell*)values->data[oldcount+i];
       instantiate_scomb_r(val,rec->value,names,values);
@@ -121,7 +122,7 @@ void reduce(stack *s)
     if (nallocs > COLLECT_THRESHOLD)
       collect();
 
-    redex = s->data[s->count-1];
+    redex = (cell*)s->data[s->count-1];
     reductions++;
 
     target = resolve_ind(redex);
@@ -233,9 +234,9 @@ void reduce(stack *s)
 
       /* UPDATE */
 
-      s->data[s->count-1] = resolve_ind(s->data[s->count-1]);
+      s->data[s->count-1] = resolve_ind((cell*)s->data[s->count-1]);
 
-      free_cell_fields(s->data[s->count-2]);
+      free_cell_fields((cell*)s->data[s->count-2]);
       ((cell*)s->data[s->count-2])->tag = TYPE_IND;
       ((cell*)s->data[s->count-2])->field1 = s->data[s->count-1];
 

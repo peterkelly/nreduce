@@ -188,14 +188,16 @@ void b_bitop(cell **argstack, int bif)
 {
   cell *cell2 = argstack[0];
   cell *cell1 = argstack[1];
+  int a;
+  int b;
 
   if ((TYPE_INT != celltype(cell1)) || (TYPE_INT != celltype(cell2))) {
     fprintf(stderr,"%s: incompatible arguments (must be int)\n",builtin_info[bif].name);
     exit(1);
   }
 
-  int a = (int)cell1->field1;
-  int b = (int)cell2->field1;
+  a = (int)cell1->field1;
+  b = (int)cell2->field1;
 
   switch (bif) {
   case B_BITSHL:  setint(&argstack[0],a << b);  break;
@@ -216,11 +218,12 @@ void b_bitxor(cell **argstack) { b_bitop(argstack,B_BITXOR); }
 void b_bitnot(cell **argstack)
 {
   cell *arg = argstack[0];
+  int val;
   if (TYPE_INT != celltype(arg)) {
     fprintf(stderr,"~: incompatible argument (must be an int)\n");
     exit(1);
   }
-  int val = (int)arg->field1;
+  val = (int)arg->field1;
   setint(&argstack[0],~val);
 }
 
@@ -348,6 +351,12 @@ void b_isstring(cell **argstack)
 void b_convertarray(cell **argstack)
 {
   cell *retcell = (cell*)argstack[1];
+  cell *top;
+  int size;
+  cell *c;
+  carray *arr;
+  int i;
+  cell *arrcell;
 
   if (TYPE_INT != celltype(retcell)) {
     printf("convertarray: first arg should be an int, got ");
@@ -357,13 +366,13 @@ void b_convertarray(cell **argstack)
   }
 
   // FIXME: this doesn't correctly handle cyclic lists at present!
-  cell *top = argstack[0];
-  int size = 0;
+  top = argstack[0];
+  size = 0;
 
   if (TYPE_AREF == celltype(top))
     return;
 
-  cell *c = top;
+  c = top;
   while (TYPE_CONS == celltype(c)) {
     c = resolve_ind((cell*)c->field2);
     size++;
@@ -380,21 +389,20 @@ void b_convertarray(cell **argstack)
     abort();
   }
 
-  carray *arr = (carray*)calloc(1,sizeof(carray));
+  arr = (carray*)calloc(1,sizeof(carray));
   arr->alloc = size;
   arr->size = size;
   arr->cells = (cell**)calloc(arr->alloc,sizeof(cell*));
   arr->refs = (cell**)calloc(arr->alloc,sizeof(cell*));
   arr->tail = globnil;
 
-  int i;
   c = top;
   for (i = 0; i < arr->size; i++) {
-    arr->cells[i] = c->field1;
+    arr->cells[i] = (cell*)c->field1;
     c = resolve_ind((cell*)c->field2);
   }
 
-  cell *arrcell = alloc_cell();
+  arrcell = alloc_cell();
   arrcell->tag = TYPE_ARRAY;
   arrcell->field1 = arr;
 
@@ -411,6 +419,10 @@ void b_arrayitem(cell **argstack)
 {
   cell *refcell = argstack[0];
   cell *indexcell = argstack[1];
+  int index;
+  cell *arrcell;
+  carray *arr;
+  int refindex;
 
   if (TYPE_INT != celltype(indexcell)) {
     printf("arrayitem: index must be an integer, got ");
@@ -425,11 +437,11 @@ void b_arrayitem(cell **argstack)
     abort();
   }
 
-  int index = (int)indexcell->field1;
+  index = (int)indexcell->field1;
 
-  cell *arrcell = (cell*)refcell->field1;
-  carray *arr = (carray*)arrcell->field1;
-  int refindex = (int)refcell->field2;
+  arrcell = (cell*)refcell->field1;
+  arr = (carray*)arrcell->field1;
+  refindex = (int)refcell->field2;
   assert(refindex+index < arr->size);
   argstack[0] = (cell*)arr->cells[refindex+index];
 }
@@ -438,6 +450,10 @@ void b_arrayhas(cell **argstack)
 {
   cell *refcell = argstack[0];
   cell *indexcell = argstack[1];
+  int index;
+  cell *arrcell;
+  carray *arr;
+  int refindex;
 
   if (TYPE_INT != celltype(indexcell)) {
     printf("arrayhas: index must be an integer, got ");
@@ -451,11 +467,11 @@ void b_arrayhas(cell **argstack)
     return;
   }
 
-  int index = (int)indexcell->field1;
+  index = (int)indexcell->field1;
 
-  cell *arrcell = (cell*)refcell->field1;
-  carray *arr = (carray*)arrcell->field1;
-  int refindex = (int)refcell->field2;
+  arrcell = (cell*)refcell->field1;
+  arr = (carray*)arrcell->field1;
+  refindex = (int)refcell->field2;
   if (refindex+index < arr->size)
     argstack[0] = globtrue;
   else
@@ -466,16 +482,7 @@ void b_arrayext(cell **argstack)
 {
   cell *lstcell = argstack[0];
   cell *ncell = argstack[1];
-
-  if (TYPE_INT != celltype(ncell)) {
-    printf("arrayext: n must be an integer, got ");
-    print_code(ncell);
-    printf("\n");
-    abort();
-  }
-  int n = (int)ncell->field1;
-  assert(0 <= n);
-
+  int n;
   cell *arrcell = NULL;
   carray *arr = NULL;
   int base = 0; // FIXME: make sure this is respected
@@ -483,6 +490,17 @@ void b_arrayext(cell **argstack)
   cell *cons = NULL;
   char *mode = NULL;
   int existing = 0;
+  int oldalloc;
+
+  if (TYPE_INT != celltype(ncell)) {
+    printf("arrayext: n must be an integer, got ");
+    print_code(ncell);
+    printf("\n");
+    abort();
+  }
+  n = (int)ncell->field1;
+  assert(0 <= n);
+
   if (TYPE_AREF == celltype(lstcell)) {
     mode = "existing";
     arrcell = (cell*)lstcell->field1;
@@ -512,7 +530,7 @@ void b_arrayext(cell **argstack)
     cons = lstcell;
   }
 
-  int oldalloc = arr->alloc;
+  oldalloc = arr->alloc;
   while (base+n >= arr->alloc)
     arr->alloc *= 2;
   if (oldalloc != arr->alloc) {
@@ -557,8 +575,9 @@ void b_arraysize(cell **argstack)
   cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
+    carray *arr;
     assert(0 == (int)refcell->field2);
-    carray *arr = (carray*)arrcell->field1;
+    arr = (carray*)arrcell->field1;
 
     if ((NULL == arr->sizecell) ||
         (arr->size != (int)arr->sizecell->field1)) {
@@ -585,8 +604,9 @@ void b_arraytail(cell **argstack)
   cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
+    carray *arr;
     assert(0 == (int)refcell->field2);
-    carray *arr = (carray*)arrcell->field1;
+    arr = (carray*)arrcell->field1;
 
     argstack[0] = arr->tail;
   }
@@ -606,8 +626,9 @@ void b_arrayoptlen(cell **argstack)
   cell *refcell = argstack[0];
   if (TYPE_AREF == celltype(refcell)) {
     cell *arrcell = (cell*)refcell->field1;
+    carray *arr;
     assert(0 == (int)refcell->field2);
-    carray *arr = (carray*)arrcell->field1;
+    arr = (carray*)arrcell->field1;
 
     if (TYPE_NIL == celltype(arr->tail))
       b_arraysize(argstack);

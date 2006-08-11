@@ -78,6 +78,11 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
     reorder_letrecs_r((cell*)c->field2,used,bound);
     break;
   case TYPE_LETREC: {
+    letrec *newrecs;
+    letrec **newptr;
+    list **lptr;
+    letrec *rec;
+
     stack_push(bound,c->field1);
 
     reorder_letrecs_r((cell*)c->field2,used,bound);
@@ -87,10 +92,10 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
        old list at the end of this process, it means they are not used (and can thus be
        safely removed) */
 
-    letrec *newrecs = NULL;
-    letrec **newptr = &newrecs;
+    newrecs = NULL;
+    newptr = &newrecs;
 
-    list **lptr = used;
+    lptr = used;
     while (*lptr) {
       char *usedname = (char*)(*lptr)->data;
       int found = 0;
@@ -123,7 +128,7 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
     }
 
     /* Remove any letrec bindings in the old list */
-    letrec *rec = (letrec*)c->field1;
+    rec = (letrec*)c->field1;
     while (rec) {
       letrec *next = rec->next;
       free_letrec(rec);
@@ -136,6 +141,9 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
     break;
   }
   case TYPE_SYMBOL: {
+    int i;
+    letrec *rec;
+
     /* Encountered a symbol - add it to the beginning of the list of variables used, but
        *only* if we have not encountered it (otherwise we could have infinite recursion) */
     if (list_contains_string(*used,(char*)c->field1))
@@ -143,8 +151,6 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
 
     list_push(used,(char*)c->field1);
 
-    int i;
-    letrec *rec;
     for (i = bound->count-1; 0 <= i; i--) {
       for (rec = (letrec*)bound->data[i]; rec; rec = rec->next) {
         if (!strcmp(rec->name,(char*)c->field1)) {

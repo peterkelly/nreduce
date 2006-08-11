@@ -37,8 +37,6 @@
 #include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <dirent.h>
 #include <errno.h>
 
 cell *parse_root = NULL;
@@ -80,20 +78,21 @@ int debug(int depth, const char *format, ...)
 {
   va_list ap;
   int i;
+  int r;
   for (i = 0; i < depth; i++)
     printf("  ");
   va_start(ap,format);
-  int r = vprintf(format,ap);
+  r = vprintf(format,ap);
   va_end(ap);
   return r;
 }
 
 void debug_stage(const char *name)
 {
-  if (!trace)
-    return;
   int npad = 80-2-strlen(name);
   int i;
+  if (!trace)
+    return;
   for (i = 0; i < npad/2; i++)
     printf("=");
   printf(" %s ",name);
@@ -174,8 +173,8 @@ static void print1(char *prefix, cell *c, int indent)
       printf("%s\n",((scomb*)c->field1)->name);
       break;
     case TYPE_LETREC: {
-      printf("LETREC\n");
       letrec *rec;
+      printf("LETREC\n");
       for (rec = (letrec*)c->field1; rec; rec = rec->next) {
         printf("%s             %11s ",prefix,"def");
         for (i = 0; i < indent+1; i++)
@@ -218,9 +217,9 @@ void print(cell *c)
 
 static void down_line(FILE *f, int *line, int *col)
 {
+  int i;
   (*line)++;
   fprintf(f,"\n");
-  int i;
   for (i = 0; i < *col; i++)
     fprintf(f," ");
 }
@@ -233,7 +232,7 @@ const char *real_varname(const char *sym)
   if (!strncmp(sym,"_v",2)) {
     int varno = atoi(sym+2);
     assert(oldnames);
-    assert(varno <= (oldnames->size-1)*sizeof(char*));
+    assert(varno <= (int)((oldnames->size-1)*sizeof(char*)));
     return ((char**)oldnames->data)[varno];
   }
   else {
@@ -250,11 +249,13 @@ char *real_scname(const char *sym)
   if (!strncmp(sym,"_v",2)) {
     char *end = NULL;
     int varno = strtol(sym+2,&end,10);
+    char *old;
+    char *fullname;
     assert(end);
     assert(oldnames);
-    assert(varno <= (oldnames->size-1)*sizeof(char*));
-    char *old = ((char**)oldnames->data)[varno];
-    char *fullname = (char*)malloc(strlen(old)+strlen(sym)+1);
+    assert(varno <= (int)((oldnames->size-1)*sizeof(char*)));
+    old = ((char**)oldnames->data)[varno];
+    fullname = (char*)malloc(strlen(old)+strlen(sym)+1);
     sprintf(fullname,"%s%s",old,end);
     return fullname;
   }
@@ -270,9 +271,9 @@ static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, in
 {
   int i;
   for (i = 0; i < count; i++) {
+    cell *c = resolve_ind(data[i]);
     if (0 < i)
       printf(" ");
-    cell *c = resolve_ind(data[i]);
     if ((TYPE_NIL == celltype(c)) ||
         (TYPE_INT == celltype(c)) ||
         (TYPE_DOUBLE == celltype(c)) ||
@@ -310,24 +311,29 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       *col += fprintf(f,"empty");
       break;
     case TYPE_APPLICATION: {
+      cell *tmp;
+      list *l;
+      int addedline = 0;
+      int argscol;
+      int argno;
+      int isif;
+      list *apps = NULL;
       if (needbr)
         *col += fprintf(f,"(");
-      list *apps = NULL;
-      cell *tmp;
       for (tmp = c; TYPE_APPLICATION == celltype(tmp); tmp = resolve_ind((cell*)tmp->field1))
         list_push(&apps,tmp);
 
       print_code1(f,tmp,0,c,line,col);
       *col += fprintf(f," ");
-      int argscol = *col;
-      int argno = 0;
-      list *l;
-      int isif = (((TYPE_BUILTIN == celltype(tmp)) && (B_IF == (int)tmp->field1)) ||
-                  ((TYPE_SYMBOL == celltype(tmp)) && !strcmp((char*)tmp->field1,"if")));
-      int addedline = 0;
+      argscol = *col;
+      argno = 0;
+      isif = (((TYPE_BUILTIN == celltype(tmp)) && (B_IF == (int)tmp->field1)) ||
+              ((TYPE_SYMBOL == celltype(tmp)) && !strcmp((char*)tmp->field1,"if")));
       for (l = apps; l; l = l->next) {
         cell *app = (cell*)l->data;
         cell *arg = resolve_ind((cell*)app->field2);
+        int oldcol;
+        int oldline;
 
         if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == celltype(resolve_ind(arg))))) {
           *col = argscol;
@@ -335,8 +341,8 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
         }
         addedline = 0;
 
-        int oldcol = *col;
-        int oldline = *line;
+        oldcol = *col;
+        oldline = *line;
 /*         if (app->tag & FLAG_STRICT) */
 /*           *col += fprintf(f,"!"); */
         print_code1(f,arg,1,app,line,col);
@@ -370,9 +376,9 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       *col += fprintf(f,"%s",builtin_info[(int)c->field1].name);
       break;
     case TYPE_CONS: {
-      *col += fprintf(f,"[");
       int pos = 0;
       cell *item;
+      *col += fprintf(f,"[");
       for (item = c; TYPE_CONS == celltype(item); item = resolve_ind((cell*)item->field2)) {
         if (0 < pos++)
           *col += fprintf(f,",");
@@ -405,11 +411,11 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       break;
     }
     case TYPE_LETREC: {
+      int count = 0;
       letrec *rec = (letrec*)c->field1;
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         *col += fprintf(f,"(");
       *col += fprintf(f,"let (");
-      int count = 0;
       while (rec) {
         int col2 = *col;
         if (0 < count++)
@@ -429,6 +435,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
         *col += fprintf(f,")");
       break;
+    }
     case TYPE_HOLE:
       fprintf(f,"(hole)");
       break;
@@ -464,18 +471,14 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     }
     case TYPE_ARRAY: {
       carray *arr = (carray*)c->field1;
-      *col += fprintf(f,"ARRAY[");
       int i;
+      *col += fprintf(f,"ARRAY[");
       for (i = 0; i < arr->size; i++) {
         if (i > 0)
           *col += fprintf(f,",");
         print_code1(f,arr->cells[i],0,c,line,col);
       }
       printf("]");
-      break;
-    }
-    default:
-      assert(0);
       break;
     }
     case TYPE_FRAME: {
@@ -492,23 +495,26 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       *col += printf(") %s)",function_name(cp->fno));
       break;
     }
+    default:
+      assert(0);
+      break;
     }
   }
 }
 
 void print_codef2(FILE *f, cell *c, int pos)
 {
-  cleargraph(c,FLAG_TMP);
   int line = 0;
   int col = pos;
+  cleargraph(c,FLAG_TMP);
   print_code1(f,c,0,NULL,&line,&col);
 }
 
 void print_codef(FILE *f, cell *c)
 {
-  cleargraph(c,FLAG_TMP);
   int line = 0;
   int col = 0;
+  cleargraph(c,FLAG_TMP);
   print_code1(f,c,0,NULL,&line,&col);
 }
 void print_code(cell *c)

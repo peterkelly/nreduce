@@ -129,12 +129,12 @@ void mark(cell *c);
 void mark_frame(frame *f)
 {
 /*   printf("mark_frame %p (cell %p)\n",f,f->c); */
+  int i;
   if (f->completed) {
     assert(!"completed frame referenced from here");
   }
   if (f->c)
     mark(f->c);
-  int i;
   for (i = 0; i < f->count; i++)
     mark(f->data[i]);
 }
@@ -334,6 +334,7 @@ void cleanup()
 {
   block *bl;
   int i;
+  frame *f;
   scomb_free_list(&scombs);
 
   for (bl = blocks; bl; bl = bl->next)
@@ -342,7 +343,7 @@ void cleanup()
 
   collect();
 
-  frame *f = freeframe;
+  f = freeframe;
   while (f) {
     frame *next = f->freelnk;
     f->c = NULL;
@@ -362,7 +363,7 @@ void cleanup()
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
-    for (i = 0; i < oldnames->size/sizeof(char*); i++)
+    for (i = 0; i < (int)(oldnames->size/sizeof(char*)); i++)
       free(((char**)oldnames->data)[i]);
     array_free(oldnames);
   }
@@ -380,10 +381,11 @@ void add_active_frame(frame *f)
 
 void remove_active_frame(frame *f)
 {
+  frame **ptr;
   assert(f->active);
   f->active = 0;
   f->completed = 1;
-  frame **ptr = &active_frames;
+  ptr = &active_frames;
   while (*ptr != f)
     ptr = &((*ptr)->next);
   *ptr = f->next;
@@ -497,7 +499,7 @@ stack *stack_new(void)
   stack *s = (stack*)calloc(1,sizeof(stack));
   s->alloc = 1;
   s->count = 0;
-  s->data = malloc(s->alloc*sizeof(void*));
+  s->data = (void**)malloc(s->alloc*sizeof(void*));
   return s;
 }
 
@@ -506,7 +508,7 @@ stack *stack_new2(int alloc)
   stack *s = (stack*)calloc(1,sizeof(stack));
   s->alloc = alloc;
   s->count = 0;
-  s->data = malloc(s->alloc*sizeof(void*));
+  s->data = (void**)malloc(s->alloc*sizeof(void*));
   return s;
 }
 
@@ -520,7 +522,7 @@ void stack_grow(int *alloc, void ***data, int size)
 {
   if (*alloc < size) {
     *alloc = size;
-    *data = realloc(*data,(*alloc)*sizeof(void*));
+    *data = (void**)realloc(*data,(*alloc)*sizeof(void*));
   }
 }
 
@@ -551,23 +553,23 @@ void stack_insert(stack *s, void *c, int pos)
   s->data[pos] = c;
 }
 
-void *stack_pop(stack *s)
+cell *stack_pop(stack *s)
 {
   assert(0 < s->count);
-  return resolve_ind(s->data[--s->count]);
+  return resolve_ind((cell*)s->data[--s->count]);
 }
 
-void *stack_top(stack *s)
+cell *stack_top(stack *s)
 {
   assert(0 < s->count);
-  return resolve_ind(s->data[s->count-1]);
+  return resolve_ind((cell*)s->data[s->count-1]);
 }
 
-void *stack_at(stack *s, int pos)
+cell *stack_at(stack *s, int pos)
 {
   assert(0 <= pos);
   assert(pos < s->count);
-  return resolve_ind(s->data[pos]);
+  return resolve_ind((cell*)s->data[pos]);
 }
 
 void statistics(FILE *f)

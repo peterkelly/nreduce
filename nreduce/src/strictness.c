@@ -90,7 +90,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#include <alloca.h>
 
 /**
  * Determine the number of arguments required by the function referenced by the specified cell.
@@ -195,6 +194,7 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
   case TYPE_LETREC: {
     letrec *rec;
     list *bodyused = NULL;
+    list *l;
 
     int again;
     do {
@@ -213,7 +213,6 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
       }
     } while (again);
 
-    list *l;
     for (l = bodyused; l; l = l->next) {
       int isrec = 0;
       for (rec = (letrec*)c->field1; rec && !isrec; rec = rec->next)
@@ -336,17 +335,20 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
 static void check_strictness(scomb *sc, int *changed)
 {
   list *used = NULL;
+  int i;
+  int *strictin;
+
   check_strictness_r(sc,sc->body,&used,changed);
 
-  int *strictin = (int*)alloca(sc->nargs*sizeof(int));
-  int i;
+  strictin = (int*)malloc(sc->nargs*sizeof(int));
   for (i = 0; i < sc->nargs; i++)
     strictin[i] = list_contains_string(used,sc->argnames[i]);
 
   if (memcmp(sc->strictin,strictin,sc->nargs*sizeof(int)))
     *changed = 1;
 
-  memcpy(sc->strictin,strictin,sc->nargs*sizeof(int));
+  free(sc->strictin);
+  sc->strictin = strictin;
   list_free(used,NULL);
 }
 
@@ -379,16 +381,17 @@ void dump_strictinfo()
  */
 void strictness_analysis()
 {
+  scomb *sc;
+  int changed;
+
   if (trace)
     debug_stage("Strictness analysis (new version)");
 
-  scomb *sc;
   for (sc = scombs; sc; sc = sc->next)
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
 
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
-  int changed;
   do {
     changed = 0;
     for (sc = scombs; sc; sc = sc->next)

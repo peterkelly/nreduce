@@ -142,44 +142,79 @@ x86_assembly *x86_assembly_new()
 
 x86_arg imm(int val1)
 {
-  x86_arg arg = { type: TYPE_IMM, val: val1, off: 0, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_IMM;
+  arg.val = val1;
+  arg.off = 0;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 
 x86_arg reg(int reg1)
 {
-  x86_arg arg = { type: TYPE_REG, val: reg1, off: 0, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_REG;
+  arg.val = reg1;
+  arg.off = 0;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 
 x86_arg regmem(int reg1, int off1)
 {
-  x86_arg arg = { type: TYPE_REGMEM, val: reg1, off: off1, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_REGMEM;
+  arg.val = reg1;
+  arg.off = off1;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 
 x86_arg regmemscaled(int reg1, int off1, int scale1, int index1)
 {
-  x86_arg arg = { type: TYPE_REGMEM, val: reg1, off: off1, scale: scale1, index: index1 };
+  x86_arg arg;
+  arg.type = TYPE_REGMEM;
+  arg.val = reg1;
+  arg.off = off1;
+  arg.scale = scale1;
+  arg.index = index1;
   assert(NOINDEX != index1);
   return arg;
 }
 
 x86_arg absmem(int addr1)
 {
-  x86_arg arg = { type: TYPE_MEM, val: addr1, off: 0, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_MEM;
+  arg.val = addr1;
+  arg.off = 0;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 
 x86_arg label(int l)
 {
-  x86_arg arg = { type: TYPE_LABEL, val: l, off: 0, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_LABEL;
+  arg.val = l;
+  arg.off = 0;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 
 x86_arg none()
 {
-  x86_arg arg = { type: TYPE_NONE, val: 0, off: 0, scale: 0,index: NOINDEX };
+  x86_arg arg;
+  arg.type = TYPE_NONE;
+  arg.val = 0;
+  arg.off = 0;
+  arg.scale = 0;
+  arg.index = NOINDEX;
   return arg;
 }
 

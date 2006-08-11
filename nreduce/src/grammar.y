@@ -27,6 +27,7 @@
 
 #include "nreduce.h"
 #include <string.h>
+#include <stdlib.h>
 
 extern int yylineno;
 extern char *yyfilename;
