@@ -116,6 +116,13 @@ void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
              "actually a %s\n",curf->address,i,i,cell_types[celltype(c)]);
       abort();
     }
+    if (instr->expstatus[i] && (TYPE_IND == celltype(stackdata[i]))) {
+      if (OP_RESOLVE != gp->ginstrs[curf->address].opcode) {
+        printf("Instruction %d expects stack frame entry %d (%d) to be evald (and it is) "
+               "but the pointer in the stack is an IND\n",curf->address,i,i);
+        abort();
+      }
+    }
   }
 }
 
@@ -205,7 +212,8 @@ void execute(gprogram *gp)
     case OP_EVAL: {
       cell *c;
       assert(0 <= stcount-1-instr->arg0);
-      c = resolve_ind(stdata[stcount-1-instr->arg0]);
+      stdata[stcount-1-instr->arg0] = resolve_ind(stdata[stcount-1-instr->arg0]);
+      c = stdata[stcount-1-instr->arg0];
 
       if (TYPE_FRAME == celltype(c)) {
         frame *newf = (frame*)c->field1;
@@ -221,6 +229,10 @@ void execute(gprogram *gp)
 
         // curf->address--; /* so we process the GLOBSTART */
         add_active_frame(curf);
+      }
+      else {
+        assert(OP_RESOLVE == gp->ginstrs[curf->address+1].opcode);
+        curf->address++; // skip RESOLVE
       }
       break;
     }
@@ -250,7 +262,7 @@ void execute(gprogram *gp)
       int s1;
       int a1;
       assert(0 < stcount);
-      capcell = resolve_ind((cell*)stdata[stcount-1]);
+      capcell = (cell*)stdata[stcount-1];
       stcount--;
 
       assert(TYPE_CAP == celltype(capcell));
@@ -332,7 +344,8 @@ void execute(gprogram *gp)
       // curf->address--; /* so we process the GLOBSTART */
       break;
     case OP_JFALSE: {
-      cell *test = resolve_ind(stdata[stcount-1]);
+      cell *test = stdata[stcount-1];
+      assert(TYPE_IND != celltype(test));
       assert(TYPE_APPLICATION != celltype(test));
       assert(TYPE_CAP != celltype(test));
       assert(TYPE_FRAME != celltype(test));
@@ -357,10 +370,7 @@ void execute(gprogram *gp)
       assert(n < stcount);
       assert(n > 0);
 
-      target = resolve_ind(stdata[stcount-1-n]);
-
-      /* FIXME: this check can probably just become TYPE_HOLE once the (v,g) scheme is
-         in place, as I think UPDATE is only used for letrecs */
+      target = stdata[stcount-1-n];
       assert(TYPE_HOLE == celltype(target));
 
       res = resolve_ind(stdata[stcount-1]);
@@ -370,6 +380,7 @@ void execute(gprogram *gp)
       }
       target->tag = TYPE_IND;
       target->field1 = res;
+      stdata[stcount-1-n] = res;
       stcount--;
       break;
     }
@@ -433,7 +444,6 @@ void execute(gprogram *gp)
       int i;
       assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
-        stdata[stcount-1-i] = resolve_ind(stdata[stcount-1-i]); /* bifs expect it */
         assert(TYPE_APPLICATION != celltype((cell*)stdata[stcount-1-i]));
         assert(TYPE_CAP != celltype((cell*)stdata[stcount-1-i]));
         assert(TYPE_FRAME != celltype((cell*)stdata[stcount-1-i]));
@@ -444,6 +454,7 @@ void execute(gprogram *gp)
 
       builtin_info[bif].f((cell**)(&stdata[stcount-nargs]));
       stcount -= (nargs-1);
+      assert(!builtin_info[bif].reswhnf || (TYPE_IND != celltype(stdata[stcount-1])));
       break;
     }
     case OP_PUSHNIL:
@@ -457,6 +468,9 @@ void execute(gprogram *gp)
       break;
     case OP_PUSHSTRING:
       stdata[stcount++] = ((cell**)gp->stringmap->data)[instr->arg0];
+      break;
+    case OP_RESOLVE:
+      stdata[stcount-1-instr->arg0] = resolve_ind(stdata[stcount-1-instr->arg0]);
       break;
     default:
       assert(0);

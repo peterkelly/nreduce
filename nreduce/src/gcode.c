@@ -42,7 +42,12 @@
 #define JFUN(_a)           add_instruction(gp,OP_JFUN,(_a),0)
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
 #define DO()               add_instruction(gp,OP_DO,0,0)
-#define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
+#define EVAL(_a)           { int arg0 = (_a);                \
+    if (!gp->si || !statusat(gp->si,gp->si->count-1-arg0)) { \
+       add_instruction(gp,OP_EVAL,arg0,0); \
+       add_instruction(gp,OP_RESOLVE,arg0,0); \
+    }}
+#define RESOLVE(_a)        add_instruction(gp,OP_RESOLVE,(_a),0)
 #define RETURN()           add_instruction(gp,OP_RETURN,0,0)
 #define PUSH(_a)           add_instruction(gp,OP_PUSH,(_a),0)
 #define LAST()             add_instruction(gp,OP_LAST,0,0)
@@ -157,6 +162,7 @@ const char *op_names[OP_COUNT] = {
 "PUSHINT",
 "PUSHDOUBLE",
 "PUSHSTRING",
+"RESOLVE",
 };
 
 void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
@@ -251,14 +257,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
 {
   ginstr *instr;
   assert(!gp->si || !gp->si->invalid);
-
-#if 1
-  /* Skip the EVAL instruction if we know this stack location has already been evaluated */
-  if ((OP_EVAL == opcode) && gp->si && statusat(gp->si,gp->si->count-1-arg0)) {
-/*     printf("skipping eval (%d)\n",arg0); */
-    return;
-  }
-#endif
 
   if (gp->alloc <= gp->count) {
     gp->alloc *= 2;
@@ -378,6 +376,9 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     break;
   case OP_PUSHSTRING:
     pushstatus(gp->si,1);
+    break;
+  case OP_RESOLVE:
+    assert(statusat(gp->si,gp->si->count-1-arg0));
     break;
   default:
     assert(0);

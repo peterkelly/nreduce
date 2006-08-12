@@ -46,7 +46,8 @@
 #define OP_PUSHINT       18
 #define OP_PUSHDOUBLE    19
 #define OP_PUSHSTRING    20
-#define OP_COUNT         21
+#define OP_RESOLVE       21
+#define OP_COUNT         22
 
 #define GINSTR_OPCODE   ((int)&((ginstr*)0)->opcode)
 #define GINSTR_ARG0     ((int)&((ginstr*)0)->arg0)

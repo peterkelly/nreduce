@@ -645,8 +645,10 @@ void print_stack(cell **stk, int size, int dir)
       break;
 
     c = resolve_ind(stk[i]);
-/*     debug(0,"%2d: %p %12s ",pos,c,cell_types[celltype(c)]); */
-    debug(0,"%2d: %12s ",pos,cell_types[celltype(c)]);
+    if (TYPE_IND == celltype(stk[i]))
+      debug(0,"%2d: [i] %12s ",pos,cell_types[celltype(c)]);
+    else
+      debug(0,"%2d:     %12s ",pos,cell_types[celltype(c)]);
     print_code(c);
     debug(0,"\n");
 
