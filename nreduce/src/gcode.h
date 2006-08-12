@@ -37,17 +37,16 @@
 #define OP_JUMP          9
 #define OP_PUSH          10
 #define OP_UPDATE        11
-#define OP_REPLACE       12
-#define OP_ALLOC         13
-#define OP_SQUEEZE       14
-#define OP_MKCAP         15
-#define OP_MKFRAME       16
-#define OP_BIF           17
-#define OP_PUSHNIL       18
-#define OP_PUSHINT       19
-#define OP_PUSHDOUBLE    20
-#define OP_PUSHSTRING    21
-#define OP_COUNT         22
+#define OP_ALLOC         12
+#define OP_SQUEEZE       13
+#define OP_MKCAP         14
+#define OP_MKFRAME       15
+#define OP_BIF           16
+#define OP_PUSHNIL       17
+#define OP_PUSHINT       18
+#define OP_PUSHDOUBLE    19
+#define OP_PUSHSTRING    20
+#define OP_COUNT         21
 
 #define GINSTR_OPCODE   ((int)&((ginstr*)0)->opcode)
 #define GINSTR_ARG0     ((int)&((ginstr*)0)->arg0)

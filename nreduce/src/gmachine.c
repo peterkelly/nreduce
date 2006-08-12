@@ -373,14 +373,6 @@ void execute(gprogram *gp)
       stcount--;
       break;
     }
-    case OP_REPLACE: {
-      int n = instr->arg0;
-      assert(n < stcount);
-      assert(n > 0);
-      stdata[stcount-1-n] = stdata[stcount-1];
-      stcount--;
-      break;
-    }
     case OP_ALLOC: {
       int i;
       for (i = 0; i < instr->arg0; i++)

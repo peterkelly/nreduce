@@ -41,7 +41,6 @@
 #define MKFRAME(_a,_b)     add_instruction(gp,OP_MKFRAME,(_a),(_b))
 #define JFUN(_a)           add_instruction(gp,OP_JFUN,(_a),0)
 #define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
-#define REPLACE(_a)        add_instruction(gp,OP_REPLACE,(_a),0)
 #define DO()               add_instruction(gp,OP_DO,0,0)
 #define EVAL(_a)           add_instruction(gp,OP_EVAL,(_a),0)
 #define RETURN()           add_instruction(gp,OP_RETURN,0,0)
@@ -149,7 +148,6 @@ const char *op_names[OP_COUNT] = {
 "JUMP",
 "PUSH",
 "UPDATE",
-"REPLACE",
 "ALLOC",
 "SQUEEZE",
 "MKCAP",
@@ -338,11 +336,6 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
     pushstatus(gp->si,statusat(gp->si,gp->si->count-1-arg0));
     break;
   case OP_UPDATE:
-    assert(0 <= gp->si->count-1-arg0);
-    setstatusat(gp->si,gp->si->count-1-arg0,statusat(gp->si,gp->si->count-1));
-    popstatus(gp->si,1);
-    break;
-  case OP_REPLACE:
     assert(0 <= gp->si->count-1-arg0);
     setstatusat(gp->si,gp->si->count-1-arg0,statusat(gp->si,gp->si->count-1));
     popstatus(gp->si,1);

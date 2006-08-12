@@ -273,7 +273,7 @@ static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, in
   for (i = 0; i < count; i++) {
     cell *c = resolve_ind(data[i]);
     if (0 < i)
-      printf(" ");
+      fprintf(f," ");
     if ((TYPE_NIL == celltype(c)) ||
         (TYPE_INT == celltype(c)) ||
         (TYPE_DOUBLE == celltype(c)) ||
@@ -478,21 +478,24 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
           *col += fprintf(f,",");
         print_code1(f,arr->cells[i],0,c,line,col);
       }
-      printf("]");
+      fprintf(f,"]");
       break;
     }
     case TYPE_FRAME: {
       frame *frm = (frame*)c->field1;
-      *col += printf("(FRAME (");
-      print_abbrev_stack(f,frm->data,frm->count,c,line,col);
-      *col += printf(") %s)",function_name(frm->fno));
+      *col += fprintf(f,"(FRAME (");
+      if (frm->data)
+        print_abbrev_stack(f,frm->data,frm->count,c,line,col);
+      else
+        *col += fprintf(f,"...");
+      *col += fprintf(f,") %s)",function_name(frm->fno));
       break;
     }
     case TYPE_CAP: {
       cap *cp = (cap*)c->field1;
-      *col += printf("(CAP (");
+      *col += fprintf(f,"(CAP (");
       print_abbrev_stack(f,(cell**)cp->data,cp->count,c,line,col);
-      *col += printf(") %s)",function_name(cp->fno));
+      *col += fprintf(f,") %s)",function_name(cp->fno));
       break;
     }
     default:
