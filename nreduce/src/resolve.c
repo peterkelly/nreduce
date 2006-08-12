@@ -44,7 +44,7 @@ void resolve_refs_r(cell *c, stack *bound)
   case TYPE_LAMBDA:
     stack_push(bound,(char*)c->field1);
     resolve_refs_r((cell*)c->field2,bound);
-    stack_pop(bound);
+    bound->count--;
     break;
   case TYPE_SYMBOL: {
     char *sym = (char*)c->field1;

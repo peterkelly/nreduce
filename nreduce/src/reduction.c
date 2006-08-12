@@ -223,7 +223,8 @@ void reduce(stack *s)
       for (i = 0; i < strictargs; i++) {
         stack_push(s,s->data[s->count-1-i]);
         reduce(s);
-        s->data[s->count-1-i] = stack_pop(s);
+        cell *val = stack_pop(s);
+        s->data[s->count-1-i] = val;
       }
 
       for (i = 0; i < strictargs; i++)
