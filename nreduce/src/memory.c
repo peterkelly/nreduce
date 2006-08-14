@@ -78,11 +78,11 @@ void initmem()
   globnil = alloc_cell();
   globnil->tag = TYPE_NIL | FLAG_PINNED;
   globtrue = alloc_cell();
-  globtrue->tag = TYPE_INT | FLAG_PINNED;
-  globtrue->field1 = (void*)1;
+  globtrue->tag = TYPE_NUMBER | FLAG_PINNED;
+  celldouble(globtrue) = 1.0;
   globzero = alloc_cell();
-  globzero->tag = TYPE_INT | FLAG_PINNED;
-  globzero->field1 = (void*)0;
+  globzero->tag = TYPE_NUMBER | FLAG_PINNED;
+  celldouble(globzero) = 0.0;
 }
 
 cell *alloc_cell()

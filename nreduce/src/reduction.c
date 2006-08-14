@@ -78,8 +78,7 @@ static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *v
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     copy_cell(dest,source);
     break;
@@ -177,8 +176,7 @@ void reduce(stack *s)
     case TYPE_CONS:
     case TYPE_AREF:
     case TYPE_NIL:
-    case TYPE_INT:
-    case TYPE_DOUBLE:
+    case TYPE_NUMBER:
     case TYPE_STRING:
       /* The item at the tip of the spine is a value; this means the expression is in WHNF.
          If there are one or more arguments "applied" to this value then it's considered an

@@ -123,8 +123,7 @@ static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
   }
   case TYPE_BUILTIN:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
   case TYPE_SYMBOL:
   case TYPE_SCREF:

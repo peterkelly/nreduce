@@ -43,6 +43,60 @@ char *trace_stackbase = NULL;
 char *code_start = NULL;
 int resolve_ind_offset = -1;
 
+int getsignbit(double d)
+{
+  char tmp[100];
+  sprintf(tmp,"%f",d);
+  return ('-' == tmp[0]);
+}
+
+void print_double(FILE *f, double d)
+{
+  if (d == (double)((int)(d))) {
+    int i = (int)d;
+    if (getsignbit(d) && (0.0 == d))
+      printf("-0");
+    else
+      printf("%d",i);
+  }
+  else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
+    int ipart = (int)d;
+    double fraction;
+
+    if (0.0 < d)
+      fraction = d - floor(d);
+    else
+      fraction = d - ceil(d);
+
+    int start = getsignbit(d) ? 1 : 0;
+
+    char tmp[100];
+    sprintf(tmp,"%f",fraction);
+    int pos = strlen(tmp)-1;
+    while ((2+start < pos) && ('0' == tmp[pos]))
+      tmp[pos--] = '\0';
+    assert('0' == tmp[start]);
+    assert('.' == tmp[start+1]);
+
+    printf("%d.%s",ipart,tmp+start+2);
+  }
+  else if (0.0 == d) {
+    printf("0");
+  }
+  else if (isnan(d)) {
+    printf("NaN");
+  }
+  else if (isinf(d) && (0.0 < d)) {
+    printf("INF");
+  }
+  else if (isinf(d) && (0.0 > d)) {
+    printf("-INF");
+  }
+  else {
+    printf("%f",d);
+  }
+}
+
 void print_cell(cell *c)
 {
 /*   printf("print_cell\n"); */
@@ -67,11 +121,8 @@ void print_cell(cell *c)
   switch (celltype(c)) {
   case TYPE_NIL:
     break;
-  case TYPE_INT:
-    printf("%d",(int)c->field1);
-    break;
-  case TYPE_DOUBLE:
-    printf("%f",celldouble(c));
+  case TYPE_NUMBER:
+    print_double(stdout,celldouble(c));
     break;
   case TYPE_STRING:
     printf("%s",(char*)c->field1);

@@ -128,8 +128,7 @@ void rename_variables_r(cell *c, stack *mappings)
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:

@@ -179,8 +179,7 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
   case TYPE_SCREF:
   case TYPE_BUILTIN:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:
@@ -225,8 +224,7 @@ static void replace_usage(cell **k, const char *fun, cell *extra, list *args)
   case TYPE_SCREF:
   case TYPE_BUILTIN:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:
@@ -317,8 +315,7 @@ static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
   case TYPE_SCREF:
   case TYPE_BUILTIN:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:
@@ -373,8 +370,7 @@ void find_vars(cell *c, int *pos, char **names, letrec *ignore)
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:
@@ -451,8 +447,7 @@ void applift_r(cell **k, scomb *sc)
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   }

@@ -74,10 +74,10 @@ SingleExpr:
   NIL                                           { $$ = globnil; }
 | '(' ')'                                       { $$ = globnil; }
 | INTEGER                                       { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_INT;
-                                                  $$->field1 = (void*)$1; }
+                                                  $$->tag = TYPE_NUMBER;
+                                                  celldouble($$) = (double)($1); }
 | DOUBLE                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
-                                                  $$->tag = TYPE_DOUBLE;
+                                                  $$->tag = TYPE_NUMBER;
                                                   celldouble($$) = $1; }
 | STRING                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
                                                   $$->tag = TYPE_STRING;

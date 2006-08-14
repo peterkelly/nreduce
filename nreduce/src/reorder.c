@@ -164,8 +164,7 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   }

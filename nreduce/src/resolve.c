@@ -86,8 +86,7 @@ void resolve_refs_r(cell *c, stack *bound)
     break;
   }
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   default:

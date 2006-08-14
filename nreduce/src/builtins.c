@@ -38,17 +38,10 @@
 
 const builtin builtin_info[NUM_BUILTINS];
 
-void setint(cell **cptr, int val)
+void setnumber(cell **cptr, double val)
 {
   *cptr = alloc_cell();
-  (*cptr)->tag = TYPE_INT;
-  (*cptr)->field1 = (void*)val;
-}
-
-void setdouble(cell **cptr, double val)
-{
-  *cptr = alloc_cell();
-  (*cptr)->tag = TYPE_DOUBLE;
+  (*cptr)->tag = TYPE_NUMBER;
   celldouble(*cptr) = val;
 }
 
@@ -57,40 +50,18 @@ void setbool(cell **cptr, int b)
   *cptr = (b ? globtrue : globnil);
 }
 
-void intop(cell **cptr, int bif, int a, int b)
-{
-  switch (bif) {
-  case B_ADD:       setint(cptr,a +  b);  break;
-  case B_SUBTRACT:  setint(cptr,a -  b);  break;
-  case B_MULTIPLY:  setint(cptr,a *  b);  break;
-  case B_DIVIDE:    if (0 == b) {
-                      fprintf(stderr,"Divide by zero\n");
-                      exit(1);
-                    }
-                    setint(cptr,a /  b);  break;
-  case B_MOD:       setint(cptr,a %  b);  break;
-  case B_EQ:       setbool(cptr,a == b);  break;
-  case B_NE:       setbool(cptr,a != b);  break;
-  case B_LT:       setbool(cptr,a <  b);  break;
-  case B_LE:       setbool(cptr,a <= b);  break;
-  case B_GT:       setbool(cptr,a >  b);  break;
-  case B_GE:       setbool(cptr,a >= b);  break;
-  default:         assert(0);        break;
-  }
-}
-
 void doubleop(cell **cptr, int bif, double a, double b)
 {
   switch (bif) {
-  case B_ADD:       setdouble(cptr,a +  b);  break;
-  case B_SUBTRACT:  setdouble(cptr,a -  b);  break;
-  case B_MULTIPLY:  setdouble(cptr,a *  b);  break;
+  case B_ADD:       setnumber(cptr,a +  b);  break;
+  case B_SUBTRACT:  setnumber(cptr,a -  b);  break;
+  case B_MULTIPLY:  setnumber(cptr,a *  b);  break;
   case B_DIVIDE:    if (0.0 == b) {
                       fprintf(stderr,"Divide by zero\n");
                       exit(1);
                     }
-                    setdouble(cptr,a /  b);  break;
-  case B_MOD:       setdouble(cptr,fmod(a,b));  break;
+                    setnumber(cptr,a /  b);  break;
+  case B_MOD:       setnumber(cptr,fmod(a,b));  break;
   case B_EQ:       setbool(cptr,a == b);  break;
   case B_NE:       setbool(cptr,a != b);  break;
   case B_LT:       setbool(cptr,a <  b);  break;
@@ -131,17 +102,8 @@ void b_other(cell **argstack, int bif)
   case B_MULTIPLY:
   case B_DIVIDE:
   case B_MOD:
-    if ((TYPE_INT == celltype(cell1)) && (TYPE_INT == celltype(cell2))) {
-      intop(&argstack[0],bif,(int)cell1->field1,(int)cell2->field1);
-    }
-    else if ((TYPE_DOUBLE == celltype(cell1)) && (TYPE_DOUBLE == celltype(cell2))) {
+    if ((TYPE_NUMBER == celltype(cell1)) && (TYPE_NUMBER == celltype(cell2))) {
       doubleop(&argstack[0],bif,celldouble(cell1),celldouble(cell2));
-    }
-    else if ((TYPE_INT == celltype(cell1)) && (TYPE_DOUBLE == celltype(cell2))) {
-      doubleop(&argstack[0],bif,(double)((int)cell1->field1),celldouble(cell2));
-    }
-    else if ((TYPE_DOUBLE == celltype(cell1)) && (TYPE_INT == celltype(cell2))) {
-      doubleop(&argstack[0],bif,celldouble(cell1),(double)((int)cell2->field1));
     }
     else {
       fprintf(stderr,"%s: incompatible arguments: (%s,%s)\n",
@@ -191,20 +153,20 @@ void b_bitop(cell **argstack, int bif)
   int a;
   int b;
 
-  if ((TYPE_INT != celltype(cell1)) || (TYPE_INT != celltype(cell2))) {
-    fprintf(stderr,"%s: incompatible arguments (must be int)\n",builtin_info[bif].name);
+  if ((TYPE_NUMBER != celltype(cell1)) || (TYPE_NUMBER != celltype(cell2))) {
+    fprintf(stderr,"%s: incompatible arguments (must be numbers)\n",builtin_info[bif].name);
     exit(1);
   }
 
-  a = (int)cell1->field1;
-  b = (int)cell2->field1;
+  a = (int)celldouble(cell1);
+  b = (int)celldouble(cell2);
 
   switch (bif) {
-  case B_BITSHL:  setint(&argstack[0],a << b);  break;
-  case B_BITSHR:  setint(&argstack[0],a >> b);  break;
-  case B_BITAND:  setint(&argstack[0],a & b);   break;
-  case B_BITOR:   setint(&argstack[0],a | b);   break;
-  case B_BITXOR:  setint(&argstack[0],a ^ b);   break;
+  case B_BITSHL:  setnumber(&argstack[0],(double)(a << b));  break;
+  case B_BITSHR:  setnumber(&argstack[0],(double)(a >> b));  break;
+  case B_BITAND:  setnumber(&argstack[0],(double)(a & b));   break;
+  case B_BITOR:   setnumber(&argstack[0],(double)(a | b));   break;
+  case B_BITXOR:  setnumber(&argstack[0],(double)(a ^ b));   break;
   default:        assert(0);       break;
   }
 }
@@ -219,12 +181,12 @@ void b_bitnot(cell **argstack)
 {
   cell *arg = argstack[0];
   int val;
-  if (TYPE_INT != celltype(arg)) {
-    fprintf(stderr,"~: incompatible argument (must be an int)\n");
+  if (TYPE_NUMBER != celltype(arg)) {
+    fprintf(stderr,"~: incompatible argument (must be a number)\n");
     exit(1);
   }
-  val = (int)arg->field1;
-  setint(&argstack[0],~val);
+  val = (int)celldouble(arg);
+  setnumber(&argstack[0],(double)(~val));
 }
 
 void b_if(cell **argstack)
@@ -330,16 +292,10 @@ void b_isnil(cell **argstack)
   setbool(&argstack[0],TYPE_NIL == celltype(val));
 }
 
-void b_isint(cell **argstack)
+void b_isnumber(cell **argstack)
 {
   cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_INT == celltype(val));
-}
-
-void b_isdouble(cell **argstack)
-{
-  cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_DOUBLE == celltype(val));
+  setbool(&argstack[0],TYPE_NUMBER == celltype(val));
 }
 
 void b_isstring(cell **argstack)
@@ -358,8 +314,8 @@ void b_convertarray(cell **argstack)
   int i;
   cell *arrcell;
 
-  if (TYPE_INT != celltype(retcell)) {
-    printf("convertarray: first arg should be an int, got ");
+  if (TYPE_NUMBER != celltype(retcell)) {
+    printf("convertarray: first arg should be a number, got ");
     print_code(retcell);
     printf("\n");
     abort();
@@ -424,8 +380,8 @@ void b_arrayitem(cell **argstack)
   carray *arr;
   int refindex;
 
-  if (TYPE_INT != celltype(indexcell)) {
-    printf("arrayitem: index must be an integer, got ");
+  if (TYPE_NUMBER != celltype(indexcell)) {
+    printf("arrayitem: index must be a number, got ");
     print_code(indexcell);
     printf("\n");
     abort();
@@ -437,7 +393,7 @@ void b_arrayitem(cell **argstack)
     abort();
   }
 
-  index = (int)indexcell->field1;
+  index = (int)celldouble(indexcell);
 
   arrcell = (cell*)refcell->field1;
   arr = (carray*)arrcell->field1;
@@ -455,8 +411,8 @@ void b_arrayhas(cell **argstack)
   carray *arr;
   int refindex;
 
-  if (TYPE_INT != celltype(indexcell)) {
-    printf("arrayhas: index must be an integer, got ");
+  if (TYPE_NUMBER != celltype(indexcell)) {
+    printf("arrayhas: index must be a number, got ");
     print_code(indexcell);
     printf("\n");
     abort();
@@ -467,7 +423,7 @@ void b_arrayhas(cell **argstack)
     return;
   }
 
-  index = (int)indexcell->field1;
+  index = (int)celldouble(indexcell);
 
   arrcell = (cell*)refcell->field1;
   arr = (carray*)arrcell->field1;
@@ -492,13 +448,13 @@ void b_arrayext(cell **argstack)
   int existing = 0;
   int oldalloc;
 
-  if (TYPE_INT != celltype(ncell)) {
-    printf("arrayext: n must be an integer, got ");
+  if (TYPE_NUMBER != celltype(ncell)) {
+    printf("arrayext: n must be a number, got ");
     print_code(ncell);
     printf("\n");
     abort();
   }
-  n = (int)ncell->field1;
+  n = (int)celldouble(ncell);
   assert(0 <= n);
 
   if (TYPE_AREF == celltype(lstcell)) {
@@ -563,7 +519,7 @@ void b_arrayext(cell **argstack)
     arr->refs[0] = lstcell;
   }
 
-  assert(n == (int)ncell->field1);
+  assert(n == (int)celldouble(ncell));
   assert(pos == n+1);
   assert(arr->cells[n]);
 
@@ -582,8 +538,8 @@ void b_arraysize(cell **argstack)
     if ((NULL == arr->sizecell) ||
         (arr->size != (int)arr->sizecell->field1)) {
       arr->sizecell = alloc_cell();
-      arr->sizecell->tag = TYPE_INT;
-      arr->sizecell->field1 = (void*)arr->size;
+      arr->sizecell->tag = TYPE_NUMBER;
+      celldouble(arr->sizecell) = (double)arr->size;
     }
 
     argstack[0] = arr->sizecell;
@@ -666,10 +622,7 @@ void b_sqrt(cell **argstack)
   double d = 0.0;
 
   cell *c = argstack[0];
-  if (TYPE_INT == celltype(c)) {
-    d = (double)((int)c->field1);
-  }
-  else if (TYPE_DOUBLE == celltype(c)) {
+  if (TYPE_NUMBER == celltype(c)) {
     d = celldouble(c);
   }
   else {
@@ -677,7 +630,39 @@ void b_sqrt(cell **argstack)
     exit(1);
   }
 
-  setdouble(&argstack[0],sqrt(d));
+  setnumber(&argstack[0],sqrt(d));
+}
+
+void b_floor(cell **argstack)
+{
+  double d = 0.0;
+
+  cell *c = argstack[0];
+  if (TYPE_NUMBER == celltype(c)) {
+    d = celldouble(c);
+  }
+  else {
+    fprintf(stderr,"floor: incompatible argument: %s\n",cell_types[celltype(c)]);
+    exit(1);
+  }
+
+  setnumber(&argstack[0],floor(d));
+}
+
+void b_ceil(cell **argstack)
+{
+  double d = 0.0;
+
+  cell *c = argstack[0];
+  if (TYPE_NUMBER == celltype(c)) {
+    d = celldouble(c);
+  }
+  else {
+    fprintf(stderr,"ceil: incompatible argument: %s\n",cell_types[celltype(c)]);
+    exit(1);
+  }
+
+  setnumber(&argstack[0],ceil(d));
 }
 
 int get_builtin(const char *name)
@@ -723,8 +708,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "value?",         1, 1, 1, b_isvalue        },
 { "cons?",          1, 1, 1, b_iscons         },
 { "nil?",           1, 1, 1, b_isnil          },
-{ "int?",           1, 1, 1, b_isint          },
-{ "double?",        1, 1, 1, b_isdouble       },
+{ "number?",        1, 1, 1, b_isnumber       },
 { "string?",        1, 1, 1, b_isstring       },
 
 { "convertarray",   2, 2, 1, b_convertarray   },
@@ -739,6 +723,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "print",          1, 1, 1, b_print          },
 
 { "sqrt",           1, 1, 1, b_sqrt           },
+{ "floor",          1, 1, 1, b_floor          },
+{ "ceil",           1, 1, 1, b_ceil           },
 
 };
 

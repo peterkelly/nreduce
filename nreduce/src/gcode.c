@@ -59,8 +59,7 @@
 #define CALL(_a)           add_instruction(gp,OP_CALL,(_a),0)
 #define ALLOC(_a)          add_instruction(gp,OP_ALLOC,(_a),0)
 #define PUSHNIL()          add_instruction(gp,OP_PUSHNIL,0,0)
-#define PUSHINT(_a)        add_instruction(gp,OP_PUSHINT,(_a),0)
-#define PUSHDOUBLE(_a,_b)  add_instruction(gp,OP_PUSHDOUBLE,(_a),(_b))
+#define PUSHNUMBER(_a,_b)  add_instruction(gp,OP_PUSHNUMBER,(_a),(_b))
 #define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
 #define SQUEEZE(_a,_b)     add_instruction(gp,OP_SQUEEZE,(_a),(_b))
 
@@ -159,8 +158,7 @@ const char *op_names[OP_COUNT] = {
 "MKFRAME",
 "BIF",
 "PUSHNIL",
-"PUSHINT",
-"PUSHDOUBLE",
+"PUSHNUMBER",
 "PUSHSTRING",
 "RESOLVE",
 };
@@ -368,10 +366,7 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   case OP_PUSHNIL:
     pushstatus(gp->si,1);
     break;
-  case OP_PUSHINT:
-    pushstatus(gp->si,1);
-    break;
-  case OP_PUSHDOUBLE:
+  case OP_PUSHNUMBER:
     pushstatus(gp->si,1);
     break;
   case OP_PUSHSTRING:
@@ -626,8 +621,7 @@ void getusage(cell *c, list **used)
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     break;
   }
@@ -904,8 +898,7 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     }
     break;
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
     C(gp,c,p,n);
     RETURN();
@@ -962,8 +955,7 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
                      break;
   case TYPE_SYMBOL:  PUSH(n-presolve(p,(char*)c->field1));         break;
   case TYPE_NIL:     PUSHNIL();                                    break;
-  case TYPE_INT:     PUSHINT((int)c->field1);                      break;
-  case TYPE_DOUBLE:  PUSHDOUBLE((int)c->field1,(int)c->field2);    break;
+  case TYPE_NUMBER:  PUSHNUMBER((int)c->field1,(int)c->field2);    break;
   case TYPE_STRING:  PUSHSTRING(add_string(gp,(char*)c->field1));  break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;

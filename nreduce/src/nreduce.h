@@ -65,11 +65,10 @@
 #define TYPE_FRAME       0x0E  /* left: frame (frame*)                             */
 #define TYPE_CAP         0x0F  /* left: cap (cap*)                                 */
 #define TYPE_NIL         0x10  /*                                                  */
-#define TYPE_INT         0x11  /*                                                  */
-#define TYPE_DOUBLE      0x12  /*                                                  */
-#define TYPE_STRING      0x13  /*                                                  */
-#define TYPE_ARRAY       0x14  /* left: array (carray*)                            */
-#define NUM_CELLTYPES    0x15
+#define TYPE_NUMBER      0x11  /*                                                  */
+#define TYPE_STRING      0x12  /*                                                  */
+#define TYPE_ARRAY       0x13  /* left: array (carray*)                            */
+#define NUM_CELLTYPES    0x14
 
 #define VALUE_FIELD      0x10
 
@@ -109,24 +108,25 @@
 #define B_ISVALUE        25
 #define B_ISCONS         26
 #define B_ISNIL          27
-#define B_ISINT          28
-#define B_ISDOUBLE       29
-#define B_ISSTRING       30
+#define B_ISNUMBER       28
+#define B_ISSTRING       29
 
-#define B_CONVERTARRAY   31
-#define B_ARRAYITEM      32
-#define B_ARRAYHAS       33
-#define B_ARRAYEXT       34
-#define B_ARRAYSIZE      35
-#define B_ARRAYTAIL      36
-#define B_ARRAYOPTLEN    37
+#define B_CONVERTARRAY   30
+#define B_ARRAYITEM      31
+#define B_ARRAYHAS       32
+#define B_ARRAYEXT       33
+#define B_ARRAYSIZE      34
+#define B_ARRAYTAIL      35
+#define B_ARRAYOPTLEN    36
 
-#define B_ECHO           38
-#define B_PRINT          39
+#define B_ECHO           37
+#define B_PRINT          38
 
-#define B_SQRT           40
+#define B_SQRT           39
+#define B_FLOOR          40
+#define B_CEIL           41
 
-#define NUM_BUILTINS     41
+#define NUM_BUILTINS     42
 
 #define TAG_MASK         0xFF
 
@@ -330,6 +330,7 @@ const char *real_varname(const char *sym);
 char *real_scname(const char *sym);
 
 /* jit */
+void print_double(FILE *f, double d);
 void print_cell(cell *c);
 
 /* strictness */

@@ -38,9 +38,9 @@
    (gcell      (!grid.!row.!col.item col (item row grid)))
 
    (makegrid   (!pat.!rows.!cols.
-                (let ((startrow  (/ (- rows (grows pat)) 2))
+                (let ((startrow  (floor (/ (- rows (grows pat)) 2)))
                       (endrow    (+ startrow (grows pat)))
-                      (startcol  (/ (- cols (gcols pat)) 2))
+                      (startcol  (floor (/ (- cols (gcols pat)) 2)))
                       (endcol    (+ startcol (gcols pat))))
                  (for 0 (- rows 1) (!row.
                    (for 0 (- cols 1) (!col.

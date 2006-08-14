@@ -194,10 +194,7 @@ void stream(cell *c)
     if (TYPE_NIL == celltype(c)) {
       /* nothing */
     }
-    else if (TYPE_INT == celltype(c)) {
-      printf("%d",(int)c->field1);
-    }
-    else if (TYPE_DOUBLE == celltype(c)) {
+    else if (TYPE_NUMBER == celltype(c)) {
       printf("%f",celldouble(c));
     }
     else if (TYPE_STRING == celltype(c)) {
@@ -519,8 +516,7 @@ void create_letrecs_r(cell *c)
     break;
   case TYPE_SYMBOL:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
   case TYPE_SCREF:
     break;
@@ -638,8 +634,7 @@ void substitute_apps_r(cell **k)
   case TYPE_BUILTIN:
   case TYPE_SYMBOL:
   case TYPE_NIL:
-  case TYPE_INT:
-  case TYPE_DOUBLE:
+  case TYPE_NUMBER:
   case TYPE_STRING:
   case TYPE_SCREF:
     break;

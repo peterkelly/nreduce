@@ -61,8 +61,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "FRAME",
 "CAP",
 "NIL",
-"INT",
-"DOUBLE",
+"NUMBER",
 "STRING",
 "ARRAY",
  };
@@ -192,11 +191,9 @@ static void print1(char *prefix, cell *c, int indent)
       printf("(hole)\n"); break;
     case TYPE_NIL:
       printf("nil\n"); break;
-    case TYPE_INT:
-      printf("%d\n",(int)c->field1);
-      break;
-    case TYPE_DOUBLE:
-      printf("%f\n",celldouble(c));
+    case TYPE_NUMBER:
+      print_double(stdout,celldouble(c));
+      printf("\n");
       break;
     case TYPE_STRING:
       printf("%s\n",(char*)c->field1);
@@ -275,8 +272,7 @@ static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, in
     if (0 < i)
       fprintf(f," ");
     if ((TYPE_NIL == celltype(c)) ||
-        (TYPE_INT == celltype(c)) ||
-        (TYPE_DOUBLE == celltype(c)) ||
+        (TYPE_NUMBER == celltype(c)) ||
         (TYPE_STRING == celltype(c)))
       print_code1(f,c,1,parent,line,col);
     else
@@ -290,8 +286,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
   if (1 && (c->tag & FLAG_TMP) &&
       (c != globnil) &&
       (TYPE_NIL != celltype(c)) &&
-      (TYPE_INT != celltype(c)) &&
-      (TYPE_DOUBLE != celltype(c)) &&
+      (TYPE_NUMBER != celltype(c)) &&
       (TYPE_STRING != celltype(c)) &&
       (TYPE_BUILTIN != celltype(c)) &&
       (TYPE_SYMBOL != celltype(c)) &&
@@ -442,11 +437,8 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     case TYPE_NIL:
       fprintf(f,"nil");
       break;
-    case TYPE_INT:
-      fprintf(f,"%d",(int)c->field1);
-      break;
-    case TYPE_DOUBLE:
-      fprintf(f,"%f",celldouble(c));
+    case TYPE_NUMBER:
+      print_double(f,celldouble(c));
       break;
     case TYPE_STRING: {
       char *ch;

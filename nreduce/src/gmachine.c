@@ -460,11 +460,8 @@ void execute(gprogram *gp)
     case OP_PUSHNIL:
       stdata[stcount++] = globnil;
       break;
-    case OP_PUSHINT:
-      stdata[stcount++] = alloc_cell2(TYPE_INT,(void*)instr->arg0,NULL);
-      break;
-    case OP_PUSHDOUBLE:
-      stdata[stcount++] = alloc_cell2(TYPE_DOUBLE,(void*)instr->arg0,(void*)instr->arg1);
+    case OP_PUSHNUMBER:
+      stdata[stcount++] = alloc_cell2(TYPE_NUMBER,(void*)instr->arg0,(void*)instr->arg1);
       break;
     case OP_PUSHSTRING:
       stdata[stcount++] = ((cell**)gp->stringmap->data)[instr->arg0];
