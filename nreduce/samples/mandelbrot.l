@@ -1,12 +1,12 @@
 (mandel (Zr Zi Cr Ci iterations res)
-  (if (= iterations 0)
+  (if (= res iterations)
       res
       (let ((newZr (+ (- (* Zr Zr) (* Zi Zi)) Cr))
             (newZi (+ (* 2.0 (* Zr Zi)) Ci))
             (mag (sqrt (+ (* newZr newZr) (* newZi newZi)))))
            (if (> mag 2.0)
                res
-               (mandel newZr newZi Cr Ci (- iterations 1) (+ res 1))))))
+               (mandel newZr newZi Cr Ci iterations (+ res 1))))))
 
 (mandel0 (Cr Ci iterations) (mandel 0.0 0.0 Cr Ci iterations 0))
 
