@@ -245,6 +245,9 @@ flex.exe lexer.l
 				RelativePath=".\src\resolve.c">
 			</File>
 			<File
+				RelativePath=".\src\rtvalue.c">
+			</File>
+			<File
 				RelativePath=".\src\strictness.c">
 			</File>
 			<File

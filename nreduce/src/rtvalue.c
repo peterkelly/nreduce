@@ -82,9 +82,10 @@ void rtmark_cap(cap *c)
 
 void rtmark(pntr p)
 {
+  rtvalue *c;
   if (!is_pntr(p))
     return;
-  rtvalue *c = get_pntr(p);
+  c = get_pntr(p);
   assert(TYPE_EMPTY != celltype(c));
   if (c->tag & FLAG_MARKED)
     return;
@@ -205,6 +206,7 @@ void rtcollect()
 {
   rtblock *bl;
   int i;
+  frame *f;
 
   ncollections++;
   nallocs = 0;
@@ -224,7 +226,6 @@ void rtcollect()
     for (i = 0; i < gstackcount; i++)
       rtmark(gstack[i]);
 
-  frame *f;
   for (f = active_frames; f; f = f->next)
     rtmark_frame(f);
 

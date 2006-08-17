@@ -29,6 +29,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef WIN32
+#define strdup _strdup
+#endif
+
 extern int yylineno;
 extern char *yyfilename;
 int yylex();

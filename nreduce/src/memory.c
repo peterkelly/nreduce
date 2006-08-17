@@ -146,6 +146,8 @@ pntr make_number(double d)
 
 void initmem()
 {
+  rtvalue *globnilvalue;
+
   memset(&op_usage,0,OP_COUNT*sizeof(int));
   globnil = alloc_cell();
   globnil->tag = TYPE_NIL | FLAG_PINNED;
@@ -156,7 +158,7 @@ void initmem()
   globzero->tag = TYPE_NUMBER | FLAG_PINNED;
   celldouble(globzero) = 0.0;
 
-  rtvalue *globnilvalue = alloc_rtvalue();
+  globnilvalue = alloc_rtvalue();
   globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
 
   globnilpntr = make_pntr(globnilvalue);

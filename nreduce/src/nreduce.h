@@ -27,6 +27,9 @@
 
 #ifdef WIN32
 #define YY_NO_UNISTD_H
+#include <float.h>
+#define isnan _isnan
+#define isinf(__x) (!_finite(__x))
 #else
 #define TIMING
 #endif

@@ -62,17 +62,19 @@ void print_double(FILE *f, double d)
   else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
     int ipart = (int)d;
     double fraction;
+	int start;
+    char tmp[100];
+	int pos;
 
     if (0.0 < d)
       fraction = d - floor(d);
     else
       fraction = d - ceil(d);
 
-    int start = getsignbit(d) ? 1 : 0;
+    start = getsignbit(d) ? 1 : 0;
 
-    char tmp[100];
     sprintf(tmp,"%f",fraction);
-    int pos = strlen(tmp)-1;
+    pos = strlen(tmp)-1;
     while ((2+start < pos) && ('0' == tmp[pos]))
       tmp[pos--] = '\0';
     assert('0' == tmp[start]);
