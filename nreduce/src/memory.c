@@ -37,6 +37,8 @@
 #include <stdarg.h>
 #include <math.h>
 
+double __tempd;
+
 typedef struct block {
   struct block *next;
   cell cells[BLOCK_SIZE];
@@ -113,13 +115,6 @@ char *get_string(pntr p)
   return (char*)(*((unsigned int*)&p));
 }
 
-pntr resolve_pntr(pntr p)
-{
-  while (TYPE_IND == pntrtype(p))
-    p = get_pntr(p)->cmp1;
-  return p;
-}
-
 int pntrequal(pntr a, pntr b)
 {
   return 
@@ -132,6 +127,15 @@ int is_nullpntr(pntr p)
   return (is_pntr(p) && (NULL == get_pntr(p)));
 }
 
+#endif
+
+#ifndef INLINE_RESOLVE_PNTR
+pntr resolve_pntr(pntr p)
+{
+  while (TYPE_IND == pntrtype(p))
+    p = get_pntr(p)->cmp1;
+  return p;
+}
 #endif
 
 #ifndef UNBOXED_NUMBERS
