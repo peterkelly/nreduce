@@ -97,7 +97,7 @@ void print_double(FILE *f, double d)
   }
 }
 
-void print_cell(cell *c)
+void output_pntr(pntr p)
 {
 /*   printf("print_cell\n"); */
 /*   printf("print_cell: c = %p\n",c); */
@@ -106,26 +106,26 @@ void print_cell(cell *c)
 /*   printf("print_cell: c->field2 = %p\n",c->field2); */
 /*   print_code(c); */
 /*   printf("\nprint_cell done\n"); */
-  c = resolve_ind(c);
+  p = resolve_pntr(p);
 
   if (trace)
     debug(0,"<============ ");
 
-  if (TYPE_AREF == celltype(c)) {
-    print_code(c);
+  if (TYPE_AREF == pntrtype(p)) {
+    print_pntr(p);
     printf("\n");
     return;
   }
 
-  assert(isvalue(c));
-  switch (celltype(c)) {
+  assert(isvaluetype(pntrtype(p)));
+  switch (pntrtype(p)) {
   case TYPE_NIL:
     break;
   case TYPE_NUMBER:
-    print_double(stdout,celldouble(c));
+    print_double(stdout,pntrdouble(p));
     break;
   case TYPE_STRING:
-    printf("%s",(char*)c->field1);
+    printf("%s",get_string(get_pntr(p)->cmp1));
     break;
   }
   if (trace)

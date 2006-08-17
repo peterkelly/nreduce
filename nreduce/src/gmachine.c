@@ -37,30 +37,31 @@
 
 extern int evaldoaddr;
 
-int is_whnf(cell *c)
+int is_whnf(pntr p)
 {
-  c = resolve_ind(c);
-
-  if (TYPE_FRAME == celltype(c))
-    return 0;
-
-  if (TYPE_CAP == celltype(c))
+  if (!is_pntr(p))
     return 1;
 
-  if (TYPE_APPLICATION == celltype(c)) {
+  if (TYPE_FRAME == pntrtype(p))
+    return 0;
+
+  if (TYPE_CAP == pntrtype(p))
+    return 1;
+
+  if (TYPE_APPLICATION == pntrtype(p)) {
     int nargs = 0;
-    while (TYPE_APPLICATION == celltype(c)) {
-      c = resolve_ind((cell*)c->field1);
+    while (TYPE_APPLICATION == pntrtype(p)) {
+      p = resolve_pntr(get_pntr(p)->cmp1);
       nargs++;
     }
 
-    if (TYPE_FRAME == celltype(c)) {
+    if (TYPE_FRAME == pntrtype(p)) {
       return 0;
     }
     else {
       cap *cp;
-      assert(TYPE_CAP == celltype(c));
-      cp = (cap*)c->field1;
+      assert(TYPE_CAP == pntrtype(p));
+      cp = (cap*)get_pntr(get_pntr(p)->cmp1);
       if (nargs+cp->count >= cp->arity)
         return 0;
     }
@@ -83,7 +84,7 @@ int end_addr(gprogram *gp, int fno)
   return addr-1;
 }
 
-void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
+void check_stack(frame *curf, pntr *stackdata, int stackcount, gprogram *gp)
 {
   ginstr *instr;
   int i;
@@ -109,14 +110,14 @@ void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
   }
 
   for (i = 0; i < instr->expcount; i++) {
-    cell *c = resolve_ind(stackdata[i]);
-    int actualstatus = is_whnf(c);
+    pntr p = resolve_pntr(stackdata[i]);
+    int actualstatus = is_whnf(p);
     if (instr->expstatus[i] && !actualstatus) {
       printf("Instruction %d expects stack frame entry %d (%d) to be evald but it's "
-             "actually a %s\n",curf->address,i,i,cell_types[celltype(c)]);
+             "actually a %s\n",curf->address,i,i,cell_types[pntrtype(p)]);
       abort();
     }
-    if (instr->expstatus[i] && (TYPE_IND == celltype(stackdata[i]))) {
+    if (instr->expstatus[i] && !is_pntr(p) && (TYPE_IND == pntrtype(stackdata[i]))) {
       if (OP_RESOLVE != gp->ginstrs[curf->address].opcode) {
         printf("Instruction %d expects stack frame entry %d (%d) to be evald (and it is) "
                "but the pointer in the stack is an IND\n",curf->address,i,i);
@@ -126,10 +127,10 @@ void check_stack(frame *curf, cell **stackdata, int stackcount, gprogram *gp)
   }
 }
 
-cell **gstack = NULL;
+pntr *gstack = NULL;
 int gstackcount = 0;
 
-void swapstack_in(frame *curf, cell **stdata, int stcount)
+void swapstack_in(frame *curf, pntr *stdata, int stcount)
 {
   assert(NULL == curf->data);
   assert(0 == curf->count);
@@ -138,7 +139,7 @@ void swapstack_in(frame *curf, cell **stdata, int stcount)
   curf->count = stcount;
 }
 
-void swapstack_out(frame *curf, cell ***stdata, int *stcount)
+void swapstack_out(frame *curf, pntr **stdata, int *stcount)
 {
   *stdata = curf->data;
   *stcount = curf->count;
@@ -150,7 +151,7 @@ void swapstack_out(frame *curf, cell ***stdata, int *stcount)
 void execute(gprogram *gp)
 {
   int stcount = 0;
-  cell **stdata = (cell**)malloc(sizeof(cell));
+  pntr *stdata = (pntr*)malloc(sizeof(pntr));
   int lines = -1;
 
   frame *curf = frame_alloc();
@@ -171,22 +172,23 @@ void execute(gprogram *gp)
     if (trace) {
       printf("[d %d] ",frame_depth(curf));
       print_ginstr(gp,curf->address,instr,0);
-      print_stack((cell**)stdata,stcount,0);
+      print_stack(stdata,stcount,0);
       printed += stcount+1;
     }
     #endif
 
     #ifdef STACK_MODEL_SANITY_CHECK
-    check_stack(curf,(cell**)stdata,stcount,gp);
+    check_stack(curf,stdata,stcount,gp);
     assert(stcount <= curf->alloc);
     assert((0 > curf->fno) || (curf->alloc >= stacksizes[curf->fno]));
     assert((0 > curf->fno) || (stcount <= stacksizes[curf->fno]));
     #endif
 
     if (nallocs > COLLECT_THRESHOLD) {
-      gstack = (cell**)stdata;
+      gstack = stdata;
       gstackcount = stcount;
-      collect();
+/*       collect(); */
+      rtcollect();
       gstack = NULL;
       gstackcount = 0;
     }
@@ -210,13 +212,16 @@ void execute(gprogram *gp)
     case OP_GLOBSTART:
       break;
     case OP_EVAL: {
-      cell *c;
+      pntr p;
       assert(0 <= stcount-1-instr->arg0);
-      stdata[stcount-1-instr->arg0] = resolve_ind(stdata[stcount-1-instr->arg0]);
-      c = stdata[stcount-1-instr->arg0];
+      stdata[stcount-1-instr->arg0] = resolve_pntr(stdata[stcount-1-instr->arg0]);
+      p = stdata[stcount-1-instr->arg0];
 
-      if (TYPE_FRAME == celltype(c)) {
-        frame *newf = (frame*)c->field1;
+
+      if (TYPE_FRAME == pntrtype(p)) {
+        rtvalue *c = get_pntr(p);
+        frame *newf;
+        newf = (frame*)get_pntr(c->cmp1);
 
         assert(NULL == newf->d);
         assert(OP_GLOBSTART == gp->ginstrs[newf->address].opcode);
@@ -242,7 +247,7 @@ void execute(gprogram *gp)
       assert(NULL != curf->c);
       assert(TYPE_FRAME == celltype(curf->c));
       curf->c->tag = TYPE_IND;
-      curf->c->field1 = stdata[stcount-1];
+      curf->c->cmp1 = stdata[stcount-1];
       curf->c = NULL;
 
       old = curf;
@@ -256,18 +261,17 @@ void execute(gprogram *gp)
       break;
     }
     case OP_DO: {
-      cell *capcell;
+      rtvalue *capcell;
       cap *cp;
       int s;
       int s1;
       int a1;
       assert(0 < stcount);
-      capcell = (cell*)stdata[stcount-1];
+      assert(TYPE_CAP == pntrtype(stdata[stcount-1]));
+      capcell = (rtvalue*)get_pntr(stdata[stcount-1]);
       stcount--;
 
-      assert(TYPE_CAP == celltype(capcell));
-
-      cp = (cap*)capcell->field1;
+      cp = (cap*)get_pntr(capcell->cmp1);
       s = stcount;
       s1 = cp->count;
       a1 = cp->arity;
@@ -277,9 +281,9 @@ void execute(gprogram *gp)
            FRAME's stack */
         cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
         int i;
-        cell *replace;
+        rtvalue *replace;
         frame *old;
-        newcp->data = (cell**)malloc((stcount+cp->count)*sizeof(cell*));
+        newcp->data = (pntr*)malloc((stcount+cp->count)*sizeof(pntr));
         newcp->count = 0;
         for (i = 0; i < stcount; i++)
           newcp->data[newcp->count++] = stdata[i];
@@ -290,7 +294,7 @@ void execute(gprogram *gp)
         replace = curf->c;
         curf->c = NULL;
         replace->tag = TYPE_CAP;
-        replace->field1 = newcp;
+        replace->cmp1 = make_pntr(newcp);
 
         /* return to caller */
         old = curf;
@@ -306,7 +310,7 @@ void execute(gprogram *gp)
         int i;
         curf->address = cp->address;
         curf->fno = cp->fno;
-        stack_grow(&curf->alloc,(void***)&stdata,stacksizes[cp->fno]);
+        pntrstack_grow(&curf->alloc,&stdata,stacksizes[cp->fno]);
         for (i = 0; i < cp->count; i++)
           stdata[stcount++] = cp->data[i];
         // curf->address--; /* so we process the GLOBSTART */
@@ -316,7 +320,7 @@ void execute(gprogram *gp)
         int i;
         int extra;
         newf->alloc = stacksizes[cp->fno];
-        newf->data = (cell**)malloc(newf->alloc*sizeof(cell*));
+        newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
         newf->count = 0;
         newf->address = cp->address;
         newf->fno = cp->fno;
@@ -326,10 +330,12 @@ void execute(gprogram *gp)
         for (i = 0; i < cp->count; i++)
           newf->data[newf->count++] = cp->data[i];
 
-        newf->c = alloc_cell2(TYPE_FRAME,newf,NULL);
+        newf->c = alloc_rtvalue();
+        newf->c->tag = TYPE_FRAME;
+        newf->c->cmp1 = make_pntr(newf);
 
         stcount -= extra;
-        stdata[stcount++] = newf->c;
+        stdata[stcount++] = make_pntr(newf->c);
 
         curf->address = evaldoaddr-1;
         curf->fno = -1;
@@ -340,16 +346,16 @@ void execute(gprogram *gp)
     case OP_JFUN:
       curf->address = addressmap[instr->arg0];
       curf->fno = instr->arg0;
-      stack_grow(&curf->alloc,(void***)&stdata,stacksizes[curf->fno]);
+      pntrstack_grow(&curf->alloc,&stdata,stacksizes[curf->fno]);
       // curf->address--; /* so we process the GLOBSTART */
       break;
     case OP_JFALSE: {
-      cell *test = stdata[stcount-1];
-      assert(TYPE_IND != celltype(test));
-      assert(TYPE_APPLICATION != celltype(test));
-      assert(TYPE_CAP != celltype(test));
-      assert(TYPE_FRAME != celltype(test));
-      if (TYPE_NIL == celltype(test))
+      pntr test = stdata[stcount-1];
+      assert(TYPE_IND != pntrtype(test));
+      assert(TYPE_APPLICATION != pntrtype(test));
+      assert(TYPE_CAP != pntrtype(test));
+      assert(TYPE_FRAME != pntrtype(test));
+      if (TYPE_NIL == pntrtype(test))
         curf->address += instr->arg0-1;
       stcount--;
       break;
@@ -365,29 +371,34 @@ void execute(gprogram *gp)
     }
     case OP_UPDATE: {
       int n = instr->arg0;
-      cell *target;
-      cell *res;
+      pntr targetp;
+      rtvalue *target;
+      pntr res;
       assert(n < stcount);
       assert(n > 0);
 
-      target = stdata[stcount-1-n];
-      assert(TYPE_HOLE == celltype(target));
+      targetp = stdata[stcount-1-n];
+      assert(TYPE_HOLE == pntrtype(targetp));
+      target = get_pntr(targetp);
 
-      res = resolve_ind(stdata[stcount-1]);
-      if (target == res) {
+      res = resolve_pntr(stdata[stcount-1]);
+      if (pntrequal(targetp,res)) {
         fprintf(stderr,"Attempt to update cell with itself\n");
         exit(1);
       }
       target->tag = TYPE_IND;
-      target->field1 = res;
+      target->cmp1 = res;
       stdata[stcount-1-n] = res;
       stcount--;
       break;
     }
     case OP_ALLOC: {
       int i;
-      for (i = 0; i < instr->arg0; i++)
-        stdata[stcount++] = alloc_cell2(TYPE_HOLE,NULL,NULL);
+      for (i = 0; i < instr->arg0; i++) {
+        rtvalue *hole = alloc_rtvalue();
+        hole->tag = TYPE_HOLE;
+        stdata[stcount++] = make_pntr(hole);
+      }
       break;
     }
     case OP_SQUEEZE: {
@@ -406,36 +417,42 @@ void execute(gprogram *gp)
       int n = instr->arg1;
       int i;
       cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
-      c->data = (cell**)malloc(n*sizeof(cell*));
+      rtvalue *capv;
+      c->data = (pntr*)malloc(n*sizeof(pntr));
       c->count = 0;
       for (i = stcount-n; i < stcount; i++)
         c->data[c->count++] = stdata[i];
       stcount -= n;
 
-      stdata[stcount++] = alloc_cell2(TYPE_CAP,c,NULL);
+      capv = alloc_rtvalue();
+      capv->tag = TYPE_CAP;
+      capv->cmp1 = make_pntr(c);
+      stdata[stcount++] = make_pntr(capv);
       break;
     }
     case OP_MKFRAME: {
       int fno = instr->arg0;
       int n = instr->arg1;
-      cell *newfcell;
+      rtvalue *newfcell;
       int i;
       frame *newf = frame_alloc();
       newf->alloc = stacksizes[fno];
-      newf->data = (cell**)malloc(newf->alloc*sizeof(cell*));
+      newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
       newf->count = 0;
 
       newf->address = addressmap[fno];
       newf->fno = fno;
       newf->d = NULL;
 
-      newfcell = alloc_cell2(TYPE_FRAME,newf,NULL);
+      newfcell = alloc_rtvalue();
+      newfcell->tag = TYPE_FRAME;
+      newfcell->cmp1 = make_pntr(newf);
       newf->c = newfcell;
 
       for (i = stcount-n; i < stcount; i++)
         newf->data[newf->count++] = stdata[i];
       stcount -= n;
-      stdata[stcount++] = newfcell;
+      stdata[stcount++] = make_pntr(newfcell);
       break;
     }
     case OP_BIF: {
@@ -444,30 +461,30 @@ void execute(gprogram *gp)
       int i;
       assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
-        assert(TYPE_APPLICATION != celltype((cell*)stdata[stcount-1-i]));
-        assert(TYPE_CAP != celltype((cell*)stdata[stcount-1-i]));
-        assert(TYPE_FRAME != celltype((cell*)stdata[stcount-1-i]));
+        assert(TYPE_APPLICATION != pntrtype(stdata[stcount-1-i]));
+        assert(TYPE_CAP != pntrtype(stdata[stcount-1-i]));
+        assert(TYPE_FRAME != pntrtype(stdata[stcount-1-i]));
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)
-        assert(TYPE_IND != celltype((cell*)stdata[stcount-1-i]));
+        assert(TYPE_IND != pntrtype(stdata[stcount-1-i]));
 
-      builtin_info[bif].f((cell**)(&stdata[stcount-nargs]));
+      builtin_info[bif].f(&stdata[stcount-nargs]);
       stcount -= (nargs-1);
-      assert(!builtin_info[bif].reswhnf || (TYPE_IND != celltype(stdata[stcount-1])));
+      assert(!builtin_info[bif].reswhnf || (TYPE_IND != pntrtype(stdata[stcount-1])));
       break;
     }
     case OP_PUSHNIL:
-      stdata[stcount++] = globnil;
+      stdata[stcount++] = globnilpntr;
       break;
     case OP_PUSHNUMBER:
-      stdata[stcount++] = alloc_cell2(TYPE_NUMBER,(void*)instr->arg0,(void*)instr->arg1);
+      stdata[stcount++] = make_number(*((double*)&instr->arg0));
       break;
     case OP_PUSHSTRING:
-      stdata[stcount++] = ((cell**)gp->stringmap->data)[instr->arg0];
+      stdata[stcount++] = make_pntr(((cell**)gp->stringmap->data)[instr->arg0]);
       break;
     case OP_RESOLVE:
-      stdata[stcount-1-instr->arg0] = resolve_ind(stdata[stcount-1-instr->arg0]);
+      stdata[stcount-1-instr->arg0] = resolve_pntr(stdata[stcount-1-instr->arg0]);
       break;
     default:
       assert(0);

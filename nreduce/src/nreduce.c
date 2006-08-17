@@ -58,7 +58,7 @@ extern cell *parse_root;
 extern char *code_start;
 extern int resolve_ind_offset;
 extern array *oldnames;
-extern stack *streamstack;
+extern pntrstack *streamstack;
 
 FILE *statsfile = NULL;
 
@@ -181,39 +181,39 @@ int yylex_destroy(void);
 int yylex_destroy(void);
 #endif
 
-void stream(cell *c)
+void stream(pntr p)
 {
-  streamstack = stack_new();
-  stack_push(streamstack,c);
+  streamstack = pntrstack_new();
+  pntrstack_push(streamstack,p);
   while (0 < streamstack->count) {
-    cell *c;
+    pntr p;
     reduce(streamstack);
 
-    c = stack_pop(streamstack);
-    c = resolve_ind(c);
-    if (TYPE_NIL == celltype(c)) {
+    p = pntrstack_pop(streamstack);
+    p = resolve_pntr(p);
+    if (TYPE_NIL == pntrtype(p)) {
       /* nothing */
     }
-    else if (TYPE_NUMBER == celltype(c)) {
-      printf("%f",celldouble(c));
+    else if (TYPE_NUMBER == pntrtype(p)) {
+      printf("%f",pntrdouble(p));
     }
-    else if (TYPE_STRING == celltype(c)) {
-      printf("%s",(char*)c->field1);
+    else if (TYPE_STRING == pntrtype(p)) {
+      printf("%s",(char*)get_string(get_pntr(p)->cmp1));
     }
-    else if (TYPE_CONS == celltype(c)) {
-      stack_push(streamstack,(cell*)c->field2);
-      stack_push(streamstack,(cell*)c->field1);
+    else if (TYPE_CONS == pntrtype(p)) {
+      pntrstack_push(streamstack,get_pntr(p)->cmp2);
+      pntrstack_push(streamstack,get_pntr(p)->cmp1);
     }
-    else if (TYPE_APPLICATION == celltype(c)) {
+    else if (TYPE_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
       exit(1);
     }
     else {
-      fprintf(stderr,"Bad cell type returned to printing mechanism: %s\n",cell_types[celltype(c)]);
+      fprintf(stderr,"Bad cell type returned to printing mechanism: %s\n",cell_types[pntrtype(p)]);
       exit(1);
     }
   }
-  stack_free(streamstack);
+  pntrstack_free(streamstack);
   streamstack = NULL;
 }
 
@@ -759,7 +759,7 @@ void machine_code_generation()
 void reduction_engine()
 {
   scomb *mainsc;
-  cell *root;
+  rtvalue *root;
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
@@ -769,11 +769,14 @@ void reduction_engine()
   debug_stage("Reduction engine");
   mainsc = get_scomb("main");
 
-  root = alloc_cell2(TYPE_SCREF,mainsc,NULL);
+  root = alloc_rtvalue();
+  root->tag = TYPE_SCREF;
+  root->cmp1 = make_pntr(mainsc);
+
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  stream(root);
+  stream(make_pntr(root));
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +

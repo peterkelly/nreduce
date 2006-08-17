@@ -34,108 +34,133 @@
 #include <stdarg.h>
 #include <math.h>
 
-static void instantiate_scomb_r(cell *dest, cell *source, stack *names, stack *values)
+static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
 {
+  rtvalue *dest;
   switch (celltype(source)) {
-  case TYPE_APPLICATION:
+  case TYPE_APPLICATION: {
+    dest = alloc_rtvalue();
     dest->tag = TYPE_APPLICATION;
-    dest->field1 = alloc_cell();
-    dest->field2 = alloc_cell();
-    instantiate_scomb_r((cell*)dest->field1,(cell*)source->field1,names,values);
-    instantiate_scomb_r((cell*)dest->field2,(cell*)source->field2,names,values);
-    break;
+    dest->cmp1 = instantiate_scomb_r((cell*)source->field1,names,values);
+    dest->cmp2 = instantiate_scomb_r((cell*)source->field2,names,values);
+    return make_pntr(dest);
+  }
   case TYPE_SYMBOL: {
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
       if (!strcmp((char*)names->data[pos],(char*)source->field1)) {
+        dest = alloc_rtvalue();
         dest->tag = TYPE_IND;
-        dest->field1 = (cell*)values->data[pos];
-        return;
+        dest->cmp1 = values->data[pos];
+        return make_pntr(dest);
       }
     }
     fprintf(stderr,"Unknown variable: %s\n",(char*)source->field1);
-    break;
+    exit(1);
+    return make_pntr(NULL);
   }
   case TYPE_LETREC: {
     int oldcount = names->count;
     letrec *rec;
     int i;
+    pntr res;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
+      rtvalue *hole = alloc_rtvalue();
+      hole->tag = TYPE_HOLE;
       stack_push(names,(char*)rec->name);
-      stack_push(values,alloc_cell());
+      pntrstack_push(values,make_pntr(hole));
     }
     i = 0;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
-      cell *val = (cell*)values->data[oldcount+i];
-      instantiate_scomb_r(val,rec->value,names,values);
+      res = instantiate_scomb_r(rec->value,names,values);
+      assert(TYPE_HOLE == get_pntr(values->data[oldcount+i])->tag);
+      get_pntr(values->data[oldcount+i])->tag = TYPE_IND;
+      get_pntr(values->data[oldcount+i])->cmp1 = res;
       i++;
     }
-    instantiate_scomb_r(dest,(cell*)source->field2,names,values);
+    res = instantiate_scomb_r((cell*)source->field2,names,values);
     names->count = oldcount;
     values->count = oldcount;
-    break;
+    return res;
   }
   case TYPE_BUILTIN:
+    dest = alloc_rtvalue();
+    dest->tag = TYPE_BUILTIN;
+    dest->cmp1 = make_pntr(source->field1);
+    return make_pntr(dest);
   case TYPE_SCREF:
+    dest = alloc_rtvalue();
+    dest->tag = TYPE_SCREF;
+    dest->cmp1 = make_pntr((scomb*)source->field1);
+    return make_pntr(dest);
   case TYPE_NIL:
+    return globnilpntr;
   case TYPE_NUMBER:
+    return make_number(celldouble(source));
   case TYPE_STRING:
-    copy_cell(dest,source);
+    dest = alloc_rtvalue();
+    dest->tag = TYPE_STRING;
+    dest->cmp1 = make_string(strdup((char*)source->field1));
+    return make_pntr(dest);
+  default:
+    abort();
     break;
   }
 }
 
-static void instantiate_scomb(stack *s, cell *dest, cell *source, scomb *sc)
+static pntr instantiate_scomb(pntrstack *s, cell *source, scomb *sc)
 {
   stack *names = stack_new();
-  stack *values = stack_new();
+  pntrstack *values = pntrstack_new();
+  pntr res;
 
   int i;
   for (i = 0; i < sc->nargs; i++) {
     int pos = s->count-1-i;
     assert(0 <= pos);
     stack_push(names,(char*)sc->argnames[i]);
-    stack_push(values,(cell*)stack_at(s,pos));
+    pntrstack_push(values,pntrstack_at(s,pos));
   }
 
-  instantiate_scomb_r(dest,source,names,values);
+  res = instantiate_scomb_r(source,names,values);
 
   stack_free(names);
-  stack_free(values);
+  pntrstack_free(values);
+  return res;
 }
 
-void reduce(stack *s)
+void reduce(pntrstack *s)
 {
   int reductions = 0;
 
   /* REPEAT */
   while (1) {
     int oldtop = s->count;
-    cell *target;
-    cell *redex;
+    pntr target;
+    pntr redex;
 
     nreductions++;
 
 
     /* FIXME: if we call collect() here then sometimes the redex gets collected */
     if (nallocs > COLLECT_THRESHOLD)
-      collect();
+      rtcollect();
 
-    redex = (cell*)s->data[s->count-1];
+    redex = s->data[s->count-1];
     reductions++;
 
-    target = resolve_ind(redex);
+    target = resolve_pntr(redex);
 
     /* 1. Unwind the spine until something other than an application node is encountered. */
-    stack_push(s,target);
+    pntrstack_push(s,target);
 
-    while (TYPE_APPLICATION == celltype(target)) {
-      target = resolve_ind((cell*)target->field1);
-      stack_push(s,target);
+    while (TYPE_APPLICATION == pntrtype(target)) {
+      target = resolve_pntr(get_pntr(target)->cmp1);
+      pntrstack_push(s,target);
     }
 
     /* 2. Examine the cell  at the tip of the spine */
-    switch (celltype(target)) {
+    switch (pntrtype(target)) {
 
     /* A variable. This should correspond to a supercombinator, and if it doesn't it means
        something has gone wrong. */
@@ -143,14 +168,15 @@ void reduce(stack *s)
       assert(!"variable encountered during reduction");
       break;
     case TYPE_SCREF: {
-      scomb *sc = (scomb*)target->field1;
+      scomb *sc = (scomb*)get_pntr(get_pntr(target)->cmp1);
 
       int i;
       int destno;
-      cell *dest;
+      pntr dest;
+      pntr res;
 
       destno = s->count-1-sc->nargs;
-      dest = stack_at(s,destno);
+      dest = pntrstack_at(s,destno);
 
       nscombappls++;
 
@@ -163,12 +189,18 @@ void reduce(stack *s)
 
       /* We have enough arguments present to instantiate the supercombinator */
       for (i = s->count-1; i >= s->count-sc->nargs; i--) {
+        pntr arg;
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype((cell*)stack_at(s,i-1)));
-        s->data[i] = (cell*)((cell*)stack_at(s,i-1))->field2;
+        arg = pntrstack_at(s,i-1);
+        assert(TYPE_APPLICATION == pntrtype(arg));
+        s->data[i] = get_pntr(arg)->cmp2;
       }
 
-      instantiate_scomb(s,dest,sc->body,sc);
+      assert((TYPE_APPLICATION == pntrtype(dest)) ||
+             (TYPE_SCREF == pntrtype(dest)));
+      res = instantiate_scomb(s,sc->body,sc);
+      get_pntr(dest)->tag = TYPE_IND;
+      get_pntr(dest)->cmp1 = res;
 
       s->count = oldtop;
       continue;
@@ -183,7 +215,7 @@ void reduce(stack *s)
          error, e.g. caused by an attempt to pass more arguments to a function than it requires. */
       if (1 < s->count-oldtop) {
         printf("Attempt to apply %d arguments to a value: ",s->count-oldtop-1);
-        print_code(target);
+        print_pntr(target);
         printf("\n");
         exit(1);
       }
@@ -195,7 +227,7 @@ void reduce(stack *s)
          execute the built-in function and overwrite the root of the redex with the result. */
     case TYPE_BUILTIN: {
 
-      int bif = (int)target->field1;
+      int bif = (int)get_pntr(get_pntr(target)->cmp1);
       int reqargs;
       int strictargs;
       int i;
@@ -212,38 +244,40 @@ void reduce(stack *s)
       }
 
       for (i = s->count-1; i >= s->count-reqargs; i--) {
+        pntr arg = pntrstack_at(s,i-1);
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == celltype((cell*)stack_at(s,i-1)));
-        s->data[i] = (cell*)((cell*)stack_at(s,i-1))->field2;
+        assert(TYPE_APPLICATION == pntrtype(arg));
+        s->data[i] = get_pntr(arg)->cmp2;
       }
 
       assert(strictargs <= reqargs);
       for (i = 0; i < strictargs; i++) {
-        stack_push(s,s->data[s->count-1-i]);
+        pntr val;
+        pntrstack_push(s,s->data[s->count-1-i]);
         reduce(s);
-        cell *val = stack_pop(s);
+        val = pntrstack_pop(s);
         s->data[s->count-1-i] = val;
       }
 
       for (i = 0; i < strictargs; i++)
-        assert(TYPE_IND != celltype((cell*)s->data[s->count-1-i]));
+        assert(TYPE_IND != pntrtype(s->data[s->count-1-i]));
 
-      builtin_info[bif].f((cell**)&s->data[s->count-reqargs]);
+      builtin_info[bif].f(&s->data[s->count-reqargs]);
       s->count -= (reqargs-1);
 
       /* UPDATE */
 
-      s->data[s->count-1] = resolve_ind((cell*)s->data[s->count-1]);
+      s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_cell_fields((cell*)s->data[s->count-2]);
-      ((cell*)s->data[s->count-2])->tag = TYPE_IND;
-      ((cell*)s->data[s->count-2])->field1 = s->data[s->count-1];
+      free_rtvalue_fields(get_pntr(s->data[s->count-2]));
+      get_pntr(s->data[s->count-2])->tag = TYPE_IND;
+      get_pntr(s->data[s->count-2])->cmp1 = s->data[s->count-1];
 
       s->count--;
       break;
     }
     default:
-      fprintf(stderr,"Encountered %s\n",cell_types[celltype(target)]);
+      fprintf(stderr,"Encountered %s\n",cell_types[pntrtype(target)]);
       assert(0);
       break;
     }

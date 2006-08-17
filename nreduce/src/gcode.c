@@ -244,10 +244,10 @@ void gprogram_free(gprogram *gp)
 int add_string(gprogram *gp, char *str)
 {
   int pos = gp->stringmap->size/sizeof(cell*);
-  cell *c = alloc_cell();
+  rtvalue *c = alloc_rtvalue();
   c->tag = TYPE_STRING | FLAG_PINNED;
-  c->field1 = strdup(str);
-  array_append(gp->stringmap,&c,sizeof(cell*));
+  c->cmp1 = make_string(strdup(str));
+  array_append(gp->stringmap,&c,sizeof(rtvalue*));
   return pos;
 }
 
@@ -453,9 +453,11 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
       }
     }
     break;
-  case OP_PUSHSTRING:
-    printf("; PUSHSTRING \"%s\"",(char*)(((cell**)gp->stringmap->data)[instr->arg0])->field1);
+  case OP_PUSHSTRING: {
+    rtvalue *v = ((rtvalue**)gp->stringmap->data)[instr->arg0];
+    printf("; PUSHSTRING \"%s\"",get_string(v->cmp1));
     break;
+  }
   case OP_MKFRAME:
     printf("; MKFRAME %s %d",function_name(instr->arg0),instr->arg1);
     break;
@@ -499,11 +501,11 @@ void print_program(gprogram *gp, int builtins, int usage)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < (int)(gp->stringmap->size/sizeof(cell*)); i++) {
-    cell *strcell = ((cell**)gp->stringmap->data)[i];
+  for (i = 0; i < (int)(gp->stringmap->size/sizeof(rtvalue*)); i++) {
+    rtvalue *strcell = ((rtvalue**)gp->stringmap->data)[i];
     assert(TYPE_STRING == celltype(strcell));
     printf("%d: ",i);
-    print_quoted_string(stdout,(char*)strcell->field1);
+    print_quoted_string(stdout,get_string(strcell->cmp1));
     printf("\n");
   }
 }

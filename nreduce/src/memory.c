@@ -37,19 +37,17 @@
 #include <stdarg.h>
 #include <math.h>
 
-int trace = 0;
+typedef struct block {
+  struct block *next;
+  cell cells[BLOCK_SIZE];
+} block;
 
-static int framecount = 0;
-static int active_framecount = 0;
-static int framecellcount = 0;
-static frame *freeframe = NULL;
+int trace = 0;
 
 extern array *lexstring;
 extern array *oldnames;
 
-frame *active_frames = NULL;
 cell *freeptr = NULL;
-stack *streamstack = NULL;
 
 block *blocks = NULL;
 int nblocks = 0;
@@ -59,6 +57,7 @@ int ncells = 0;
 int maxcells = 0;
 int nallocs = 0;
 int totalallocs = 0;
+int totalrtallocs = 0;
 int nscombappls = 0;
 int nresindnoch = 0;
 int nresindch = 0;
@@ -71,6 +70,79 @@ cell *pinned = NULL;
 cell *globnil = NULL;
 cell *globtrue = NULL;
 cell *globzero = NULL;
+pntr globnilpntr = 0.0;
+pntr globtruepntr = 0.0;
+pntr globzeropntr = 0.0;
+
+#ifndef INLINE_PTRFUNS
+int is_pntr(pntr p)
+{
+  return (*(((unsigned int*)&p)+1) == 0xFFFFFFF1);
+}
+
+pntr make_pntr(void *c)
+{
+  double d = 0.0;
+  *(((unsigned int*)&d)+0) = (unsigned int)c;
+  *(((unsigned int*)&d)+1) = 0xFFFFFFF1;
+  return d;  
+}
+
+rtvalue *get_pntr(pntr p)
+{
+  assert(is_pntr(p));
+  return (rtvalue*)(*((unsigned int*)&p));
+}
+
+int is_string(pntr p)
+{
+  return (*(((unsigned int*)&p)+1) == 0xFFFFFFF2);
+}
+
+pntr make_string(char *c)
+{
+  double d = 0.0;
+  *(((unsigned int*)&d)+0) = (unsigned int)c;
+  *(((unsigned int*)&d)+1) = 0xFFFFFFF2;
+  return d;  
+}
+
+char *get_string(pntr p)
+{
+  assert(is_string(p));
+  return (char*)(*((unsigned int*)&p));
+}
+
+pntr resolve_pntr(pntr p)
+{
+  while (TYPE_IND == pntrtype(p))
+    p = get_pntr(p)->cmp1;
+  return p;
+}
+
+int pntrequal(pntr a, pntr b)
+{
+  return 
+    ((*(((unsigned int*)&(a))+0) == *(((unsigned int*)&(b))+0)) &&
+     (*(((unsigned int*)&(a))+1) == *(((unsigned int*)&(b))+1)));
+}
+
+int is_nullpntr(pntr p)
+{
+  return (is_pntr(p) && (NULL == get_pntr(p)));
+}
+
+#endif
+
+#ifndef UNBOXED_NUMBERS
+pntr make_number(double d)
+{
+  rtvalue *v = alloc_rtvalue();
+  v->tag = TYPE_NUMBER;
+  v->cmp1 = d;
+  return make_pntr(v);
+}
+#endif
 
 void initmem()
 {
@@ -83,6 +155,18 @@ void initmem()
   globzero = alloc_cell();
   globzero->tag = TYPE_NUMBER | FLAG_PINNED;
   celldouble(globzero) = 0.0;
+
+  rtvalue *globnilvalue = alloc_rtvalue();
+  globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
+
+  globnilpntr = make_pntr(globnilvalue);
+  globtruepntr = make_number(1.0);
+  globzeropntr = make_number(0.0);
+
+  if (is_pntr(globtruepntr))
+    get_pntr(globtruepntr)->tag |= FLAG_PINNED;
+  if (is_pntr(globzeropntr))
+    get_pntr(globzeropntr)->tag |= FLAG_PINNED;
 }
 
 cell *alloc_cell()
@@ -115,35 +199,12 @@ cell *alloc_cell2(int tag, void *field1, void *field2)
   c->tag = tag;
   c->field1 = field1;
   c->field2 = field2;
-  if (TYPE_FRAME == tag)
-    framecellcount++;
   return c;
 }
 
 cell *alloc_sourcecell(const char *filename, int lineno)
 {
   return alloc_cell();
-}
-
-void mark(cell *c);
-void mark_frame(frame *f)
-{
-/*   printf("mark_frame %p (cell %p)\n",f,f->c); */
-  int i;
-  if (f->completed) {
-    assert(!"completed frame referenced from here");
-  }
-  if (f->c)
-    mark(f->c);
-  for (i = 0; i < f->count; i++)
-    mark(f->data[i]);
-}
-
-void mark_cap(cap *c)
-{
-  int i;
-  for (i = 0; i < c->count; i++)
-    mark(c->data[i]);
 }
 
 int nreachable = 0;
@@ -175,34 +236,11 @@ void mark(cell *c)
     mark((cell*)c->field2);
     break;
   }
-  case TYPE_AREF: {
-    cell *arrcell = (cell*)c->field1;
-    carray *arr = (carray*)arrcell->field1;
-    int index = (int)c->field2;
-    assert(index < arr->size);
-    assert(arr->refs[index] == c);
-
-    mark((cell*)c->field1);
-    break;
-  }
-  case TYPE_ARRAY: {
-    carray *arr = (carray*)c->field1;
-    int i;
-    for (i = 0; i < arr->size; i++) {
-      mark(arr->cells[i]);
-      if (arr->refs[i])
-        mark(arr->refs[i]);
-    }
-    mark(arr->tail);
-    if (arr->sizecell)
-      mark(arr->sizecell);
-    break;
-  }
+  case TYPE_AREF:
+  case TYPE_ARRAY:
   case TYPE_FRAME:
-    mark_frame((frame*)c->field1);
-    break;
   case TYPE_CAP:
-    mark_cap((cap*)c->field1);
+    assert(0);
     break;
   default:
     break;
@@ -249,7 +287,6 @@ void free_cell_fields(cell *c)
       frame_dealloc(f);
     else printf("free_cell_fields: frame still active\n");
 
-    framecellcount--;
     break;
   }
   case TYPE_CAP: {
@@ -261,9 +298,6 @@ void free_cell_fields(cell *c)
 
 char *collect_ebp = NULL;
 char *collect_esp = NULL;
-
-extern cell **gstack;
-extern int gstackcount;
 
 int ncollections = 0;
 void collect()
@@ -283,30 +317,6 @@ void collect()
 
   /* mark phase */
 
-  if (streamstack)
-    for (i = 0; i < streamstack->count; i++)
-      mark((cell*)streamstack->data[i]);
-
-  if (gstack)
-    for (i = 0; i < gstackcount; i++)
-      mark(gstack[i]);
-
-  if (NULL != collect_ebp) {
-    char *p;
-    /* native stack */
-    assert(collect_ebp >= collect_esp);
-    for (p = collect_ebp-4; p >= collect_esp; p -= 4) {
-      cell *cp;
-      *((cell**)p) = resolve_ind(*((cell**)p));
-      cp = *((cell**)p);
-      mark(cp);
-    }
-  }
-  else {
-    frame *f;
-    for (f = active_frames; f; f = f->next)
-      mark_frame(f);
-  }
   for (sc = scombs; sc; sc = sc->next)
     mark(sc->body);
 /*   printf("\ncollect(): %d/%d cells still reachable\n",nreachable,ncells); */
@@ -334,7 +344,9 @@ void cleanup()
 {
   block *bl;
   int i;
-  frame *f;
+
+  rtcleanup();
+
   scomb_free_list(&scombs);
 
   for (bl = blocks; bl; bl = bl->next)
@@ -342,14 +354,6 @@ void cleanup()
       bl->cells[i].tag &= ~FLAG_PINNED;
 
   collect();
-
-  f = freeframe;
-  while (f) {
-    frame *next = f->freelnk;
-    f->c = NULL;
-    frame_free(f);
-    f = next;
-  }
 
   bl = blocks;
   while (bl) {
@@ -369,129 +373,44 @@ void cleanup()
   }
 }
 
-void add_active_frame(frame *f)
+pntrstack *pntrstack_new(void)
 {
-  assert(!f->active);
-  assert(NULL == f->next);
-  f->active = 1;
-  f->next = active_frames;
-  active_frames = f;
-  active_framecount++;
+  pntrstack *s = (pntrstack*)calloc(1,sizeof(pntrstack));
+  s->alloc = 1;
+  s->count = 0;
+  s->data = (pntr*)malloc(sizeof(pntr));
+  return s;
 }
 
-void remove_active_frame(frame *f)
+void pntrstack_push(pntrstack *s, pntr p)
 {
-  frame **ptr;
-  assert(f->active);
-  f->active = 0;
-  f->completed = 1;
-  ptr = &active_frames;
-  while (*ptr != f)
-    ptr = &((*ptr)->next);
-  *ptr = f->next;
-  f->next = NULL;
-  active_framecount--;
-
-  assert(NULL == f->c);
-  frame_dealloc(f);
-
-#if 0
-  if (NULL == f->c) {
-    frame_dealloc(f);
+  if (s->count == s->alloc) {
+    if (s->count >= STACK_LIMIT) {
+      fprintf(stderr,"Out of stack space\n");
+      exit(1);
+    }
+    pntrstack_grow(&s->alloc,&s->data,s->alloc*2);
   }
-  else {
-    printf("remove_active_frame %p (cell %p): still referenced\n",f,f->c);
-    assert(TYPE_FRAME == celltype(f->c));
-    assert(f == f->c->field1);
-    assert(!(f->c->tag & FLAG_PINNED));
-/*     f->c = NULL; */
-/*     frame_dealloc(f); */
-  }
-#endif
+  s->data[s->count++] = p;
 }
 
-frame *frame_new()
+pntr pntrstack_at(pntrstack *s, int pos)
 {
-  frame *f = (frame*)calloc(1,sizeof(frame));
-  f->fno = -1;
-  nframes++;
-  framecount++;
-/*   printf("framecount = %d, cells = %d, active = %d\n",framecount,framecellcount,active_framecount); */
-  if (framecount > maxframes)
-    maxframes = framecount;
-  return f;
+  assert(0 <= pos);
+  assert(pos < s->count);
+  return resolve_pntr(s->data[pos]);
 }
 
-void frame_free(frame *f)
+pntr pntrstack_pop(pntrstack *s)
 {
-  assert(NULL == f->c);
-  assert(!f->active);
-  if (f->data)
-    free(f->data);
-  free(f);
-  framecount--;
+  assert(0 < s->count);
+  return resolve_pntr(s->data[--s->count]);
 }
 
-frame *frame_alloc()
+void pntrstack_free(pntrstack *s)
 {
-  if (freeframe) {
-    frame *f = freeframe;
-    freeframe = freeframe->freelnk;
-    f->c = NULL;
-    f->fno = -1;
-    f->address = 0;
-    f->d = NULL;
-
-    f->alloc = 0;
-    f->count = 0;
-    f->data = NULL;
-
-    f->next = NULL;
-    f->active = 0;
-    f->completed = 0;
-    f->freelnk = NULL;
-    return f;
-  }
-  else {
-    return frame_new();
-  }
-}
-
-void frame_dealloc(frame *f)
-{
-  if (f->data)
-    free(f->data);
-  f->data = NULL;
-  f->freelnk = freeframe;
-  freeframe = f;
-/*   frame_free(f); */
-}
-
-int frame_depth(frame *f)
-{
-  int depth = 0;
-  while (f) {
-    depth++;
-    f = f->d;
-  }
-  return depth;
-}
-
-cap *cap_alloc(int arity, int address, int fno)
-{
-  cap *c = (cap*)calloc(1,sizeof(cap));
-  c->arity = arity;
-  c->address = address;
-  c->fno = fno;
-  assert(0 < c->arity); /* MKCAP should not be called for CAFs */
-  return c;
-}
-
-void cap_dealloc(cap *c)
-{
-  if (c->data)
-    free(c->data);
-  free(c);
+  free(s->data);
+  free(s);
 }
 
 stack *stack_new(void)
@@ -518,7 +437,15 @@ void stack_free(stack *s)
   free(s);
 }
 
-void stack_grow(int *alloc, void ***data, int size)
+void pntrstack_grow(int *alloc, pntr **data, int size)
+{
+  if (*alloc < size) {
+    *alloc = size;
+    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
+  }
+}
+
+static void stack_grow(int *alloc, void ***data, int size)
 {
   if (*alloc < size) {
     *alloc = size;
@@ -578,6 +505,7 @@ void statistics(FILE *f)
   int total;
   fprintf(f,"maxstack = %d\n",maxstack);
   fprintf(f,"totalallocs = %d\n",totalallocs);
+  fprintf(f,"totalrtallocs = %d\n",totalrtallocs);
   fprintf(f,"ncells = %d\n",ncells);
   fprintf(f,"maxcells = %d\n",maxcells);
   fprintf(f,"nblocks = %d\n",nblocks);
@@ -624,7 +552,7 @@ void copy_cell(cell *redex, cell *source)
     redex->field1 = strdup((char*)redex->field1);
 }
 
-void print_stack(cell **stk, int size, int dir)
+void print_stack(pntr *stk, int size, int dir)
 {
   int i;
 
@@ -635,7 +563,7 @@ void print_stack(cell **stk, int size, int dir)
 
 
   while (1) {
-    cell *c;
+    pntr p;
     int pos = dir ? (size-1-i) : i;
 
     if (dir && i < 0)
@@ -644,12 +572,12 @@ void print_stack(cell **stk, int size, int dir)
     if (!dir && (i >= size))
       break;
 
-    c = resolve_ind(stk[i]);
-    if (TYPE_IND == celltype(stk[i]))
-      debug(0,"%2d: [i] %12s ",pos,cell_types[celltype(c)]);
+    p = resolve_pntr(stk[i]);
+    if (TYPE_IND == pntrtype(stk[i]))
+      debug(0,"%2d: [i] %12s ",pos,cell_types[pntrtype(p)]);
     else
-      debug(0,"%2d:     %12s ",pos,cell_types[celltype(c)]);
-    print_code(c);
+      debug(0,"%2d:     %12s ",pos,cell_types[pntrtype(p)]);
+    print_pntr(p);
     debug(0,"\n");
 
     if (dir)

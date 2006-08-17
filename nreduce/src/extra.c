@@ -124,6 +124,60 @@ cell *get_arg(cell *c, int argno)
   return (cell*)c->field2;
 }
 
+void print_hex(int c)
+{
+  if (0xA > c)
+    printf("%c",'0'+c);
+  else
+    printf("%c",'A'+(c-0xA));
+}
+
+void print_hexbyte(unsigned char val)
+{
+  unsigned char hi = ((val & 0xF0) >> 4);
+  unsigned char lo = (val & 0x0F);
+  print_hex(hi);
+  print_hex(lo);
+}
+
+void print_bin(void *ptr, int nbytes)
+{
+  int i;
+  unsigned char *data = (unsigned char*)ptr;
+  printf("   ");
+  for (i = 0; i < nbytes; i++) {
+    int bit;
+    for (bit = 7; 0 <= bit; bit--)
+      printf("%c",(data[i] & (0x1 << bit)) ? '1' : '0');
+    printf(" ");
+  }
+  printf("\n0x ");
+  for (i = 0; i < nbytes; i++) {
+    print_hexbyte(data[i]);
+    printf("       ");
+  }
+  printf("\n");
+}
+
+void print_bin_rev(void *ptr, int nbytes)
+{
+  int i;
+  unsigned char *data = (unsigned char*)ptr;
+  printf("   ");
+  for (i = nbytes-1; 0 <= i; i--) {
+    int bit;
+    for (bit = 7; 0 <= bit; bit--)
+      printf("%c",(data[i] & (0x1 << bit)) ? '1' : '0');
+    printf(" ");
+  }
+  printf("\n0x ");
+  for (i = nbytes-1; 0 <= i; i--) {
+    print_hexbyte(data[i]);
+    printf("       ");
+  }
+  printf("\n");
+}
+
 static void print1(char *prefix, cell *c, int indent)
 {
   int i;
@@ -264,11 +318,12 @@ char *real_scname(const char *sym)
 
 static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col);
 
-static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, int *line, int *col)
+void print_abbrev_stack(FILE *f, pntr *data, int count, cell *parent, int *line, int *col)
 {
+  /* DIS1
   int i;
   for (i = 0; i < count; i++) {
-    cell *c = resolve_ind(data[i]);
+    rtvalue *c = resolve_value(get_pntr(data[i]));
     if (0 < i)
       fprintf(f," ");
     if ((TYPE_NIL == celltype(c)) ||
@@ -278,6 +333,7 @@ static void print_abbrev_stack(FILE *f, cell **data, int count, cell *parent, in
     else
       *col += fprintf(f,"?");
   }
+  */
 }
 
 static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col)
@@ -462,6 +518,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       break;
     }
     case TYPE_ARRAY: {
+      /* DIS1 
       carray *arr = (carray*)c->field1;
       int i;
       *col += fprintf(f,"ARRAY[");
@@ -471,9 +528,11 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
         print_code1(f,arr->cells[i],0,c,line,col);
       }
       fprintf(f,"]");
+      */
       break;
     }
     case TYPE_FRAME: {
+      /* DIS1 
       frame *frm = (frame*)c->field1;
       *col += fprintf(f,"(FRAME (");
       if (frm->data)
@@ -481,13 +540,16 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
       else
         *col += fprintf(f,"...");
       *col += fprintf(f,") %s)",function_name(frm->fno));
+      */
       break;
     }
     case TYPE_CAP: {
+      /* DIS1 
       cap *cp = (cap*)c->field1;
       *col += fprintf(f,"(CAP (");
-      print_abbrev_stack(f,(cell**)cp->data,cp->count,c,line,col);
+      print_abbrev_stack(f,cp->data,cp->count,c,line,col);
       *col += fprintf(f,") %s)",function_name(cp->fno));
+      */
       break;
     }
     default:

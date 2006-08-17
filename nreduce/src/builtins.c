@@ -38,19 +38,17 @@
 
 const builtin builtin_info[NUM_BUILTINS];
 
-void setnumber(cell **cptr, double val)
+void setnumber(pntr *cptr, double val)
 {
-  *cptr = alloc_cell();
-  (*cptr)->tag = TYPE_NUMBER;
-  celldouble(*cptr) = val;
+  *cptr = make_number(val);
 }
 
-void setbool(cell **cptr, int b)
+void setbool(pntr *cptr, int b)
 {
-  *cptr = (b ? globtrue : globnil);
+  *cptr = (b ? globtruepntr : globnilpntr);
 }
 
-void doubleop(cell **cptr, int bif, double a, double b)
+void doubleop(pntr *cptr, int bif, double a, double b)
 {
   switch (bif) {
   case B_ADD:       setnumber(cptr,a +  b);  break;
@@ -72,10 +70,10 @@ void doubleop(cell **cptr, int bif, double a, double b)
   }
 }
 
-void b_other(cell **argstack, int bif)
+void b_other(pntr *argstack, int bif)
 {
-  cell *cell2 = argstack[0];
-  cell *cell1 = argstack[1];
+  pntr cell2 = argstack[0];
+  pntr cell1 = argstack[1];
 
   switch (bif) {
   case B_EQ:
@@ -84,8 +82,8 @@ void b_other(cell **argstack, int bif)
   case B_LE:
   case B_GT:
   case B_GE:
-    if ((TYPE_STRING == celltype(cell1)) && (TYPE_STRING == celltype(cell2))) {
-      int cmp = strcmp((char*)cell1->field1,(char*)cell2->field1);
+    if ((TYPE_STRING == pntrtype(cell1)) && (TYPE_STRING == pntrtype(cell2))) {
+      int cmp = strcmp(get_string(get_pntr(cell1)->cmp1),get_string(get_pntr(cell2)->cmp2));
       switch (bif) {
       case B_EQ: setbool(&argstack[0],0 == cmp); break;
       case B_NE: setbool(&argstack[0],0 != cmp); break;
@@ -102,64 +100,64 @@ void b_other(cell **argstack, int bif)
   case B_MULTIPLY:
   case B_DIVIDE:
   case B_MOD:
-    if ((TYPE_NUMBER == celltype(cell1)) && (TYPE_NUMBER == celltype(cell2))) {
-      doubleop(&argstack[0],bif,celldouble(cell1),celldouble(cell2));
+    if ((TYPE_NUMBER == pntrtype(cell1)) && (TYPE_NUMBER == pntrtype(cell2))) {
+      doubleop(&argstack[0],bif,pntrdouble(cell1),pntrdouble(cell2));
     }
     else {
       fprintf(stderr,"%s: incompatible arguments: (%s,%s)\n",
                       builtin_info[bif].name,
-                      cell_types[celltype(cell1)],
-                      cell_types[celltype(cell2)]);
+                      cell_types[pntrtype(cell1)],
+                      cell_types[pntrtype(cell2)]);
       exit(1);
     }
     break;
   case B_AND:
-    setbool(&argstack[0],(TYPE_NIL != celltype(cell1)) && (TYPE_NIL != celltype(cell2)));
+    setbool(&argstack[0],(TYPE_NIL != pntrtype(cell1)) && (TYPE_NIL != pntrtype(cell2)));
     break;
   case B_OR:
-    setbool(&argstack[0],(TYPE_NIL != celltype(cell1)) || (TYPE_NIL != celltype(cell2)));
+    setbool(&argstack[0],(TYPE_NIL != pntrtype(cell1)) || (TYPE_NIL != pntrtype(cell2)));
     break;
   default:
     assert(0);
   }
 }
 
-void b_add(cell **argstack) { b_other(argstack,B_ADD); }
-void b_subtract(cell **argstack) { b_other(argstack,B_SUBTRACT); }
-void b_multiply(cell **argstack) { b_other(argstack,B_MULTIPLY); }
-void b_divide(cell **argstack) { b_other(argstack,B_DIVIDE); }
-void b_mod(cell **argstack) { b_other(argstack,B_MOD); }
-void b_eq(cell **argstack) { b_other(argstack,B_EQ); }
-void b_ne(cell **argstack) { b_other(argstack,B_NE); }
-void b_lt(cell **argstack) { b_other(argstack,B_LT); }
-void b_le(cell **argstack) { b_other(argstack,B_LE); }
-void b_gt(cell **argstack) { b_other(argstack,B_GT); }
-void b_ge(cell **argstack) { b_other(argstack,B_GE); }
-void b_and(cell **argstack) { b_other(argstack,B_AND); }
-void b_or(cell **argstack) { b_other(argstack,B_OR); }
+void b_add(pntr *argstack) { b_other(argstack,B_ADD); }
+void b_subtract(pntr *argstack) { b_other(argstack,B_SUBTRACT); }
+void b_multiply(pntr *argstack) { b_other(argstack,B_MULTIPLY); }
+void b_divide(pntr *argstack) { b_other(argstack,B_DIVIDE); }
+void b_mod(pntr *argstack) { b_other(argstack,B_MOD); }
+void b_eq(pntr *argstack) { b_other(argstack,B_EQ); }
+void b_ne(pntr *argstack) { b_other(argstack,B_NE); }
+void b_lt(pntr *argstack) { b_other(argstack,B_LT); }
+void b_le(pntr *argstack) { b_other(argstack,B_LE); }
+void b_gt(pntr *argstack) { b_other(argstack,B_GT); }
+void b_ge(pntr *argstack) { b_other(argstack,B_GE); }
+void b_and(pntr *argstack) { b_other(argstack,B_AND); }
+void b_or(pntr *argstack) { b_other(argstack,B_OR); }
 
-void b_not(cell **argstack)
+void b_not(pntr *argstack)
 {
-  if (TYPE_NIL == celltype(argstack[0]))
-    argstack[0] = globtrue;
+  if (TYPE_NIL == pntrtype(argstack[0]))
+    argstack[0] = globtruepntr;
   else
-    argstack[0] = globnil;
+    argstack[0] = globnilpntr;
 }
 
-void b_bitop(cell **argstack, int bif)
+void b_bitop(pntr *argstack, int bif)
 {
-  cell *cell2 = argstack[0];
-  cell *cell1 = argstack[1];
+  pntr cell2 = argstack[0];
+  pntr cell1 = argstack[1];
   int a;
   int b;
 
-  if ((TYPE_NUMBER != celltype(cell1)) || (TYPE_NUMBER != celltype(cell2))) {
+  if ((TYPE_NUMBER != pntrtype(cell1)) || (TYPE_NUMBER != pntrtype(cell2))) {
     fprintf(stderr,"%s: incompatible arguments (must be numbers)\n",builtin_info[bif].name);
     exit(1);
   }
 
-  a = (int)celldouble(cell1);
-  b = (int)celldouble(cell2);
+  a = (int)pntrdouble(cell1);
+  b = (int)pntrdouble(cell2);
 
   switch (bif) {
   case B_BITSHL:  setnumber(&argstack[0],(double)(a << b));  break;
@@ -171,30 +169,30 @@ void b_bitop(cell **argstack, int bif)
   }
 }
 
-void b_bitshl(cell **argstack) { b_bitop(argstack,B_BITSHL); }
-void b_bitshr(cell **argstack) { b_bitop(argstack,B_BITSHR); }
-void b_bitand(cell **argstack) { b_bitop(argstack,B_BITAND); }
-void b_bitor(cell **argstack) { b_bitop(argstack,B_BITOR); }
-void b_bitxor(cell **argstack) { b_bitop(argstack,B_BITXOR); }
+void b_bitshl(pntr *argstack) { b_bitop(argstack,B_BITSHL); }
+void b_bitshr(pntr *argstack) { b_bitop(argstack,B_BITSHR); }
+void b_bitand(pntr *argstack) { b_bitop(argstack,B_BITAND); }
+void b_bitor(pntr *argstack) { b_bitop(argstack,B_BITOR); }
+void b_bitxor(pntr *argstack) { b_bitop(argstack,B_BITXOR); }
 
-void b_bitnot(cell **argstack)
+void b_bitnot(pntr *argstack)
 {
-  cell *arg = argstack[0];
+  pntr arg = argstack[0];
   int val;
-  if (TYPE_NUMBER != celltype(arg)) {
+  if (TYPE_NUMBER != pntrtype(arg)) {
     fprintf(stderr,"~: incompatible argument (must be a number)\n");
     exit(1);
   }
-  val = (int)celldouble(arg);
+  val = (int)pntrdouble(arg);
   setnumber(&argstack[0],(double)(~val));
 }
 
-void b_if(cell **argstack)
+void b_if(pntr *argstack)
 {
-  cell *ifc = argstack[2];
-  cell *source;
+  pntr ifc = argstack[2];
+  pntr source;
 
-  if (TYPE_NIL == celltype(ifc))
+  if (TYPE_NIL == pntrtype(ifc))
     source = argstack[0];
   else
     source = argstack[1];
@@ -202,49 +200,53 @@ void b_if(cell **argstack)
   argstack[0] = source;
 }
 
-void b_cons(cell **argstack)
+void b_cons(pntr *argstack)
 {
-  cell *head = argstack[1];
-  cell *tail = argstack[0];
+  pntr head = argstack[1];
+  pntr tail = argstack[0];
 
-  argstack[0] = alloc_cell();
-  argstack[0]->tag = TYPE_CONS;
-  argstack[0]->field1 = head;
-  argstack[0]->field2 = tail;
+  rtvalue *res = alloc_rtvalue();
+  res->tag = TYPE_CONS;
+  res->cmp1 = head;
+  res->cmp2 = tail;
+
+  argstack[0] = make_pntr(res);
 }
 
-void b_head(cell **argstack)
+void b_head(pntr *argstack)
 {
-  cell *arg = argstack[0];
-  if (TYPE_CONS == celltype(arg)) {
-    argstack[0] = (cell*)arg->field1;
+  pntr arg = argstack[0];
+  if (TYPE_CONS == pntrtype(arg)) {
+    argstack[0] = get_pntr(arg)->cmp1;
   }
-  else if (TYPE_AREF == celltype(arg)) {
-    cell *arrcell = (cell*)arg->field1;
-    carray *arr = (carray*)arrcell->field1;
-    int index = (int)arg->field2;
+  else if (TYPE_AREF == pntrtype(arg)) {
+    rtvalue *argval = get_pntr(arg);
+    rtvalue *arrcell = (rtvalue*)get_pntr(argval->cmp1);
+    carray *arr = (carray*)get_pntr(arrcell->cmp1);
+    int index = (int)get_pntr(argval->cmp2);
     assert(index < arr->size);
-    argstack[0] = (cell*)arr->cells[index];
+    argstack[0] = arr->cells[index];
   }
   else {
     assert(!"head: expected a cons cell");
   }
 }
 
-cell *get_tail(cell *arrcell, int index)
+pntr get_tail(rtvalue *arrcell, int index)
 {
-  carray *arr = (carray*)arrcell->field1;
+  carray *arr = (carray*)get_pntr(arrcell->cmp1);
   assert(index < arr->size);
   if (index+1 == arr->size) {
     return arr->tail;
   }
   else {
-    cell *ref = arr->refs[index+1];
-    if (NULL == ref) {
-      ref = alloc_cell();
-      ref->tag = TYPE_AREF;
-      ref->field1 = arrcell;
-      ref->field2 = (void*)(index+1);
+    pntr ref = arr->refs[index+1];
+    if (is_nullpntr(ref)) {
+      rtvalue *refval = alloc_rtvalue();
+      refval->tag = TYPE_AREF;
+      refval->cmp1 = make_pntr(arrcell);
+      refval->cmp2 = make_pntr((void*)(index+1));
+      ref = make_pntr(refval);
       arr->refs[index+1] = ref;
       assert(index+1 < arr->size);
     }
@@ -252,15 +254,16 @@ cell *get_tail(cell *arrcell, int index)
   }
 }
 
-void b_tail(cell **argstack)
+void b_tail(pntr *argstack)
 {
-  cell *arg = argstack[0];
-  if (TYPE_CONS == celltype(arg)) {
-    argstack[0] = (cell*)arg->field2;
+  pntr arg = argstack[0];
+  if (TYPE_CONS == pntrtype(arg)) {
+    argstack[0] = get_pntr(arg)->cmp2;
   }
-  else if (TYPE_AREF == celltype(arg)) {
-    cell *arrcell = (cell*)arg->field1;
-    int index = (int)arg->field2;
+  else if (TYPE_AREF == pntrtype(arg)) {
+    rtvalue *argval = get_pntr(arg);
+    rtvalue *arrcell = (rtvalue*)get_pntr(argval->cmp1);
+    int index = (int)get_pntr(argval->cmp2);
     argstack[0] = get_tail(arrcell,index);
   }
   else {
@@ -268,55 +271,56 @@ void b_tail(cell **argstack)
   }
 }
 
-void b_islambda(cell **argstack)
+void b_islambda(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_LAMBDA == celltype(val));
+  pntr val = argstack[0];
+  setbool(&argstack[0],TYPE_LAMBDA == pntrtype(val));
 }
 
-void b_isvalue(cell **argstack)
+void b_isvalue(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],isvalue(val));
+  pntr val = argstack[0];
+  setbool(&argstack[0],isvaluetype(pntrtype(val)));
 }
 
-void b_iscons(cell **argstack)
+void b_iscons(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],(TYPE_CONS == celltype(val)) || (TYPE_AREF == celltype(val)));
+  pntr val = argstack[0];
+  setbool(&argstack[0],(TYPE_CONS == pntrtype(val)) || (TYPE_AREF == pntrtype(val)));
 }
 
-void b_isnil(cell **argstack)
+void b_isnil(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_NIL == celltype(val));
+  pntr val = argstack[0];
+  setbool(&argstack[0],TYPE_NIL == pntrtype(val));
 }
 
-void b_isnumber(cell **argstack)
+void b_isnumber(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_NUMBER == celltype(val));
+  pntr val = argstack[0];
+  setbool(&argstack[0],TYPE_NUMBER == pntrtype(val));
 }
 
-void b_isstring(cell **argstack)
+void b_isstring(pntr *argstack)
 {
-  cell *val = argstack[0];
-  setbool(&argstack[0],TYPE_STRING == celltype(val));
+  pntr val = argstack[0];
+  setbool(&argstack[0],TYPE_STRING == pntrtype(val));
 }
 
-void b_convertarray(cell **argstack)
+void b_convertarray(pntr *argstack)
 {
-  cell *retcell = (cell*)argstack[1];
-  cell *top;
+  pntr ret = argstack[1];
+  pntr top;
+  rtvalue *topval;
   int size;
-  cell *c;
+  pntr p;
   carray *arr;
   int i;
-  cell *arrcell;
+  rtvalue *arrcell;
 
-  if (TYPE_NUMBER != celltype(retcell)) {
+  if (TYPE_NUMBER != pntrtype(ret)) {
     printf("convertarray: first arg should be a number, got ");
-    print_code(retcell);
+    print_pntr(ret);
     printf("\n");
     abort();
   }
@@ -325,22 +329,24 @@ void b_convertarray(cell **argstack)
   top = argstack[0];
   size = 0;
 
-  if (TYPE_AREF == celltype(top))
+  if (TYPE_AREF == pntrtype(top)) {
+    argstack[0] = ret;
     return;
+  }
 
-  c = top;
-  while (TYPE_CONS == celltype(c)) {
-    c = resolve_ind((cell*)c->field2);
+  p = top;
+  while (TYPE_CONS == pntrtype(p)) {
+    p = resolve_pntr(get_pntr(p)->cmp2);
     size++;
   }
 
-  if (TYPE_APPLICATION == celltype(c)) {
+  if (TYPE_APPLICATION == pntrtype(p)) {
     printf("convertarray: list is not fully evaluated\n");
     abort();
   }
-  else if (TYPE_NIL != celltype(c)) {
+  else if (TYPE_NIL != pntrtype(p)) {
     printf("convertarray: found non-cons within list: ");
-    print_code(c);
+    print_pntr(p);
     printf("\n");
     abort();
   }
@@ -348,120 +354,128 @@ void b_convertarray(cell **argstack)
   arr = (carray*)calloc(1,sizeof(carray));
   arr->alloc = size;
   arr->size = size;
-  arr->cells = (cell**)calloc(arr->alloc,sizeof(cell*));
-  arr->refs = (cell**)calloc(arr->alloc,sizeof(cell*));
-  arr->tail = globnil;
+  arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
+  arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
+  for (i = 0; i < arr->alloc; i++) {
+    arr->cells[i] = make_pntr(NULL);
+    arr->refs[i] = make_pntr(NULL);
+  }
+  arr->tail = globnilpntr;
+  arr->sizecell = make_pntr(NULL);
 
-  c = top;
+  p = top;
   for (i = 0; i < arr->size; i++) {
-    arr->cells[i] = (cell*)c->field1;
-    c = resolve_ind((cell*)c->field2);
+    arr->cells[i] = get_pntr(p)->cmp1;
+    p = resolve_pntr(get_pntr(p)->cmp2);
   }
 
-  arrcell = alloc_cell();
+  arrcell = alloc_rtvalue();
   arrcell->tag = TYPE_ARRAY;
-  arrcell->field1 = arr;
+  arrcell->cmp1 = make_pntr(arr);
 
   // return value is what is passed in, but now it points to an array
-  top->tag = TYPE_AREF;
-  top->field1 = arrcell;
-  top->field2 = 0;
-  arr->refs[0] = top;
+  assert(is_pntr(top));
+  topval = get_pntr(top);
+  topval->tag = TYPE_AREF;
+  topval->cmp1 = make_pntr(arrcell);
+  topval->cmp2 = make_pntr(0);
+  arr->refs[0] = make_pntr(topval);
 
-  argstack[0] = retcell;
+  argstack[0] = ret;
 }
 
-void b_arrayitem(cell **argstack)
+void b_arrayitem(pntr *argstack)
 {
-  cell *refcell = argstack[0];
-  cell *indexcell = argstack[1];
+  pntr refpntr = argstack[0];
+  pntr indexpntr = argstack[1];
   int index;
-  cell *arrcell;
+  rtvalue *arrcell;
   carray *arr;
   int refindex;
 
-  if (TYPE_NUMBER != celltype(indexcell)) {
+  if (TYPE_NUMBER != pntrtype(indexpntr)) {
     printf("arrayitem: index must be a number, got ");
-    print_code(indexcell);
+    print_pntr(indexpntr);
     printf("\n");
     abort();
   }
-  if (TYPE_AREF != celltype(refcell)) {
+  if (TYPE_AREF != pntrtype(refpntr)) {
     printf("arrayitem: expected an array reference, got ");
-    print_code(refcell);
+    print_pntr(refpntr);
     printf("\n");
     abort();
   }
 
-  index = (int)celldouble(indexcell);
+  index = (int)pntrdouble(indexpntr);
 
-  arrcell = (cell*)refcell->field1;
-  arr = (carray*)arrcell->field1;
-  refindex = (int)refcell->field2;
+  arrcell = get_pntr(get_pntr(refpntr)->cmp1);
+  arr = (carray*)get_pntr(arrcell->cmp1);
+  refindex = (int)get_pntr(get_pntr(refpntr)->cmp2);
   assert(refindex+index < arr->size);
-  argstack[0] = (cell*)arr->cells[refindex+index];
+  argstack[0] = arr->cells[refindex+index];
 }
 
-void b_arrayhas(cell **argstack)
+void b_arrayhas(pntr *argstack)
 {
-  cell *refcell = argstack[0];
-  cell *indexcell = argstack[1];
+  pntr refcell = argstack[0];
+  pntr indexcell = argstack[1];
   int index;
-  cell *arrcell;
+  rtvalue *arrcell;
   carray *arr;
   int refindex;
 
-  if (TYPE_NUMBER != celltype(indexcell)) {
+  if (TYPE_NUMBER != pntrtype(indexcell)) {
     printf("arrayhas: index must be a number, got ");
-    print_code(indexcell);
+    print_pntr(indexcell);
     printf("\n");
     abort();
   }
 
-  if (TYPE_AREF != celltype(refcell)) {
-    argstack[0] = globnil;
+  if (TYPE_AREF != pntrtype(refcell)) {
+    argstack[0] = globnilpntr;
     return;
   }
 
-  index = (int)celldouble(indexcell);
+  index = (int)pntrdouble(indexcell);
 
-  arrcell = (cell*)refcell->field1;
-  arr = (carray*)arrcell->field1;
-  refindex = (int)refcell->field2;
+  arrcell = get_pntr(get_pntr(refcell)->cmp1);
+  arr = (carray*)get_pntr(arrcell->cmp1);
+  refindex = (int)get_pntr(get_pntr(refcell)->cmp2);
   if (refindex+index < arr->size)
-    argstack[0] = globtrue;
+    argstack[0] = globtruepntr;
   else
-    argstack[0] = globnil;
+    argstack[0] = globnilpntr;
 }
 
-void b_arrayext(cell **argstack)
+void b_arrayext(pntr *argstack)
 {
-  cell *lstcell = argstack[0];
-  cell *ncell = argstack[1];
+  pntr lstcell = argstack[0];
+  pntr ncell = argstack[1];
   int n;
-  cell *arrcell = NULL;
+  rtvalue *arrcell = NULL;
   carray *arr = NULL;
   int base = 0; // FIXME: make sure this is respected
   int pos = 0;
-  cell *cons = NULL;
+  pntr cons = make_pntr(NULL);
   char *mode = NULL;
   int existing = 0;
   int oldalloc;
+  int i;
 
-  if (TYPE_NUMBER != celltype(ncell)) {
+  if (TYPE_NUMBER != pntrtype(ncell)) {
     printf("arrayext: n must be a number, got ");
-    print_code(ncell);
+    print_pntr(ncell);
     printf("\n");
     abort();
   }
-  n = (int)celldouble(ncell);
+  n = (int)pntrdouble(ncell);
   assert(0 <= n);
 
-  if (TYPE_AREF == celltype(lstcell)) {
+  if (TYPE_AREF == pntrtype(lstcell)) {
     mode = "existing";
-    arrcell = (cell*)lstcell->field1;
-    arr = (carray*)arrcell->field1;
-    base = (int)lstcell->field2;
+    arrcell = get_pntr(get_pntr(lstcell)->cmp1);
+    arr = (carray*)get_pntr(arrcell->cmp1);
+    base = (int)get_pntr(get_pntr(lstcell)->cmp2);
 
     assert(base < arr->size);
     assert(0 == base); // FIXME: lift this restriction
@@ -472,17 +486,22 @@ void b_arrayext(cell **argstack)
   }
   else {
     mode = "new";
-    assert(TYPE_CONS == celltype(lstcell));
+    assert(TYPE_CONS == pntrtype(lstcell));
     arr = (carray*)calloc(1,sizeof(carray));
     arr->alloc = 16; // FIXME
     arr->size = 0;
-    arr->cells = (cell**)calloc(arr->alloc,sizeof(cell*));
-    arr->refs = (cell**)calloc(arr->alloc,sizeof(cell*));
-    arr->tail = NULL;
+    arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
+    arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
+    for (i = 0; i < arr->alloc; i++) {
+      arr->cells[i] = make_pntr(NULL);
+      arr->refs[i] = make_pntr(NULL);
+    }
+    arr->tail = make_pntr(NULL);
+    arr->sizecell = make_pntr(NULL);
 
-    arrcell = alloc_cell();
+    arrcell = alloc_rtvalue();
     arrcell->tag = TYPE_ARRAY;
-    arrcell->field1 = arr;
+    arrcell->cmp1 = make_pntr(arr);
     cons = lstcell;
   }
 
@@ -490,175 +509,175 @@ void b_arrayext(cell **argstack)
   while (base+n >= arr->alloc)
     arr->alloc *= 2;
   if (oldalloc != arr->alloc) {
-    arr->cells = (cell**)realloc(arr->cells,arr->alloc*sizeof(cell*));
-    arr->refs = (cell**)realloc(arr->refs,arr->alloc*sizeof(cell*));
-    memset(&arr->cells[oldalloc],0,(arr->alloc-oldalloc)*sizeof(cell*));
-    memset(&arr->refs[oldalloc],0,(arr->alloc-oldalloc)*sizeof(cell*));
+    arr->cells = (pntr*)realloc(arr->cells,arr->alloc*sizeof(pntr));
+    arr->refs = (pntr*)realloc(arr->refs,arr->alloc*sizeof(pntr));
+    for (i = oldalloc; i < arr->alloc; i++) {
+      arr->cells[i] = make_pntr(NULL);
+      arr->refs[i] = make_pntr(NULL);
+    }
   }
 
   assert(pos == arr->size);
   while (pos <= n) {
-    cons = resolve_ind(cons);
-    assert(TYPE_CONS == celltype(cons));
+    cons = resolve_pntr(cons);
+    assert(TYPE_CONS == pntrtype(cons));
 
     assert(pos < arr->alloc);
 
-    arr->cells[pos] = (cell*)cons->field1;
-    arr->tail = (cell*)cons->field2;
-    cons = (cell*)cons->field2;
+    arr->cells[pos] = get_pntr(cons)->cmp1;
+    arr->tail = get_pntr(cons)->cmp2;
+    cons = get_pntr(cons)->cmp2;
 
     pos++;
     arr->size++;
     assert(pos == arr->size);
   }
 
-  if (TYPE_CONS == celltype(lstcell)) {
-    lstcell->tag = TYPE_AREF;
-    lstcell->field1 = arrcell;
-    lstcell->field2 = 0;
-    arr->refs[0] = lstcell;
+  if (TYPE_CONS == pntrtype(lstcell)) {
+    rtvalue *lstvalue = get_pntr(lstcell);
+    lstvalue->tag = TYPE_AREF;
+    lstvalue->cmp1 = make_pntr(arrcell);
+    lstvalue->cmp2 = make_pntr(0);
+    arr->refs[0] = make_pntr(lstvalue);
   }
 
-  assert(n == (int)celldouble(ncell));
+  assert(n == (int)pntrdouble(ncell));
   assert(pos == n+1);
-  assert(arr->cells[n]);
+  assert(!is_nullpntr(arr->cells[n]));
 
   argstack[0] = arr->cells[n];
 }
 
-void b_arraysize(cell **argstack)
+void b_arraysize(pntr *argstack)
 {
-  cell *refcell = argstack[0];
-  if (TYPE_AREF == celltype(refcell)) {
-    cell *arrcell = (cell*)refcell->field1;
+  pntr refcell = argstack[0];
+  if (TYPE_AREF == pntrtype(refcell)) {
+    rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
     carray *arr;
-    assert(0 == (int)refcell->field2);
-    arr = (carray*)arrcell->field1;
+    assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
+    arr = (carray*)get_pntr(arrcell->cmp1);
 
-    if ((NULL == arr->sizecell) ||
-        (arr->size != (int)arr->sizecell->field1)) {
-      arr->sizecell = alloc_cell();
-      arr->sizecell->tag = TYPE_NUMBER;
-      celldouble(arr->sizecell) = (double)arr->size;
-    }
+    if (is_nullpntr(arr->sizecell) ||
+        (arr->size != (int)pntrdouble(arr->sizecell)))
+      arr->sizecell = make_number((double)arr->size);
 
     argstack[0] = arr->sizecell;
   }
-  else if (TYPE_CONS == celltype(refcell)) {
-    argstack[0] = globzero; // FIXME: should this be nil, like arrayoptlen?
+  else if (TYPE_CONS == pntrtype(refcell)) {
+    argstack[0] = globzeropntr; // FIXME: should this be nil, like arrayoptlen?
   }
   else {
     printf("arraysize: expected aref or cons, got ");
-    print_code(refcell);
+    print_pntr(refcell);
     printf("\n");
     abort();
   }
 }
 
-void b_arraytail(cell **argstack)
+void b_arraytail(pntr *argstack)
 {
-  cell *refcell = argstack[0];
-  if (TYPE_AREF == celltype(refcell)) {
-    cell *arrcell = (cell*)refcell->field1;
+  pntr refcell = argstack[0];
+  if (TYPE_AREF == pntrtype(refcell)) {
+    rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
     carray *arr;
-    assert(0 == (int)refcell->field2);
-    arr = (carray*)arrcell->field1;
+    assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
+    arr = (carray*)get_pntr(arrcell->cmp1);
 
     argstack[0] = arr->tail;
   }
-  else if (TYPE_CONS == celltype(refcell)) {
+  else if (TYPE_CONS == pntrtype(refcell)) {
     // leave item on top of stack as is; it's the list
   }
   else {
     printf("arraytail: expected aref or cons, got ");
-    print_code(refcell);
+    print_pntr(refcell);
     printf("\n");
     abort();
   }
 }
 
-void b_arrayoptlen(cell **argstack)
+void b_arrayoptlen(pntr *argstack)
 {
-  cell *refcell = argstack[0];
-  if (TYPE_AREF == celltype(refcell)) {
-    cell *arrcell = (cell*)refcell->field1;
+  pntr refcell = argstack[0];
+  if (TYPE_AREF == pntrtype(refcell)) {
+    rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
     carray *arr;
-    assert(0 == (int)refcell->field2);
-    arr = (carray*)arrcell->field1;
+    assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
+    arr = (carray*)get_pntr(arrcell->cmp1);
 
-    if (TYPE_NIL == celltype(arr->tail))
+    if (TYPE_NIL == pntrtype(arr->tail))
       b_arraysize(argstack);
     else
-      argstack[0] = globnil;
+      argstack[0] = globnilpntr;
   }
-  else if (TYPE_CONS == celltype(refcell)) {
-    argstack[0] = globnil;
+  else if (TYPE_CONS == pntrtype(refcell)) {
+    argstack[0] = globnilpntr;
   }
   else {
     printf("arrayoptlen: expected aref or cons, got ");
-    print_code(refcell);
+    print_pntr(refcell);
     printf("\n");
     abort();
   }
 }
 
-void b_echo(cell **argstack)
+void b_echo(pntr *argstack)
 {
-  if (TYPE_STRING == celltype(argstack[0]))
-    printf("%s",(char*)argstack[0]->field1);
+  if (TYPE_STRING == pntrtype(argstack[0]))
+    printf("%s",get_string(get_pntr(argstack[0])->cmp1));
   else
-    print_code(argstack[0]);
-  argstack[0] = globnil;
+    print_pntr(argstack[0]);
+  argstack[0] = globnilpntr;
 }
 
-void b_print(cell **argstack)
+void b_print(pntr *argstack)
 {
-  print_cell(argstack[0]);
-  argstack[0] = globnil;
+  output_pntr(argstack[0]);
+  argstack[0] = globnilpntr;
 }
 
-void b_sqrt(cell **argstack)
+void b_sqrt(pntr *argstack)
 {
   double d = 0.0;
 
-  cell *c = argstack[0];
-  if (TYPE_NUMBER == celltype(c)) {
-    d = celldouble(c);
+  pntr p = argstack[0];
+  if (TYPE_NUMBER == pntrtype(p)) {
+    d = pntrdouble(p);
   }
   else {
-    fprintf(stderr,"sqrt: incompatible argument: %s\n",cell_types[celltype(c)]);
+    fprintf(stderr,"sqrt: incompatible argument: %s\n",cell_types[pntrtype(p)]);
     exit(1);
   }
 
   setnumber(&argstack[0],sqrt(d));
 }
 
-void b_floor(cell **argstack)
+void b_floor(pntr *argstack)
 {
   double d = 0.0;
 
-  cell *c = argstack[0];
-  if (TYPE_NUMBER == celltype(c)) {
-    d = celldouble(c);
+  pntr p = argstack[0];
+  if (TYPE_NUMBER == pntrtype(p)) {
+    d = pntrdouble(p);
   }
   else {
-    fprintf(stderr,"floor: incompatible argument: %s\n",cell_types[celltype(c)]);
+    fprintf(stderr,"floor: incompatible argument: %s\n",cell_types[pntrtype(p)]);
     exit(1);
   }
 
   setnumber(&argstack[0],floor(d));
 }
 
-void b_ceil(cell **argstack)
+void b_ceil(pntr *argstack)
 {
   double d = 0.0;
 
-  cell *c = argstack[0];
-  if (TYPE_NUMBER == celltype(c)) {
-    d = celldouble(c);
+  pntr p = argstack[0];
+  if (TYPE_NUMBER == pntrtype(p)) {
+    d = pntrdouble(p);
   }
   else {
-    fprintf(stderr,"ceil: incompatible argument: %s\n",cell_types[celltype(c)]);
+    fprintf(stderr,"ceil: incompatible argument: %s\n",cell_types[pntrtype(p)]);
     exit(1);
   }
 
