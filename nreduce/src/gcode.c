@@ -246,7 +246,7 @@ int add_string(gprogram *gp, char *str)
   int pos = gp->stringmap->size/sizeof(cell*);
   rtvalue *c = alloc_rtvalue();
   c->tag = TYPE_STRING | FLAG_PINNED;
-  c->cmp1 = make_string(strdup(str));
+  make_string(c->cmp1,strdup(str));
   array_append(gp->stringmap,&c,sizeof(rtvalue*));
   return pos;
 }

@@ -37,13 +37,15 @@
 static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
 {
   rtvalue *dest;
+  pntr p;
   switch (celltype(source)) {
   case TYPE_APPLICATION: {
     dest = alloc_rtvalue();
     dest->tag = TYPE_APPLICATION;
     dest->cmp1 = instantiate_scomb_r((cell*)source->field1,names,values);
     dest->cmp2 = instantiate_scomb_r((cell*)source->field2,names,values);
-    return make_pntr(dest);
+    make_pntr(p,dest);
+    return p;
   }
   case TYPE_SYMBOL: {
     int pos;
@@ -52,12 +54,14 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
         dest = alloc_rtvalue();
         dest->tag = TYPE_IND;
         dest->cmp1 = values->data[pos];
-        return make_pntr(dest);
+        make_pntr(p,dest);
+        return p;
       }
     }
     fprintf(stderr,"Unknown variable: %s\n",(char*)source->field1);
     exit(1);
-    return make_pntr(NULL);
+    make_pntr(p,NULL);
+    return p;
   }
   case TYPE_LETREC: {
     int oldcount = names->count;
@@ -68,7 +72,8 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
       rtvalue *hole = alloc_rtvalue();
       hole->tag = TYPE_HOLE;
       stack_push(names,(char*)rec->name);
-      pntrstack_push(values,make_pntr(hole));
+      make_pntr(p,hole);
+      pntrstack_push(values,p);
     }
     i = 0;
     for (rec = (letrec*)source->field1; rec; rec = rec->next) {
@@ -86,13 +91,15 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   case TYPE_BUILTIN:
     dest = alloc_rtvalue();
     dest->tag = TYPE_BUILTIN;
-    dest->cmp1 = make_pntr(source->field1);
-    return make_pntr(dest);
+    make_pntr(dest->cmp1,source->field1);
+    make_pntr(p,dest);
+    return p;
   case TYPE_SCREF:
     dest = alloc_rtvalue();
     dest->tag = TYPE_SCREF;
-    dest->cmp1 = make_pntr((scomb*)source->field1);
-    return make_pntr(dest);
+    make_pntr(dest->cmp1,(scomb*)source->field1);
+    make_pntr(p,dest);
+    return p;
   case TYPE_NIL:
     return globnilpntr;
   case TYPE_NUMBER:
@@ -100,8 +107,9 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   case TYPE_STRING:
     dest = alloc_rtvalue();
     dest->tag = TYPE_STRING;
-    dest->cmp1 = make_string(strdup((char*)source->field1));
-    return make_pntr(dest);
+    make_string(dest->cmp1,strdup((char*)source->field1));
+    make_pntr(p,dest);
+    return p;
   default:
     abort();
     break;

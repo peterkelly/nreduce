@@ -175,15 +175,13 @@ typedef struct rtvalue {
 
 #ifdef INLINE_PTRFUNS
 #define is_pntr(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF1)
-#define make_pntr(__c) ((*(((unsigned int*)&__tempd)+0) = (unsigned int)(__c)), \
-                        (*(((unsigned int*)&__tempd)+1) = 0xFFFFFFF1), \
-                        __tempd)
+#define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
+                            *(((unsigned int*)&(__p))+1) = 0xFFFFFFF1; }
 #define get_pntr(__p) (assert(is_pntr(__p)), ((rtvalue*)(*((unsigned int*)&(__p)))))
 
 #define is_string(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF2)
-#define make_string(__c) ((*(((unsigned int*)&__tempd)+0) = (unsigned int)(__c)), \
-                          (*(((unsigned int*)&__tempd)+1) = 0xFFFFFFF2), \
-                          __tempd)
+#define make_string(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
+                              *(((unsigned int*)&(__p))+1) = 0xFFFFFFF2; }
 #define get_string(__p) (assert(is_string(__p)), ((char*)(*((unsigned int*)&(__p)))))
 #define pntrequal(__a,__b) ((*(((unsigned int*)&(__a))+0) == *(((unsigned int*)&(__b))+0)) && \
                             (*(((unsigned int*)&(__a))+1) == *(((unsigned int*)&(__b))+1)))
@@ -194,11 +192,9 @@ typedef struct rtvalue {
 #endif
 #else
 int is_pntr(pntr p);
-pntr make_pntr(void *c);
 rtvalue *get_pntr(pntr p);
 
 int is_string(pntr p);
-pntr make_string(char *c);
 char *get_string(pntr p);
 int pntrequal(pntr a, pntr b);
 int is_nullpntr(pntr p);
@@ -484,8 +480,6 @@ extern pntr globtruepntr;
 extern pntr globzeropntr;
 extern char *collect_ebp;
 extern char *collect_esp;
-
-extern double __tempd;
 #endif
 
 #ifndef SUPER_C

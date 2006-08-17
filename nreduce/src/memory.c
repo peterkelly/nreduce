@@ -37,8 +37,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-double __tempd;
-
 typedef struct block {
   struct block *next;
   cell cells[BLOCK_SIZE];
@@ -82,14 +80,6 @@ int is_pntr(pntr p)
   return (*(((unsigned int*)&p)+1) == 0xFFFFFFF1);
 }
 
-pntr make_pntr(void *c)
-{
-  double d = 0.0;
-  *(((unsigned int*)&d)+0) = (unsigned int)c;
-  *(((unsigned int*)&d)+1) = 0xFFFFFFF1;
-  return d;  
-}
-
 rtvalue *get_pntr(pntr p)
 {
   assert(is_pntr(p));
@@ -99,14 +89,6 @@ rtvalue *get_pntr(pntr p)
 int is_string(pntr p)
 {
   return (*(((unsigned int*)&p)+1) == 0xFFFFFFF2);
-}
-
-pntr make_string(char *c)
-{
-  double d = 0.0;
-  *(((unsigned int*)&d)+0) = (unsigned int)c;
-  *(((unsigned int*)&d)+1) = 0xFFFFFFF2;
-  return d;  
 }
 
 char *get_string(pntr p)
@@ -142,9 +124,11 @@ pntr resolve_pntr(pntr p)
 pntr make_number(double d)
 {
   rtvalue *v = alloc_rtvalue();
+  pntr p;
   v->tag = TYPE_NUMBER;
   v->cmp1 = d;
-  return make_pntr(v);
+  make_pntr(p,v);
+  return p;
 }
 #endif
 
@@ -165,7 +149,7 @@ void initmem()
   globnilvalue = alloc_rtvalue();
   globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
 
-  globnilpntr = make_pntr(globnilvalue);
+  make_pntr(globnilpntr,globnilvalue);
   globtruepntr = make_number(1.0);
   globzeropntr = make_number(0.0);
 

@@ -760,6 +760,7 @@ void reduction_engine()
 {
   scomb *mainsc;
   rtvalue *root;
+  pntr rootp;
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
@@ -771,12 +772,13 @@ void reduction_engine()
 
   root = alloc_rtvalue();
   root->tag = TYPE_SCREF;
-  root->cmp1 = make_pntr(mainsc);
+  make_pntr(root->cmp1,mainsc);
+  make_pntr(rootp,root);
 
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  stream(make_pntr(root));
+  stream(rootp);
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +

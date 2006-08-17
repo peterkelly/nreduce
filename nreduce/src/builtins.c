@@ -210,7 +210,7 @@ void b_cons(pntr *argstack)
   res->cmp1 = head;
   res->cmp2 = tail;
 
-  argstack[0] = make_pntr(res);
+  make_pntr(argstack[0],res);
 }
 
 void b_head(pntr *argstack)
@@ -244,9 +244,9 @@ pntr get_tail(rtvalue *arrcell, int index)
     if (is_nullpntr(ref)) {
       rtvalue *refval = alloc_rtvalue();
       refval->tag = TYPE_AREF;
-      refval->cmp1 = make_pntr(arrcell);
-      refval->cmp2 = make_pntr((void*)(index+1));
-      ref = make_pntr(refval);
+      make_pntr(refval->cmp1,arrcell);
+      make_pntr(refval->cmp2,(void*)(index+1));
+      make_pntr(ref,refval);
       arr->refs[index+1] = ref;
       assert(index+1 < arr->size);
     }
@@ -357,11 +357,11 @@ void b_convertarray(pntr *argstack)
   arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
   arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
   for (i = 0; i < arr->alloc; i++) {
-    arr->cells[i] = make_pntr(NULL);
-    arr->refs[i] = make_pntr(NULL);
+    make_pntr(arr->cells[i],NULL);
+    make_pntr(arr->refs[i],NULL);
   }
   arr->tail = globnilpntr;
-  arr->sizecell = make_pntr(NULL);
+  make_pntr(arr->sizecell,NULL);
 
   p = top;
   for (i = 0; i < arr->size; i++) {
@@ -371,15 +371,15 @@ void b_convertarray(pntr *argstack)
 
   arrcell = alloc_rtvalue();
   arrcell->tag = TYPE_ARRAY;
-  arrcell->cmp1 = make_pntr(arr);
+  make_pntr(arrcell->cmp1,arr);
 
   // return value is what is passed in, but now it points to an array
   assert(is_pntr(top));
   topval = get_pntr(top);
   topval->tag = TYPE_AREF;
-  topval->cmp1 = make_pntr(arrcell);
-  topval->cmp2 = make_pntr(0);
-  arr->refs[0] = make_pntr(topval);
+  make_pntr(topval->cmp1,arrcell);
+  make_pntr(topval->cmp2,0);
+  make_pntr(arr->refs[0],topval);
 
   argstack[0] = ret;
 }
@@ -456,11 +456,13 @@ void b_arrayext(pntr *argstack)
   carray *arr = NULL;
   int base = 0; // FIXME: make sure this is respected
   int pos = 0;
-  pntr cons = make_pntr(NULL);
+  pntr cons;
   char *mode = NULL;
   int existing = 0;
   int oldalloc;
   int i;
+
+  make_pntr(cons,NULL);
 
   if (TYPE_NUMBER != pntrtype(ncell)) {
     printf("arrayext: n must be a number, got ");
@@ -493,15 +495,15 @@ void b_arrayext(pntr *argstack)
     arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
     arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
     for (i = 0; i < arr->alloc; i++) {
-      arr->cells[i] = make_pntr(NULL);
-      arr->refs[i] = make_pntr(NULL);
+      make_pntr(arr->cells[i],NULL);
+      make_pntr(arr->refs[i],NULL);
     }
-    arr->tail = make_pntr(NULL);
-    arr->sizecell = make_pntr(NULL);
+    make_pntr(arr->tail,NULL);
+    make_pntr(arr->sizecell,NULL);
 
     arrcell = alloc_rtvalue();
     arrcell->tag = TYPE_ARRAY;
-    arrcell->cmp1 = make_pntr(arr);
+    make_pntr(arrcell->cmp1,arr);
     cons = lstcell;
   }
 
@@ -512,8 +514,8 @@ void b_arrayext(pntr *argstack)
     arr->cells = (pntr*)realloc(arr->cells,arr->alloc*sizeof(pntr));
     arr->refs = (pntr*)realloc(arr->refs,arr->alloc*sizeof(pntr));
     for (i = oldalloc; i < arr->alloc; i++) {
-      arr->cells[i] = make_pntr(NULL);
-      arr->refs[i] = make_pntr(NULL);
+      make_pntr(arr->cells[i],NULL);
+      make_pntr(arr->refs[i],NULL);
     }
   }
 
@@ -536,9 +538,9 @@ void b_arrayext(pntr *argstack)
   if (TYPE_CONS == pntrtype(lstcell)) {
     rtvalue *lstvalue = get_pntr(lstcell);
     lstvalue->tag = TYPE_AREF;
-    lstvalue->cmp1 = make_pntr(arrcell);
-    lstvalue->cmp2 = make_pntr(0);
-    arr->refs[0] = make_pntr(lstvalue);
+    make_pntr(lstvalue->cmp1,arrcell);
+    make_pntr(lstvalue->cmp2,0);
+    make_pntr(arr->refs[0],lstvalue);
   }
 
   assert(n == (int)pntrdouble(ncell));

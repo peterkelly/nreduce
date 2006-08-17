@@ -60,8 +60,11 @@ void rtmark_frame(frame *f)
   if (f->completed) {
     assert(!"completed frame referenced from here");
   }
-  if (f->c)
-    rtmark(make_pntr(f->c));
+  if (f->c) {
+    pntr p;
+    make_pntr(p,f->c);
+    rtmark(p);
+  };
   for (i = 0; i < f->count; i++)
     rtmark(f->data[i]);
 }
@@ -152,8 +155,8 @@ rtvalue *alloc_rtvalue()
     bl->next = rtblocks;
     rtblocks = bl;
     for (i = 0; i < BLOCK_SIZE-1; i++)
-      bl->values[i].cmp1 = make_pntr(&bl->values[i+1]);
-    bl->values[i].cmp1 = make_pntr(NULL);
+      make_pntr(bl->values[i].cmp1,&bl->values[i+1]);
+    make_pntr(bl->values[i].cmp1,NULL);
 
     rtfreeptr = &bl->values[0];
     nrtrtblocks++;
@@ -239,7 +242,7 @@ void rtcollect()
         if (!(bl->values[i].tag & FLAG_PINNED)) {
           free_rtvalue_fields(&bl->values[i]);
           bl->values[i].tag = TYPE_EMPTY;
-          bl->values[i].cmp1 = make_pntr(rtfreeptr);
+          make_pntr(bl->values[i].cmp1,rtfreeptr);
           rtfreeptr = &bl->values[i];
         }
       }

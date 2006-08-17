@@ -294,7 +294,7 @@ void execute(gprogram *gp)
         replace = curf->c;
         curf->c = NULL;
         replace->tag = TYPE_CAP;
-        replace->cmp1 = make_pntr(newcp);
+        make_pntr(replace->cmp1,newcp);
 
         /* return to caller */
         old = curf;
@@ -332,10 +332,11 @@ void execute(gprogram *gp)
 
         newf->c = alloc_rtvalue();
         newf->c->tag = TYPE_FRAME;
-        newf->c->cmp1 = make_pntr(newf);
+        make_pntr(newf->c->cmp1,newf);
 
         stcount -= extra;
-        stdata[stcount++] = make_pntr(newf->c);
+        make_pntr(stdata[stcount],newf->c);
+        stcount++;
 
         curf->address = evaldoaddr-1;
         curf->fno = -1;
@@ -397,7 +398,8 @@ void execute(gprogram *gp)
       for (i = 0; i < instr->arg0; i++) {
         rtvalue *hole = alloc_rtvalue();
         hole->tag = TYPE_HOLE;
-        stdata[stcount++] = make_pntr(hole);
+        make_pntr(stdata[stcount],hole);
+        stcount++;
       }
       break;
     }
@@ -426,8 +428,9 @@ void execute(gprogram *gp)
 
       capv = alloc_rtvalue();
       capv->tag = TYPE_CAP;
-      capv->cmp1 = make_pntr(c);
-      stdata[stcount++] = make_pntr(capv);
+      make_pntr(capv->cmp1,c);
+      make_pntr(stdata[stcount],capv);
+      stcount++;
       break;
     }
     case OP_MKFRAME: {
@@ -446,13 +449,14 @@ void execute(gprogram *gp)
 
       newfcell = alloc_rtvalue();
       newfcell->tag = TYPE_FRAME;
-      newfcell->cmp1 = make_pntr(newf);
+      make_pntr(newfcell->cmp1,newf);
       newf->c = newfcell;
 
       for (i = stcount-n; i < stcount; i++)
         newf->data[newf->count++] = stdata[i];
       stcount -= n;
-      stdata[stcount++] = make_pntr(newfcell);
+      make_pntr(stdata[stcount],newfcell);
+      stcount++;
       break;
     }
     case OP_BIF: {
@@ -481,7 +485,8 @@ void execute(gprogram *gp)
       stdata[stcount++] = make_number(*((double*)&instr->arg0));
       break;
     case OP_PUSHSTRING:
-      stdata[stcount++] = make_pntr(((cell**)gp->stringmap->data)[instr->arg0]);
+      make_pntr(stdata[stcount],((cell**)gp->stringmap->data)[instr->arg0]);
+      stcount++;
       break;
     case OP_RESOLVE:
       stdata[stcount-1-instr->arg0] = resolve_pntr(stdata[stcount-1-instr->arg0]);
