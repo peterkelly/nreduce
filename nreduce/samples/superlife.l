@@ -3,23 +3,15 @@
 (reduce     (f init lst) (if lst (f (head lst) (reduce f init (tail lst))) init))
 (for        (min max f) (map f (range min max)))
 
-(forceall   (lst total) (if lst (forceall (tail lst) (+ total 1)) total))
-(len (lst)
-     (let ((alen (arrayoptlen lst)))
-          (if (alen)
-              alen
-              (convertarray (forceall lst 0) lst))))
-(forcelist (n lst)
-           (if (and lst (= n 0))
-               nil
-               (forcelist (- n 1) (tail lst))))
-
-(item (n lst)
-      (if (arrayhas n lst)
-          (arrayitem n lst)
-          (if (forcelist (- n (arraysize lst)) (arraytail lst))
-              nil
-              (arrayext n lst))))
+(len1       (lst total) (if (and total lst) (len1 (tail lst) (+ total 1)) total))
+(len        (lst) (let ((alen (arrayoptlen lst)))
+                          (if (alen)
+                              alen
+                              (len1 lst 0))))
+(item1      (n lst) (if (and lst (= n 0)) (head lst) (item1 (- n 1) (tail lst))))
+(item       (n lst) (if (arrayhas n lst)
+                           (arrayitem n lst)
+                           (item1 (- n (arraypsize lst)) (arraylastref lst))))
 
 (range      (min max) (if (= min max) (cons min nil) (cons min (range (+ min 1) max))))
 

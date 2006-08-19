@@ -232,6 +232,11 @@ void execute(gprogram *gp)
         curf = newf;
         swapstack_out(curf,&stdata,&stcount);
 
+        #ifdef PROFILING
+        if (0 <= curf->fno)
+          funcalls[curf->fno]++;
+        #endif
+
         // curf->address--; /* so we process the GLOBSTART */
         add_active_frame(curf);
       }
@@ -314,6 +319,10 @@ void execute(gprogram *gp)
         for (i = 0; i < cp->count; i++)
           stdata[stcount++] = cp->data[i];
         // curf->address--; /* so we process the GLOBSTART */
+        #ifdef PROFILING
+        if (0 <= curf->fno)
+          funcalls[curf->fno]++;
+        #endif
       }
       else { /* s+s1 > a1 */
         frame *newf = frame_alloc();
@@ -349,6 +358,10 @@ void execute(gprogram *gp)
       curf->fno = instr->arg0;
       pntrstack_grow(&curf->alloc,&stdata,stacksizes[curf->fno]);
       // curf->address--; /* so we process the GLOBSTART */
+      #ifdef PROFILING
+      if (0 <= curf->fno)
+        funcalls[curf->fno]++;
+      #endif
       break;
     case OP_JFALSE: {
       pntr test = stdata[stcount-1];

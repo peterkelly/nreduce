@@ -351,6 +351,7 @@ void cleanup()
     free(bl);
     bl = next;
   }
+  free(funcalls);
   free(addressmap);
   free(noevaladdressmap);
   free(stacksizes);

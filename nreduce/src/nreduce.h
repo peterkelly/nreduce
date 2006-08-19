@@ -124,22 +124,20 @@
 #define B_ISNUMBER       28
 #define B_ISSTRING       29
 
-#define B_CONVERTARRAY   30
-#define B_ARRAYITEM      31
-#define B_ARRAYHAS       32
-#define B_ARRAYEXT       33
-#define B_ARRAYSIZE      34
-#define B_ARRAYTAIL      35
-#define B_ARRAYOPTLEN    36
+#define B_ARRAYITEM      30
+#define B_ARRAYHAS       31
+#define B_ARRAYPSIZE     32
+#define B_ARRAYOPTLEN    33
+#define B_ARRAYLASTREF   34
 
-#define B_ECHO           37
-#define B_PRINT          38
+#define B_ECHO           35
+#define B_PRINT          36
 
-#define B_SQRT           39
-#define B_FLOOR          40
-#define B_CEIL           41
+#define B_SQRT           37
+#define B_FLOOR          38
+#define B_CEIL           39
 
-#define NUM_BUILTINS     42
+#define NUM_BUILTINS     40
 
 #define TAG_MASK         0xFF
 

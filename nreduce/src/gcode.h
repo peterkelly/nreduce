@@ -99,6 +99,7 @@ void jit_execute(ginstr *program);
 
 #ifndef GCODE_C
 extern int op_usage[OP_COUNT];
+extern int *funcalls;
 extern int *addressmap;
 extern int *noevaladdressmap;
 extern int *stacksizes;

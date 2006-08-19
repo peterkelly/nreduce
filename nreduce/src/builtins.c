@@ -232,39 +232,108 @@ void b_head(pntr *argstack)
   }
 }
 
-pntr get_tail(rtvalue *arrcell, int index)
+void make_aref(rtvalue *refval, rtvalue *arrcell, int index)
 {
   carray *arr = (carray*)get_pntr(arrcell->cmp1);
-  assert(index < arr->size);
-  if (index+1 == arr->size) {
-    return arr->tail;
+  refval->tag = TYPE_AREF;
+  make_pntr(refval->cmp1,arrcell);
+  make_pntr(refval->cmp2,(void*)index);
+  make_pntr(arr->refs[index],refval);
+}
+
+pntr get_aref(rtvalue *arrcell, int index)
+{
+  carray *arr = (carray*)get_pntr(arrcell->cmp1);
+  if (is_nullpntr(arr->refs[index])) {
+    rtvalue *refval = alloc_rtvalue();
+    make_aref(refval,arrcell,index);
   }
-  else {
-    pntr ref = arr->refs[index+1];
-    if (is_nullpntr(ref)) {
-      rtvalue *refval = alloc_rtvalue();
-      refval->tag = TYPE_AREF;
-      make_pntr(refval->cmp1,arrcell);
-      make_pntr(refval->cmp2,(void*)(index+1));
-      make_pntr(ref,refval);
-      arr->refs[index+1] = ref;
-      assert(index+1 < arr->size);
-    }
-    return ref;
-  }
+  return arr->refs[index];
 }
 
 void b_tail(pntr *argstack)
 {
   pntr arg = argstack[0];
   if (TYPE_CONS == pntrtype(arg)) {
-    argstack[0] = get_pntr(arg)->cmp2;
+    rtvalue *consval = get_pntr(arg);
+    pntr conshead = resolve_pntr(consval->cmp1);
+    pntr constail = resolve_pntr(consval->cmp2);
+    rtvalue *otherval;
+    pntr otherhead;
+    pntr othertail;
+    carray *arr;
+    rtvalue *arrcell;
+
+    /* TODO: handle the case where the tail is another array */
+    if (TYPE_CONS != pntrtype(constail)) {
+      argstack[0] = constail;
+      return;
+    }
+
+    otherval = get_pntr(constail);
+    otherhead = resolve_pntr(otherval->cmp1);
+    othertail = resolve_pntr(otherval->cmp2);
+
+    arr = (carray*)calloc(1,sizeof(carray));
+    arr->alloc = 8;
+    arr->size = 2;
+    arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
+    arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
+    make_pntr(arr->sizecell,NULL);
+
+    arr->cells[0] = conshead;
+    arr->cells[1] = otherhead;
+    arr->tail = othertail;
+
+    arrcell = alloc_rtvalue();
+    arrcell->tag = TYPE_ARRAY;
+    make_pntr(arrcell->cmp1,arr);
+
+    make_aref(consval,arrcell,0);
+    make_aref(otherval,arrcell,1);
+
+    argstack[0] = arr->refs[1];
   }
   else if (TYPE_AREF == pntrtype(arg)) {
     rtvalue *argval = get_pntr(arg);
     rtvalue *arrcell = (rtvalue*)get_pntr(argval->cmp1);
     int index = (int)get_pntr(argval->cmp2);
-    argstack[0] = get_tail(arrcell,index);
+    carray *arr = (carray*)get_pntr(arrcell->cmp1);
+    assert(index < arr->size);
+    if (index+1 == arr->size) {
+      pntr other = resolve_pntr(arr->tail);
+      rtvalue *otherval;
+      pntr otherhead;
+      pntr othertail;
+
+      /* TODO: handle the case where the tail is another array */
+      if (TYPE_CONS != pntrtype(other)) {
+        argstack[0] = other;
+        return;
+      }
+
+      otherval = get_pntr(other);
+      otherhead = otherval->cmp1;
+      othertail = otherval->cmp2;
+
+      if (arr->alloc < arr->size+1) {
+        arr->alloc *= 2;
+        arr->cells = (pntr*)realloc(arr->cells,arr->alloc*sizeof(pntr));
+        arr->refs = (pntr*)realloc(arr->refs,arr->alloc*sizeof(pntr));
+      }
+
+      arr->cells[arr->size] = otherhead;
+      arr->tail = othertail;
+      make_aref(otherval,arrcell,arr->size);
+      arr->size++;
+
+      argstack[0] = other;
+      return;
+    }
+    else {
+      argstack[0] = get_aref(arrcell,index+1);
+      return;
+    }
   }
   else {
     assert(!"tail: expected a cons cell");
@@ -305,83 +374,6 @@ void b_isstring(pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(&argstack[0],TYPE_STRING == pntrtype(val));
-}
-
-void b_convertarray(pntr *argstack)
-{
-  pntr ret = argstack[1];
-  pntr top;
-  rtvalue *topval;
-  int size;
-  pntr p;
-  carray *arr;
-  int i;
-  rtvalue *arrcell;
-
-  if (TYPE_NUMBER != pntrtype(ret)) {
-    printf("convertarray: first arg should be a number, got ");
-    print_pntr(ret);
-    printf("\n");
-    abort();
-  }
-
-  // FIXME: this doesn't correctly handle cyclic lists at present!
-  top = argstack[0];
-  size = 0;
-
-  if (TYPE_AREF == pntrtype(top)) {
-    argstack[0] = ret;
-    return;
-  }
-
-  p = top;
-  while (TYPE_CONS == pntrtype(p)) {
-    p = resolve_pntr(get_pntr(p)->cmp2);
-    size++;
-  }
-
-  if (TYPE_APPLICATION == pntrtype(p)) {
-    printf("convertarray: list is not fully evaluated\n");
-    abort();
-  }
-  else if (TYPE_NIL != pntrtype(p)) {
-    printf("convertarray: found non-cons within list: ");
-    print_pntr(p);
-    printf("\n");
-    abort();
-  }
-
-  arr = (carray*)calloc(1,sizeof(carray));
-  arr->alloc = size;
-  arr->size = size;
-  arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
-  arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
-  for (i = 0; i < arr->alloc; i++) {
-    make_pntr(arr->cells[i],NULL);
-    make_pntr(arr->refs[i],NULL);
-  }
-  arr->tail = globnilpntr;
-  make_pntr(arr->sizecell,NULL);
-
-  p = top;
-  for (i = 0; i < arr->size; i++) {
-    arr->cells[i] = get_pntr(p)->cmp1;
-    p = resolve_pntr(get_pntr(p)->cmp2);
-  }
-
-  arrcell = alloc_rtvalue();
-  arrcell->tag = TYPE_ARRAY;
-  make_pntr(arrcell->cmp1,arr);
-
-  // return value is what is passed in, but now it points to an array
-  assert(is_pntr(top));
-  topval = get_pntr(top);
-  topval->tag = TYPE_AREF;
-  make_pntr(topval->cmp1,arrcell);
-  make_pntr(topval->cmp2,0);
-  make_pntr(arr->refs[0],topval);
-
-  argstack[0] = ret;
 }
 
 void b_arrayitem(pntr *argstack)
@@ -447,110 +439,7 @@ void b_arrayhas(pntr *argstack)
     argstack[0] = globnilpntr;
 }
 
-void b_arrayext(pntr *argstack)
-{
-  pntr lstcell = argstack[0];
-  pntr ncell = argstack[1];
-  int n;
-  rtvalue *arrcell = NULL;
-  carray *arr = NULL;
-  int base = 0; // FIXME: make sure this is respected
-  int pos = 0;
-  pntr cons;
-  char *mode = NULL;
-  int existing = 0;
-  int oldalloc;
-  int i;
-
-  make_pntr(cons,NULL);
-
-  if (TYPE_NUMBER != pntrtype(ncell)) {
-    printf("arrayext: n must be a number, got ");
-    print_pntr(ncell);
-    printf("\n");
-    abort();
-  }
-  n = (int)pntrdouble(ncell);
-  assert(0 <= n);
-
-  if (TYPE_AREF == pntrtype(lstcell)) {
-    mode = "existing";
-    arrcell = get_pntr(get_pntr(lstcell)->cmp1);
-    arr = (carray*)get_pntr(arrcell->cmp1);
-    base = (int)get_pntr(get_pntr(lstcell)->cmp2);
-
-    assert(base < arr->size);
-    assert(0 == base); // FIXME: lift this restriction
-
-    pos = arr->size;
-    cons = arr->tail;
-    existing = 1;
-  }
-  else {
-    mode = "new";
-    assert(TYPE_CONS == pntrtype(lstcell));
-    arr = (carray*)calloc(1,sizeof(carray));
-    arr->alloc = 16; // FIXME
-    arr->size = 0;
-    arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
-    arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
-    for (i = 0; i < arr->alloc; i++) {
-      make_pntr(arr->cells[i],NULL);
-      make_pntr(arr->refs[i],NULL);
-    }
-    make_pntr(arr->tail,NULL);
-    make_pntr(arr->sizecell,NULL);
-
-    arrcell = alloc_rtvalue();
-    arrcell->tag = TYPE_ARRAY;
-    make_pntr(arrcell->cmp1,arr);
-    cons = lstcell;
-  }
-
-  oldalloc = arr->alloc;
-  while (base+n >= arr->alloc)
-    arr->alloc *= 2;
-  if (oldalloc != arr->alloc) {
-    arr->cells = (pntr*)realloc(arr->cells,arr->alloc*sizeof(pntr));
-    arr->refs = (pntr*)realloc(arr->refs,arr->alloc*sizeof(pntr));
-    for (i = oldalloc; i < arr->alloc; i++) {
-      make_pntr(arr->cells[i],NULL);
-      make_pntr(arr->refs[i],NULL);
-    }
-  }
-
-  assert(pos == arr->size);
-  while (pos <= n) {
-    cons = resolve_pntr(cons);
-    assert(TYPE_CONS == pntrtype(cons));
-
-    assert(pos < arr->alloc);
-
-    arr->cells[pos] = get_pntr(cons)->cmp1;
-    arr->tail = get_pntr(cons)->cmp2;
-    cons = get_pntr(cons)->cmp2;
-
-    pos++;
-    arr->size++;
-    assert(pos == arr->size);
-  }
-
-  if (TYPE_CONS == pntrtype(lstcell)) {
-    rtvalue *lstvalue = get_pntr(lstcell);
-    lstvalue->tag = TYPE_AREF;
-    make_pntr(lstvalue->cmp1,arrcell);
-    make_pntr(lstvalue->cmp2,0);
-    make_pntr(arr->refs[0],lstvalue);
-  }
-
-  assert(n == (int)pntrdouble(ncell));
-  assert(pos == n+1);
-  assert(!is_nullpntr(arr->cells[n]));
-
-  argstack[0] = arr->cells[n];
-}
-
-void b_arraysize(pntr *argstack)
+void b_arraypsize(pntr *argstack)
 {
   pntr refcell = argstack[0];
   if (TYPE_AREF == pntrtype(refcell)) {
@@ -566,32 +455,10 @@ void b_arraysize(pntr *argstack)
     argstack[0] = arr->sizecell;
   }
   else if (TYPE_CONS == pntrtype(refcell)) {
-    argstack[0] = globzeropntr; // FIXME: should this be nil, like arrayoptlen?
+    argstack[0] = globzeropntr;
   }
   else {
-    printf("arraysize: expected aref or cons, got ");
-    print_pntr(refcell);
-    printf("\n");
-    abort();
-  }
-}
-
-void b_arraytail(pntr *argstack)
-{
-  pntr refcell = argstack[0];
-  if (TYPE_AREF == pntrtype(refcell)) {
-    rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
-    carray *arr;
-    assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
-    arr = (carray*)get_pntr(arrcell->cmp1);
-
-    argstack[0] = arr->tail;
-  }
-  else if (TYPE_CONS == pntrtype(refcell)) {
-    // leave item on top of stack as is; it's the list
-  }
-  else {
-    printf("arraytail: expected aref or cons, got ");
+    printf("arraypsize: expected aref or cons, got ");
     print_pntr(refcell);
     printf("\n");
     abort();
@@ -607,8 +474,10 @@ void b_arrayoptlen(pntr *argstack)
     assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
     arr = (carray*)get_pntr(arrcell->cmp1);
 
+    arr->tail = resolve_pntr(arr->tail);
+
     if (TYPE_NIL == pntrtype(arr->tail))
-      b_arraysize(argstack);
+      b_arraypsize(argstack);
     else
       argstack[0] = globnilpntr;
   }
@@ -621,6 +490,27 @@ void b_arrayoptlen(pntr *argstack)
     printf("\n");
     abort();
   }
+}
+
+void b_arraylastref(pntr *argstack)
+{
+  pntr arrpntr = argstack[0];
+  rtvalue *refcell;
+  rtvalue *arrcell;
+  carray *arr;
+  int refindex;
+
+  if (TYPE_CONS == pntrtype(arrpntr))
+    return;
+
+  assert(TYPE_AREF == pntrtype(arrpntr));
+  refcell = get_pntr(arrpntr);
+  arrcell = (rtvalue*)get_pntr(refcell->cmp1);
+  refindex = (int)get_pntr(refcell->cmp2);
+  assert(0 == refindex);
+  arr = (carray*)get_pntr(arrcell->cmp1);
+  assert(0 < arr->size);
+  argstack[0] = get_aref(arrcell,arr->size-1);
 }
 
 void b_echo(pntr *argstack)
@@ -732,13 +622,11 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "number?",        1, 1, 1, b_isnumber       },
 { "string?",        1, 1, 1, b_isstring       },
 
-{ "convertarray",   2, 2, 1, b_convertarray   },
 { "arrayitem",      2, 2, 0, b_arrayitem      },
 { "arrayhas",       2, 2, 1, b_arrayhas       },
-{ "arrayext",       2, 2, 0, b_arrayext       },
-{ "arraysize",      1, 1, 1, b_arraysize      },
-{ "arraytail",      1, 1, 0, b_arraytail      },
+{ "arraypsize",     1, 1, 1, b_arraypsize     },
 { "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
+{ "arraylastref",   1, 1, 1, b_arraylastref   },
 
 { "echo",           1, 1, 1, b_echo           },
 { "print",          1, 1, 1, b_print          },

@@ -67,6 +67,7 @@
 #define JUMP(addr)         { addr = gp->count; add_instruction(gp,OP_JUMP,0,0); }
 #define LABEL(addr)        { gp->ginstrs[addr].arg0 = gp->count-addr; }
 
+int *funcalls = NULL;
 int *addressmap = NULL;
 int *noevaladdressmap = NULL;
 int *stacksizes = NULL;
@@ -550,8 +551,11 @@ void print_profiling(gprogram *gp)
     addr++;
   }
 
+  printf("#calls   #instrs   instr%%\n");
+  printf("------   -------   ------\n");
   for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
     double portion = (((double)usage[fno])/((double)totalusage))*100.0;
+    printf("%-9d",funcalls[fno]);
     printf("%-9d",usage[fno]);
     printf(" %-6.2f",portion);
     if (fno == NUM_BUILTINS+index) {
@@ -1066,6 +1070,7 @@ void compile(gprogram *gp)
 
   nfunctions = NUM_BUILTINS+index;
 
+  funcalls = (int*)calloc(nfunctions,sizeof(int));
   addressmap = (int*)calloc(nfunctions,sizeof(int));
   noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
   stacksizes = (int*)calloc(nfunctions,sizeof(int));
