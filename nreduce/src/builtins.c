@@ -509,8 +509,7 @@ void b_arraylastref(pntr *argstack)
   refindex = (int)get_pntr(refcell->cmp2);
   assert(0 == refindex);
   arr = (carray*)get_pntr(arrcell->cmp1);
-  assert(0 < arr->size);
-  argstack[0] = get_aref(arrcell,arr->size-1);
+  argstack[0] = arr->tail;
 }
 
 void b_echo(pntr *argstack)
