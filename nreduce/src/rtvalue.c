@@ -123,8 +123,6 @@ void rtmark(pntr p)
         rtmark(arr->refs[i]);
     }
     rtmark(arr->tail);
-    if (!is_nullpntr(arr->sizecell))
-      rtmark(arr->sizecell);
     break;
   }
   case TYPE_FRAME:
@@ -405,5 +403,5 @@ void rtcleanup()
 
 void print_pntr(pntr p)
 {
-  printf("(value)");
+  printf("(value %s)",cell_types[pntrtype(p)]);
 }

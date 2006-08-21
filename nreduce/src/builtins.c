@@ -279,7 +279,6 @@ void b_tail(pntr *argstack)
     arr->size = 2;
     arr->cells = (pntr*)calloc(arr->alloc,sizeof(pntr));
     arr->refs = (pntr*)calloc(arr->alloc,sizeof(pntr));
-    make_pntr(arr->sizecell,NULL);
 
     arr->cells[0] = conshead;
     arr->cells[1] = otherhead;
@@ -439,26 +438,62 @@ void b_arrayhas(pntr *argstack)
     argstack[0] = globnilpntr;
 }
 
-void b_arraypsize(pntr *argstack)
+void b_arrayremsize(pntr *argstack)
+{
+  pntr refcell = argstack[1];
+  pntr ncell = argstack[0];
+  int n;
+
+  if (TYPE_NUMBER != pntrtype(ncell)) {
+    printf("arrayremsize: index must be a number, got ");
+    print_pntr(ncell);
+    printf("\n");
+    abort();
+  }
+
+  n = (int)pntrdouble(ncell);
+
+  if (TYPE_AREF == pntrtype(refcell)) {
+    rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
+    carray *arr;
+    int result;
+    assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
+    arr = (carray*)get_pntr(arrcell->cmp1);
+    result = n-arr->size+1;
+
+    assert(0 < arr->size);
+    assert(0 <= result);
+    argstack[0] = make_number(result);
+  }
+  else if (TYPE_CONS == pntrtype(refcell)) {
+    argstack[0] = make_number(n);
+  }
+  else {
+    printf("arrayremsize: expected aref or cons, got ");
+    print_pntr(refcell);
+    printf("\n");
+    abort();
+  }
+}
+
+void b_arrayrem(pntr *argstack)
 {
   pntr refcell = argstack[0];
+
   if (TYPE_AREF == pntrtype(refcell)) {
     rtvalue *arrcell = get_pntr(get_pntr(refcell)->cmp1);
     carray *arr;
     assert(0 == (int)get_pntr(get_pntr(refcell)->cmp2));
     arr = (carray*)get_pntr(arrcell->cmp1);
+    assert(0 < arr->size);
 
-    if (is_nullpntr(arr->sizecell) ||
-        (arr->size != (int)pntrdouble(arr->sizecell)))
-      arr->sizecell = make_number((double)arr->size);
-
-    argstack[0] = arr->sizecell;
+    argstack[0] = arr->refs[arr->size-1];
   }
   else if (TYPE_CONS == pntrtype(refcell)) {
-    argstack[0] = globzeropntr;
+    argstack[0] = refcell;
   }
   else {
-    printf("arraypsize: expected aref or cons, got ");
+    printf("arrayrem: expected aref or cons, got ");
     print_pntr(refcell);
     printf("\n");
     abort();
@@ -477,7 +512,7 @@ void b_arrayoptlen(pntr *argstack)
     arr->tail = resolve_pntr(arr->tail);
 
     if (TYPE_NIL == pntrtype(arr->tail))
-      b_arraypsize(argstack);
+      argstack[0] = make_number(arr->size);
     else
       argstack[0] = globnilpntr;
   }
@@ -490,26 +525,6 @@ void b_arrayoptlen(pntr *argstack)
     printf("\n");
     abort();
   }
-}
-
-void b_arraylastref(pntr *argstack)
-{
-  pntr arrpntr = argstack[0];
-  rtvalue *refcell;
-  rtvalue *arrcell;
-  carray *arr;
-  int refindex;
-
-  if (TYPE_CONS == pntrtype(arrpntr))
-    return;
-
-  assert(TYPE_AREF == pntrtype(arrpntr));
-  refcell = get_pntr(arrpntr);
-  arrcell = (rtvalue*)get_pntr(refcell->cmp1);
-  refindex = (int)get_pntr(refcell->cmp2);
-  assert(0 == refindex);
-  arr = (carray*)get_pntr(arrcell->cmp1);
-  argstack[0] = arr->tail;
 }
 
 void b_echo(pntr *argstack)
@@ -623,9 +638,9 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "arrayitem",      2, 2, 0, b_arrayitem      },
 { "arrayhas",       2, 2, 1, b_arrayhas       },
-{ "arraypsize",     1, 1, 1, b_arraypsize     },
+{ "arrayremsize",   2, 2, 1, b_arrayremsize   },
+{ "arrayrem",       1, 1, 1, b_arrayrem       },
 { "arrayoptlen",    1, 1, 1, b_arrayoptlen    },
-{ "arraylastref",   1, 1, 1, b_arraylastref   },
 
 { "echo",           1, 1, 1, b_echo           },
 { "print",          1, 1, 1, b_print          },

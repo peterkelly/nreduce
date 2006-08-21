@@ -126,9 +126,9 @@
 
 #define B_ARRAYITEM      30
 #define B_ARRAYHAS       31
-#define B_ARRAYPSIZE     32
-#define B_ARRAYOPTLEN    33
-#define B_ARRAYLASTREF   34
+#define B_ARRAYREMSIZE   32
+#define B_ARRAYREM       33
+#define B_ARRAYOPTLEN    34
 
 #define B_ECHO           35
 #define B_PRINT          36
@@ -234,7 +234,6 @@ typedef struct carray {
   pntr *cells;
   pntr *refs;
   pntr tail;
-  pntr sizecell;
 } carray;
 
 typedef struct stack {

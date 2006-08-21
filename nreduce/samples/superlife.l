@@ -10,8 +10,8 @@
                               (len1 lst 0))))
 (item1      (n lst) (if (and lst (= n 0)) (head lst) (item1 (- n 1) (tail lst))))
 (item       (n lst) (if (arrayhas n lst)
-                           (arrayitem n lst)
-                           (item1 (- n (arraypsize lst)) (arraylastref lst))))
+                        (arrayitem n lst)
+                        (item1 (arrayremsize lst n) (arrayrem lst))))
 
 (range      (min max) (if (= min max) (cons min nil) (cons min (range (+ min 1) max))))
 
