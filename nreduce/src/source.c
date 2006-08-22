@@ -94,7 +94,7 @@ const char *lookup_parsedfile(int fileno)
 {
   assert(parsedfiles);
   assert(0 <= fileno);
-  assert(fileno < parsedfiles->size/sizeof(char*));
+  assert(fileno < (int)(parsedfiles->size/sizeof(char*)));
   return ((char**)parsedfiles->data)[fileno];
 }
 

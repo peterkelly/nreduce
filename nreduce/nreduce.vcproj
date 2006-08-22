@@ -128,7 +128,7 @@ flex.exe lexer.l
 				RelativePath=".\src\builtins.c">
 			</File>
 			<File
-				RelativePath=".\src\extra.c">
+				RelativePath=".\src\debug.c">
 			</File>
 			<File
 				RelativePath=".\src\gcode.c">
@@ -179,9 +179,6 @@ bison.exe -d grammar.y
 			</File>
 			<File
 				RelativePath=".\src\graph.c">
-			</File>
-			<File
-				RelativePath=".\src\jit.c">
 			</File>
 			<File
 				RelativePath=".\src\lexer.l">
@@ -245,7 +242,7 @@ flex.exe lexer.l
 				RelativePath=".\src\resolve.c">
 			</File>
 			<File
-				RelativePath=".\src\rtvalue.c">
+				RelativePath=".\src\source.c">
 			</File>
 			<File
 				RelativePath=".\src\strictness.c">

@@ -498,12 +498,12 @@ void cleanup()
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
-    for (i = 0; i < oldnames->size/sizeof(char*); i++)
+    for (i = 0; i < (int)(oldnames->size/sizeof(char*)); i++)
       free(((char**)oldnames->data)[i]);
     array_free(oldnames);
   }
   if (parsedfiles) {
-    for (i = 0; i < parsedfiles->size/sizeof(char*); i++)
+    for (i = 0; i < (int)(parsedfiles->size/sizeof(char*)); i++)
       free(((char**)parsedfiles->data)[i]);
     array_free(parsedfiles);
   }
