@@ -100,9 +100,9 @@
 static int fun_nargs(cell *c)
 {
   if (TYPE_SCREF == celltype(c))
-    return ((scomb*)(c->field1))->nargs;
+    return c->sc->nargs;
   else if (TYPE_BUILTIN == celltype(c))
-    return builtin_info[(int)c->field1].nargs;
+    return builtin_info[c->bif].nargs;
   else
     abort();
 }
@@ -117,9 +117,9 @@ static int fun_strictin(cell *c, int argno)
 {
   assert(argno < fun_nargs(c));
   if (TYPE_SCREF == celltype(c))
-    return ((scomb*)(c->field1))->strictin[argno];
+    return c->sc->strictin[argno];
   else if (TYPE_BUILTIN == celltype(c))
-    return (argno < builtin_info[(int)c->field1].nstrict);
+    return (argno < builtin_info[c->bif].nstrict);
   else
     abort();
 }
@@ -199,12 +199,12 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
     int again;
     do {
       again = 0;
-      for (rec = (letrec*)c->field1; rec; rec = rec->next)
+      for (rec = c->bindings; rec; rec = rec->next)
         if (rec->strict)
           check_strictness_r(sc,rec->value,&bodyused,changed);
-      check_strictness_r(sc,(cell*)c->field2,&bodyused,changed);
+      check_strictness_r(sc,c->body,&bodyused,changed);
 
-      for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+      for (rec = c->bindings; rec; rec = rec->next) {
         if (!rec->strict && list_contains_string(bodyused,rec->name)) {
           rec->strict = 1;
           again = 1;
@@ -215,7 +215,7 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
 
     for (l = bodyused; l; l = l->next) {
       int isrec = 0;
-      for (rec = (letrec*)c->field1; rec && !isrec; rec = rec->next)
+      for (rec = c->bindings; rec && !isrec; rec = rec->next)
         if (!strcmp((char*)l->data,rec->name))
           isrec = 1;
       if (!isrec) {
@@ -228,7 +228,7 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
   case TYPE_APPLICATION: {
     cell *fun;
     int nargs = 0;
-    for (fun = c; TYPE_APPLICATION == celltype(fun); fun = (cell*)fun->field1)
+    for (fun = c; TYPE_APPLICATION == celltype(fun); fun = fun->left)
       nargs++;
 
     /* We have discovered the item at the bottom of the spine, which is the function to be called.
@@ -259,10 +259,10 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
 
           /* The expression will definitely need to be evaluated, i.e. it is in a strictness
              context. Perform the analysis recursively. */
-          check_strictness_r(sc,(cell*)app->field2,used,changed);
+          check_strictness_r(sc,app->right,used,changed);
         }
 
-        app = (cell*)app->field1;
+        app = app->left;
       }
 
       /* If statements need special treatment. The first argument (i.e. the conditional) is strict
@@ -278,9 +278,9 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
          the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
          We also annotate application nodes within the true/false branches with FLAG_STRICT
          where appropriate. */
-      if ((TYPE_BUILTIN == celltype(fun)) && (B_IF == (int)fun->field1)) {
-        cell *falsebranch = (cell*)c->field2;
-        cell *truebranch = (cell*)((cell*)c->field1)->field2;
+      if ((TYPE_BUILTIN == celltype(fun)) && (B_IF == fun->bif)) {
+        cell *falsebranch = c->right;
+        cell *truebranch = c->left->right;
 
         list *trueused = NULL;
         list *falseused = NULL;
@@ -298,14 +298,14 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
 
     /* The expression representing the thing being called is in a strict context, as we definitely
        need the function. */
-    check_strictness_r(sc,(cell*)c->field1,used,changed);
+    check_strictness_r(sc,c->left,used,changed);
     break;
   }
   case TYPE_SYMBOL:
     /* We are in a strict context and have an encountered a symbol, which must correspond to
        one of the supercombinator's arguments or a letrec binding. Add the variable to the list
        to indicate that this argument will definitely be evaluated. */
-    add_var(used,(char*)c->field1);
+    add_var(used,c->name);
     break;
   case TYPE_BUILTIN:
   case TYPE_SCREF:

@@ -153,10 +153,30 @@
 #define CELL_FIELD1 ((int)&((cell*)0)->field1)
 #define CELL_FIELD2 ((int)&((cell*)0)->field2)
 
+struct letrec;
+struct scomb;
+
+typedef struct sourceloc {
+  int fileno;
+  int lineno;
+} sourceloc;
+
 typedef struct cell {
   int tag;
   void *field1;
   void *field2;
+
+  struct cell *left;
+  struct cell *right;
+
+  char *value;
+  char *name;
+  struct letrec *bindings;
+  struct cell *body;
+  struct scomb *sc;
+  int bif;
+
+  sourceloc sl;
 } cell;
 
 #define celltype(_c) ((_c)->tag & TAG_MASK)
@@ -261,6 +281,7 @@ typedef struct scomb {
   cell *body;
   int index;
   int *strictin;
+  sourceloc sl;
   struct scomb *next;
 } scomb;
 
@@ -281,6 +302,7 @@ typedef struct cap {
 
   pntr *data;
   int count;
+  sourceloc sl;
 } cap;
 
 typedef struct frame {
@@ -303,12 +325,14 @@ typedef struct frame {
 
 void initmem();
 cell *alloc_cell(void);
-cell *alloc_cell2(int tag, void *field1, void *field2);
-cell *alloc_sourcecell(const char *filename, int lineno);
+cell *alloc_sourcecell(int fileno, int lineno);
 void collect();
 void free_letrec(letrec *rec);
 void free_scomb(scomb *sc);
 void cleanup();
+
+const char *lookup_parsedfile(int fileno);
+int add_parsedfile(const char *filename);
 
 pntrstack *pntrstack_new(void);
 void pntrstack_push(pntrstack *s, pntr p);
@@ -317,19 +341,11 @@ pntr pntrstack_pop(pntrstack *s);
 void pntrstack_free(pntrstack *s);
 
 stack *stack_new(void);
-stack *stack_new2(int alloc);
 void stack_free(stack *s);
-void stack_push2(stack *s, void *c);
 void stack_push(stack *s, void *c);
-void stack_insert(stack *s, void *c, int pos);
-cell *stack_pop(stack *s);
-cell *stack_top(stack *s);
-cell *stack_at(stack *s, int pos);
 void pntrstack_grow(int *alloc, pntr **data, int size);
 
 void statistics(FILE *f);
-void copy_raw(cell *dest, cell *source);
-void copy_cell(cell *redex, cell *source);
 void free_cell_fields(cell *c);
 void print_stack(pntr *stk, int size, int dir);
 
@@ -356,6 +372,8 @@ void cap_dealloc(cap *c);
 void rtcleanup();
 
 void print_pntr(pntr p);
+void print_double(FILE *f, double d);
+void output_pntr(pntr p);
 
 /* resolve */
 
@@ -414,10 +432,6 @@ void print_scombs2();
 const char *real_varname(const char *sym);
 char *real_scname(const char *sym);
 
-/* jit */
-void print_double(FILE *f, double d);
-void output_pntr(pntr p);
-
 /* strictness */
 
 void dump_strictinfo();
@@ -437,6 +451,7 @@ void array_free(array *arr);
 
 void print_quoted_string(FILE *f, const char *str);
 void parse_check(int cond, cell *c, char *msg);
+void print_sourceloc(FILE *f, sourceloc sl);
 
 typedef void (*list_d_t)(void *a);
 typedef void* (*list_copy_t)(void *a);

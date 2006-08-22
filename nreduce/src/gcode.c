@@ -37,35 +37,35 @@
 
 #define GCODE_C
 
-#define MKCAP(_a,_b)       add_instruction(gp,OP_MKCAP,(_a),(_b))
-#define MKFRAME(_a,_b)     add_instruction(gp,OP_MKFRAME,(_a),(_b))
-#define JFUN(_a)           add_instruction(gp,OP_JFUN,(_a),0)
-#define UPDATE(_a)         add_instruction(gp,OP_UPDATE,(_a),0)
-#define DO()               add_instruction(gp,OP_DO,0,0)
-#define EVAL(_a)           { int arg0 = (_a);                \
-    if (!gp->si || !statusat(gp->si,gp->si->count-1-arg0)) { \
-       add_instruction(gp,OP_EVAL,arg0,0); \
-       add_instruction(gp,OP_RESOLVE,arg0,0); \
-    }}
-#define RESOLVE(_a)        add_instruction(gp,OP_RESOLVE,(_a),0)
-#define RETURN()           add_instruction(gp,OP_RETURN,0,0)
-#define PUSH(_a)           add_instruction(gp,OP_PUSH,(_a),0)
-#define LAST()             add_instruction(gp,OP_LAST,0,0)
-#define BIF(_a)            add_instruction(gp,OP_BIF,(_a),0)
-#define JUMPrel(_a)        add_instruction(gp,OP_JUMP,(_a),0)
-#define GLOBSTART(_a,_b)   add_instruction(gp,OP_GLOBSTART,(_a),(_b))
-#define END()              add_instruction(gp,OP_END,0,0)
-#define BEGIN()            add_instruction(gp,OP_BEGIN,0,0)
-#define CALL(_a)           add_instruction(gp,OP_CALL,(_a),0)
-#define ALLOC(_a)          add_instruction(gp,OP_ALLOC,(_a),0)
-#define PUSHNIL()          add_instruction(gp,OP_PUSHNIL,0,0)
-#define PUSHNUMBER(_a,_b)  add_instruction(gp,OP_PUSHNUMBER,(_a),(_b))
-#define PUSHSTRING(_a)     add_instruction(gp,OP_PUSHSTRING,(_a),0)
-#define SQUEEZE(_a,_b)     add_instruction(gp,OP_SQUEEZE,(_a),(_b))
+#define MKCAP(_s,_a,_b)       add_instruction(gp,_s,OP_MKCAP,(_a),(_b))
+#define MKFRAME(_s,_a,_b)     add_instruction(gp,_s,OP_MKFRAME,(_a),(_b))
+#define JFUN(_s,_a)           add_instruction(gp,_s,OP_JFUN,(_a),0)
+#define UPDATE(_s,_a)         add_instruction(gp,_s,OP_UPDATE,(_a),0)
+#define DO(_s)                add_instruction(gp,_s,OP_DO,0,0)
+#define EVAL(_s,_a)           { int arg0 = (_a);                \
+                                if (!gp->si || !statusat(gp->si,gp->si->count-1-arg0)) { \
+                                   add_instruction(gp,_s,OP_EVAL,arg0,0); \
+                                   add_instruction(gp,_s,OP_RESOLVE,arg0,0); \
+                                }}
+#define RESOLVE(_s,_a)        add_instruction(gp,_s,OP_RESOLVE,(_a),0)
+#define RETURN(_s)            add_instruction(gp,_s,OP_RETURN,0,0)
+#define PUSH(_s,_a)           add_instruction(gp,_s,OP_PUSH,(_a),0)
+#define LAST(_s)              add_instruction(gp,_s,OP_LAST,0,0)
+#define BIF(_s,_a)            add_instruction(gp,_s,OP_BIF,(_a),0)
+#define JUMPrel(_s,_a)        add_instruction(gp,_s,OP_JUMP,(_a),0)
+#define GLOBSTART(_s,_a,_b)   add_instruction(gp,_s,OP_GLOBSTART,(_a),(_b))
+#define END(_s)               add_instruction(gp,_s,OP_END,0,0)
+#define BEGIN(_s)             add_instruction(gp,_s,OP_BEGIN,0,0)
+#define CALL(_s,_a)           add_instruction(gp,_s,OP_CALL,(_a),0)
+#define ALLOC(_s,_a)          add_instruction(gp,_s,OP_ALLOC,(_a),0)
+#define PUSHNIL(_s)           add_instruction(gp,_s,OP_PUSHNIL,0,0)
+#define PUSHNUMBER(_s,_a,_b)  add_instruction(gp,_s,OP_PUSHNUMBER,(_a),(_b))
+#define PUSHSTRING(_s,_a)     add_instruction(gp,_s,OP_PUSHSTRING,(_a),0)
+#define SQUEEZE(_s,_a,_b)     add_instruction(gp,_s,OP_SQUEEZE,(_a),(_b))
 
-#define JFALSE(addr)       { addr = gp->count; add_instruction(gp,OP_JFALSE,0,0); }
-#define JUMP(addr)         { addr = gp->count; add_instruction(gp,OP_JUMP,0,0); }
-#define LABEL(addr)        { gp->ginstrs[addr].arg0 = gp->count-addr; }
+#define JFALSE(_s,addr)       { addr = gp->count; add_instruction(gp,_s,OP_JFALSE,0,0); }
+#define JUMP(_s,addr)         { addr = gp->count; add_instruction(gp,_s,OP_JUMP,0,0); }
+#define LABEL(addr)           { gp->ginstrs[addr].arg0 = gp->count-addr; }
 
 int *funcalls = NULL;
 int *addressmap = NULL;
@@ -252,7 +252,7 @@ int add_string(gprogram *gp, char *str)
   return pos;
 }
 
-void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
+void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
 {
   ginstr *instr;
   assert(!gp->si || !gp->si->invalid);
@@ -267,6 +267,7 @@ void add_instruction(gprogram *gp, int opcode, int arg0, int arg1)
   instr->opcode = opcode;
   instr->arg0 = arg0;
   instr->arg1 = arg1;
+  instr->sl = sl;
   if (gp->si) {
     instr->expcount = gp->si->count;
     instr->expstatus = (int*)malloc(gp->si->count*sizeof(int));
@@ -387,20 +388,19 @@ int cell_fno(cell *c)
   assert((TYPE_BUILTIN == celltype(c)) ||
          (TYPE_SCREF == celltype(c)));
   if (TYPE_BUILTIN == celltype(c))
-    return (int)c->field1;
+    return c->bif;
   else if (TYPE_SCREF == celltype(c))
-    return ((scomb*)c->field1)->index+NUM_BUILTINS;
+    return c->sc->index+NUM_BUILTINS;
   else
     return -1;
 }
 
-const char *function_name(int fno)
+char *get_function_name(int fno)
 {
-  /* FIXME: this leaks memory, since real_scname makes a copy */
   if (0 > fno)
-    return "(unknown)";
+    return strdup("(unknown)");
   else if (NUM_BUILTINS > fno)
-    return builtin_info[fno].name;
+    return strdup(builtin_info[fno].name);
   else
     return real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
 }
@@ -418,7 +418,7 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
 {
   assert(OP_COUNT > instr->opcode);
 
-  printf("%-6d %-12s %-6d %-6d",
+  printf("%-5d %-12s %-10d %-10d",
          address,op_names[instr->opcode],instr->arg0,instr->arg1);
   if (0 <= instr->expcount)
     printf(" %-4d",instr->expcount);
@@ -427,6 +427,11 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
   if (usage)
     printf(" u:%-6d",instr->usage);
   printf("    ");
+
+  if (0 <= instr->sl.fileno)
+    printf("%20s:%-4d ",lookup_parsedfile(instr->sl.fileno),instr->sl.lineno);
+  else
+    printf("%20s%-5s ","","");
 
   switch (instr->opcode) {
   case OP_GLOBSTART:
@@ -459,15 +464,24 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
     printf("; PUSHSTRING \"%s\"",get_string(v->cmp1));
     break;
   }
-  case OP_MKFRAME:
-    printf("; MKFRAME %s %d",function_name(instr->arg0),instr->arg1);
+  case OP_MKFRAME: {
+    char *name = get_function_name(instr->arg0);
+    printf("; MKFRAME %s %d",name,instr->arg1);
+    free(name);
     break;
-  case OP_MKCAP:
-    printf("; MKCAP %s %d",function_name(instr->arg0),instr->arg1);
+  }
+  case OP_MKCAP: {
+    char *name = get_function_name(instr->arg0);
+    printf("; MKCAP %s %d",name,instr->arg1);
+    free(name);
     break;
-  case OP_JFUN:
-    printf("; JFUN %s",function_name(instr->arg0));
+  }
+  case OP_JFUN: {
+    char *name = get_function_name(instr->arg0);
+    printf("; JFUN %s",name);
+    free(name);
     break;
+  }
   case OP_BIF:
     printf("; %s",builtin_info[instr->arg0].name);
     break;
@@ -610,19 +624,19 @@ void getusage(cell *c, list **used)
 {
   switch (celltype(c)) {
   case TYPE_APPLICATION:
-    getusage((cell*)c->field1,used);
-    getusage((cell*)c->field2,used);
+    getusage(c->left,used);
+    getusage(c->right,used);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       getusage(rec->value,used);
-    getusage((cell*)c->field2,used);
+    getusage(c->body,used);
     break;
   }
   case TYPE_SYMBOL:
-    if (!list_contains_string(*used,(char*)c->field1))
-      list_push(used,(char*)c->field1);
+    if (!list_contains_string(*used,c->name))
+      list_push(used,c->name);
     break;
   case TYPE_BUILTIN:
   case TYPE_SCREF:
@@ -654,13 +668,13 @@ void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
   int count = 0;
-  for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+  for (rec = c->bindings; rec; rec = rec->next) {
     count++;
     stack_push(p->names,rec->name);
     stack_push(p->indexes,(void*)(n+count));
   }
 
-  rec = (letrec*)c->field1;
+  rec = c->bindings;
   for (; rec; rec = rec->next) {
     if (strictcontext && rec->strict && (0 == letrecs_used(rec->value,rec))) {
       E(gp,rec->value,p,n);
@@ -675,7 +689,7 @@ void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
   if (0 == count)
     return;
 
-  ALLOC(count);
+  ALLOC(rec->value->sl,count);
   n += count;
 
   for (; rec; rec = rec->next) {
@@ -683,7 +697,7 @@ void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
       E(gp,rec->value,p,n);
     else
       C(gp,rec->value,p,n);
-    UPDATE(n+1-presolve(p,rec->name));
+    UPDATE(rec->value->sl,n+1-presolve(p,rec->name));
   }
 }
 
@@ -697,7 +711,7 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     cell *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1)
+    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left)
       m++;
 
     assert(TYPE_SYMBOL != celltype(app)); /* should be lifted into separate scomb otherwise */
@@ -709,7 +723,7 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if ((TYPE_BUILTIN == celltype(app)) &&
-        (B_IF == (int)app->field1) &&
+        (B_IF == app->bif) &&
         (3 == m)) {
       cell *falsebranch;
       cell *truebranch;
@@ -718,18 +732,18 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
       int label;
       stackinfo *oldsi;
       int end;
-      falsebranch = (cell*)app->field2;
-      app = (cell*)app->field1;
-      truebranch = (cell*)app->field2;
-      app = (cell*)app->field1;
-      cond = (cell*)app->field2;
+      falsebranch = app->right;
+      app = app->left;
+      truebranch = app->right;
+      app = app->left;
+      cond = app->right;
 
       E(gp,cond,p,n);
-      JFALSE(label);
+      JFALSE(cond->sl,label);
 
       stackinfo_newswap(&gp->si,&oldsi);
       E(gp,truebranch,p,n);
-      JUMP(end);
+      JUMP(cond->sl,end);
       stackinfo_freeswap(&gp->si,&oldsi);
 
       LABEL(label);
@@ -742,29 +756,29 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     }
     else {
       m = 0;
-      for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
+      for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
         if (app->tag & FLAG_STRICT)
-          E(gp,(cell*)app->field2,p,n+m);
+          E(gp,app->right,p,n+m);
         else
-          C(gp,(cell*)app->field2,p,n+m);
+          C(gp,app->right,p,n+m);
         m++;
       }
 
       if (m == k) {
 
         if (TYPE_BUILTIN == celltype(app)) {
-          BIF(fno);
+          BIF(app->sl,fno);
           if (!builtin_info[fno].reswhnf)
-            EVAL(0);
+            EVAL(app->sl,0);
         }
         else {
-          MKFRAME(fno,k);
-          EVAL(0);
+          MKFRAME(app->sl,fno,k);
+          EVAL(app->sl,0);
         }
       }
       else {
-        MKCAP(fno,m);
-        EVAL(0);
+        MKCAP(app->sl,fno,m);
+        EVAL(app->sl,0);
       }
     }
     break;
@@ -773,20 +787,20 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     int oldcount = p->names->count;
     Cletrec(gp,c,n,p,1);
     n += pcount(p)-oldcount;
-    E(gp,(cell*)c->field2,p,n);
-    SQUEEZE(1,pcount(p)-oldcount);
+    E(gp,c->body,p,n);
+    SQUEEZE(c->sl,1,pcount(p)-oldcount);
     presize(p,oldcount);
     break;
   }
   default:
     C(gp,c,p,n);
-    EVAL(0);
+    EVAL(c->sl,0);
     break;
   }
   cdepth--;
 }
 
-void S(gprogram *gp, stack *exprs, stack *strict, pmap *p, int n)
+void S(gprogram *gp, cell *source, stack *exprs, stack *strict, pmap *p, int n)
 {
   int m;
   print_comp2_stack("S",exprs,n,"");
@@ -796,7 +810,7 @@ void S(gprogram *gp, stack *exprs, stack *strict, pmap *p, int n)
     else
       C(gp,(cell*)exprs->data[m],p,n+m);
   }
-  SQUEEZE(m,n);
+  SQUEEZE(source->sl,m,n);
 }
 
 void R(gprogram *gp, cell *c, pmap *p, int n)
@@ -809,31 +823,31 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     stack *argstrict = stack_new();
     cell *app;
     int m;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
-      stack_push(args,app->field2);
+    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
+      stack_push(args,app->right);
       stack_push(argstrict,(void*)(app->tag & FLAG_STRICT));
     }
     m = args->count;
     if (TYPE_SYMBOL == celltype(app)) {
       stack_push(args,app);
       stack_push(argstrict,0);
-      S(gp,args,argstrict,p,n);
-      EVAL(0);
-      DO();
+      S(gp,app,args,argstrict,p,n);
+      EVAL(app->sl,0);
+      DO(app->sl);
     }
     else if ((TYPE_BUILTIN == celltype(app)) ||
              (TYPE_SCREF == celltype(app))) {
       int fno = cell_fno(app);
       int k = function_nargs(fno);
       if (m > k) {
-        S(gp,args,argstrict,p,n);
-        MKFRAME(fno,k);
-        EVAL(0);
-        DO();
+        S(gp,app,args,argstrict,p,n);
+        MKFRAME(app->sl,fno,k);
+        EVAL(app->sl,0);
+        DO(app->sl);
       }
       else if (m == k) {
         if ((TYPE_BUILTIN == celltype(app)) &&
-            (B_IF == (int)app->field1)) {
+            (B_IF == app->bif)) {
           cell *falsebranch = (cell*)args->data[0];
           cell *truebranch = (cell*)args->data[1];
           cell *cond = (cell*)args->data[2];
@@ -841,7 +855,7 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
           stackinfo *oldsi;
 
           E(gp,cond,p,n);
-          JFALSE(label);
+          JFALSE(cond->sl,label);
 
           stackinfo_newswap(&gp->si,&oldsi);
           R(gp,truebranch,p,n);
@@ -852,31 +866,31 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
           R(gp,falsebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
         }
-        else if ((TYPE_BUILTIN == celltype(app)) && (B_IF != (int)app->field1)) {
+        else if ((TYPE_BUILTIN == celltype(app)) && (B_IF != app->bif)) {
           int bif;
           const builtin *bi;
           int argno;
-          S(gp,args,argstrict,p,n);
-          bif = (int)app->field1;
+          S(gp,app,args,argstrict,p,n);
+          bif = app->bif;
           bi = &builtin_info[bif];
           assert(gp->si->count >= bi->nstrict);
           for (argno = 0; argno < bi->nstrict; argno++)
             assert(statusat(gp->si,gp->si->count-1-argno));
-          BIF(bif);
+          BIF(app->sl,bif);
           if (!bi->reswhnf)
-            EVAL(0);
-          RETURN();
+            EVAL(app->sl,0);
+          RETURN(app->sl);
         }
         else {
-          S(gp,args,argstrict,p,n);
-          JFUN(fno);
+          S(gp,app,args,argstrict,p,n);
+          JFUN(app->sl,fno);
         }
       }
       else { /* m < k */
         for (m = 0; m < args->count; m++)
           C(gp,(cell*)args->data[m],p,n+m);
-        MKCAP(fno,m);
-        RETURN();
+        MKCAP(app->sl,fno,m);
+        RETURN(app->sl);
       }
     }
     else {
@@ -889,31 +903,31 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
   }
   case TYPE_SYMBOL:
     C(gp,c,p,n);
-    SQUEEZE(1,n);
-    EVAL(0);
-    RETURN();
+    SQUEEZE(c->sl,1,n);
+    EVAL(c->sl,0);
+    RETURN(c->sl);
     break;
   case TYPE_BUILTIN:
   case TYPE_SCREF:
     if (0 == function_nargs(cell_fno(c))) {
-      JFUN(cell_fno(c));
+      JFUN(c->sl,cell_fno(c));
     }
     else {
-      MKCAP(cell_fno(c),0);
-      RETURN();
+      MKCAP(c->sl,cell_fno(c),0);
+      RETURN(c->sl);
     }
     break;
   case TYPE_NIL:
   case TYPE_NUMBER:
   case TYPE_STRING:
     C(gp,c,p,n);
-    RETURN();
+    RETURN(c->sl);
     break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(gp,c,n,p,1);
     n += pcount(p)-oldcount;
-    R(gp,(cell*)c->field2,p,n);
+    R(gp,c->body,p,n);
     presize(p,oldcount);
     break;
   }
@@ -934,8 +948,8 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
     cell *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = (cell*)app->field1) {
-      C(gp,(cell*)app->field2,p,n+m);
+    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
+      C(gp,app->right,p,n+m);
       m++;
     }
 
@@ -948,27 +962,27 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if (m == k)
-      MKFRAME(fno,k);
+      MKFRAME(app->sl,fno,k);
     else
-      MKCAP(fno,m);
+      MKCAP(app->sl,fno,m);
     break;
   }
   case TYPE_BUILTIN:
   case TYPE_SCREF:   if (0 == function_nargs(cell_fno(c)))
-                       MKFRAME(cell_fno(c),0);
+                       MKFRAME(c->sl,cell_fno(c),0);
                      else
-                       MKCAP(cell_fno(c),0);
+                       MKCAP(c->sl,cell_fno(c),0);
                      break;
-  case TYPE_SYMBOL:  PUSH(n-presolve(p,(char*)c->field1));         break;
-  case TYPE_NIL:     PUSHNIL();                                    break;
-  case TYPE_NUMBER:  PUSHNUMBER((int)c->field1,(int)c->field2);    break;
-  case TYPE_STRING:  PUSHSTRING(add_string(gp,(char*)c->field1));  break;
+  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(p,c->name));                break;
+  case TYPE_NIL:     PUSHNIL(c->sl);                                   break;
+  case TYPE_NUMBER:  PUSHNUMBER(c->sl,(int)c->field1,(int)c->field2);  break;
+  case TYPE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));        break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(gp,c,n,p,0);
     n += pcount(p)-oldcount;
-    C(gp,(cell*)c->field2,p,n);
-    SQUEEZE(1,pcount(p)-oldcount);
+    C(gp,c->body,p,n);
+    SQUEEZE(c->sl,1,pcount(p)-oldcount);
     presize(p,oldcount);
     break;
   }
@@ -997,13 +1011,13 @@ void F(gprogram *gp, int fno, scomb *sc)
     pushstatus(gp->si,0);
   }
 
-  GLOBSTART(fno,sc->nargs);
+  GLOBSTART(sc->sl,fno,sc->nargs);
   for (i = 0; i < sc->nargs; i++)
     if (sc->strictin && sc->strictin[i])
-      EVAL(i);
+      EVAL(sc->sl,i);
 
   noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
-  GLOBSTART(fno,sc->nargs);
+  GLOBSTART(sc->sl,fno,sc->nargs);
 
 #ifdef DEBUG_GCODE_COMPILATION
   printf("\n");
@@ -1061,9 +1075,13 @@ void compile(gprogram *gp)
   int index = 0;
   int i;
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
+  sourceloc nosl;
 
   scomb *startsc = get_scomb("__start");
   assert(startsc);
+
+  nosl.fileno = -1;
+  nosl.lineno = -1;
 
   for (sc = scombs; sc; sc = sc->next)
     sc->index = index++;
@@ -1076,16 +1094,16 @@ void compile(gprogram *gp)
   stacksizes = (int*)calloc(nfunctions,sizeof(int));
 
   gp->si = stackinfo_new(NULL);
-  BEGIN();
-  MKFRAME(startsc->index+NUM_BUILTINS,0);
-  EVAL(0);
-  END();
+  BEGIN(startsc->sl);
+  MKFRAME(startsc->sl,startsc->index+NUM_BUILTINS,0);
+  EVAL(startsc->sl,0);
+  END(startsc->sl);
   stackinfo_free(gp->si);
   gp->si = NULL;
 
   evaldoaddr = gp->count;
-  EVAL(0);
-  DO();
+  EVAL(nosl,0);
+  DO(nosl);
 
   for (sc = scombs; sc; sc = sc->next)
     F(gp,NUM_BUILTINS+sc->index,sc);
@@ -1101,52 +1119,49 @@ void compile(gprogram *gp)
       pushstatus(gp->si,0);
 
     addressmap[i] = gp->count;
-    GLOBSTART(i,bi->nargs);
+    GLOBSTART(nosl,i,bi->nargs);
 
     if (B_IF == i) {
       int label1;
       stackinfo *oldsi;
       int label2;
-      PUSH(0);
-      EVAL(0);
-      JFALSE(label1);
+      PUSH(nosl,0);
+      EVAL(nosl,0);
+      JFALSE(nosl,label1);
 
       oldsi = gp->si;
       gp->si = stackinfo_new(oldsi);
-      PUSH(1);
-      JUMP(label2);
+      PUSH(nosl,1);
+      JUMP(nosl,label2);
       stackinfo_free(gp->si);
       gp->si = oldsi;
 
       /* label l1 */
       LABEL(label1);
-      PUSH(2);
+      PUSH(nosl,2);
 
       /* label l2 */
       LABEL(label2);
-      EVAL(0);
-      RETURN();
+      EVAL(nosl,0);
+      RETURN(nosl);
     }
     else {
       for (argno = 0; argno < bi->nstrict; argno++)
-        EVAL(argno);
-      BIF(i);
+        EVAL(nosl,argno);
+      BIF(nosl,i);
       if (!bi->reswhnf)
-        EVAL(0);
-      RETURN();
+        EVAL(nosl,0);
+      RETURN(nosl);
     }
 
     stackinfo_free(gp->si);
   }
   gp->si = topsi;
 
-  LAST();
+  LAST(nosl);
 /*   stackinfo_free(gp->si); */
 
   compute_stacksizes(gp);
-/*   for (i = 0; i < NUM_BUILTINS+index; i++) { */
-/*     printf("stacksizes[%s] = %d\n",function_name(i),stacksizes[i]); */
-/*   } */
 
   cur_program = gp;
 }

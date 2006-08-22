@@ -9,7 +9,6 @@ nreduce_SOURCES = assembler.c \
 	reduction.c \
 	builtins.c \
 	gcode.c \
-	jit.c \
 	memory.c \
 	strictness.c \
 	util.c \

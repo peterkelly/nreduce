@@ -83,16 +83,16 @@ void rename_variables_r(cell *c, stack *mappings)
   switch (celltype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    rename_variables_r((cell*)c->field1,mappings);
-    rename_variables_r((cell*)c->field2,mappings);
+    rename_variables_r(c->left,mappings);
+    rename_variables_r(c->right,mappings);
     break;
   case TYPE_LAMBDA: {
-    char *newname = next_var((char*)c->field1);
+    char *newname = next_var(c->name);
     int oldcount = mappings->count;
-    stack_push(mappings,mapping_new((char*)c->field1,newname));
-    free(c->field1);
-    c->field1 = newname;
-    rename_variables_r((cell*)c->field2,mappings);
+    stack_push(mappings,mapping_new(c->name,newname));
+    free(c->name);
+    c->name = newname;
+    rename_variables_r(c->body,mappings);
     mappings_set_count(mappings,oldcount);
     break;
   }
@@ -100,16 +100,16 @@ void rename_variables_r(cell *c, stack *mappings)
     int oldcount = mappings->count;
     letrec *rec;
 
-    for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+    for (rec = c->bindings; rec; rec = rec->next) {
       char *newname = next_var(rec->name);
       stack_push(mappings,mapping_new(rec->name,newname));
       free(rec->name);
       rec->name = newname;
     }
 
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       rename_variables_r(rec->value,mappings);
-    rename_variables_r((cell*)c->field2,mappings);
+    rename_variables_r(c->body,mappings);
 
     mappings_set_count(mappings,oldcount);
     break;
@@ -118,9 +118,9 @@ void rename_variables_r(cell *c, stack *mappings)
     int i;
     for (i = mappings->count-1; 0 <= i; i--) {
       mapping *mp = (mapping*)mappings->data[i];
-      if (!strcmp(mp->from,(char*)c->field1)) {
-        free(c->field1);
-        c->field1 = strdup(mp->to);
+      if (!strcmp(mp->from,c->name)) {
+        free(c->name);
+        c->name = strdup(mp->to);
       }
     }
     break;

@@ -209,6 +209,14 @@ void parse_check(int cond, cell *c, char *msg)
 {
   if (cond)
     return;
+  if (0 <= c->sl.fileno)
+    fprintf(stderr,"%s:%d: ",lookup_parsedfile(c->sl.fileno),c->sl.lineno);
   fprintf(stderr,"%s\n",msg);
   exit(1);
+}
+
+void print_sourceloc(FILE *f, sourceloc sl)
+{
+  if (0 <= sl.fileno)
+    fprintf(stderr,"%s:%d: ",lookup_parsedfile(sl.fileno),sl.lineno);
 }

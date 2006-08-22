@@ -103,9 +103,8 @@ void debug_stage(const char *name)
 int count_args(cell *c)
 {
   int napps = 0;
-  c = resolve_ind(c);
   while (TYPE_APPLICATION == celltype(c)) {
-    c = resolve_ind((cell*)c->field1);
+    c = c->left;
     napps++;
   }
   return napps;
@@ -115,13 +114,12 @@ cell *get_arg(cell *c, int argno)
 {
   argno = count_args(c)-argno-1;
   assert(0 <= argno);
-  c = resolve_ind(c);
   while (0 < argno) {
     assert(TYPE_APPLICATION == celltype(c));
-    c = resolve_ind((cell*)c->field1);
+    c = c->left;
     argno--;
   }
-  return (cell*)c->field2;
+  return c->right;
 }
 
 void print_hex(int c)
@@ -204,31 +202,29 @@ static void print1(char *prefix, cell *c, int indent)
         printf("@S\n");
       else
         printf("@\n");
-      print1(prefix,(cell*)c->field1,indent+1);
-      print1(prefix,(cell*)c->field2,indent+1);
+      print1(prefix,c->left,indent+1);
+      print1(prefix,c->right,indent+1);
       break;
     case TYPE_LAMBDA:
-      printf("lambda %s\n",(char*)c->field1);
-      print1(prefix,(cell*)c->field2,indent+1);
+      printf("lambda %s\n",c->name);
+      print1(prefix,c->body,indent+1);
       break;
     case TYPE_BUILTIN:
-      printf("%s\n",builtin_info[(int)c->field1].name);
+      printf("%s\n",builtin_info[c->bif].name);
       break;
     case TYPE_CONS:
-      printf(":\n");
-      print1(prefix,(cell*)c->field1,indent+1);
-      print1(prefix,(cell*)c->field2,indent+1);
+      assert(0);
       break;
     case TYPE_SYMBOL:
-      printf("%s\n",(char*)c->field1);
+      printf("%s\n",c->name);
       break;
     case TYPE_SCREF:
-      printf("%s\n",((scomb*)c->field1)->name);
+      printf("%s\n",c->sc->name);
       break;
     case TYPE_LETREC: {
       letrec *rec;
       printf("LETREC\n");
-      for (rec = (letrec*)c->field1; rec; rec = rec->next) {
+      for (rec = c->bindings; rec; rec = rec->next) {
         printf("%s             %11s ",prefix,"def");
         for (i = 0; i < indent+1; i++)
           printf("  ");
@@ -238,7 +234,7 @@ static void print1(char *prefix, cell *c, int indent)
           printf(" %s\n",rec->name);
         print1(prefix,rec->value,indent+2);
       }
-      print1(prefix,(cell*)c->field2,indent+1);
+      print1(prefix,c->body,indent+1);
       break;
     }
     case TYPE_HOLE:
@@ -250,7 +246,7 @@ static void print1(char *prefix, cell *c, int indent)
       printf("\n");
       break;
     case TYPE_STRING:
-      printf("%s\n",(char*)c->field1);
+      printf("%s\n",c->value);
       break;
     default:
       printf("**** INVALID\n");
@@ -316,246 +312,179 @@ char *real_scname(const char *sym)
 #endif
 }
 
-static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col);
-
-void print_abbrev_stack(FILE *f, pntr *data, int count, cell *parent, int *line, int *col)
-{
-  /* DIS1
-  int i;
-  for (i = 0; i < count; i++) {
-    rtvalue *c = resolve_value(get_pntr(data[i]));
-    if (0 < i)
-      fprintf(f," ");
-    if ((TYPE_NIL == celltype(c)) ||
-        (TYPE_NUMBER == celltype(c)) ||
-        (TYPE_STRING == celltype(c)))
-      print_code1(f,c,1,parent,line,col);
-    else
-      *col += fprintf(f,"?");
-  }
-  */
-}
-
 static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col)
 {
-  c = resolve_ind(c);
-  if (1 && (c->tag & FLAG_TMP) &&
-      (c != globnil) &&
-      (TYPE_NIL != celltype(c)) &&
-      (TYPE_NUMBER != celltype(c)) &&
-      (TYPE_STRING != celltype(c)) &&
-      (TYPE_BUILTIN != celltype(c)) &&
-      (TYPE_SYMBOL != celltype(c)) &&
-      (TYPE_SCREF != celltype(c)) &&
-      (TYPE_BUILTIN != celltype(c)) &&
-      (TYPE_SYMBOL != celltype(c)) &&
-      (!isvalue(c))) {
-    fprintf(f,"###");
-  }
-  else {
-    c->tag |= FLAG_TMP;
-    switch (celltype(c)) {
-    case TYPE_IND:
-      assert(0);
-      break;
-    case TYPE_EMPTY:
-      *col += fprintf(f,"empty");
-      break;
-    case TYPE_APPLICATION: {
-      cell *tmp;
-      list *l;
-      int addedline = 0;
-      int argscol;
-      int argno;
-      int isif;
-      list *apps = NULL;
-      if (needbr)
-        *col += fprintf(f,"(");
-      for (tmp = c; TYPE_APPLICATION == celltype(tmp); tmp = resolve_ind((cell*)tmp->field1))
-        list_push(&apps,tmp);
+  switch (celltype(c)) {
+  case TYPE_IND:
+    assert(0);
+    break;
+  case TYPE_EMPTY:
+    *col += fprintf(f,"empty");
+    break;
+  case TYPE_APPLICATION: {
+    cell *tmp;
+    list *l;
+    int addedline = 0;
+    int argscol;
+    int argno;
+    int isif;
+    list *apps = NULL;
+    if (needbr)
+      *col += fprintf(f,"(");
+    for (tmp = c; TYPE_APPLICATION == celltype(tmp); tmp = tmp->left)
+      list_push(&apps,tmp);
 
-      print_code1(f,tmp,0,c,line,col);
-      *col += fprintf(f," ");
-      argscol = *col;
-      argno = 0;
-      isif = (((TYPE_BUILTIN == celltype(tmp)) && (B_IF == (int)tmp->field1)) ||
-              ((TYPE_SYMBOL == celltype(tmp)) && !strcmp((char*)tmp->field1,"if")));
-      for (l = apps; l; l = l->next) {
-        cell *app = (cell*)l->data;
-        cell *arg = resolve_ind((cell*)app->field2);
-        int oldcol;
-        int oldline;
+    print_code1(f,tmp,0,c,line,col);
+    *col += fprintf(f," ");
+    argscol = *col;
+    argno = 0;
+    isif = (((TYPE_BUILTIN == celltype(tmp)) && (B_IF == tmp->bif)) ||
+            ((TYPE_SYMBOL == celltype(tmp)) && !strcmp(tmp->name,"if")));
+    for (l = apps; l; l = l->next) {
+      cell *app = (cell*)l->data;
+      cell *arg = app->right;
+      int oldcol;
+      int oldline;
 
-        if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == celltype(resolve_ind(arg))))) {
-          *col = argscol;
+      if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == celltype(arg)))) {
+        *col = argscol;
+        down_line(f,line,col);
+      }
+      addedline = 0;
+
+      oldcol = *col;
+      oldline = *line;
+/*       if (app->tag & FLAG_STRICT) */
+/*         *col += fprintf(f,"!"); */
+      print_code1(f,arg,1,app,line,col);
+      if (l->next) {
+        if (1 && (oldline != *line)) {
+          *col = oldcol;
           down_line(f,line,col);
+          addedline = 1;
         }
-        addedline = 0;
-
-        oldcol = *col;
-        oldline = *line;
-/*         if (app->tag & FLAG_STRICT) */
-/*           *col += fprintf(f,"!"); */
-        print_code1(f,arg,1,app,line,col);
-        if (l->next) {
-          if (1 && (oldline != *line)) {
-            *col = oldcol;
-            down_line(f,line,col);
-            addedline = 1;
-          }
-          else {
-            *col += fprintf(f," ");
-          }
+        else {
+          *col += fprintf(f," ");
         }
-        argno++;
       }
+      argno++;
+    }
 
-      list_free(apps,NULL);
-      if (needbr)
-        fprintf(f,")");
-      break;
-    }
-    case TYPE_LAMBDA:
-      if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
-        *col += fprintf(f,"(");
-      *col += fprintf(f,"!%s.",real_varname((char*)c->field1));
-      print_code1(f,(cell*)c->field2,0,c,line,col);
-      if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
-        *col += fprintf(f,")");
-      break;
-    case TYPE_BUILTIN:
-      *col += fprintf(f,"%s",builtin_info[(int)c->field1].name);
-      break;
-    case TYPE_CONS: {
-      int pos = 0;
-      cell *item;
-      *col += fprintf(f,"[");
-      for (item = c; TYPE_CONS == celltype(item); item = resolve_ind((cell*)item->field2)) {
-        if (0 < pos++)
-          *col += fprintf(f,",");
-        print_code1(f,(cell*)item->field1,1,c,line,col);
-      }
-      *col += fprintf(f,"]");
-      if (TYPE_NIL != celltype(item))
-        print_code1(f,item,1,c,line,col);
-      break;
-    }
-    case TYPE_SYMBOL: {
-      char *sym = (char*)c->field1;
-      if (!strncmp(sym,"__code",6)) {
-        int fno = atoi(sym+6);
-        assert(0 <= fno);
-        if (NUM_BUILTINS > fno)
-          *col += fprintf(f,"%s",builtin_info[fno].name);
-        else
-          *col += fprintf(f,"%s",get_scomb_index(fno-NUM_BUILTINS)->name);
-      }
-      else {
-        *col += fprintf(f,"%s",real_varname(sym));
-      }
-      break;
-    }
-    case TYPE_SCREF: {
-      char *scname = real_scname(((scomb*)c->field1)->name);
-      *col += fprintf(f,"%s",scname);
-      free(scname);
-      break;
-    }
-    case TYPE_LETREC: {
-      int count = 0;
-      letrec *rec = (letrec*)c->field1;
-      if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
-        *col += fprintf(f,"(");
-      *col += fprintf(f,"let (");
-      while (rec) {
-        int col2 = *col;
-        if (0 < count++)
-          down_line(f,line,&col2);
-        if (rec->strict)
-          col2 += fprintf(f,"(%s! ",real_varname(rec->name));
-        else
-          col2 += fprintf(f,"(%s ",real_varname(rec->name));
-        print_code1(f,rec->value,1,c,line,&col2);
-        rec = rec->next;
-        fprintf(f,")");
-      }
+    list_free(apps,NULL);
+    if (needbr)
       fprintf(f,")");
-      (*col)--;
-      down_line(f,line,col);
-      print_code1(f,(cell*)c->field2,1,c,line,col);
-      if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
-        *col += fprintf(f,")");
-      break;
+    break;
+  }
+  case TYPE_LAMBDA:
+    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+      *col += fprintf(f,"(");
+    *col += fprintf(f,"!%s.",real_varname(c->name));
+    print_code1(f,c->body,0,c,line,col);
+    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+      *col += fprintf(f,")");
+    break;
+  case TYPE_BUILTIN:
+    *col += fprintf(f,"%s",builtin_info[c->bif].name);
+    break;
+  case TYPE_CONS: {
+    int pos = 0;
+    cell *item;
+    *col += fprintf(f,"[");
+    for (item = c; TYPE_CONS == celltype(item); item = item->right) {
+      if (0 < pos++)
+        *col += fprintf(f,",");
+      print_code1(f,item->left,1,c,line,col);
     }
-    case TYPE_HOLE:
-      fprintf(f,"(hole)");
-      break;
-    case TYPE_NIL:
-      fprintf(f,"nil");
-      break;
-    case TYPE_NUMBER:
-      print_double(f,celldouble(c));
-      break;
-    case TYPE_STRING: {
-      char *ch;
-      fprintf(f,"\"");
-      for (ch = (char*)c->field1; *ch; ch++) {
-        if ('\n' == *ch)
-          fprintf(f,"\\n");
-        else if ('"' == *ch)
-          fprintf(f,"\\\"");
-        else
-          fprintf(f,"%c",*ch);
-      }
-      fprintf(f,"\"");
-      break;
-    }
-    case TYPE_AREF: {
-      cell *arrcell = (cell*)c->field1;
-      carray *arr = (carray*)arrcell->field1;
-      int index = (int)c->field2;
-      fprintf(f,"(array ref %d/%d)",index,arr->size);
-      break;
-    }
-    case TYPE_ARRAY: {
-      /* DIS1 
-      carray *arr = (carray*)c->field1;
-      int i;
-      *col += fprintf(f,"ARRAY[");
-      for (i = 0; i < arr->size; i++) {
-        if (i > 0)
-          *col += fprintf(f,",");
-        print_code1(f,arr->cells[i],0,c,line,col);
-      }
-      fprintf(f,"]");
-      */
-      break;
-    }
-    case TYPE_FRAME: {
-      /* DIS1 
-      frame *frm = (frame*)c->field1;
-      *col += fprintf(f,"(FRAME (");
-      if (frm->data)
-        print_abbrev_stack(f,frm->data,frm->count,c,line,col);
+    *col += fprintf(f,"]");
+    if (TYPE_NIL != celltype(item))
+      print_code1(f,item,1,c,line,col);
+    break;
+  }
+  case TYPE_SYMBOL: {
+    char *sym = c->name;
+    if (!strncmp(sym,"__code",6)) {
+      int fno = atoi(sym+6);
+      assert(0 <= fno);
+      if (NUM_BUILTINS > fno)
+        *col += fprintf(f,"%s",builtin_info[fno].name);
       else
-        *col += fprintf(f,"...");
-      *col += fprintf(f,") %s)",function_name(frm->fno));
-      */
-      break;
+        *col += fprintf(f,"%s",get_scomb_index(fno-NUM_BUILTINS)->name);
     }
-    case TYPE_CAP: {
-      /* DIS1 
-      cap *cp = (cap*)c->field1;
-      *col += fprintf(f,"(CAP (");
-      print_abbrev_stack(f,cp->data,cp->count,c,line,col);
-      *col += fprintf(f,") %s)",function_name(cp->fno));
-      */
-      break;
+    else {
+      *col += fprintf(f,"%s",real_varname(sym));
     }
-    default:
-      assert(0);
-      break;
+    break;
+  }
+  case TYPE_SCREF: {
+    char *scname = real_scname(c->sc->name);
+    *col += fprintf(f,"%s",scname);
+    free(scname);
+    break;
+  }
+  case TYPE_LETREC: {
+    int count = 0;
+    letrec *rec = c->bindings;
+    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+      *col += fprintf(f,"(");
+    *col += fprintf(f,"let (");
+    while (rec) {
+      int col2 = *col;
+      if (0 < count++)
+        down_line(f,line,&col2);
+      if (rec->strict)
+        col2 += fprintf(f,"(%s! ",real_varname(rec->name));
+      else
+        col2 += fprintf(f,"(%s ",real_varname(rec->name));
+      print_code1(f,rec->value,1,c,line,&col2);
+      rec = rec->next;
+      fprintf(f,")");
     }
+    fprintf(f,")");
+    (*col)--;
+    down_line(f,line,col);
+    print_code1(f,c->body,1,c,line,col);
+    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+      *col += fprintf(f,")");
+    break;
+  }
+  case TYPE_HOLE:
+    fprintf(f,"(hole)");
+    break;
+  case TYPE_NIL:
+    fprintf(f,"nil");
+    break;
+  case TYPE_NUMBER:
+    print_double(f,celldouble(c));
+    break;
+  case TYPE_STRING: {
+    char *ch;
+    fprintf(f,"\"");
+    for (ch = c->value; *ch; ch++) {
+      if ('\n' == *ch)
+        fprintf(f,"\\n");
+      else if ('"' == *ch)
+        fprintf(f,"\\\"");
+      else
+        fprintf(f,"%c",*ch);
+    }
+    fprintf(f,"\"");
+    break;
+  }
+  case TYPE_AREF:
+    assert(0);
+    break;
+  case TYPE_ARRAY:
+    assert(0);
+    break;
+  case TYPE_FRAME:
+    assert(0);
+    break;
+  case TYPE_CAP:
+    assert(0);
+    break;
+  default:
+    assert(0);
+    break;
   }
 }
 

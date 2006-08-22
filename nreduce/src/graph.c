@@ -43,20 +43,20 @@ static void setneedclear_r(cell *c)
   switch (celltype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    setneedclear_r((cell*)c->field1);
-    setneedclear_r((cell*)c->field2);
+    setneedclear_r(c->left);
+    setneedclear_r(c->right);
     break;
   case TYPE_LAMBDA:
-    setneedclear_r((cell*)c->field2);
+    setneedclear_r(c->body);
     break;
   case TYPE_IND:
-    setneedclear_r((cell*)c->field1);
+    assert(0);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       setneedclear_r(rec->value);
-    setneedclear_r((cell*)c->field2);
+    setneedclear_r(c->body);
     break;
   }
   }
@@ -72,20 +72,20 @@ static void cleargraph_r(cell *c, int flag)
   switch (celltype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    cleargraph_r((cell*)c->field1,flag);
-    cleargraph_r((cell*)c->field2,flag);
+    cleargraph_r(c->left,flag);
+    cleargraph_r(c->right,flag);
     break;
   case TYPE_LAMBDA:
-    cleargraph_r((cell*)c->field2,flag);
+    cleargraph_r(c->body,flag);
     break;
   case TYPE_IND:
-    cleargraph_r((cell*)c->field1,flag);
+    assert(0);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       cleargraph_r(rec->value,flag);
-    cleargraph_r((cell*)c->field2,flag);
+    cleargraph_r(c->body,flag);
     break;
   }
   }
@@ -108,17 +108,17 @@ static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
   switch (celltype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    add_cells(cells,ncells,(cell*)c->field1,alloc);
-    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    add_cells(cells,ncells,c->left,alloc);
+    add_cells(cells,ncells,c->right,alloc);
     break;
   case TYPE_LAMBDA:
-    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    add_cells(cells,ncells,c->body,alloc);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       add_cells(cells,ncells,rec->value,alloc);
-    add_cells(cells,ncells,(cell*)c->field2,alloc);
+    add_cells(cells,ncells,c->body,alloc);
     break;
   }
   case TYPE_BUILTIN:

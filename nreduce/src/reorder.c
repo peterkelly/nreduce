@@ -74,8 +74,8 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
 {
   switch (celltype(c)) {
   case TYPE_APPLICATION:
-    reorder_letrecs_r((cell*)c->field1,used,bound);
-    reorder_letrecs_r((cell*)c->field2,used,bound);
+    reorder_letrecs_r(c->left,used,bound);
+    reorder_letrecs_r(c->right,used,bound);
     break;
   case TYPE_LETREC: {
     letrec *newrecs;
@@ -83,9 +83,9 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
     list **lptr;
     letrec *rec;
 
-    stack_push(bound,c->field1);
+    stack_push(bound,c->bindings);
 
-    reorder_letrecs_r((cell*)c->field2,used,bound);
+    reorder_letrecs_r(c->body,used,bound);
 
     /* Create a new linked list of letrecs my moving the old entries one by one as we
        encounter them in the list of used variables. If there are any letrecs left in the
@@ -100,7 +100,7 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
       char *usedname = (char*)(*lptr)->data;
       int found = 0;
       letrec **recptr;
-      for (recptr = (letrec**)&c->field1; *recptr; recptr = &(*recptr)->next) {
+      for (recptr = &c->bindings; *recptr; recptr = &(*recptr)->next) {
         char *recname = (char*)(*recptr)->name;
         if (!strcmp(recname,usedname)) {
           letrec *rec = *recptr;
@@ -128,14 +128,14 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
     }
 
     /* Remove any letrec bindings in the old list */
-    rec = (letrec*)c->field1;
+    rec = c->bindings;
     while (rec) {
       letrec *next = rec->next;
       free_letrec(rec);
       rec = next;
     }
 
-    c->field1 = newrecs;
+    c->bindings = newrecs;
 
     bound->count--;
     break;
@@ -146,14 +146,14 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
 
     /* Encountered a symbol - add it to the beginning of the list of variables used, but
        *only* if we have not encountered it (otherwise we could have infinite recursion) */
-    if (list_contains_string(*used,(char*)c->field1))
+    if (list_contains_string(*used,c->name))
       break;
 
-    list_push(used,(char*)c->field1);
+    list_push(used,c->name);
 
     for (i = bound->count-1; 0 <= i; i--) {
       for (rec = (letrec*)bound->data[i]; rec; rec = rec->next) {
-        if (!strcmp(rec->name,(char*)c->field1)) {
+        if (!strcmp(rec->name,c->name)) {
           reorder_letrecs_r(rec->value,used,bound);
           return;
         }

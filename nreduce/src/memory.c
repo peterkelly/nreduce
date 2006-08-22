@@ -47,6 +47,8 @@ int trace = 0;
 extern array *lexstring;
 extern array *oldnames;
 
+array *parsedfiles = NULL;
+
 cell *freeptr = NULL;
 
 block *blocks = NULL;
@@ -59,8 +61,6 @@ int nallocs = 0;
 int totalallocs = 0;
 int totalrtallocs = 0;
 int nscombappls = 0;
-int nresindnoch = 0;
-int nresindch = 0;
 int nreductions = 0;
 int nframes = 0;
 int maxdepth = 0;
@@ -180,26 +180,35 @@ cell *alloc_cell()
     maxcells = ncells;
   nallocs++;
   totalallocs++;
+
+  c->tag = 0;
+  c->field1 = NULL;
+  c->field2 = NULL;
+  c->left = NULL;
+  c->right = NULL;
+  c->value = NULL;
+  c->name = NULL;
+  c->bindings = NULL;
+  c->body = NULL;
+  c->sc = NULL;
+  c->bif = 0;
+  c->sl.fileno = -1;
+  c->sl.lineno = -1;
   return c;
 }
 
-cell *alloc_cell2(int tag, void *field1, void *field2)
+cell *alloc_sourcecell(int fileno, int lineno)
 {
   cell *c = alloc_cell();
-  c->tag = tag;
-  c->field1 = field1;
-  c->field2 = field2;
+  c->sl.fileno = fileno;
+  c->sl.lineno = lineno;
   return c;
-}
-
-cell *alloc_sourcecell(const char *filename, int lineno)
-{
-  return alloc_cell();
 }
 
 int nreachable = 0;
 void mark(cell *c)
 {
+  assert(TYPE_IND != celltype(c));
   assert(TYPE_EMPTY != celltype(c));
   if (c->tag & FLAG_MARKED)
     return;
@@ -207,23 +216,21 @@ void mark(cell *c)
   nreachable++;
   switch (celltype(c)) {
   case TYPE_IND:
-    mark((cell*)c->field1);
+    assert(0);
     break;
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    c->field1 = resolve_ind((cell*)c->field1);
-    c->field2 = resolve_ind((cell*)c->field2);
-    mark((cell*)c->field1);
-    mark((cell*)c->field2);
+    mark(c->left);
+    mark(c->right);
     break;
   case TYPE_LAMBDA:
-    mark((cell*)c->field2);
+    mark(c->body);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       mark(rec->value);
-    mark((cell*)c->field2);
+    mark(c->body);
     break;
   }
   case TYPE_AREF:
@@ -245,14 +252,11 @@ void free_letrec(letrec *rec)
 
 void free_cell_fields(cell *c)
 {
+  free(c->name);
+  free(c->value);
   switch (celltype(c)) {
-  case TYPE_STRING:
-  case TYPE_SYMBOL:
-  case TYPE_LAMBDA:
-    free((char*)c->field1);
-    break;
   case TYPE_LETREC: {
-    letrec *rec = (letrec*)c->field1;
+    letrec *rec = c->bindings;
     while (rec) {
       letrec *next = rec->next;
       free_letrec(rec);
@@ -260,29 +264,15 @@ void free_cell_fields(cell *c)
     }
     break;
   }
-  case TYPE_ARRAY: {
-    carray *arr = (carray*)c->field1;
-    free(arr->cells);
-    free(arr->refs);
-    free(arr);
+  case TYPE_ARRAY:
+    assert(0);
     break;
-  }
-  case TYPE_FRAME: {
-/*     printf("here at frame\n"); */
-    /* note: we don't necessarily free frames here... this is only safe to do after the frame
-       has finished executing */
-    frame *f = (frame*)c->field1;
-    f->c = NULL;
-    if (!f->active)
-      frame_dealloc(f);
-    else printf("free_cell_fields: frame still active\n");
-
+  case TYPE_FRAME:
+    assert(0);
     break;
-  }
-  case TYPE_CAP: {
-    cap *cp = (cap*)c->field1;
-    cap_dealloc(cp);
-  }
+  case TYPE_CAP:
+    assert(0);
+    break;
   }
 }
 
@@ -358,10 +348,32 @@ void cleanup()
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
-    for (i = 0; i < (int)(oldnames->size/sizeof(char*)); i++)
+    for (i = 0; i < oldnames->size/sizeof(char*); i++)
       free(((char**)oldnames->data)[i]);
     array_free(oldnames);
   }
+  if (parsedfiles) {
+    for (i = 0; i < parsedfiles->size/sizeof(char*); i++)
+      free(((char**)parsedfiles->data)[i]);
+    array_free(parsedfiles);
+  }
+}
+
+const char *lookup_parsedfile(int fileno)
+{
+  assert(parsedfiles);
+  assert(0 <= fileno);
+  assert(fileno < parsedfiles->size/sizeof(char*));
+  return ((char**)parsedfiles->data)[fileno];
+}
+
+int add_parsedfile(const char *filename)
+{
+  char *copy = strdup(filename);
+  if (NULL == parsedfiles)
+    parsedfiles = array_new();
+  array_append(parsedfiles,&copy,sizeof(char*));
+  return (parsedfiles->size/sizeof(char*))-1;
 }
 
 pntrstack *pntrstack_new(void)
@@ -404,19 +416,18 @@ void pntrstack_free(pntrstack *s)
   free(s);
 }
 
+void pntrstack_grow(int *alloc, pntr **data, int size)
+{
+  if (*alloc < size) {
+    *alloc = size;
+    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
+  }
+}
+
 stack *stack_new(void)
 {
   stack *s = (stack*)calloc(1,sizeof(stack));
   s->alloc = 1;
-  s->count = 0;
-  s->data = (void**)malloc(s->alloc*sizeof(void*));
-  return s;
-}
-
-stack *stack_new2(int alloc)
-{
-  stack *s = (stack*)calloc(1,sizeof(stack));
-  s->alloc = alloc;
   s->count = 0;
   s->data = (void**)malloc(s->alloc*sizeof(void*));
   return s;
@@ -428,26 +439,12 @@ void stack_free(stack *s)
   free(s);
 }
 
-void pntrstack_grow(int *alloc, pntr **data, int size)
-{
-  if (*alloc < size) {
-    *alloc = size;
-    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
-  }
-}
-
 static void stack_grow(int *alloc, void ***data, int size)
 {
   if (*alloc < size) {
     *alloc = size;
     *data = (void**)realloc(*data,(*alloc)*sizeof(void*));
   }
-}
-
-void stack_push2(stack *s, void *c)
-{
-  assert(s->count+1 <= s->alloc);
-  s->data[s->count++] = c;
 }
 
 void stack_push(stack *s, void *c)
@@ -462,34 +459,6 @@ void stack_push(stack *s, void *c)
   s->data[s->count++] = c;
 }
 
-void stack_insert(stack *s, void *c, int pos)
-{
-  if (s->count == s->alloc)
-    stack_grow(&s->alloc,&s->data,s->alloc*2);
-  memmove(&s->data[pos+1],&s->data[pos],(s->count-pos)*sizeof(cell*));
-  s->count++;
-  s->data[pos] = c;
-}
-
-cell *stack_pop(stack *s)
-{
-  assert(0 < s->count);
-  return resolve_ind((cell*)s->data[--s->count]);
-}
-
-cell *stack_top(stack *s)
-{
-  assert(0 < s->count);
-  return resolve_ind((cell*)s->data[s->count-1]);
-}
-
-cell *stack_at(stack *s, int pos)
-{
-  assert(0 <= pos);
-  assert(pos < s->count);
-  return resolve_ind((cell*)s->data[pos]);
-}
-
 void statistics(FILE *f)
 {
   int i;
@@ -502,10 +471,6 @@ void statistics(FILE *f)
   fprintf(f,"nblocks = %d\n",nblocks);
   fprintf(f,"ncollections = %d\n",ncollections);
   fprintf(f,"nscombappls = %d\n",nscombappls);
-  fprintf(f,"nresindnoch = %d\n",nresindnoch);
-  fprintf(f,"nresindch = %d\n",nresindch);
-  fprintf(f,"resolve_ind() total = %d\n",nresindch+nresindnoch);
-  fprintf(f,"resolve_ind() ratio = %f\n",((double)nresindch)/((double)nresindnoch));
   fprintf(f,"nreductions = %d\n",nreductions);
   fprintf(f,"nframes = %d\n",nframes);
   fprintf(f,"maxdepth = %d\n",maxdepth);
@@ -524,23 +489,6 @@ cell *resolve_ind(cell *c)
   while (TYPE_IND == celltype(c))
     c = (cell*)c->field1;
   return c;
-}
-
-void copy_raw(cell *dest, cell *source)
-{
-  dest->tag = source->tag & TAG_MASK;
-  dest->field1 = source->field1;
-  dest->field2 = source->field2;
-}
-
-void copy_cell(cell *redex, cell *source)
-{
-  assert(redex != source);
-  copy_raw(redex,source);
-  if ((TYPE_STRING == celltype(source)) ||
-      (TYPE_SYMBOL == celltype(source)) ||
-      (TYPE_LAMBDA == celltype(source)))
-    redex->field1 = strdup((char*)redex->field1);
 }
 
 void print_stack(pntr *stk, int size, int dir)

@@ -341,8 +341,7 @@ void b_tail(pntr *argstack)
 
 void b_islambda(pntr *argstack)
 {
-  pntr val = argstack[0];
-  setbool(&argstack[0],TYPE_LAMBDA == pntrtype(val));
+  setbool(&argstack[0],0);
 }
 
 void b_isvalue(pntr *argstack)

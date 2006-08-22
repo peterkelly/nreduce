@@ -54,6 +54,7 @@ const char *internal_functions =
 "(__start () (__printer main))";
 
 extern char *yyfilename;
+extern int yyfileno;
 extern cell *parse_root;
 extern char *code_start;
 extern int resolve_ind_offset;
@@ -217,63 +218,12 @@ void stream(pntr p)
   streamstack = NULL;
 }
 
-void print_compiled(gprogram *gp, array *cpucode)
-{
-  FILE *f = fopen("compiled.s","w");
-  int i;
-  int prev = 0;
-  int *codesizes;
-  int gaddr;
-
-  codesizes = (int*)calloc(gp->count,sizeof(int));
-
-  gaddr = 1;
-  for (i = 0; i < cpucode->size; i++) {
-    if (gp->ginstrs[gaddr].codeaddr == i) {
-      codesizes[gaddr-1] = i-prev;
-      prev = i;
-      gaddr++;
-    }
-  }
-
-  fprintf(f,"\t.file \"compiled.c\"\n");
-  fprintf(f,".globl _start\n");
-  fprintf(f,"\t.section\t.rodata\n");
-  fprintf(f,"\t.type\t_start,@object\n");
-  fprintf(f,"\t.size\t_start,%d\n",resolve_ind_offset);
-  fprintf(f,"_start:\n");
-
-  gaddr = 0;
-  for (i = 0; i < cpucode->size; i++) {
-    char x = ((char*)cpucode->data)[i] & 0xFF;
-    if ((gp->ginstrs[gaddr].codeaddr == i) && (0 < i)) {
-      assert(OP_LAST != gp->ginstrs[gaddr].opcode);
-
-      fprintf(f,".globl i%06d\n",gaddr);
-      fprintf(f,"\t.type\ti%06d,@object\n",gaddr);
-      fprintf(f,"\t.size\ti%06d,%d\n",gaddr,codesizes[gaddr]);
-      fprintf(f,"i%06d:\n",gaddr);
-
-      gaddr++;
-    }
-    else if (resolve_ind_offset == i) {
-      fprintf(f,".globl resolve_ind\n");
-      fprintf(f,"\t.type\tresolve_ind,@object\n");
-      fprintf(f,"\t.size\tresolve_ind,%d\n",gp->ginstrs[0].codeaddr-resolve_ind_offset);
-      fprintf(f,"resolve_ind:\n");
-    }
-    fprintf(f,"\t.byte\t%d\n",x);
-  }
-
-  fclose(f);
-}
-
 int conslist_length(cell *list)
 {
   int count = 0;
   while (TYPE_CONS == celltype(list)) {
     count++;
-    list = (cell*)list->field2;
+    list = list->right;
   }
   if (TYPE_NIL != celltype(list))
     return -1;
@@ -284,11 +234,11 @@ cell *conslist_item(cell *list, int index)
 {
   while ((0 < index) && (TYPE_CONS == celltype(list))) {
     index--;
-    list = (cell*)list->field2;
+    list = list->right;
   }
   if (TYPE_CONS != celltype(list))
     return NULL;
-  return (cell*)list->field1;
+  return list->left;
 }
 
 void parse_post_processing(cell *root)
@@ -300,7 +250,7 @@ void parse_post_processing(cell *root)
     int nargs;
     scomb *sc;
     int i;
-    cell *fundef = (cell*)funlist->field1;
+    cell *fundef = funlist->left;
 
     cell *name = conslist_item(fundef,0);
     cell *args = conslist_item(fundef,1);
@@ -314,7 +264,7 @@ void parse_post_processing(cell *root)
       fprintf(stderr,"Invalid function name\n");
       exit(1);
     }
-    namestr = (char*)name->field1;
+    namestr = name->name;
 
     nargs = conslist_length(args);
     if (0 > nargs) {
@@ -328,22 +278,23 @@ void parse_post_processing(cell *root)
     }
 
     sc = add_scomb(namestr);
+    sc->sl = name->sl;
     sc->nargs = nargs;
     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
     i = 0;
     while (TYPE_CONS == celltype(args)) {
-      cell *argname = (cell*)args->field1;
+      cell *argname = args->left;
       if (TYPE_SYMBOL != celltype(argname)) {
         fprintf(stderr,"Invalid argument name\n");
         exit(1);
       }
-      sc->argnames[i++] = (char*)strdup((char*)argname->field1);
-      args = (cell*)args->field2;
+      sc->argnames[i++] = strdup(argname->name);
+      args = args->right;
     }
 
     sc->body = body;
 
-    funlist = (cell*)funlist->field2;
+    funlist = funlist->right;
   }
 }
 
@@ -379,6 +330,7 @@ void parse_file(char *filename)
   }
 
   yyfilename = filename;
+  yyfileno = add_parsedfile(filename);
 
   bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
   yy_switch_to_buffer(bufstate);
@@ -398,6 +350,7 @@ void parse_string(const char *str)
 {
   YY_BUFFER_STATE bufstate;
   yyfilename = "(string)";
+  yyfileno = add_parsedfile("(string)");
 
   bufstate = yy_scan_string(str);
   yy_switch_to_buffer(bufstate);
@@ -425,6 +378,56 @@ void source_code_parsing()
     print_scombs1();
 }
 
+void fix_linenos(cell *c)
+{
+  switch (celltype(c)) {
+  case TYPE_CONS: {
+    cell *other = c;
+    while (TYPE_CONS == celltype(other))
+      other = other->left;
+    c->sl.fileno = other->sl.fileno;
+    c->sl.lineno = other->sl.lineno;
+
+
+    fix_linenos(c->left);
+    fix_linenos(c->right);
+    break;
+  }
+  case TYPE_LAMBDA:
+    fix_linenos(c->body);
+    break;
+  case TYPE_LETREC: {
+    letrec *rec;
+    for (rec = c->bindings; rec; rec = rec->next)
+      fix_linenos(rec->value);
+    fix_linenos(c->body);
+    break;
+  }
+  case TYPE_BUILTIN:
+  case TYPE_SYMBOL:
+  case TYPE_SCREF:
+  case TYPE_NIL:
+  case TYPE_NUMBER:
+  case TYPE_STRING:
+    break;
+  default:
+    assert(0);
+    break;
+  }
+}
+
+void line_fixing()
+{
+  scomb *sc;
+  debug_stage("Line number fixing");
+
+  for (sc = scombs; sc; sc = sc->next)
+    fix_linenos(sc->body);
+
+  if (trace)
+    print_scombs1();
+}
+
 void create_letrecs_r(cell *c)
 {
   assert((c == globnil) || !(c->tag & FLAG_PROCESSED)); /* should not be a graph */
@@ -434,9 +437,9 @@ void create_letrecs_r(cell *c)
   case TYPE_CONS:
 
     if ((TYPE_CONS == celltype(c)) &&
-        (TYPE_SYMBOL == celltype((cell*)c->field1)) &&
-        (!strcmp("let",(char*)((cell*)c->field1)->field1) ||
-         !strcmp("letrec",(char*)((cell*)c->field1)->field1))) {
+        (TYPE_SYMBOL == celltype(c->left)) &&
+        (!strcmp("let",c->left->name) ||
+         !strcmp("letrec",c->left->name))) {
 
       letrec *defs = NULL;
       letrec **lnkptr = NULL;
@@ -446,10 +449,10 @@ void create_letrecs_r(cell *c)
       cell *body;
       letrec *lnk;
 
-      let1 = (cell*)c->field2;
+      let1 = c->right;
       parse_check(TYPE_CONS == celltype(let1),let1,"let takes 2 parameters");
 
-      iter = (cell*)let1->field1;
+      iter = let1->left;
       while (TYPE_CONS == celltype(iter)) {
         letrec *check;
         letrec *newlnk;
@@ -460,25 +463,25 @@ void create_letrecs_r(cell *c)
         cell *value;
         cell *link2;
 
-        deflist = (cell*)iter->field1;
+        deflist = iter->left;
         parse_check(TYPE_CONS == celltype(deflist),deflist,"let entry not a cons cell");
-        symbol = (cell*)deflist->field1;
+        symbol = deflist->left;
         parse_check(TYPE_SYMBOL == celltype(symbol),symbol,"let definition expects a symbol");
-        link1 = (cell*)deflist->field2;
+        link1 = deflist->right;
         parse_check(TYPE_CONS == celltype(link1),link1,"let definition should be list of 2");
-        value = (cell*)link1->field1;
-        link2 = (cell*)link1->field2;
+        value = link1->left;
+        link2 = link1->right;
         parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
 
         for (check = defs; check; check = check->next) {
-          if (!strcmp(check->name,(char*)symbol->field1)) {
+          if (!strcmp(check->name,symbol->name)) {
             fprintf(stderr,"Duplicate letrec definition: %s\n",check->name);
             exit(1);
           }
         }
 
         newlnk = (letrec*)calloc(1,sizeof(letrec));
-        newlnk->name = strdup((char*)symbol->field1);
+        newlnk->name = strdup(symbol->name);
         newlnk->value = value;
 
         if (NULL == defs)
@@ -487,32 +490,32 @@ void create_letrecs_r(cell *c)
           *lnkptr = newlnk;
         lnkptr = &newlnk->next;
 
-        iter = (cell*)iter->field2;
+        iter = iter->right;
       }
 
-      let2 = (cell*)let1->field2;
+      let2 = let1->right;
       parse_check(TYPE_CONS == celltype(let2),let2,"let takes 2 parameters");
-      body = (cell*)let2->field1;
+      body = let2->left;
 
       for (lnk = defs; lnk; lnk = lnk->next) {
         create_letrecs_r(lnk->value);
       }
 
       c->tag = (TYPE_LETREC | (c->tag & ~TAG_MASK));
-      c->field1 = defs;
-      c->field2 = body;
+      c->bindings = defs;
+      c->body = body;
 
       create_letrecs_r(body);
     }
     else {
 
-      create_letrecs_r((cell*)c->field1);
-      create_letrecs_r((cell*)c->field2);
+      create_letrecs_r(c->left);
+      create_letrecs_r(c->right);
     }
 
     break;
   case TYPE_LAMBDA:
-    create_letrecs_r((cell*)c->field2);
+    create_letrecs_r(c->body);
     break;
   case TYPE_SYMBOL:
   case TYPE_NIL:
@@ -574,12 +577,12 @@ void substitute_apps_r(cell **k)
   (*k)->tag |= FLAG_PROCESSED;
   switch (celltype(*k)) {
   case TYPE_APPLICATION:
-    substitute_apps_r((cell**)&(*k)->field1);
-    substitute_apps_r((cell**)&(*k)->field2);
+    substitute_apps_r(&(*k)->left);
+    substitute_apps_r(&(*k)->right);
     break;
   case TYPE_CONS: {
-    cell *left = (cell*)(*k)->field1;
-    cell *right = (cell*)(*k)->field2;
+    cell *left = (*k)->left;
+    cell *right = (*k)->right;
 
     if (TYPE_NIL != celltype(right)) {
       cell *lst;
@@ -590,45 +593,44 @@ void substitute_apps_r(cell **k)
 
       lst = right;
       app = left;
-      next = (cell*)lst->field2;
+      next = lst->right;
 
       while (TYPE_NIL != celltype(next)) {
         cell *item;
         cell *newapp;
         parse_check(TYPE_CONS == celltype(next),next,"expected a cons here");
-        item = (cell*)lst->field1;
+        item = lst->left;
         newapp = alloc_cell();
         newapp->tag = TYPE_APPLICATION;
-        newapp->field1 = app;
-        newapp->field2 = item;
+        newapp->left = app;
+        newapp->right = item;
         app = newapp;
 
         lst = next;
-        next = (cell*)lst->field2;
+        next = lst->right;
       }
 
-      lastitem = (cell*)lst->field1;
+      lastitem = lst->left;
       (*k)->tag = TYPE_APPLICATION;
-      (*k)->field1 = app;
-      (*k)->field2 = lastitem;
+      (*k)->left = app;
+      (*k)->right = lastitem;
 
       substitute_apps_r(k);
     }
     else {
-      (*k)->tag &= ~FLAG_PROCESSED;
-      *k = (cell*)(*k)->field1;
+      *k = (*k)->left;
       substitute_apps_r(k);
     }
     break;
   }
   case TYPE_LAMBDA:
-    substitute_apps_r((cell**)&(*k)->field2);
+    substitute_apps_r(&(*k)->body);
     break;
   case TYPE_LETREC: {
     letrec *rec;
-    for (rec = (letrec*)(*k)->field1; rec; rec = rec->next)
+    for (rec = (*k)->bindings; rec; rec = rec->next)
       substitute_apps_r(&rec->value);
-    substitute_apps_r((cell**)&(*k)->field2);
+    substitute_apps_r(&(*k)->body);
     break;
   }
   case TYPE_BUILTIN:
@@ -741,6 +743,7 @@ void gcode_compilation()
   }
 }
 
+#if 0
 void machine_code_generation()
 {
   int i;
@@ -755,6 +758,7 @@ void machine_code_generation()
 
   code_start = (char*)global_cpucode->data;
 }
+#endif
 
 void reduction_engine()
 {
@@ -818,6 +822,7 @@ void gcode_interpreter()
   gprogram_free(global_program);
 }
 
+#if 0
 typedef void (jitfun)();
 void native_execution_engine()
 {
@@ -828,6 +833,7 @@ void native_execution_engine()
   free(global_cpucode);
   gprogram_free(global_program);
 }
+#endif
 
 void open_statistics()
 {
@@ -856,6 +862,7 @@ int main(int argc, char **argv)
     open_statistics();
 
   source_code_parsing();
+  line_fixing();
   letrec_creation();
   variable_renaming();
 
@@ -876,6 +883,7 @@ int main(int argc, char **argv)
   letrec_reordering();
   if (args.reorderdebug) {
     print_scombs1();
+    cleanup();
     exit(0);
   }
 
@@ -888,6 +896,7 @@ int main(int argc, char **argv)
     strictness_analysis();
     if (args.strictdebug) {
       dump_strictinfo();
+      cleanup();
       exit(0);
     }
 
@@ -897,8 +906,10 @@ int main(int argc, char **argv)
       gcode_interpreter();
     }
     else {
+#if 0
       machine_code_generation();
       native_execution_engine();
+#endif
     }
   }
 

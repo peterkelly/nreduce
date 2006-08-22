@@ -64,6 +64,7 @@ typedef struct ginstr {
   int opcode;
   int arg0;
   int arg1;
+  sourceloc sl;
   int codeaddr;
   int expcount;
   int *expstatus;
@@ -81,7 +82,7 @@ typedef struct gprogram {
 gprogram *gprogram_new();
 void gprogram_free(gprogram *gp);
 
-const char *function_name(int fno);
+char *get_function_name(int fno);
 int function_nargs(int fno);
 void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage);
 void print_program(gprogram *gp, int builtins, int usage);

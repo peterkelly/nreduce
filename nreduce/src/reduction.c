@@ -42,15 +42,15 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   case TYPE_APPLICATION: {
     dest = alloc_rtvalue();
     dest->tag = TYPE_APPLICATION;
-    dest->cmp1 = instantiate_scomb_r((cell*)source->field1,names,values);
-    dest->cmp2 = instantiate_scomb_r((cell*)source->field2,names,values);
+    dest->cmp1 = instantiate_scomb_r(source->left,names,values);
+    dest->cmp2 = instantiate_scomb_r(source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
   case TYPE_SYMBOL: {
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
-      if (!strcmp((char*)names->data[pos],(char*)source->field1)) {
+      if (!strcmp((char*)names->data[pos],source->name)) {
         dest = alloc_rtvalue();
         dest->tag = TYPE_IND;
         dest->cmp1 = values->data[pos];
@@ -58,7 +58,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
         return p;
       }
     }
-    fprintf(stderr,"Unknown variable: %s\n",(char*)source->field1);
+    fprintf(stderr,"Unknown variable: %s\n",source->name);
     exit(1);
     make_pntr(p,NULL);
     return p;
@@ -68,7 +68,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
     letrec *rec;
     int i;
     pntr res;
-    for (rec = (letrec*)source->field1; rec; rec = rec->next) {
+    for (rec = source->bindings; rec; rec = rec->next) {
       rtvalue *hole = alloc_rtvalue();
       hole->tag = TYPE_HOLE;
       stack_push(names,(char*)rec->name);
@@ -76,14 +76,14 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
       pntrstack_push(values,p);
     }
     i = 0;
-    for (rec = (letrec*)source->field1; rec; rec = rec->next) {
+    for (rec = source->bindings; rec; rec = rec->next) {
       res = instantiate_scomb_r(rec->value,names,values);
       assert(TYPE_HOLE == get_pntr(values->data[oldcount+i])->tag);
       get_pntr(values->data[oldcount+i])->tag = TYPE_IND;
       get_pntr(values->data[oldcount+i])->cmp1 = res;
       i++;
     }
-    res = instantiate_scomb_r((cell*)source->field2,names,values);
+    res = instantiate_scomb_r(source->body,names,values);
     names->count = oldcount;
     values->count = oldcount;
     return res;
@@ -91,13 +91,13 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   case TYPE_BUILTIN:
     dest = alloc_rtvalue();
     dest->tag = TYPE_BUILTIN;
-    make_pntr(dest->cmp1,source->field1);
+    make_pntr(dest->cmp1,source->bif);
     make_pntr(p,dest);
     return p;
   case TYPE_SCREF:
     dest = alloc_rtvalue();
     dest->tag = TYPE_SCREF;
-    make_pntr(dest->cmp1,(scomb*)source->field1);
+    make_pntr(dest->cmp1,source->sc);
     make_pntr(p,dest);
     return p;
   case TYPE_NIL:
@@ -107,7 +107,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   case TYPE_STRING:
     dest = alloc_rtvalue();
     dest->tag = TYPE_STRING;
-    make_string(dest->cmp1,strdup((char*)source->field1));
+    make_string(dest->cmp1,strdup(source->value));
     make_pntr(p,dest);
     return p;
   default:

@@ -35,6 +35,7 @@
 
 array *lexstring = NULL;
 char *yyfilename = NULL;
+int yyfileno;
 int yylineno;
 
 %}

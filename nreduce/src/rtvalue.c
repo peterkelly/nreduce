@@ -170,8 +170,6 @@ void free_rtvalue_fields(rtvalue *v)
 {
   switch (celltype(v)) {
   case TYPE_STRING:
-  case TYPE_SYMBOL:
-  case TYPE_LAMBDA:
     free(get_string(v->cmp1));
     break;
   case TYPE_ARRAY: {
@@ -405,3 +403,88 @@ void print_pntr(pntr p)
 {
   printf("(value %s)",cell_types[pntrtype(p)]);
 }
+
+int getsignbit(double d)
+{
+  char tmp[100];
+  sprintf(tmp,"%f",d);
+  return ('-' == tmp[0]);
+}
+
+void print_double(FILE *f, double d)
+{
+  if (d == (double)((int)(d))) {
+    int i = (int)d;
+    if (getsignbit(d) && (0.0 == d))
+      printf("-0");
+    else
+      printf("%d",i);
+  }
+  else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
+    int ipart = (int)d;
+    double fraction;
+	int start;
+    char tmp[100];
+	int pos;
+
+    if (0.0 < d)
+      fraction = d - floor(d);
+    else
+      fraction = d - ceil(d);
+
+    start = getsignbit(d) ? 1 : 0;
+
+    sprintf(tmp,"%f",fraction);
+    pos = strlen(tmp)-1;
+    while ((2+start < pos) && ('0' == tmp[pos]))
+      tmp[pos--] = '\0';
+    assert('0' == tmp[start]);
+    assert('.' == tmp[start+1]);
+
+    printf("%d.%s",ipart,tmp+start+2);
+  }
+  else if (0.0 == d) {
+    printf("0");
+  }
+  else if (isnan(d)) {
+    printf("NaN");
+  }
+  else if (isinf(d) && (0.0 < d)) {
+    printf("INF");
+  }
+  else if (isinf(d) && (0.0 > d)) {
+    printf("-INF");
+  }
+  else {
+    printf("%f",d);
+  }
+}
+
+void output_pntr(pntr p)
+{
+  p = resolve_pntr(p);
+
+  if (trace)
+    debug(0,"<============ ");
+
+  if (TYPE_AREF == pntrtype(p)) {
+    print_pntr(p);
+    printf("\n");
+    return;
+  }
+
+  assert(isvaluetype(pntrtype(p)));
+  switch (pntrtype(p)) {
+  case TYPE_NIL:
+    break;
+  case TYPE_NUMBER:
+    print_double(stdout,pntrdouble(p));
+    break;
+  case TYPE_STRING:
+    printf("%s",get_string(get_pntr(p)->cmp1));
+    break;
+  }
+  if (trace)
+    debug(0,"\n");
+}
+

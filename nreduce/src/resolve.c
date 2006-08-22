@@ -38,16 +38,16 @@ void resolve_refs_r(cell *c, stack *bound)
 {
   switch (celltype(c)) {
   case TYPE_APPLICATION:
-    resolve_refs_r((cell*)c->field1,bound);
-    resolve_refs_r((cell*)c->field2,bound);
+    resolve_refs_r(c->left,bound);
+    resolve_refs_r(c->right,bound);
     break;
   case TYPE_LAMBDA:
-    stack_push(bound,(char*)c->field1);
-    resolve_refs_r((cell*)c->field2,bound);
+    stack_push(bound,c->name);
+    resolve_refs_r(c->body,bound);
     bound->count--;
     break;
   case TYPE_SYMBOL: {
-    char *sym = (char*)c->field1;
+    char *sym = c->name;
     int found = 0;
     int i;
     for (i = 0; (i < bound->count) && !found; i++)
@@ -58,14 +58,16 @@ void resolve_refs_r(cell *c, stack *bound)
       int bif;
 
       if (NULL != (sc = get_scomb(sym))) {
-        free(c->field1);
+        free(c->name);
+        c->name = NULL;
         c->tag = TYPE_SCREF;
-        c->field1 = sc;
+        c->sc = sc;
       }
       else if (0 <= (bif = get_builtin(sym))) {
-        free(c->field1);
+        free(c->name);
+        c->name = NULL;
         c->tag = TYPE_BUILTIN;
-        c->field1 = (void*)bif;
+        c->bif = bif;
       }
       else {
         fprintf(stderr,"Unbound variable: %s\n",sym);
@@ -77,11 +79,11 @@ void resolve_refs_r(cell *c, stack *bound)
   case TYPE_LETREC: {
     letrec *rec;
     int oldcount = bound->count;
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       stack_push(bound,rec->name);
-    for (rec = (letrec*)c->field1; rec; rec = rec->next)
+    for (rec = c->bindings; rec; rec = rec->next)
       resolve_refs_r(rec->value,bound);
-    resolve_refs_r((cell*)c->field2,bound);
+    resolve_refs_r(c->body,bound);
     bound->count = oldcount;
     break;
   }

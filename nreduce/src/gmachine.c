@@ -91,10 +91,12 @@ void check_stack(frame *curf, pntr *stackdata, int stackcount, gprogram *gp)
   if (0 <= curf->fno) {
     if ((curf->address < start_addr(gp,curf->fno)) ||
         (curf->address > end_addr(gp,curf->fno))) {
+      char *name = get_function_name(curf->fno);
       printf("Current address %d out of range\n",curf->address);
-      printf("Function: %s\n",function_name(curf->fno));
+      printf("Function: %s\n",name);
       printf("Function start address: %d\n",start_addr(gp,curf->fno));
       printf("Function end address: %d\n",end_addr(gp,curf->fno));
+      free(name);
       abort();
     }
   }
@@ -146,6 +148,51 @@ void swapstack_out(frame *curf, pntr **stdata, int *stcount)
 
   curf->data = NULL;
   curf->count = 0;
+}
+
+#if 0
+void runtime_error(gprogram *gp, frame *f, const char *format, ...)
+{
+  va_list ap;
+  int stackpos;
+  ginstr *instr = &gp->ginstrs[f->address];
+
+  if (0 <= instr->fileno)
+    fprintf(stderr,"%s:%d: ",lookup_parsedfile(instr->fileno),instr->lineno);
+
+  va_start(ap,format);
+  vfprintf(stderr,format,ap);
+  va_end(ap);
+
+  fprintf(stderr,"\n");
+  fprintf(stderr,"Call stack:\n");
+  stackpos = 0;
+  while (f) {
+    if (0 <= f->fno)
+      fprintf(stderr,"%3d: %s\n",stackpos,function_name(f->fno));
+    else
+      fprintf(stderr,"%3d: --\n",stackpos);
+    f = f->d;
+    stackpos++;
+  }
+  exit(1);
+}
+#endif
+
+void cap_error(pntr cappntr, ginstr *instr)
+{
+  rtvalue *capval = get_pntr(cappntr);
+  cap *c = (cap*)get_pntr(capval->cmp1);
+  char *name = get_function_name(c->fno);
+
+  print_sourceloc(stderr,instr->sl);
+  fprintf(stderr,"Attempt to evaluate incomplete function application\n");
+
+  print_sourceloc(stderr,c->sl);
+  fprintf(stderr,"%s requires %d args, only have %d\n",
+          name,function_nargs(c->fno),c->count);
+  free(name);
+  exit(1);
 }
 
 void execute(gprogram *gp)
@@ -284,10 +331,11 @@ void execute(gprogram *gp)
       if (s+s1 < a1) {
         /* create a new CAP with the existing CAPs arguments and those from the current
            FRAME's stack */
-        cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
         int i;
         rtvalue *replace;
         frame *old;
+        cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
+        newcp->sl = cp->sl;
         newcp->data = (pntr*)malloc((stcount+cp->count)*sizeof(pntr));
         newcp->count = 0;
         for (i = 0; i < stcount; i++)
@@ -367,8 +415,11 @@ void execute(gprogram *gp)
       pntr test = stdata[stcount-1];
       assert(TYPE_IND != pntrtype(test));
       assert(TYPE_APPLICATION != pntrtype(test));
-      assert(TYPE_CAP != pntrtype(test));
       assert(TYPE_FRAME != pntrtype(test));
+
+      if (TYPE_CAP == pntrtype(test))
+        cap_error(test,instr);
+
       if (TYPE_NIL == pntrtype(test))
         curf->address += instr->arg0-1;
       stcount--;
@@ -431,8 +482,9 @@ void execute(gprogram *gp)
       int fno = instr->arg0;
       int n = instr->arg1;
       int i;
-      cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
       rtvalue *capv;
+      cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
+      c->sl = instr->sl;
       c->data = (pntr*)malloc(n*sizeof(pntr));
       c->count = 0;
       for (i = stcount-n; i < stcount; i++)
@@ -479,8 +531,10 @@ void execute(gprogram *gp)
       assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
         assert(TYPE_APPLICATION != pntrtype(stdata[stcount-1-i]));
-        assert(TYPE_CAP != pntrtype(stdata[stcount-1-i]));
         assert(TYPE_FRAME != pntrtype(stdata[stcount-1-i]));
+
+        if (TYPE_CAP == pntrtype(stdata[stcount-1-i]))
+          cap_error(stdata[stcount-1-i],instr);
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)

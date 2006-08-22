@@ -35,6 +35,7 @@
 
 extern int yylineno;
 extern char *yyfilename;
+extern int yyfileno;
 int yylex();
 int yyerror(const char *err);
 
@@ -75,58 +76,60 @@ extern struct cell *parse_root;
 %%
 
 SingleExpr:
-  NIL                                           { $$ = globnil; }
-| '(' ')'                                       { $$ = globnil; }
-| INTEGER                                       { $$ = alloc_sourcecell(yyfilename,yylineno);
+  NIL                                           { $$ = alloc_sourcecell(yyfileno,yylineno);
+                                                  $$->tag = TYPE_NIL; }
+| '(' ')'                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
+                                                  $$->tag = TYPE_NIL; }
+| INTEGER                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_NUMBER;
                                                   celldouble($$) = (double)($1); }
-| DOUBLE                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
+| DOUBLE                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_NUMBER;
                                                   celldouble($$) = $1; }
-| STRING                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
+| STRING                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_STRING;
-                                                  $$->field1 = (void*)strdup($1); }
-| SYMBOL                                      { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->value = strdup($1); }
+| SYMBOL                                      { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_SYMBOL;
-                                                  $$->field1 = (void*)strdup($1); }
-| BUILTIN                                       { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->name = strdup($1); }
+| BUILTIN                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_BUILTIN;
-                                                  $$->field1 = (void*)$1; }
-| EQUALS                                        { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->bif = $1; }
+| EQUALS                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_BUILTIN;
-                                                  $$->field1 = (void*)B_EQ; }
+                                                  $$->bif = B_EQ; }
 | '(' Expr ')'                                  { $$ = $2; }
 ;
 
 SingleLambda:
-  LAMBDA SYMBOL  '.'                          { $$ = alloc_sourcecell(yyfilename,yylineno);
+  LAMBDA SYMBOL  '.'                          { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_LAMBDA;
-                                                  $$->field1 = (void*)strdup($2);
-                                                  $$->field2 = NULL; }
+                                                  $$->name = (void*)strdup($2);
+                                                  $$->body = NULL; }
 ;
 
 Lambdas:
   SingleLambda                                  { $$ = $1; }
-| SingleLambda Lambdas                          { $$ = $1; $$->field2 = $2; }
+| SingleLambda Lambdas                          { $$ = $1; $$->body = $2; }
 ;
 
 AppliedExpr:
-  SingleExpr                                    { $$ = alloc_sourcecell(yyfilename,yylineno);
+  SingleExpr                                    { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_CONS;
-                                                  $$->field1 = $1;
-                                                  $$->field2 = globnil; }
-| SingleExpr AppliedExpr                        { $$ = alloc_sourcecell(yyfilename,yylineno);
+                                                  $$->left = $1;
+                                                  $$->right = globnil; }
+| SingleExpr AppliedExpr                        { $$ = alloc_sourcecell(yyfileno,yylineno);
                                                   $$->tag = TYPE_CONS;
-                                                  $$->field1 = $1;
-                                                  $$->field2 = $2; }
+                                                  $$->left = $1;
+                                                  $$->right = $2; }
 ;
 
 Expr:
   AppliedExpr                                   { $$ = $1; }
 | Lambdas AppliedExpr                           { cell *c = $1;
-                                                  while (c->field2)
-                                                    c = (cell*)c->field2;
-                                                  c->field2 = $2; }
+                                                  while (c->body)
+                                                    c = c->body;
+                                                  c->body = $2; }
 ;
 
 Program:

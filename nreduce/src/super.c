@@ -96,6 +96,9 @@ scomb *add_scomb(const char *name1)
   *lastsc = sc;
   lastsc = &sc->next;
 
+  sc->sl.fileno = -1;
+  sc->sl.lineno = -1;
+
   free(name);
   return sc;
 }
@@ -129,11 +132,11 @@ void fix_partial_applications()
     int nargs = 0;
     scomb *other;
     while (TYPE_APPLICATION == celltype(c)) {
-      c = (cell*)c->field1;
+      c = c->left;
       nargs++;
     }
     if (TYPE_SCREF == celltype(c)) {
-      other = (scomb*)c->field1;
+      other = c->sc;
       if (nargs < other->nargs) {
         int oldargs = sc->nargs;
         int extra = other->nargs - nargs;
@@ -148,13 +151,12 @@ void fix_partial_applications()
           sprintf(sc->argnames[i],"N%d",genvar++);
 
           arg->tag = TYPE_SYMBOL;
-          arg->field1 = strdup(sc->argnames[i]);
-          arg->field2 = NULL;
+          arg->name = strdup(sc->argnames[i]);
 
           sc->body = alloc_cell();
           sc->body->tag = TYPE_APPLICATION;
-          sc->body->field1 = fun;
-          sc->body->field2 = arg;
+          sc->body->left = fun;
+          sc->body->right = arg;
         }
       }
     }
