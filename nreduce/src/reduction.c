@@ -34,16 +34,16 @@
 #include <stdarg.h>
 #include <math.h>
 
-static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
+static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
 {
-  rtvalue *dest;
+  cell *dest;
   pntr p;
-  switch (celltype(source)) {
+  switch (snodetype(source)) {
   case TYPE_APPLICATION: {
-    dest = alloc_rtvalue();
+    dest = alloc_cell();
     dest->tag = TYPE_APPLICATION;
-    dest->cmp1 = instantiate_scomb_r(source->left,names,values);
-    dest->cmp2 = instantiate_scomb_r(source->right,names,values);
+    dest->field1 = instantiate_scomb_r(source->left,names,values);
+    dest->field2 = instantiate_scomb_r(source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
@@ -51,9 +51,9 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
       if (!strcmp((char*)names->data[pos],source->name)) {
-        dest = alloc_rtvalue();
+        dest = alloc_cell();
         dest->tag = TYPE_IND;
-        dest->cmp1 = values->data[pos];
+        dest->field1 = values->data[pos];
         make_pntr(p,dest);
         return p;
       }
@@ -69,7 +69,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
     int i;
     pntr res;
     for (rec = source->bindings; rec; rec = rec->next) {
-      rtvalue *hole = alloc_rtvalue();
+      cell *hole = alloc_cell();
       hole->tag = TYPE_HOLE;
       stack_push(names,(char*)rec->name);
       make_pntr(p,hole);
@@ -80,7 +80,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
       res = instantiate_scomb_r(rec->value,names,values);
       assert(TYPE_HOLE == get_pntr(values->data[oldcount+i])->tag);
       get_pntr(values->data[oldcount+i])->tag = TYPE_IND;
-      get_pntr(values->data[oldcount+i])->cmp1 = res;
+      get_pntr(values->data[oldcount+i])->field1 = res;
       i++;
     }
     res = instantiate_scomb_r(source->body,names,values);
@@ -89,25 +89,25 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
     return res;
   }
   case TYPE_BUILTIN:
-    dest = alloc_rtvalue();
+    dest = alloc_cell();
     dest->tag = TYPE_BUILTIN;
-    make_pntr(dest->cmp1,source->bif);
+    make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
   case TYPE_SCREF:
-    dest = alloc_rtvalue();
+    dest = alloc_cell();
     dest->tag = TYPE_SCREF;
-    make_pntr(dest->cmp1,source->sc);
+    make_pntr(dest->field1,source->sc);
     make_pntr(p,dest);
     return p;
   case TYPE_NIL:
     return globnilpntr;
   case TYPE_NUMBER:
-    return make_number(celldouble(source));
+    return make_number(source->num);
   case TYPE_STRING:
-    dest = alloc_rtvalue();
+    dest = alloc_cell();
     dest->tag = TYPE_STRING;
-    make_string(dest->cmp1,strdup(source->value));
+    make_string(dest->field1,strdup(source->value));
     make_pntr(p,dest);
     return p;
   default:
@@ -116,7 +116,7 @@ static pntr instantiate_scomb_r(cell *source, stack *names, pntrstack *values)
   }
 }
 
-static pntr instantiate_scomb(pntrstack *s, cell *source, scomb *sc)
+static pntr instantiate_scomb(pntrstack *s, snode *source, scomb *sc)
 {
   stack *names = stack_new();
   pntrstack *values = pntrstack_new();
@@ -152,7 +152,7 @@ void reduce(pntrstack *s)
 
     /* FIXME: if we call collect() here then sometimes the redex gets collected */
     if (nallocs > COLLECT_THRESHOLD)
-      rtcollect();
+      collect();
 
     redex = s->data[s->count-1];
     reductions++;
@@ -163,11 +163,11 @@ void reduce(pntrstack *s)
     pntrstack_push(s,target);
 
     while (TYPE_APPLICATION == pntrtype(target)) {
-      target = resolve_pntr(get_pntr(target)->cmp1);
+      target = resolve_pntr(get_pntr(target)->field1);
       pntrstack_push(s,target);
     }
 
-    /* 2. Examine the cell  at the tip of the spine */
+    /* 2. Examine the cell at the tip of the spine */
     switch (pntrtype(target)) {
 
     /* A variable. This should correspond to a supercombinator, and if it doesn't it means
@@ -176,7 +176,7 @@ void reduce(pntrstack *s)
       assert(!"variable encountered during reduction");
       break;
     case TYPE_SCREF: {
-      scomb *sc = (scomb*)get_pntr(get_pntr(target)->cmp1);
+      scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
 
       int i;
       int destno;
@@ -201,14 +201,14 @@ void reduce(pntrstack *s)
         assert(i > oldtop);
         arg = pntrstack_at(s,i-1);
         assert(TYPE_APPLICATION == pntrtype(arg));
-        s->data[i] = get_pntr(arg)->cmp2;
+        s->data[i] = get_pntr(arg)->field2;
       }
 
       assert((TYPE_APPLICATION == pntrtype(dest)) ||
              (TYPE_SCREF == pntrtype(dest)));
       res = instantiate_scomb(s,sc->body,sc);
       get_pntr(dest)->tag = TYPE_IND;
-      get_pntr(dest)->cmp1 = res;
+      get_pntr(dest)->field1 = res;
 
       s->count = oldtop;
       continue;
@@ -235,7 +235,7 @@ void reduce(pntrstack *s)
          execute the built-in function and overwrite the root of the redex with the result. */
     case TYPE_BUILTIN: {
 
-      int bif = (int)get_pntr(get_pntr(target)->cmp1);
+      int bif = (int)get_pntr(get_pntr(target)->field1);
       int reqargs;
       int strictargs;
       int i;
@@ -255,7 +255,7 @@ void reduce(pntrstack *s)
         pntr arg = pntrstack_at(s,i-1);
         assert(i > oldtop);
         assert(TYPE_APPLICATION == pntrtype(arg));
-        s->data[i] = get_pntr(arg)->cmp2;
+        s->data[i] = get_pntr(arg)->field2;
       }
 
       assert(strictargs <= reqargs);
@@ -277,9 +277,9 @@ void reduce(pntrstack *s)
 
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_rtvalue_fields(get_pntr(s->data[s->count-2]));
+      free_cell_fields(get_pntr(s->data[s->count-2]));
       get_pntr(s->data[s->count-2])->tag = TYPE_IND;
-      get_pntr(s->data[s->count-2])->cmp1 = s->data[s->count-1];
+      get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 
       s->count--;
       break;

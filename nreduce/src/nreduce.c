@@ -55,9 +55,8 @@ const char *internal_functions =
 
 extern char *yyfilename;
 extern int yyfileno;
-extern cell *parse_root;
+extern snode *parse_root;
 extern char *code_start;
-extern int resolve_ind_offset;
 extern array *oldnames;
 extern pntrstack *streamstack;
 
@@ -199,11 +198,11 @@ void stream(pntr p)
       printf("%f",pntrdouble(p));
     }
     else if (TYPE_STRING == pntrtype(p)) {
-      printf("%s",(char*)get_string(get_pntr(p)->cmp1));
+      printf("%s",(char*)get_string(get_pntr(p)->field1));
     }
     else if (TYPE_CONS == pntrtype(p)) {
-      pntrstack_push(streamstack,get_pntr(p)->cmp2);
-      pntrstack_push(streamstack,get_pntr(p)->cmp1);
+      pntrstack_push(streamstack,get_pntr(p)->field2);
+      pntrstack_push(streamstack,get_pntr(p)->field1);
     }
     else if (TYPE_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
@@ -218,53 +217,57 @@ void stream(pntr p)
   streamstack = NULL;
 }
 
-int conslist_length(cell *list)
+int conslist_length(snode *list)
 {
   int count = 0;
-  while (TYPE_CONS == celltype(list)) {
+  while (TYPE_CONS == snodetype(list)) {
     count++;
     list = list->right;
   }
-  if (TYPE_NIL != celltype(list))
+  if (TYPE_NIL != snodetype(list))
     return -1;
   return count;
 }
 
-cell *conslist_item(cell *list, int index)
+snode *conslist_item(snode *list, int index)
 {
-  while ((0 < index) && (TYPE_CONS == celltype(list))) {
+  while ((0 < index) && (TYPE_CONS == snodetype(list))) {
     index--;
     list = list->right;
   }
-  if (TYPE_CONS != celltype(list))
+  if (TYPE_CONS != snodetype(list))
     return NULL;
   return list->left;
 }
 
-void parse_post_processing(cell *root)
+void parse_post_processing(snode *root)
 {
-  cell *funlist = parse_root;
+  snode *funlist = parse_root;
 
-  while (TYPE_CONS == celltype(funlist)) {
-    char *namestr;
+  while (TYPE_CONS == snodetype(funlist)) {
     int nargs;
     scomb *sc;
     int i;
-    cell *fundef = funlist->left;
+    snode *fundef = funlist->left;
 
-    cell *name = conslist_item(fundef,0);
-    cell *args = conslist_item(fundef,1);
-    cell *body = conslist_item(fundef,2);
+/*     snode *name = conslist_item(fundef,0); */
+/*     snode *args = conslist_item(fundef,1); */
+/*     snode *body = conslist_item(fundef,2); */
+
+    snode *name = fundef->left;
+    snode *args = fundef->right->left;
+    snode *body = fundef->right->right->left;
+    fundef->right->right->left = NULL; /* don't free body */
+
     if ((NULL == name) || (NULL == args) || (NULL == body)) {
       fprintf(stderr,"Invalid function definition\n");
       exit(1);
     }
 
-    if (TYPE_SYMBOL != celltype(name)) {
+    if (TYPE_SYMBOL != snodetype(name)) {
       fprintf(stderr,"Invalid function name\n");
       exit(1);
     }
-    namestr = name->name;
 
     nargs = conslist_length(args);
     if (0 > nargs) {
@@ -272,19 +275,19 @@ void parse_post_processing(cell *root)
       exit(1);
     }
 
-    if (NULL != get_scomb(namestr)) {
-      fprintf(stderr,"Duplicate supercombinator: %s\n",namestr);
+    if (NULL != get_scomb(name->name)) {
+      fprintf(stderr,"Duplicate supercombinator: %s\n",name->name);
       exit(1);
     }
 
-    sc = add_scomb(namestr);
+    sc = add_scomb(name->name);
     sc->sl = name->sl;
     sc->nargs = nargs;
     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
     i = 0;
-    while (TYPE_CONS == celltype(args)) {
-      cell *argname = args->left;
-      if (TYPE_SYMBOL != celltype(argname)) {
+    while (TYPE_CONS == snodetype(args)) {
+      snode *argname = args->left;
+      if (TYPE_SYMBOL != snodetype(argname)) {
         fprintf(stderr,"Invalid argument name\n");
         exit(1);
       }
@@ -296,6 +299,8 @@ void parse_post_processing(cell *root)
 
     funlist = funlist->right;
   }
+
+  snode_free(root);
 }
 
 void check_for_main()
@@ -378,12 +383,12 @@ void source_code_parsing()
     print_scombs1();
 }
 
-void fix_linenos(cell *c)
+void fix_linenos(snode *c)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_CONS: {
-    cell *other = c;
-    while (TYPE_CONS == celltype(other))
+    snode *other = c;
+    while (TYPE_CONS == snodetype(other))
       other = other->left;
     c->sl.fileno = other->sl.fileno;
     c->sl.lineno = other->sl.lineno;
@@ -428,50 +433,51 @@ void line_fixing()
     print_scombs1();
 }
 
-void create_letrecs_r(cell *c)
+void create_letrecs_r(snode *c)
 {
-  assert((c == globnil) || !(c->tag & FLAG_PROCESSED)); /* should not be a graph */
+  assert(!(c->tag & FLAG_PROCESSED)); /* should not be a graph */
   c->tag |= FLAG_PROCESSED;
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
 
-    if ((TYPE_CONS == celltype(c)) &&
-        (TYPE_SYMBOL == celltype(c->left)) &&
+    if ((TYPE_CONS == snodetype(c)) &&
+        (TYPE_SYMBOL == snodetype(c->left)) &&
         (!strcmp("let",c->left->name) ||
          !strcmp("letrec",c->left->name))) {
 
       letrec *defs = NULL;
       letrec **lnkptr = NULL;
-      cell *iter;
-      cell *let1;
-      cell *let2;
-      cell *body;
+      snode *iter;
+      snode *let1;
+      snode *let2;
+      snode *body;
       letrec *lnk;
 
       let1 = c->right;
-      parse_check(TYPE_CONS == celltype(let1),let1,"let takes 2 parameters");
+      parse_check(TYPE_CONS == snodetype(let1),let1,"let takes 2 parameters");
 
       iter = let1->left;
-      while (TYPE_CONS == celltype(iter)) {
+      while (TYPE_CONS == snodetype(iter)) {
         letrec *check;
         letrec *newlnk;
 
-        cell *deflist;
-        cell *symbol;
-        cell *link1;
-        cell *value;
-        cell *link2;
+        snode *deflist;
+        snode *symbol;
+        snode *link1;
+        snode *value;
+        snode *link2;
 
         deflist = iter->left;
-        parse_check(TYPE_CONS == celltype(deflist),deflist,"let entry not a cons cell");
+        parse_check(TYPE_CONS == snodetype(deflist),deflist,"let entry not a cons node");
         symbol = deflist->left;
-        parse_check(TYPE_SYMBOL == celltype(symbol),symbol,"let definition expects a symbol");
+        parse_check(TYPE_SYMBOL == snodetype(symbol),symbol,"let definition expects a symbol");
         link1 = deflist->right;
-        parse_check(TYPE_CONS == celltype(link1),link1,"let definition should be list of 2");
+        parse_check(TYPE_CONS == snodetype(link1),link1,"let definition should be list of 2");
         value = link1->left;
+        link1->left = NULL; /* don't free value */
         link2 = link1->right;
-        parse_check(TYPE_NIL == celltype(link2),link2,"let definition should be list of 2");
+        parse_check(TYPE_NIL == snodetype(link2),link2,"let definition should be list of 2");
 
         for (check = defs; check; check = check->next) {
           if (!strcmp(check->name,symbol->name)) {
@@ -494,13 +500,15 @@ void create_letrecs_r(cell *c)
       }
 
       let2 = let1->right;
-      parse_check(TYPE_CONS == celltype(let2),let2,"let takes 2 parameters");
+      parse_check(TYPE_CONS == snodetype(let2),let2,"let takes 2 parameters");
       body = let2->left;
+      let2->left = NULL; /* don't free body */
 
-      for (lnk = defs; lnk; lnk = lnk->next) {
+      for (lnk = defs; lnk; lnk = lnk->next)
         create_letrecs_r(lnk->value);
-      }
 
+      snode_free(c->left);
+      snode_free(c->right);
       c->tag = (TYPE_LETREC | (c->tag & ~TAG_MASK));
       c->bindings = defs;
       c->body = body;
@@ -524,12 +532,12 @@ void create_letrecs_r(cell *c)
   case TYPE_SCREF:
     break;
   default:
-    assert(!"invalid cell type");
+    assert(!"invalid node type");
     break;
   }
 }
 
-void create_letrecs(cell *c)
+void create_letrecs(snode *c)
 {
   cleargraph(c,FLAG_PROCESSED);
   create_letrecs_r(c);
@@ -571,36 +579,39 @@ void symbol_resolution()
     print_scombs1();
 }
 
-void substitute_apps_r(cell **k)
+void substitute_apps_r(snode **k)
 {
-  assert((*k == globnil) || !((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
+  assert(!((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
   (*k)->tag |= FLAG_PROCESSED;
-  switch (celltype(*k)) {
+  switch (snodetype(*k)) {
   case TYPE_APPLICATION:
     substitute_apps_r(&(*k)->left);
     substitute_apps_r(&(*k)->right);
     break;
   case TYPE_CONS: {
-    cell *left = (*k)->left;
-    cell *right = (*k)->right;
+    snode *left = (*k)->left;
+    snode *right = (*k)->right;
 
-    if (TYPE_NIL != celltype(right)) {
-      cell *lst;
-      cell *app;
-      cell *next;
-      cell *lastitem;
-      parse_check(TYPE_CONS == celltype(right),right,"expected a cons here");
+    (*k)->left = NULL; /* don't free it */
+
+    if (TYPE_NIL != snodetype(right)) {
+      snode *lst;
+      snode *app;
+      snode *next;
+      snode *lastitem;
+      parse_check(TYPE_CONS == snodetype(right),right,"expected a cons here");
 
       lst = right;
       app = left;
       next = lst->right;
 
-      while (TYPE_NIL != celltype(next)) {
-        cell *item;
-        cell *newapp;
-        parse_check(TYPE_CONS == celltype(next),next,"expected a cons here");
+      while (TYPE_NIL != snodetype(next)) {
+        snode *item;
+        snode *newapp;
+        parse_check(TYPE_CONS == snodetype(next),next,"expected a cons here");
         item = lst->left;
-        newapp = alloc_cell();
+        lst->left = NULL; /* don't free it */
+        newapp = snode_new(-1,-1);
         newapp->tag = TYPE_APPLICATION;
         newapp->left = app;
         newapp->right = item;
@@ -611,6 +622,10 @@ void substitute_apps_r(cell **k)
       }
 
       lastitem = lst->left;
+      lst->left = NULL; /* don't free it */
+
+      snode_free(*k);
+      *k = snode_new(-1,-1);
       (*k)->tag = TYPE_APPLICATION;
       (*k)->left = app;
       (*k)->right = lastitem;
@@ -618,7 +633,8 @@ void substitute_apps_r(cell **k)
       substitute_apps_r(k);
     }
     else {
-      *k = (*k)->left;
+      snode_free(*k);
+      *k = left;
       substitute_apps_r(k);
     }
     break;
@@ -641,12 +657,12 @@ void substitute_apps_r(cell **k)
   case TYPE_SCREF:
     break;
   default:
-    assert(!"invalid cell type");
+    assert(!"invalid node type");
     break;
   }
 }
 
-void substitute_apps(cell **k)
+void substitute_apps(snode **k)
 {
   cleargraph(*k,FLAG_PROCESSED);
   substitute_apps_r(k);
@@ -763,7 +779,7 @@ void machine_code_generation()
 void reduction_engine()
 {
   scomb *mainsc;
-  rtvalue *root;
+  cell *root;
   pntr rootp;
 #ifdef TIMING
   struct timeval start;
@@ -774,9 +790,9 @@ void reduction_engine()
   debug_stage("Reduction engine");
   mainsc = get_scomb("main");
 
-  root = alloc_rtvalue();
+  root = alloc_cell();
   root->tag = TYPE_SCREF;
-  make_pntr(root->cmp1,mainsc);
+  make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
 
 #ifdef TIMING
@@ -913,7 +929,6 @@ int main(int argc, char **argv)
     }
   }
 
-  collect();
   if (args.statistics) {
     statistics(statsfile);
     close_statistics();

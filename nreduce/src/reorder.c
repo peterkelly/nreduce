@@ -70,9 +70,9 @@
  *
  * This expression will be left as-is.
  */
-static void reorder_letrecs_r(cell *c, list **used, stack *bound)
+static void reorder_letrecs_r(snode *c, list **used, stack *bound)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
     reorder_letrecs_r(c->left,used,bound);
     reorder_letrecs_r(c->right,used,bound);
@@ -170,7 +170,7 @@ static void reorder_letrecs_r(cell *c, list **used, stack *bound)
   }
 }
 
-void reorder_letrecs(cell *c)
+void reorder_letrecs(snode *c)
 {
   list *used = NULL;
   stack *bound = stack_new();

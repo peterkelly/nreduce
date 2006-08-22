@@ -34,13 +34,13 @@
 #include <stdarg.h>
 #include <math.h>
 
-static void setneedclear_r(cell *c)
+static void setneedclear_r(snode *c)
 {
   if (c->tag & FLAG_NEEDCLEAR)
     return;
   c->tag |= FLAG_NEEDCLEAR;
 
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
     setneedclear_r(c->left);
@@ -62,14 +62,14 @@ static void setneedclear_r(cell *c)
   }
 }
 
-static void cleargraph_r(cell *c, int flag)
+static void cleargraph_r(snode *c, int flag)
 {
   if (!(c->tag & FLAG_NEEDCLEAR))
     return;
   c->tag &= ~FLAG_NEEDCLEAR;
   c->tag &= ~flag;
 
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
     cleargraph_r(c->left,flag);
@@ -91,34 +91,34 @@ static void cleargraph_r(cell *c, int flag)
   }
 }
 
-void cleargraph(cell *root, int flag)
+void cleargraph(snode *root, int flag)
 {
   setneedclear_r(root);
   cleargraph_r(root,flag);
 }
 
-static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
+static void add_nodes(snode ***nodes, int *nnodes, snode *c, int *alloc)
 {
-  if ((*ncells) == *alloc) {
+  if ((*nnodes) == *alloc) {
     (*alloc) *= 2;
-    (*cells) = (cell**)realloc((*cells),(*alloc)*sizeof(cell*));
+    (*nodes) = (snode**)realloc((*nodes),(*alloc)*sizeof(snode*));
   }
-  (*cells)[(*ncells)++] = c;
+  (*nodes)[(*nnodes)++] = c;
 
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    add_cells(cells,ncells,c->left,alloc);
-    add_cells(cells,ncells,c->right,alloc);
+    add_nodes(nodes,nnodes,c->left,alloc);
+    add_nodes(nodes,nnodes,c->right,alloc);
     break;
   case TYPE_LAMBDA:
-    add_cells(cells,ncells,c->body,alloc);
+    add_nodes(nodes,nnodes,c->body,alloc);
     break;
   case TYPE_LETREC: {
     letrec *rec;
     for (rec = c->bindings; rec; rec = rec->next)
-      add_cells(cells,ncells,rec->value,alloc);
-    add_cells(cells,ncells,c->body,alloc);
+      add_nodes(nodes,nnodes,rec->value,alloc);
+    add_nodes(nodes,nnodes,c->body,alloc);
     break;
   }
   case TYPE_BUILTIN:
@@ -134,10 +134,10 @@ static void add_cells(cell ***cells, int *ncells, cell *c, int *alloc)
   }
 }
 
-void find_graph_cells(cell ***cells, int *ncells, cell *root)
+void find_snodes(snode ***nodes, int *nnodes, snode *root)
 {
   int alloc = 4;
-  *ncells = 0;
-  *cells = (cell**)malloc(alloc*sizeof(cell*));
-  add_cells(cells,ncells,root,&alloc);
+  *nnodes = 0;
+  *nodes = (snode**)malloc(alloc*sizeof(snode*));
+  add_nodes(nodes,nnodes,root,&alloc);
 }

@@ -33,7 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-array *lexstring = NULL;
+extern array *lexstring;
 char *yyfilename = NULL;
 int yyfileno;
 int yylineno;

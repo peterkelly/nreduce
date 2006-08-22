@@ -53,26 +53,25 @@
 //#define COLLECT_THRESHOLD 1024
 #define STACK_LIMIT 10240
 
-#define celldouble(c) (*(double*)(&((c)->field1)))
 #ifdef UNBOXED_NUMBERS
 #define pntrdouble(p) (p)
 #else
-#define pntrdouble(p) ({assert(is_pntr(p)); get_pntr(p)->cmp1; })
+#define pntrdouble(p) ({assert(is_pntr(p)); get_pntr(p)->field1; })
 #endif
 
 #define TYPE_EMPTY       0x00
-#define TYPE_APPLICATION 0x01  /* left: function (cell*)   right: argument (cell*) */
-#define TYPE_LAMBDA      0x02  /* left: name (char*)       right: body (cell*)     */
+#define TYPE_APPLICATION 0x01  /* left: function (snode*)   right: argument (snode*) */
+#define TYPE_LAMBDA      0x02  /* left: name (char*)       right: body (snode*)     */
 #define TYPE_BUILTIN     0x03  /* left: bif (int)                                  */
-#define TYPE_CONS        0x04  /* left: head (cell*)       right: tail (cell*)     */
+#define TYPE_CONS        0x04  /* left: head (snode*)       right: tail (snode*)     */
 #define TYPE_SYMBOL      0x05  /* left: name (char*)                               */
-#define TYPE_LETREC      0x06  /* left: defs (letrec*)     right: body (cell*)     */
+#define TYPE_LETREC      0x06  /* left: defs (letrec*)     right: body (snode*)     */
 #define TYPE_RES2        0x07  /*                                                  */
 #define TYPE_RES3        0x08  /*                                                  */
-#define TYPE_IND         0x09  /* left: tgt (cell*)                                */
+#define TYPE_IND         0x09  /* left: tgt (snode*)                                */
 #define TYPE_RES1        0x0A  /*                                                  */
 #define TYPE_SCREF       0x0B  /* left: scomb (scomb*)                             */
-#define TYPE_AREF        0x0C  /* left: array (cell*)      right: index            */
+#define TYPE_AREF        0x0C  /* left: array (snode*)      right: index            */
 #define TYPE_HOLE        0x0D  /*                                                  */
 #define TYPE_FRAME       0x0E  /* left: frame (frame*)                             */
 #define TYPE_CAP         0x0F  /* left: cap (cap*)                                 */
@@ -86,7 +85,7 @@
 
 #define isvalue(c) ((c)->tag & VALUE_FIELD)
 #define isvaluetype(t) ((t) & VALUE_FIELD)
-#define isvaluefun(c) (isvalue(c) || (TYPE_BUILTIN == celltype(c) || (TYPE_SCREF == celltype(c))))
+#define isvaluefun(c) (isvalue(c) || (TYPE_BUILTIN == snodetype(c) || (TYPE_SCREF == snodetype(c))))
 
 #define B_ADD            0
 #define B_SUBTRACT       1
@@ -149,10 +148,6 @@
 #define FLAG_STRICT     0x2000
 #define FLAG_NEEDCLEAR  0x4000
 
-#define CELL_TAG    ((int)&((cell*)0)->tag)
-#define CELL_FIELD1 ((int)&((cell*)0)->field1)
-#define CELL_FIELD2 ((int)&((cell*)0)->field2)
-
 struct letrec;
 struct scomb;
 
@@ -161,41 +156,41 @@ typedef struct sourceloc {
   int lineno;
 } sourceloc;
 
-typedef struct cell {
+typedef struct snode {
   int tag;
-  void *field1;
-  void *field2;
 
-  struct cell *left;
-  struct cell *right;
+  struct snode *left;
+  struct snode *right;
 
   char *value;
   char *name;
   struct letrec *bindings;
-  struct cell *body;
+  struct snode *body;
   struct scomb *sc;
   int bif;
+  double num;
 
   sourceloc sl;
-} cell;
+} snode;
 
-#define celltype(_c) ((_c)->tag & TAG_MASK)
-#define pntrtype(p) (is_pntr(p) ? celltype(get_pntr(p)) : TYPE_NUMBER)
+#define snodetype(_c) ((_c)->tag & TAG_MASK)
+#define celltype snodetype
+#define pntrtype(p) (is_pntr(p) ? snodetype(get_pntr(p)) : TYPE_NUMBER)
 
 typedef double pntr;
 
-typedef struct rtvalue {
+typedef struct cell {
   int tag;
-  pntr cmp1;
-  pntr cmp2;
-} rtvalue;
+  pntr field1;
+  pntr field2;
+} cell;
 
 
 #ifdef INLINE_PTRFUNS
 #define is_pntr(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF1)
 #define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
                             *(((unsigned int*)&(__p))+1) = 0xFFFFFFF1; }
-#define get_pntr(__p) (assert(is_pntr(__p)), ((rtvalue*)(*((unsigned int*)&(__p)))))
+#define get_pntr(__p) (assert(is_pntr(__p)), ((cell*)(*((unsigned int*)&(__p)))))
 
 #define is_string(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF2)
 #define make_string(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
@@ -210,7 +205,7 @@ typedef struct rtvalue {
 #endif
 #else
 int is_pntr(pntr p);
-rtvalue *get_pntr(pntr p);
+cell *get_pntr(pntr p);
 
 int is_string(pntr p);
 char *get_string(pntr p);
@@ -221,7 +216,7 @@ int is_nullpntr(pntr p);
 #ifdef INLINE_RESOLVE_PNTR
 #define resolve_pntr(x) ({ pntr __x = (x);        \
                            while (TYPE_IND == pntrtype(__x)) \
-                             __x = get_pntr(__x)->cmp1; \
+                             __x = get_pntr(__x)->field1; \
                            __x; })
 #else
 pntr resolve_pntr(pntr p);
@@ -236,7 +231,7 @@ pntr make_number(double d);
 
 typedef struct letrec {
   char *name;
-  cell *value;
+  snode *value;
   int strict;
   struct scomb *sc;
   struct letrec *next;
@@ -251,7 +246,7 @@ struct list {
 typedef struct carray {
   int alloc;
   int size;
-  pntr *cells;
+  pntr *elements;
   pntr *refs;
   pntr tail;
 } carray;
@@ -278,7 +273,7 @@ typedef struct scomb {
   char *name;
   int nargs;
   char **argnames;
-  cell *body;
+  snode *body;
   int index;
   int *strictin;
   sourceloc sl;
@@ -313,7 +308,7 @@ typedef struct frame {
   int count;
   pntr *data;
 
-  rtvalue *c;
+  cell *c;
   int fno; /* temp */
   int active;
   int completed;
@@ -324,9 +319,8 @@ typedef struct frame {
 /* memory */
 
 void initmem();
-cell *alloc_cell(void);
-cell *alloc_sourcecell(int fileno, int lineno);
-void collect();
+snode *snode_new(int fileno, int lineno);
+void snode_free(snode *c);
 void free_letrec(letrec *rec);
 void free_scomb(scomb *sc);
 void cleanup();
@@ -340,23 +334,14 @@ pntr pntrstack_at(pntrstack *s, int pos);
 pntr pntrstack_pop(pntrstack *s);
 void pntrstack_free(pntrstack *s);
 
-stack *stack_new(void);
-void stack_free(stack *s);
-void stack_push(stack *s, void *c);
 void pntrstack_grow(int *alloc, pntr **data, int size);
 
-void statistics(FILE *f);
-void free_cell_fields(cell *c);
-void print_stack(pntr *stk, int size, int dir);
+/* cell */
 
-cell *resolve_ind(cell *c);
+cell *alloc_cell(void);
+void free_cell_fields(cell *v);
 
-/* rtvalue */
-
-rtvalue *alloc_rtvalue(void);
-void free_rtvalue_fields(rtvalue *v);
-
-void rtcollect();
+void collect();
 
 void add_active_frame(frame *f);
 void remove_active_frame(frame *f);
@@ -372,8 +357,6 @@ void cap_dealloc(cap *c);
 void rtcleanup();
 
 void print_pntr(pntr p);
-void print_double(FILE *f, double d);
-void output_pntr(pntr p);
 
 /* resolve */
 
@@ -381,7 +364,7 @@ void resolve_refs(scomb *sc);
 
 /* reorder */
 
-void reorder_letrecs(cell *c);
+void reorder_letrecs(snode *c);
 
 /* super */
 
@@ -404,8 +387,8 @@ void reduce(pntrstack *s);
 
 /* graph */
 
-void cleargraph(cell *root, int flag);
-void find_graph_cells(cell ***cells, int *ncells, cell *root);
+void cleargraph(snode *root, int flag);
+void find_snodes(snode ***nodes, int *nnodes, snode *root);
 
 /* new */
 
@@ -420,17 +403,19 @@ void print_hex(int c);
 void print_hexbyte(unsigned char val);
 void print_bin(void *ptr, int nbytes);
 void print_bin_rev(void *ptr, int nbytes);
-int count_args(cell *c);
-cell *get_arg(cell *c, int argno);
-void print(cell *c);
-void print_codef2(FILE *f, cell *c, int pos);
-void print_codef(FILE *f, cell *c);
-void print_code(cell *c);
+int count_args(snode *c);
+snode *get_arg(snode *c, int argno);
+void print(snode *c);
+void print_codef2(FILE *f, snode *c, int pos);
+void print_codef(FILE *f, snode *c);
+void print_code(snode *c);
 void print_scomb_code(scomb *sc);
 void print_scombs1();
 void print_scombs2();
 const char *real_varname(const char *sym);
 char *real_scname(const char *sym);
+void print_stack(pntr *stk, int size, int dir);
+void statistics(FILE *f);
 
 /* strictness */
 
@@ -450,7 +435,7 @@ void array_append(array *arr, const void *data, int size);
 void array_free(array *arr);
 
 void print_quoted_string(FILE *f, const char *str);
-void parse_check(int cond, cell *c, char *msg);
+void parse_check(int cond, snode *c, char *msg);
 void print_sourceloc(FILE *f, sourceloc sl);
 
 typedef void (*list_d_t)(void *a);
@@ -468,30 +453,32 @@ int list_contains_string(list *l, const char *str);
 int list_contains_ptr(list *l, const void *data);
 void list_remove_ptr(list **l, void *ptr);
 
+stack *stack_new(void);
+void stack_free(stack *s);
+void stack_push(stack *s, void *c);
+
+void print_double(FILE *f, double d);
+
 #ifndef EXTRA_C
+extern const char *snode_types[NUM_CELLTYPES];
 extern const char *cell_types[NUM_CELLTYPES];
 #endif
 
 #ifndef MEMORY_C
+extern int maxstack;
 extern int trace;
-extern int nblocks;
 extern int nallocs;
 extern int ncollections;
-extern int totalrtallocs;
+extern int totalallocs;
 extern int nscombappls;
 extern int nreductions;
 extern int nframes;
 extern int maxdepth;
 extern int maxframes;
 
-extern cell *globnil;
-extern cell *globtrue;
-extern cell *globzero;
 extern pntr globnilpntr;
 extern pntr globtruepntr;
 extern pntr globzeropntr;
-extern char *collect_ebp;
-extern char *collect_esp;
 #endif
 
 #ifndef SUPER_C

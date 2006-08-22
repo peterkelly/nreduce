@@ -51,7 +51,7 @@ int is_whnf(pntr p)
   if (TYPE_APPLICATION == pntrtype(p)) {
     int nargs = 0;
     while (TYPE_APPLICATION == pntrtype(p)) {
-      p = resolve_pntr(get_pntr(p)->cmp1);
+      p = resolve_pntr(get_pntr(p)->field1);
       nargs++;
     }
 
@@ -61,7 +61,7 @@ int is_whnf(pntr p)
     else {
       cap *cp;
       assert(TYPE_CAP == pntrtype(p));
-      cp = (cap*)get_pntr(get_pntr(p)->cmp1);
+      cp = (cap*)get_pntr(get_pntr(p)->field1);
       if (nargs+cp->count >= cp->arity)
         return 0;
     }
@@ -181,8 +181,8 @@ void runtime_error(gprogram *gp, frame *f, const char *format, ...)
 
 void cap_error(pntr cappntr, ginstr *instr)
 {
-  rtvalue *capval = get_pntr(cappntr);
-  cap *c = (cap*)get_pntr(capval->cmp1);
+  cell *capval = get_pntr(cappntr);
+  cap *c = (cap*)get_pntr(capval->field1);
   char *name = get_function_name(c->fno);
 
   print_sourceloc(stderr,instr->sl);
@@ -234,8 +234,7 @@ void execute(gprogram *gp)
     if (nallocs > COLLECT_THRESHOLD) {
       gstack = stdata;
       gstackcount = stcount;
-/*       collect(); */
-      rtcollect();
+      collect();
       gstack = NULL;
       gstackcount = 0;
     }
@@ -266,9 +265,9 @@ void execute(gprogram *gp)
 
 
       if (TYPE_FRAME == pntrtype(p)) {
-        rtvalue *c = get_pntr(p);
+        cell *c = get_pntr(p);
         frame *newf;
-        newf = (frame*)get_pntr(c->cmp1);
+        newf = (frame*)get_pntr(c->field1);
 
         assert(NULL == newf->d);
         assert(OP_GLOBSTART == gp->ginstrs[newf->address].opcode);
@@ -297,9 +296,9 @@ void execute(gprogram *gp)
       frame *old;
       assert(0 < stcount);
       assert(NULL != curf->c);
-      assert(TYPE_FRAME == celltype(curf->c));
+      assert(TYPE_FRAME == snodetype(curf->c));
       curf->c->tag = TYPE_IND;
-      curf->c->cmp1 = stdata[stcount-1];
+      curf->c->field1 = stdata[stcount-1];
       curf->c = NULL;
 
       old = curf;
@@ -313,17 +312,17 @@ void execute(gprogram *gp)
       break;
     }
     case OP_DO: {
-      rtvalue *capcell;
+      cell *capholder;
       cap *cp;
       int s;
       int s1;
       int a1;
       assert(0 < stcount);
       assert(TYPE_CAP == pntrtype(stdata[stcount-1]));
-      capcell = (rtvalue*)get_pntr(stdata[stcount-1]);
+      capholder = (cell*)get_pntr(stdata[stcount-1]);
       stcount--;
 
-      cp = (cap*)get_pntr(capcell->cmp1);
+      cp = (cap*)get_pntr(capholder->field1);
       s = stcount;
       s1 = cp->count;
       a1 = cp->arity;
@@ -332,7 +331,7 @@ void execute(gprogram *gp)
         /* create a new CAP with the existing CAPs arguments and those from the current
            FRAME's stack */
         int i;
-        rtvalue *replace;
+        cell *replace;
         frame *old;
         cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
         newcp->sl = cp->sl;
@@ -347,7 +346,7 @@ void execute(gprogram *gp)
         replace = curf->c;
         curf->c = NULL;
         replace->tag = TYPE_CAP;
-        make_pntr(replace->cmp1,newcp);
+        make_pntr(replace->field1,newcp);
 
         /* return to caller */
         old = curf;
@@ -387,9 +386,9 @@ void execute(gprogram *gp)
         for (i = 0; i < cp->count; i++)
           newf->data[newf->count++] = cp->data[i];
 
-        newf->c = alloc_rtvalue();
+        newf->c = alloc_cell();
         newf->c->tag = TYPE_FRAME;
-        make_pntr(newf->c->cmp1,newf);
+        make_pntr(newf->c->field1,newf);
 
         stcount -= extra;
         make_pntr(stdata[stcount],newf->c);
@@ -437,7 +436,7 @@ void execute(gprogram *gp)
     case OP_UPDATE: {
       int n = instr->arg0;
       pntr targetp;
-      rtvalue *target;
+      cell *target;
       pntr res;
       assert(n < stcount);
       assert(n > 0);
@@ -452,7 +451,7 @@ void execute(gprogram *gp)
         exit(1);
       }
       target->tag = TYPE_IND;
-      target->cmp1 = res;
+      target->field1 = res;
       stdata[stcount-1-n] = res;
       stcount--;
       break;
@@ -460,7 +459,7 @@ void execute(gprogram *gp)
     case OP_ALLOC: {
       int i;
       for (i = 0; i < instr->arg0; i++) {
-        rtvalue *hole = alloc_rtvalue();
+        cell *hole = alloc_cell();
         hole->tag = TYPE_HOLE;
         make_pntr(stdata[stcount],hole);
         stcount++;
@@ -482,7 +481,7 @@ void execute(gprogram *gp)
       int fno = instr->arg0;
       int n = instr->arg1;
       int i;
-      rtvalue *capv;
+      cell *capv;
       cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
       c->sl = instr->sl;
       c->data = (pntr*)malloc(n*sizeof(pntr));
@@ -491,9 +490,9 @@ void execute(gprogram *gp)
         c->data[c->count++] = stdata[i];
       stcount -= n;
 
-      capv = alloc_rtvalue();
+      capv = alloc_cell();
       capv->tag = TYPE_CAP;
-      make_pntr(capv->cmp1,c);
+      make_pntr(capv->field1,c);
       make_pntr(stdata[stcount],capv);
       stcount++;
       break;
@@ -501,7 +500,7 @@ void execute(gprogram *gp)
     case OP_MKFRAME: {
       int fno = instr->arg0;
       int n = instr->arg1;
-      rtvalue *newfcell;
+      cell *newfholder;
       int i;
       frame *newf = frame_alloc();
       newf->alloc = stacksizes[fno];
@@ -512,15 +511,15 @@ void execute(gprogram *gp)
       newf->fno = fno;
       newf->d = NULL;
 
-      newfcell = alloc_rtvalue();
-      newfcell->tag = TYPE_FRAME;
-      make_pntr(newfcell->cmp1,newf);
-      newf->c = newfcell;
+      newfholder = alloc_cell();
+      newfholder->tag = TYPE_FRAME;
+      make_pntr(newfholder->field1,newf);
+      newf->c = newfholder;
 
       for (i = stcount-n; i < stcount; i++)
         newf->data[newf->count++] = stdata[i];
       stcount -= n;
-      make_pntr(stdata[stcount],newfcell);
+      make_pntr(stdata[stcount],newfholder);
       stcount++;
       break;
     }

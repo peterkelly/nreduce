@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <math.h>
 
 array *array_new()
 {
@@ -205,7 +206,7 @@ void print_quoted_string(FILE *f, const char *str)
   fprintf(f,"\"");
 }
 
-void parse_check(int cond, cell *c, char *msg)
+void parse_check(int cond, snode *c, char *msg)
 {
   if (cond)
     return;
@@ -220,3 +221,88 @@ void print_sourceloc(FILE *f, sourceloc sl)
   if (0 <= sl.fileno)
     fprintf(stderr,"%s:%d: ",lookup_parsedfile(sl.fileno),sl.lineno);
 }
+
+stack *stack_new(void)
+{
+  stack *s = (stack*)calloc(1,sizeof(stack));
+  s->alloc = 1;
+  s->count = 0;
+  s->data = (void**)malloc(s->alloc*sizeof(void*));
+  return s;
+}
+
+void stack_free(stack *s)
+{
+  free(s->data);
+  free(s);
+}
+
+void stack_push(stack *s, void *c)
+{
+  if (s->count == s->alloc) {
+    if (s->count >= STACK_LIMIT) {
+      fprintf(stderr,"Out of stack space\n");
+      exit(1);
+    }
+    s->alloc *= 2;
+    s->data = (void**)realloc(s->data,s->alloc*sizeof(void*));
+  }
+  s->data[s->count++] = c;
+}
+
+int getsignbit(double d)
+{
+  char tmp[100];
+  sprintf(tmp,"%f",d);
+  return ('-' == tmp[0]);
+}
+
+void print_double(FILE *f, double d)
+{
+  if (d == (double)((int)(d))) {
+    int i = (int)d;
+    if (getsignbit(d) && (0.0 == d))
+      printf("-0");
+    else
+      printf("%d",i);
+  }
+  else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
+    int ipart = (int)d;
+    double fraction;
+	int start;
+    char tmp[100];
+	int pos;
+
+    if (0.0 < d)
+      fraction = d - floor(d);
+    else
+      fraction = d - ceil(d);
+
+    start = getsignbit(d) ? 1 : 0;
+
+    sprintf(tmp,"%f",fraction);
+    pos = strlen(tmp)-1;
+    while ((2+start < pos) && ('0' == tmp[pos]))
+      tmp[pos--] = '\0';
+    assert('0' == tmp[start]);
+    assert('.' == tmp[start+1]);
+
+    printf("%d.%s",ipart,tmp+start+2);
+  }
+  else if (0.0 == d) {
+    printf("0");
+  }
+  else if (isnan(d)) {
+    printf("NaN");
+  }
+  else if (isinf(d) && (0.0 < d)) {
+    printf("INF");
+  }
+  else if (isinf(d) && (0.0 > d)) {
+    printf("-INF");
+  }
+  else {
+    printf("%f",d);
+  }
+}
+

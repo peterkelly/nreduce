@@ -34,9 +34,9 @@
 #include <stdarg.h>
 #include <math.h>
 
-void resolve_refs_r(cell *c, stack *bound)
+void resolve_refs_r(snode *c, stack *bound)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
     resolve_refs_r(c->left,bound);
     resolve_refs_r(c->right,bound);

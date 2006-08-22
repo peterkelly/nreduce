@@ -117,7 +117,7 @@ void pushstatus(stackinfo *si, int i)
       si->alloc = 16;
     else
       si->alloc *= 2;
-    si->status = (int*)realloc(si->status,si->alloc*sizeof(cell*));
+    si->status = (int*)realloc(si->status,si->alloc*sizeof(snode*));
   }
   si->status[si->count++] = i;
 }
@@ -164,7 +164,7 @@ const char *op_names[OP_COUNT] = {
 "RESOLVE",
 };
 
-void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
+void print_comp(char *fname, snode *c, int d, int isresult, int needseval, int n)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   debug(cdepth,"%s [ ",fname);
@@ -181,7 +181,7 @@ void print_comp(char *fname, cell *c, int d, int isresult, int needseval, int n)
 #endif
 }
 
-void print_comp2(char *fname, cell *c, int n, const char *format, ...)
+void print_comp2(char *fname, snode *c, int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   va_list ap;
@@ -205,7 +205,7 @@ void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...
   for (i = exprs->count-1; 0 <= i; i--) {
     if (i < exprs->count-1)
       printf(", ");
-    print_code((cell*)exprs->data[i]);
+    print_code((snode*)exprs->data[i]);
   }
   printf(" ]");
   printf(" %d",n);
@@ -244,11 +244,11 @@ void gprogram_free(gprogram *gp)
 
 int add_string(gprogram *gp, char *str)
 {
-  int pos = gp->stringmap->size/sizeof(cell*);
-  rtvalue *c = alloc_rtvalue();
+  int pos = gp->stringmap->size/sizeof(snode*);
+  cell *c = alloc_cell();
   c->tag = TYPE_STRING | FLAG_PINNED;
-  make_string(c->cmp1,strdup(str));
-  array_append(gp->stringmap,&c,sizeof(rtvalue*));
+  make_string(c->field1,strdup(str));
+  array_append(gp->stringmap,&c,sizeof(cell*));
   return pos;
 }
 
@@ -383,13 +383,13 @@ void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
   }
 }
 
-int cell_fno(cell *c)
+int snode_fno(snode *c)
 {
-  assert((TYPE_BUILTIN == celltype(c)) ||
-         (TYPE_SCREF == celltype(c)));
-  if (TYPE_BUILTIN == celltype(c))
+  assert((TYPE_BUILTIN == snodetype(c)) ||
+         (TYPE_SCREF == snodetype(c)));
+  if (TYPE_BUILTIN == snodetype(c))
     return c->bif;
-  else if (TYPE_SCREF == celltype(c))
+  else if (TYPE_SCREF == snodetype(c))
     return c->sc->index+NUM_BUILTINS;
   else
     return -1;
@@ -460,8 +460,8 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
     }
     break;
   case OP_PUSHSTRING: {
-    rtvalue *v = ((rtvalue**)gp->stringmap->data)[instr->arg0];
-    printf("; PUSHSTRING \"%s\"",get_string(v->cmp1));
+    cell *v = ((cell**)gp->stringmap->data)[instr->arg0];
+    printf("; PUSHSTRING \"%s\"",get_string(v->field1));
     break;
   }
   case OP_MKFRAME: {
@@ -516,11 +516,11 @@ void print_program(gprogram *gp, int builtins, int usage)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < (int)(gp->stringmap->size/sizeof(rtvalue*)); i++) {
-    rtvalue *strcell = ((rtvalue**)gp->stringmap->data)[i];
-    assert(TYPE_STRING == celltype(strcell));
+  for (i = 0; i < (int)(gp->stringmap->size/sizeof(cell*)); i++) {
+    cell *strval = ((cell**)gp->stringmap->data)[i];
+    assert(TYPE_STRING == snodetype(strval));
     printf("%d: ",i);
-    print_quoted_string(stdout,get_string(strcell->cmp1));
+    print_quoted_string(stdout,get_string(strval->field1));
     printf("\n");
   }
 }
@@ -620,9 +620,9 @@ int pcount(pmap *pm)
   return pm->names->count;
 }
 
-void getusage(cell *c, list **used)
+void getusage(snode *c, list **used)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
     getusage(c->left,used);
     getusage(c->right,used);
@@ -647,7 +647,7 @@ void getusage(cell *c, list **used)
   }
 }
 
-int letrecs_used(cell *expr, letrec *first)
+int letrecs_used(snode *expr, letrec *first)
 {
   int count = 0;
   list *used = NULL;
@@ -662,9 +662,9 @@ int letrecs_used(cell *expr, letrec *first)
   return count;
 }
 
-void C(gprogram *gp, cell *c, pmap *p, int n);
-void E(gprogram *gp, cell *c, pmap *p, int n);
-void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
+void C(gprogram *gp, snode *c, pmap *p, int n);
+void E(gprogram *gp, snode *c, pmap *p, int n);
+void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
   int count = 0;
@@ -701,34 +701,34 @@ void Cletrec(gprogram *gp, cell *c, int n, pmap *p, int strictcontext)
   }
 }
 
-void E(gprogram *gp, cell *c, pmap *p, int n)
+void E(gprogram *gp, snode *c, pmap *p, int n)
 {
   cdepth++;
   print_comp2("E",c,n,"");
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
-    cell *app;
+    snode *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left)
+    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left)
       m++;
 
-    assert(TYPE_SYMBOL != celltype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
+    assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
+    parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
                 app,"Non-function applied to args");
 
-    fno = cell_fno(app);
+    fno = snode_fno(app);
     k = function_nargs(fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
-    if ((TYPE_BUILTIN == celltype(app)) &&
+    if ((TYPE_BUILTIN == snodetype(app)) &&
         (B_IF == app->bif) &&
         (3 == m)) {
-      cell *falsebranch;
-      cell *truebranch;
-      cell *cond;
-      cell *app = c;
+      snode *falsebranch;
+      snode *truebranch;
+      snode *cond;
+      snode *app = c;
       int label;
       stackinfo *oldsi;
       int end;
@@ -756,7 +756,7 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
     }
     else {
       m = 0;
-      for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
+      for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
         if (app->tag & FLAG_STRICT)
           E(gp,app->right,p,n+m);
         else
@@ -766,7 +766,7 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
 
       if (m == k) {
 
-        if (TYPE_BUILTIN == celltype(app)) {
+        if (TYPE_BUILTIN == snodetype(app)) {
           BIF(app->sl,fno);
           if (!builtin_info[fno].reswhnf)
             EVAL(app->sl,0);
@@ -800,44 +800,44 @@ void E(gprogram *gp, cell *c, pmap *p, int n)
   cdepth--;
 }
 
-void S(gprogram *gp, cell *source, stack *exprs, stack *strict, pmap *p, int n)
+void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 {
   int m;
   print_comp2_stack("S",exprs,n,"");
   for (m = 0; m < exprs->count; m++) {
     if (strict->data[m])
-      E(gp,(cell*)exprs->data[m],p,n+m);
+      E(gp,(snode*)exprs->data[m],p,n+m);
     else
-      C(gp,(cell*)exprs->data[m],p,n+m);
+      C(gp,(snode*)exprs->data[m],p,n+m);
   }
   SQUEEZE(source->sl,m,n);
 }
 
-void R(gprogram *gp, cell *c, pmap *p, int n)
+void R(gprogram *gp, snode *c, pmap *p, int n)
 {
   cdepth++;
   print_comp2("R",c,n,"");
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     stack *args = stack_new();
     stack *argstrict = stack_new();
-    cell *app;
+    snode *app;
     int m;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
+    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
       stack_push(args,app->right);
       stack_push(argstrict,(void*)(app->tag & FLAG_STRICT));
     }
     m = args->count;
-    if (TYPE_SYMBOL == celltype(app)) {
+    if (TYPE_SYMBOL == snodetype(app)) {
       stack_push(args,app);
       stack_push(argstrict,0);
       S(gp,app,args,argstrict,p,n);
       EVAL(app->sl,0);
       DO(app->sl);
     }
-    else if ((TYPE_BUILTIN == celltype(app)) ||
-             (TYPE_SCREF == celltype(app))) {
-      int fno = cell_fno(app);
+    else if ((TYPE_BUILTIN == snodetype(app)) ||
+             (TYPE_SCREF == snodetype(app))) {
+      int fno = snode_fno(app);
       int k = function_nargs(fno);
       if (m > k) {
         S(gp,app,args,argstrict,p,n);
@@ -846,11 +846,11 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
         DO(app->sl);
       }
       else if (m == k) {
-        if ((TYPE_BUILTIN == celltype(app)) &&
+        if ((TYPE_BUILTIN == snodetype(app)) &&
             (B_IF == app->bif)) {
-          cell *falsebranch = (cell*)args->data[0];
-          cell *truebranch = (cell*)args->data[1];
-          cell *cond = (cell*)args->data[2];
+          snode *falsebranch = (snode*)args->data[0];
+          snode *truebranch = (snode*)args->data[1];
+          snode *cond = (snode*)args->data[2];
           int label;
           stackinfo *oldsi;
 
@@ -866,7 +866,7 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
           R(gp,falsebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
         }
-        else if ((TYPE_BUILTIN == celltype(app)) && (B_IF != app->bif)) {
+        else if ((TYPE_BUILTIN == snodetype(app)) && (B_IF != app->bif)) {
           int bif;
           const builtin *bi;
           int argno;
@@ -888,13 +888,13 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
       }
       else { /* m < k */
         for (m = 0; m < args->count; m++)
-          C(gp,(cell*)args->data[m],p,n+m);
+          C(gp,(snode*)args->data[m],p,n+m);
         MKCAP(app->sl,fno,m);
         RETURN(app->sl);
       }
     }
     else {
-      fprintf(stderr,"%s can't be applied to anything\n",cell_types[celltype(app)]);
+      fprintf(stderr,"%s can't be applied to anything\n",snode_types[snodetype(app)]);
       assert(0);
     }
     stack_free(args);
@@ -909,11 +909,11 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
     break;
   case TYPE_BUILTIN:
   case TYPE_SCREF:
-    if (0 == function_nargs(cell_fno(c))) {
-      JFUN(c->sl,cell_fno(c));
+    if (0 == function_nargs(snode_fno(c))) {
+      JFUN(c->sl,snode_fno(c));
     }
     else {
-      MKCAP(c->sl,cell_fno(c),0);
+      MKCAP(c->sl,snode_fno(c),0);
       RETURN(c->sl);
     }
     break;
@@ -938,26 +938,26 @@ void R(gprogram *gp, cell *c, pmap *p, int n)
   cdepth--;
 }
 
-void C(gprogram *gp, cell *c, pmap *p, int n)
+void C(gprogram *gp, snode *c, pmap *p, int n)
 {
   cdepth++;
   print_comp2("C",c,n,"");
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
-    cell *app;
+    snode *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == celltype(app); app = app->left) {
+    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
       C(gp,app->right,p,n+m);
       m++;
     }
 
-    assert(TYPE_SYMBOL != celltype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check((TYPE_BUILTIN == celltype(app)) || (TYPE_SCREF == celltype(app)),
+    assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
+    parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
                 app,"Non-function applied to args");
 
-    fno = cell_fno(app);
+    fno = snode_fno(app);
     k = function_nargs(fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
@@ -968,15 +968,15 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
     break;
   }
   case TYPE_BUILTIN:
-  case TYPE_SCREF:   if (0 == function_nargs(cell_fno(c)))
-                       MKFRAME(c->sl,cell_fno(c),0);
+  case TYPE_SCREF:   if (0 == function_nargs(snode_fno(c)))
+                       MKFRAME(c->sl,snode_fno(c),0);
                      else
-                       MKCAP(c->sl,cell_fno(c),0);
+                       MKCAP(c->sl,snode_fno(c),0);
                      break;
-  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(p,c->name));                break;
-  case TYPE_NIL:     PUSHNIL(c->sl);                                   break;
-  case TYPE_NUMBER:  PUSHNUMBER(c->sl,(int)c->field1,(int)c->field2);  break;
-  case TYPE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));        break;
+  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(p,c->name));                        break;
+  case TYPE_NIL:     PUSHNIL(c->sl);                                           break;
+  case TYPE_NUMBER:  PUSHNUMBER(c->sl,((int*)&c->num)[0],((int*)&c->num)[1]);  break;
+  case TYPE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));                break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(gp,c,n,p,0);
@@ -996,7 +996,7 @@ void C(gprogram *gp, cell *c, pmap *p, int n)
 void F(gprogram *gp, int fno, scomb *sc)
 {
   int i;
-  cell *copy = sc->body;
+  snode *copy = sc->body;
   stackinfo *oldsi;
   pmap pm;
 

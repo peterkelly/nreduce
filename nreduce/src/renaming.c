@@ -34,9 +34,9 @@
 #include <stdarg.h>
 #include <math.h>
 
-int varno = 0;
+extern array *oldnames;
 
-array *oldnames = NULL;
+static int varno = 0;
 
 typedef struct mapping {
   char *from;
@@ -78,9 +78,9 @@ char *next_var(const char *oldname)
   return name;
 }
 
-void rename_variables_r(cell *c, stack *mappings)
+void rename_variables_r(snode *c, stack *mappings)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
     rename_variables_r(c->left,mappings);

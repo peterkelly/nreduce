@@ -62,7 +62,7 @@ int binding_level(stack *boundvars, const char *sym)
   for (i = boundvars->count-1; 0 <= i; i--) {
     binding *bnd = (binding*)boundvars->data[i];
     if (!strcmp(bnd->name,sym)) {
-      if (bnd->rec && (TYPE_LAMBDA == celltype(bnd->rec->value)))
+      if (bnd->rec && (TYPE_LAMBDA == snodetype(bnd->rec->value)))
         return -1;
       else
         return i+1;
@@ -72,24 +72,24 @@ int binding_level(stack *boundvars, const char *sym)
   return 0; /* top-level def */
 }
 
-void abstract(stack *boundvars, const char *sym, int level, cell **lambda, int *changed)
+void abstract(stack *boundvars, const char *sym, int level, snode **lambda, int *changed)
 {
   int appdepth = 0;
-  cell **reall = lambda;
+  snode **reall = lambda;
   assert(lambda);
-  while (TYPE_APPLICATION == celltype(*reall)) {
+  while (TYPE_APPLICATION == snodetype(*reall)) {
     reall = &(*reall)->left;
     appdepth++;
   }
 
-  while ((TYPE_LAMBDA == celltype(*reall)) &&
+  while ((TYPE_LAMBDA == snodetype(*reall)) &&
          (level > binding_level(boundvars,(*reall)->name))) {
     reall = &(*reall)->body;
     appdepth--;
   }
   if (strcmp(sym,(*reall)->name)) {
-    cell *body = *reall;
-    *reall = alloc_cell();
+    snode *body = *reall;
+    *reall = snode_new(-1,-1);
     (*reall)->tag = TYPE_LAMBDA;
     (*reall)->name = strdup(sym);
     (*reall)->body = body;
@@ -98,9 +98,9 @@ void abstract(stack *boundvars, const char *sym, int level, cell **lambda, int *
   }
 }
 
-static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const char *prefix)
+static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const char *prefix)
 {
-  switch (celltype(*k)) {
+  switch (snodetype(*k)) {
   case TYPE_APPLICATION:
     create_scombs(boundvars,&((*k)->left),NULL,prefix);
     create_scombs(boundvars,&((*k)->right),NULL,prefix);
@@ -115,7 +115,7 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
        and the recursive call to create_scombs() will fill in the supercombinator with the
        appropriate arguments and body. */
     for (rec = (*k)->bindings; rec; rec = rec->next) {
-      if (TYPE_LAMBDA == celltype(rec->value)) {
+      if (TYPE_LAMBDA == snodetype(rec->value)) {
         rec->sc = add_scomb(rec->name);
         rec->sc->sl = rec->value->sl;
       }
@@ -133,6 +133,8 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
       if ((*ptr)->sc) {
         letrec *old = *ptr;
         *ptr = (*ptr)->next;
+        assert(TYPE_SCREF == snodetype(old->value));
+        snode_free(old->value);
         free(old->name);
         free(old);
       }
@@ -143,14 +145,14 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
 
     /* If we have no definitions left, simply replace the letrec with its body */
     if (NULL == (*k)->bindings)
-      *k = (cell*)(*k)->body;
+      *k = (*k)->body;
 
     bindings_setcount(boundvars,oldcount);
     break;
   }
   case TYPE_LAMBDA: {
     int oldcount = boundvars->count;
-    cell **tmp;
+    snode **tmp;
     int argno;
     scomb *newsc;
 
@@ -163,18 +165,22 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
       newsc->sl = (*k)->sl;
     }
 
-    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = &(*tmp)->body) {
+    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body) {
       stack_push(boundvars,binding_new((*tmp)->name,NULL));
       newsc->nargs++;
     }
     newsc->body = *tmp;
     newsc->argnames = (char**)malloc(newsc->nargs*sizeof(char*));
     argno = 0;
-    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = &(*tmp)->body)
+    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body)
       newsc->argnames[argno++] = strdup((*tmp)->name);
 
     create_scombs(boundvars,tmp,NULL,newsc->name);
-    (*k) = alloc_cell();
+
+    *tmp = NULL;
+    snode_free(*k);
+
+    (*k) = snode_new(-1,-1);
     (*k)->tag = TYPE_SCREF;
     (*k)->sc = newsc;
     (*k)->sl = newsc->body->sl;
@@ -183,17 +189,18 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
     break;
   }
   case TYPE_SYMBOL: {
-    cell *ref = *k;
-    char *sym = ref->name;
+    char *sym = (*k)->name;
+    sourceloc sl = (*k)->sl;
     int i;
     for (i = boundvars->count-1; 0 <= i; i--) {
       binding *bnd = (binding*)boundvars->data[i];
       if (!strcmp(bnd->name,sym)) {
         if (bnd->rec && bnd->rec->sc) {
-          (*k) = alloc_cell();
+          snode_free(*k);
+          (*k) = snode_new(-1,-1);
           (*k)->tag = TYPE_SCREF;
           (*k)->sc = bnd->rec->sc;
-          (*k)->sl = ref->sl;
+          (*k)->sl = sl;
         }
         break;
       }
@@ -212,17 +219,17 @@ static void create_scombs(stack *boundvars, cell **k, letrec *inletrec, const ch
   }
 }
 
-static void make_app(cell **k, list *args)
+static void make_app(snode **k, list *args)
 {
   list *l;
   for (l = args; l; l = l->next) {
     char *argname = (char*)l->data;
-    cell *varref = alloc_cell();
-    cell *left = *k;
+    snode *varref = snode_new(-1,-1);
+    snode *left = *k;
     varref->tag = TYPE_SYMBOL;
     varref->name = strdup(argname);
     varref->sl = left->sl;
-    (*k) = alloc_cell();
+    (*k) = snode_new(-1,-1);
     (*k)->tag = TYPE_APPLICATION;
     (*k)->left = left;
     (*k)->right = varref;
@@ -230,9 +237,9 @@ static void make_app(cell **k, list *args)
   }
 }
 
-static void replace_usage(cell **k, const char *fun, cell *extra, list *args)
+static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
 {
-  switch (celltype(*k)) {
+  switch (snodetype(*k)) {
   case TYPE_APPLICATION:
     replace_usage(&((*k)->left),fun,extra,args);
     replace_usage(&((*k)->right),fun,extra,args);
@@ -265,10 +272,10 @@ static void replace_usage(cell **k, const char *fun, cell *extra, list *args)
   }
 }
 
-static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
+static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
                    int *changed, letrec *inletrec)
 {
-  switch (celltype(*k)) {
+  switch (snodetype(*k)) {
   case TYPE_APPLICATION:
     lift_r(boundvars,&((*k)->left),noabsvars,lambda,changed,NULL);
     lift_r(boundvars,&((*k)->right),noabsvars,lambda,changed,NULL);
@@ -286,16 +293,16 @@ static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
       list_push(&newnoabs,strdup((char*)l->data));
 
     for (rec = (*k)->bindings; rec; rec = rec->next) {
-      int islambda = (TYPE_LAMBDA == celltype(rec->value));
-      cell *oldval = rec->value;
+      int islambda = (TYPE_LAMBDA == snodetype(rec->value));
+      snode *oldval = rec->value;
 
       lift_r(boundvars,&rec->value,newnoabs,lambda,changed,rec);
 
       if (islambda && (oldval != rec->value)) {
         list *vars = NULL;
-        cell *tmp;
+        snode *tmp;
         for (tmp = rec->value; tmp != oldval; tmp = tmp->body) {
-          assert(TYPE_LAMBDA == celltype(tmp));
+          assert(TYPE_LAMBDA == snodetype(tmp));
           list_append(&vars,tmp->name);
         }
         replace_usage(k,rec->name,rec->value,vars);
@@ -311,9 +318,9 @@ static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
   case TYPE_LAMBDA: {
     int oldcount = boundvars->count;
     list *lambdavars = NULL;
-    cell **tmp;
-    cell *oldlambda;
-    for (tmp = k; TYPE_LAMBDA == celltype(*tmp); tmp = &(*tmp)->body) {
+    snode **tmp;
+    snode *oldlambda;
+    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body) {
       stack_push(boundvars,binding_new((*tmp)->name,NULL));
       list_append(&lambdavars,strdup((*tmp)->name));
     }
@@ -330,7 +337,7 @@ static void lift_r(stack *boundvars, cell **k, list *noabsvars, cell **lambda,
 
     bindings_setcount(boundvars,oldcount);
 
-    for (tmp = k; TYPE_APPLICATION == celltype(*tmp); tmp = &(*tmp)->left)
+    for (tmp = k; TYPE_APPLICATION == snodetype(*tmp); tmp = &(*tmp)->left)
       lift_r(boundvars,&(*tmp)->right,noabsvars,lambda,changed,NULL);
     list_free(lambdavars,free);
     break;
@@ -376,9 +383,9 @@ void lift(scomb *sc)
   stack_free(boundvars);
 }
 
-void find_vars(cell *c, int *pos, char **names, letrec *ignore)
+void find_vars(snode *c, int *pos, char **names, letrec *ignore)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_APPLICATION:
     find_vars(c->left,pos,names,ignore);
     find_vars(c->right,pos,names,ignore);
@@ -411,34 +418,34 @@ void find_vars(cell *c, int *pos, char **names, letrec *ignore)
   }
 }
 
-void applift_r(cell **k, scomb *sc)
+void applift_r(snode **k, scomb *sc)
 {
-  switch (celltype(*k)) {
+  switch (snodetype(*k)) {
   case TYPE_APPLICATION: {
-    cell *fun = *k;
+    snode *fun = *k;
     int nargs = 0;
-    while (TYPE_APPLICATION == celltype(fun)) {
+    while (TYPE_APPLICATION == snodetype(fun)) {
       fun = fun->left;
       nargs++;
     }
-    if ((TYPE_SYMBOL == celltype(fun)) ||
-        ((TYPE_SCREF == celltype(fun)) && (nargs > fun->sc->nargs)) ||
-        ((TYPE_BUILTIN == celltype(fun)) && (nargs > builtin_info[fun->bif].nargs))) {
+    if ((TYPE_SYMBOL == snodetype(fun)) ||
+        ((TYPE_SCREF == snodetype(fun)) && (nargs > fun->sc->nargs)) ||
+        ((TYPE_BUILTIN == snodetype(fun)) && (nargs > builtin_info[fun->bif].nargs))) {
       int maxvars;
       scomb *newsc;
       int i;
 
       if (*k == sc->body) {
         /* just do the arguments */
-        cell *app;
-        for (app = *k; TYPE_APPLICATION == celltype(app); app = app->left)
+        snode *app;
+        for (app = *k; TYPE_APPLICATION == snodetype(app); app = app->left)
           applift_r(&app->right,sc);
         break;
       }
 
 
       maxvars = sc->nargs;
-      if (TYPE_LETREC == celltype(sc->body)) {
+      if (TYPE_LETREC == snodetype(sc->body)) {
         letrec *rec;
         for (rec = sc->body->bindings; rec; rec = rec->next)
           maxvars++;
@@ -453,18 +460,18 @@ void applift_r(cell **k, scomb *sc)
       find_vars(newsc->body,&newsc->nargs,newsc->argnames,NULL);
       assert(newsc->nargs <= maxvars);
 
-      (*k) = alloc_cell();
+      (*k) = snode_new(-1,-1);
       (*k)->tag = TYPE_SCREF;
       (*k)->sc = newsc;
       (*k)->sl = newsc->body->sl;
       for (i = 0; i < newsc->nargs; i++) {
-        cell *varref;
-        cell *app;
-        varref = alloc_cell();
+        snode *varref;
+        snode *app;
+        varref = snode_new(-1,-1);
         varref->tag = TYPE_SYMBOL;
         varref->name = strdup(newsc->argnames[i]);
         varref->sl = (*k)->sl;
-        app = alloc_cell();
+        app = snode_new(-1,-1);
         app->tag = TYPE_APPLICATION;
         app->left = *k;
         app->right = varref;

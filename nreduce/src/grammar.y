@@ -39,13 +39,13 @@ extern int yyfileno;
 int yylex();
 int yyerror(const char *err);
 
-extern struct cell *parse_root;
+extern struct snode *parse_root;
 
 %}
 
 
 %union {
-  struct cell *c;
+  struct snode *c;
   char *s;
   int i;
   double d;
@@ -76,33 +76,33 @@ extern struct cell *parse_root;
 %%
 
 SingleExpr:
-  NIL                                           { $$ = alloc_sourcecell(yyfileno,yylineno);
+  NIL                                           { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_NIL; }
-| '(' ')'                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
+| '(' ')'                                       { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_NIL; }
-| INTEGER                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
+| INTEGER                                       { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_NUMBER;
-                                                  celldouble($$) = (double)($1); }
-| DOUBLE                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
+                                                  $$->num = (double)($1); }
+| DOUBLE                                        { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_NUMBER;
-                                                  celldouble($$) = $1; }
-| STRING                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
+                                                  $$->num = $1; }
+| STRING                                        { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_STRING;
                                                   $$->value = strdup($1); }
-| SYMBOL                                      { $$ = alloc_sourcecell(yyfileno,yylineno);
+| SYMBOL                                      { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_SYMBOL;
                                                   $$->name = strdup($1); }
-| BUILTIN                                       { $$ = alloc_sourcecell(yyfileno,yylineno);
+| BUILTIN                                       { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_BUILTIN;
                                                   $$->bif = $1; }
-| EQUALS                                        { $$ = alloc_sourcecell(yyfileno,yylineno);
+| EQUALS                                        { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_BUILTIN;
                                                   $$->bif = B_EQ; }
 | '(' Expr ')'                                  { $$ = $2; }
 ;
 
 SingleLambda:
-  LAMBDA SYMBOL  '.'                          { $$ = alloc_sourcecell(yyfileno,yylineno);
+  LAMBDA SYMBOL  '.'                          { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_LAMBDA;
                                                   $$->name = (void*)strdup($2);
                                                   $$->body = NULL; }
@@ -114,11 +114,12 @@ Lambdas:
 ;
 
 AppliedExpr:
-  SingleExpr                                    { $$ = alloc_sourcecell(yyfileno,yylineno);
+  SingleExpr                                    { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_CONS;
                                                   $$->left = $1;
-                                                  $$->right = globnil; }
-| SingleExpr AppliedExpr                        { $$ = alloc_sourcecell(yyfileno,yylineno);
+                                                  $$->right = snode_new(yyfileno,yylineno);
+                                                  $$->right->tag = TYPE_NIL; }
+| SingleExpr AppliedExpr                        { $$ = snode_new(yyfileno,yylineno);
                                                   $$->tag = TYPE_CONS;
                                                   $$->left = $1;
                                                   $$->right = $2; }
@@ -126,7 +127,7 @@ AppliedExpr:
 
 Expr:
   AppliedExpr                                   { $$ = $1; }
-| Lambdas AppliedExpr                           { cell *c = $1;
+| Lambdas AppliedExpr                           { snode *c = $1;
                                                   while (c->body)
                                                     c = c->body;
                                                   c->body = $2; }

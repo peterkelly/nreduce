@@ -39,9 +39,32 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-cell *parse_root = NULL;
+snode *parse_root = NULL;
 extern gprogram *cur_program;
 extern array *oldnames;
+
+const char *snode_types[NUM_CELLTYPES] = {
+"EMPTY",
+"APPLICATION",
+"LAMBDA",
+"BUILTIN",
+"CONS",
+"SYMBOL",
+"LETREC",
+"RES2",
+"RES3",
+"IND",
+"RES1",
+"SCREF",
+"AREF",
+"HOLE",
+"FRAME",
+"CAP",
+"NIL",
+"NUMBER",
+"STRING",
+"ARRAY",
+ };
 
 const char *cell_types[NUM_CELLTYPES] = {
 "EMPTY",
@@ -100,22 +123,22 @@ void debug_stage(const char *name)
   printf("\n");
 }
 
-int count_args(cell *c)
+int count_args(snode *c)
 {
   int napps = 0;
-  while (TYPE_APPLICATION == celltype(c)) {
+  while (TYPE_APPLICATION == snodetype(c)) {
     c = c->left;
     napps++;
   }
   return napps;
 }
 
-cell *get_arg(cell *c, int argno)
+snode *get_arg(snode *c, int argno)
 {
   argno = count_args(c)-argno-1;
   assert(0 <= argno);
   while (0 < argno) {
-    assert(TYPE_APPLICATION == celltype(c));
+    assert(TYPE_APPLICATION == snodetype(c));
     c = c->left;
     argno--;
   }
@@ -176,11 +199,11 @@ void print_bin_rev(void *ptr, int nbytes)
   printf("\n");
 }
 
-static void print1(char *prefix, cell *c, int indent)
+static void print1(char *prefix, snode *c, int indent)
 {
   int i;
 
-  printf("%s%p    %11s ",prefix,c,cell_types[celltype(c)]);
+  printf("%s%p    %11s ",prefix,c,snode_types[snodetype(c)]);
   for (i = 0; i < indent; i++)
     printf("  ");
 
@@ -189,10 +212,9 @@ static void print1(char *prefix, cell *c, int indent)
   }
   else {
     c->tag |= FLAG_TMP;
-    switch (celltype(c)) {
+    switch (snodetype(c)) {
     case TYPE_IND:
-      printf("IND\n");
-      print1(prefix,(cell*)c->field1,indent+1);
+      assert(0);
       break;
     case TYPE_EMPTY:
       printf("empty\n");
@@ -242,7 +264,7 @@ static void print1(char *prefix, cell *c, int indent)
     case TYPE_NIL:
       printf("nil\n"); break;
     case TYPE_NUMBER:
-      print_double(stdout,celldouble(c));
+      print_double(stdout,c->num);
       printf("\n");
       break;
     case TYPE_STRING:
@@ -256,7 +278,7 @@ static void print1(char *prefix, cell *c, int indent)
   }
 }
 
-void print(cell *c)
+void print(snode *c)
 {
   cleargraph(c,FLAG_TMP);
   print1("",c,0);
@@ -312,9 +334,9 @@ char *real_scname(const char *sym)
 #endif
 }
 
-static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, int *col)
+static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line, int *col)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_IND:
     assert(0);
     break;
@@ -322,7 +344,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     *col += fprintf(f,"empty");
     break;
   case TYPE_APPLICATION: {
-    cell *tmp;
+    snode *tmp;
     list *l;
     int addedline = 0;
     int argscol;
@@ -331,22 +353,22 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     list *apps = NULL;
     if (needbr)
       *col += fprintf(f,"(");
-    for (tmp = c; TYPE_APPLICATION == celltype(tmp); tmp = tmp->left)
+    for (tmp = c; TYPE_APPLICATION == snodetype(tmp); tmp = tmp->left)
       list_push(&apps,tmp);
 
     print_code1(f,tmp,0,c,line,col);
     *col += fprintf(f," ");
     argscol = *col;
     argno = 0;
-    isif = (((TYPE_BUILTIN == celltype(tmp)) && (B_IF == tmp->bif)) ||
-            ((TYPE_SYMBOL == celltype(tmp)) && !strcmp(tmp->name,"if")));
+    isif = (((TYPE_BUILTIN == snodetype(tmp)) && (B_IF == tmp->bif)) ||
+            ((TYPE_SYMBOL == snodetype(tmp)) && !strcmp(tmp->name,"if")));
     for (l = apps; l; l = l->next) {
-      cell *app = (cell*)l->data;
-      cell *arg = app->right;
+      snode *app = (snode*)l->data;
+      snode *arg = app->right;
       int oldcol;
       int oldline;
 
-      if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == celltype(arg)))) {
+      if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == snodetype(arg)))) {
         *col = argscol;
         down_line(f,line,col);
       }
@@ -376,11 +398,11 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     break;
   }
   case TYPE_LAMBDA:
-    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,"(");
     *col += fprintf(f,"!%s.",real_varname(c->name));
     print_code1(f,c->body,0,c,line,col);
-    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,")");
     break;
   case TYPE_BUILTIN:
@@ -388,15 +410,15 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     break;
   case TYPE_CONS: {
     int pos = 0;
-    cell *item;
+    snode *item;
     *col += fprintf(f,"[");
-    for (item = c; TYPE_CONS == celltype(item); item = item->right) {
+    for (item = c; TYPE_CONS == snodetype(item); item = item->right) {
       if (0 < pos++)
         *col += fprintf(f,",");
       print_code1(f,item->left,1,c,line,col);
     }
     *col += fprintf(f,"]");
-    if (TYPE_NIL != celltype(item))
+    if (TYPE_NIL != snodetype(item))
       print_code1(f,item,1,c,line,col);
     break;
   }
@@ -424,7 +446,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
   case TYPE_LETREC: {
     int count = 0;
     letrec *rec = c->bindings;
-    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,"(");
     *col += fprintf(f,"let (");
     while (rec) {
@@ -443,7 +465,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     (*col)--;
     down_line(f,line,col);
     print_code1(f,c->body,1,c,line,col);
-    if (parent && (TYPE_LAMBDA != celltype(parent)) && (TYPE_LETREC != celltype(parent)))
+    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,")");
     break;
   }
@@ -454,7 +476,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
     fprintf(f,"nil");
     break;
   case TYPE_NUMBER:
-    print_double(f,celldouble(c));
+    print_double(f,c->num);
     break;
   case TYPE_STRING: {
     char *ch;
@@ -488,7 +510,7 @@ static void print_code1(FILE *f, cell *c, int needbr, cell *parent, int *line, i
   }
 }
 
-void print_codef2(FILE *f, cell *c, int pos)
+void print_codef2(FILE *f, snode *c, int pos)
 {
   int line = 0;
   int col = pos;
@@ -496,14 +518,14 @@ void print_codef2(FILE *f, cell *c, int pos)
   print_code1(f,c,0,NULL,&line,&col);
 }
 
-void print_codef(FILE *f, cell *c)
+void print_codef(FILE *f, snode *c)
 {
   int line = 0;
   int col = 0;
   cleargraph(c,FLAG_TMP);
   print_code1(f,c,0,NULL,&line,&col);
 }
-void print_code(cell *c)
+void print_code(snode *c)
 {
   print_codef(stdout,c);
 }
@@ -553,4 +575,60 @@ void print_scombs2()
     debug(0,"\n");
   }
   debug(0,"\n");
+}
+
+void print_stack(pntr *stk, int size, int dir)
+{
+  int i;
+
+  if (dir)
+    i = size-1;
+  else
+    i = 0;
+
+
+  while (1) {
+    pntr p;
+    int pos = dir ? (size-1-i) : i;
+
+    if (dir && i < 0)
+      break;
+
+    if (!dir && (i >= size))
+      break;
+
+    p = resolve_pntr(stk[i]);
+    if (TYPE_IND == pntrtype(stk[i]))
+      debug(0,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
+    else
+      debug(0,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
+    print_pntr(p);
+    debug(0,"\n");
+
+    if (dir)
+      i--;
+    else
+      i++;
+  }
+}
+
+void statistics(FILE *f)
+{
+  int i;
+  int total;
+  fprintf(f,"maxstack = %d\n",maxstack);
+  fprintf(f,"totalallocs = %d\n",totalallocs);
+  fprintf(f,"ncollections = %d\n",ncollections);
+  fprintf(f,"nscombappls = %d\n",nscombappls);
+  fprintf(f,"nreductions = %d\n",nreductions);
+  fprintf(f,"nframes = %d\n",nframes);
+  fprintf(f,"maxdepth = %d\n",maxdepth);
+  fprintf(f,"maxframes = %d\n",maxframes);
+
+  total = 0;
+  for (i = 0; i < OP_COUNT; i++) {
+    fprintf(f,"usage(%s) = %d\n",op_names[i],op_usage[i]);
+    total += op_usage[i];
+  }
+  fprintf(f,"usage total = %d\n",total);
 }

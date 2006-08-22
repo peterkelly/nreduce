@@ -4,7 +4,7 @@ noinst_HEADERS = assembler.h gcode.h nreduce.h
 BUILT_SOURCES = grammar.tab.c lexer.yy.c
 EXTRA_DIST = grammar.y lexer.l grammar.tab.h
 nreduce_SOURCES = assembler.c \
-	extra.c \
+	debug.c \
 	gmachine.c \
 	reduction.c \
 	builtins.c \
@@ -19,7 +19,7 @@ nreduce_SOURCES = assembler.c \
 	renaming.c \
 	resolve.c \
 	reorder.c \
-	rtvalue.c \
+	source.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c

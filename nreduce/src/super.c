@@ -106,6 +106,7 @@ scomb *add_scomb(const char *name1)
 void scomb_free(scomb *sc)
 {
   int i;
+  snode_free(sc->body);
   free(sc->name);
   for (i = 0; i < sc->nargs; i++)
     free(sc->argnames[i]);
@@ -128,14 +129,14 @@ void fix_partial_applications()
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
-    cell *c = sc->body;
+    snode *c = sc->body;
     int nargs = 0;
     scomb *other;
-    while (TYPE_APPLICATION == celltype(c)) {
+    while (TYPE_APPLICATION == snodetype(c)) {
       c = c->left;
       nargs++;
     }
-    if (TYPE_SCREF == celltype(c)) {
+    if (TYPE_SCREF == snodetype(c)) {
       other = c->sc;
       if (nargs < other->nargs) {
         int oldargs = sc->nargs;
@@ -144,8 +145,8 @@ void fix_partial_applications()
         sc->nargs += extra;
         sc->argnames = (char**)realloc(sc->argnames,sc->nargs*sizeof(char*));
         for (i = oldargs; i < sc->nargs; i++) {
-          cell *fun = sc->body;
-          cell *arg = alloc_cell();
+          snode *fun = sc->body;
+          snode *arg = snode_new(-1,-1);
 
           sc->argnames[i] = (char*)malloc(20);
           sprintf(sc->argnames[i],"N%d",genvar++);
@@ -153,7 +154,7 @@ void fix_partial_applications()
           arg->tag = TYPE_SYMBOL;
           arg->name = strdup(sc->argnames[i]);
 
-          sc->body = alloc_cell();
+          sc->body = snode_new(-1,-1);
           sc->body->tag = TYPE_APPLICATION;
           sc->body->left = fun;
           sc->body->right = arg;
@@ -163,18 +164,18 @@ void fix_partial_applications()
   }
 }
 
-void shared_error(cell ***cells, int *ncells, cell *shared)
+void shared_error(snode ***nodes, int *nnodes, snode *shared)
 {
   int i = 0;
   scomb *sc;
-  fprintf(stderr,"Shared cell: ");
+  fprintf(stderr,"Shared node: ");
   print_codef(stderr,shared);
   fprintf(stderr,"\n");
   fprintf(stderr,"Present in supercombinators:\n");
   for (sc = scombs; sc; sc = sc->next) {
     int j;
-    for (j = 0; j < ncells[i]; j++) {
-      if (cells[i][j] == shared)
+    for (j = 0; j < nnodes[i]; j++) {
+      if (nodes[i][j] == shared)
         fprintf(stderr,"%s\n",sc->name);
     }
     i++;
@@ -186,44 +187,42 @@ void check_scombs_nosharing()
 {
   int count = 0;
   scomb *sc;
-  cell ***cells;
-  int *ncells;
+  snode ***nodes;
+  int *nnodes;
   int i;
 
   for (sc = scombs; sc; sc = sc->next)
     count++;
 
-  cells = (cell***)calloc(count,sizeof(cell**));
-  ncells = (int*)calloc(count,sizeof(cell**));
+  nodes = (snode***)calloc(count,sizeof(snode**));
+  nnodes = (int*)calloc(count,sizeof(snode**));
   i = 0;
   for (sc = scombs; sc; sc = sc->next) {
-    find_graph_cells(&cells[i],&ncells[i],sc->body);
+    find_snodes(&nodes[i],&nnodes[i],sc->body);
     i++;
   }
 
   i = 0;
   for (sc = scombs; sc; sc = sc->next) {
     int j;
-    for (j = 0; j < ncells[i]; j++)
-      cells[i][j]->tag &= ~FLAG_PROCESSED;
+    for (j = 0; j < nnodes[i]; j++)
+      nodes[i][j]->tag &= ~FLAG_PROCESSED;
     i++;
   }
 
   i = 0;
   for (sc = scombs; sc; sc = sc->next) {
     int j;
-    for (j = 0; j < ncells[i]; j++) {
-      /* we allow globnil to be shared - could it still cause problems? */
-      if ((cells[i][j]->tag & FLAG_PROCESSED) && (cells[i][j] != globnil)) {
-        shared_error(cells,ncells,cells[i][j]);
-      }
-      cells[i][j]->tag |= FLAG_PROCESSED;
+    for (j = 0; j < nnodes[i]; j++) {
+      if (nodes[i][j]->tag & FLAG_PROCESSED)
+        shared_error(nodes,nnodes,nodes[i][j]);
+      nodes[i][j]->tag |= FLAG_PROCESSED;
     }
     i++;
   }
 
   for (i = 0; i < count; i++)
-    free(cells[i]);
-  free(cells);
-  free(ncells);
+    free(nodes[i]);
+  free(nodes);
+  free(nnodes);
 }

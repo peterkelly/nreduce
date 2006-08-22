@@ -92,33 +92,33 @@
 #include <math.h>
 
 /**
- * Determine the number of arguments required by the function referenced by the specified cell.
+ * Determine the number of arguments required by the function referenced by the specified node
  *
- * @param c Cell representing a function. Must be either a supercombinator reference or built-in
+ * @param c Node representing a function. Must be either a supercombinator reference or built-in
  *          function
  */
-static int fun_nargs(cell *c)
+static int fun_nargs(snode *c)
 {
-  if (TYPE_SCREF == celltype(c))
+  if (TYPE_SCREF == snodetype(c))
     return c->sc->nargs;
-  else if (TYPE_BUILTIN == celltype(c))
+  else if (TYPE_BUILTIN == snodetype(c))
     return builtin_info[c->bif].nargs;
   else
     abort();
 }
 
 /**
- * Determine whether or not the function referenced by the cell is strict in the specified argument
+ * Determine whether or not the function referenced by the node is strict in the specified argument
  *
- * @param c Cell representing a function. Must be either a supercombinator reference or built-in
+ * @param c Node representing a function. Must be either a supercombinator reference or built-in
  *          function
  */
-static int fun_strictin(cell *c, int argno)
+static int fun_strictin(snode *c, int argno)
 {
   assert(argno < fun_nargs(c));
-  if (TYPE_SCREF == celltype(c))
+  if (TYPE_SCREF == snodetype(c))
     return c->sc->strictin[argno];
-  else if (TYPE_BUILTIN == celltype(c))
+  else if (TYPE_BUILTIN == snodetype(c))
     return (argno < builtin_info[c->bif].nstrict);
   else
     abort();
@@ -188,9 +188,9 @@ static void add_union(list **dest, list *a, list *b)
  *                strictness flag of one or more application nodes. Changes to used are not
  *                recorded here; this is the responsibility of check_strictness().
  */
-static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
+static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
 {
-  switch (celltype(c)) {
+  switch (snodetype(c)) {
   case TYPE_LETREC: {
     letrec *rec;
     list *bodyused = NULL;
@@ -226,14 +226,14 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
     break;
   }
   case TYPE_APPLICATION: {
-    cell *fun;
+    snode *fun;
     int nargs = 0;
-    for (fun = c; TYPE_APPLICATION == celltype(fun); fun = fun->left)
+    for (fun = c; TYPE_APPLICATION == snodetype(fun); fun = fun->left)
       nargs++;
 
     /* We have discovered the item at the bottom of the spine, which is the function to be called.
        However we can only perform strictness analysis if we know statically what that function
-       is - i.e. if the cell is a supercombinator reference of built-in function.
+       is - i.e. if the node is a supercombinator reference of built-in function.
 
        It is also possible that it could be a symbol, corresponding to a higher-order function
        passed in as an argument, but since we don't know anything about it we skip this case.
@@ -241,12 +241,12 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
        Additionally, we will wait until we have an application to the right number of arguments
        before doing the analysis - if this is not the case yet we'll just do a recursive call
        to the next item in the application chain and handle it later. */
-    if (((TYPE_SCREF == celltype(fun)) || (TYPE_BUILTIN == celltype(fun))) &&
+    if (((TYPE_SCREF == snodetype(fun)) || (TYPE_BUILTIN == snodetype(fun))) &&
         (nargs == fun_nargs(fun))) {
 
       /* Follow the left branches down the tree, inspecting each argument and treating it as
          strict or not depending on what we know about the appropriate argument to the function. */
-      cell *app = c;
+      snode *app = c;
       int argno;
       for (argno = nargs-1; 0 <= argno; argno--) {
 
@@ -278,9 +278,9 @@ static void check_strictness_r(scomb *sc, cell *c, list **used, int *changed)
          the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
          We also annotate application nodes within the true/false branches with FLAG_STRICT
          where appropriate. */
-      if ((TYPE_BUILTIN == celltype(fun)) && (B_IF == fun->bif)) {
-        cell *falsebranch = c->right;
-        cell *truebranch = c->left->right;
+      if ((TYPE_BUILTIN == snodetype(fun)) && (B_IF == fun->bif)) {
+        snode *falsebranch = c->right;
+        snode *truebranch = c->left->right;
 
         list *trueused = NULL;
         list *falseused = NULL;
