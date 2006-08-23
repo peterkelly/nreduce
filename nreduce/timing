@@ -1,11 +1,11 @@
 arraylife.l
-Average execution time: 12.283
+Average execution time: 12.324
 
 bigmandelbrot.l
-Average execution time: 9.373
+Average execution time: 9.643
 
 arraylife.l -O3 -DNDEBUG
-Average execution time: 6.327
+Average execution time: 6.896
 
 bigmandelbrot.l -O3 -DNDEBUG
-Average execution time: 4.889
+Average execution time: 5.499
