@@ -150,6 +150,8 @@
 
 struct letrec;
 struct scomb;
+struct gprogram;
+struct process;
 
 typedef struct sourceloc {
   int fileno;
@@ -280,7 +282,7 @@ typedef struct scomb {
   struct scomb *next;
 } scomb;
 
-typedef void (*builtin_f)(pntr *argstack);
+typedef void (*builtin_f)(struct process *proc, pntr *argstack);
 
 typedef struct builtin {
   char *name;
@@ -316,6 +318,37 @@ typedef struct frame {
   struct frame *freelnk;
 } frame;
 
+typedef struct block {
+  struct block *next;
+  cell values[BLOCK_SIZE];
+} block;
+
+typedef struct process {
+  block *blocks;
+  cell *freeptr;
+  pntr globnilpntr;
+  pntr globtruepntr;
+  pntr *strings;
+  int nstrings;
+  frame *freeframe;
+  frame *active_frames;
+  int framecount;
+  int active_framecount;
+  int *funcalls;
+  int *usage;
+  int *op_usage;
+  int totalallocs;
+  int ncollections;
+  int nscombappls;
+  int nreductions;
+  int nframes;
+  int maxframes;
+  int nallocs;
+  pntrstack *streamstack;
+  pntr *gstack;
+  int gstackcount;
+} process;
+
 /* memory */
 
 void initmem();
@@ -324,6 +357,10 @@ void snode_free(snode *c);
 void free_letrec(letrec *rec);
 void free_scomb(scomb *sc);
 void cleanup();
+
+process *process_new();
+void process_init(process *proc, struct gprogram *gp);
+void process_free(process *proc);
 
 const char *lookup_parsedfile(int fileno);
 int add_parsedfile(const char *filename);
@@ -338,17 +375,15 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 
 /* cell */
 
-cell *alloc_cell(void);
-void free_cell_fields(cell *v);
+cell *alloc_cell(process *proc);
+void free_cell_fields(process *proc, cell *v);
 
-void collect();
+void collect(process *h);
 
-void add_active_frame(frame *f);
-void remove_active_frame(frame *f);
-frame *frame_new();
-void frame_free(frame *f);
-frame *frame_alloc();
-void frame_dealloc(frame *f);
+void add_active_frame(process *proc, frame *f);
+void remove_active_frame(process *proc, frame *f);
+frame *frame_alloc(process *proc);
+void frame_dealloc(process *proc, frame *f);
 int frame_depth(frame *f);
 
 cap *cap_alloc(int arity, int address, int fno);
@@ -383,7 +418,7 @@ void applift(scomb *sc);
 
 /* reduction */
 
-void reduce(pntrstack *s);
+void reduce(process *h, pntrstack *s);
 
 /* graph */
 
@@ -415,7 +450,7 @@ void print_scombs2();
 const char *real_varname(const char *sym);
 char *real_scname(const char *sym);
 void print_stack(pntr *stk, int size, int dir);
-void statistics(FILE *f);
+void statistics(process *proc, FILE *f);
 
 /* strictness */
 
@@ -465,20 +500,7 @@ extern const char *cell_types[NUM_CELLTYPES];
 #endif
 
 #ifndef MEMORY_C
-extern int maxstack;
 extern int trace;
-extern int nallocs;
-extern int ncollections;
-extern int totalallocs;
-extern int nscombappls;
-extern int nreductions;
-extern int nframes;
-extern int maxdepth;
-extern int maxframes;
-
-extern pntr globnilpntr;
-extern pntr globtruepntr;
-extern pntr globzeropntr;
 #endif
 
 #ifndef SUPER_C

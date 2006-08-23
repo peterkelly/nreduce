@@ -35,8 +35,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-extern int evaldoaddr;
-
 int is_whnf(pntr p)
 {
   if (!is_pntr(p))
@@ -71,12 +69,12 @@ int is_whnf(pntr p)
 
 int start_addr(gprogram *gp, int fno)
 {
-  return addressmap[fno];
+  return gp->addressmap[fno];
 }
 
 int end_addr(gprogram *gp, int fno)
 {
-  int addr = addressmap[fno];
+  int addr = gp->addressmap[fno];
   while ((addr < gp->count) &&
          ((OP_GLOBSTART != gp->ginstrs[addr].opcode) ||
           (gp->ginstrs[addr].arg0 == fno)))
@@ -129,9 +127,6 @@ void check_stack(frame *curf, pntr *stackdata, int stackcount, gprogram *gp)
   }
 }
 
-pntr *gstack = NULL;
-int gstackcount = 0;
-
 void swapstack_in(frame *curf, pntr *stdata, int stcount)
 {
   assert(NULL == curf->data);
@@ -150,35 +145,6 @@ void swapstack_out(frame *curf, pntr **stdata, int *stcount)
   curf->count = 0;
 }
 
-#if 0
-void runtime_error(gprogram *gp, frame *f, const char *format, ...)
-{
-  va_list ap;
-  int stackpos;
-  ginstr *instr = &gp->ginstrs[f->address];
-
-  if (0 <= instr->fileno)
-    fprintf(stderr,"%s:%d: ",lookup_parsedfile(instr->fileno),instr->lineno);
-
-  va_start(ap,format);
-  vfprintf(stderr,format,ap);
-  va_end(ap);
-
-  fprintf(stderr,"\n");
-  fprintf(stderr,"Call stack:\n");
-  stackpos = 0;
-  while (f) {
-    if (0 <= f->fno)
-      fprintf(stderr,"%3d: %s\n",stackpos,function_name(f->fno));
-    else
-      fprintf(stderr,"%3d: --\n",stackpos);
-    f = f->d;
-    stackpos++;
-  }
-  exit(1);
-}
-#endif
-
 void cap_error(pntr cappntr, ginstr *instr)
 {
   cell *capval = get_pntr(cappntr);
@@ -195,15 +161,15 @@ void cap_error(pntr cappntr, ginstr *instr)
   exit(1);
 }
 
-void execute(gprogram *gp)
+void execute(process *proc, gprogram *gp)
 {
   int stcount = 0;
   pntr *stdata = (pntr*)malloc(sizeof(pntr));
   int lines = -1;
 
-  frame *curf = frame_alloc();
+  frame *curf = frame_alloc(proc);
   curf->fno = -1;
-  add_active_frame(curf);
+  add_active_frame(proc,curf);
 
   curf->alloc = 1;
 
@@ -227,28 +193,28 @@ void execute(gprogram *gp)
     #ifdef STACK_MODEL_SANITY_CHECK
     check_stack(curf,stdata,stcount,gp);
     assert(stcount <= curf->alloc);
-    assert((0 > curf->fno) || (curf->alloc >= stacksizes[curf->fno]));
-    assert((0 > curf->fno) || (stcount <= stacksizes[curf->fno]));
+    assert((0 > curf->fno) || (curf->alloc >= gp->stacksizes[curf->fno]));
+    assert((0 > curf->fno) || (stcount <= gp->stacksizes[curf->fno]));
     #endif
 
-    if (nallocs > COLLECT_THRESHOLD) {
-      gstack = stdata;
-      gstackcount = stcount;
-      collect();
-      gstack = NULL;
-      gstackcount = 0;
+    if (proc->nallocs > COLLECT_THRESHOLD) {
+      proc->gstack = stdata;
+      proc->gstackcount = stcount;
+      collect(proc);
+      proc->gstack = NULL;
+      proc->gstackcount = 0;
     }
 
     #ifdef PROFILING
-    op_usage[instr->opcode]++;
-    instr->usage++;
+    proc->op_usage[instr->opcode]++;
+    proc->usage[curf->address]++;
     #endif
 
     switch (instr->opcode) {
     case OP_BEGIN:
       break;
     case OP_END:
-      remove_active_frame(curf);
+      remove_active_frame(proc,curf);
       free(stdata);
       curf = NULL;
       done = 1;
@@ -280,11 +246,11 @@ void execute(gprogram *gp)
 
         #ifdef PROFILING
         if (0 <= curf->fno)
-          funcalls[curf->fno]++;
+          proc->funcalls[curf->fno]++;
         #endif
 
         // curf->address--; /* so we process the GLOBSTART */
-        add_active_frame(curf);
+        add_active_frame(proc,curf);
       }
       else {
         assert(OP_RESOLVE == gp->ginstrs[curf->address+1].opcode);
@@ -307,7 +273,7 @@ void execute(gprogram *gp)
       curf = old->d;
       swapstack_out(curf,&stdata,&stcount);
 
-      remove_active_frame(old);
+      remove_active_frame(proc,old);
       assert(curf);
       break;
     }
@@ -355,27 +321,27 @@ void execute(gprogram *gp)
         curf = old->d;
         swapstack_out(curf,&stdata,&stcount);
 
-        remove_active_frame(old);
+        remove_active_frame(proc,old);
         assert(curf);
       }
       else if (s+s1 == a1) {
         int i;
         curf->address = cp->address;
         curf->fno = cp->fno;
-        pntrstack_grow(&curf->alloc,&stdata,stacksizes[cp->fno]);
+        pntrstack_grow(&curf->alloc,&stdata,gp->stacksizes[cp->fno]);
         for (i = 0; i < cp->count; i++)
           stdata[stcount++] = cp->data[i];
         // curf->address--; /* so we process the GLOBSTART */
         #ifdef PROFILING
         if (0 <= curf->fno)
-          funcalls[curf->fno]++;
+          proc->funcalls[curf->fno]++;
         #endif
       }
       else { /* s+s1 > a1 */
-        frame *newf = frame_alloc();
+        frame *newf = frame_alloc(proc);
         int i;
         int extra;
-        newf->alloc = stacksizes[cp->fno];
+        newf->alloc = gp->stacksizes[cp->fno];
         newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
         newf->count = 0;
         newf->address = cp->address;
@@ -386,7 +352,7 @@ void execute(gprogram *gp)
         for (i = 0; i < cp->count; i++)
           newf->data[newf->count++] = cp->data[i];
 
-        newf->c = alloc_cell();
+        newf->c = alloc_cell(proc);
         newf->c->tag = TYPE_FRAME;
         make_pntr(newf->c->field1,newf);
 
@@ -394,20 +360,20 @@ void execute(gprogram *gp)
         make_pntr(stdata[stcount],newf->c);
         stcount++;
 
-        curf->address = evaldoaddr-1;
+        curf->address = gp->evaldoaddr-1;
         curf->fno = -1;
       }
 
       break;
     }
     case OP_JFUN:
-      curf->address = addressmap[instr->arg0];
+      curf->address = gp->addressmap[instr->arg0];
       curf->fno = instr->arg0;
-      pntrstack_grow(&curf->alloc,&stdata,stacksizes[curf->fno]);
+      pntrstack_grow(&curf->alloc,&stdata,gp->stacksizes[curf->fno]);
       // curf->address--; /* so we process the GLOBSTART */
       #ifdef PROFILING
       if (0 <= curf->fno)
-        funcalls[curf->fno]++;
+        proc->funcalls[curf->fno]++;
       #endif
       break;
     case OP_JFALSE: {
@@ -459,7 +425,7 @@ void execute(gprogram *gp)
     case OP_ALLOC: {
       int i;
       for (i = 0; i < instr->arg0; i++) {
-        cell *hole = alloc_cell();
+        cell *hole = alloc_cell(proc);
         hole->tag = TYPE_HOLE;
         make_pntr(stdata[stcount],hole);
         stcount++;
@@ -482,7 +448,7 @@ void execute(gprogram *gp)
       int n = instr->arg1;
       int i;
       cell *capv;
-      cap *c = cap_alloc(function_nargs(fno),addressmap[fno],fno);
+      cap *c = cap_alloc(function_nargs(fno),gp->addressmap[fno],fno);
       c->sl = instr->sl;
       c->data = (pntr*)malloc(n*sizeof(pntr));
       c->count = 0;
@@ -490,7 +456,7 @@ void execute(gprogram *gp)
         c->data[c->count++] = stdata[i];
       stcount -= n;
 
-      capv = alloc_cell();
+      capv = alloc_cell(proc);
       capv->tag = TYPE_CAP;
       make_pntr(capv->field1,c);
       make_pntr(stdata[stcount],capv);
@@ -502,16 +468,16 @@ void execute(gprogram *gp)
       int n = instr->arg1;
       cell *newfholder;
       int i;
-      frame *newf = frame_alloc();
-      newf->alloc = stacksizes[fno];
+      frame *newf = frame_alloc(proc);
+      newf->alloc = gp->stacksizes[fno];
       newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
       newf->count = 0;
 
-      newf->address = addressmap[fno];
+      newf->address = gp->addressmap[fno];
       newf->fno = fno;
       newf->d = NULL;
 
-      newfholder = alloc_cell();
+      newfholder = alloc_cell(proc);
       newfholder->tag = TYPE_FRAME;
       make_pntr(newfholder->field1,newf);
       newf->c = newfholder;
@@ -539,21 +505,22 @@ void execute(gprogram *gp)
       for (i = 0; i < builtin_info[bif].nstrict; i++)
         assert(TYPE_IND != pntrtype(stdata[stcount-1-i]));
 
-      builtin_info[bif].f(&stdata[stcount-nargs]);
+      builtin_info[bif].f(proc,&stdata[stcount-nargs]);
       stcount -= (nargs-1);
       assert(!builtin_info[bif].reswhnf || (TYPE_IND != pntrtype(stdata[stcount-1])));
       break;
     }
     case OP_PUSHNIL:
-      stdata[stcount++] = globnilpntr;
+      stdata[stcount++] = proc->globnilpntr;
       break;
     case OP_PUSHNUMBER:
       stdata[stcount++] = make_number(*((double*)&instr->arg0));
       break;
-    case OP_PUSHSTRING:
-      make_pntr(stdata[stcount],((cell**)gp->stringmap->data)[instr->arg0]);
+    case OP_PUSHSTRING: {
+      stdata[stcount] = proc->strings[instr->arg0];
       stcount++;
       break;
+    }
     case OP_RESOLVE:
       stdata[stcount-1-instr->arg0] = resolve_pntr(stdata[stcount-1-instr->arg0]);
       break;

@@ -612,23 +612,21 @@ void print_stack(pntr *stk, int size, int dir)
   }
 }
 
-void statistics(FILE *f)
+void statistics(process *proc, FILE *f)
 {
   int i;
   int total;
-  fprintf(f,"maxstack = %d\n",maxstack);
-  fprintf(f,"totalallocs = %d\n",totalallocs);
-  fprintf(f,"ncollections = %d\n",ncollections);
-  fprintf(f,"nscombappls = %d\n",nscombappls);
-  fprintf(f,"nreductions = %d\n",nreductions);
-  fprintf(f,"nframes = %d\n",nframes);
-  fprintf(f,"maxdepth = %d\n",maxdepth);
-  fprintf(f,"maxframes = %d\n",maxframes);
+  fprintf(f,"totalallocs = %d\n",proc->totalallocs);
+  fprintf(f,"ncollections = %d\n",proc->ncollections);
+  fprintf(f,"nscombappls = %d\n",proc->nscombappls);
+  fprintf(f,"nreductions = %d\n",proc->nreductions);
+  fprintf(f,"nframes = %d\n",proc->nframes);
+  fprintf(f,"maxframes = %d\n",proc->maxframes);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
-    fprintf(f,"usage(%s) = %d\n",op_names[i],op_usage[i]);
-    total += op_usage[i];
+    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->op_usage[i]);
+    total += proc->op_usage[i];
   }
   fprintf(f,"usage total = %d\n",total);
 }

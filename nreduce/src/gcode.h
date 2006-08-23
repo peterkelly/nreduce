@@ -68,7 +68,6 @@ typedef struct ginstr {
   int codeaddr;
   int expcount;
   int *expstatus;
-  int usage;
 } ginstr;
 
 typedef struct gprogram {
@@ -77,6 +76,12 @@ typedef struct gprogram {
   int count;
   stackinfo *si;
   array *stringmap;
+  int nfunctions;
+  int *addressmap;
+  int *noevaladdressmap;
+  int *stacksizes;
+  int evaldoaddr;
+  int cdepth;
 } gprogram;
 
 gprogram *gprogram_new();
@@ -86,12 +91,12 @@ char *get_function_name(int fno);
 int function_nargs(int fno);
 void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage);
 void print_program(gprogram *gp, int builtins, int usage);
-void print_profiling(gprogram *gp);
+void print_profiling(process *proc, gprogram *gp);
 void compile(gprogram *gp);
 
 /* gmachine */
 
-void execute(gprogram *gp);
+void execute(process *proc, gprogram *gp);
 
 /* jit */
 
@@ -99,12 +104,10 @@ void jit_compile(ginstr *program, array *cpucode);
 void jit_execute(ginstr *program);
 
 #ifndef GCODE_C
-extern int op_usage[OP_COUNT];
 extern int *funcalls;
 extern int *addressmap;
 extern int *noevaladdressmap;
 extern int *stacksizes;
-extern int nfunctions;
 extern const char *op_names[OP_COUNT];
 #endif
 

@@ -34,16 +34,16 @@
 #include <stdarg.h>
 #include <math.h>
 
-static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
+static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntrstack *values)
 {
   cell *dest;
   pntr p;
   switch (snodetype(source)) {
   case TYPE_APPLICATION: {
-    dest = alloc_cell();
+    dest = alloc_cell(proc);
     dest->tag = TYPE_APPLICATION;
-    dest->field1 = instantiate_scomb_r(source->left,names,values);
-    dest->field2 = instantiate_scomb_r(source->right,names,values);
+    dest->field1 = instantiate_scomb_r(proc,source->left,names,values);
+    dest->field2 = instantiate_scomb_r(proc,source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
@@ -51,7 +51,7 @@ static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
       if (!strcmp((char*)names->data[pos],source->name)) {
-        dest = alloc_cell();
+        dest = alloc_cell(proc);
         dest->tag = TYPE_IND;
         dest->field1 = values->data[pos];
         make_pntr(p,dest);
@@ -69,7 +69,7 @@ static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
     int i;
     pntr res;
     for (rec = source->bindings; rec; rec = rec->next) {
-      cell *hole = alloc_cell();
+      cell *hole = alloc_cell(proc);
       hole->tag = TYPE_HOLE;
       stack_push(names,(char*)rec->name);
       make_pntr(p,hole);
@@ -77,35 +77,35 @@ static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
     }
     i = 0;
     for (rec = source->bindings; rec; rec = rec->next) {
-      res = instantiate_scomb_r(rec->value,names,values);
+      res = instantiate_scomb_r(proc,rec->value,names,values);
       assert(TYPE_HOLE == get_pntr(values->data[oldcount+i])->tag);
       get_pntr(values->data[oldcount+i])->tag = TYPE_IND;
       get_pntr(values->data[oldcount+i])->field1 = res;
       i++;
     }
-    res = instantiate_scomb_r(source->body,names,values);
+    res = instantiate_scomb_r(proc,source->body,names,values);
     names->count = oldcount;
     values->count = oldcount;
     return res;
   }
   case TYPE_BUILTIN:
-    dest = alloc_cell();
+    dest = alloc_cell(proc);
     dest->tag = TYPE_BUILTIN;
     make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
   case TYPE_SCREF:
-    dest = alloc_cell();
+    dest = alloc_cell(proc);
     dest->tag = TYPE_SCREF;
     make_pntr(dest->field1,source->sc);
     make_pntr(p,dest);
     return p;
   case TYPE_NIL:
-    return globnilpntr;
+    return proc->globnilpntr;
   case TYPE_NUMBER:
     return make_number(source->num);
   case TYPE_STRING:
-    dest = alloc_cell();
+    dest = alloc_cell(proc);
     dest->tag = TYPE_STRING;
     make_string(dest->field1,strdup(source->value));
     make_pntr(p,dest);
@@ -116,7 +116,7 @@ static pntr instantiate_scomb_r(snode *source, stack *names, pntrstack *values)
   }
 }
 
-static pntr instantiate_scomb(pntrstack *s, snode *source, scomb *sc)
+static pntr instantiate_scomb(process *proc, pntrstack *s, snode *source, scomb *sc)
 {
   stack *names = stack_new();
   pntrstack *values = pntrstack_new();
@@ -130,16 +130,18 @@ static pntr instantiate_scomb(pntrstack *s, snode *source, scomb *sc)
     pntrstack_push(values,pntrstack_at(s,pos));
   }
 
-  res = instantiate_scomb_r(source,names,values);
+  res = instantiate_scomb_r(proc,source,names,values);
 
   stack_free(names);
   pntrstack_free(values);
   return res;
 }
 
-void reduce(pntrstack *s)
+void reduce(process *proc, pntrstack *s)
 {
   int reductions = 0;
+
+  assert(proc);
 
   /* REPEAT */
   while (1) {
@@ -147,12 +149,12 @@ void reduce(pntrstack *s)
     pntr target;
     pntr redex;
 
-    nreductions++;
+    proc->nreductions++;
 
 
     /* FIXME: if we call collect() here then sometimes the redex gets collected */
-    if (nallocs > COLLECT_THRESHOLD)
-      collect();
+    if (proc->nallocs > COLLECT_THRESHOLD)
+      collect(proc);
 
     redex = s->data[s->count-1];
     reductions++;
@@ -186,7 +188,7 @@ void reduce(pntrstack *s)
       destno = s->count-1-sc->nargs;
       dest = pntrstack_at(s,destno);
 
-      nscombappls++;
+      proc->nscombappls++;
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
@@ -206,7 +208,7 @@ void reduce(pntrstack *s)
 
       assert((TYPE_APPLICATION == pntrtype(dest)) ||
              (TYPE_SCREF == pntrtype(dest)));
-      res = instantiate_scomb(s,sc->body,sc);
+      res = instantiate_scomb(proc,s,sc->body,sc);
       get_pntr(dest)->tag = TYPE_IND;
       get_pntr(dest)->field1 = res;
 
@@ -262,7 +264,7 @@ void reduce(pntrstack *s)
       for (i = 0; i < strictargs; i++) {
         pntr val;
         pntrstack_push(s,s->data[s->count-1-i]);
-        reduce(s);
+        reduce(proc,s);
         val = pntrstack_pop(s);
         s->data[s->count-1-i] = val;
       }
@@ -270,14 +272,14 @@ void reduce(pntrstack *s)
       for (i = 0; i < strictargs; i++)
         assert(TYPE_IND != pntrtype(s->data[s->count-1-i]));
 
-      builtin_info[bif].f(&s->data[s->count-reqargs]);
+      builtin_info[bif].f(proc,&s->data[s->count-reqargs]);
       s->count -= (reqargs-1);
 
       /* UPDATE */
 
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_cell_fields(get_pntr(s->data[s->count-2]));
+      free_cell_fields(proc,get_pntr(s->data[s->count-2]));
       get_pntr(s->data[s->count-2])->tag = TYPE_IND;
       get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 

@@ -43,36 +43,6 @@ array *lexstring = NULL;
 array *oldnames = NULL;
 array *parsedfiles = NULL;
 
-int maxstack = 0;
-int nallocs = 0;
-int totalallocs = 0;
-int nscombappls = 0;
-int nreductions = 0;
-int nframes = 0;
-int maxdepth = 0;
-int maxframes = 0;
-int ncollections = 0;
-
-snode *pinned = NULL;
-pntr globnilpntr = 0.0;
-pntr globtruepntr = 0.0;
-pntr globzeropntr = 0.0;
-
-typedef struct block {
-  struct block *next;
-  cell values[BLOCK_SIZE];
-} block;
-
-static int framecount = 0;
-static int active_framecount = 0;
-static frame *freeframe = NULL;
-
-frame *active_frames = NULL;
-pntrstack *streamstack = NULL;
-
-block *blocks = NULL;
-cell *freeptr = NULL;
-
 #ifndef INLINE_PTRFUNS
 int is_pntr(pntr p)
 {
@@ -122,7 +92,7 @@ pntr resolve_pntr(pntr p)
 #ifndef UNBOXED_NUMBERS
 pntr make_number(double d)
 {
-  cell *v = alloc_cell();
+  cell *v = alloc_cell(NULL);
   pntr p;
   v->tag = TYPE_NUMBER;
   v->field1 = d;
@@ -133,21 +103,6 @@ pntr make_number(double d)
 
 void initmem()
 {
-  cell *globnilvalue;
-
-  memset(&op_usage,0,OP_COUNT*sizeof(int));
-
-  globnilvalue = alloc_cell();
-  globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
-
-  make_pntr(globnilpntr,globnilvalue);
-  globtruepntr = make_number(1.0);
-  globzeropntr = make_number(0.0);
-
-  if (is_pntr(globtruepntr))
-    get_pntr(globtruepntr)->tag |= FLAG_PINNED;
-  if (is_pntr(globzeropntr))
-    get_pntr(globzeropntr)->tag |= FLAG_PINNED;
 }
 
 void mark(pntr p);
@@ -236,28 +191,29 @@ void mark(pntr p)
   }
 }
 
-cell *alloc_cell()
+cell *alloc_cell(process *proc)
 {
   cell *v;
-  if (NULL == freeptr) {
+  assert(proc);
+  if (NULL == proc->freeptr) {
     block *bl = (block*)calloc(1,sizeof(block));
     int i;
-    bl->next = blocks;
-    blocks = bl;
+    bl->next = proc->blocks;
+    proc->blocks = bl;
     for (i = 0; i < BLOCK_SIZE-1; i++)
       make_pntr(bl->values[i].field1,&bl->values[i+1]);
     make_pntr(bl->values[i].field1,NULL);
 
-    freeptr = &bl->values[0];
+    proc->freeptr = &bl->values[0];
   }
-  v = freeptr;
-  freeptr = (cell*)get_pntr(freeptr->field1);
-  nallocs++;
-  totalallocs++;
+  v = proc->freeptr;
+  proc->freeptr = (cell*)get_pntr(proc->freeptr->field1);
+  proc->nallocs++;
+  proc->totalallocs++;
   return v;
 }
 
-void free_cell_fields(cell *v)
+void free_cell_fields(process *proc, cell *v)
 {
   switch (celltype(v)) {
   case TYPE_STRING:
@@ -277,7 +233,7 @@ void free_cell_fields(cell *v)
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
     if (!f->active)
-      frame_dealloc(f);
+      frame_dealloc(proc,f);
     else printf("free_cell_fields: frame still active\n");
 
     break;
@@ -289,83 +245,82 @@ void free_cell_fields(cell *v)
   }
 }
 
-extern pntr *gstack;
-extern int gstackcount;
-
-void collect()
+void collect(process *proc)
 {
   block *bl;
   int i;
   frame *f;
 
-  ncollections++;
-  nallocs = 0;
+  assert(proc);
+
+  proc->ncollections++;
+  proc->nallocs = 0;
 
   /* clear all marks */
-  for (bl = blocks; bl; bl = bl->next)
+  for (bl = proc->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
       bl->values[i].tag &= ~FLAG_MARKED;
 
   /* mark phase */
 
-  if (streamstack)
-    for (i = 0; i < streamstack->count; i++)
-      mark(streamstack->data[i]);
+  if (proc->streamstack)
+    for (i = 0; i < proc->streamstack->count; i++)
+      mark(proc->streamstack->data[i]);
 
-  if (gstack)
-    for (i = 0; i < gstackcount; i++)
-      mark(gstack[i]);
+  if (proc->gstack)
+    for (i = 0; i < proc->gstackcount; i++)
+      mark(proc->gstack[i]);
 
-  for (f = active_frames; f; f = f->next)
+  for (f = proc->active_frames; f; f = f->next)
     mark_frame(f);
 
   /* sweep phase */
-  for (bl = blocks; bl; bl = bl->next) {
+  for (bl = proc->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
       if (!(bl->values[i].tag & FLAG_MARKED) &&
           (TYPE_EMPTY != celltype(&bl->values[i]))) {
 
         
         if (!(bl->values[i].tag & FLAG_PINNED)) {
-          free_cell_fields(&bl->values[i]);
+          free_cell_fields(proc,&bl->values[i]);
           bl->values[i].tag = TYPE_EMPTY;
-          make_pntr(bl->values[i].field1,freeptr);
-          freeptr = &bl->values[i];
+          make_pntr(bl->values[i].field1,proc->freeptr);
+          proc->freeptr = &bl->values[i];
         }
       }
     }
   }
 }
 
-void add_active_frame(frame *f)
+void add_active_frame(process *proc, frame *f)
 {
   assert(!f->active);
   assert(NULL == f->next);
   f->active = 1;
-  f->next = active_frames;
-  active_frames = f;
-  active_framecount++;
+  f->next = proc->active_frames;
+  proc->active_frames = f;
+  proc->active_framecount++;
 }
 
-void remove_active_frame(frame *f)
+void remove_active_frame(process *proc, frame *f)
 {
   frame **ptr;
   assert(f->active);
   f->active = 0;
   f->completed = 1;
-  ptr = &active_frames;
+  ptr = &proc->active_frames;
   while (*ptr != f)
     ptr = &((*ptr)->next);
   *ptr = f->next;
   f->next = NULL;
-  active_framecount--;
+  proc->active_framecount--;
 
   assert(NULL == f->c);
-  frame_dealloc(f);
+  frame_dealloc(proc,f);
 
 #if 0
   if (NULL == f->c) {
-    frame_dealloc(f);
+    frame_dealloc(proc,f);
   }
   else {
     printf("remove_active_frame %p (cell %p): still referenced\n",f,f->c);
@@ -373,38 +328,39 @@ void remove_active_frame(frame *f)
     assert(f == f->c->field1);
     assert(!(f->c->tag & FLAG_PINNED));
 /*     f->c = NULL; */
-/*     frame_dealloc(f); */
+/*     frame_dealloc(proc,f); */
   }
 #endif
 }
 
-frame *frame_new()
+static frame *frame_new(process *proc)
 {
   frame *f = (frame*)calloc(1,sizeof(frame));
   f->fno = -1;
-  nframes++;
-  framecount++;
-/*   printf("framecount = %d, cells = %d, active = %d\n",framecount,framecellcount,active_framecount); */
-  if (framecount > maxframes)
-    maxframes = framecount;
+  proc->nframes++;
+  proc->framecount++;
+/*   printf("framecount = %d, cells = %d, active = %d\n", */
+/*          proc->framecount,framecellcount,proc->active_framecount); */
+  if (proc->framecount > proc->maxframes)
+    proc->maxframes = proc->framecount;
   return f;
 }
 
-void frame_free(frame *f)
+static void frame_free(process *proc, frame *f)
 {
   assert(NULL == f->c);
   assert(!f->active);
   if (f->data)
     free(f->data);
   free(f);
-  framecount--;
+  proc->framecount--;
 }
 
-frame *frame_alloc()
+frame *frame_alloc(process *proc)
 {
-  if (freeframe) {
-    frame *f = freeframe;
-    freeframe = freeframe->freelnk;
+  if (proc->freeframe) {
+    frame *f = proc->freeframe;
+    proc->freeframe = proc->freeframe->freelnk;
     f->c = NULL;
     f->fno = -1;
     f->address = 0;
@@ -421,18 +377,18 @@ frame *frame_alloc()
     return f;
   }
   else {
-    return frame_new();
+    return frame_new(proc);
   }
 }
 
-void frame_dealloc(frame *f)
+void frame_dealloc(process *proc, frame *f)
 {
   if (f->data)
     free(f->data);
   f->data = NULL;
-  f->freelnk = freeframe;
-  freeframe = f;
-/*   frame_free(f); */
+  f->freelnk = proc->freeframe;
+  proc->freeframe = f;
+/*   frame_free(proc,f); */
 }
 
 int frame_depth(frame *f)
@@ -465,36 +421,8 @@ void cap_dealloc(cap *c)
 void cleanup()
 {
   int i;
-  frame *f;
-  block *bl;
-
-  for (bl = blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].tag &= ~FLAG_PINNED;
-
-  collect();
-
-  f = freeframe;
-  while (f) {
-    frame *next = f->freelnk;
-    f->c = NULL;
-    frame_free(f);
-    f = next;
-  }
-
-  bl = blocks;
-  while (bl) {
-    block *next = bl->next;
-    free(bl);
-    bl = next;
-  }
-
   scomb_free_list(&scombs);
 
-  free(funcalls);
-  free(addressmap);
-  free(noevaladdressmap);
-  free(stacksizes);
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
@@ -507,6 +435,79 @@ void cleanup()
       free(((char**)parsedfiles->data)[i]);
     array_free(parsedfiles);
   }
+}
+
+process *process_new()
+{
+  process *proc = (process*)calloc(1,sizeof(process));
+  cell *globnilvalue;
+
+  proc->op_usage = (int*)calloc(OP_COUNT,sizeof(int));
+
+  globnilvalue = alloc_cell(proc);
+  globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
+
+  make_pntr(proc->globnilpntr,globnilvalue);
+  proc->globtruepntr = make_number(1.0);
+
+  if (is_pntr(proc->globtruepntr))
+    get_pntr(proc->globtruepntr)->tag |= FLAG_PINNED;
+
+  return proc;
+}
+
+void process_init(process *proc, gprogram *gp)
+{
+  int i;
+  char **str = (char**)gp->stringmap->data;
+  int count = (int)(gp->stringmap->size/sizeof(char*));
+  assert(NULL == proc->strings);
+  assert(0 == proc->nstrings);
+  proc->nstrings = count;
+  proc->strings = (pntr*)malloc(count*sizeof(pntr));
+  for (i = 0; i < count; i++) {
+    cell *val = alloc_cell(proc);
+    char *copy = strdup(str[i]);
+    val->tag = TYPE_STRING | FLAG_PINNED;
+    make_string(val->field1,copy);
+    make_pntr(proc->strings[i],val);
+  }
+  proc->funcalls = (int*)calloc(gp->nfunctions,sizeof(int));
+  proc->usage = (int*)calloc(gp->count,sizeof(int));
+}
+
+void process_free(process *proc)
+{
+  int i;
+  frame *f;
+  block *bl;
+
+  for (bl = proc->blocks; bl; bl = bl->next)
+    for (i = 0; i < BLOCK_SIZE; i++)
+      bl->values[i].tag &= ~FLAG_PINNED;
+
+  collect(proc);
+
+  f = proc->freeframe;
+  while (f) {
+    frame *next = f->freelnk;
+    f->c = NULL;
+    frame_free(proc,f);
+    f = next;
+  }
+
+  bl = proc->blocks;
+  while (bl) {
+    block *next = bl->next;
+    free(bl);
+    bl = next;
+  }
+
+  free(proc->strings);
+  free(proc->funcalls);
+  free(proc->usage);
+  free(proc->op_usage);
+  free(proc);
 }
 
 pntrstack *pntrstack_new(void)

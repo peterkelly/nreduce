@@ -67,17 +67,6 @@
 #define JUMP(_s,addr)         { addr = gp->count; add_instruction(gp,_s,OP_JUMP,0,0); }
 #define LABEL(addr)           { gp->ginstrs[addr].arg0 = gp->count-addr; }
 
-int *funcalls = NULL;
-int *addressmap = NULL;
-int *noevaladdressmap = NULL;
-int *stacksizes = NULL;
-int nfunctions = 0;
-int evaldoaddr = 0;
-
-int op_usage[OP_COUNT];
-int cdepth = -1;
-
-
 stackinfo *stackinfo_new(stackinfo *source)
 {
   stackinfo *si = (stackinfo*)calloc(1,sizeof(stackinfo));
@@ -167,7 +156,7 @@ const char *op_names[OP_COUNT] = {
 void print_comp(char *fname, snode *c, int d, int isresult, int needseval, int n)
 {
 #ifdef DEBUG_GCODE_COMPILATION
-  debug(cdepth,"%s [ ",fname);
+  debug(gp->cdepth,"%s [ ",fname);
   print_code(c);
   printf(" ]");
   printf(" %d",d);
@@ -185,7 +174,7 @@ void print_comp2(char *fname, snode *c, int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   va_list ap;
-  debug(cdepth,"%s [ ",fname);
+  debug(gp->cdepth,"%s [ ",fname);
   print_code(c);
   printf(" ]");
   printf(" %d",n);
@@ -201,7 +190,7 @@ void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...
 #ifdef DEBUG_GCODE_COMPILATION
   int i;
   va_list ap;
-  debug(cdepth,"%s [ ",fname);
+  debug(gp->cdepth,"%s [ ",fname);
   for (i = exprs->count-1; 0 <= i; i--) {
     if (i < exprs->count-1)
       printf(", ");
@@ -224,6 +213,7 @@ gprogram *gprogram_new()
   gp->ginstrs = (ginstr*)malloc(gp->alloc*sizeof(ginstr));
   gp->si = NULL;
   gp->stringmap = array_new();
+  gp->cdepth = -1;
   return gp;
 }
 
@@ -236,19 +226,22 @@ void gprogram_free(gprogram *gp)
     free(gp->ginstrs[i].expstatus);
   }
 
+  for (i = 0; i < (int)(gp->stringmap->size/sizeof(char*)); i++)
+    free(((char**)gp->stringmap->data)[i]);
   array_free(gp->stringmap);
 
+  free(gp->addressmap);
+  free(gp->noevaladdressmap);
   free(gp->ginstrs);
+  free(gp->stacksizes);
   free(gp);
 }
 
-int add_string(gprogram *gp, char *str)
+static int add_string(gprogram *gp, const char *str)
 {
-  int pos = gp->stringmap->size/sizeof(snode*);
-  cell *c = alloc_cell();
-  c->tag = TYPE_STRING | FLAG_PINNED;
-  make_string(c->field1,strdup(str));
-  array_append(gp->stringmap,&c,sizeof(cell*));
+  int pos = gp->stringmap->size/sizeof(char*);
+  char *copy = strdup(str);
+  array_append(gp->stringmap,&copy,sizeof(cell*));
   return pos;
 }
 
@@ -278,12 +271,12 @@ void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
   }
 
   #ifdef DEBUG_GCODE_COMPILATION
-  if (gp->si && (0 <= cdepth)) {
+  if (gp->si && (0 <= gp->cdepth)) {
     int i;
-    for (i = 0; i < cdepth; i++)
+    for (i = 0; i < gp->cdepth; i++)
       printf("  ");
     printf("==> ");
-    for (i = 0; i < 6-cdepth; i++)
+    for (i = 0; i < 6-gp->cdepth; i++)
       printf("  ");
     printf("%d ",gp->si->count);
 /*     printf("stackinfo"); */
@@ -424,8 +417,8 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
     printf(" %-4d",instr->expcount);
   else
     printf("       ");
-  if (usage)
-    printf(" u:%-6d",instr->usage);
+/*   if (usage) */
+/*     printf(" u:%-6d",instr->usage); */
   printf("    ");
 
   if (0 <= instr->sl.fileno)
@@ -460,8 +453,8 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
     }
     break;
   case OP_PUSHSTRING: {
-    cell *v = ((cell**)gp->stringmap->data)[instr->arg0];
-    printf("; PUSHSTRING \"%s\"",get_string(v->field1));
+    char *str = ((char**)gp->stringmap->data)[instr->arg0];
+    printf("; PUSHSTRING \"%s\"",str);
     break;
   }
   case OP_MKFRAME: {
@@ -516,16 +509,15 @@ void print_program(gprogram *gp, int builtins, int usage)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < (int)(gp->stringmap->size/sizeof(cell*)); i++) {
-    cell *strval = ((cell**)gp->stringmap->data)[i];
-    assert(TYPE_STRING == snodetype(strval));
+  for (i = 0; i < (int)(gp->stringmap->size/sizeof(char*)); i++) {
+    char *str = ((char**)gp->stringmap->data)[i];
     printf("%d: ",i);
-    print_quoted_string(stdout,get_string(strval->field1));
+    print_quoted_string(stdout,str);
     printf("\n");
   }
 }
 
-void print_profiling(gprogram *gp)
+void print_profiling(process *proc, gprogram *gp)
 {
   int index = 0;
   scomb *sc;
@@ -559,8 +551,8 @@ void print_profiling(gprogram *gp)
       prevfun = fno;
     }
     if (addr < gp->count) {
-      curusage += gp->ginstrs[addr].usage;
-      totalusage += gp->ginstrs[addr].usage;
+      curusage += proc->usage[addr];
+      totalusage += proc->usage[addr];
     }
     addr++;
   }
@@ -569,7 +561,7 @@ void print_profiling(gprogram *gp)
   printf("------   -------   ------\n");
   for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
     double portion = (((double)usage[fno])/((double)totalusage))*100.0;
-    printf("%-9d",funcalls[fno]);
+    printf("%-9d",proc->funcalls[fno]);
     printf("%-9d",usage[fno]);
     printf(" %-6.2f",portion);
     if (fno == NUM_BUILTINS+index) {
@@ -703,7 +695,7 @@ void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 
 void E(gprogram *gp, snode *c, pmap *p, int n)
 {
-  cdepth++;
+  gp->cdepth++;
   print_comp2("E",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
@@ -797,7 +789,7 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
     EVAL(c->sl,0);
     break;
   }
-  cdepth--;
+  gp->cdepth--;
 }
 
 void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
@@ -815,7 +807,7 @@ void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 
 void R(gprogram *gp, snode *c, pmap *p, int n)
 {
-  cdepth++;
+  gp->cdepth++;
   print_comp2("R",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
@@ -935,12 +927,12 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
     assert(0);
     break;
   }
-  cdepth--;
+  gp->cdepth--;
 }
 
 void C(gprogram *gp, snode *c, pmap *p, int n)
 {
-  cdepth++;
+  gp->cdepth++;
   print_comp2("C",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
@@ -988,7 +980,7 @@ void C(gprogram *gp, snode *c, pmap *p, int n)
   }
   default:           assert(0);                                    break;
   }
-  cdepth--;
+  gp->cdepth--;
 }
 
 
@@ -1000,7 +992,7 @@ void F(gprogram *gp, int fno, scomb *sc)
   stackinfo *oldsi;
   pmap pm;
 
-  addressmap[NUM_BUILTINS+sc->index] = gp->count;
+  gp->addressmap[NUM_BUILTINS+sc->index] = gp->count;
 
   oldsi = gp->si;
   gp->si = stackinfo_new(NULL);
@@ -1016,7 +1008,7 @@ void F(gprogram *gp, int fno, scomb *sc)
     if (sc->strictin && sc->strictin[i])
       EVAL(sc->sl,i);
 
-  noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
+  gp->noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
   GLOBSTART(sc->sl,fno,sc->nargs);
 
 #ifdef DEBUG_GCODE_COMPILATION
@@ -1055,7 +1047,7 @@ void compute_stacksizes(gprogram *gp)
     if ((addr == gp->count) ||
         ((OP_GLOBSTART == gp->ginstrs[addr].opcode) && (fno != gp->ginstrs[addr].arg0))) {
       if (0 <= fno)
-        stacksizes[fno] = stacksize;
+        gp->stacksizes[fno] = stacksize;
       if (addr == gp->count)
         return;
       fno = gp->ginstrs[addr].arg0;
@@ -1086,12 +1078,11 @@ void compile(gprogram *gp)
   for (sc = scombs; sc; sc = sc->next)
     sc->index = index++;
 
-  nfunctions = NUM_BUILTINS+index;
+  gp->nfunctions = NUM_BUILTINS+index;
 
-  funcalls = (int*)calloc(nfunctions,sizeof(int));
-  addressmap = (int*)calloc(nfunctions,sizeof(int));
-  noevaladdressmap = (int*)calloc(nfunctions,sizeof(int));
-  stacksizes = (int*)calloc(nfunctions,sizeof(int));
+  gp->addressmap = (int*)calloc(gp->nfunctions,sizeof(int));
+  gp->noevaladdressmap = (int*)calloc(gp->nfunctions,sizeof(int));
+  gp->stacksizes = (int*)calloc(gp->nfunctions,sizeof(int));
 
   gp->si = stackinfo_new(NULL);
   BEGIN(startsc->sl);
@@ -1101,7 +1092,7 @@ void compile(gprogram *gp)
   stackinfo_free(gp->si);
   gp->si = NULL;
 
-  evaldoaddr = gp->count;
+  gp->evaldoaddr = gp->count;
   EVAL(nosl,0);
   DO(nosl);
 
@@ -1118,7 +1109,7 @@ void compile(gprogram *gp)
     for (argno = 0; argno < bi->nargs; argno++)
       pushstatus(gp->si,0);
 
-    addressmap[i] = gp->count;
+    gp->addressmap[i] = gp->count;
     GLOBSTART(nosl,i,bi->nargs);
 
     if (B_IF == i) {

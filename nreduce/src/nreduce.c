@@ -58,7 +58,6 @@ extern int yyfileno;
 extern snode *parse_root;
 extern char *code_start;
 extern array *oldnames;
-extern pntrstack *streamstack;
 
 FILE *statsfile = NULL;
 
@@ -181,15 +180,21 @@ int yylex_destroy(void);
 int yylex_destroy(void);
 #endif
 
-void stream(pntr p)
+void close_statistics()
 {
-  streamstack = pntrstack_new();
-  pntrstack_push(streamstack,p);
-  while (0 < streamstack->count) {
-    pntr p;
-    reduce(streamstack);
+  fclose(statsfile);
+  statsfile = NULL;
+}
 
-    p = pntrstack_pop(streamstack);
+void stream(process *proc, pntr p)
+{
+  proc->streamstack = pntrstack_new();
+  pntrstack_push(proc->streamstack,p);
+  while (0 < proc->streamstack->count) {
+    pntr p;
+    reduce(proc,proc->streamstack);
+
+    p = pntrstack_pop(proc->streamstack);
     p = resolve_pntr(p);
     if (TYPE_NIL == pntrtype(p)) {
       /* nothing */
@@ -201,8 +206,8 @@ void stream(pntr p)
       printf("%s",(char*)get_string(get_pntr(p)->field1));
     }
     else if (TYPE_CONS == pntrtype(p)) {
-      pntrstack_push(streamstack,get_pntr(p)->field2);
-      pntrstack_push(streamstack,get_pntr(p)->field1);
+      pntrstack_push(proc->streamstack,get_pntr(p)->field2);
+      pntrstack_push(proc->streamstack,get_pntr(p)->field1);
     }
     else if (TYPE_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
@@ -213,8 +218,8 @@ void stream(pntr p)
       exit(1);
     }
   }
-  pntrstack_free(streamstack);
-  streamstack = NULL;
+  pntrstack_free(proc->streamstack);
+  proc->streamstack = NULL;
 }
 
 int conslist_length(snode *list)
@@ -781,6 +786,7 @@ void reduction_engine()
   scomb *mainsc;
   cell *root;
   pntr rootp;
+  process *proc = process_new();
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
@@ -790,7 +796,7 @@ void reduction_engine()
   debug_stage("Reduction engine");
   mainsc = get_scomb("main");
 
-  root = alloc_cell();
+  root = alloc_cell(proc);
   root->tag = TYPE_SCREF;
   make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
@@ -798,7 +804,7 @@ void reduction_engine()
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  stream(rootp);
+  stream(proc,rootp);
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +
@@ -808,22 +814,32 @@ void reduction_engine()
 #endif
 
   printf("\n");
+
+  if (args.statistics) {
+    statistics(proc,statsfile);
+    close_statistics();
+  }
+
+  process_free(proc);
 }
 
 void gcode_interpreter()
 {
+  process *proc = process_new();
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
   int ms;
 #endif
 
+  process_init(proc,global_program);
+
   debug_stage("G-code interpreter");
 
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  execute(global_program);
+  execute(proc,global_program);
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +
@@ -834,7 +850,15 @@ void gcode_interpreter()
 
   printf("\n");
   if (args.profiling)
-    print_profiling(global_program);
+    print_profiling(proc,global_program);
+
+  if (args.statistics) {
+    statistics(proc,statsfile);
+    close_statistics();
+  }
+
+
+  process_free(proc);
   gprogram_free(global_program);
 }
 
@@ -857,11 +881,6 @@ void open_statistics()
     perror(args.statistics);
     exit(1);
   }
-}
-
-void close_statistics()
-{
-  fclose(statsfile);
 }
 
 int main(int argc, char **argv)
@@ -927,11 +946,6 @@ int main(int argc, char **argv)
       native_execution_engine();
 #endif
     }
-  }
-
-  if (args.statistics) {
-    statistics(statsfile);
-    close_statistics();
   }
 
   cleanup();
