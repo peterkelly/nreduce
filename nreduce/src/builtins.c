@@ -83,7 +83,7 @@ void b_other(process *proc, pntr *argstack, int bif)
   case B_GT:
   case B_GE:
     if ((TYPE_STRING == pntrtype(val1)) && (TYPE_STRING == pntrtype(val2))) {
-      int cmp = strcmp(get_string(get_pntr(val1)->field1),get_string(get_pntr(val2)->field2));
+      int cmp = strcmp(get_string(get_pntr(val1)->field1),get_string(get_pntr(val2)->field1));
       switch (bif) {
       case B_EQ: setbool(proc,&argstack[0],0 == cmp); break;
       case B_NE: setbool(proc,&argstack[0],0 != cmp); break;
