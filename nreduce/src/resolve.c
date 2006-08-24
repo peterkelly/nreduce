@@ -70,6 +70,7 @@ void resolve_refs_r(snode *c, stack *bound)
         c->bif = bif;
       }
       else {
+        print_sourceloc(stderr,c->sl);
         fprintf(stderr,"Unbound variable: %s\n",sym);
         exit(1);
       }

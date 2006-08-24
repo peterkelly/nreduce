@@ -56,16 +56,18 @@ IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 "/*"                     { BEGIN(comment); }
 <comment>[^*\n]*         { }
 <comment>"*"+[^*/\n]*    { }
-<comment>\n             
+<comment>\n              { yylineno++; }
 <comment>"*"+"/"         { BEGIN(INITIAL); }
 
 "//"                     { BEGIN(comment2); }
 <comment2>[^\n]*         { }
-<comment2>\n             { BEGIN(INITIAL); }
+<comment2>\n             { yylineno++;
+                           BEGIN(INITIAL); }
 
 "#!"                     { BEGIN(intline); }
 <intline>[^\n]*          { }
-<intline>\n              { BEGIN(INITIAL); }
+<intline>\n              { yylineno++;
+                           BEGIN(INITIAL); }
 
 \"                       { BEGIN(string);
                            if (NULL == lexstring)

@@ -383,27 +383,25 @@ void lift(scomb *sc)
   stack_free(boundvars);
 }
 
-void find_vars(snode *c, int *pos, char **names, letrec *ignore)
+void find_vars(snode *c, list **names, stack *ignore)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
-    find_vars(c->left,pos,names,ignore);
-    find_vars(c->right,pos,names,ignore);
+    find_vars(c->left,names,ignore);
+    find_vars(c->right,names,ignore);
     break;
   case TYPE_SYMBOL: {
     char *sym = c->name;
     int i;
-    letrec *rec;
 
-    for (i = 0; i < *pos; i++)
-      if (!strcmp(sym,names[i]))
+    if (list_contains_string(*names,sym))
         return;
 
-    for (rec = ignore; rec; rec = rec->next)
-      if (!strcmp(sym,rec->name))
+    for (i = 0; i < ignore->count; i++)
+      if (!strcmp(sym,(char*)ignore->data[i]))
         return;
 
-    names[(*pos)++] = strdup(sym);
+    list_push(names,strdup(sym));
     break;
   }
   case TYPE_BUILTIN:
@@ -412,6 +410,17 @@ void find_vars(snode *c, int *pos, char **names, letrec *ignore)
   case TYPE_NUMBER:
   case TYPE_STRING:
     break;
+  case TYPE_LETREC: {
+    int oldcount = ignore->count;
+    letrec *rec;
+    for (rec = c->bindings; rec; rec = rec->next)
+      stack_push(ignore,rec->name);
+    for (rec = c->bindings; rec; rec = rec->next)
+      find_vars(rec->value,names,ignore);
+    find_vars(c->body,names,ignore);
+    ignore->count = oldcount;
+    break;
+  }
   default:
     assert(0);
     break;
@@ -431,9 +440,11 @@ void applift_r(snode **k, scomb *sc)
     if ((TYPE_SYMBOL == snodetype(fun)) ||
         ((TYPE_SCREF == snodetype(fun)) && (nargs > fun->sc->nargs)) ||
         ((TYPE_BUILTIN == snodetype(fun)) && (nargs > builtin_info[fun->bif].nargs))) {
-      int maxvars;
       scomb *newsc;
       int i;
+      list *vars = NULL;
+      list *l;
+      stack *ignore;
 
       if (*k == sc->body) {
         /* just do the arguments */
@@ -444,21 +455,22 @@ void applift_r(snode **k, scomb *sc)
       }
 
 
-      maxvars = sc->nargs;
-      if (TYPE_LETREC == snodetype(sc->body)) {
-        letrec *rec;
-        for (rec = sc->body->bindings; rec; rec = rec->next)
-          maxvars++;
-      }
-
       newsc = add_scomb(sc->name);
 
       newsc->body = *k;
       newsc->sl = (*k)->sl;
-      newsc->nargs = 0;
-      newsc->argnames = (char**)malloc(maxvars*sizeof(char*));
-      find_vars(newsc->body,&newsc->nargs,newsc->argnames,NULL);
-      assert(newsc->nargs <= maxvars);
+
+      ignore = stack_new();
+      find_vars(newsc->body,&vars,ignore);
+      stack_free(ignore);
+
+
+      newsc->nargs = list_count(vars);
+      newsc->argnames = (char**)malloc(newsc->nargs*sizeof(char*));
+      i = 0;
+      for (l = vars; l; l = l->next)
+        newsc->argnames[i++] = (char*)l->data;
+      list_free(vars,NULL);
 
       (*k) = snode_new(-1,-1);
       (*k)->tag = TYPE_SCREF;
