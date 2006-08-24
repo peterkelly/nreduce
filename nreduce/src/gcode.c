@@ -708,7 +708,7 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
 
     assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
     parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
-                app,"Non-function applied to args");
+                app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
     k = function_nargs(fno);
@@ -886,8 +886,9 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
       }
     }
     else {
-      fprintf(stderr,"%s can't be applied to anything\n",snode_types[snodetype(app)]);
-      assert(0);
+      print_sourceloc(stderr,app->sl);
+      fprintf(stderr,CONSTANT_APP_MSG"\n");
+      exit(1);
     }
     stack_free(args);
     stack_free(argstrict);
@@ -947,7 +948,7 @@ void C(gprogram *gp, snode *c, pmap *p, int n)
 
     assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
     parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
-                app,"Non-function applied to args");
+                app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
     k = function_nargs(fno);

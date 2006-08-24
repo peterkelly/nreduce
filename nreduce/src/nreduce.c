@@ -620,6 +620,7 @@ void substitute_apps_r(snode **k)
         newapp->tag = TYPE_APPLICATION;
         newapp->left = app;
         newapp->right = item;
+        newapp->sl = lst->sl;
         app = newapp;
 
         lst = next;
@@ -634,6 +635,7 @@ void substitute_apps_r(snode **k)
       (*k)->tag = TYPE_APPLICATION;
       (*k)->left = app;
       (*k)->right = lastitem;
+      (*k)->sl = lastitem->sl;
 
       substitute_apps_r(k);
     }

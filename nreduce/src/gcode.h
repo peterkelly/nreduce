@@ -53,6 +53,8 @@
 #define GINSTR_ARG1     ((int)&((ginstr*)0)->arg1)
 #define GINSTR_CODEADDR ((int)&((ginstr*)0)->codeaddr)
 
+#define CONSTANT_APP_MSG "constant cannot be applied to arguments"
+
 typedef struct stackinfo {
   int alloc;
   int count;

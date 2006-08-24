@@ -147,6 +147,7 @@ void swapstack_out(frame *curf, pntr **stdata, int *stcount)
 
 void cap_error(pntr cappntr, ginstr *instr)
 {
+  assert(TYPE_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
   char *name = get_function_name(c->fno);
@@ -158,6 +159,13 @@ void cap_error(pntr cappntr, ginstr *instr)
   fprintf(stderr,"%s requires %d args, only have %d\n",
           name,function_nargs(c->fno),c->count);
   free(name);
+  exit(1);
+}
+
+void constant_app_error(pntr cappntr, ginstr *instr)
+{
+  print_sourceloc(stderr,instr->sl);
+  fprintf(stderr,CONSTANT_APP_MSG"\n");
   exit(1);
 }
 
@@ -284,7 +292,8 @@ void execute(process *proc, gprogram *gp)
       int s1;
       int a1;
       assert(0 < stcount);
-      assert(TYPE_CAP == pntrtype(stdata[stcount-1]));
+      if (TYPE_CAP != pntrtype(stdata[stcount-1]))
+        constant_app_error(stdata[stcount-1],instr);
       capholder = (cell*)get_pntr(stdata[stcount-1]);
       stcount--;
 
