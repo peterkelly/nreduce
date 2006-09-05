@@ -47,11 +47,14 @@
 
 const char *internal_functions =
 "(__printer (val) (if (cons? val)"
-"                   (if (__printer (head val))"
-"                       nil"
+"                   (seq (print (head val))"
 "                       (__printer (tail val)))"
-"                   (print val)))"
-"(__start () (__printer main))";
+"                   nil))"
+"(sparklist (lst) (if lst"
+"                     (parhead lst (sparklist (tail lst)))"
+"                     nil))"
+"(spark (val) (seq (sparklist val) val))"
+"(__start () (__printer (spark main)))";
 
 extern char *yyfilename;
 extern int yyfileno;
@@ -440,8 +443,6 @@ void line_fixing()
 
 void create_letrecs_r(snode *c)
 {
-  assert(!(c->tag & FLAG_PROCESSED)); /* should not be a graph */
-  c->tag |= FLAG_PROCESSED;
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
@@ -544,7 +545,6 @@ void create_letrecs_r(snode *c)
 
 void create_letrecs(snode *c)
 {
-  cleargraph(c,FLAG_PROCESSED);
   create_letrecs_r(c);
 }
 
@@ -586,8 +586,6 @@ void symbol_resolution()
 
 void substitute_apps_r(snode **k)
 {
-  assert(!((*k)->tag & FLAG_PROCESSED)); /* should not be a graph */
-  (*k)->tag |= FLAG_PROCESSED;
   switch (snodetype(*k)) {
   case TYPE_APPLICATION:
     substitute_apps_r(&(*k)->left);
@@ -671,7 +669,6 @@ void substitute_apps_r(snode **k)
 
 void substitute_apps(snode **k)
 {
-  cleargraph(*k,FLAG_PROCESSED);
   substitute_apps_r(k);
 }
 
@@ -799,7 +796,7 @@ void reduction_engine()
   mainsc = get_scomb("main");
 
   root = alloc_cell(proc);
-  root->tag = TYPE_SCREF;
+  root->type = TYPE_SCREF;
   make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
 
@@ -827,21 +824,19 @@ void reduction_engine()
 
 void gcode_interpreter()
 {
-  process *proc = process_new();
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
   int ms;
 #endif
 
-  process_init(proc,global_program);
 
   debug_stage("G-code interpreter");
 
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  execute(proc,global_program);
+  run(global_program);
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +
@@ -850,17 +845,14 @@ void gcode_interpreter()
     fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
 #endif
 
-  printf("\n");
-  if (args.profiling)
-    print_profiling(proc,global_program);
+/*   if (args.profiling) */
+/*     print_profiling(proc,global_program); */
 
-  if (args.statistics) {
-    statistics(proc,statsfile);
-    close_statistics();
-  }
+/*   if (args.statistics) { */
+/*     statistics(proc,statsfile); */
+/*     close_statistics(); */
+/*   } */
 
-
-  process_free(proc);
   gprogram_free(global_program);
 }
 

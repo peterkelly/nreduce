@@ -1,0 +1,11 @@
+#!/bin/bash
+
+
+for filename in output.0 output.1 output.2 output.3; do
+  i="0"
+  echo "" >> $filename
+  while [ $i -lt 32 ]; do
+    echo "" >> $filename
+    i=$[$i+1]
+  done
+done

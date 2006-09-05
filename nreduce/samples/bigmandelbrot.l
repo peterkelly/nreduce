@@ -19,11 +19,16 @@
                  (if (> num 20) "--"
                  (if (> num 10) "**" "##")))))
 
+(mloop (minx maxx xincr miny maxy yincr x y)
+(if (> x maxx)
+    (if (> y maxy)
+        (cons "\n" nil)
+        (cons "\n" (mloop minx maxx xincr miny maxy yincr minx (+ y yincr))))
+    (cons (printcell (mandel0 x y 1024))
+          (mloop minx maxx xincr miny maxy yincr (+ x xincr) y))))
+
 (mandelrange (minx maxx xincr miny maxy yincr)
-         (for miny maxy yincr (!y.
-           (cons (for minx maxx xincr (!x.
-                   (printcell (mandel0 x y 1024))))
-                 "\n"))))
+(mloop minx (+ maxx xincr) xincr miny maxy yincr minx miny))
 
 //(main () (mandelrange -1.5 0.5 0.046 -1.0 1.0 0.046))
 (main () (mandelrange 0.06625 0.44125 0.008611 0.29625 0.67125 0.008611))

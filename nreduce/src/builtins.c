@@ -35,6 +35,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <gcode.h>
 
 const builtin builtin_info[NUM_BUILTINS];
 
@@ -206,7 +207,7 @@ void b_cons(process *proc, pntr *argstack)
   pntr tail = argstack[0];
 
   cell *res = alloc_cell(proc);
-  res->tag = TYPE_CONS;
+  res->type = TYPE_CONS;
   res->field1 = head;
   res->field2 = tail;
 
@@ -235,7 +236,7 @@ void b_head(process *proc, pntr *argstack)
 void make_aref(cell *refval, cell *arrholder, int index)
 {
   carray *arr = (carray*)get_pntr(arrholder->field1);
-  refval->tag = TYPE_AREF;
+  refval->type = TYPE_AREF;
   make_pntr(refval->field1,arrholder);
   make_pntr(refval->field2,(void*)index);
   make_pntr(arr->refs[index],refval);
@@ -285,7 +286,7 @@ void b_tail(process *proc, pntr *argstack)
     arr->tail = othertail;
 
     arrholder = alloc_cell(proc);
-    arrholder->tag = TYPE_ARRAY;
+    arrholder->type = TYPE_ARRAY;
     make_pntr(arrholder->field1,arr);
 
     make_aref(consval,arrholder,0);
@@ -385,13 +386,13 @@ void b_arrayitem(process *proc, pntr *argstack)
 
   if (TYPE_NUMBER != pntrtype(indexpntr)) {
     printf("arrayitem: index must be a number, got ");
-    print_pntr(indexpntr);
+    print_pntr(proc->output,indexpntr);
     printf("\n");
     abort();
   }
   if (TYPE_AREF != pntrtype(refpntr)) {
     printf("arrayitem: expected an array reference, got ");
-    print_pntr(refpntr);
+    print_pntr(proc->output,refpntr);
     printf("\n");
     abort();
   }
@@ -416,7 +417,7 @@ void b_arrayhas(process *proc, pntr *argstack)
 
   if (TYPE_NUMBER != pntrtype(indexpntr)) {
     printf("arrayhas: index must be a number, got ");
-    print_pntr(indexpntr);
+    print_pntr(proc->output,indexpntr);
     printf("\n");
     abort();
   }
@@ -445,7 +446,7 @@ void b_arrayremsize(process *proc, pntr *argstack)
 
   if (TYPE_NUMBER != pntrtype(npntr)) {
     printf("arrayremsize: index must be a number, got ");
-    print_pntr(npntr);
+    print_pntr(proc->output,npntr);
     printf("\n");
     abort();
   }
@@ -469,7 +470,7 @@ void b_arrayremsize(process *proc, pntr *argstack)
   }
   else {
     printf("arrayremsize: expected aref or cons, got ");
-    print_pntr(refpntr);
+    print_pntr(proc->output,refpntr);
     printf("\n");
     abort();
   }
@@ -493,7 +494,7 @@ void b_arrayrem(process *proc, pntr *argstack)
   }
   else {
     printf("arrayrem: expected aref or cons, got ");
-    print_pntr(refpntr);
+    print_pntr(proc->output,refpntr);
     printf("\n");
     abort();
   }
@@ -520,7 +521,7 @@ void b_arrayoptlen(process *proc, pntr *argstack)
   }
   else {
     printf("arrayoptlen: expected aref or cons, got ");
-    print_pntr(refpntr);
+    print_pntr(proc->output,refpntr);
     printf("\n");
     abort();
   }
@@ -529,9 +530,9 @@ void b_arrayoptlen(process *proc, pntr *argstack)
 void b_echo(process *proc, pntr *argstack)
 {
   if (TYPE_STRING == pntrtype(argstack[0]))
-    printf("%s",get_string(get_pntr(argstack[0])->field1));
+    fprintf(proc->output,"%s",get_string(get_pntr(argstack[0])->field1));
   else
-    print_pntr(argstack[0]);
+    print_pntr(proc->output,argstack[0]);
   argstack[0] = proc->globnilpntr;
 }
 
@@ -539,29 +540,36 @@ void b_print(process *proc, pntr *argstack)
 {
   pntr p = argstack[0];
 
+  //  fprintf(proc->output,"print: "); /* TEMP - distinguish output from debug */
+
   if (trace)
-    debug(0,"<============ ");
+    fprintf(proc->output,"<============ ");
 
   if (TYPE_AREF == pntrtype(p)) {
-    print_pntr(p);
-    printf("\n");
+    print_pntr(proc->output,p);
+    fprintf(proc->output,"\n");
     return;
   }
 
+  if (!isvaluetype(pntrtype(p))) {
+    fprintf(proc->output,"print: encountered %s\n",cell_types[pntrtype(p)]);
+    abort();
+  }
   assert(isvaluetype(pntrtype(p)));
   switch (pntrtype(p)) {
   case TYPE_NIL:
     break;
   case TYPE_NUMBER:
-    print_double(stdout,pntrdouble(p));
+    print_double(proc->output,pntrdouble(p));
     break;
   case TYPE_STRING:
-    printf("%s",get_string(get_pntr(p)->field1));
+    fprintf(proc->output,"%s",get_string(get_pntr(p)->field1));
     break;
   }
   if (trace)
-    debug(0,"\n");
+    fprintf(proc->output,"\n");
 
+  //  fprintf(proc->output,"\n"); /* TEMP - distinguish output from debug */
   argstack[0] = proc->globnilpntr;
 }
 
@@ -611,6 +619,28 @@ void b_ceil(process *proc, pntr *argstack)
   }
 
   setnumber(&argstack[0],ceil(d));
+}
+
+void b_seq(process *proc, pntr *argstack)
+{
+}
+
+void b_par(process *proc, pntr *argstack)
+{
+  pntr p = resolve_pntr(argstack[1]);
+  if (TYPE_FRAME == pntrtype(p)) {
+    frame *f = (frame*)get_pntr(get_pntr(p)->field1);
+    spark_frame(proc,f);
+  }
+  else {
+/*     printf("not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
+  }
+}
+
+void b_parhead(process *proc, pntr *argstack)
+{
+  b_head(proc,&argstack[1]);
+  b_par(proc,argstack);
 }
 
 int get_builtin(const char *name)
@@ -671,6 +701,10 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "sqrt",           1, 1, 1, b_sqrt           },
 { "floor",          1, 1, 1, b_floor          },
 { "ceil",           1, 1, 1, b_ceil           },
+
+{ "seq",            2, 1, 0, b_seq            },
+{ "par",            2, 0, 0, b_par            },
+{ "parhead",        2, 1, 0, b_parhead        },
 
 };
 

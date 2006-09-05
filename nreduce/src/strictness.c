@@ -389,6 +389,7 @@ void strictness_analysis()
   for (sc = scombs; sc; sc = sc->next)
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
 
+#if 1
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
   do {
@@ -403,6 +404,7 @@ void strictness_analysis()
        can trickle up to other supercombinators which call the one that changed, and then others
        that call them and so forth. */
   } while (changed);
+#endif
 
   if (trace)
     print_scombs1();

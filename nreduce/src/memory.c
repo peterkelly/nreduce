@@ -36,12 +36,18 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <pthread.h>
 
 int trace = 0;
 
 array *lexstring = NULL;
 array *oldnames = NULL;
 array *parsedfiles = NULL;
+
+int _pntrtype(pntr p) { return pntrtype(p); }
+const char *_pntrtname(pntr p) { return cell_types[pntrtype(p)]; }
+global *_pglobal(pntr p) { return pglobal(p); }
+frame *_pframe(pntr p) { return pframe(p); }
 
 #ifndef INLINE_PTRFUNS
 int is_pntr(pntr p)
@@ -94,7 +100,7 @@ pntr make_number(double d)
 {
   cell *v = alloc_cell(NULL);
   pntr p;
-  v->tag = TYPE_NUMBER;
+  v->type = TYPE_NUMBER;
   v->field1 = d;
   make_pntr(p,v);
   return p;
@@ -105,51 +111,72 @@ void initmem()
 {
 }
 
-void mark(pntr p);
+void mark(process *proc, pntr p, int bit);
+void mark_frame(process *proc, frame *f, int bit);
 
-void mark_frame(frame *f)
+void mark_waitqueue(process *proc, waitqueue *wq, int bit)
+{
+  list *l;
+  for (l = wq->frames; l; l = l->next)
+    mark_frame(proc,(frame*)l->data,bit);
+}
+
+void mark_global(process *proc, global *glo, int bit)
+{
+  check_global(glo);
+  if (glo->flags & bit)
+    return;
+  glo->flags |= bit;
+  mark(proc,glo->p,bit);
+  mark_waitqueue(proc,&glo->wq,bit);
+
+  if ((FLAG_DMB == bit) && (0 <= glo->addr.lid) && (proc->pid != glo->addr.pid))
+    add_pending_mark(proc,glo->addr);
+}
+
+void mark_frame(process *proc, frame *f, int bit)
 {
 /*   printf("mark_frame %p (cell %p)\n",f,f->c); */
   int i;
-  if (f->completed) {
-    assert(!"completed frame referenced from here");
-  }
   if (f->c) {
     pntr p;
     make_pntr(p,f->c);
-    mark(p);
-  };
+    mark(proc,p,bit);
+  }
   for (i = 0; i < f->count; i++)
-    mark(f->data[i]);
+    if (f->data[i])
+      mark(proc,f->data[i],bit);
+  mark_waitqueue(proc,&f->wq,bit);
 }
 
-void mark_cap(cap *c)
+void mark_cap(process *proc, cap *c, int bit)
 {
   int i;
   for (i = 0; i < c->count; i++)
-    mark(c->data[i]);
+    if (c->data[i])
+      mark(proc,c->data[i],bit);
 }
 
-void mark(pntr p)
+void mark(process *proc, pntr p, int bit)
 {
   cell *c;
   assert(TYPE_EMPTY != pntrtype(p));
   if (!is_pntr(p))
     return;
   c = get_pntr(p);
-  if (c->tag & FLAG_MARKED)
+  if (c->flags & bit)
     return;
-  c->tag |= FLAG_MARKED;
+  c->flags |= bit;
   switch (pntrtype(p)) {
   case TYPE_IND:
-    mark(c->field1);
+    mark(proc,c->field1,bit);
     break;
   case TYPE_APPLICATION:
   case TYPE_CONS:
     c->field1 = resolve_pntr(c->field1);
     c->field2 = resolve_pntr(c->field2);
-    mark(c->field1);
-    mark(c->field2);
+    mark(proc,c->field1,bit);
+    mark(proc,c->field2,bit);
     break;
   case TYPE_AREF: {
     cell *arrholder = get_pntr(c->field1);
@@ -158,26 +185,31 @@ void mark(pntr p)
     assert(index < arr->size);
     assert(get_pntr(arr->refs[index]) == c);
 
-    mark(c->field1);
+    mark(proc,c->field1,bit);
     break;
   }
   case TYPE_ARRAY: {
     carray *arr = (carray*)get_pntr(c->field1);
     int i;
     for (i = 0; i < arr->size; i++) {
-      mark(arr->elements[i]);
+      mark(proc,arr->elements[i],bit);
       if (!is_nullpntr(arr->refs[i]))
-        mark(arr->refs[i]);
+        mark(proc,arr->refs[i],bit);
     }
-    mark(arr->tail);
+    mark(proc,arr->tail,bit);
     break;
   }
   case TYPE_FRAME:
-    mark_frame((frame*)get_pntr(c->field1));
+    mark_frame(proc,(frame*)get_pntr(c->field1),bit);
     break;
   case TYPE_CAP:
-    mark_cap((cap*)get_pntr(c->field1));
+    mark_cap(proc,(cap*)get_pntr(c->field1),bit);
     break;
+  case TYPE_REMOTEREF: {
+    global *glo = (global*)get_pntr(c->field1);
+    mark_global(proc,glo,bit);
+    break;
+  }
   case TYPE_BUILTIN:
   case TYPE_SCREF:
   case TYPE_NIL:
@@ -207,14 +239,45 @@ cell *alloc_cell(process *proc)
     proc->freeptr = &bl->values[0];
   }
   v = proc->freeptr;
+  v->flags = proc->indistgc ? FLAG_DMB : 0;
   proc->freeptr = (cell*)get_pntr(proc->freeptr->field1);
-  proc->nallocs++;
-  proc->totalallocs++;
+  proc->stats.nallocs++;
+  proc->stats.totalallocs++;
   return v;
 }
 
+static void free_global(process *proc, global *glo)
+{
+  glo->freed = 1;
+
+  if (TYPE_REMOTEREF == pntrtype(glo->p)) {
+    cell *refcell = get_pntr(glo->p);
+    global *target = (global*)get_pntr(refcell->field1);
+    if (target == glo) {
+      assert(!(refcell->flags & FLAG_MARKED));
+      assert(!(refcell->flags & FLAG_DMB));
+    }
+  }
+
+  free(glo);
+}
+
+/* static void remove_global(process *proc, global *glo) */
+/* { */
+/*   #ifdef COLLECTION_DEBUG */
+/*   fprintf(proc->output,"removing remoteref global %d@%d\n",glo->addr.lid,glo->addr.pid); */
+/*   #endif */
+
+/*   assert(!glo->freed); */
+/*   pntrhash_remove(proc,glo); */
+/*   addrhash_remove(proc,glo); */
+/*   free_global(proc,glo); */
+/* } */
+
 void free_cell_fields(process *proc, cell *v)
 {
+  assert(TYPE_EMPTY != v->type);
+  v->oldtype = v->type;
   switch (celltype(v)) {
   case TYPE_STRING:
     free(get_string(v->field1));
@@ -227,178 +290,231 @@ void free_cell_fields(process *proc, cell *v)
     break;
   }
   case TYPE_FRAME: {
-/*     printf("here at frame\n"); */
-    /* note: we don't necessarily free frames here... this is only safe to do after the frame
-       has finished executing */
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
-    if (!f->active)
-      frame_dealloc(proc,f);
-    else printf("free_cell_fields: frame still active\n");
-
+    assert(proc->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
+    frame_dealloc(proc,f);
     break;
   }
   case TYPE_CAP: {
     cap *cp = (cap*)get_pntr(v->field1);
     cap_dealloc(cp);
+    break;
+  }
+  case TYPE_REMOTEREF: {
+/*     assert(!((global*)get_pntr(v->field1))->freed); */
+/*     remove_global(proc,(global*)get_pntr(v->field1)); */
+    break;
   }
   }
 }
 
-void collect(process *proc)
+int count_alive(process *proc)
 {
   block *bl;
   int i;
-  frame *f;
-
-  assert(proc);
-
-  proc->ncollections++;
-  proc->nallocs = 0;
-
-  /* clear all marks */
+  int alive = 0;
   for (bl = proc->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].tag &= ~FLAG_MARKED;
+      if (TYPE_EMPTY != bl->values[i].type)
+        alive++;
+  return alive;
+}
 
-  /* mark phase */
+void clear_marks(process *proc, int bit)
+{
+  block *bl;
+  int i;
+  int h;
+  global *glo;
 
-  if (proc->streamstack)
-    for (i = 0; i < proc->streamstack->count; i++)
-      mark(proc->streamstack->data[i]);
+  for (bl = proc->blocks; bl; bl = bl->next)
+    for (i = 0; i < BLOCK_SIZE; i++)
+      bl->values[i].flags &= ~bit;
 
-  if (proc->gstack)
-    for (i = 0; i < proc->gstackcount; i++)
-      mark(proc->gstack[i]);
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
+    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+      glo->flags &= ~bit;
+}
 
-  for (f = proc->active_frames; f; f = f->next)
-    mark_frame(f);
+void mark_roots(process *proc, int bit)
+{
+  int i;
+  frame *f;
+  list *l;
+  int h;
+  global *glo;
 
-  /* sweep phase */
+  proc->memdebug = 0;
+
+  if (proc->streamstack) {
+    for (i = 0; i < proc->streamstack->count; i++) {
+      if (proc->memdebug) {
+        fprintf(proc->output,"root: streamstack[%d]\n",i);
+      }
+      mark(proc,proc->streamstack->data[i],bit);
+    }
+  }
+
+  for (f = proc->sparked.first; f; f = f->qnext) {
+    if (proc->memdebug) {
+      fprintf(proc->output,"root: sparked frame %s\n",function_name(proc->gp,f->fno));
+    }
+    mark_frame(proc,f,bit);
+    assert(NULL == f->wq.frames);
+    assert(NULL == f->wq.fetchers);
+  }
+
+  for (f = proc->runnable.first; f; f = f->qnext) {
+    if (proc->memdebug) {
+      fprintf(proc->output,"root: runnable frame %s\n",function_name(proc->gp,f->fno));
+    }
+    mark_frame(proc,f,bit);
+  }
+
+  /* mark any in-flight gaddrs that refer to objects in this process */
+  for (l = proc->inflight; l; l = l->next) {
+    gaddr *addr = (gaddr*)l->data;
+    if ((0 <= addr->lid) && (addr->pid == proc->pid)) {
+      global *glo = global_lookup_glo(proc,*addr);
+      assert(glo);
+      check_global(glo);
+      if (proc->memdebug) {
+        fprintf(proc->output,"root: inflight local ref %d@%d\n",
+                addr->lid,addr->pid);
+      }
+      mark(proc,glo->p,bit);
+    }
+  }
+
+  /* mark any remote references that are currently being fetched (and any frames waiting
+     on them */
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
+    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+      if (glo->fetching)
+        mark_global(proc,glo,FLAG_MARKED);
+}
+
+void print_cells(process *proc)
+{
+  block *bl;
+  int i;
   for (bl = proc->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
-      if (!(bl->values[i].tag & FLAG_MARKED) &&
-          (TYPE_EMPTY != celltype(&bl->values[i]))) {
-
-        
-        if (!(bl->values[i].tag & FLAG_PINNED)) {
-          free_cell_fields(proc,&bl->values[i]);
-          bl->values[i].tag = TYPE_EMPTY;
-          make_pntr(bl->values[i].field1,proc->freeptr);
-          proc->freeptr = &bl->values[i];
-        }
+      if (TYPE_EMPTY != bl->values[i].type) {
+        pntr p;
+        make_pntr(p,&bl->values[i]);
+        fprintf(proc->output,"remaining: ");
+        print_pntr(proc->output,p);
+        fprintf(proc->output,"\n");
       }
     }
   }
 }
 
-void add_active_frame(process *proc, frame *f)
+void sweep(process *proc)
 {
-  assert(!f->active);
-  assert(NULL == f->next);
-  f->active = 1;
-  f->next = proc->active_frames;
-  proc->active_frames = f;
-  proc->active_framecount++;
-}
+  block *bl;
+  int i;
+/*   list **lptr; */
 
-void remove_active_frame(process *proc, frame *f)
-{
-  frame **ptr;
-  assert(f->active);
-  f->active = 0;
-  f->completed = 1;
-  ptr = &proc->active_frames;
-  while (*ptr != f)
-    ptr = &((*ptr)->next);
-  *ptr = f->next;
-  f->next = NULL;
-  proc->active_framecount--;
+  global **gptr;
+  int h;
 
-  assert(NULL == f->c);
-  frame_dealloc(proc,f);
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    gptr = &proc->pntrhash[h];
+    while (*gptr) {
+      global *glo = *gptr;
+      int needed = 0;
+      check_global(glo);
 
-#if 0
-  if (NULL == f->c) {
-    frame_dealloc(proc,f);
+      if ((glo->flags & FLAG_MARKED) || (glo->flags & FLAG_DMB)) {
+        needed = 1;
+      }
+      else if (is_pntr(glo->p)) {
+        cell *c = get_pntr(glo->p);
+        checkcell(c);
+        if ((c->flags & FLAG_MARKED) || (c->flags & FLAG_DMB))
+          needed = 1;
+      }
+
+      if (!needed) {
+        #ifdef COLLECTION_DEBUG
+        fprintf(proc->output,"removing garbage global %d@%d\n",glo->addr.lid,glo->addr.pid);
+        #endif
+        *gptr = (*gptr)->pntrnext;
+
+        addrhash_remove(proc,glo);
+        free_global(proc,glo);
+      }
+      else {
+        gptr = &(*gptr)->pntrnext;
+      }
+    }
   }
-  else {
-    printf("remove_active_frame %p (cell %p): still referenced\n",f,f->c);
-    assert(TYPE_FRAME == celltype(f->c));
-    assert(f == f->c->field1);
-    assert(!(f->c->tag & FLAG_PINNED));
-/*     f->c = NULL; */
-/*     frame_dealloc(proc,f); */
+
+  for (bl = proc->blocks; bl; bl = bl->next) {
+    for (i = 0; i < BLOCK_SIZE; i++) {
+      if (!(bl->values[i].flags & FLAG_MARKED) &&
+          !(bl->values[i].flags & FLAG_DMB) &&
+          !(bl->values[i].flags & FLAG_PINNED) &&
+          (TYPE_EMPTY != bl->values[i].type)) {
+        free_cell_fields(proc,&bl->values[i]);
+        bl->values[i].type = TYPE_EMPTY;
+
+        /* TEMP: don't make this cell available again. Want to check for accesses to free cells */
+/*         make_pntr(bl->values[i].field1,proc->freeptr); */
+/*         proc->freeptr = &bl->values[i]; */
+      }
+    }
   }
-#endif
 }
 
-static frame *frame_new(process *proc)
+void local_collect(process *proc)
 {
-  frame *f = (frame*)calloc(1,sizeof(frame));
-  f->fno = -1;
-  proc->nframes++;
-  proc->framecount++;
-/*   printf("framecount = %d, cells = %d, active = %d\n", */
-/*          proc->framecount,framecellcount,proc->active_framecount); */
-  if (proc->framecount > proc->maxframes)
-    proc->maxframes = proc->framecount;
-  return f;
-}
+  int h;
+  global *glo;
 
-static void frame_free(process *proc, frame *f)
-{
-  assert(NULL == f->c);
-  assert(!f->active);
-  if (f->data)
-    free(f->data);
-  free(f);
-  proc->framecount--;
+  /* clear */
+  clear_marks(proc,FLAG_MARKED);
+
+  /* mark */
+  mark_roots(proc,FLAG_MARKED);
+
+  /* treat any objects referenced from other processes as roots */
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
+    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+      if (proc->pid == glo->addr.pid)
+        mark_global(proc,glo,FLAG_MARKED);
+
+  /* sweep */
+  sweep(proc);
+
+  #ifdef COLLECTION_DEBUG
+  fprintf(proc->output,"local_collect() finished: %d cells remaining\n",count_alive(proc));
+  #endif
 }
 
 frame *frame_alloc(process *proc)
 {
-  if (proc->freeframe) {
-    frame *f = proc->freeframe;
-    proc->freeframe = proc->freeframe->freelnk;
-    f->c = NULL;
-    f->fno = -1;
-    f->address = 0;
-    f->d = NULL;
-
-    f->alloc = 0;
-    f->count = 0;
-    f->data = NULL;
-
-    f->next = NULL;
-    f->active = 0;
-    f->completed = 0;
-    f->freelnk = NULL;
-    return f;
-  }
-  else {
-    return frame_new(proc);
-  }
+  frame *f = (frame*)calloc(1,sizeof(frame));
+  f->fno = -1;
+  return f;
 }
 
 void frame_dealloc(process *proc, frame *f)
 {
+  assert(proc->done || (NULL == f->c));
+/*   assert((NULL == f->c) || TYPE_FRAME != celltype(f->c)); */
+  assert(proc->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
+  assert(proc->done || (NULL == f->wq.frames));
+  assert(proc->done || (NULL == f->wq.fetchers));
+  list_free(f->wq.fetchers,free);
+  list_free(f->wq.frames,NULL);
   if (f->data)
     free(f->data);
   f->data = NULL;
-  f->freelnk = proc->freeframe;
-  proc->freeframe = f;
-/*   frame_free(proc,f); */
-}
-
-int frame_depth(frame *f)
-{
-  int depth = 0;
-  while (f) {
-    depth++;
-    f = f->d;
-  }
-  return depth;
+  free(f);
 }
 
 cap *cap_alloc(int arity, int address, int fno)
@@ -442,16 +558,23 @@ process *process_new()
   process *proc = (process*)calloc(1,sizeof(process));
   cell *globnilvalue;
 
-  proc->op_usage = (int*)calloc(OP_COUNT,sizeof(int));
+  pthread_mutex_init(&proc->msglock,NULL);
+  pthread_cond_init(&proc->msgcond,NULL);
+
+  proc->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
   globnilvalue = alloc_cell(proc);
-  globnilvalue->tag = TYPE_NIL | FLAG_PINNED;
+  globnilvalue->type = TYPE_NIL;
+  globnilvalue->flags |= FLAG_PINNED;
 
   make_pntr(proc->globnilpntr,globnilvalue);
   proc->globtruepntr = make_number(1.0);
 
   if (is_pntr(proc->globtruepntr))
-    get_pntr(proc->globtruepntr)->tag |= FLAG_PINNED;
+    get_pntr(proc->globtruepntr)->flags |= FLAG_PINNED;
+
+  proc->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  proc->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
 
   return proc;
 }
@@ -468,33 +591,40 @@ void process_init(process *proc, gprogram *gp)
   for (i = 0; i < count; i++) {
     cell *val = alloc_cell(proc);
     char *copy = strdup(str[i]);
-    val->tag = TYPE_STRING | FLAG_PINNED;
+    val->type = TYPE_STRING;
+    val->flags |= FLAG_PINNED;
     make_string(val->field1,copy);
     make_pntr(proc->strings[i],val);
   }
-  proc->funcalls = (int*)calloc(gp->nfunctions,sizeof(int));
-  proc->usage = (int*)calloc(gp->count,sizeof(int));
+  proc->stats.funcalls = (int*)calloc(gp->nfunctions,sizeof(int));
+  proc->stats.usage = (int*)calloc(gp->count,sizeof(int));
+  proc->stats.framecompletions = (int*)calloc(gp->nfunctions,sizeof(int));
+  proc->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->gcsent = (int*)calloc(proc->grp->nprocs,sizeof(int));
+  proc->markmsgs = (array**)calloc(proc->grp->nprocs,sizeof(array*));
+}
+
+void message_free(message *msg)
+{
+  free(msg->data);
+  free(msg);
 }
 
 void process_free(process *proc)
 {
   int i;
-  frame *f;
   block *bl;
+  int h;
 
   for (bl = proc->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].tag &= ~FLAG_PINNED;
+      bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
 
-  collect(proc);
-
-  f = proc->freeframe;
-  while (f) {
-    frame *next = f->freelnk;
-    f->c = NULL;
-    frame_free(proc,f);
-    f = next;
-  }
+/*   local_collect(proc); */
+  sweep(proc);
 
   bl = proc->blocks;
   while (bl) {
@@ -503,10 +633,31 @@ void process_free(process *proc)
     bl = next;
   }
 
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    global *glo = proc->pntrhash[h];
+    while (glo) {
+      global *next = glo->pntrnext;
+      free(glo);
+      glo = next;
+    }
+  }
+
   free(proc->strings);
-  free(proc->funcalls);
-  free(proc->usage);
-  free(proc->op_usage);
+  free(proc->stats.funcalls);
+  free(proc->stats.framecompletions);
+  free(proc->stats.sendcount);
+  free(proc->stats.sendbytes);
+  free(proc->stats.recvcount);
+  free(proc->stats.recvbytes);
+  free(proc->stats.usage);
+  free(proc->stats.op_usage);
+  free(proc->gcsent);
+  free(proc->markmsgs);
+  free(proc->pntrhash);
+  free(proc->addrhash);
+  list_free(proc->msgqueue,(void*)message_free);
+  pthread_mutex_destroy(&proc->msglock);
+  pthread_cond_destroy(&proc->msgcond);
   free(proc);
 }
 
@@ -558,8 +709,41 @@ void pntrstack_grow(int *alloc, pntr **data, int size)
   }
 }
 
-void print_pntr(pntr p)
+void print_pntr(FILE *f, pntr p)
 {
-  printf("(value %s)",cell_types[pntrtype(p)]);
+  switch (pntrtype(p)) {
+  case TYPE_NUMBER:
+    print_double(f,p);
+    break;
+  case TYPE_STRING: {
+    char *str = get_string(get_pntr(p)->field1);
+    fprintf(f,"\"%s\"",str);
+    break;
+  }
+  case TYPE_NIL:
+    fprintf(f,"nil");
+    break;
+  case TYPE_FRAME: {
+    frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
+    char *name = get_function_name(fr->fno);
+    fprintf(f,"frame(%s/%d)",name,fr->count);
+    free(name);
+    break;
+  }
+  case TYPE_REMOTEREF: {
+    global *glo = (global*)get_pntr(get_pntr(p)->field1);
+    fprintf(f,"%d@%d",glo->addr.lid,glo->addr.pid);
+    break;
+  }
+  case TYPE_IND: {
+    fprintf(f,"(%s ",cell_types[pntrtype(p)]);
+    print_pntr(f,get_pntr(p)->field1);
+    fprintf(f,")");
+    break;
+  }
+  default:
+    fprintf(f,"(%s)",cell_types[pntrtype(p)]);
+    break;
+  }
 }
 

@@ -41,7 +41,7 @@
 #define MKFRAME(_s,_a,_b)     add_instruction(gp,_s,OP_MKFRAME,(_a),(_b))
 #define JFUN(_s,_a)           add_instruction(gp,_s,OP_JFUN,(_a),0)
 #define UPDATE(_s,_a)         add_instruction(gp,_s,OP_UPDATE,(_a),0)
-#define DO(_s)                add_instruction(gp,_s,OP_DO,0,0)
+#define DO(_s,_a)             add_instruction(gp,_s,OP_DO,_a,0)
 #define EVAL(_s,_a)           { int arg0 = (_a);                \
                                 if (!gp->si || !statusat(gp->si,gp->si->count-1-arg0)) { \
                                    add_instruction(gp,_s,OP_EVAL,arg0,0); \
@@ -153,24 +153,7 @@ const char *op_names[OP_COUNT] = {
 "RESOLVE",
 };
 
-void print_comp(char *fname, snode *c, int d, int isresult, int needseval, int n)
-{
-#ifdef DEBUG_GCODE_COMPILATION
-  debug(gp->cdepth,"%s [ ",fname);
-  print_code(c);
-  printf(" ]");
-  printf(" %d",d);
-  if (isresult)
-    printf(" (r)");
-  if (needseval)
-    printf(" (e)");
-  if (0 < n)
-    printf(" %d",n);
-  printf("\n");
-#endif
-}
-
-void print_comp2(char *fname, snode *c, int n, const char *format, ...)
+static void print_comp2(gprogram *gp, char *fname, snode *c, int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   va_list ap;
@@ -185,7 +168,8 @@ void print_comp2(char *fname, snode *c, int n, const char *format, ...)
 #endif
 }
 
-void print_comp2_stack(char *fname, stack *exprs, int n, const char *format, ...)
+static void print_comp2_stack(gprogram *gp, char *fname, stack *exprs, int n,
+                              const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   int i;
@@ -229,6 +213,10 @@ void gprogram_free(gprogram *gp)
   for (i = 0; i < (int)(gp->stringmap->size/sizeof(char*)); i++)
     free(((char**)gp->stringmap->data)[i]);
   array_free(gp->stringmap);
+
+  for (i = 0; i < gp->nfunctions; i++)
+    free(gp->fnames[i]);
+  free(gp->fnames);
 
   free(gp->addressmap);
   free(gp->noevaladdressmap);
@@ -286,7 +274,7 @@ void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
 /*     } */
 /*     printf("\n"); */
   }
-  print_ginstr(gp,gp->count-1,instr,0);
+  print_ginstr(stdout,gp,gp->count-1,instr,0);
   #endif
 
   if (!gp->si)
@@ -398,6 +386,16 @@ char *get_function_name(int fno)
     return real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
 }
 
+const char *function_name(gprogram *gp, int fno)
+{
+  if (0 > fno)
+    return "(unknown)";
+  else if (fno >= gp->nfunctions)
+    return "(invalid)";
+  else
+    return gp->fnames[fno];
+}
+
 int function_nargs(int fno)
 {
   assert(0 <= fno);
@@ -407,33 +405,33 @@ int function_nargs(int fno)
     return get_scomb_index(fno-NUM_BUILTINS)->nargs;
 }
 
-void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
+void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage)
 {
   assert(OP_COUNT > instr->opcode);
 
-  printf("%-5d %-12s %-10d %-10d",
+  fprintf(f,"%-5d %-12s %-10d %-10d",
          address,op_names[instr->opcode],instr->arg0,instr->arg1);
   if (0 <= instr->expcount)
-    printf(" %-4d",instr->expcount);
+    fprintf(f," %-4d",instr->expcount);
   else
-    printf("       ");
+    fprintf(f,"       ");
 /*   if (usage) */
-/*     printf(" u:%-6d",instr->usage); */
-  printf("    ");
+/*     fprintf(f," u:%-6d",instr->usage); */
+  fprintf(f,"    ");
 
   if (0 <= instr->sl.fileno)
-    printf("%20s:%-4d ",lookup_parsedfile(instr->sl.fileno),instr->sl.lineno);
+    fprintf(f,"%20s:%-4d ",lookup_parsedfile(instr->sl.fileno),instr->sl.lineno);
   else
-    printf("%20s%-5s ","","");
+    fprintf(f,"%20s%-5s ","","");
 
   switch (instr->opcode) {
   case OP_GLOBSTART:
     if (NUM_BUILTINS > instr->arg0) {
-      printf("; Builtin %s",builtin_info[instr->arg0].name);
+      fprintf(f,"; Builtin %s",builtin_info[instr->arg0].name);
     }
     else {
       char *name = real_scname(get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
-      printf("; Supercombinator %s",name);
+      fprintf(f,"; Supercombinator %s",name);
       free(name);
     }
     break;
@@ -448,41 +446,32 @@ void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage)
         scomb *sc = get_scomb_index(program[funstart].arg0-NUM_BUILTINS);
         int stackpos = instr->expcount-instr->arg0-1;
         if (stackpos < sc->nargs)
-          printf("; PUSH %s",real_varname(sc->argnames[sc->nargs-1-stackpos]));
+          fprintf(f,"; PUSH %s",real_varname(sc->argnames[sc->nargs-1-stackpos]));
       }
     }
     break;
   case OP_PUSHSTRING: {
     char *str = ((char**)gp->stringmap->data)[instr->arg0];
-    printf("; PUSHSTRING \"%s\"",str);
+    fprintf(f,"; PUSHSTRING \"%s\"",str);
     break;
   }
-  case OP_MKFRAME: {
-    char *name = get_function_name(instr->arg0);
-    printf("; MKFRAME %s %d",name,instr->arg1);
-    free(name);
+  case OP_MKFRAME:
+    fprintf(f,"; MKFRAME %s %d",function_name(gp,instr->arg0),instr->arg1);
     break;
-  }
-  case OP_MKCAP: {
-    char *name = get_function_name(instr->arg0);
-    printf("; MKCAP %s %d",name,instr->arg1);
-    free(name);
+  case OP_MKCAP:
+    fprintf(f,"; MKCAP %s %d",function_name(gp,instr->arg0),instr->arg1);
     break;
-  }
-  case OP_JFUN: {
-    char *name = get_function_name(instr->arg0);
-    printf("; JFUN %s",name);
-    free(name);
+  case OP_JFUN:
+    fprintf(f,"; JFUN %s",function_name(gp,instr->arg0));
     break;
-  }
   case OP_BIF:
-    printf("; %s",builtin_info[instr->arg0].name);
+    fprintf(f,"; %s",builtin_info[instr->arg0].name);
     break;
   default:
     break;
   }
 
-  printf("\n");
+  fprintf(f,"\n");
 }
 
 void print_program(gprogram *gp, int builtins, int usage)
@@ -504,7 +493,7 @@ void print_program(gprogram *gp, int builtins, int usage)
       printf("\n");
       prevfun = gp->ginstrs[i].arg0;
     }
-    print_ginstr(gp,i,&gp->ginstrs[i],usage);
+    print_ginstr(stdout,gp,i,&gp->ginstrs[i],usage);
   }
 
   printf("\n");
@@ -551,8 +540,8 @@ void print_profiling(process *proc, gprogram *gp)
       prevfun = fno;
     }
     if (addr < gp->count) {
-      curusage += proc->usage[addr];
-      totalusage += proc->usage[addr];
+      curusage += proc->stats.usage[addr];
+      totalusage += proc->stats.usage[addr];
     }
     addr++;
   }
@@ -561,7 +550,7 @@ void print_profiling(process *proc, gprogram *gp)
   printf("------   -------   ------\n");
   for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
     double portion = (((double)usage[fno])/((double)totalusage))*100.0;
-    printf("%-9d",proc->funcalls[fno]);
+    printf("%-9d",proc->stats.funcalls[fno]);
     printf("%-9d",usage[fno]);
     printf(" %-6.2f",portion);
     if (fno == NUM_BUILTINS+index) {
@@ -696,7 +685,7 @@ void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 void E(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2("E",c,n,"");
+  print_comp2(gp,"E",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
@@ -784,6 +773,10 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
     presize(p,oldcount);
     break;
   }
+  case TYPE_SYMBOL:
+    EVAL(c->sl,n-presolve(p,c->name));
+    PUSH(c->sl,n-presolve(p,c->name));
+    break;
   default:
     C(gp,c,p,n);
     EVAL(c->sl,0);
@@ -795,7 +788,7 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
 void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 {
   int m;
-  print_comp2_stack("S",exprs,n,"");
+  print_comp2_stack(gp,"S",exprs,n,"");
   for (m = 0; m < exprs->count; m++) {
     if (strict->data[m])
       E(gp,(snode*)exprs->data[m],p,n+m);
@@ -808,7 +801,7 @@ void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 void R(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2("R",c,n,"");
+  print_comp2(gp,"R",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     stack *args = stack_new();
@@ -825,7 +818,7 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
       stack_push(argstrict,0);
       S(gp,app,args,argstrict,p,n);
       EVAL(app->sl,0);
-      DO(app->sl);
+      DO(app->sl,0);
     }
     else if ((TYPE_BUILTIN == snodetype(app)) ||
              (TYPE_SCREF == snodetype(app))) {
@@ -835,7 +828,7 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
         S(gp,app,args,argstrict,p,n);
         MKFRAME(app->sl,fno,k);
         EVAL(app->sl,0);
-        DO(app->sl);
+        DO(app->sl,0);
       }
       else if (m == k) {
         if ((TYPE_BUILTIN == snodetype(app)) &&
@@ -866,12 +859,34 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
           bif = app->bif;
           bi = &builtin_info[bif];
           assert(gp->si->count >= bi->nstrict);
+
+
+          /* FIXME: temp: this is only because strictness analysis is disabled */
+/*           for (argno = 0; argno < bi->nstrict; argno++) */
+/*             EVAL(app->sl,argno); */
+
+
+
+
+
+
           for (argno = 0; argno < bi->nstrict; argno++)
             assert(statusat(gp->si,gp->si->count-1-argno));
+
           BIF(app->sl,bif);
-          if (!bi->reswhnf)
-            EVAL(app->sl,0);
-          RETURN(app->sl);
+
+/*           if (!bi->reswhnf) */
+/*             EVAL(app->sl,0); */
+/*           RETURN(app->sl); */
+
+          if (!bi->reswhnf) {
+            DO(app->sl,1);
+          }
+          else {
+            RETURN(app->sl);
+          }
+
+
         }
         else {
           S(gp,app,args,argstrict,p,n);
@@ -934,7 +949,7 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
 void C(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2("C",c,n,"");
+  print_comp2(gp,"C",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
@@ -1080,6 +1095,11 @@ void compile(gprogram *gp)
     sc->index = index++;
 
   gp->nfunctions = NUM_BUILTINS+index;
+  gp->fnames = (char**)malloc(gp->nfunctions*sizeof(char*));
+  for (i = 0; i < NUM_BUILTINS; i++)
+    gp->fnames[i] = strdup(builtin_info[i].name);
+  for (sc = scombs; sc; sc = sc->next)
+    gp->fnames[i++] = real_scname(sc->name);
 
   gp->addressmap = (int*)calloc(gp->nfunctions,sizeof(int));
   gp->noevaladdressmap = (int*)calloc(gp->nfunctions,sizeof(int));
@@ -1095,7 +1115,7 @@ void compile(gprogram *gp)
 
   gp->evaldoaddr = gp->count;
   EVAL(nosl,0);
-  DO(nosl);
+  DO(nosl,0);
 
   for (sc = scombs; sc; sc = sc->next)
     F(gp,NUM_BUILTINS+sc->index,sc);

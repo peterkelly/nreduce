@@ -72,4 +72,4 @@
                 (append (printgrid grid) (cons "\n" (loop (- iter 1) (dolife grid))))
                 nil))
 
-(main () (loop 50 (makegrid start 40 40)))
+(main () (loop 10 (makegrid start 40 40)))

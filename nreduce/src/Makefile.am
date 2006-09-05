@@ -20,6 +20,9 @@ nreduce_SOURCES = assembler.c \
 	resolve.c \
 	reorder.c \
 	source.c \
+	data.c \
+	console.c \
+	process.c \
 	grammar.tab.c \
 	lexer.yy.c
 #	life.c

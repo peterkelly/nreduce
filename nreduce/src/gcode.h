@@ -79,6 +79,7 @@ typedef struct gprogram {
   stackinfo *si;
   array *stringmap;
   int nfunctions;
+  char **fnames;
   int *addressmap;
   int *noevaladdressmap;
   int *stacksizes;
@@ -90,15 +91,18 @@ gprogram *gprogram_new();
 void gprogram_free(gprogram *gp);
 
 char *get_function_name(int fno);
+const char *function_name(gprogram *gp, int fno);
 int function_nargs(int fno);
-void print_ginstr(gprogram *gp, int address, ginstr *instr, int usage);
+void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage);
 void print_program(gprogram *gp, int builtins, int usage);
 void print_profiling(process *proc, gprogram *gp);
 void compile(gprogram *gp);
 
 /* gmachine */
 
-void execute(process *proc, gprogram *gp);
+void add_pending_mark(process *proc, gaddr addr);
+void spark(process *proc, frame *f);
+void run(gprogram *gp);
 
 /* jit */
 
@@ -106,10 +110,6 @@ void jit_compile(ginstr *program, array *cpucode);
 void jit_execute(ginstr *program);
 
 #ifndef GCODE_C
-extern int *funcalls;
-extern int *addressmap;
-extern int *noevaladdressmap;
-extern int *stacksizes;
 extern const char *op_names[OP_COUNT];
 #endif
 

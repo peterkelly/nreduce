@@ -262,9 +262,9 @@ void print_double(FILE *f, double d)
   if (d == (double)((int)(d))) {
     int i = (int)d;
     if (getsignbit(d) && (0.0 == d))
-      printf("-0");
+      fprintf(f,"-0");
     else
-      printf("%d",i);
+      fprintf(f,"%d",i);
   }
   else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
     int ipart = (int)d;
@@ -287,22 +287,46 @@ void print_double(FILE *f, double d)
     assert('0' == tmp[start]);
     assert('.' == tmp[start+1]);
 
-    printf("%d.%s",ipart,tmp+start+2);
+    fprintf(f,"%d.%s",ipart,tmp+start+2);
   }
   else if (0.0 == d) {
-    printf("0");
+    fprintf(f,"0");
   }
   else if (isnan(d)) {
-    printf("NaN");
+    fprintf(f,"NaN");
   }
   else if (isinf(d) && (0.0 < d)) {
-    printf("INF");
+    fprintf(f,"INF");
   }
   else if (isinf(d) && (0.0 > d)) {
-    printf("-INF");
+    fprintf(f,"-INF");
   }
   else {
-    printf("%f",d);
+    fprintf(f,"%f",d);
   }
+}
+
+struct timeval timeval_diff(struct timeval from, struct timeval to)
+{
+  struct timeval diff;
+  diff.tv_sec = to.tv_sec - from.tv_sec;
+  diff.tv_usec = to.tv_usec - from.tv_usec;
+  if (0 > diff.tv_usec) {
+    diff.tv_sec -= 1;
+    diff.tv_usec += 1000000;
+  }
+  return diff;
+}
+
+int hash(void *mem, int size)
+{
+  int h = 0;
+  int i;
+  for (i = 0; i < size; i++)
+    h += ((char*)mem)[i];
+  h %= GLOBAL_HASH_SIZE;
+  if (0 > h)
+    h += GLOBAL_HASH_SIZE;
+  return h;
 }
 

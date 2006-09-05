@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#define EXTRA_C
+#define DEBUG_C
 
 #include "grammar.tab.h"
 #include "gcode.h"
@@ -40,7 +40,6 @@
 #include <errno.h>
 
 snode *parse_root = NULL;
-extern gprogram *cur_program;
 extern array *oldnames;
 
 const char *snode_types[NUM_CELLTYPES] = {
@@ -51,7 +50,7 @@ const char *snode_types[NUM_CELLTYPES] = {
 "CONS",
 "SYMBOL",
 "LETREC",
-"RES2",
+"REMOTEREF",
 "RES3",
 "IND",
 "RES1",
@@ -74,7 +73,7 @@ const char *cell_types[NUM_CELLTYPES] = {
 "CONS",
 "SYMBOL",
 "LETREC",
-"RES2",
+"REMOTEREF",
 "RES3",
 "IND",
 "RES1",
@@ -88,6 +87,36 @@ const char *cell_types[NUM_CELLTYPES] = {
 "STRING",
 "ARRAY",
  };
+
+const char *msg_names[MSG_COUNT] = {
+"ISTATS",
+"ALLSTATS",
+"DUMP_INFO",
+"DONE",
+"PAUSE",
+"RESUME",
+"FISH",
+"FETCH",
+"TRANSFER",
+"ACK",
+"MARKROOTS",
+"MARKENTRY",
+"SWEEP",
+"SWEEPACK",
+"UPDATE",
+"RESPOND",
+"SCHEDULE",
+"UPDATEREF",
+"TEST",
+"STARTDISTGC",
+};
+
+const char *frame_states[4] = {
+"NEW",
+"SPARKED",
+"RUNNING",
+"DONE",
+};
 
 void fatal(const char *msg)
 {
@@ -577,7 +606,7 @@ void print_scombs2()
   debug(0,"\n");
 }
 
-void print_stack(pntr *stk, int size, int dir)
+void print_stack(FILE *f, pntr *stk, int size, int dir)
 {
   int i;
 
@@ -599,11 +628,11 @@ void print_stack(pntr *stk, int size, int dir)
 
     p = resolve_pntr(stk[i]);
     if (TYPE_IND == pntrtype(stk[i]))
-      debug(0,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
+      fprintf(f,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
     else
-      debug(0,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
-    print_pntr(p);
-    debug(0,"\n");
+      fprintf(f,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
+    print_pntr(f,p);
+    fprintf(f,"\n");
 
     if (dir)
       i--;
@@ -616,17 +645,149 @@ void statistics(process *proc, FILE *f)
 {
   int i;
   int total;
-  fprintf(f,"totalallocs = %d\n",proc->totalallocs);
-  fprintf(f,"ncollections = %d\n",proc->ncollections);
-  fprintf(f,"nscombappls = %d\n",proc->nscombappls);
-  fprintf(f,"nreductions = %d\n",proc->nreductions);
-  fprintf(f,"nframes = %d\n",proc->nframes);
-  fprintf(f,"maxframes = %d\n",proc->maxframes);
+  fprintf(f,"totalallocs = %d\n",proc->stats.totalallocs);
+  fprintf(f,"ncollections = %d\n",proc->stats.ncollections);
+  fprintf(f,"nscombappls = %d\n",proc->stats.nscombappls);
+  fprintf(f,"nreductions = %d\n",proc->stats.nreductions);
+  fprintf(f,"nsparks = %d\n",proc->stats.nsparks);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
-    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->op_usage[i]);
-    total += proc->op_usage[i];
+    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->stats.op_usage[i]);
+    total += proc->stats.op_usage[i];
   }
   fprintf(f,"usage total = %d\n",total);
 }
+
+void print_pntr_tree(FILE *f, pntr p, int indent)
+{
+  cell *c;
+  int i;
+  int oldtype;
+  int type = pntrtype(p);
+
+  if (TYPE_EMPTY == type)
+    return; /* cycle */
+
+  if (TYPE_NUMBER == type)
+    fprintf(f,"%-12s","(number)");
+  else
+    fprintf(f,"%-12p",get_pntr(p));
+
+  for (i = 0; i < indent; i++) {
+    fprintf(f,"  ");
+  }
+  fprintf(f,"%-12s",cell_types[type]);
+
+  if (TYPE_NUMBER == type) {
+    assert(!is_pntr(p));
+    print_double(f,p);
+    fprintf(f,"\n");
+    return;
+  }
+
+  assert(is_pntr(p));
+  c = get_pntr(p);
+
+  oldtype = c->type;
+  c->type = TYPE_EMPTY; /* to avoid loops */
+  switch (type) {
+  case TYPE_CONS:
+    fprintf(f,"(cons)\n");
+    print_pntr_tree(f,c->field1,indent+1);
+    print_pntr_tree(f,c->field2,indent+1);
+    break;
+  case TYPE_REMOTEREF: {
+    global *glo = (global*)get_pntr(c->field1);
+    fprintf(f,"%d@%d\n",glo->addr.lid,glo->addr.pid);
+    break;
+  }
+  case TYPE_IND:
+    fprintf(f,"(ind)\n");
+    print_pntr_tree(f,c->field1,indent+1);
+    break;
+  case TYPE_AREF: {
+    cell *arrcell = get_pntr(c->field1);
+    carray *arr = (carray*)get_pntr(arrcell->field1);
+    int index = (int)get_pntr(c->field2);
+    fprintf(f,"(aref %d/%d)\n",index,arr->size);
+    break;
+  }
+  case TYPE_HOLE:
+    fprintf(f,"(hole)\n");
+    break;
+  case TYPE_FRAME: {
+    frame *fr = (frame*)get_pntr(c->field1);
+    char *name = get_function_name(fr->fno);
+    int i;
+    fprintf(f,"%s (%d)\n",name,fr->count);
+    free(name);
+    for (i = 0; i < fr->count; i++)
+      print_pntr_tree(f,fr->data[i],indent+1);
+    break;
+  }
+  case TYPE_CAP: {
+    cap *cp = (cap*)get_pntr(c->field1);
+    char *name = get_function_name(cp->fno);
+    int i;
+    fprintf(f,"%s (%d)\n",name,cp->count);
+    free(name);
+    for (i = 0; i < cp->count; i++)
+      print_pntr_tree(f,cp->data[i],indent+1);
+    break;
+  }
+  case TYPE_NIL:
+    fprintf(f,"(nil)\n");
+    break;
+  case TYPE_STRING:
+    fprintf(f,"\"%s\"\n",get_string(c->field1));
+    break;
+  default:
+    assert(0);
+  }
+  c->type = oldtype;
+}
+
+void dump_info(process *proc)
+{
+  block *bl;
+  int i;
+  frame *f;
+
+  fprintf(proc->output,"Frames with things waiting on them:\n");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
+
+  for (bl = proc->blocks; bl; bl = bl->next) {
+    for (i = 0; i < BLOCK_SIZE; i++) {
+      cell *c = &bl->values[i];
+      if (TYPE_FRAME == c->type) {
+        f = (frame*)get_pntr(c->field1);
+        if (f->wq.frames || f->wq.fetchers) {
+          fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
+                  f,
+                  function_name(proc->gp,f->fno),
+                  list_count(f->wq.frames),
+                  list_count(f->wq.fetchers));
+        }
+      }
+    }
+  }
+
+  fprintf(proc->output,"\n");
+  fprintf(proc->output,"Runnable queue (size %d):\n",proc->runnable.size);
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+          "frame*","function","frames","fetchers","state");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+          "------","--------","------","--------","-------------");
+  for (f = proc->runnable.first; f; f = f->qnext) {
+    fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
+            f,
+            function_name(proc->gp,f->fno),
+            list_count(f->wq.frames),
+            list_count(f->wq.fetchers),
+            frame_states[f->state]);
+  }
+
+}
+
