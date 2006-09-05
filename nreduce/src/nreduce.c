@@ -58,10 +58,10 @@ const char *internal_functions =
 
 extern char *yyfilename;
 extern int yyfileno;
-extern snode *parse_root;
 extern char *code_start;
 extern array *oldnames;
 
+snode *parse_root = NULL;
 FILE *statsfile = NULL;
 
 gprogram *global_program = NULL;
@@ -84,7 +84,7 @@ struct arguments {
 
 struct arguments args;
 
-void usage()
+static void usage()
 {
   printf(
 "Usage: nreduce [OPTIONS] FILENAME\n"
@@ -183,16 +183,16 @@ int yylex_destroy(void);
 int yylex_destroy(void);
 #endif
 
-void close_statistics()
+static void close_statistics()
 {
   fclose(statsfile);
   statsfile = NULL;
 }
 
-void stream(process *proc, pntr p)
+static void stream(process *proc, pntr lst)
 {
   proc->streamstack = pntrstack_new();
-  pntrstack_push(proc->streamstack,p);
+  pntrstack_push(proc->streamstack,lst);
   while (0 < proc->streamstack->count) {
     pntr p;
     reduce(proc,proc->streamstack);
@@ -225,7 +225,7 @@ void stream(process *proc, pntr p)
   proc->streamstack = NULL;
 }
 
-int conslist_length(snode *list)
+static int conslist_length(snode *list)
 {
   int count = 0;
   while (TYPE_CONS == snodetype(list)) {
@@ -237,18 +237,18 @@ int conslist_length(snode *list)
   return count;
 }
 
-snode *conslist_item(snode *list, int index)
-{
-  while ((0 < index) && (TYPE_CONS == snodetype(list))) {
-    index--;
-    list = list->right;
-  }
-  if (TYPE_CONS != snodetype(list))
-    return NULL;
-  return list->left;
-}
+/* static snode *conslist_item(snode *list, int index) */
+/* { */
+/*   while ((0 < index) && (TYPE_CONS == snodetype(list))) { */
+/*     index--; */
+/*     list = list->right; */
+/*   } */
+/*   if (TYPE_CONS != snodetype(list)) */
+/*     return NULL; */
+/*   return list->left; */
+/* } */
 
-void parse_post_processing(snode *root)
+static void parse_post_processing(snode *root)
 {
   snode *funlist = parse_root;
 
@@ -311,7 +311,7 @@ void parse_post_processing(snode *root)
   snode_free(root);
 }
 
-void check_for_main()
+static void check_for_main()
 {
   int gotmain = 0;
 
@@ -334,7 +334,7 @@ void check_for_main()
   }
 }
 
-void parse_file(char *filename)
+static void parse_file(char *filename)
 {
   YY_BUFFER_STATE bufstate;
   if (NULL == (yyin = fopen(filename,"r"))) {
@@ -359,7 +359,7 @@ void parse_file(char *filename)
   parse_post_processing(parse_root);
 }
 
-void parse_string(const char *str)
+static void parse_string(const char *str)
 {
   YY_BUFFER_STATE bufstate;
   yyfilename = "(string)";
@@ -379,7 +379,7 @@ void parse_string(const char *str)
   parse_post_processing(parse_root);
 }
 
-void source_code_parsing()
+static void source_code_parsing()
 {
   debug_stage("Source code parsing");
 
@@ -391,7 +391,7 @@ void source_code_parsing()
     print_scombs1();
 }
 
-void fix_linenos(snode *c)
+static void fix_linenos(snode *c)
 {
   switch (snodetype(c)) {
   case TYPE_CONS: {
@@ -424,12 +424,12 @@ void fix_linenos(snode *c)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
 
-void line_fixing()
+static void line_fixing()
 {
   scomb *sc;
   debug_stage("Line number fixing");
@@ -441,7 +441,7 @@ void line_fixing()
     print_scombs1();
 }
 
-void create_letrecs_r(snode *c)
+static void create_letrecs_r(snode *c)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
@@ -538,17 +538,17 @@ void create_letrecs_r(snode *c)
   case TYPE_SCREF:
     break;
   default:
-    assert(!"invalid node type");
+    fatal("invalid node type");
     break;
   }
 }
 
-void create_letrecs(snode *c)
+static void create_letrecs(snode *c)
 {
   create_letrecs_r(c);
 }
 
-void letrec_creation()
+static void letrec_creation()
 {
   scomb *sc;
   debug_stage("Letrec creation");
@@ -560,7 +560,7 @@ void letrec_creation()
     print_scombs1();
 }
 
-void variable_renaming()
+static void variable_renaming()
 {
   scomb *sc;
   debug_stage("Variable renaming");
@@ -572,7 +572,7 @@ void variable_renaming()
     print_scombs1();
 }
 
-void symbol_resolution()
+static void symbol_resolution()
 {
   scomb *sc;
   debug_stage("Symbol resolution");
@@ -584,7 +584,7 @@ void symbol_resolution()
     print_scombs1();
 }
 
-void substitute_apps_r(snode **k)
+static void substitute_apps_r(snode **k)
 {
   switch (snodetype(*k)) {
   case TYPE_APPLICATION:
@@ -662,17 +662,17 @@ void substitute_apps_r(snode **k)
   case TYPE_SCREF:
     break;
   default:
-    assert(!"invalid node type");
+    fatal("invalid node type");
     break;
   }
 }
 
-void substitute_apps(snode **k)
+static void substitute_apps(snode **k)
 {
   substitute_apps_r(k);
 }
 
-void app_substitution()
+static void app_substitution()
 {
   scomb *sc;
   debug_stage("Application substitution");
@@ -684,7 +684,7 @@ void app_substitution()
     print_scombs1();
 }
 
-void lambda_lifting()
+static void lambda_lifting()
 {
   scomb *sc;
   scomb *last;
@@ -705,7 +705,7 @@ void lambda_lifting()
     print_scombs1();
 }
 
-void app_lifting()
+static void app_lifting()
 {
   scomb *sc;
   scomb *last;
@@ -726,7 +726,7 @@ void app_lifting()
     print_scombs1();
 }
 
-void letrec_reordering()
+static void letrec_reordering()
 {
   scomb *sc;
   debug_stage("Letrec reordering");
@@ -738,7 +738,8 @@ void letrec_reordering()
     print_scombs1();
 }
 
-void graph_optimisation()
+#if 0
+static void graph_optimisation()
 {
   debug_stage("Graph optimisation");
 
@@ -747,24 +748,25 @@ void graph_optimisation()
   if (trace)
     print_scombs1();
 }
+#endif
 
-void gcode_compilation()
+static void gcode_compilation()
 {
   debug_stage("G-code compilation");
 
   global_program = gprogram_new();
   compile(global_program);
   if (args.justgcode) {
-    print_program(global_program,0,0);
+    print_program(global_program,0);
     exit(0);
   }
   else if (trace) {
-    print_program(global_program,1,0);
+    print_program(global_program,1);
   }
 }
 
 #if 0
-void machine_code_generation()
+static void machine_code_generation()
 {
   int i;
   debug_stage("Machine code generation");
@@ -780,7 +782,7 @@ void machine_code_generation()
 }
 #endif
 
-void reduction_engine()
+static void reduction_engine()
 {
   scomb *mainsc;
   cell *root;
@@ -822,7 +824,7 @@ void reduction_engine()
   process_free(proc);
 }
 
-void gcode_interpreter()
+static void gcode_interpreter()
 {
 #ifdef TIMING
   struct timeval start;
@@ -858,7 +860,7 @@ void gcode_interpreter()
 
 #if 0
 typedef void (jitfun)();
-void native_execution_engine()
+static void native_execution_engine()
 {
   debug_stage("Native execution engine");
   ((jitfun*)global_cpucode->data)();;
@@ -869,7 +871,7 @@ void native_execution_engine()
 }
 #endif
 
-void open_statistics()
+static void open_statistics()
 {
   if (NULL == (statsfile = fopen(args.statistics,"w"))) {
     perror(args.statistics);

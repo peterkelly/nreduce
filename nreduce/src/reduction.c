@@ -175,7 +175,7 @@ void reduce(process *proc, pntrstack *s)
     /* A variable. This should correspond to a supercombinator, and if it doesn't it means
        something has gone wrong. */
     case TYPE_SYMBOL:
-      assert(!"variable encountered during reduction");
+      fatal("variable encountered during reduction");
       break;
     case TYPE_SCREF: {
       scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
@@ -288,7 +288,7 @@ void reduce(process *proc, pntrstack *s)
     }
     default:
       fprintf(stderr,"Encountered %s\n",cell_types[pntrtype(target)]);
-      assert(0);
+      abort();
       break;
     }
 

@@ -34,7 +34,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-void resolve_refs_r(snode *c, stack *bound)
+static void resolve_refs_r(snode *c, stack *bound)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
@@ -93,7 +93,7 @@ void resolve_refs_r(snode *c, stack *bound)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }

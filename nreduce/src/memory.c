@@ -107,21 +107,21 @@ pntr make_number(double d)
 }
 #endif
 
-void initmem()
+void initmem(void)
 {
 }
 
-void mark(process *proc, pntr p, int bit);
-void mark_frame(process *proc, frame *f, int bit);
+static void mark(process *proc, pntr p, short bit);
+static void mark_frame(process *proc, frame *f, short bit);
 
-void mark_waitqueue(process *proc, waitqueue *wq, int bit)
+static void mark_waitqueue(process *proc, waitqueue *wq, short bit)
 {
   list *l;
   for (l = wq->frames; l; l = l->next)
     mark_frame(proc,(frame*)l->data,bit);
 }
 
-void mark_global(process *proc, global *glo, int bit)
+void mark_global(process *proc, global *glo, short bit)
 {
   check_global(glo);
   if (glo->flags & bit)
@@ -134,7 +134,7 @@ void mark_global(process *proc, global *glo, int bit)
     add_pending_mark(proc,glo->addr);
 }
 
-void mark_frame(process *proc, frame *f, int bit)
+static void mark_frame(process *proc, frame *f, short bit)
 {
 /*   printf("mark_frame %p (cell %p)\n",f,f->c); */
   int i;
@@ -144,20 +144,20 @@ void mark_frame(process *proc, frame *f, int bit)
     mark(proc,p,bit);
   }
   for (i = 0; i < f->count; i++)
-    if (f->data[i])
+    if (!is_nullpntr(f->data[i]))
       mark(proc,f->data[i],bit);
   mark_waitqueue(proc,&f->wq,bit);
 }
 
-void mark_cap(process *proc, cap *c, int bit)
+static void mark_cap(process *proc, cap *c, short bit)
 {
   int i;
   for (i = 0; i < c->count; i++)
-    if (c->data[i])
+    if (!is_nullpntr(c->data[i]))
       mark(proc,c->data[i],bit);
 }
 
-void mark(process *proc, pntr p, int bit)
+static void mark(process *proc, pntr p, short bit)
 {
   cell *c;
   assert(TYPE_EMPTY != pntrtype(p));
@@ -218,7 +218,7 @@ void mark(process *proc, pntr p, int bit)
   case TYPE_HOLE:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -321,7 +321,7 @@ int count_alive(process *proc)
   return alive;
 }
 
-void clear_marks(process *proc, int bit)
+void clear_marks(process *proc, short bit)
 {
   block *bl;
   int i;
@@ -337,7 +337,7 @@ void clear_marks(process *proc, int bit)
       glo->flags &= ~bit;
 }
 
-void mark_roots(process *proc, int bit)
+void mark_roots(process *proc, short bit)
 {
   int i;
   frame *f;
@@ -376,7 +376,7 @@ void mark_roots(process *proc, int bit)
   for (l = proc->inflight; l; l = l->next) {
     gaddr *addr = (gaddr*)l->data;
     if ((0 <= addr->lid) && (addr->pid == proc->pid)) {
-      global *glo = global_lookup_glo(proc,*addr);
+      glo = global_lookup_glo(proc,*addr);
       assert(glo);
       check_global(glo);
       if (proc->memdebug) {
@@ -534,7 +534,7 @@ void cap_dealloc(cap *c)
   free(c);
 }
 
-void cleanup()
+void cleanup(void)
 {
   int i;
   scomb_free_list(&scombs);
@@ -553,7 +553,7 @@ void cleanup()
   }
 }
 
-process *process_new()
+process *process_new(void)
 {
   process *proc = (process*)calloc(1,sizeof(process));
   cell *globnilvalue;
@@ -607,7 +607,7 @@ void process_init(process *proc, gprogram *gp)
   proc->markmsgs = (array**)calloc(proc->grp->nprocs,sizeof(array*));
 }
 
-void message_free(message *msg)
+static void message_free(message *msg)
 {
   free(msg->data);
   free(msg);
@@ -655,7 +655,7 @@ void process_free(process *proc)
   free(proc->markmsgs);
   free(proc->pntrhash);
   free(proc->addrhash);
-  list_free(proc->msgqueue,(void*)message_free);
+  list_free(proc->msgqueue,(list_d_t)message_free);
   pthread_mutex_destroy(&proc->msglock);
   pthread_cond_destroy(&proc->msgcond);
   free(proc);

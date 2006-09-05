@@ -46,7 +46,7 @@ reader read_start(const char *data, int size)
   return rd;
 }
 
-int read_bytes(reader *rd, void *data, int count)
+static int read_bytes(reader *rd, void *data, int count)
 {
   if (rd->pos+count > rd->size)
     return READER_INCOMPLETE_DATA;
@@ -55,7 +55,7 @@ int read_bytes(reader *rd, void *data, int count)
   return READER_OK;
 }
 
-int read_check_tag(reader *rd, int tag)
+static int read_check_tag(reader *rd, int tag)
 {
   int got;
   CHECK_READ(read_bytes(rd,&got,sizeof(int)));
@@ -64,7 +64,7 @@ int read_check_tag(reader *rd, int tag)
   return READER_OK;
 }
 
-int read_tagged_bytes(reader *rd, int tag, void *data, int count)
+static int read_tagged_bytes(reader *rd, int tag, void *data, int count)
 {
   CHECK_READ(read_check_tag(rd,tag));
   return read_bytes(rd,data,count);
@@ -151,7 +151,7 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
     *pout = global_lookup(proc,addr,*pout);
     break;
   case TYPE_HOLE:
-    assert(!"shouldn't receive HOLE");
+    fatal("shouldn't receive HOLE");
     break;
   case TYPE_FRAME: {
     frame *fr = frame_alloc(proc);
@@ -261,7 +261,7 @@ int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_lis
       r = read_end(rd);
       break;
     default:
-      assert(!"invalid read format character");
+      fatal("invalid read format character");
     }
     if (READER_OK == r)
       done++;
@@ -361,7 +361,7 @@ int read_end(reader *rd)
   return 0;
 }
 
-array *write_start()
+array *write_start(void)
 {
   return array_new();
 }
@@ -445,7 +445,7 @@ void write_pntr(array *arr, process *proc, pntr p)
     else {
       /* FIXME: how to deal with this case? */
       /* Want to make another ref which points to this */
-      assert(0);
+      abort();
       write_ref(arr,proc,p);
     }
     return;
@@ -517,7 +517,7 @@ void write_pntr(array *arr, process *proc, pntr p)
     write_string(arr,get_string(get_pntr(p)->field1));
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -527,7 +527,7 @@ void write_vformat(array *wr, process *proc, const char *fmt, va_list ap)
   for (; *fmt; fmt++) {
     switch (*fmt) {
     case 'c':
-      write_char(wr,va_arg(ap,int));
+      write_char(wr,(char)(va_arg(ap,int)));
       break;
     case 'i':
       write_int(wr,va_arg(ap,int));
@@ -548,7 +548,7 @@ void write_vformat(array *wr, process *proc, const char *fmt, va_list ap)
       write_ref(wr,proc,va_arg(ap,pntr));
       break;
     default:
-      assert(!"invalid write format character");
+      fatal("invalid write format character");
     }
   }
 }
@@ -583,7 +583,7 @@ static void msg_print(process *proc, int dest, const char *data, int size)
 }
 #endif
 
-static void msg_send_addcount(process *proc, int dest, const char *data, int size)
+static void msg_send_addcount(process *proc, const char *data, int size)
 {
   reader rd = read_start(data,size);
   int msgtype;
@@ -610,7 +610,7 @@ void msg_send(process *proc, int dest, const char *data, int size)
   #ifdef MSG_DEBUG
   msg_print(proc,dest,data,size);
   #endif
-  msg_send_addcount(proc,dest,data,size);
+  msg_send_addcount(proc,data,size);
 
   assert(0 <= dest);
   assert(dest < proc->grp->nprocs);

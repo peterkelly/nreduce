@@ -70,17 +70,6 @@ void addrhash_add(process *proc, global *glo)
   proc->addrhash[h] = glo;
 }
 
-int find_glo(process *proc, global *glo)
-{
-  int h;
-  global *t;
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (t = proc->pntrhash[h]; t; t = t->pntrnext)
-      if (t == glo)
-        return h;
-  return -1;
-}
-
 void pntrhash_remove(process *proc, global *glo)
 {
   int h = hash(&glo->p,sizeof(pntr));
@@ -225,7 +214,7 @@ void remove_gaddr(process *proc, list **l, gaddr addr)
     }
   }
   fprintf(proc->output,"gaddr %d@%d not found\n",addr.lid,addr.pid);
-  assert(!"gaddr not found");
+  fatal("gaddr not found");
 }
 
 #ifdef QUEUE_CHECKS

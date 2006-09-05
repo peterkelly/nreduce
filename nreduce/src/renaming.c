@@ -43,7 +43,7 @@ typedef struct mapping {
   char *to;
 } mapping;
 
-mapping *mapping_new(const char *from, const char *to)
+static mapping *mapping_new(const char *from, const char *to)
 {
   mapping *mp = (mapping*)calloc(1,sizeof(mapping));
   mp->from = strdup(from);
@@ -51,14 +51,14 @@ mapping *mapping_new(const char *from, const char *to)
   return mp;
 }
 
-void mapping_free(mapping *mp)
+static void mapping_free(mapping *mp)
 {
   free(mp->from);
   free(mp->to);
   free(mp);
 }
 
-void mappings_set_count(stack *mappings, int count)
+static void mappings_set_count(stack *mappings, int count)
 {
   int i;
   for (i = count; i < mappings->count; i++)
@@ -66,7 +66,7 @@ void mappings_set_count(stack *mappings, int count)
   mappings->count = count;
 }
 
-char *next_var(const char *oldname)
+static char *next_var(const char *oldname)
 {
   char *name = (char*)malloc(20);
   char *copy;
@@ -78,7 +78,7 @@ char *next_var(const char *oldname)
   return name;
 }
 
-void rename_variables_r(snode *c, stack *mappings)
+static void rename_variables_r(snode *c, stack *mappings)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
@@ -132,7 +132,7 @@ void rename_variables_r(snode *c, stack *mappings)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }

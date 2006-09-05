@@ -50,7 +50,7 @@ static void setneedclear_r(snode *c)
     setneedclear_r(c->body);
     break;
   case TYPE_IND:
-    assert(0);
+    abort();
     break;
   case TYPE_LETREC: {
     letrec *rec;
@@ -79,7 +79,7 @@ static void cleargraph_r(snode *c, int flag)
     cleargraph_r(c->body,flag);
     break;
   case TYPE_IND:
-    assert(0);
+    abort();
     break;
   case TYPE_LETREC: {
     letrec *rec;
@@ -129,7 +129,7 @@ static void add_nodes(snode ***nodes, int *nnodes, snode *c, int *alloc)
   case TYPE_SCREF:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }

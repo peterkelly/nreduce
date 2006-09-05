@@ -314,7 +314,7 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -354,7 +354,7 @@ static void check_strictness(scomb *sc, int *changed)
 /**
  * Print strictness information about all supercobminators to standard output
  */
-void dump_strictinfo()
+void dump_strictinfo(void)
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
@@ -378,7 +378,7 @@ void dump_strictinfo()
  * The process terminates when no changes to the argument strictness or application flags have
  * occurred.
  */
-void strictness_analysis()
+void strictness_analysis(void)
 {
   scomb *sc;
   int changed;

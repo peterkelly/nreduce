@@ -87,19 +87,20 @@ typedef struct gprogram {
   int cdepth;
 } gprogram;
 
-gprogram *gprogram_new();
+gprogram *gprogram_new(void);
 void gprogram_free(gprogram *gp);
 
 char *get_function_name(int fno);
 const char *function_name(gprogram *gp, int fno);
 int function_nargs(int fno);
-void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage);
-void print_program(gprogram *gp, int builtins, int usage);
+void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr);
+void print_program(gprogram *gp, int builtins);
 void print_profiling(process *proc, gprogram *gp);
 void compile(gprogram *gp);
 
 /* gmachine */
 
+void check_stack(process *proc, frame *curf, pntr *stackdata, int stackcount, gprogram *gp);
 void add_pending_mark(process *proc, gaddr addr);
 void spark(process *proc, frame *f);
 void run(gprogram *gp);

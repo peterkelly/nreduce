@@ -67,7 +67,7 @@
 #define JUMP(_s,addr)         { addr = gp->count; add_instruction(gp,_s,OP_JUMP,0,0); }
 #define LABEL(addr)           { gp->ginstrs[addr].arg0 = gp->count-addr; }
 
-stackinfo *stackinfo_new(stackinfo *source)
+static stackinfo *stackinfo_new(stackinfo *source)
 {
   stackinfo *si = (stackinfo*)calloc(1,sizeof(stackinfo));
   if (NULL != source) {
@@ -79,27 +79,27 @@ stackinfo *stackinfo_new(stackinfo *source)
   return si;
 }
 
-void stackinfo_free(stackinfo *si)
+static void stackinfo_free(stackinfo *si)
 {
   free(si->status);
   free(si);
 }
 
-int statusat(stackinfo *si, int index)
+static int statusat(stackinfo *si, int index)
 {
   assert(index < si->count);
   assert(0 <= index);
   return si->status[index];
 }
 
-void setstatusat(stackinfo *si, int index, int i)
+static void setstatusat(stackinfo *si, int index, int i)
 {
   assert(index < si->count);
   assert(0 <= index);
   si->status[index] = i;
 }
 
-void pushstatus(stackinfo *si, int i)
+static void pushstatus(stackinfo *si, int i)
 {
   if (si->alloc == si->count) {
     if (0 == si->alloc)
@@ -111,19 +111,19 @@ void pushstatus(stackinfo *si, int i)
   si->status[si->count++] = i;
 }
 
-void popstatus(stackinfo *si, int n)
+static void popstatus(stackinfo *si, int n)
 {
   si->count -= n;
   assert(0 <= si->count);
 }
 
-void stackinfo_newswap(stackinfo **si, stackinfo **tmp)
+static void stackinfo_newswap(stackinfo **si, stackinfo **tmp)
 {
   *tmp = *si;
   *si = stackinfo_new(*si);
 }
 
-void stackinfo_freeswap(stackinfo **si, stackinfo **tmp)
+static void stackinfo_freeswap(stackinfo **si, stackinfo **tmp)
 {
   stackinfo_free(*si);
   *si = *tmp;
@@ -189,7 +189,7 @@ static void print_comp2_stack(gprogram *gp, char *fname, stack *exprs, int n,
 #endif
 }
 
-gprogram *gprogram_new()
+gprogram *gprogram_new(void)
 {
   gprogram *gp = (gprogram*)calloc(1,sizeof(gprogram));
   gp->count = 0;
@@ -233,7 +233,7 @@ static int add_string(gprogram *gp, const char *str)
   return pos;
 }
 
-void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
+static void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
 {
   ginstr *instr;
   assert(!gp->si || !gp->si->invalid);
@@ -274,7 +274,7 @@ void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
 /*     } */
 /*     printf("\n"); */
   }
-  print_ginstr(stdout,gp,gp->count-1,instr,0);
+  print_ginstr(stdout,gp,gp->count-1,instr);
   #endif
 
   if (!gp->si)
@@ -359,12 +359,12 @@ void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, int arg1)
     assert(statusat(gp->si,gp->si->count-1-arg0));
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
 
-int snode_fno(snode *c)
+static int snode_fno(snode *c)
 {
   assert((TYPE_BUILTIN == snodetype(c)) ||
          (TYPE_SCREF == snodetype(c)));
@@ -405,7 +405,7 @@ int function_nargs(int fno)
     return get_scomb_index(fno-NUM_BUILTINS)->nargs;
 }
 
-void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage)
+void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
 {
   assert(OP_COUNT > instr->opcode);
 
@@ -415,8 +415,6 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage)
     fprintf(f," %-4d",instr->expcount);
   else
     fprintf(f,"       ");
-/*   if (usage) */
-/*     fprintf(f," u:%-6d",instr->usage); */
   fprintf(f,"    ");
 
   if (0 <= instr->sl.fileno)
@@ -474,7 +472,7 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr, int usage)
   fprintf(f,"\n");
 }
 
-void print_program(gprogram *gp, int builtins, int usage)
+void print_program(gprogram *gp, int builtins)
 {
   int i;
   int prevfun = -1;
@@ -493,7 +491,7 @@ void print_program(gprogram *gp, int builtins, int usage)
       printf("\n");
       prevfun = gp->ginstrs[i].arg0;
     }
-    print_ginstr(stdout,gp,i,&gp->ginstrs[i],usage);
+    print_ginstr(stdout,gp,i,&gp->ginstrs[i]);
   }
 
   printf("\n");
@@ -517,7 +515,7 @@ void print_profiling(process *proc, gprogram *gp)
   int totalusage = 0;
   int addr = 0;
 
-  print_program(gp,1,1);
+  print_program(gp,1);
 
   for (sc = scombs; sc; sc = sc->next)
     sc->index = index++;
@@ -549,7 +547,9 @@ void print_profiling(process *proc, gprogram *gp)
   printf("#calls   #instrs   instr%%\n");
   printf("------   -------   ------\n");
   for (fno = 0; fno <= NUM_BUILTINS+index; fno++) {
-    double portion = (((double)usage[fno])/((double)totalusage))*100.0;
+    double dusage = (double)usage[fno];
+    double dtotalusage = (double)totalusage;
+    double portion = (dusage/dtotalusage)*100.0;
     printf("%-9d",proc->stats.funcalls[fno]);
     printf("%-9d",usage[fno]);
     printf(" %-6.2f",portion);
@@ -575,7 +575,7 @@ typedef struct pmap {
   stack *indexes;
 } pmap;
 
-int presolve(pmap *pm, char *varname)
+static int presolve(pmap *pm, char *varname)
 {
   int i;
   assert(pm->names->count == pm->indexes->count);
@@ -587,7 +587,7 @@ int presolve(pmap *pm, char *varname)
   return -1;
 }
 
-void presize(pmap *pm, int count)
+static void presize(pmap *pm, int count)
 {
   assert(pm->names->count == pm->indexes->count);
   assert(count <= pm->names->count);
@@ -595,13 +595,13 @@ void presize(pmap *pm, int count)
   pm->indexes->count = count;
 }
 
-int pcount(pmap *pm)
+static int pcount(pmap *pm)
 {
   assert(pm->names->count == pm->indexes->count);
   return pm->names->count;
 }
 
-void getusage(snode *c, list **used)
+static void getusage(snode *c, list **used)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
@@ -628,7 +628,7 @@ void getusage(snode *c, list **used)
   }
 }
 
-int letrecs_used(snode *expr, letrec *first)
+static int letrecs_used(snode *expr, letrec *first)
 {
   int count = 0;
   list *used = NULL;
@@ -643,9 +643,9 @@ int letrecs_used(snode *expr, letrec *first)
   return count;
 }
 
-void C(gprogram *gp, snode *c, pmap *p, int n);
-void E(gprogram *gp, snode *c, pmap *p, int n);
-void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
+static void C(gprogram *gp, snode *c, pmap *p, int n);
+static void E(gprogram *gp, snode *c, pmap *p, int n);
+static void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
   int count = 0;
@@ -682,7 +682,7 @@ void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
   }
 }
 
-void E(gprogram *gp, snode *c, pmap *p, int n)
+static void E(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(gp,"E",c,n,"");
@@ -709,10 +709,10 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
       snode *falsebranch;
       snode *truebranch;
       snode *cond;
-      snode *app = c;
       int label;
       stackinfo *oldsi;
       int end;
+      app = c;
       falsebranch = app->right;
       app = app->left;
       truebranch = app->right;
@@ -785,7 +785,7 @@ void E(gprogram *gp, snode *c, pmap *p, int n)
   gp->cdepth--;
 }
 
-void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
+static void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 {
   int m;
   print_comp2_stack(gp,"S",exprs,n,"");
@@ -798,7 +798,7 @@ void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
   SQUEEZE(source->sl,m,n);
 }
 
-void R(gprogram *gp, snode *c, pmap *p, int n)
+static void R(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(gp,"R",c,n,"");
@@ -940,13 +940,13 @@ void R(gprogram *gp, snode *c, pmap *p, int n)
     break;
   }
   default:
-    assert(0);
+    abort();
     break;
   }
   gp->cdepth--;
 }
 
-void C(gprogram *gp, snode *c, pmap *p, int n)
+static void C(gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(gp,"C",c,n,"");
@@ -994,14 +994,14 @@ void C(gprogram *gp, snode *c, pmap *p, int n)
     presize(p,oldcount);
     break;
   }
-  default:           assert(0);                                    break;
+  default:           abort();                                    break;
   }
   gp->cdepth--;
 }
 
 
 
-void F(gprogram *gp, int fno, scomb *sc)
+static void F(gprogram *gp, int fno, scomb *sc)
 {
   int i;
   snode *copy = sc->body;
@@ -1054,7 +1054,7 @@ void F(gprogram *gp, int fno, scomb *sc)
 #endif
 }
 
-void compute_stacksizes(gprogram *gp)
+static void compute_stacksizes(gprogram *gp)
 {
   int fno = -1;
   int addr = 0;

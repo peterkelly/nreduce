@@ -43,29 +43,29 @@
 #define RM_DISP32  5
 #define NOINDEX    4
 
-const char *x86_opcodes[NUM_X86] = {
-  "PUSH", "POP", "MOV", "CMP", "JMP", "JZ", "JNE", "JG", "JGE", "JL", "JLE",
-  "JNB",  "JNBE", "JNA", "JNAE", "RET", "LEAVE", "CALL", "ADD", "SUB", "AND", 
-  "OR", "XOR", "NOT", "NOP", "PUSHAD", "POPAD", "IMUL", "NONE" };
+/* static const char *x86_opcodes[NUM_X86] = { */
+/*   "PUSH", "POP", "MOV", "CMP", "JMP", "JZ", "JNE", "JG", "JGE", "JL", "JLE", */
+/*   "JNB",  "JNBE", "JNA", "JNAE", "RET", "LEAVE", "CALL", "ADD", "SUB", "AND",  */
+/*   "OR", "XOR", "NOT", "NOP", "PUSHAD", "POPAD", "IMUL", "NONE" }; */
 
-int modrm(int mod, int reg, int rm)
+static int modrm(int mod, int reg, int rm)
 {
   return ((mod << 6) | (reg << 3) | rm);
 }
 
-int sib(int scale, int index, int base)
+static int sib(int scale, int index, int base)
 {
   return ((scale << 6) | (index << 3) | base);
 }
 
 #define byte(val) wbyte(&ptr,val)
-void wbyte(char **ptr, int val)
+static void wbyte(char **ptr, int val)
 {
   *((*ptr)++) = (char)(val);
 }
 
 #define dword(val) wdword(&ptr,val)
-void wdword(char **ptr, int val)
+static void wdword(char **ptr, int val)
 {
   wbyte(ptr,(val & 0x000000FF) >> 0);
   wbyte(ptr,(val & 0x0000FF00) >> 8);
@@ -73,7 +73,7 @@ void wdword(char **ptr, int val)
   wbyte(ptr,(val & 0xFF000000) >> 24);
 }
 
-void rmem(char **ptr, int reg, x86_arg oper)
+static void rmem(char **ptr, int reg, x86_arg oper)
 {
   int base = oper.val;
   int disp = oper.off;
@@ -103,14 +103,14 @@ void rmem(char **ptr, int reg, x86_arg oper)
   }
 }
 
-void mem(char **ptr, int reg, int addr)
+static void mem(char **ptr, int reg, int addr)
 {
   wbyte(ptr,modrm(0,reg,RM_DISP32));
   wdword(ptr,addr);
 }
 
 
-void add_reg_imm(char **ptr, int reg, int imm)
+static void add_reg_imm(char **ptr, int reg, int imm)
 {
   if (EAX == reg) {
     wbyte(ptr,0x05);
@@ -130,7 +130,7 @@ void add_reg_imm(char **ptr, int reg, int imm)
 #define TYPE_MEM    4
 #define TYPE_LABEL  5
 
-x86_assembly *x86_assembly_new()
+x86_assembly *x86_assembly_new(void)
 {
   x86_assembly *as = (x86_assembly*)calloc(1,sizeof(x86_assembly));
   as->alloc = 2;
@@ -207,7 +207,7 @@ x86_arg label(int l)
   return arg;
 }
 
-x86_arg none()
+x86_arg none(void)
 {
   x86_arg arg;
   arg.type = TYPE_NONE;
@@ -293,7 +293,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         mem(&ptr,6,dval);
       }
       else {
-        assert(!"PUSH: invalid destination");
+        fatal("PUSH: invalid destination");
       }
       break;
     case X86_POP:
@@ -309,7 +309,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         mem(&ptr,0,dval);
       }
       else {
-        assert(!"POP: invalid destination");
+        fatal("POP: invalid destination");
       }
       break;
     case X86_MOV:
@@ -356,7 +356,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"MOV: invalid source/destination");
+        fatal("MOV: invalid source/destination");
       }
       break;
     case X86_CMP:
@@ -396,7 +396,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"CMP: invalid source/destination");
+        fatal("CMP: invalid source/destination");
       }
       break;
     case X86_JMP:
@@ -413,7 +413,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         rmem(&ptr,4,dst);
       }
       else {
-        assert(!"JMP: invalid destination");
+        fatal("JMP: invalid destination");
       }
       break;
     case X86_JZ:
@@ -480,7 +480,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         mem(&ptr,2,dval);
       }
       else {
-        assert(!"CALL: invalid destination");
+        fatal("CALL: invalid destination");
       }
       break;
     case X86_ADD:
@@ -510,7 +510,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"ADD: invalid source/destination");
+        fatal("ADD: invalid source/destination");
       }
       break;
     case X86_SUB:
@@ -548,7 +548,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"SUB: invalid source/destination");
+        fatal("SUB: invalid source/destination");
       }
       break;
     case X86_AND:
@@ -586,7 +586,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"AND: invalid source/destination");
+        fatal("AND: invalid source/destination");
       }
       break;
     case X86_OR:
@@ -624,7 +624,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"OR: invalid source/destination");
+        fatal("OR: invalid source/destination");
       }
       break;
     case X86_XOR:
@@ -662,7 +662,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         dword(sval);
       }
       else {
-        assert(!"XOR: invalid source/destination");
+        fatal("XOR: invalid source/destination");
       }
       break;
     case X86_NOT:
@@ -679,7 +679,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         mem(&ptr,2,dval);
       }
       else {
-        assert(!"NOT: invalid destination");
+        fatal("NOT: invalid destination");
       }
       break;
     case X86_NOP:
@@ -716,7 +716,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
     case X86_NONE:
       break;
     default:
-      assert(0);
+      abort();
       break;
     }
 
@@ -728,7 +728,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
      based on the resolved label references gained from the first pass */
   for (pos = 0; pos < as->count; pos++) {
     x86_instr *instr = &as->instructions[pos];
-    char *ptr = (char*)cpucode->data+instr->addr;
+    char *ptr1 = (char*)cpucode->data+instr->addr;
     int dtype = instr->dst.type;
     int dval = instr->dst.val;
     int stype = instr->src.type;
@@ -738,7 +738,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
       if (instr->isgetnextaddr) {
         assert(TYPE_REG == dtype);
         assert(TYPE_IMM == stype);
-        add_reg_imm(&ptr,dval,labeladdrs[sval]);
+        add_reg_imm(&ptr1,dval,labeladdrs[sval]);
       }
       break;
     case X86_JMP:

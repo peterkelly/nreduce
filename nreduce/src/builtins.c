@@ -39,17 +39,17 @@
 
 const builtin builtin_info[NUM_BUILTINS];
 
-void setnumber(pntr *cptr, double val)
+static void setnumber(pntr *cptr, double val)
 {
   *cptr = make_number(val);
 }
 
-void setbool(process *proc, pntr *cptr, int b)
+static void setbool(process *proc, pntr *cptr, int b)
 {
   *cptr = (b ? proc->globtruepntr : proc->globnilpntr);
 }
 
-void doubleop(process *proc, pntr *cptr, int bif, double a, double b)
+static void doubleop(process *proc, pntr *cptr, int bif, double a, double b)
 {
   switch (bif) {
   case B_ADD:       setnumber(cptr,a +  b);  break;
@@ -67,11 +67,11 @@ void doubleop(process *proc, pntr *cptr, int bif, double a, double b)
   case B_LE:       setbool(proc,cptr,a <= b);  break;
   case B_GT:       setbool(proc,cptr,a >  b);  break;
   case B_GE:       setbool(proc,cptr,a >= b);  break;
-  default:         assert(0);        break;
+  default:         abort();        break;
   }
 }
 
-void b_other(process *proc, pntr *argstack, int bif)
+static void b_other(process *proc, pntr *argstack, int bif)
 {
   pntr val2 = argstack[0];
   pntr val1 = argstack[1];
@@ -84,7 +84,9 @@ void b_other(process *proc, pntr *argstack, int bif)
   case B_GT:
   case B_GE:
     if ((TYPE_STRING == pntrtype(val1)) && (TYPE_STRING == pntrtype(val2))) {
-      int cmp = strcmp(get_string(get_pntr(val1)->field1),get_string(get_pntr(val2)->field1));
+      const char *str1 = get_string(get_pntr(val1)->field1);
+      const char *str2 = get_string(get_pntr(val2)->field1);
+      int cmp = strcmp(str1,str2);
       switch (bif) {
       case B_EQ: setbool(proc,&argstack[0],0 == cmp); break;
       case B_NE: setbool(proc,&argstack[0],0 != cmp); break;
@@ -105,10 +107,10 @@ void b_other(process *proc, pntr *argstack, int bif)
       doubleop(proc,&argstack[0],bif,pntrdouble(val1),pntrdouble(val2));
     }
     else {
+      int t1 = pntrtype(val1);
+      int t2 = pntrtype(val2);
       fprintf(stderr,"%s: incompatible arguments: (%s,%s)\n",
-                      builtin_info[bif].name,
-                      cell_types[pntrtype(val1)],
-                      cell_types[pntrtype(val2)]);
+                      builtin_info[bif].name,cell_types[t1],cell_types[t2]);
       exit(1);
     }
     break;
@@ -119,25 +121,25 @@ void b_other(process *proc, pntr *argstack, int bif)
     setbool(proc,&argstack[0],(TYPE_NIL != pntrtype(val1)) || (TYPE_NIL != pntrtype(val2)));
     break;
   default:
-    assert(0);
+    abort();
   }
 }
 
-void b_add(process *proc, pntr *argstack) { b_other(proc,argstack,B_ADD); }
-void b_subtract(process *proc, pntr *argstack) { b_other(proc,argstack,B_SUBTRACT); }
-void b_multiply(process *proc, pntr *argstack) { b_other(proc,argstack,B_MULTIPLY); }
-void b_divide(process *proc, pntr *argstack) { b_other(proc,argstack,B_DIVIDE); }
-void b_mod(process *proc, pntr *argstack) { b_other(proc,argstack,B_MOD); }
-void b_eq(process *proc, pntr *argstack) { b_other(proc,argstack,B_EQ); }
-void b_ne(process *proc, pntr *argstack) { b_other(proc,argstack,B_NE); }
-void b_lt(process *proc, pntr *argstack) { b_other(proc,argstack,B_LT); }
-void b_le(process *proc, pntr *argstack) { b_other(proc,argstack,B_LE); }
-void b_gt(process *proc, pntr *argstack) { b_other(proc,argstack,B_GT); }
-void b_ge(process *proc, pntr *argstack) { b_other(proc,argstack,B_GE); }
-void b_and(process *proc, pntr *argstack) { b_other(proc,argstack,B_AND); }
-void b_or(process *proc, pntr *argstack) { b_other(proc,argstack,B_OR); }
+static void b_add(process *proc, pntr *argstack) { b_other(proc,argstack,B_ADD); }
+static void b_subtract(process *proc, pntr *argstack) { b_other(proc,argstack,B_SUBTRACT); }
+static void b_multiply(process *proc, pntr *argstack) { b_other(proc,argstack,B_MULTIPLY); }
+static void b_divide(process *proc, pntr *argstack) { b_other(proc,argstack,B_DIVIDE); }
+static void b_mod(process *proc, pntr *argstack) { b_other(proc,argstack,B_MOD); }
+static void b_eq(process *proc, pntr *argstack) { b_other(proc,argstack,B_EQ); }
+static void b_ne(process *proc, pntr *argstack) { b_other(proc,argstack,B_NE); }
+static void b_lt(process *proc, pntr *argstack) { b_other(proc,argstack,B_LT); }
+static void b_le(process *proc, pntr *argstack) { b_other(proc,argstack,B_LE); }
+static void b_gt(process *proc, pntr *argstack) { b_other(proc,argstack,B_GT); }
+static void b_ge(process *proc, pntr *argstack) { b_other(proc,argstack,B_GE); }
+static void b_and(process *proc, pntr *argstack) { b_other(proc,argstack,B_AND); }
+static void b_or(process *proc, pntr *argstack) { b_other(proc,argstack,B_OR); }
 
-void b_not(process *proc, pntr *argstack)
+static void b_not(process *proc, pntr *argstack)
 {
   if (TYPE_NIL == pntrtype(argstack[0]))
     argstack[0] = proc->globtruepntr;
@@ -145,7 +147,7 @@ void b_not(process *proc, pntr *argstack)
     argstack[0] = proc->globnilpntr;
 }
 
-void b_bitop(process *proc, pntr *argstack, int bif)
+static void b_bitop(process *proc, pntr *argstack, int bif)
 {
   pntr val2 = argstack[0];
   pntr val1 = argstack[1];
@@ -166,17 +168,17 @@ void b_bitop(process *proc, pntr *argstack, int bif)
   case B_BITAND:  setnumber(&argstack[0],(double)(a & b));   break;
   case B_BITOR:   setnumber(&argstack[0],(double)(a | b));   break;
   case B_BITXOR:  setnumber(&argstack[0],(double)(a ^ b));   break;
-  default:        assert(0);       break;
+  default:        abort();       break;
   }
 }
 
-void b_bitshl(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHL); }
-void b_bitshr(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHR); }
-void b_bitand(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITAND); }
-void b_bitor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITOR); }
-void b_bitxor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITXOR); }
+static void b_bitshl(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHL); }
+static void b_bitshr(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHR); }
+static void b_bitand(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITAND); }
+static void b_bitor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITOR); }
+static void b_bitxor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITXOR); }
 
-void b_bitnot(process *proc, pntr *argstack)
+static void b_bitnot(process *proc, pntr *argstack)
 {
   pntr arg = argstack[0];
   int val;
@@ -188,7 +190,7 @@ void b_bitnot(process *proc, pntr *argstack)
   setnumber(&argstack[0],(double)(~val));
 }
 
-void b_if(process *proc, pntr *argstack)
+static void b_if(process *proc, pntr *argstack)
 {
   pntr ifc = argstack[2];
   pntr source;
@@ -201,7 +203,7 @@ void b_if(process *proc, pntr *argstack)
   argstack[0] = source;
 }
 
-void b_cons(process *proc, pntr *argstack)
+static void b_cons(process *proc, pntr *argstack)
 {
   pntr head = argstack[1];
   pntr tail = argstack[0];
@@ -214,7 +216,7 @@ void b_cons(process *proc, pntr *argstack)
   make_pntr(argstack[0],res);
 }
 
-void b_head(process *proc, pntr *argstack)
+static void b_head(process *proc, pntr *argstack)
 {
   pntr arg = argstack[0];
   if (TYPE_CONS == pntrtype(arg)) {
@@ -229,7 +231,7 @@ void b_head(process *proc, pntr *argstack)
     argstack[0] = arr->elements[index];
   }
   else {
-    assert(!"head: expected a cons value");
+    fatal("head: expected a cons value");
   }
 }
 
@@ -252,7 +254,7 @@ pntr get_aref(process *proc, cell *arrholder, int index)
   return arr->refs[index];
 }
 
-void b_tail(process *proc, pntr *argstack)
+static void b_tail(process *proc, pntr *argstack)
 {
   pntr arg = argstack[0];
   if (TYPE_CONS == pntrtype(arg)) {
@@ -336,46 +338,46 @@ void b_tail(process *proc, pntr *argstack)
     }
   }
   else {
-    assert(!"tail: expected a cons value");
+    fatal("tail: expected a cons value");
   }
 }
 
-void b_islambda(process *proc, pntr *argstack)
+static void b_islambda(process *proc, pntr *argstack)
 {
   setbool(proc,&argstack[0],0);
 }
 
-void b_isvalue(process *proc, pntr *argstack)
+static void b_isvalue(process *proc, pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(proc,&argstack[0],isvaluetype(pntrtype(val)));
 }
 
-void b_iscons(process *proc, pntr *argstack)
+static void b_iscons(process *proc, pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(proc,&argstack[0],(TYPE_CONS == pntrtype(val)) || (TYPE_AREF == pntrtype(val)));
 }
 
-void b_isnil(process *proc, pntr *argstack)
+static void b_isnil(process *proc, pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(proc,&argstack[0],TYPE_NIL == pntrtype(val));
 }
 
-void b_isnumber(process *proc, pntr *argstack)
+static void b_isnumber(process *proc, pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(proc,&argstack[0],TYPE_NUMBER == pntrtype(val));
 }
 
-void b_isstring(process *proc, pntr *argstack)
+static void b_isstring(process *proc, pntr *argstack)
 {
   pntr val = argstack[0];
   setbool(proc,&argstack[0],TYPE_STRING == pntrtype(val));
 }
 
-void b_arrayitem(process *proc, pntr *argstack)
+static void b_arrayitem(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[0];
   pntr indexpntr = argstack[1];
@@ -406,7 +408,7 @@ void b_arrayitem(process *proc, pntr *argstack)
   argstack[0] = arr->elements[refindex+index];
 }
 
-void b_arrayhas(process *proc, pntr *argstack)
+static void b_arrayhas(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[0];
   pntr indexpntr = argstack[1];
@@ -438,7 +440,7 @@ void b_arrayhas(process *proc, pntr *argstack)
     argstack[0] = proc->globnilpntr;
 }
 
-void b_arrayremsize(process *proc, pntr *argstack)
+static void b_arrayremsize(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[1];
   pntr npntr = argstack[0];
@@ -476,7 +478,7 @@ void b_arrayremsize(process *proc, pntr *argstack)
   }
 }
 
-void b_arrayrem(process *proc, pntr *argstack)
+static void b_arrayrem(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[0];
 
@@ -500,7 +502,7 @@ void b_arrayrem(process *proc, pntr *argstack)
   }
 }
 
-void b_arrayoptlen(process *proc, pntr *argstack)
+static void b_arrayoptlen(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[0];
   if (TYPE_AREF == pntrtype(refpntr)) {
@@ -527,7 +529,7 @@ void b_arrayoptlen(process *proc, pntr *argstack)
   }
 }
 
-void b_echo(process *proc, pntr *argstack)
+static void b_echo(process *proc, pntr *argstack)
 {
   if (TYPE_STRING == pntrtype(argstack[0]))
     fprintf(proc->output,"%s",get_string(get_pntr(argstack[0])->field1));
@@ -536,7 +538,7 @@ void b_echo(process *proc, pntr *argstack)
   argstack[0] = proc->globnilpntr;
 }
 
-void b_print(process *proc, pntr *argstack)
+static void b_print(process *proc, pntr *argstack)
 {
   pntr p = argstack[0];
 
@@ -573,7 +575,7 @@ void b_print(process *proc, pntr *argstack)
   argstack[0] = proc->globnilpntr;
 }
 
-void b_sqrt(process *proc, pntr *argstack)
+static void b_sqrt(process *proc, pntr *argstack)
 {
   double d = 0.0;
 
@@ -589,7 +591,7 @@ void b_sqrt(process *proc, pntr *argstack)
   setnumber(&argstack[0],sqrt(d));
 }
 
-void b_floor(process *proc, pntr *argstack)
+static void b_floor(process *proc, pntr *argstack)
 {
   double d = 0.0;
 
@@ -605,7 +607,7 @@ void b_floor(process *proc, pntr *argstack)
   setnumber(&argstack[0],floor(d));
 }
 
-void b_ceil(process *proc, pntr *argstack)
+static void b_ceil(process *proc, pntr *argstack)
 {
   double d = 0.0;
 
@@ -621,11 +623,11 @@ void b_ceil(process *proc, pntr *argstack)
   setnumber(&argstack[0],ceil(d));
 }
 
-void b_seq(process *proc, pntr *argstack)
+static void b_seq(process *proc, pntr *argstack)
 {
 }
 
-void b_par(process *proc, pntr *argstack)
+static void b_par(process *proc, pntr *argstack)
 {
   pntr p = resolve_pntr(argstack[1]);
   if (TYPE_FRAME == pntrtype(p)) {
@@ -637,7 +639,7 @@ void b_par(process *proc, pntr *argstack)
   }
 }
 
-void b_parhead(process *proc, pntr *argstack)
+static void b_parhead(process *proc, pntr *argstack)
 {
   b_head(proc,&argstack[1]);
   b_par(proc,argstack);

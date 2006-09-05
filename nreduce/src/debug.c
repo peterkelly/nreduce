@@ -39,7 +39,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-snode *parse_root = NULL;
 extern array *oldnames;
 
 const char *snode_types[NUM_CELLTYPES] = {
@@ -121,8 +120,7 @@ const char *frame_states[4] = {
 void fatal(const char *msg)
 {
   fprintf(stderr,"%s\n",msg);
-  assert(0);
-  exit(1);
+  abort();
 }
 
 int debug(int depth, const char *format, ...)
@@ -184,8 +182,8 @@ void print_hex(int c)
 
 void print_hexbyte(unsigned char val)
 {
-  unsigned char hi = ((val & 0xF0) >> 4);
-  unsigned char lo = (val & 0x0F);
+  unsigned char hi = (unsigned char)((val & 0xF0) >> 4);
+  unsigned char lo = (unsigned char)(val & 0x0F);
   print_hex(hi);
   print_hex(lo);
 }
@@ -243,7 +241,7 @@ static void print1(char *prefix, snode *c, int indent)
     c->tag |= FLAG_TMP;
     switch (snodetype(c)) {
     case TYPE_IND:
-      assert(0);
+      abort();
       break;
     case TYPE_EMPTY:
       printf("empty\n");
@@ -264,7 +262,7 @@ static void print1(char *prefix, snode *c, int indent)
       printf("%s\n",builtin_info[c->bif].name);
       break;
     case TYPE_CONS:
-      assert(0);
+      abort();
       break;
     case TYPE_SYMBOL:
       printf("%s\n",c->name);
@@ -301,7 +299,7 @@ static void print1(char *prefix, snode *c, int indent)
       break;
     default:
       printf("**** INVALID\n");
-      assert(0);
+      abort();
       break;
     }
   }
@@ -349,11 +347,15 @@ char *real_scname(const char *sym)
     int varno = strtol(sym+2,&end,10);
     char *old;
     char *fullname;
+    int oldlen;
+    int symlen;
     assert(end);
     assert(oldnames);
     assert(varno <= (int)((oldnames->size-1)*sizeof(char*)));
     old = ((char**)oldnames->data)[varno];
-    fullname = (char*)malloc(strlen(old)+strlen(sym)+1);
+    oldlen = strlen(old);
+    symlen = strlen(sym);
+    fullname = (char*)malloc(oldlen+symlen+1);
     sprintf(fullname,"%s%s",old,end);
     return fullname;
   }
@@ -367,7 +369,7 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
 {
   switch (snodetype(c)) {
   case TYPE_IND:
-    assert(0);
+    abort();
     break;
   case TYPE_EMPTY:
     *col += fprintf(f,"empty");
@@ -522,19 +524,19 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
     break;
   }
   case TYPE_AREF:
-    assert(0);
+    abort();
     break;
   case TYPE_ARRAY:
-    assert(0);
+    abort();
     break;
   case TYPE_FRAME:
-    assert(0);
+    abort();
     break;
   case TYPE_CAP:
-    assert(0);
+    abort();
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -577,7 +579,7 @@ void print_scomb_code(scomb *sc)
   print_codef2(stdout,sc->body,col);
 }
 
-void print_scombs1()
+void print_scombs1(void)
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
@@ -588,7 +590,7 @@ void print_scombs1()
   }
 }
 
-void print_scombs2()
+void print_scombs2(void)
 {
   scomb *sc;
   debug(0,"\n--------------------\n\n");
@@ -663,7 +665,7 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
 {
   cell *c;
   int i;
-  int oldtype;
+  short oldtype;
   int type = pntrtype(p);
 
   if (TYPE_EMPTY == type)
@@ -719,7 +721,6 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
   case TYPE_FRAME: {
     frame *fr = (frame*)get_pntr(c->field1);
     char *name = get_function_name(fr->fno);
-    int i;
     fprintf(f,"%s (%d)\n",name,fr->count);
     free(name);
     for (i = 0; i < fr->count; i++)
@@ -729,7 +730,6 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
   case TYPE_CAP: {
     cap *cp = (cap*)get_pntr(c->field1);
     char *name = get_function_name(cp->fno);
-    int i;
     fprintf(f,"%s (%d)\n",name,cp->count);
     free(name);
     for (i = 0; i < cp->count; i++)
@@ -743,7 +743,7 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
     fprintf(f,"\"%s\"\n",get_string(c->field1));
     break;
   default:
-    assert(0);
+    abort();
   }
   c->type = oldtype;
 }
@@ -764,11 +764,11 @@ void dump_info(process *proc)
       if (TYPE_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
+          const char *fname = function_name(proc->gp,f->fno);
+          int nframes = list_count(f->wq.frames);
+          int nfetchers = list_count(f->wq.fetchers);
           fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
-                  f,
-                  function_name(proc->gp,f->fno),
-                  list_count(f->wq.frames),
-                  list_count(f->wq.fetchers));
+                  f,fname,nframes,nfetchers);
         }
       }
     }
@@ -781,12 +781,11 @@ void dump_info(process *proc)
   fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
   for (f = proc->runnable.first; f; f = f->qnext) {
+          const char *fname = function_name(proc->gp,f->fno);
+          int nframes = list_count(f->wq.frames);
+          int nfetchers = list_count(f->wq.fetchers);
     fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
-            f,
-            function_name(proc->gp,f->fno),
-            list_count(f->wq.frames),
-            list_count(f->wq.fetchers),
-            frame_states[f->state]);
+            f,fname,nframes,nfetchers,frame_states[f->state]);
   }
 
 }

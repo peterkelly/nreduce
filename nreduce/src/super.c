@@ -103,7 +103,7 @@ scomb *add_scomb(const char *name1)
   return sc;
 }
 
-void scomb_free(scomb *sc)
+static void scomb_free(scomb *sc)
 {
   int i;
   snode_free(sc->body);
@@ -125,7 +125,7 @@ void scomb_free_list(scomb **list)
   }
 }
 
-void fix_partial_applications()
+void fix_partial_applications(void)
 {
   scomb *sc;
   for (sc = scombs; sc; sc = sc->next) {
@@ -164,7 +164,7 @@ void fix_partial_applications()
   }
 }
 
-void shared_error(snode ***nodes, int *nnodes, snode *shared)
+static void shared_error(snode ***nodes, int *nnodes, snode *shared)
 {
   int i = 0;
   scomb *sc;
@@ -183,7 +183,7 @@ void shared_error(snode ***nodes, int *nnodes, snode *shared)
   abort();
 }
 
-void check_scombs_nosharing()
+void check_scombs_nosharing(void)
 {
   int count = 0;
   scomb *sc;

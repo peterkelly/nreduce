@@ -103,7 +103,7 @@ static void reorder_letrecs_r(snode *c, list **used, stack *bound)
       for (recptr = &c->bindings; *recptr; recptr = &(*recptr)->next) {
         char *recname = (char*)(*recptr)->name;
         if (!strcmp(recname,usedname)) {
-          letrec *rec = *recptr;
+          rec = *recptr;
           /* remove letrec from old list */
           *recptr = rec->next;
           rec->next = NULL;

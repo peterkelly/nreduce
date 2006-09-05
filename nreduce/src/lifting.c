@@ -39,7 +39,7 @@ typedef struct binding {
   letrec *rec;
 } binding;
 
-binding *binding_new(const char *name, letrec *rec)
+static binding *binding_new(const char *name, letrec *rec)
 {
   binding *bnd = (binding*)calloc(1,sizeof(binding));
   bnd->name = strdup(name);
@@ -47,7 +47,7 @@ binding *binding_new(const char *name, letrec *rec)
   return bnd;
 }
 
-void bindings_setcount(stack *boundvars, int count)
+static void bindings_setcount(stack *boundvars, int count)
 {
   while (count < boundvars->count) {
     binding *bnd = (binding*)boundvars->data[--boundvars->count];
@@ -56,7 +56,7 @@ void bindings_setcount(stack *boundvars, int count)
   }
 }
 
-int binding_level(stack *boundvars, const char *sym)
+static int binding_level(stack *boundvars, const char *sym)
 {
   int i;
   for (i = boundvars->count-1; 0 <= i; i--) {
@@ -72,7 +72,7 @@ int binding_level(stack *boundvars, const char *sym)
   return 0; /* top-level def */
 }
 
-void abstract(stack *boundvars, const char *sym, int level, snode **lambda, int *changed)
+static void abstract(stack *boundvars, const char *sym, int level, snode **lambda, int *changed)
 {
   int appdepth = 0;
   snode **reall = lambda;
@@ -214,7 +214,7 @@ static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const c
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -267,7 +267,7 @@ static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -358,7 +358,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
     break;
   }
 }
@@ -383,7 +383,7 @@ void lift(scomb *sc)
   stack_free(boundvars);
 }
 
-void find_vars(snode *c, list **names, stack *ignore)
+static void find_vars(snode *c, list **names, stack *ignore)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
@@ -422,12 +422,12 @@ void find_vars(snode *c, list **names, stack *ignore)
     break;
   }
   default:
-    assert(0);
+    abort();
     break;
   }
 }
 
-void applift_r(snode **k, scomb *sc)
+static void applift_r(snode **k, scomb *sc)
 {
   switch (snodetype(*k)) {
   case TYPE_APPLICATION: {

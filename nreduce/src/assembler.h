@@ -129,14 +129,14 @@ typedef struct x86_assembly {
   int nextlabel;
 } x86_assembly;
 
-x86_assembly *x86_assembly_new();
+x86_assembly *x86_assembly_new(void);
 x86_arg imm(int val1);
 x86_arg reg(int reg1);
 x86_arg regmem(int reg1, int off1);
 x86_arg regmemscaled(int reg1, int off1, int scale1, int index1);
 x86_arg absmem(int addr1);
 x86_arg label(int l);
-x86_arg none();
+x86_arg none(void);
 void x86_setnextlabel(x86_assembly *as, int label);
 void x86_addinstr(x86_assembly *as, int op, x86_arg dst, x86_arg src);
 void x86_assembly_free(x86_assembly *as);

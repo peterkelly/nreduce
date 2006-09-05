@@ -217,7 +217,7 @@ typedef struct snode {
 } snode;
 
 #define checkcell(_c) ({ if (TYPE_EMPTY == (_c)->type) \
-                          assert(!"access to free'd cell"); \
+                          fatal("access to free'd cell"); \
                         (_c); })
 
 #define snodetype(_c) ((_c)->tag & TAG_MASK)
@@ -549,7 +549,7 @@ int read_format(reader *rd, process *proc, int observe, const char *fmt, ...);
 int read_end(reader *rd);
 int print_data(process *proc, const char *data, int size);
 
-array *write_start();
+array *write_start(void);
 void write_tag(array *wr, int tag);
 void write_char(array *wr, char c);
 void write_int(array *wr, int i);
@@ -571,14 +571,14 @@ int msg_recvbt(process *proc, char **data, int *size, struct timespec *abstime);
 
 /* memory */
 
-void initmem();
+void initmem(void);
 snode *snode_new(int fileno, int lineno);
 void snode_free(snode *c);
 void free_letrec(letrec *rec);
 void free_scomb(scomb *sc);
-void cleanup();
+void cleanup(void);
 
-process *process_new();
+process *process_new(void);
 void process_init(process *proc, struct gprogram *gp);
 void process_free(process *proc);
 
@@ -628,12 +628,11 @@ cell *alloc_cell(process *proc);
 void free_cell_fields(process *proc, cell *v);
 
 int count_alive(process *proc);
-void clear_marks(process *proc, int bit);
-void mark_roots(process *proc, int bit);
+void clear_marks(process *proc, short bit);
+void mark_roots(process *proc, short bit);
 void print_cells(process *proc);
 void sweep(process *proc);
-void mark_global(process *proc, global *glo, int bit);
-void mark(process *proc, pntr p, int bit);
+void mark_global(process *proc, global *glo, short bit);
 void local_collect(process *proc);
 
 frame *frame_alloc(process *proc);
@@ -641,8 +640,6 @@ void frame_dealloc(process *proc, frame *f);
 
 cap *cap_alloc(int arity, int address, int fno);
 void cap_dealloc(cap *c);
-
-void rtcleanup();
 
 void print_pntr(FILE *f, pntr p);
 
@@ -661,8 +658,8 @@ scomb *get_scomb(const char *name);
 int get_scomb_var(scomb *sc, const char *name);
 scomb *add_scomb(const char *name);
 void scomb_free_list(scomb **list);
-void fix_partial_applications();
-void check_scombs_nosharing();
+void fix_partial_applications(void);
+void check_scombs_nosharing(void);
 
 /* lifting */
 
@@ -702,8 +699,8 @@ void print_codef2(FILE *f, snode *c, int pos);
 void print_codef(FILE *f, snode *c);
 void print_code(snode *c);
 void print_scomb_code(scomb *sc);
-void print_scombs1();
-void print_scombs2();
+void print_scombs1(void);
+void print_scombs2(void);
 const char *real_varname(const char *sym);
 char *real_scname(const char *sym);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
@@ -713,8 +710,8 @@ void dump_info(process *proc);
 
 /* strictness */
 
-void dump_strictinfo();
-void strictness_analysis();
+void dump_strictinfo(void);
+void strictness_analysis(void);
 
 /* builtin */
 
@@ -723,7 +720,7 @@ int get_builtin(const char *name);
 
 /* util */
 
-array *array_new();
+array *array_new(void);
 int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);
 void array_append(array *arr, const void *data, int size);

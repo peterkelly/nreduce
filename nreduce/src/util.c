@@ -35,7 +35,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-array *array_new()
+array *array_new(void)
 {
   array *arr = (array*)malloc(sizeof(array));
   arr->alloc = 120;
@@ -71,7 +71,7 @@ void array_free(array *arr)
   free(arr);
 }
 
-list *list_new(void *data, list *next)
+static list *list_new(void *data, list *next)
 {
   list *l = (list*)malloc(sizeof(list));
   l->data = data;
@@ -219,7 +219,7 @@ void parse_check(int cond, snode *c, char *msg)
 void print_sourceloc(FILE *f, sourceloc sl)
 {
   if (0 <= sl.fileno)
-    fprintf(stderr,"%s:%d: ",lookup_parsedfile(sl.fileno),sl.lineno);
+    fprintf(f,"%s:%d: ",lookup_parsedfile(sl.fileno),sl.lineno);
 }
 
 stack *stack_new(void)
@@ -250,7 +250,7 @@ void stack_push(stack *s, void *c)
   s->data[s->count++] = c;
 }
 
-int getsignbit(double d)
+static int getsignbit(double d)
 {
   char tmp[100];
   sprintf(tmp,"%f",d);

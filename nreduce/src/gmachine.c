@@ -36,7 +36,7 @@
 #include <math.h>
 #include <errno.h>
 
-int is_whnf(pntr p)
+static int is_whnf(pntr p)
 {
   if (!is_pntr(p))
     return 1;
@@ -68,12 +68,12 @@ int is_whnf(pntr p)
   return 1;
 }
 
-int start_addr(gprogram *gp, int fno)
+static int start_addr(gprogram *gp, int fno)
 {
   return gp->addressmap[fno];
 }
 
-int end_addr(gprogram *gp, int fno)
+static int end_addr(gprogram *gp, int fno)
 {
   int addr = gp->addressmap[fno];
   while ((addr < gp->count) &&
@@ -126,22 +126,23 @@ void check_stack(process *proc, frame *curf, pntr *stackdata, int stackcount, gp
   }
 }
 
-void cap_error(process *proc, pntr cappntr, ginstr *instr)
+static void cap_error(process *proc, pntr cappntr, ginstr *instr)
 {
   assert(TYPE_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
+  const char *name = function_name(proc->gp,c->fno);
+  int nargs = function_nargs(c->fno);
 
   print_sourceloc(stderr,instr->sl);
   fprintf(stderr,"Attempt to evaluate incomplete function application\n");
 
   print_sourceloc(stderr,c->sl);
-  fprintf(stderr,"%s requires %d args, only have %d\n",
-          function_name(proc->gp,c->fno),function_nargs(c->fno),c->count);
+  fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
   exit(1);
 }
 
-void constant_app_error(pntr cappntr, ginstr *instr)
+static void constant_app_error(pntr cappntr, ginstr *instr)
 {
   print_sourceloc(stderr,instr->sl);
   fprintf(stderr,CONSTANT_APP_MSG"\n");
@@ -181,8 +182,10 @@ static void frame_return(process *proc, frame *curf, pntr val)
 {
   #ifdef SHOW_FRAME_COMPLETION
   if (0 <= proc->pid) {
+    const char *name = function_name(proc->gp,curf->fno);
+    int valtype = pntrtype(val);
     fprintf(proc->output,"FRAME(%s) completed; result is a %s\n",
-            function_name(proc->gp,curf->fno),cell_types[pntrtype(val)]);
+            name,cell_types[valtype]);
   }
   #endif
 
@@ -405,7 +408,6 @@ static int handle_message2(process *proc, int from, char *data, int size)
   case MSG_FISH: {
     int reqproc, age, nframes;
     int scheduled = 0;
-    int r;
 
     start_address_reading(proc,from,msgtype);
     r = read_format(&rd,proc,0,"iii.",&reqproc,&age,&nframes);
@@ -436,7 +438,6 @@ static int handle_message2(process *proc, int from, char *data, int size)
     pntr obj;
     gaddr storeaddr;
     gaddr objaddr;
-    int r;
 
     start_address_reading(proc,from,msgtype);
     r = read_format(&rd,proc,0,"aa.",&objaddr,&storeaddr);
@@ -507,7 +508,6 @@ static int handle_message2(process *proc, int from, char *data, int size)
     gaddr storeaddr;
     cell *refcell;
     global *objglo;
-    int r;
 
     start_address_reading(proc,from,msgtype);
     r = read_format(&rd,proc,0,"pa",&obj,&storeaddr);
@@ -545,7 +545,6 @@ static int handle_message2(process *proc, int from, char *data, int size)
     pntr framep;
     gaddr tellsrc;
     global *frameglo;
-    int r;
 
     start_address_reading(proc,from,msgtype);
     r = read_format(&rd,proc,0,"pa",&framep,&tellsrc);
@@ -563,7 +562,6 @@ static int handle_message2(process *proc, int from, char *data, int size)
     pntr ref;
     gaddr refaddr;
     gaddr remoteaddr;
-    int r;
     global *glo;
 
     start_address_reading(proc,from,msgtype);
@@ -707,7 +705,7 @@ static int handle_message2(process *proc, int from, char *data, int size)
     print_cells(proc);
     break;
   default:
-    assert(!"unknown message");
+    fatal("unknown message");
     break;
   }
   free(data);
@@ -732,7 +730,6 @@ static void execute(process *proc, gprogram *gp)
   while (!proc->done) {
     ginstr *instr;
     frame *curf;
-    int received = 0;
 
     if ((0 < proc->paused) || (NULL == proc->runnable.first)) {
 
@@ -778,17 +775,13 @@ static void execute(process *proc, gprogram *gp)
         from = msg_recvb(proc,&msgdata,&msgsize);
         assert(0 <= from);
       }
-      if (0 <= from) {
+      if (0 <= from)
         handle_message(proc,from,msgdata,msgsize);
-        received = 1;
-      }
       continue;
     }
     else {
-      if (0 <= (from = msg_recv(proc,&msgdata,&msgsize))) {
+      if (0 <= (from = msg_recv(proc,&msgdata,&msgsize)))
         handle_message(proc,from,msgdata,msgsize);
-        received = 1;
-      }
     }
 
     assert(proc->runnable.first);
@@ -807,7 +800,7 @@ static void execute(process *proc, gprogram *gp)
 
     #ifdef EXECUTION_TRACE
     if (trace) {
-      print_ginstr(proc->output,gp,curf->address,instr,0);
+      print_ginstr(proc->output,gp,curf->address,instr);
       print_stack(proc->output,curf->data,curf->count,0);
     }
     #endif
@@ -1143,7 +1136,7 @@ static void execute(process *proc, gprogram *gp)
       assert(TYPE_REMOTEREF != pntrtype(curf->data[curf->count-1-instr->arg0]));
       break;
     default:
-      assert(0);
+      abort();
       break;
     }
 
@@ -1160,7 +1153,7 @@ static void execute(process *proc, gprogram *gp)
 
 }
 
-void *execthread(void *param)
+static void *execthread(void *param)
 {
   process *proc = (process*)param;
 

@@ -83,7 +83,7 @@ void snode_free(snode *c)
   case TYPE_STRING:
     break;
   default:
-    assert(0);
+    abort();
   }
   free(c->value);
   free(c->name);

@@ -230,7 +230,6 @@ static int handle_command(process *proc, const char *line, int *done)
     for (i = 0; i < count; i++) {
       char *data;
       int size;
-      int op;
       int msgtype;
       reader rd;
       int tmp;
@@ -392,7 +391,7 @@ void console(process *proc)
 
     input->size = 0;
     while ((EOF != (c = fgetc(stdin))) && ('\n' != c)) {
-      c2 = c;
+      c2 = (char)c;
       array_append(input,&c2,1);
     }
 
