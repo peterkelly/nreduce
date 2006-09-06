@@ -59,7 +59,6 @@ const char *internal_functions =
 extern char *yyfilename;
 extern int yyfileno;
 extern char *code_start;
-extern array *oldnames;
 
 snode *parse_root = NULL;
 FILE *statsfile = NULL;
@@ -168,7 +167,7 @@ void parse_args(int argc, char **argv)
     usage();
 }
 
-extern int yyparse();
+extern int yyparse(void);
 extern FILE *yyin;
 
 #define YY_BUF_SIZE 16384

@@ -39,8 +39,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-extern array *oldnames;
-
 const char *snode_types[NUM_CELLTYPES] = {
 "EMPTY",
 "APPLICATION",

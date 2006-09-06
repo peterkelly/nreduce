@@ -34,8 +34,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-extern array *oldnames;
-
 static int varno = 0;
 
 typedef struct mapping {

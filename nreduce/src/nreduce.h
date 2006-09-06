@@ -764,6 +764,7 @@ extern const char *frame_states[4];
 
 #ifndef MEMORY_C
 extern int trace;
+extern array *oldnames;
 #endif
 
 #ifndef SUPER_C

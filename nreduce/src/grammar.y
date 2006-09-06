@@ -36,7 +36,7 @@
 extern int yylineno;
 extern char *yyfilename;
 extern int yyfileno;
-int yylex();
+int yylex(void);
 int yyerror(const char *err);
 
 extern struct snode *parse_root;

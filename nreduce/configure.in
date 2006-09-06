@@ -34,4 +34,9 @@ CFLAGS="-g -Wall -O0 -fno-strict-aliasing"
 #CFLAGS="-Wall -O3 -fno-strict-aliasing -DNDEBUG"
 #CFLAGS="-g -Wall -O0 -pg"
 
+# Hide some warnings that icc gives
+if test "$CC" = "icc"; then
+  CFLAGS="$CFLAGS -wd279,1418,1419,869,1684,1572,193,111,810"
+fi
+
 AC_OUTPUT(Makefile src/Makefile)
