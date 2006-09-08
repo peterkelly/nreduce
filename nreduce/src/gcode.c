@@ -196,7 +196,7 @@ gprogram *gprogram_new(void)
   gp->alloc = 2;
   gp->ginstrs = (ginstr*)malloc(gp->alloc*sizeof(ginstr));
   gp->si = NULL;
-  gp->stringmap = array_new();
+  gp->stringmap = array_new(sizeof(char*));
   gp->cdepth = -1;
   return gp;
 }
@@ -210,8 +210,8 @@ void gprogram_free(gprogram *gp)
     free(gp->ginstrs[i].expstatus);
   }
 
-  for (i = 0; i < (int)(gp->stringmap->size/sizeof(char*)); i++)
-    free(((char**)gp->stringmap->data)[i]);
+  for (i = 0; i < array_count(gp->stringmap); i++)
+    free(array_item(gp->stringmap,i,char*));
   array_free(gp->stringmap);
 
   for (i = 0; i < gp->nfunctions; i++)
@@ -227,7 +227,7 @@ void gprogram_free(gprogram *gp)
 
 static int add_string(gprogram *gp, const char *str)
 {
-  int pos = gp->stringmap->size/sizeof(char*);
+  int pos = array_count(gp->stringmap);
   char *copy = strdup(str);
   array_append(gp->stringmap,&copy,sizeof(cell*));
   return pos;
@@ -448,11 +448,9 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
       }
     }
     break;
-  case OP_PUSHSTRING: {
-    char *str = ((char**)gp->stringmap->data)[instr->arg0];
-    fprintf(f,"; PUSHSTRING \"%s\"",str);
+  case OP_PUSHSTRING:
+    fprintf(f,"; PUSHSTRING \"%s\"",array_item(gp->stringmap,instr->arg0,char*));
     break;
-  }
   case OP_MKFRAME:
     fprintf(f,"; MKFRAME %s %d",function_name(gp,instr->arg0),instr->arg1);
     break;
@@ -496,8 +494,8 @@ void print_program(gprogram *gp, int builtins)
 
   printf("\n");
   printf("String map:\n");
-  for (i = 0; i < (int)(gp->stringmap->size/sizeof(char*)); i++) {
-    char *str = ((char**)gp->stringmap->data)[i];
+  for (i = 0; i < array_count(gp->stringmap); i++) {
+    char *str = array_item(gp->stringmap,i,char*);
     printf("%d: ",i);
     print_quoted_string(stdout,str);
     printf("\n");
@@ -1178,3 +1176,25 @@ void compile(gprogram *gp)
   cur_program = gp;
 }
 
+
+
+
+
+gmodule *gmodule_read(array *arr)
+{
+  gmodule *mod = (gmodule*)calloc(1,sizeof(gmodule));
+  return mod;
+}
+
+void gmodule_write(gmodule *mod, array *arr)
+{
+  int i;
+  array_append(arr,&mod->nops,sizeof(int));
+  array_append(arr,&mod->ops,mod->nops*sizeof(gop));
+  array_append(arr,&mod->nstrings,sizeof(int));
+  for (i = 0; i < mod->nstrings; i++) {
+    int len = strlen(mod->strings[i]);
+    array_append(arr,&len,sizeof(int));
+    array_append(arr,mod->strings[i],len);
+  }
+}

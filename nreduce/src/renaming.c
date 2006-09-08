@@ -141,7 +141,7 @@ void rename_variables(scomb *sc)
   int i;
 
   if (NULL == oldnames)
-    oldnames = array_new();
+    oldnames = array_new(sizeof(char*));
 
   for (i = 0; i < sc->nargs; i++)
     stack_push(mappings,mapping_new(sc->argnames[i],sc->argnames[i]));

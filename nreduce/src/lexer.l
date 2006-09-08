@@ -71,8 +71,8 @@ IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 
 \"                       { BEGIN(string);
                            if (NULL == lexstring)
-                             lexstring = array_new();
-                           lexstring->size = 0; }
+                             lexstring = array_new(sizeof(char));
+                           lexstring->nbytes = 0; }
 <string>\"               { char c = '\0';
                            BEGIN(INITIAL);
                            array_append(lexstring,&c,1);

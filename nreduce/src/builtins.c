@@ -570,6 +570,7 @@ static void b_print(process *proc, pntr *argstack)
   }
   if (trace)
     fprintf(proc->output,"\n");
+  fflush(proc->output);
 
   //  fprintf(proc->output,"\n"); /* TEMP - distinguish output from debug */
   argstack[0] = proc->globnilpntr;

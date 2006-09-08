@@ -44,6 +44,8 @@
 
 //#define NDEBUG
 
+//#define USE_MPI
+
 //#define DEBUG_GCODE_COMPILATION
 //#define STACK_MODEL_SANITY_CHECK
 //#define SHOW_SUBSTITUTED_NAMES
@@ -52,6 +54,8 @@
 //#define QUEUE_CHECKS
 //#define PAREXEC_DEBUG
 //#define MSG_DEBUG
+//#define CONTINUOUS_DISTGC
+#define DISTGC_DEBUG
 //#define SHOW_FRAME_COMPLETION
 //#define COLLECTION_DEBUG
 
@@ -59,8 +63,8 @@
 // Misc
 
 #define BLOCK_SIZE 1024
-//#define COLLECT_THRESHOLD 102400
-#define COLLECT_THRESHOLD 1024
+#define COLLECT_THRESHOLD 102400
+//#define COLLECT_THRESHOLD 1024
 #define COLLECT_INTERVAL 100000
 #define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
@@ -158,6 +162,7 @@
 
 #define FLAG_MARKED      0x100
 #define FLAG_PROCESSED   0x200
+#define FLAG_NEW         FLAG_PROCESSED
 #define FLAG_TMP         0x400
 #define FLAG_DMB         0x800
 #define FLAG_PINNED     0x1000
@@ -232,8 +237,6 @@ typedef struct cell {
   short type;
   pntr field1;
   pntr field2;
-
-  short oldtype; /* TEMP */
 } cell;
 
 #define pfield1(__p) (get_pntr(__p)->field1)
@@ -321,9 +324,10 @@ typedef struct pntrstack {
 } pntrstack;
 
 typedef struct array {
+  int elemsize;
   int alloc;
-  int size;
-  void *data;
+  int nbytes;
+  char *data;
 } array;
 
 typedef struct scomb {
@@ -365,7 +369,8 @@ typedef struct waitqueue {
 #define STATE_NEW       0
 #define STATE_SPARKED   1
 #define STATE_RUNNING   2
-#define STATE_DONE      3
+#define STATE_BLOCKED   3
+#define STATE_DONE      4
 
 typedef struct frame {
   int address;
@@ -397,6 +402,7 @@ typedef struct block {
 typedef struct message {
   int from;
   int to;
+  int tag;
   int size;
   char *data;
 } message;
@@ -457,7 +463,6 @@ typedef struct global {
   int fetching;
   waitqueue wq;
   int flags;
-  int freed;
   struct global *pntrnext;
   struct global *addrnext;
 } global;
@@ -469,11 +474,13 @@ typedef struct process {
   group *grp;
   list *msgqueue;
   int pid;
+  int groupsize;
   pthread_mutex_t msglock;
   pthread_cond_t msgcond;
   int ackmsgsize;
+  int naddrsread;
   array *ackmsg;
-  array **markmsgs;
+  array **distmarks;
 
   /* globals */
   global **pntrhash;
@@ -484,11 +491,34 @@ typedef struct process {
   int paused;
   frameq sparked;
   frameq runnable;
+  frameq blocked;
   int nextentryid;
   int nextblackholeid;
   int nextlid;
   int *gcsent;
   list *inflight;
+
+  gaddr **infaddrs;
+  int *infcount;
+  int *infalloc;
+
+  /* Each element of inflight_addrs is an array containing the addresses that have been sent
+     to a particular process but not yet acknowledged. */
+  array **inflight_addrs;
+
+  /* Each element of unack_msg_acount is an array containing the number of addresses in each
+     outstanding message to a particular process. An outstanding message is a message containing
+     addresses that has been sent but not yet acknowledged. */
+  array **unack_msg_acount;
+
+
+
+
+  /* For each unacknowledged message, the number of addresses that were in that message */
+
+  int **unackaddrs;
+  int *unackcount;
+  int *unackalloc;
 
   /* memory */
   block *blocks;
@@ -499,6 +529,7 @@ typedef struct process {
   int nstrings;
   pntrstack *streamstack;
   int indistgc;
+  int inmark;
 
   /* general */
   struct gprogram *gp;
@@ -563,11 +594,11 @@ void write_vformat(array *wr, process *proc, const char *fmt, va_list ap);
 void write_format(array *wr, process *proc, const char *fmt, ...);
 void write_end(array *wr);
 
-void msg_send(process *proc, int dest, const char *data, int size);
-void msg_fsend(process *proc, int dest, const char *fmt, ...);
-int msg_recv(process *proc, char **data, int *size);
-int msg_recvb(process *proc, char **data, int *size);
-int msg_recvbt(process *proc, char **data, int *size, struct timespec *abstime);
+void msg_send(process *proc, int dest, int tag, char *data, int size);
+void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...);
+int msg_recv(process *proc, int *tag, char **data, int *size);
+int msg_recvb(process *proc, int *tag, char **data, int *size);
+int msg_recvbt(process *proc, int *tag, char **data, int *size, struct timespec *abstime);
 
 /* memory */
 
@@ -596,14 +627,13 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 /* process */
 
 global *pntrhash_lookup(process *proc, pntr p);
-global *global_addrhash_lookup(process *proc, gaddr addr);
+global *addrhash_lookup(process *proc, gaddr addr);
 void pntrhash_add(process *proc, global *glo);
 void addrhash_add(process *proc, global *glo);
 void pntrhash_remove(process *proc, global *glo);
 void addrhash_remove(process *proc, global *glo);
 
 global *add_global(process *proc, gaddr addr, pntr p);
-global *global_lookup_glo(process *proc, gaddr addr);
 pntr global_lookup_existing(process *proc, gaddr addr);
 pntr global_lookup(process *proc, gaddr addr, pntr val);
 global *make_global(process *proc, pntr p);
@@ -620,6 +650,8 @@ void transfer_waiters(waitqueue *from, waitqueue *to);
 void spark_frame(process *proc, frame *f);
 void unspark_frame(process *proc, frame *f);
 void run_frame(process *proc, frame *f);
+void block_frame(process *proc, frame *f);
+void unblock_frame(process *proc, frame *f);
 void done_frame(process *proc, frame *f);
 
 /* cell */
@@ -707,6 +739,7 @@ void print_stack(FILE *f, pntr *stk, int size, int dir);
 void statistics(process *proc, FILE *f);
 void print_pntr_tree(FILE *f, pntr p, int indent);
 void dump_info(process *proc);
+void dump_globals(process *proc);
 
 /* strictness */
 
@@ -720,10 +753,15 @@ int get_builtin(const char *name);
 
 /* util */
 
-array *array_new(void);
+array *array_new(int elemsize);
 int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);
 void array_append(array *arr, const void *data, int size);
+void array_remove_data(array *arr, int nbytes);
+void array_remove_items(array *arr, int count);
+#define array_item(_arr,_index,_type) (*(_type*)array_at(_arr,_index))
+void *array_at(array *arr, int index);
+int array_count(array *arr);
 void array_free(array *arr);
 
 void print_quoted_string(FILE *f, const char *str);
@@ -780,5 +818,6 @@ int _pntrtype(pntr p);
 const char *_pntrtname(pntr p);
 global *_pglobal(pntr p);
 frame *_pframe(pntr p);
+pntr _make_pntr(cell *c);
 
 #endif /* _NREDUCE_H */

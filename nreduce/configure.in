@@ -35,7 +35,7 @@ CFLAGS="-g -Wall -O0 -fno-strict-aliasing"
 #CFLAGS="-g -Wall -O0 -pg"
 
 # Hide some warnings that icc gives
-if test "$CC" = "icc"; then
+if $CC --version | grep '^icc '; then
   CFLAGS="$CFLAGS -wd279,1418,1419,869,1684,1572,193,111,810"
 fi
 

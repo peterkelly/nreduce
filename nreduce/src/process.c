@@ -45,7 +45,7 @@ global *pntrhash_lookup(process *proc, pntr p)
   return g;
 }
 
-global *global_addrhash_lookup(process *proc, gaddr addr)
+global *addrhash_lookup(process *proc, gaddr addr)
 {
   int h = hash(&addr,sizeof(gaddr));
   global *g = proc->addrhash[h];
@@ -107,22 +107,18 @@ global *add_global(process *proc, gaddr addr, pntr p)
   global *glo = (global*)calloc(1,sizeof(global));
   glo->addr = addr;
   glo->p = p;
-  glo->flags = FLAG_DMB;
+  glo->flags = proc->indistgc ? FLAG_NEW : 0;
+
   pntrhash_add(proc,glo);
   addrhash_add(proc,glo);
   return glo;
-}
-
-global *global_lookup_glo(process *proc, gaddr addr)
-{
-  return global_addrhash_lookup(proc,addr);
 }
 
 pntr global_lookup_existing(process *proc, gaddr addr)
 {
   global *glo;
   pntr p;
-  if (NULL != (glo = global_lookup_glo(proc,addr)))
+  if (NULL != (glo = addrhash_lookup(proc,addr)))
     return glo->p;
   make_pntr(p,NULL);
   return p;
@@ -133,7 +129,7 @@ pntr global_lookup(process *proc, gaddr addr, pntr val)
   cell *c;
   global *glo;
 
-  if (NULL != (glo = global_lookup_glo(proc,addr)))
+  if (NULL != (glo = addrhash_lookup(proc,addr)))
     return glo->p;
 
   if (!is_nullpntr(val)) {
@@ -366,6 +362,22 @@ void run_frame(process *proc, frame *f)
     add_frame_queue(&proc->runnable,f);
     f->state = STATE_RUNNING;
   }
+}
+
+void block_frame(process *proc, frame *f)
+{
+  assert(STATE_RUNNING == f->state);
+  remove_frame_queue(&proc->runnable,f);
+  add_frame_queue(&proc->blocked,f);
+  f->state = STATE_BLOCKED;
+}
+
+void unblock_frame(process *proc, frame *f)
+{
+  assert(STATE_BLOCKED == f->state);
+  remove_frame_queue(&proc->blocked,f);
+  add_frame_queue(&proc->runnable,f);
+  f->state = STATE_RUNNING;
 }
 
 void done_frame(process *proc, frame *f)

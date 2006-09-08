@@ -266,7 +266,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
 /*     int soff = src.off; */
 
     array_mkroom(cpucode,maxinstrsize);
-    ptr = ((char*)cpucode->data)+cpucode->size;
+    ptr = ((char*)cpucode->data)+cpucode->nbytes;
     instart = ptr;
 
     if (0 <= instr->label) {
@@ -721,7 +721,7 @@ void x86_assemble(x86_assembly *as, array *cpucode)
     }
 
     assert(maxinstrsize >= ptr-instart);
-    cpucode->size += ptr-instart;
+    cpucode->nbytes += ptr-instart;
   }
 
   /* Second pass: Recompile all jump and call instructions with the correct dest addrs

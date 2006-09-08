@@ -38,36 +38,31 @@
 #include <sys/time.h>
 #include <time.h>
 
+#ifndef USE_MPI
 static int send_around(process *proc, char tag)
 {
   array *wr;
   int from;
+  int rtag;
   char *data;
   int size;
   reader rd;
-  int msgtype;
-  int r;
 
   wr = write_start();
-  write_int(wr,tag);
-  msg_send(proc,0,wr->data,wr->size);
+  msg_send(proc,0,tag,wr->data,wr->nbytes);
   write_end(wr);
 
-  from = msg_recvb(proc,&data,&size);
+  from = msg_recvb(proc,&rtag,&data,&size);
   assert(0 <= from);
 
   rd = read_start(data,size);
-  if (READER_OK != (r = read_int(&rd,&msgtype))) {
-    free(data);
-    return r;
-  }
-  if (tag != msgtype) {
+  if (tag != rtag) {
     free(data);
     return READER_INCORRECT_CONTENTS;
   }
 
   free(data);
-  return r;
+  return 0;
 }
 
 static int homegc(process *proc)
@@ -78,7 +73,7 @@ static int homegc(process *proc)
   char *data;
   int size;
   int from;
-  int msgtype;
+  int tag;
   int r;
   reader rd;
 
@@ -87,18 +82,17 @@ static int homegc(process *proc)
   fprintf(proc->output,"All processes started distributed garbage collection\n");
 
   for (i = 0; i < proc->grp->nprocs-1; i++) {
-    msg_fsend(proc,i,"i",MSG_MARKROOTS);
+    msg_fsend(proc,i,MSG_MARKROOTS,"");
     count[i]++;
   }
   while (1) {
     int done = 0;
 
-    from = msg_recvb(proc,&data,&size);
+    from = msg_recvb(proc,&tag,&data,&size);
     assert(0 <= from);
     rd = read_start(data,size);
-    r = read_int(&rd,&msgtype);
     assert(READER_OK == r);
-    assert(MSG_UPDATE == msgtype);
+    assert(MSG_UPDATE == tag);
 
 /*     count[from]--; */
     for (i = 0; i < proc->grp->nprocs-1; i++) {
@@ -108,10 +102,12 @@ static int homegc(process *proc)
       count[i] += c;
     }
 
+    #ifdef DISTGC_DEBUG
     printf("after update from %d:",from);
     for (i = 0; i < proc->grp->nprocs-1; i++)
       printf(" %d",count[i]);
     printf("\n");
+    #endif
 
     done = 1;
     for (i = 0; i < proc->grp->nprocs-1; i++)
@@ -121,18 +117,39 @@ static int homegc(process *proc)
     if (done)
       break;
   }
+  #ifdef DISTGC_DEBUG
   printf("done marking\n");
+  #endif
+
+#if 0
+    struct timespec time;
+    time.tv_sec = 0;
+    time.tv_nsec = 250*1000*1000;
+/*     time.tv_nsec = 100*1000*1000; */
+/*     time.tv_nsec =  10*1000*1000; */
+    nanosleep(&time,NULL);
+#endif
+
+
+
+
+
+
+
+
+
+
+
 
   for (sweeps = 0; sweeps < proc->grp->nprocs-1; sweeps++)
-    msg_fsend(proc,sweeps,"i",MSG_SWEEP);
+    msg_fsend(proc,sweeps,MSG_SWEEP,"");
 
   while (0 < sweeps) {
-    from = msg_recvb(proc,&data,&size);
+    from = msg_recvb(proc,&tag,&data,&size);
     assert(0 <= from);
     rd = read_start(data,size);
-    r = read_int(&rd,&msgtype);
     assert(READER_OK == r);
-    assert(MSG_SWEEPACK == msgtype);
+    assert(MSG_SWEEPACK == tag);
     sweeps--;
   }
   fprintf(proc->output,"All processes completed distributed garbage collection\n");
@@ -171,27 +188,25 @@ static int handle_command(process *proc, const char *line, int *done)
   else if (!strcmp(line,"allstats")) {
     int op;
     int from;
+    int tag;
     char *data;
     int size;
     array *wr;
-    int msgtype;
     int totalallocs;
     reader rd;
 
     wr = write_start();
-    write_int(wr,MSG_ALLSTATS);
     write_int(wr,0);
     for (op = 0; op < OP_COUNT; op++)
       write_int(wr,0);
-    msg_send(proc,0,wr->data,wr->size);
+    msg_send(proc,0,MSG_ALLSTATS,wr->data,wr->nbytes);
     write_end(wr);
 
-    from = msg_recvb(proc,&data,&size);
+    from = msg_recvb(proc,&tag,&data,&size);
     printf("received %d bytes from %d\n",size,from);
 
     rd = read_start(data,size);
-    CHECK_READ(read_int(&rd,&msgtype));
-    if (MSG_ALLSTATS != msgtype)
+    if (MSG_ALLSTATS != tag)
       return READER_INCORRECT_CONTENTS;
 
     CHECK_READ(read_int(&rd,&totalallocs));
@@ -218,28 +233,26 @@ static int handle_command(process *proc, const char *line, int *done)
     int *recvcount = (int*)calloc(count,MSG_COUNT*sizeof(int));
     int *recvbytes = (int*)calloc(count,MSG_COUNT*sizeof(int));
     int from;
+    int tag;
     int msg;
 
     for (i = 0; i < count; i++) {
       array *wr = write_start();
-      write_int(wr,MSG_ISTATS);
-      msg_send(proc,i,wr->data,wr->size);
+      msg_send(proc,i,MSG_ISTATS,wr->data,wr->nbytes);
       write_end(wr);
     }
 
     for (i = 0; i < count; i++) {
       char *data;
       int size;
-      int msgtype;
       reader rd;
       int tmp;
 
-      from = msg_recvb(proc,&data,&size);
+      from = msg_recvb(proc,&tag,&data,&size);
       printf("received %d bytes from %d\n",size,from);
 
       rd = read_start(data,size);
-      CHECK_READ(read_int(&rd,&msgtype));
-      if (MSG_ISTATS != msgtype)
+      if (MSG_ISTATS != tag)
         return READER_INCORRECT_CONTENTS;
       CHECK_READ(read_int(&rd,&totalallocs[from]));
       CHECK_READ(read_int(&rd,&nglobals[from]));
@@ -370,7 +383,7 @@ static int handle_command(process *proc, const char *line, int *done)
 void console(process *proc)
 {
   printf("Console started\n");
-  array *input = array_new();
+  array *input = array_new(sizeof(char));
   int c;
   int i;
   char c2;
@@ -378,18 +391,22 @@ void console(process *proc)
   array *wr;
   int done = 0;
 
-/*   while (1) { */
-/*     struct timespec time; */
-/*     time.tv_sec = 0; */
-/*     time.tv_nsec = 250000000; */
-/*     nanosleep(&time,NULL); */
-/*     homegc(proc); */
-/*   } */
+  #ifdef CONTINUOUS_DISTGC
+  while (1) {
+    struct timespec time;
+    time.tv_sec = 0;
+    time.tv_nsec = 250*1000*1000;
+/*     time.tv_nsec = 100*1000*1000; */
+/*     time.tv_nsec =  10*1000*1000; */
+    nanosleep(&time,NULL);
+    homegc(proc);
+  }
+  #endif
 
   do {
     printf("> ");
 
-    input->size = 0;
+    input->nbytes = 0;
     while ((EOF != (c = fgetc(stdin))) && ('\n' != c)) {
       c2 = (char)c;
       array_append(input,&c2,1);
@@ -410,8 +427,8 @@ void console(process *proc)
 
   for (i = 0; i < proc->grp->nprocs-1; i++) {
     wr = write_start();
-    write_int(wr,MSG_DONE);
-    msg_send(proc,i,wr->data,wr->size);
+    msg_send(proc,i,MSG_DONE,wr->data,wr->nbytes);
     write_end(wr);
   }
 }
+#endif

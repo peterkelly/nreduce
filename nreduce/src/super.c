@@ -202,6 +202,10 @@ void check_scombs_nosharing(void)
     i++;
   }
 
+  /* FIXME: avoid use of FLAG_PROCESSED here; store the "found bit" in a
+     temporary array. This is the only plcae in the code FLAG_PROCESSED is still
+     used, so it can be removed after that. */
+
   i = 0;
   for (sc = scombs; sc; sc = sc->next) {
     int j;

@@ -48,6 +48,7 @@ int _pntrtype(pntr p) { return pntrtype(p); }
 const char *_pntrtname(pntr p) { return cell_types[pntrtype(p)]; }
 global *_pglobal(pntr p) { return pglobal(p); }
 frame *_pframe(pntr p) { return pframe(p); }
+pntr _make_pntr(cell *c) { pntr p; make_pntr(p,c); return p; }
 
 #ifndef INLINE_PTRFUNS
 int is_pntr(pntr p)
@@ -114,21 +115,15 @@ void initmem(void)
 static void mark(process *proc, pntr p, short bit);
 static void mark_frame(process *proc, frame *f, short bit);
 
-static void mark_waitqueue(process *proc, waitqueue *wq, short bit)
-{
-  list *l;
-  for (l = wq->frames; l; l = l->next)
-    mark_frame(proc,(frame*)l->data,bit);
-}
-
 void mark_global(process *proc, global *glo, short bit)
 {
-  check_global(glo);
-  if (glo->flags & bit)
+  if (glo->flags & bit) {
+    assert(!is_pntr(glo->p) || (get_pntr(glo->p)->flags & bit));
     return;
+  }
+
   glo->flags |= bit;
   mark(proc,glo->p,bit);
-  mark_waitqueue(proc,&glo->wq,bit);
 
   if ((FLAG_DMB == bit) && (0 <= glo->addr.lid) && (proc->pid != glo->addr.pid))
     add_pending_mark(proc,glo->addr);
@@ -136,7 +131,6 @@ void mark_global(process *proc, global *glo, short bit)
 
 static void mark_frame(process *proc, frame *f, short bit)
 {
-/*   printf("mark_frame %p (cell %p)\n",f,f->c); */
   int i;
   if (f->c) {
     pntr p;
@@ -146,7 +140,6 @@ static void mark_frame(process *proc, frame *f, short bit)
   for (i = 0; i < f->count; i++)
     if (!is_nullpntr(f->data[i]))
       mark(proc,f->data[i],bit);
-  mark_waitqueue(proc,&f->wq,bit);
 }
 
 static void mark_cap(process *proc, cap *c, short bit)
@@ -239,7 +232,7 @@ cell *alloc_cell(process *proc)
     proc->freeptr = &bl->values[0];
   }
   v = proc->freeptr;
-  v->flags = proc->indistgc ? FLAG_DMB : 0;
+  v->flags = proc->indistgc ? FLAG_NEW : 0;
   proc->freeptr = (cell*)get_pntr(proc->freeptr->field1);
   proc->stats.nallocs++;
   proc->stats.totalallocs++;
@@ -248,8 +241,6 @@ cell *alloc_cell(process *proc)
 
 static void free_global(process *proc, global *glo)
 {
-  glo->freed = 1;
-
   if (TYPE_REMOTEREF == pntrtype(glo->p)) {
     cell *refcell = get_pntr(glo->p);
     global *target = (global*)get_pntr(refcell->field1);
@@ -262,22 +253,9 @@ static void free_global(process *proc, global *glo)
   free(glo);
 }
 
-/* static void remove_global(process *proc, global *glo) */
-/* { */
-/*   #ifdef COLLECTION_DEBUG */
-/*   fprintf(proc->output,"removing remoteref global %d@%d\n",glo->addr.lid,glo->addr.pid); */
-/*   #endif */
-
-/*   assert(!glo->freed); */
-/*   pntrhash_remove(proc,glo); */
-/*   addrhash_remove(proc,glo); */
-/*   free_global(proc,glo); */
-/* } */
-
 void free_cell_fields(process *proc, cell *v)
 {
   assert(TYPE_EMPTY != v->type);
-  v->oldtype = v->type;
   switch (celltype(v)) {
   case TYPE_STRING:
     free(get_string(v->field1));
@@ -301,11 +279,8 @@ void free_cell_fields(process *proc, cell *v)
     cap_dealloc(cp);
     break;
   }
-  case TYPE_REMOTEREF: {
-/*     assert(!((global*)get_pntr(v->field1))->freed); */
-/*     remove_global(proc,(global*)get_pntr(v->field1)); */
+  case TYPE_REMOTEREF:
     break;
-  }
   }
 }
 
@@ -339,6 +314,7 @@ void clear_marks(process *proc, short bit)
 
 void mark_roots(process *proc, short bit)
 {
+  int pid;
   int i;
   frame *f;
   list *l;
@@ -372,18 +348,39 @@ void mark_roots(process *proc, short bit)
     mark_frame(proc,f,bit);
   }
 
+  for (f = proc->blocked.first; f; f = f->qnext) {
+    if (proc->memdebug) {
+      fprintf(proc->output,"root: blocked frame %s\n",function_name(proc->gp,f->fno));
+    }
+    mark_frame(proc,f,bit);
+  }
+
   /* mark any in-flight gaddrs that refer to objects in this process */
   for (l = proc->inflight; l; l = l->next) {
     gaddr *addr = (gaddr*)l->data;
     if ((0 <= addr->lid) && (addr->pid == proc->pid)) {
-      glo = global_lookup_glo(proc,*addr);
+      glo = addrhash_lookup(proc,*addr);
       assert(glo);
-      check_global(glo);
       if (proc->memdebug) {
         fprintf(proc->output,"root: inflight local ref %d@%d\n",
                 addr->lid,addr->pid);
       }
-      mark(proc,glo->p,bit);
+      mark_global(proc,glo,bit);
+    }
+  }
+
+  for (pid = 0; pid < proc->groupsize; pid++) {
+    for (i = 0; i < array_count(proc->inflight_addrs[pid]); i++) {
+      gaddr addr = array_item(proc->inflight_addrs[pid],i,gaddr);
+      if ((0 <= addr.lid) && (addr.pid == proc->pid)) {
+        glo = addrhash_lookup(proc,addr);
+        assert(glo);
+        if (proc->memdebug) {
+          fprintf(proc->output,"root: inflight local ref %d@%d\n",
+                  addr.lid,addr.pid);
+        }
+        mark_global(proc,glo,bit);
+      }
     }
   }
 
@@ -416,17 +413,36 @@ void sweep(process *proc)
 {
   block *bl;
   int i;
-/*   list **lptr; */
 
   global **gptr;
   int h;
+  global *glo;
+
+
+  /* Treat all new globals and cells that were created during this garbage collection cycle
+     as rools that also need to be marked */
+  if (proc->indistgc) {
+    for (h = 0; h < GLOBAL_HASH_SIZE; h++)
+      for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+        if (glo->flags & FLAG_NEW)
+          mark_global(proc,glo,FLAG_MARKED);
+
+    for (bl = proc->blocks; bl; bl = bl->next) {
+      for (i = 0; i < BLOCK_SIZE; i++) {
+        if ((TYPE_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
+          pntr p;
+          make_pntr(p,&bl->values[i]);
+          mark(proc,p,FLAG_MARKED);
+        }
+      }
+    }
+  }
 
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
     gptr = &proc->pntrhash[h];
     while (*gptr) {
-      global *glo = *gptr;
       int needed = 0;
-      check_global(glo);
+      glo = *gptr;
 
       if ((glo->flags & FLAG_MARKED) || (glo->flags & FLAG_DMB)) {
         needed = 1;
@@ -462,9 +478,9 @@ void sweep(process *proc)
         free_cell_fields(proc,&bl->values[i]);
         bl->values[i].type = TYPE_EMPTY;
 
-        /* TEMP: don't make this cell available again. Want to check for accesses to free cells */
-/*         make_pntr(bl->values[i].field1,proc->freeptr); */
-/*         proc->freeptr = &bl->values[i]; */
+        /* comment out these two lines to avoid reallocating cells, to check invalid accesses */
+        make_pntr(bl->values[i].field1,proc->freeptr);
+        proc->freeptr = &bl->values[i];
       }
     }
   }
@@ -542,13 +558,13 @@ void cleanup(void)
   if (lexstring)
     array_free(lexstring);
   if (oldnames) {
-    for (i = 0; i < (int)(oldnames->size/sizeof(char*)); i++)
-      free(((char**)oldnames->data)[i]);
+    for (i = 0; i < array_count(oldnames); i++)
+      free(array_item(oldnames,i,char*));
     array_free(oldnames);
   }
   if (parsedfiles) {
-    for (i = 0; i < (int)(parsedfiles->size/sizeof(char*)); i++)
-      free(((char**)parsedfiles->data)[i]);
+    for (i = 0; i < array_count(parsedfiles); i++)
+      free(array_item(parsedfiles,i,char*));
     array_free(parsedfiles);
   }
 }
@@ -582,15 +598,15 @@ process *process_new(void)
 void process_init(process *proc, gprogram *gp)
 {
   int i;
-  char **str = (char**)gp->stringmap->data;
-  int count = (int)(gp->stringmap->size/sizeof(char*));
+  int count = array_count(gp->stringmap);
   assert(NULL == proc->strings);
   assert(0 == proc->nstrings);
-  proc->nstrings = count;
-  proc->strings = (pntr*)malloc(count*sizeof(pntr));
+  assert(0 < proc->groupsize);
+  proc->nstrings = array_count(gp->stringmap);
+  proc->strings = (pntr*)malloc(array_count(gp->stringmap)*sizeof(pntr));
   for (i = 0; i < count; i++) {
     cell *val = alloc_cell(proc);
-    char *copy = strdup(str[i]);
+    char *copy = strdup(array_item(gp->stringmap,i,char*));
     val->type = TYPE_STRING;
     val->flags |= FLAG_PINNED;
     make_string(val->field1,copy);
@@ -603,8 +619,16 @@ void process_init(process *proc, gprogram *gp)
   proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->gcsent = (int*)calloc(proc->grp->nprocs,sizeof(int));
-  proc->markmsgs = (array**)calloc(proc->grp->nprocs,sizeof(array*));
+  proc->gcsent = (int*)calloc(proc->groupsize,sizeof(int));
+  proc->distmarks = (array**)calloc(proc->groupsize,sizeof(array*));
+
+  proc->inflight_addrs = (array**)calloc(proc->groupsize,sizeof(array*));
+  proc->unack_msg_acount = (array**)calloc(proc->groupsize,sizeof(array*));
+  for (i = 0; i < proc->groupsize; i++) {
+    proc->inflight_addrs[i] = array_new(sizeof(gaddr));
+    proc->unack_msg_acount[i] = array_new(sizeof(int));
+    proc->distmarks[i] = array_new(sizeof(gaddr));
+  }
 }
 
 static void message_free(message *msg)
@@ -642,6 +666,12 @@ void process_free(process *proc)
     }
   }
 
+  for (i = 0; i < proc->groupsize; i++) {
+    array_free(proc->inflight_addrs[i]);
+    array_free(proc->unack_msg_acount[i]);
+    array_free(proc->distmarks[i]);
+  }
+
   free(proc->strings);
   free(proc->stats.funcalls);
   free(proc->stats.framecompletions);
@@ -652,9 +682,13 @@ void process_free(process *proc)
   free(proc->stats.usage);
   free(proc->stats.op_usage);
   free(proc->gcsent);
-  free(proc->markmsgs);
+  free(proc->distmarks);
   free(proc->pntrhash);
   free(proc->addrhash);
+
+  free(proc->inflight_addrs);
+  free(proc->unack_msg_acount);
+
   list_free(proc->msgqueue,(list_d_t)message_free);
   pthread_mutex_destroy(&proc->msglock);
   pthread_cond_destroy(&proc->msgcond);

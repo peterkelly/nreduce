@@ -326,8 +326,8 @@ const char *real_varname(const char *sym)
   if (!strncmp(sym,"_v",2)) {
     int varno = atoi(sym+2);
     assert(oldnames);
-    assert(varno <= (int)((oldnames->size-1)*sizeof(char*)));
-    return ((char**)oldnames->data)[varno];
+    assert(varno < array_count(oldnames));
+    return array_item(oldnames,varno,char*);
   }
   else {
     return sym;
@@ -349,8 +349,8 @@ char *real_scname(const char *sym)
     int symlen;
     assert(end);
     assert(oldnames);
-    assert(varno <= (int)((oldnames->size-1)*sizeof(char*)));
-    old = ((char**)oldnames->data)[varno];
+    assert(varno < array_count(oldnames));
+    old = array_item(oldnames,varno,char*);
     oldlen = strlen(old);
     symlen = strlen(sym);
     fullname = (char*)malloc(oldlen+symlen+1);
@@ -788,3 +788,19 @@ void dump_info(process *proc)
 
 }
 
+void dump_globals(process *proc)
+{
+  int h;
+  global *glo;
+
+  fprintf(proc->output,"\n");
+  fprintf(proc->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
+  fprintf(proc->output,"%-9s %-12s %-12s\n","-------","----","----");
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext) {
+      fprintf(proc->output,"%4d@%-4d %-12s %-12p\n",
+              glo->addr.lid,glo->addr.pid,cell_types[pntrtype(glo->p)],
+              is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
+    }
+  }
+}

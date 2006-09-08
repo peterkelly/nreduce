@@ -94,16 +94,16 @@ const char *lookup_parsedfile(int fileno)
 {
   assert(parsedfiles);
   assert(0 <= fileno);
-  assert(fileno < (int)(parsedfiles->size/sizeof(char*)));
-  return ((char**)parsedfiles->data)[fileno];
+  assert(fileno < array_count(parsedfiles));
+  return array_item(parsedfiles,fileno,char*);
 }
 
 int add_parsedfile(const char *filename)
 {
   char *copy = strdup(filename);
   if (NULL == parsedfiles)
-    parsedfiles = array_new();
+    parsedfiles = array_new(sizeof(char*));
   array_append(parsedfiles,&copy,sizeof(char*));
-  return (parsedfiles->size/sizeof(char*))-1;
+  return array_count(parsedfiles)-1;
 }
 

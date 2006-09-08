@@ -35,24 +35,26 @@
 #include <stdarg.h>
 #include <math.h>
 
-array *array_new(void)
+array *array_new(int elemsize)
 {
   array *arr = (array*)malloc(sizeof(array));
+  arr->elemsize = elemsize;
   arr->alloc = 120;
-  arr->size = 0;
+  arr->nbytes = 0;
   arr->data = malloc(arr->alloc);
   return arr;
 }
 
 int array_equals(array *a, array *b)
 {
-  return ((a->size == b->size) &&
-          !memcmp(a->data,b->data,a->size));
+  return ((a->elemsize == b->elemsize) &&
+          (a->nbytes == b->nbytes) &&
+          !memcmp(a->data,b->data,a->nbytes));
 }
 
 void array_mkroom(array *arr, const int size)
 {
-  while (arr->size+size > arr->alloc) {
+  while (arr->nbytes+size > arr->alloc) {
     arr->alloc *= 2;
     arr->data = realloc(arr->data,arr->alloc);
   }
@@ -61,8 +63,30 @@ void array_mkroom(array *arr, const int size)
 void array_append(array *arr, const void *data, int size)
 {
   array_mkroom(arr,size);
-  memmove((char*)(arr->data)+arr->size,data,size);
-  arr->size += size;
+  memmove((char*)(arr->data)+arr->nbytes,data,size);
+  arr->nbytes += size;
+}
+
+void array_remove_data(array *arr, int nbytes)
+{
+  assert(nbytes <= arr->nbytes);
+  memmove(&arr->data[0],&arr->data[nbytes],arr->nbytes-nbytes);
+  arr->nbytes -= nbytes;
+}
+
+void array_remove_items(array *arr, int count)
+{
+  array_remove_data(arr,count*arr->elemsize);
+}
+
+void *array_at(array *arr, int index)
+{
+  return &((char*)arr->data)[index*arr->elemsize];
+}
+
+int array_count(array *arr)
+{
+  return arr->nbytes/arr->elemsize;
 }
 
 void array_free(array *arr)

@@ -34,6 +34,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <mpi.h>
 #ifdef TIMING
 #include <sys/time.h>
 #include <time.h>
@@ -769,7 +770,7 @@ static void machine_code_generation()
 {
   int i;
   debug_stage("Machine code generation");
-  global_cpucode = array_new();
+  global_cpucode = array_new(sizeof(char));
   jit_compile(global_program->ginstrs,global_cpucode);
 
   print_compiled(global_program,global_cpucode);
@@ -825,34 +826,11 @@ static void reduction_engine()
 
 static void gcode_interpreter()
 {
-#ifdef TIMING
-  struct timeval start;
-  struct timeval end;
-  int ms;
-#endif
-
-
   debug_stage("G-code interpreter");
 
-#ifdef TIMING
-  gettimeofday(&start,NULL);
-#endif
+/*   MPI_Barrier(MPI_COMM_WORLD); */
   run(global_program);
-#ifdef TIMING
-  gettimeofday(&end,NULL);
-  ms = (end.tv_sec - start.tv_sec)*1000 +
-       (end.tv_usec - start.tv_usec)/1000;
-  if (args.statistics)
-    fprintf(statsfile,"Execution time: %.3fs\n",((double)ms)/1000.0);
-#endif
-
-/*   if (args.profiling) */
-/*     print_profiling(proc,global_program); */
-
-/*   if (args.statistics) { */
-/*     statistics(proc,statsfile); */
-/*     close_statistics(); */
-/*   } */
+/*   MPI_Barrier(MPI_COMM_WORLD); */
 
   gprogram_free(global_program);
 }
@@ -880,8 +858,26 @@ static void open_statistics()
 
 int main(int argc, char **argv)
 {
+  int bufsize = 1024*1024;
+  void *buf = malloc(bufsize);
+
   setbuf(stdout,NULL);
   initmem();
+
+  #ifdef USE_MPI
+  int rank;
+  int size;
+  int r = MPI_Init(&argc,&argv);
+  printf("MPI_Init returned %d\n",r);
+
+  MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+  MPI_Comm_size(MPI_COMM_WORLD,&size);
+  printf("Processor %d out of %d\n",rank,size);
+  #endif
+
+/*   MPI_Buffer_attach(buf,bufsize); */
+
+/*   MPI_Barrier(MPI_COMM_WORLD); */
 
   memset(&args,0,sizeof(args));
   parse_args(argc,argv);
@@ -944,5 +940,10 @@ int main(int argc, char **argv)
   }
 
   cleanup();
+/*   MPI_Buffer_detach(&buf,&bufsize); */
+  #ifdef USE_MPI
+  MPI_Finalize();
+  #endif
+  free(buf);
   return 0;
 }

@@ -87,6 +87,25 @@ typedef struct gprogram {
   int cdepth;
 } gprogram;
 
+
+typedef struct gop {
+  int opcode;
+  int arg0;
+  int arg1;
+  int fileno;
+  int lineno;
+} gop;
+
+typedef struct gmodule {
+  gop *ops;
+  int nops;
+  char **strings;
+  int nstrings;
+} gmodule;
+
+gmodule *gmodule_read(array *arr);
+void gmodule_write(gmodule *mod, array *arr);
+
 gprogram *gprogram_new(void);
 void gprogram_free(gprogram *gp);
 

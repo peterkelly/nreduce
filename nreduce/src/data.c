@@ -36,6 +36,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <mpi.h>
 
 reader read_start(const char *data, int size)
 {
@@ -111,8 +112,10 @@ int read_gaddr(reader *rd, process *proc, gaddr *a)
 {
   assert(proc->ackmsg);
   CHECK_READ(read_gaddr_noack(rd,a));
-  if ((-1 != a->pid) || (-1 != a->lid))
+  if ((-1 != a->pid) || (-1 != a->lid)) {
     write_gaddr_noack(proc->ackmsg,*a);
+    proc->naddrsread++;
+  }
   return READER_OK;
 }
 
@@ -294,6 +297,8 @@ int print_data(process *proc, const char *data, int size)
   int count = 0;
 
   assert(NULL == proc->ackmsg);
+  assert(0 == proc->ackmsgsize);
+  assert(0 == proc->naddrsread);
   proc->ackmsg = write_start();
 
   while (rd.pos < rd.size) {
@@ -350,6 +355,8 @@ int print_data(process *proc, const char *data, int size)
 
   write_end(proc->ackmsg); /* don't want to send acks in this case */
   proc->ackmsg = NULL;
+  proc->naddrsread = 0;
+  proc->ackmsgsize = 0;
 
   return READER_OK;
 }
@@ -363,7 +370,7 @@ int read_end(reader *rd)
 
 array *write_start(void)
 {
-  return array_new();
+  return array_new(sizeof(char));
 }
 
 void write_tag(array *wr, int tag)
@@ -567,50 +574,58 @@ void write_end(array *wr)
 }
 
 #ifdef MSG_DEBUG
-static void msg_print(process *proc, int dest, const char *data, int size)
+static void msg_print(process *proc, int dest, int tag, const char *data, int size)
 {
   reader rd = read_start(data,size);
-  int msgtype;
   int r;
 
-  r = read_int(&rd,&msgtype);
-  assert(READER_OK == r);
-
-  fprintf(proc->output,"%d <= %s ",dest,msg_names[msgtype]);
+  fprintf(proc->output,"%d <= %s ",dest,msg_names[tag]);
   r = print_data(proc,data+rd.pos,size-rd.pos);
   assert(READER_OK == r);
   fprintf(proc->output,"\n");
 }
 #endif
 
-static void msg_send_addcount(process *proc, const char *data, int size)
+#ifndef USE_MPI
+static void msg_send_addcount(process *proc, int tag, const char *data, int size)
 {
-  reader rd = read_start(data,size);
-  int msgtype;
-  int r;
-
-  r = read_int(&rd,&msgtype);
-  assert(READER_OK == r);
-  assert(0 <= msgtype);
-  assert(MSG_COUNT > msgtype);
-  proc->stats.sendcount[msgtype]++;
-  proc->stats.sendbytes[msgtype] += size;
+  assert(0 <= tag);
+  assert(MSG_COUNT > tag);
+  proc->stats.sendcount[tag]++;
+  proc->stats.sendbytes[tag] += size;
 }
+#endif
 
-void msg_send(process *proc, int dest, const char *data, int size)
+void msg_send(process *proc, int dest, int tag, char *data, int size)
 {
+  #ifdef MSG_DEBUG
+  msg_print(proc,dest,tag,data,size);
+  #endif
+
+  if (NULL != proc->inflight) {
+    int count = 0;
+    list *l;
+    for (l = proc->inflight; l; l = l->next) {
+      gaddr *addr = (gaddr*)l->data;
+      array_append(proc->inflight_addrs[dest],addr,sizeof(gaddr));
+      count++;
+    }
+    array_append(proc->unack_msg_acount[dest],&count,sizeof(int));
+    list_free(proc->inflight,free);
+    proc->inflight = NULL;
+  }
+
+#ifndef USE_MPI
   message *msg = (message*)calloc(1,sizeof(message));
   process *destproc;
   msg->from = proc->pid;
   msg->to = dest;
+  msg->tag = tag;
   msg->size = size;
   msg->data = (char*)malloc(size);
   memcpy(msg->data,data,size);
 
-  #ifdef MSG_DEBUG
-  msg_print(proc,dest,data,size);
-  #endif
-  msg_send_addcount(proc,data,size);
+  msg_send_addcount(proc,tag,data,size);
 
   assert(0 <= dest);
   assert(dest < proc->grp->nprocs);
@@ -623,9 +638,14 @@ void msg_send(process *proc, int dest, const char *data, int size)
   list_append(&destproc->msgqueue,msg);
   pthread_cond_signal(&destproc->msgcond);
   pthread_mutex_unlock(&destproc->msglock);
+#else
+/*   fprintf(proc->output,"msg_send 1\n"); */
+  MPI_Send(data,size,MPI_BYTE,dest,tag,MPI_COMM_WORLD);
+/*   fprintf(proc->output,"msg_send 2\n"); */
+#endif
 }
 
-void msg_fsend(process *proc, int dest, const char *fmt, ...)
+void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
 {
   va_list ap;
   array *wr;
@@ -635,11 +655,13 @@ void msg_fsend(process *proc, int dest, const char *fmt, ...)
   write_vformat(wr,proc,fmt,ap);
   va_end(ap);
 
-  msg_send(proc,dest,wr->data,wr->size);
+  msg_send(proc,dest,tag,wr->data,wr->nbytes);
   write_end(wr);
 }
 
-static int msg_recv2(process *proc, char **data, int *size, int block, struct timespec *abstime)
+#ifndef USE_MPI
+static int msg_recv2(process *proc, int *tag, char **data, int *size, int block,
+                     struct timespec *abstime)
 {
   list *l = NULL;
   message *msg;
@@ -666,6 +688,7 @@ static int msg_recv2(process *proc, char **data, int *size, int block, struct ti
 /*   fprintf(proc->output,"msg_recv %d -> %d : data %p, size %d\n", */
 /*           msg->from,proc->pid,msg->data,msg->size); */
 
+  *tag = msg->tag;
   *data = msg->data;
   *size = msg->size;
   from = msg->from;
@@ -674,18 +697,122 @@ static int msg_recv2(process *proc, char **data, int *size, int block, struct ti
 
   return from;
 }
+#endif
 
-int msg_recv(process *proc, char **data, int *size)
+#ifdef USE_MPI
+#define RECV_BUFSIZE 1048576
+//#define RECV_BUFSIZE 1024
+static char recvbuf[RECV_BUFSIZE];
+static MPI_Request nbrequest = MPI_REQUEST_NULL;
+#endif
+
+int msg_recv(process *proc, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,data,size,0,NULL);
+#ifndef USE_MPI
+  return msg_recv2(proc,tag,data,size,0,NULL);
+#else
+  int r;
+  MPI_Status status;
+  int count;
+  int flag = 0;
+
+/*   fprintf(proc->output,"msg_recv\n"); */
+
+  if (MPI_REQUEST_NULL == nbrequest) {
+    r = MPI_Irecv(recvbuf,RECV_BUFSIZE,MPI_BYTE,MPI_ANY_SOURCE,MPI_ANY_TAG,
+                  MPI_COMM_WORLD,&nbrequest);
+/*     fprintf(proc->output,"MPI_Irecv returned %d\n",r); */
+    if (MPI_SUCCESS != r) {
+/*       perror("MPI_Irecv"); */
+/*       fprintf(proc->output,"msg_recv return 1\n"); */
+      return -1;
+/*       abort(); */
+    }
+  }
+
+  r = MPI_Test(&nbrequest,&flag,&status);
+/*   fprintf(proc->output,"MPI_Test returned %d\n",r); */
+  if (MPI_SUCCESS != r) {
+/*     perror("MPI_Test"); */
+/*     fprintf(proc->output,"msg_recv return 2\n"); */
+    return -1;
+/*     abort(); */
+  }
+
+  if (!flag)
+    return -1;
+  nbrequest = MPI_REQUEST_NULL;
+
+  MPI_Get_count(&status,MPI_BYTE,&count);
+/*   fprintf(proc->output,"count = %d\n",count); */
+
+  *tag = status.MPI_TAG;
+  *size = count;
+  *data = malloc(count);
+  memcpy(*data,recvbuf,count);
+
+/*   fprintf(proc->output,"msg_recv return 3\n"); */
+  return status.MPI_SOURCE;
+#endif
 }
 
-int msg_recvb(process *proc, char **data, int *size)
+int msg_recvb(process *proc, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,data,size,1,NULL);
+#ifndef USE_MPI
+  return msg_recv2(proc,tag,data,size,1,NULL);
+#else
+  int r;
+  MPI_Status status;
+  int count;
+/*   int x; */
+/*   fprintf(proc->output,"msg_recvb\n"); */
+
+  r = MPI_Recv(recvbuf,RECV_BUFSIZE,MPI_BYTE,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status);
+/*   r = MPI_Recv(&x,1,MPI_INT,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status); */
+/*   fprintf(proc->output,"MPI_Recv returned %d\n",r); */
+  if (MPI_SUCCESS != r) {
+/*     fprintf(proc->output,"msg_recvb return 1\n"); */
+    return -1;
+  }
+
+  MPI_Get_count(&status,MPI_BYTE,&count);
+/*   fprintf(proc->output,"count = %d\n",count); */
+
+  *tag = status.MPI_TAG;
+  *size = count;
+  *data = malloc(count);
+  memcpy(*data,recvbuf,count);
+
+/*   fprintf(proc->output,"msg_recvb return 2\n"); */
+  return status.MPI_SOURCE;
+#endif
 }
 
-int msg_recvbt(process *proc, char **data, int *size, struct timespec *abstime)
+int msg_recvbt(process *proc, int *tag, char **data, int *size, struct timespec *abstime)
 {
-  return msg_recv2(proc,data,size,1,abstime);
+#ifndef USE_MPI
+  return msg_recv2(proc,tag,data,size,1,abstime);
+#else
+  int r;
+
+  while (0 > (r = msg_recv(proc,tag,data,size))) {
+    struct timeval now;
+    struct timespec sleep;
+    gettimeofday(&now,NULL);
+
+    if ((now.tv_sec > abstime->tv_sec) ||
+        ((now.tv_sec == abstime->tv_sec) &&
+         (now.tv_usec*1000 > abstime->tv_nsec)))
+      return -1;
+
+    sleep.tv_sec = 0;
+    sleep.tv_nsec = 10*1000*1000;
+    nanosleep(&sleep,NULL);
+    #ifdef MSG_DEBUG
+/*     fprintf(proc->output,"sleeping\n"); */
+    #endif
+  }
+
+  return r;
+#endif
 }
