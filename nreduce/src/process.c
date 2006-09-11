@@ -358,7 +358,7 @@ void run_frame(process *proc, frame *f)
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     assert((0 == f->address) ||
-           (OP_GLOBSTART == proc->gp->ginstrs[f->address].opcode));
+           (OP_GLOBSTART == bc_get_ops(proc->bcdata)[f->address].opcode));
     add_frame_queue(&proc->runnable,f);
     f->state = STATE_RUNNING;
   }

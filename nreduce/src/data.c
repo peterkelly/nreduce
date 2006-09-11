@@ -36,7 +36,9 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#ifdef USE_MPI
 #include <mpi.h>
+#endif
 
 reader read_start(const char *data, int size)
 {

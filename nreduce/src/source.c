@@ -35,8 +35,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-extern array *parsedfiles;
-
 snode *snode_new(int fileno, int lineno)
 {
   snode *c = calloc(1,sizeof(snode));

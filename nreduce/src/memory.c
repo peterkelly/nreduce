@@ -333,27 +333,16 @@ void mark_roots(process *proc, short bit)
   }
 
   for (f = proc->sparked.first; f; f = f->qnext) {
-    if (proc->memdebug) {
-      fprintf(proc->output,"root: sparked frame %s\n",function_name(proc->gp,f->fno));
-    }
     mark_frame(proc,f,bit);
     assert(NULL == f->wq.frames);
     assert(NULL == f->wq.fetchers);
   }
 
-  for (f = proc->runnable.first; f; f = f->qnext) {
-    if (proc->memdebug) {
-      fprintf(proc->output,"root: runnable frame %s\n",function_name(proc->gp,f->fno));
-    }
+  for (f = proc->runnable.first; f; f = f->qnext)
     mark_frame(proc,f,bit);
-  }
 
-  for (f = proc->blocked.first; f; f = f->qnext) {
-    if (proc->memdebug) {
-      fprintf(proc->output,"root: blocked frame %s\n",function_name(proc->gp,f->fno));
-    }
+  for (f = proc->blocked.first; f; f = f->qnext)
     mark_frame(proc,f,bit);
-  }
 
   /* mark any in-flight gaddrs that refer to objects in this process */
   for (l = proc->inflight; l; l = l->next) {
@@ -595,26 +584,31 @@ process *process_new(void)
   return proc;
 }
 
-void process_init(process *proc, gprogram *gp)
+void process_init(process *proc)
 {
   int i;
-  int count = array_count(gp->stringmap);
+  bcheader *bch = (bcheader*)proc->bcdata;
+  int count = bch->nstrings;
+  int *stroffsets = bc_get_stroffsets(proc->bcdata);
+
   assert(NULL == proc->strings);
   assert(0 == proc->nstrings);
   assert(0 < proc->groupsize);
-  proc->nstrings = array_count(gp->stringmap);
-  proc->strings = (pntr*)malloc(array_count(gp->stringmap)*sizeof(pntr));
+
+
+  proc->nstrings = count;
+  proc->strings = (pntr*)malloc(count*sizeof(pntr));
   for (i = 0; i < count; i++) {
     cell *val = alloc_cell(proc);
-    char *copy = strdup(array_item(gp->stringmap,i,char*));
+    char *copy = strdup(proc->bcdata+stroffsets[i]);
     val->type = TYPE_STRING;
     val->flags |= FLAG_PINNED;
     make_string(val->field1,copy);
     make_pntr(proc->strings[i],val);
   }
-  proc->stats.funcalls = (int*)calloc(gp->nfunctions,sizeof(int));
-  proc->stats.usage = (int*)calloc(gp->count,sizeof(int));
-  proc->stats.framecompletions = (int*)calloc(gp->nfunctions,sizeof(int));
+  proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
+  proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
+  proc->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
   proc->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));

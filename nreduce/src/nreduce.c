@@ -34,7 +34,9 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#ifdef USE_MPI
 #include <mpi.h>
+#endif
 #ifdef TIMING
 #include <sys/time.h>
 #include <time.h>
@@ -752,10 +754,23 @@ static void graph_optimisation()
 
 static void gcode_compilation()
 {
+
   debug_stage("G-code compilation");
 
   global_program = gprogram_new();
   compile(global_program);
+
+  char *bcdata;
+  int bcsize;
+  gen_bytecode(global_program,&bcdata,&bcsize);
+  print_bytecode(stdout,bcdata,bcsize);
+  exit(0);
+
+
+
+
+
+
   if (args.justgcode) {
     print_program(global_program,0);
     exit(0);

@@ -72,21 +72,33 @@ typedef struct ginstr {
   int *expstatus;
 } ginstr;
 
+typedef struct funinfo {
+  int address;
+  int addressne;
+  int arity;
+  int stacksize;
+  int name;
+} funinfo;
+
 typedef struct gprogram {
   ginstr *ginstrs;
   int alloc;
   int count;
   stackinfo *si;
   array *stringmap;
+  funinfo *finfo;
   int nfunctions;
   char **fnames;
-  int *addressmap;
-  int *noevaladdressmap;
-  int *stacksizes;
   int evaldoaddr;
   int cdepth;
 } gprogram;
 
+typedef struct bcheader {
+  int nops;
+  int nfunctions;
+  int nstrings;
+  int evaldoaddr;
+} bcheader;
 
 typedef struct gop {
   int opcode;
@@ -95,16 +107,6 @@ typedef struct gop {
   int fileno;
   int lineno;
 } gop;
-
-typedef struct gmodule {
-  gop *ops;
-  int nops;
-  char **strings;
-  int nstrings;
-} gmodule;
-
-gmodule *gmodule_read(array *arr);
-void gmodule_write(gmodule *mod, array *arr);
 
 gprogram *gprogram_new(void);
 void gprogram_free(gprogram *gp);
@@ -116,6 +118,12 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr);
 void print_program(gprogram *gp, int builtins);
 void print_profiling(process *proc, gprogram *gp);
 void compile(gprogram *gp);
+void print_bytecode(FILE *f, char *bcdata, int bcsize);
+void gen_bytecode(gprogram *gp, char **bcdata, int *bcsize);
+
+gop *bc_get_ops(char *bcdata);
+funinfo *bc_get_funinfo(char *bcdata);
+int *bc_get_stroffsets(char *bcdata);
 
 /* gmachine */
 

@@ -218,10 +218,8 @@ void gprogram_free(gprogram *gp)
     free(gp->fnames[i]);
   free(gp->fnames);
 
-  free(gp->addressmap);
-  free(gp->noevaladdressmap);
+  free(gp->finfo);
   free(gp->ginstrs);
-  free(gp->stacksizes);
   free(gp);
 }
 
@@ -1005,8 +1003,14 @@ static void F(gprogram *gp, int fno, scomb *sc)
   snode *copy = sc->body;
   stackinfo *oldsi;
   pmap pm;
+  char *namestr;
 
-  gp->addressmap[NUM_BUILTINS+sc->index] = gp->count;
+  gp->finfo[NUM_BUILTINS+sc->index].address = gp->count;
+  gp->finfo[NUM_BUILTINS+sc->index].arity = sc->nargs;
+
+  namestr = real_scname(sc->name);
+  gp->finfo[NUM_BUILTINS+sc->index].name = add_string(gp,namestr);
+  free(namestr);
 
   oldsi = gp->si;
   gp->si = stackinfo_new(NULL);
@@ -1022,7 +1026,7 @@ static void F(gprogram *gp, int fno, scomb *sc)
     if (sc->strictin && sc->strictin[i])
       EVAL(sc->sl,i);
 
-  gp->noevaladdressmap[NUM_BUILTINS+sc->index] = gp->count;
+  gp->finfo[NUM_BUILTINS+sc->index].addressne = gp->count;
   GLOBSTART(sc->sl,fno,sc->nargs);
 
 #ifdef DEBUG_GCODE_COMPILATION
@@ -1061,7 +1065,7 @@ static void compute_stacksizes(gprogram *gp)
     if ((addr == gp->count) ||
         ((OP_GLOBSTART == gp->ginstrs[addr].opcode) && (fno != gp->ginstrs[addr].arg0))) {
       if (0 <= fno)
-        gp->stacksizes[fno] = stacksize;
+        gp->finfo[fno].stacksize = stacksize;
       if (addr == gp->count)
         return;
       fno = gp->ginstrs[addr].arg0;
@@ -1086,6 +1090,12 @@ void compile(gprogram *gp)
   scomb *startsc = get_scomb("__start");
   assert(startsc);
 
+  assert(0 == array_count(gp->stringmap));
+  for (i = 0; i < array_count(parsedfiles); i++) {
+    char *filename = array_item(parsedfiles,i,char*);
+    add_string(gp,filename);
+  }
+
   nosl.fileno = -1;
   nosl.lineno = -1;
 
@@ -1099,9 +1109,7 @@ void compile(gprogram *gp)
   for (sc = scombs; sc; sc = sc->next)
     gp->fnames[i++] = real_scname(sc->name);
 
-  gp->addressmap = (int*)calloc(gp->nfunctions,sizeof(int));
-  gp->noevaladdressmap = (int*)calloc(gp->nfunctions,sizeof(int));
-  gp->stacksizes = (int*)calloc(gp->nfunctions,sizeof(int));
+  gp->finfo = (funinfo*)calloc(gp->nfunctions,sizeof(funinfo));
 
   gp->si = stackinfo_new(NULL);
   BEGIN(startsc->sl);
@@ -1128,7 +1136,10 @@ void compile(gprogram *gp)
     for (argno = 0; argno < bi->nargs; argno++)
       pushstatus(gp->si,0);
 
-    gp->addressmap[i] = gp->count;
+    gp->finfo[i].address = gp->count;
+    gp->finfo[i].addressne = gp->count;
+    gp->finfo[i].arity = bi->nargs;
+    gp->finfo[i].name = add_string(gp,bi->name);
     GLOBSTART(nosl,i,bi->nargs);
 
     if (B_IF == i) {
@@ -1176,25 +1187,154 @@ void compile(gprogram *gp)
   cur_program = gp;
 }
 
-
-
-
-
-gmodule *gmodule_read(array *arr)
+void print_bytecode(FILE *f, char *bcdata, int bcsize)
 {
-  gmodule *mod = (gmodule*)calloc(1,sizeof(gmodule));
-  return mod;
+  int nops;
+  int nfunctions;
+  int nstrings;
+  int evaldoaddr;
+  int pos = 0;
+  int i;
+  int *stroffsets = bc_get_stroffsets(bcdata);
+
+  nops = *(int*)&bcdata[pos];
+  pos += sizeof(int);
+  fprintf(f,"nops = %d\n",nops);
+
+  nfunctions = *(int*)&bcdata[pos];
+  pos += sizeof(int);
+  fprintf(f,"nfunctions = %d\n",nfunctions);
+
+  nstrings = *(int*)&bcdata[pos];
+  pos += sizeof(int);
+  fprintf(f,"nstrings = %d\n",nstrings);
+
+  evaldoaddr = *(int*)&bcdata[pos];
+  pos += sizeof(int);
+  fprintf(f,"evaldoaddr = %d\n",evaldoaddr);
+
+  fprintf(f,"\n");
+  fprintf(f,"Ops:\n");
+  fprintf(f,"\n");
+  fprintf(f,"%8s %-12s %-12s %-12s %s\n","address","opcode","arg0","arg1","fileno/lineno");
+  fprintf(f,"%8s %-12s %-12s %-12s %s\n","-------","------","----","----","-------------");
+  for (i = 0; i < nops; i++) {
+    gop *op = (gop*)&bcdata[pos];
+    char *filename = (0 <= op->fileno) ? (bcdata+stroffsets[op->fileno]) : "_";
+    fprintf(f,"%8d %-12s %-12d %-12d %s:%d\n",
+            i,op_names[op->opcode],op->arg0,op->arg1,filename,op->lineno);
+    pos += sizeof(gop);
+  }
+  fprintf(f,"\n");
+  fprintf(f,"Functions:\n");
+  fprintf(f,"\n");
+  fprintf(f,"%-8s %-8s %-8s %-8s %s\n","fno","address","arity","stacksize","name");
+  fprintf(f,"%-8s %-8s %-8s %-8s %s\n","---","-------","-----","---------","----");
+  for (i = 0; i < nfunctions; i++) {
+    funinfo *fi = (funinfo*)&bcdata[pos];
+    fprintf(f,"%-8d %-8d %-8d %-8d %d\n",i,fi->address,fi->arity,fi->stacksize,fi->name);
+    pos += sizeof(funinfo);
+  }
+  fprintf(f,"\n");
+  fprintf(f,"Strings:\n");
+  fprintf(f,"\n");
+  for (i = 0; i < nstrings; i++) {
+    int offset = *(int*)&bcdata[pos];
+    char *str = (char*)&bcdata[offset];
+    fprintf(f,"%4d: ",i);
+    print_quoted_string(f,str);
+    fprintf(f,"\n");
+    pos += sizeof(int);
+  }
 }
 
-void gmodule_write(gmodule *mod, array *arr)
+void gen_bytecode(gprogram *gp, char **bcdata, int *bcsize)
 {
+  char *data;
+  int size;
   int i;
-  array_append(arr,&mod->nops,sizeof(int));
-  array_append(arr,&mod->ops,mod->nops*sizeof(gop));
-  array_append(arr,&mod->nstrings,sizeof(int));
-  for (i = 0; i < mod->nstrings; i++) {
-    int len = strlen(mod->strings[i]);
-    array_append(arr,&len,sizeof(int));
-    array_append(arr,mod->strings[i],len);
+  int nops = gp->count;
+  int nfunctions = gp->nfunctions;
+  int nstrings = array_count(gp->stringmap);
+  int pos;
+  int strpos;
+
+  size = 0;
+  size += sizeof(int); /* nops */
+  size += sizeof(int); /* nfunctions */
+  size += sizeof(int); /* nstrings */
+  size += sizeof(int); /* evaldoaddr */
+  size += nops*sizeof(gop); /* ops */
+  size += nfunctions*sizeof(funinfo); /* function info table */
+  size += nstrings*sizeof(int); /* string offset table */
+
+  for (i = 0; i < nstrings; i++) { /* string data */
+    char *str = array_item(gp->stringmap,i,char*);
+    size += strlen(str)+1;
   }
+
+  data = (char*)malloc(size);
+  pos = 0;
+
+  *(int*)&data[pos] = nops;
+  pos += sizeof(int);
+
+  *(int*)&data[pos] = nfunctions;
+  pos += sizeof(int);
+
+  *(int*)&data[pos] = nstrings;
+  pos += sizeof(int);
+
+  *(int*)&data[pos] = gp->evaldoaddr;
+  pos += sizeof(int);
+
+  for (i = 0; i < nops; i++) {
+    gop op;
+    op.opcode = gp->ginstrs[i].opcode;
+    op.arg0 = gp->ginstrs[i].arg0;
+    op.arg1 = gp->ginstrs[i].arg1;
+    op.fileno = gp->ginstrs[i].sl.fileno;
+    op.lineno = gp->ginstrs[i].sl.lineno;
+    memcpy(&data[pos],&op,sizeof(gop));
+    pos += sizeof(gop);
+  }
+
+  for (i = 0; i < nfunctions; i++) {
+    memcpy(&data[pos],&gp->finfo[i],sizeof(funinfo));
+    pos += sizeof(funinfo);
+  }
+
+  strpos = pos+nstrings*sizeof(int);
+  for (i = 0; i < nstrings; i++) {
+    char *str = array_item(gp->stringmap,i,char*);
+
+    *(int*)&data[pos] += strpos;
+    pos += sizeof(int);
+
+    memcpy(&data[strpos],str,strlen(str)+1);
+    strpos += strlen(str)+1;
+  }
+
+  assert(strpos == size);
+
+  *bcdata = data;
+  *bcsize = size;
+}
+
+gop *bc_get_ops(char *bcdata)
+{
+  return (gop*)&bcdata[sizeof(bcheader)];
+}
+
+funinfo *bc_get_funinfo(char *bcdata)
+{
+  return (funinfo*)&bcdata[sizeof(bcheader)+
+                           ((bcheader*)bcdata)->nops*sizeof(gop)];
+}
+
+int *bc_get_stroffsets(char *bcdata)
+{
+  return (int*)&bcdata[sizeof(bcheader)+
+                       ((bcheader*)bcdata)->nops*sizeof(gop)+
+                       ((bcheader*)bcdata)->nfunctions*sizeof(funinfo)];
 }

@@ -751,6 +751,8 @@ void dump_info(process *proc)
   block *bl;
   int i;
   frame *f;
+  funinfo *finfo = bc_get_funinfo(proc->bcdata);
+  int *stroffsets = bc_get_stroffsets(proc->bcdata);
 
   fprintf(proc->output,"Frames with things waiting on them:\n");
   fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
@@ -762,7 +764,7 @@ void dump_info(process *proc)
       if (TYPE_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = function_name(proc->gp,f->fno);
+          const char *fname = proc->bcdata+stroffsets[finfo[f->fno].name];
           int nframes = list_count(f->wq.frames);
           int nfetchers = list_count(f->wq.fetchers);
           fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
@@ -779,7 +781,7 @@ void dump_info(process *proc)
   fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
   for (f = proc->runnable.first; f; f = f->qnext) {
-          const char *fname = function_name(proc->gp,f->fno);
+          const char *fname = proc->bcdata+stroffsets[finfo[f->fno].name];
           int nframes = list_count(f->wq.frames);
           int nfetchers = list_count(f->wq.fetchers);
     fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",

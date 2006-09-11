@@ -47,7 +47,6 @@
 //#define USE_MPI
 
 //#define DEBUG_GCODE_COMPILATION
-//#define STACK_MODEL_SANITY_CHECK
 //#define SHOW_SUBSTITUTED_NAMES
 #define EXECUTION_TRACE
 #define PROFILING
@@ -470,6 +469,10 @@ typedef struct global {
 typedef struct process {
   int memdebug;
 
+  /* bytecode */
+  char *bcdata;
+  int bcsize;
+
   /* communication */
   group *grp;
   list *msgqueue;
@@ -532,7 +535,6 @@ typedef struct process {
   int inmark;
 
   /* general */
-  struct gprogram *gp;
   FILE *output;
   procstats stats;
 } process;
@@ -610,7 +612,7 @@ void free_scomb(scomb *sc);
 void cleanup(void);
 
 process *process_new(void);
-void process_init(process *proc, struct gprogram *gp);
+void process_init(process *proc);
 void process_free(process *proc);
 
 const char *lookup_parsedfile(int fileno);
@@ -803,6 +805,7 @@ extern const char *frame_states[4];
 #ifndef MEMORY_C
 extern int trace;
 extern array *oldnames;
+extern array *parsedfiles;
 #endif
 
 #ifndef SUPER_C
