@@ -1,19 +1,7 @@
-(append (a b) (if a (cons (head a) (append (tail a) b)) b))
-
 (map        (f lst) (if lst (cons (f (head lst)) (map f (tail lst))) nil))
 (foreach    (lst f) (map f lst))
 (reduce     (f init lst) (if lst (f (head lst) (reduce f init (tail lst))) init))
 (for        (min max f) (map f (range min max)))
-
-(len1       (lst total) (if (and total lst) (len1 (tail lst) (+ total 1)) total))
-(len        (lst) (let ((alen (arrayoptlen lst)))
-                          (if (alen)
-                              alen
-                              (len1 lst 0))))
-(item1      (n lst) (if (and lst (= n 0)) (head lst) (item1 (- n 1) (tail lst))))
-(item       (n lst) (if (arrayhas n lst)
-                        (arrayitem n lst)
-                        (item1 (arrayremsize lst n) (arrayrem lst))))
 
 (range      (min max) (if (= min max) (cons min nil) (cons min (range (+ min 1) max))))
 
@@ -22,7 +10,7 @@
 
 (creategrid (rows cols) (map (!n.map (!n.0) (range 1 rows)) (range 1 cols)))
 (printcell  (cell) (if (= cell 1) "##" "--"))
-(printrow   (row) (if row (cons (printcell (head row)) (printrow (tail row))) (cons "\n" nil)))
+(printrow   (row) (if row (append (printcell (head row)) (printrow (tail row))) (append "\n" nil)))
 (printgrid  (grid) (if grid (append (printrow (head grid)) (printgrid (tail grid))) nil))
 //(printgrid (grid) (append (printrow (head grid)) (cons "\n" nil)))
 
@@ -69,7 +57,7 @@
             (cons (cons 0 (cons 1 (cons 0 nil))) nil))))
 (loop       (iter grid)
             (if (> iter 0)
-                (append (printgrid grid) (cons "\n" (loop (- iter 1) (dolife grid))))
+                (append (printgrid grid) (append "\n" (loop (- iter 1) (dolife grid))))
                 nil))
 
 (main () (loop 10 (makegrid start 40 40)))

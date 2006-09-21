@@ -361,6 +361,11 @@ void run_frame(process *proc, frame *f)
            (OP_GLOBSTART == bc_get_ops(proc->bcdata)[f->address].opcode));
     add_frame_queue(&proc->runnable,f);
     f->state = STATE_RUNNING;
+
+    #ifdef PROFILING
+    if (0 <= f->fno)
+      proc->stats.fusage[f->fno]++;
+    #endif
   }
 }
 
@@ -385,4 +390,19 @@ void done_frame(process *proc, frame *f)
   assert(STATE_RUNNING == f->state);
   remove_frame_queue(&proc->runnable,f);
   f->state = STATE_DONE;
+}
+
+void set_error(process *proc, const char *format, ...)
+{
+  va_list ap;
+  int len;
+  va_start(ap,format);
+  len = vsnprintf(NULL,0,format,ap);
+  va_end(ap);
+
+  assert(NULL == proc->error);
+  proc->error = (char*)malloc(len+1);
+  va_start(ap,format);
+  len = vsnprintf(proc->error,len+1,format,ap);
+  va_end(ap);
 }

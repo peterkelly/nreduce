@@ -115,9 +115,13 @@ const char *frame_states[4] = {
 "DONE",
 };
 
-void fatal(const char *msg)
+void fatal(const char *format, ...)
 {
-  fprintf(stderr,"%s\n",msg);
+  va_list ap;
+  va_start(ap,format);
+  vfprintf(stderr,format,ap);
+  va_end(ap);
+  fprintf(stderr,"\n");
   abort();
 }
 
@@ -524,9 +528,6 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
   case TYPE_AREF:
     abort();
     break;
-  case TYPE_ARRAY:
-    abort();
-    break;
   case TYPE_FRAME:
     abort();
     break;
@@ -645,6 +646,7 @@ void statistics(process *proc, FILE *f)
 {
   int i;
   int total;
+  bcheader *bch = (bcheader*)proc->bcdata;
   fprintf(f,"totalallocs = %d\n",proc->stats.totalallocs);
   fprintf(f,"ncollections = %d\n",proc->stats.ncollections);
   fprintf(f,"nscombappls = %d\n",proc->stats.nscombappls);
@@ -657,6 +659,10 @@ void statistics(process *proc, FILE *f)
     total += proc->stats.op_usage[i];
   }
   fprintf(f,"usage total = %d\n",total);
+
+  fprintf(f,"\n");
+  for (i = 0; i < bch->nfunctions; i++)
+    fprintf(f,"%-20s %d\n",bc_function_name(proc->bcdata,i),proc->stats.fusage[i]);
 }
 
 void print_pntr_tree(FILE *f, pntr p, int indent)
@@ -707,9 +713,8 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
     print_pntr_tree(f,c->field1,indent+1);
     break;
   case TYPE_AREF: {
-    cell *arrcell = get_pntr(c->field1);
-    carray *arr = (carray*)get_pntr(arrcell->field1);
-    int index = (int)get_pntr(c->field2);
+    carray *arr = aref_array(p);
+    int index = aref_index(p);
     fprintf(f,"(aref %d/%d)\n",index,arr->size);
     break;
   }
@@ -738,7 +743,7 @@ void print_pntr_tree(FILE *f, pntr p, int indent)
     fprintf(f,"(nil)\n");
     break;
   case TYPE_STRING:
-    fprintf(f,"\"%s\"\n",get_string(c->field1));
+    fprintf(f,"\"%s\"\n",(char*)get_pntr(c->field1));
     break;
   default:
     abort();
@@ -751,8 +756,6 @@ void dump_info(process *proc)
   block *bl;
   int i;
   frame *f;
-  funinfo *finfo = bc_get_funinfo(proc->bcdata);
-  int *stroffsets = bc_get_stroffsets(proc->bcdata);
 
   fprintf(proc->output,"Frames with things waiting on them:\n");
   fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
@@ -764,7 +767,7 @@ void dump_info(process *proc)
       if (TYPE_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = proc->bcdata+stroffsets[finfo[f->fno].name];
+          const char *fname = bc_function_name(proc->bcdata,f->fno);
           int nframes = list_count(f->wq.frames);
           int nfetchers = list_count(f->wq.fetchers);
           fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
@@ -781,9 +784,9 @@ void dump_info(process *proc)
   fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
   for (f = proc->runnable.first; f; f = f->qnext) {
-          const char *fname = proc->bcdata+stroffsets[finfo[f->fno].name];
-          int nframes = list_count(f->wq.frames);
-          int nfetchers = list_count(f->wq.fetchers);
+    const char *fname = bc_function_name(proc->bcdata,f->fno);
+    int nframes = list_count(f->wq.frames);
+    int nfetchers = list_count(f->wq.fetchers);
     fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
             f,fname,nframes,nfetchers,frame_states[f->state]);
   }

@@ -35,6 +35,12 @@
 #include <stdarg.h>
 #include <math.h>
 
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 array *array_new(int elemsize)
 {
   array *arr = (array*)malloc(sizeof(array));

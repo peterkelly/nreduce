@@ -48,7 +48,7 @@
 
 //#define DEBUG_GCODE_COMPILATION
 //#define SHOW_SUBSTITUTED_NAMES
-#define EXECUTION_TRACE
+//#define EXECUTION_TRACE
 #define PROFILING
 //#define QUEUE_CHECKS
 //#define PAREXEC_DEBUG
@@ -65,6 +65,7 @@
 #define COLLECT_THRESHOLD 102400
 //#define COLLECT_THRESHOLD 1024
 #define COLLECT_INTERVAL 100000
+//#define COLLECT_INTERVAL 1000
 #define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
 
@@ -126,36 +127,34 @@
 #define B_BITXOR         18
 #define B_BITNOT         19
 
-#define B_IF             20
-#define B_CONS           21
-#define B_HEAD           22
-#define B_TAIL           23
+#define B_SQRT           20
+#define B_FLOOR          21
+#define B_CEIL           22
 
-#define B_ISLAMBDA       24
-#define B_ISVALUE        25
-#define B_ISCONS         26
-#define B_ISNIL          27
-#define B_ISNUMBER       28
-#define B_ISSTRING       29
+#define B_SEQ            23
+#define B_PAR            24
+#define B_PARHEAD        25
 
-#define B_ARRAYITEM      30
-#define B_ARRAYHAS       31
-#define B_ARRAYREMSIZE   32
-#define B_ARRAYREM       33
-#define B_ARRAYOPTLEN    34
+#define B_ECHO           26
+#define B_PRINT          27
 
-#define B_ECHO           35
-#define B_PRINT          36
+#define B_IF             28
+#define B_CONS           29
+#define B_HEAD           30
+#define B_TAIL           31
 
-#define B_SQRT           37
-#define B_FLOOR          38
-#define B_CEIL           39
+#define B_ARRAYSIZE      32
+#define B_ARRAYSKIP      33
+#define B_ARRAYPREFIX    34
 
-#define B_SEQ            40
-#define B_PAR            41
-#define B_PARHEAD        42
+#define B_ISVALARRAY     35
+#define B_PRINTARRAY     36
 
-#define NUM_BUILTINS     43
+#define B_NUMTOSTRING    37
+#define B_OPENFD         38
+#define B_READCHUNK      39
+
+#define NUM_BUILTINS     40
 
 #define TAG_MASK         0xFF
 
@@ -221,13 +220,13 @@ typedef struct snode {
 } snode;
 
 #define checkcell(_c) ({ if (TYPE_EMPTY == (_c)->type) \
-                          fatal("access to free'd cell"); \
+                          fatal("access to free'd cell %p",(_c)); \
                         (_c); })
 
 #define snodetype(_c) ((_c)->tag & TAG_MASK)
 //#define celltype(_c) ((_c)->type)
 #define celltype(_c) (checkcell(_c)->type)
-#define pntrtype(p) (is_pntr(p) ? (get_pntr(p))->type : TYPE_NUMBER)
+#define pntrtype(p) (is_pntr(p) ? celltype(get_pntr(p)) : TYPE_NUMBER)
 
 typedef double pntr;
 
@@ -238,6 +237,26 @@ typedef struct cell {
   pntr field2;
 } cell;
 
+#define PNTR_VALUE 0xFFF80000
+//#define PNTR_VALUE 0xFFF00000
+//#define MAX_ARRAY_SIZE (1 << 19)
+//#define MAX_ARRAY_SIZE 30
+#define MAX_ARRAY_SIZE 2000
+//#define MAX_ARRAY_SIZE 20
+
+
+
+
+//#define ARRAY_DEBUG
+//#define PRINT_DEBUG
+
+//#define ARRAY_DEBUG2
+
+
+
+
+
+
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
 #define ppfield1(__p) (get_pntr(pfield1(__p)))
@@ -246,15 +265,20 @@ typedef struct cell {
 #define pframe(__p) ((frame*)ppfield1(__p))
 
 #ifdef INLINE_PTRFUNS
-#define is_pntr(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF1)
+#define is_pntr(__p) ((*(((unsigned int*)&(__p))+1) & PNTR_VALUE) == PNTR_VALUE)
 #define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
-                            *(((unsigned int*)&(__p))+1) = 0xFFFFFFF1; }
+                            *(((unsigned int*)&(__p))+1) = PNTR_VALUE; }
+
+#define make_aref_pntr(__p,__c,__i) { assert((__i) < MAX_ARRAY_SIZE); \
+                            *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
+                            *(((unsigned int*)&(__p))+1) = (PNTR_VALUE | (__i)); }
+
+#define aref_index(__p) (*(((unsigned int*)&(__p))+1) & ~PNTR_VALUE)
+#define aref_array(__p) ((carray*)get_pntr(get_pntr(__p)->field1))
+
+
 #define get_pntr(__p) (assert(is_pntr(__p)), ((cell*)(*((unsigned int*)&(__p)))))
 
-#define is_string(__p) (*(((unsigned int*)&(__p))+1) == 0xFFFFFFF2)
-#define make_string(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
-                              *(((unsigned int*)&(__p))+1) = 0xFFFFFFF2; }
-#define get_string(__p) (assert(is_string(__p)), ((char*)(*((unsigned int*)&(__p)))))
 #define pntrequal(__a,__b) ((*(((unsigned int*)&(__a))+0) == *(((unsigned int*)&(__b))+0)) && \
                             (*(((unsigned int*)&(__a))+1) == *(((unsigned int*)&(__b))+1)))
 
@@ -266,8 +290,6 @@ typedef struct cell {
 int is_pntr(pntr p);
 cell *get_pntr(pntr p);
 
-int is_string(pntr p);
-char *get_string(pntr p);
 int pntrequal(pntr a, pntr b);
 int is_nullpntr(pntr p);
 #endif
@@ -305,9 +327,11 @@ struct list {
 typedef struct carray {
   int alloc;
   int size;
-  pntr *elements;
-  pntr *refs;
+  int elemsize;
+  void *elements;
   pntr tail;
+  cell *wrapper;
+  int nchars;
 } carray;
 
 typedef struct stack {
@@ -433,6 +457,7 @@ typedef struct procstats {
   int *sendbytes;
   int *recvcount;
   int *recvbytes;
+  int *fusage;
 } procstats;
 
 typedef struct gaddr {
@@ -500,6 +525,7 @@ typedef struct process {
   int nextlid;
   int *gcsent;
   list *inflight;
+  char *error;
 
   gaddr **infaddrs;
   int *infcount;
@@ -656,6 +682,8 @@ void block_frame(process *proc, frame *f);
 void unblock_frame(process *proc, frame *f);
 void done_frame(process *proc, frame *f);
 
+void set_error(process *proc, const char *format, ...);
+
 /* cell */
 
 cell *alloc_cell(process *proc);
@@ -719,7 +747,7 @@ void console(process *proc);
 
 /* debug */
 
-void fatal(const char *msg);
+void fatal(const char *format, ...);
 int debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
 void print_hex(int c);
@@ -750,8 +778,9 @@ void strictness_analysis(void);
 
 /* builtin */
 
-pntr get_aref(process *proc, cell *arrholder, int index);
 int get_builtin(const char *name);
+pntr string_to_array(process *proc, const char *str);
+char *array_to_string(pntr refpntr);
 
 /* util */
 
@@ -794,6 +823,7 @@ void print_double(FILE *f, double d);
 struct timeval timeval_diff(struct timeval from, struct timeval to);
 
 int hash(void *mem, int size);
+int connect_host(const char *hostname, int port);
 
 #ifndef DEBUG_C
 extern const char *snode_types[NUM_CELLTYPES];

@@ -107,7 +107,7 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
   case TYPE_STRING:
     dest = alloc_cell(proc);
     dest->type = TYPE_STRING;
-    make_string(dest->field1,strdup(source->value));
+    make_pntr(dest->field1,strdup(source->value));
     make_pntr(p,dest);
     return p;
   default:
@@ -273,6 +273,9 @@ void reduce(process *proc, pntrstack *s)
         assert(TYPE_IND != pntrtype(s->data[s->count-1-i]));
 
       builtin_info[bif].f(proc,&s->data[s->count-reqargs]);
+      if (proc->error) {
+        abort();
+      }
       s->count -= (reqargs-1);
 
       /* UPDATE */

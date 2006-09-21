@@ -48,8 +48,9 @@ HEXDIGITS               {HEXDIGIT}+
 INTEGER                  \-?{DIGITS}
 HEX                      \-?0[xX]{HEXDIGIT}+
 DOUBLE                   \-?{DIGITS}\.{DIGITS}
-IDCHAR                   [a-zA-Z_?]
+IDCHAR                   [a-zA-Z_\-?]
 IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
+CHAR                     \'.\'
 
 %%
 
@@ -112,7 +113,13 @@ IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 "|"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "^"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "~"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"'\\n'"                  { yylval.d = (double)'\n'; return DOUBLE; }
+"'\\t'"                  { yylval.d = (double)'\t'; return DOUBLE; }
+"'\\r'"                  { yylval.d = (double)'\r'; return DOUBLE; }
+"'\\b'"                  { yylval.d = (double)'\b'; return DOUBLE; }
+"'\\g'"                  { yylval.d = (double)'\f'; return DOUBLE; }
 {IDENT}                  { yylval.s = strdup(yytext); return SYMBOL; }
+{CHAR}                   { yylval.d = (double)yytext[1]; return DOUBLE; }
 {HEX}                    { yylval.i = strtol(yytext,NULL,0); return INTEGER; }
 {DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
 {INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 

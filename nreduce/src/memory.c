@@ -62,17 +62,6 @@ cell *get_pntr(pntr p)
   return (cell*)(*((unsigned int*)&p));
 }
 
-int is_string(pntr p)
-{
-  return (*(((unsigned int*)&p)+1) == 0xFFFFFFF2);
-}
-
-char *get_string(pntr p)
-{
-  assert(is_string(p));
-  return (char*)(*((unsigned int*)&p));
-}
-
 int pntrequal(pntr a, pntr b)
 {
   return 
@@ -137,9 +126,12 @@ static void mark_frame(process *proc, frame *f, short bit)
     make_pntr(p,f->c);
     mark(proc,p,bit);
   }
-  for (i = 0; i < f->count; i++)
-    if (!is_nullpntr(f->data[i]))
+  for (i = 0; i < f->count; i++) {
+    if (!is_nullpntr(f->data[i])) {
+      f->data[i] = resolve_pntr(f->data[i]);
       mark(proc,f->data[i],bit);
+    }
+  }
 }
 
 static void mark_cap(process *proc, cap *c, short bit)
@@ -154,44 +146,54 @@ static void mark(process *proc, pntr p, short bit)
 {
   cell *c;
   assert(TYPE_EMPTY != pntrtype(p));
+
+  /* handle CONS and AREF specially - process the "spine" iteratively */
+  while ((TYPE_AREF == pntrtype(p)) || (TYPE_CONS == pntrtype(p))) {
+    c = get_pntr(p);
+    if (c->flags & bit)
+      return;
+    c->flags |= bit;
+
+    if (TYPE_AREF == pntrtype(p)) {
+      carray *arr = (carray*)get_pntr(c->field1);
+      int i;
+      assert(MAX_ARRAY_SIZE >= arr->size);
+      if (sizeof(pntr) == arr->elemsize) {
+        for (i = 0; i < arr->size; i++) {
+          ((pntr*)arr->elements)[i] = resolve_pntr(((pntr*)arr->elements)[i]);
+          mark(proc,((pntr*)arr->elements)[i],bit);
+        }
+      }
+      arr->tail = resolve_pntr(arr->tail);
+      p = arr->tail;
+    }
+    else {
+      c->field1 = resolve_pntr(c->field1);
+      c->field2 = resolve_pntr(c->field2);
+      mark(proc,c->field1,bit);
+      p = c->field2;
+    }
+  }
+
+  /* handle other types */
   if (!is_pntr(p))
     return;
+
   c = get_pntr(p);
   if (c->flags & bit)
     return;
+
   c->flags |= bit;
   switch (pntrtype(p)) {
   case TYPE_IND:
     mark(proc,c->field1,bit);
     break;
   case TYPE_APPLICATION:
-  case TYPE_CONS:
     c->field1 = resolve_pntr(c->field1);
     c->field2 = resolve_pntr(c->field2);
     mark(proc,c->field1,bit);
     mark(proc,c->field2,bit);
     break;
-  case TYPE_AREF: {
-    cell *arrholder = get_pntr(c->field1);
-    carray *arr = (carray*)get_pntr(arrholder->field1);
-    int index = (int)get_pntr(c->field2);
-    assert(index < arr->size);
-    assert(get_pntr(arr->refs[index]) == c);
-
-    mark(proc,c->field1,bit);
-    break;
-  }
-  case TYPE_ARRAY: {
-    carray *arr = (carray*)get_pntr(c->field1);
-    int i;
-    for (i = 0; i < arr->size; i++) {
-      mark(proc,arr->elements[i],bit);
-      if (!is_nullpntr(arr->refs[i]))
-        mark(proc,arr->refs[i],bit);
-    }
-    mark(proc,arr->tail,bit);
-    break;
-  }
   case TYPE_FRAME:
     mark_frame(proc,(frame*)get_pntr(c->field1),bit);
     break;
@@ -258,12 +260,11 @@ void free_cell_fields(process *proc, cell *v)
   assert(TYPE_EMPTY != v->type);
   switch (celltype(v)) {
   case TYPE_STRING:
-    free(get_string(v->field1));
+    free((char*)get_pntr(v->field1));
     break;
-  case TYPE_ARRAY: {
+  case TYPE_AREF: {
     carray *arr = (carray*)get_pntr(v->field1);
     free(arr->elements);
-    free(arr->refs);
     free(arr);
     break;
   }
@@ -323,13 +324,12 @@ void mark_roots(process *proc, short bit)
 
   proc->memdebug = 0;
 
+  for (i = 0; i < proc->nstrings; i++)
+    mark(proc,proc->strings[i],bit);
+
   if (proc->streamstack) {
-    for (i = 0; i < proc->streamstack->count; i++) {
-      if (proc->memdebug) {
-        fprintf(proc->output,"root: streamstack[%d]\n",i);
-      }
+    for (i = 0; i < proc->streamstack->count; i++)
       mark(proc,proc->streamstack->data[i],bit);
-    }
   }
 
   for (f = proc->sparked.first; f; f = f->qnext) {
@@ -338,11 +338,13 @@ void mark_roots(process *proc, short bit)
     assert(NULL == f->wq.fetchers);
   }
 
-  for (f = proc->runnable.first; f; f = f->qnext)
+  for (f = proc->runnable.first; f; f = f->qnext) {
     mark_frame(proc,f,bit);
+  }
 
-  for (f = proc->blocked.first; f; f = f->qnext)
+  for (f = proc->blocked.first; f; f = f->qnext) {
     mark_frame(proc,f,bit);
+  }
 
   /* mark any in-flight gaddrs that refer to objects in this process */
   for (l = proc->inflight; l; l = l->next) {
@@ -504,6 +506,7 @@ frame *frame_alloc(process *proc)
 {
   frame *f = (frame*)calloc(1,sizeof(frame));
   f->fno = -1;
+
   return f;
 }
 
@@ -589,7 +592,7 @@ void process_init(process *proc)
   int i;
   bcheader *bch = (bcheader*)proc->bcdata;
   int count = bch->nstrings;
-  int *stroffsets = bc_get_stroffsets(proc->bcdata);
+  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
 
   assert(NULL == proc->strings);
   assert(0 == proc->nstrings);
@@ -599,12 +602,7 @@ void process_init(process *proc)
   proc->nstrings = count;
   proc->strings = (pntr*)malloc(count*sizeof(pntr));
   for (i = 0; i < count; i++) {
-    cell *val = alloc_cell(proc);
-    char *copy = strdup(proc->bcdata+stroffsets[i]);
-    val->type = TYPE_STRING;
-    val->flags |= FLAG_PINNED;
-    make_string(val->field1,copy);
-    make_pntr(proc->strings[i],val);
+    proc->strings[i] = string_to_array(proc,proc->bcdata+stroffsets[i]);
   }
   proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
   proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
@@ -613,6 +611,7 @@ void process_init(process *proc)
   proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
   proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
   proc->gcsent = (int*)calloc(proc->groupsize,sizeof(int));
   proc->distmarks = (array**)calloc(proc->groupsize,sizeof(array*));
 
@@ -673,9 +672,11 @@ void process_free(process *proc)
   free(proc->stats.sendbytes);
   free(proc->stats.recvcount);
   free(proc->stats.recvbytes);
+  free(proc->stats.fusage);
   free(proc->stats.usage);
   free(proc->stats.op_usage);
   free(proc->gcsent);
+  free(proc->error);
   free(proc->distmarks);
   free(proc->pntrhash);
   free(proc->addrhash);
@@ -744,7 +745,7 @@ void print_pntr(FILE *f, pntr p)
     print_double(f,p);
     break;
   case TYPE_STRING: {
-    char *str = get_string(get_pntr(p)->field1);
+    char *str = (char*)get_pntr(get_pntr(p)->field1);
     fprintf(f,"\"%s\"",str);
     break;
   }

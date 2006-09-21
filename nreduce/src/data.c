@@ -212,7 +212,7 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
 
     c = alloc_cell(proc);
     c->type = TYPE_STRING;
-    make_string(c->field1,str);
+    make_pntr(c->field1,str);
     make_pntr(*pout,c);
     break;
   }
@@ -469,14 +469,21 @@ void write_pntr(array *arr, process *proc, pntr p)
   if (TYPE_AREF == pntrtype(p)) {
     cell *c = get_pntr(p);
     cell *arrholder = get_pntr(c->field1);
-    carray *carr = (carray*)get_pntr(arrholder->field1);
-    int index = (int)get_pntr(c->field2);
-    if (index+1 < carr->size)
+    carray *carr = aref_array(p);
+    int index = aref_index(p);
+
+    assert(sizeof(pntr) == carr->elemsize); /* FIXME: remove this restriction */
+
+    if (index+1 < carr->size) {
+      pntr p;
+      make_aref_pntr(p,arrholder,index+1);
       write_format(arr,proc,"airr",addr,TYPE_CONS,
-                   carr->elements[index],get_aref(proc,arrholder,index+1));
-    else
+                   ((pntr*)carr->elements)[index],p);
+    }
+    else {
       write_format(arr,proc,"airr",addr,TYPE_CONS,
-                   carr->elements[index],carr->tail);
+                   ((pntr*)carr->elements)[index],carr->tail);
+    }
     return;
   }
 
@@ -523,7 +530,7 @@ void write_pntr(array *arr, process *proc, pntr p)
     write_double(arr,p);
     break;
   case TYPE_STRING:
-    write_string(arr,get_string(get_pntr(p)->field1));
+    write_string(arr,(char*)get_pntr(get_pntr(p)->field1));
     break;
   default:
     abort();

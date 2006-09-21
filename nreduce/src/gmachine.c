@@ -41,14 +41,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-static void cap_error(process *proc, pntr cappntr, gop *op)
+static void cap_error(process *proc, pntr cappntr, const gop *op)
 {
   sourceloc sl;
   assert(TYPE_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
-  funinfo *finfo = bc_get_funinfo(proc->bcdata);
-  int *stroffsets = bc_get_stroffsets(proc->bcdata);
+  const funinfo *finfo = bc_get_funinfo(proc->bcdata);
+  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
   const char *name = proc->bcdata+stroffsets[finfo[c->fno].name];
   int nargs = c->arity;
 
@@ -59,10 +59,10 @@ static void cap_error(process *proc, pntr cappntr, gop *op)
 
   print_sourceloc(stderr,c->sl);
   fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
-  exit(1);
+  abort();
 }
 
-static void constant_app_error(pntr cappntr, gop *op)
+static void constant_app_error(pntr cappntr, const gop *op)
 {
   sourceloc sl;
   sl.fileno = op->fileno;
@@ -70,7 +70,17 @@ static void constant_app_error(pntr cappntr, gop *op)
   print_sourceloc(stderr,sl);
   fprintf(stderr,CONSTANT_APP_MSG"\n");
   print_pntr_tree(stderr,cappntr,0);
-  exit(1);
+  abort();
+}
+
+static void handle_error(process *proc, int bif, const gop *op)
+{
+  sourceloc sl;
+  sl.fileno = op->fileno;
+  sl.lineno = op->lineno;
+  print_sourceloc(stderr,sl);
+  fprintf(stderr,"%s\n",proc->error);
+  abort();
 }
 
 static void resume_waiters(process *proc, waitqueue *wq, pntr obj)
@@ -727,14 +737,14 @@ static void execute(process *proc)
 /*   int nfunctions = ((bcheader*)proc->bcdata)->nfunctions; */
 /*   int nstrings = ((bcheader*)proc->bcdata)->nstrings; */
   int evaldoaddr = ((bcheader*)proc->bcdata)->evaldoaddr;
-  gop *program_ops = bc_get_ops(proc->bcdata);
-  funinfo *program_finfo = bc_get_funinfo(proc->bcdata);
+  const gop *program_ops = bc_get_ops(proc->bcdata);
+  const funinfo *program_finfo = bc_get_funinfo(proc->bcdata);
 
   while (!proc->done) {
-    gop *op;
+    const gop *op;
     frame *curf;
 
-    if ((0 < proc->paused) || (NULL == proc->runnable.first)) {
+    if ((NULL == proc->runnable.first) || (0 < proc->paused)) {
 
       if (0 == proc->paused) {
         struct timeval before;
@@ -800,6 +810,7 @@ static void execute(process *proc)
     #endif
 
     if (0 == nextcollect--) {
+/*       fprintf(proc->output,"Garbage collecting\n"); */
       local_collect(proc);
       nextcollect = COLLECT_INTERVAL;
     }
@@ -1103,6 +1114,12 @@ static void execute(process *proc)
         assert(TYPE_IND != pntrtype(curf->data[curf->count-1-i]));
 
       builtin_info[bif].f(proc,&curf->data[curf->count-nargs]);
+
+      /* TODO: figure out a more efficient way of doing this that doesn't require an explicit
+         check */
+      if (proc->error)
+        handle_error(proc,bif,op);
+
       curf->count -= (nargs-1);
       assert(!builtin_info[bif].reswhnf || (TYPE_IND != pntrtype(curf->data[curf->count-1])));
       break;
@@ -1150,13 +1167,13 @@ static void *execthread(void *param)
   }
   else {
     execute(proc);
-    fprintf(proc->output,"\n");
+/*     fprintf(proc->output,"\n"); */
   }
   return NULL;
 }
 #endif
 
-void run(gprogram *gp)
+void run(gprogram *gp, FILE *statsfile)
 {
 #ifdef USE_MPI
 
@@ -1249,7 +1266,7 @@ void run(gprogram *gp)
   grp.nprocs = 1;
   grp.procs = (process**)calloc(grp.nprocs,sizeof(process*));
 
-  printf("Initializing processes\n");
+/*   printf("Initializing processes\n"); */
   for (i = 0; i < grp.nprocs; i++) {
     char filename[100];
 
@@ -1287,7 +1304,7 @@ void run(gprogram *gp)
   make_pntr(initial->c->field1,initial);
   run_frame(grp.procs[0],initial);
 
-  printf("Creating threads\n");
+/*   printf("Creating threads\n"); */
   threads = (pthread_t*)malloc(grp.nprocs*sizeof(pthread_t));
   for (i = 0; i < grp.nprocs; i++) {
     if (0 != pthread_create(&threads[i],NULL,execthread,grp.procs[i])) {
@@ -1296,12 +1313,15 @@ void run(gprogram *gp)
     }
   }
 
-  printf("Executing program\n");
+/*   printf("Executing program\n"); */
   for (i = 0; i < grp.nprocs; i++)
     pthread_join(threads[i],NULL);
   free(threads);
 
-  printf("Cleaning up\n");
+  if ((1 == grp.nprocs) && (NULL != statsfile))
+    statistics(grp.procs[0],statsfile);
+
+/*   printf("Cleaning up\n"); */
   for (i = 0; i < grp.nprocs; i++) {
     if (1 < grp.nprocs)
       fclose(grp.procs[i]->output);
@@ -1309,7 +1329,7 @@ void run(gprogram *gp)
   }
   free(grp.procs);
 
-  printf("Done!\n");
+/*   printf("Done!\n"); */
 #endif
 }
 

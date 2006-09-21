@@ -1195,7 +1195,7 @@ void print_bytecode(FILE *f, char *bcdata, int bcsize)
   int evaldoaddr;
   int pos = 0;
   int i;
-  int *stroffsets = bc_get_stroffsets(bcdata);
+  const int *stroffsets = bc_get_stroffsets(bcdata);
 
   nops = *(int*)&bcdata[pos];
   pos += sizeof(int);
@@ -1308,7 +1308,7 @@ void gen_bytecode(gprogram *gp, char **bcdata, int *bcsize)
   for (i = 0; i < nstrings; i++) {
     char *str = array_item(gp->stringmap,i,char*);
 
-    *(int*)&data[pos] += strpos;
+    *(int*)&data[pos] = strpos;
     pos += sizeof(int);
 
     memcpy(&data[strpos],str,strlen(str)+1);
@@ -1321,20 +1321,28 @@ void gen_bytecode(gprogram *gp, char **bcdata, int *bcsize)
   *bcsize = size;
 }
 
-gop *bc_get_ops(char *bcdata)
+const gop *bc_get_ops(const char *bcdata)
 {
-  return (gop*)&bcdata[sizeof(bcheader)];
+  return (const gop*)&bcdata[sizeof(bcheader)];
 }
 
-funinfo *bc_get_funinfo(char *bcdata)
+const funinfo *bc_get_funinfo(const char *bcdata)
 {
-  return (funinfo*)&bcdata[sizeof(bcheader)+
-                           ((bcheader*)bcdata)->nops*sizeof(gop)];
+  return (const funinfo*)&bcdata[sizeof(bcheader)+
+                                 ((bcheader*)bcdata)->nops*sizeof(gop)];
 }
 
-int *bc_get_stroffsets(char *bcdata)
+const int *bc_get_stroffsets(const char *bcdata)
 {
-  return (int*)&bcdata[sizeof(bcheader)+
-                       ((bcheader*)bcdata)->nops*sizeof(gop)+
-                       ((bcheader*)bcdata)->nfunctions*sizeof(funinfo)];
+  return (const int*)&bcdata[sizeof(bcheader)+
+                             ((bcheader*)bcdata)->nops*sizeof(gop)+
+                             ((bcheader*)bcdata)->nfunctions*sizeof(funinfo)];
+}
+
+const char *bc_function_name(const char *bcdata, int fno)
+{
+  const funinfo *finfo = bc_get_funinfo(bcdata);
+  const int *stroffsets = bc_get_stroffsets(bcdata);
+
+  return bcdata+stroffsets[finfo[fno].name];;
 }

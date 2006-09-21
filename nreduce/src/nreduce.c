@@ -48,19 +48,11 @@
 #define ENGINE_NATIVE      1
 #define ENGINE_REDUCER     2
 
-const char *internal_functions =
-"(__printer (val) (if (cons? val)"
-"                   (seq (print (head val))"
-"                       (__printer (tail val)))"
-"                   nil))"
-"(sparklist (lst) (if lst"
-"                     (parhead lst (sparklist (tail lst)))"
-"                     nil))"
-"(spark (val) (seq (sparklist val) val))"
-"(__start () (__printer (spark main)))";
+extern const char *prelude;
 
 extern char *yyfilename;
 extern int yyfileno;
+extern int yylineno;
 extern char *code_start;
 
 snode *parse_root = NULL;
@@ -208,7 +200,7 @@ static void stream(process *proc, pntr lst)
       printf("%f",pntrdouble(p));
     }
     else if (TYPE_STRING == pntrtype(p)) {
-      printf("%s",(char*)get_string(get_pntr(p)->field1));
+      printf("%s",(char*)get_pntr(get_pntr(p)->field1));
     }
     else if (TYPE_CONS == pntrtype(p)) {
       pntrstack_push(proc->streamstack,get_pntr(p)->field2);
@@ -346,6 +338,7 @@ static void parse_file(char *filename)
 
   yyfilename = filename;
   yyfileno = add_parsedfile(filename);
+  yylineno = 1;
 
   bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
   yy_switch_to_buffer(bufstate);
@@ -361,11 +354,12 @@ static void parse_file(char *filename)
   parse_post_processing(parse_root);
 }
 
-static void parse_string(const char *str)
+static void parse_string(const char *str, char *name)
 {
   YY_BUFFER_STATE bufstate;
-  yyfilename = "(string)";
-  yyfileno = add_parsedfile("(string)");
+  yyfilename = name;
+  yyfileno = add_parsedfile(name);
+  yylineno = 1;
 
   bufstate = yy_scan_string(str);
   yy_switch_to_buffer(bufstate);
@@ -385,7 +379,7 @@ static void source_code_parsing()
 {
   debug_stage("Source code parsing");
 
-  parse_string(internal_functions);
+  parse_string(prelude,"prelude.l");
   parse_file(args.filename);
   check_for_main();
 
@@ -760,11 +754,11 @@ static void gcode_compilation()
   global_program = gprogram_new();
   compile(global_program);
 
-  char *bcdata;
-  int bcsize;
-  gen_bytecode(global_program,&bcdata,&bcsize);
-  print_bytecode(stdout,bcdata,bcsize);
-  exit(0);
+/*   char *bcdata; */
+/*   int bcsize; */
+/*   gen_bytecode(global_program,&bcdata,&bcsize); */
+/*   print_bytecode(stdout,bcdata,bcsize); */
+/*   exit(0); */
 
 
 
@@ -844,8 +838,11 @@ static void gcode_interpreter()
   debug_stage("G-code interpreter");
 
 /*   MPI_Barrier(MPI_COMM_WORLD); */
-  run(global_program);
+  run(global_program,statsfile);
 /*   MPI_Barrier(MPI_COMM_WORLD); */
+
+  if (args.statistics)
+    close_statistics();
 
   gprogram_free(global_program);
 }
@@ -871,6 +868,7 @@ static void open_statistics()
   }
 }
 
+extern int arefs;
 int main(int argc, char **argv)
 {
   int bufsize = 1024*1024;

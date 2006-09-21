@@ -1,3 +1,5 @@
+(append (a b) (if a (cons (head a) (append (tail a) b)) b))
+
 (mandel (Zr Zi Cr Ci iterations res)
   (if (= res iterations)
       res
@@ -22,9 +24,9 @@
 (mloop (minx maxx xincr miny maxy yincr x y)
 (if (> x maxx)
     (if (> y maxy)
-        (cons "\n" nil)
-        (cons "\n" (mloop minx maxx xincr miny maxy yincr minx (+ y yincr))))
-    (cons (printcell (mandel0 x y 1024))
+        (append "\n" nil)
+        (append "\n" (mloop minx maxx xincr miny maxy yincr minx (+ y yincr))))
+    (append (printcell (mandel0 x y 1024))
           (mloop minx maxx xincr miny maxy yincr (+ x xincr) y))))
 
 (mandelrange (minx maxx xincr miny maxy yincr)
