@@ -24,8 +24,7 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
 #include "gcode.h"
 #include <stdio.h>
 #include <string.h>
@@ -34,12 +33,12 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <errno.h>
 
 array *array_new(int elemsize)
 {
@@ -236,22 +235,6 @@ void print_quoted_string(FILE *f, const char *str)
   fprintf(f,"\"");
 }
 
-void parse_check(int cond, snode *c, char *msg)
-{
-  if (cond)
-    return;
-  if (0 <= c->sl.fileno)
-    fprintf(stderr,"%s:%d: ",lookup_parsedfile(c->sl.fileno),c->sl.lineno);
-  fprintf(stderr,"%s\n",msg);
-  exit(1);
-}
-
-void print_sourceloc(FILE *f, sourceloc sl)
-{
-  if (0 <= sl.fileno)
-    fprintf(f,"%s:%d: ",lookup_parsedfile(sl.fileno),sl.lineno);
-}
-
 stack *stack_new(void)
 {
   stack *s = (stack*)calloc(1,sizeof(stack));
@@ -358,5 +341,24 @@ int hash(void *mem, int size)
   if (0 > h)
     h += GLOBAL_HASH_SIZE;
   return h;
+}
+
+char *getcwd_alloc()
+{
+  int buflen = 128;
+  char *buf = (char*)malloc(buflen);
+  char *cwd;
+
+  while ((NULL == (cwd = getcwd(buf,buflen))) && (ERANGE == errno)) {
+    buflen *= 2;
+    buf = (char*)realloc(buf,buflen);
+  }
+
+  if (NULL == cwd) {
+    free(buf);
+    return NULL;
+  }
+
+  return cwd;
 }
 

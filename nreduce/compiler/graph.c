@@ -24,8 +24,8 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

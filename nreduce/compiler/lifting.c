@@ -24,8 +24,9 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -98,12 +99,13 @@ static void abstract(stack *boundvars, const char *sym, int level, snode **lambd
   }
 }
 
-static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const char *prefix)
+static void create_scombs(source *src, stack *boundvars, snode **k,
+                          letrec *inletrec, const char *prefix)
 {
   switch (snodetype(*k)) {
   case TYPE_APPLICATION:
-    create_scombs(boundvars,&((*k)->left),NULL,prefix);
-    create_scombs(boundvars,&((*k)->right),NULL,prefix);
+    create_scombs(src,boundvars,&((*k)->left),NULL,prefix);
+    create_scombs(src,boundvars,&((*k)->right),NULL,prefix);
     break;
   case TYPE_LETREC: {
     int oldcount = boundvars->count;
@@ -116,15 +118,15 @@ static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const c
        appropriate arguments and body. */
     for (rec = (*k)->bindings; rec; rec = rec->next) {
       if (TYPE_LAMBDA == snodetype(rec->value)) {
-        rec->sc = add_scomb(rec->name);
+        rec->sc = add_scomb(src,rec->name);
         rec->sc->sl = rec->value->sl;
       }
       stack_push(boundvars,binding_new(rec->name,rec));
     }
 
     for (rec = (*k)->bindings; rec; rec = rec->next)
-      create_scombs(boundvars,&rec->value,rec,prefix);
-    create_scombs(boundvars,&((*k)->body),NULL,prefix);
+      create_scombs(src,boundvars,&rec->value,rec,prefix);
+    create_scombs(src,boundvars,&((*k)->body),NULL,prefix);
 
     /* Remove any definitions that have been converted into supercombinators (all references
        to them should have been replaced by this point */
@@ -161,7 +163,7 @@ static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const c
       assert(newsc);
     }
     else {
-      newsc = add_scomb(prefix);
+      newsc = add_scomb(src,prefix);
       newsc->sl = (*k)->sl;
     }
 
@@ -175,7 +177,7 @@ static void create_scombs(stack *boundvars, snode **k, letrec *inletrec, const c
     for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body)
       newsc->argnames[argno++] = strdup((*tmp)->name);
 
-    create_scombs(boundvars,tmp,NULL,newsc->name);
+    create_scombs(src,boundvars,tmp,NULL,newsc->name);
 
     *tmp = NULL;
     snode_free(*k);
@@ -363,7 +365,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
   }
 }
 
-void lift(scomb *sc)
+void lift(source *src, scomb *sc)
 {
   stack *boundvars = stack_new();
   int changed;
@@ -379,7 +381,7 @@ void lift(scomb *sc)
       break;
   } while (changed);
 
-  create_scombs(boundvars,&sc->body,NULL,sc->name);
+  create_scombs(src,boundvars,&sc->body,NULL,sc->name);
   stack_free(boundvars);
 }
 
@@ -427,7 +429,7 @@ static void find_vars(snode *c, list **names, stack *ignore)
   }
 }
 
-static void applift_r(snode **k, scomb *sc)
+static void applift_r(source *src, snode **k, scomb *sc)
 {
   switch (snodetype(*k)) {
   case TYPE_APPLICATION: {
@@ -450,12 +452,12 @@ static void applift_r(snode **k, scomb *sc)
         /* just do the arguments */
         snode *app;
         for (app = *k; TYPE_APPLICATION == snodetype(app); app = app->left)
-          applift_r(&app->right,sc);
+          applift_r(src,&app->right,sc);
         break;
       }
 
 
-      newsc = add_scomb(sc->name);
+      newsc = add_scomb(src,sc->name);
 
       newsc->body = *k;
       newsc->sl = (*k)->sl;
@@ -491,11 +493,11 @@ static void applift_r(snode **k, scomb *sc)
         *k = app;
       }
 
-      applift(newsc);
+      applift(src,newsc);
     }
     else {
-      applift_r(&((*k)->left),sc);
-      applift_r(&((*k)->right),sc);
+      applift_r(src,&((*k)->left),sc);
+      applift_r(src,&((*k)->right),sc);
     }
     break;
   }
@@ -504,8 +506,8 @@ static void applift_r(snode **k, scomb *sc)
   case TYPE_LETREC: {
     letrec *rec;
     for (rec = (*k)->bindings; rec; rec = rec->next)
-      applift_r(&rec->value,sc);
-    applift_r(&((*k)->body),sc);
+      applift_r(src,&rec->value,sc);
+    applift_r(src,&((*k)->body),sc);
     break;
   }
   case TYPE_BUILTIN:
@@ -517,7 +519,7 @@ static void applift_r(snode **k, scomb *sc)
   }
 }
 
-void applift(scomb *sc)
+void applift(source *src, scomb *sc)
 {
-  applift_r(&sc->body,sc);
+  applift_r(src,&sc->body,sc);
 }

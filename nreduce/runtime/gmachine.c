@@ -24,9 +24,10 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "gcode.h"
-#include "nreduce.h"
+#include "compiler/gcode.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -35,11 +36,15 @@
 #include <stdarg.h>
 #include <math.h>
 #include <errno.h>
-#ifdef USE_MPI
-#include <mpi.h>
-#endif
 #include <sys/types.h>
 #include <unistd.h>
+
+static void print_proc_sourceloc(process *proc, FILE *f, sourceloc sl)
+{
+  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
+  if (0 <= sl.fileno)
+    fprintf(f,"%s:%d: ",proc->bcdata+stroffsets[sl.fileno],sl.lineno);
+}
 
 static void cap_error(process *proc, pntr cappntr, const gop *op)
 {
@@ -54,22 +59,22 @@ static void cap_error(process *proc, pntr cappntr, const gop *op)
 
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
-  print_sourceloc(stderr,sl);
+  print_proc_sourceloc(proc,stderr,sl);
   fprintf(stderr,"Attempt to evaluate incomplete function application\n");
 
-  print_sourceloc(stderr,c->sl);
+  print_proc_sourceloc(proc,stderr,c->sl);
   fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
   abort();
 }
 
-static void constant_app_error(pntr cappntr, const gop *op)
+static void constant_app_error(process *proc, pntr cappntr, const gop *op)
 {
   sourceloc sl;
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
-  print_sourceloc(stderr,sl);
+  print_proc_sourceloc(proc,stderr,sl);
   fprintf(stderr,CONSTANT_APP_MSG"\n");
-  print_pntr_tree(stderr,cappntr,0);
+  /* FIXME: need to print the expression here */
   abort();
 }
 
@@ -78,7 +83,7 @@ static void handle_error(process *proc, int bif, const gop *op)
   sourceloc sl;
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
-  print_sourceloc(stderr,sl);
+  print_proc_sourceloc(proc,stderr,sl);
   fprintf(stderr,"%s\n",proc->error);
   abort();
 }
@@ -115,10 +120,9 @@ static void frame_return(process *proc, frame *curf, pntr val)
 {
   #ifdef SHOW_FRAME_COMPLETION
   if (0 <= proc->pid) {
-    const char *name = function_name(proc->gp,curf->fno);
     int valtype = pntrtype(val);
-    fprintf(proc->output,"FRAME(%s) completed; result is a %s\n",
-            name,cell_types[valtype]);
+    fprintf(proc->output,"FRAME(%d) completed; result is a %s\n",
+            curf->fno,cell_types[valtype]);
   }
   #endif
 
@@ -905,7 +909,7 @@ static void execute(process *proc)
       }
 
       if (TYPE_CAP != pntrtype(p))
-        constant_app_error(p,op);
+        constant_app_error(proc,p,op);
       capholder = (cell*)get_pntr(p);
       curf->count--;
 
@@ -1157,7 +1161,6 @@ static void execute(process *proc)
 
 }
 
-#ifndef USE_MPI
 static void *execthread(void *param)
 {
   process *proc = (process*)param;
@@ -1171,93 +1174,9 @@ static void *execthread(void *param)
   }
   return NULL;
 }
-#endif
 
-void run(gprogram *gp, FILE *statsfile)
+void run(const char *bcdata, int bcsize, FILE *statsfile)
 {
-#ifdef USE_MPI
-
-
-  /* FIXME: many places assume the number of gmachines processes is 1 less than proc->groupsize,
-     because of the console. Need to allow the console to be present as a message
-     sender/receiver, but not considered for things like distributed garbage collection. */
-
-  process *proc;
-  int rank;
-  int size;
-  char filename[100];
-  MPI_Comm_rank(MPI_COMM_WORLD,&rank);
-  MPI_Comm_size(MPI_COMM_WORLD,&size);
-
-
-
-
-
-  proc = process_new();
-  proc->pid = rank;
-  proc->groupsize = size;
-  proc->gp = gp;
-
-/*   proc->output = stdout; */
-  sprintf(filename,"output.%d",rank);
-  proc->output = fopen(filename,"w");
-  if (NULL == proc->output) {
-    perror(filename);
-    exit(1);
-  }
-  fprintf(proc->output,"%d: in run(), pid is %d\n",rank,getpid());
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  fprintf(proc->output,"Past first barrier\n");
-  MPI_Barrier(MPI_COMM_WORLD);
-  fprintf(proc->output,"Past second barrier\n");
-
-
-  int r;
-
-  int val = 40+rank;
-  if (rank == size-1)
-    r = MPI_Send(&val,1,MPI_INT,0,0,MPI_COMM_WORLD);
-  else
-    r = MPI_Send(&val,1,MPI_INT,rank+1,0,MPI_COMM_WORLD);
-  fprintf(proc->output,"MPI_Send returned %d\n",r);
-
-  int rdval;
-  MPI_Status status;
-  r = MPI_Recv(&rdval,1,MPI_INT,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status);
-  fprintf(proc->output,"MPI_Recv returned %d\n",r);
-  fprintf(proc->output,"rdval = %d\n",rdval);
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  fprintf(proc->output,"Past third barrier\n");
-
-
-  gen_bytecode(gp,&grp.procs[i]->bcdata,&grp.procs[i]->bcsize);
-  process_init(proc);
-
-  if (0 == rank) {
-    frame *initial = frame_alloc(proc);
-    initial->address = 0;
-    initial->fno = -1;
-    initial->data = (pntr*)malloc(sizeof(pntr));
-    initial->count = 0;
-    initial->alloc = 1;
-    initial->c = alloc_cell(proc);
-    initial->c->type = TYPE_FRAME;
-    make_pntr(initial->c->field1,initial);
-    run_frame(proc,initial);
-  }
-
-  fprintf(proc->output,"Before fourth barrier\n");
-  MPI_Barrier(MPI_COMM_WORLD);
-  fprintf(proc->output,"Past fourth barrier\n");
-
-  fprintf(proc->output,"%d: before execute()\n",rank);
-  execute(proc);
-  fprintf(proc->output,"\n");
-  fprintf(proc->output,"%d: after execute()\n",rank);
-
-#else
   group grp;
   int i;
   pthread_t *threads;
@@ -1274,8 +1193,8 @@ void run(gprogram *gp, FILE *statsfile)
     grp.procs[i]->pid = i;
     grp.procs[i]->groupsize = grp.nprocs;
     grp.procs[i]->grp = &grp;
-
-    gen_bytecode(gp,&grp.procs[i]->bcdata,&grp.procs[i]->bcsize);
+    grp.procs[i]->bcdata = bcdata;
+    grp.procs[i]->bcsize = bcsize;
 
     process_init(grp.procs[i]);
 
@@ -1330,6 +1249,5 @@ void run(gprogram *gp, FILE *statsfile)
   free(grp.procs);
 
 /*   printf("Done!\n"); */
-#endif
 }
 

@@ -1,5 +1,3 @@
-(append (a b) (if a (cons (head a) (append (tail a) b)) b))
-
 (mandel (Zr Zi Cr Ci iterations res)
   (if (= res iterations)
       res

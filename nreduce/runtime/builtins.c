@@ -26,8 +26,10 @@
 
 #define BUILTINS_C
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
+#include "compiler/gcode.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -35,7 +37,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#include <gcode.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -748,8 +749,6 @@ void b_arrayprefix(process *proc, pntr *argstack)
   pntr restpntr = argstack[0];
   int n;
   carray *prefix;
-
-  /* FIXME: handle refpntr = CONS */
 
   CHECK_ARG(2,TYPE_NUMBER,B_ARRAYPREFIX);
   n = (int)pntrdouble(npntr);

@@ -26,9 +26,10 @@
 
 #define DEBUG_C
 
-#include "grammar.tab.h"
-#include "gcode.h"
-#include "nreduce.h"
+#include "compiler/gcode.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -108,10 +109,11 @@ const char *msg_names[MSG_COUNT] = {
 "STARTDISTGC",
 };
 
-const char *frame_states[4] = {
+const char *frame_states[5] = {
 "NEW",
 "SPARKED",
 "RUNNING",
+"BLOCKED",
 "DONE",
 };
 
@@ -322,16 +324,16 @@ static void down_line(FILE *f, int *line, int *col)
     fprintf(f," ");
 }
 
-const char *real_varname(const char *sym)
+const char *real_varname(source *src, const char *sym)
 {
 #ifdef SHOW_SUBSTITUTED_NAMES
   return sym;
 #else
   if (!strncmp(sym,"_v",2)) {
     int varno = atoi(sym+2);
-    assert(oldnames);
-    assert(varno < array_count(oldnames));
-    return array_item(oldnames,varno,char*);
+    assert(src->oldnames);
+    assert(varno < array_count(src->oldnames));
+    return array_item(src->oldnames,varno,char*);
   }
   else {
     return sym;
@@ -339,7 +341,7 @@ const char *real_varname(const char *sym)
 #endif
 }
 
-char *real_scname(const char *sym)
+char *real_scname(source *src, const char *sym)
 {
 #ifdef SHOW_SUBSTITUTED_NAMES
   return strdup(sym);
@@ -352,9 +354,9 @@ char *real_scname(const char *sym)
     int oldlen;
     int symlen;
     assert(end);
-    assert(oldnames);
-    assert(varno < array_count(oldnames));
-    old = array_item(oldnames,varno,char*);
+    assert(src->oldnames);
+    assert(varno < array_count(src->oldnames));
+    old = array_item(src->oldnames,varno,char*);
     oldlen = strlen(old);
     symlen = strlen(sym);
     fullname = (char*)malloc(oldlen+symlen+1);
@@ -367,7 +369,8 @@ char *real_scname(const char *sym)
 #endif
 }
 
-static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line, int *col)
+static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *parent,
+                        int *line, int *col)
 {
   switch (snodetype(c)) {
   case TYPE_IND:
@@ -389,7 +392,7 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
     for (tmp = c; TYPE_APPLICATION == snodetype(tmp); tmp = tmp->left)
       list_push(&apps,tmp);
 
-    print_code1(f,tmp,0,c,line,col);
+    print_code1(src,f,tmp,0,c,line,col);
     *col += fprintf(f," ");
     argscol = *col;
     argno = 0;
@@ -411,7 +414,7 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
       oldline = *line;
 /*       if (app->tag & FLAG_STRICT) */
 /*         *col += fprintf(f,"!"); */
-      print_code1(f,arg,1,app,line,col);
+      print_code1(src,f,arg,1,app,line,col);
       if (l->next) {
         if (1 && (oldline != *line)) {
           *col = oldcol;
@@ -433,8 +436,8 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
   case TYPE_LAMBDA:
     if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,"(");
-    *col += fprintf(f,"!%s.",real_varname(c->name));
-    print_code1(f,c->body,0,c,line,col);
+    *col += fprintf(f,"!%s.",real_varname(src,c->name));
+    print_code1(src,f,c->body,0,c,line,col);
     if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,")");
     break;
@@ -448,11 +451,11 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
     for (item = c; TYPE_CONS == snodetype(item); item = item->right) {
       if (0 < pos++)
         *col += fprintf(f,",");
-      print_code1(f,item->left,1,c,line,col);
+      print_code1(src,f,item->left,1,c,line,col);
     }
     *col += fprintf(f,"]");
     if (TYPE_NIL != snodetype(item))
-      print_code1(f,item,1,c,line,col);
+      print_code1(src,f,item,1,c,line,col);
     break;
   }
   case TYPE_SYMBOL: {
@@ -463,15 +466,15 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
       if (NUM_BUILTINS > fno)
         *col += fprintf(f,"%s",builtin_info[fno].name);
       else
-        *col += fprintf(f,"%s",get_scomb_index(fno-NUM_BUILTINS)->name);
+        *col += fprintf(f,"sc%d",fno-NUM_BUILTINS);
     }
     else {
-      *col += fprintf(f,"%s",real_varname(sym));
+      *col += fprintf(f,"%s",real_varname(src,sym));
     }
     break;
   }
   case TYPE_SCREF: {
-    char *scname = real_scname(c->sc->name);
+    char *scname = real_scname(src,c->sc->name);
     *col += fprintf(f,"%s",scname);
     free(scname);
     break;
@@ -487,17 +490,17 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
       if (0 < count++)
         down_line(f,line,&col2);
       if (rec->strict)
-        col2 += fprintf(f,"(%s! ",real_varname(rec->name));
+        col2 += fprintf(f,"(%s! ",real_varname(src,rec->name));
       else
-        col2 += fprintf(f,"(%s ",real_varname(rec->name));
-      print_code1(f,rec->value,1,c,line,&col2);
+        col2 += fprintf(f,"(%s ",real_varname(src,rec->name));
+      print_code1(src,f,rec->value,1,c,line,&col2);
       rec = rec->next;
       fprintf(f,")");
     }
     fprintf(f,")");
     (*col)--;
     down_line(f,line,col);
-    print_code1(f,c->body,1,c,line,col);
+    print_code1(src,f,c->body,1,c,line,col);
     if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
       *col += fprintf(f,")");
     break;
@@ -540,31 +543,31 @@ static void print_code1(FILE *f, snode *c, int needbr, snode *parent, int *line,
   }
 }
 
-void print_codef2(FILE *f, snode *c, int pos)
+void print_codef2(source *src, FILE *f, snode *c, int pos)
 {
   int line = 0;
   int col = pos;
   cleargraph(c,FLAG_TMP);
-  print_code1(f,c,0,NULL,&line,&col);
+  print_code1(src,f,c,0,NULL,&line,&col);
 }
 
-void print_codef(FILE *f, snode *c)
+void print_codef(source *src, FILE *f, snode *c)
 {
   int line = 0;
   int col = 0;
   cleargraph(c,FLAG_TMP);
-  print_code1(f,c,0,NULL,&line,&col);
+  print_code1(src,f,c,0,NULL,&line,&col);
 }
-void print_code(snode *c)
+void print_code(source *src, snode *c)
 {
-  print_codef(stdout,c);
+  print_codef(src,stdout,c);
 }
 
-void print_scomb_code(scomb *sc)
+void print_scomb_code(source *src, scomb *sc)
 {
   int i;
   int col = 0;
-  char *scname = real_scname(sc->name);
+  char *scname = real_scname(src,sc->name);
   col += debug(0,"%s ",scname);
   free(scname);
   for (i = 0; i < sc->nargs; i++) {
@@ -572,34 +575,34 @@ void print_scomb_code(scomb *sc)
       if (sc->strictin[i])
         col += debug(0,"!");
     }
-    col += debug(0,"%s ",real_varname(sc->argnames[i]));
+    col += debug(0,"%s ",real_varname(src,sc->argnames[i]));
   }
   col += debug(0,"= ");
-  print_codef2(stdout,sc->body,col);
+  print_codef2(src,stdout,sc->body,col);
 }
 
-void print_scombs1(void)
+void print_scombs1(source *src)
 {
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     if (strncmp(sc->name,"__",2)) {
-      print_scomb_code(sc);
+      print_scomb_code(src,sc);
       debug(0,"\n");
     }
   }
 }
 
-void print_scombs2(void)
+void print_scombs2(source *src)
 {
   scomb *sc;
   debug(0,"\n--------------------\n\n");
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     int i;
     debug(0,"%s ",sc->name);
     for (i = 0; i < sc->nargs; i++)
       debug(0,"%s ",sc->argnames[i]);
     debug(0,"= ");
-    print_code(sc->body);
+    print_code(src,sc->body);
     debug(0,"\n");
     print(sc->body);
     debug(0,"\n");
@@ -642,170 +645,3 @@ void print_stack(FILE *f, pntr *stk, int size, int dir)
   }
 }
 
-void statistics(process *proc, FILE *f)
-{
-  int i;
-  int total;
-  bcheader *bch = (bcheader*)proc->bcdata;
-  fprintf(f,"totalallocs = %d\n",proc->stats.totalallocs);
-  fprintf(f,"ncollections = %d\n",proc->stats.ncollections);
-  fprintf(f,"nscombappls = %d\n",proc->stats.nscombappls);
-  fprintf(f,"nreductions = %d\n",proc->stats.nreductions);
-  fprintf(f,"nsparks = %d\n",proc->stats.nsparks);
-
-  total = 0;
-  for (i = 0; i < OP_COUNT; i++) {
-    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->stats.op_usage[i]);
-    total += proc->stats.op_usage[i];
-  }
-  fprintf(f,"usage total = %d\n",total);
-
-  fprintf(f,"\n");
-  for (i = 0; i < bch->nfunctions; i++)
-    fprintf(f,"%-20s %d\n",bc_function_name(proc->bcdata,i),proc->stats.fusage[i]);
-}
-
-void print_pntr_tree(FILE *f, pntr p, int indent)
-{
-  cell *c;
-  int i;
-  short oldtype;
-  int type = pntrtype(p);
-
-  if (TYPE_EMPTY == type)
-    return; /* cycle */
-
-  if (TYPE_NUMBER == type)
-    fprintf(f,"%-12s","(number)");
-  else
-    fprintf(f,"%-12p",get_pntr(p));
-
-  for (i = 0; i < indent; i++) {
-    fprintf(f,"  ");
-  }
-  fprintf(f,"%-12s",cell_types[type]);
-
-  if (TYPE_NUMBER == type) {
-    assert(!is_pntr(p));
-    print_double(f,p);
-    fprintf(f,"\n");
-    return;
-  }
-
-  assert(is_pntr(p));
-  c = get_pntr(p);
-
-  oldtype = c->type;
-  c->type = TYPE_EMPTY; /* to avoid loops */
-  switch (type) {
-  case TYPE_CONS:
-    fprintf(f,"(cons)\n");
-    print_pntr_tree(f,c->field1,indent+1);
-    print_pntr_tree(f,c->field2,indent+1);
-    break;
-  case TYPE_REMOTEREF: {
-    global *glo = (global*)get_pntr(c->field1);
-    fprintf(f,"%d@%d\n",glo->addr.lid,glo->addr.pid);
-    break;
-  }
-  case TYPE_IND:
-    fprintf(f,"(ind)\n");
-    print_pntr_tree(f,c->field1,indent+1);
-    break;
-  case TYPE_AREF: {
-    carray *arr = aref_array(p);
-    int index = aref_index(p);
-    fprintf(f,"(aref %d/%d)\n",index,arr->size);
-    break;
-  }
-  case TYPE_HOLE:
-    fprintf(f,"(hole)\n");
-    break;
-  case TYPE_FRAME: {
-    frame *fr = (frame*)get_pntr(c->field1);
-    char *name = get_function_name(fr->fno);
-    fprintf(f,"%s (%d)\n",name,fr->count);
-    free(name);
-    for (i = 0; i < fr->count; i++)
-      print_pntr_tree(f,fr->data[i],indent+1);
-    break;
-  }
-  case TYPE_CAP: {
-    cap *cp = (cap*)get_pntr(c->field1);
-    char *name = get_function_name(cp->fno);
-    fprintf(f,"%s (%d)\n",name,cp->count);
-    free(name);
-    for (i = 0; i < cp->count; i++)
-      print_pntr_tree(f,cp->data[i],indent+1);
-    break;
-  }
-  case TYPE_NIL:
-    fprintf(f,"(nil)\n");
-    break;
-  case TYPE_STRING:
-    fprintf(f,"\"%s\"\n",(char*)get_pntr(c->field1));
-    break;
-  default:
-    abort();
-  }
-  c->type = oldtype;
-}
-
-void dump_info(process *proc)
-{
-  block *bl;
-  int i;
-  frame *f;
-
-  fprintf(proc->output,"Frames with things waiting on them:\n");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
-
-  for (bl = proc->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      cell *c = &bl->values[i];
-      if (TYPE_FRAME == c->type) {
-        f = (frame*)get_pntr(c->field1);
-        if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = bc_function_name(proc->bcdata,f->fno);
-          int nframes = list_count(f->wq.frames);
-          int nfetchers = list_count(f->wq.fetchers);
-          fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
-                  f,fname,nframes,nfetchers);
-        }
-      }
-    }
-  }
-
-  fprintf(proc->output,"\n");
-  fprintf(proc->output,"Runnable queue (size %d):\n",proc->runnable.size);
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
-          "frame*","function","frames","fetchers","state");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
-          "------","--------","------","--------","-------------");
-  for (f = proc->runnable.first; f; f = f->qnext) {
-    const char *fname = bc_function_name(proc->bcdata,f->fno);
-    int nframes = list_count(f->wq.frames);
-    int nfetchers = list_count(f->wq.fetchers);
-    fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
-            f,fname,nframes,nfetchers,frame_states[f->state]);
-  }
-
-}
-
-void dump_globals(process *proc)
-{
-  int h;
-  global *glo;
-
-  fprintf(proc->output,"\n");
-  fprintf(proc->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
-  fprintf(proc->output,"%-9s %-12s %-12s\n","-------","----","----");
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext) {
-      fprintf(proc->output,"%4d@%-4d %-12s %-12p\n",
-              glo->addr.lid,glo->addr.pid,cell_types[pntrtype(glo->p)],
-              is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
-    }
-  }
-}

@@ -26,6 +26,7 @@
 
 #include "nreduce.h"
 #include "assembler.h"
+#include "compiler/source.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

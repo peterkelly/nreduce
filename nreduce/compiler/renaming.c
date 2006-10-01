@@ -24,8 +24,8 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -33,8 +33,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-
-static int varno = 0;
 
 typedef struct mapping {
   char *from;
@@ -64,33 +62,33 @@ static void mappings_set_count(stack *mappings, int count)
   mappings->count = count;
 }
 
-static char *next_var(const char *oldname)
+static char *next_var(source *src, const char *oldname)
 {
   char *name = (char*)malloc(20);
   char *copy;
-  sprintf(name,"_v%d",varno++);
+  sprintf(name,"_v%d",src->varno++);
 
   copy = strdup(oldname);
-  array_append(oldnames,&copy,sizeof(char*));
+  array_append(src->oldnames,&copy,sizeof(char*));
 
   return name;
 }
 
-static void rename_variables_r(snode *c, stack *mappings)
+static void rename_variables_r(source *src, snode *c, stack *mappings)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
   case TYPE_CONS:
-    rename_variables_r(c->left,mappings);
-    rename_variables_r(c->right,mappings);
+    rename_variables_r(src,c->left,mappings);
+    rename_variables_r(src,c->right,mappings);
     break;
   case TYPE_LAMBDA: {
-    char *newname = next_var(c->name);
+    char *newname = next_var(src,c->name);
     int oldcount = mappings->count;
     stack_push(mappings,mapping_new(c->name,newname));
     free(c->name);
     c->name = newname;
-    rename_variables_r(c->body,mappings);
+    rename_variables_r(src,c->body,mappings);
     mappings_set_count(mappings,oldcount);
     break;
   }
@@ -99,15 +97,15 @@ static void rename_variables_r(snode *c, stack *mappings)
     letrec *rec;
 
     for (rec = c->bindings; rec; rec = rec->next) {
-      char *newname = next_var(rec->name);
+      char *newname = next_var(src,rec->name);
       stack_push(mappings,mapping_new(rec->name,newname));
       free(rec->name);
       rec->name = newname;
     }
 
     for (rec = c->bindings; rec; rec = rec->next)
-      rename_variables_r(rec->value,mappings);
-    rename_variables_r(c->body,mappings);
+      rename_variables_r(src,rec->value,mappings);
+    rename_variables_r(src,c->body,mappings);
 
     mappings_set_count(mappings,oldcount);
     break;
@@ -135,18 +133,18 @@ static void rename_variables_r(snode *c, stack *mappings)
   }
 }
 
-void rename_variables(scomb *sc)
+void rename_variables(source *src, scomb *sc)
 {
   stack *mappings = stack_new();
   int i;
 
-  if (NULL == oldnames)
-    oldnames = array_new(sizeof(char*));
+  if (NULL == src->oldnames)
+    src->oldnames = array_new(sizeof(char*));
 
   for (i = 0; i < sc->nargs; i++)
     stack_push(mappings,mapping_new(sc->argnames[i],sc->argnames[i]));
 
-  rename_variables_r(sc->body,mappings);
+  rename_variables_r(src,sc->body,mappings);
 
   mappings_set_count(mappings,0);
   stack_free(mappings);

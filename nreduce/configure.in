@@ -29,6 +29,7 @@ fi
 rm -f conftest.l lex.yy.c
 
 ALL_LIBS="-lm -lpthread"
+ALL_INCLUDES=""
 AC_SUBST(ALL_LIBS)
 CFLAGS="-ggdb3 -Wall -O0 -fno-strict-aliasing"
 #CFLAGS="-Wall -O3 -fno-strict-aliasing -DNDEBUG"
@@ -39,4 +40,4 @@ if $CC --version | grep '^icc '; then
   CFLAGS="$CFLAGS -wd279,1418,1419,869,1684,1572,193,111,810"
 fi
 
-AC_OUTPUT(Makefile src/Makefile)
+AC_OUTPUT(Makefile src/Makefile compiler/Makefile runtime/Makefile)

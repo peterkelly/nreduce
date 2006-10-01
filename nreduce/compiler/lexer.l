@@ -29,12 +29,12 @@
 #endif
 
 #include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
 #include <string.h>
 #include <stdlib.h>
 
-extern array *lexstring;
-char *yyfilename = NULL;
+array *lexstring = NULL;
+const char *yyfilename = NULL;
 int yyfileno;
 int yylineno;
 
@@ -71,13 +71,14 @@ CHAR                     \'.\'
                            BEGIN(INITIAL); }
 
 \"                       { BEGIN(string);
-                           if (NULL == lexstring)
-                             lexstring = array_new(sizeof(char));
+                           lexstring = array_new(sizeof(char));
                            lexstring->nbytes = 0; }
 <string>\"               { char c = '\0';
                            BEGIN(INITIAL);
                            array_append(lexstring,&c,1);
                            yylval.s = strdup(lexstring->data);
+                           array_free(lexstring);
+                           lexstring = NULL;
                            return STRING; }
 <string>\\n              { char c = '\n'; array_append(lexstring,&c,1); }
 <string>\\t              { char c = '\t'; array_append(lexstring,&c,1); }

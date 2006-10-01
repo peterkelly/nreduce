@@ -1,41 +1,16 @@
-LDADD = @ALL_LIBS@
+LDADD = ../libnreduce.la libsrc.la @ALL_LIBS@
 noinst_PROGRAMS = nreduce
-noinst_HEADERS = assembler.h gcode.h nreduce.h
-BUILT_SOURCES = grammar.tab.c lexer.yy.c prelude.c
-EXTRA_DIST = grammar.y lexer.l grammar.tab.h
-nreduce_SOURCES = assembler.c \
-	debug.c \
-	gmachine.c \
-	reduction.c \
-	builtins.c \
-	gcode.c \
-	memory.c \
-	strictness.c \
-	util.c \
-	nreduce.c \
-	super.c \
-	lifting.c \
-	graph.c \
-	renaming.c \
-	resolve.c \
-	reorder.c \
-	source.c \
-	data.c \
-	console.c \
-	process.c \
-	grammar.tab.c \
-	lexer.yy.c \
+noinst_HEADERS = assembler.h nreduce.h
+BUILT_SOURCES = prelude.c
+EXTRA_DIST = prelude.l
+nreduce_SOURCES = nreduce.c
+nreduce_LDFLAGS = -static
+
+noinst_LTLIBRARIES = libsrc.la
+libsrc_la_SOURCES = assembler.c \
 	prelude.c
-#	life.c
-#	testasm.c
 
-CLEANFILES = *.da *.bb *.bbg *.gcov grammar.tab.c lexer.yy.c grammar.tab.h prelude.c
-
-grammar.tab.c: grammar.y
-	bison -d grammar.y
-
-lexer.yy.c: lexer.l
-	flex lexer.l
+CLEANFILES = *.da *.bb *.bbg *.gcov prelude.c
 
 prelude.c: prelude.l
 	echo 'const char *prelude = ' > prelude.c

@@ -24,8 +24,9 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -34,16 +35,16 @@
 #include <stdarg.h>
 #include <math.h>
 
-static void resolve_refs_r(snode *c, stack *bound)
+static void resolve_refs_r(source *src, snode *c, stack *bound)
 {
   switch (snodetype(c)) {
   case TYPE_APPLICATION:
-    resolve_refs_r(c->left,bound);
-    resolve_refs_r(c->right,bound);
+    resolve_refs_r(src,c->left,bound);
+    resolve_refs_r(src,c->right,bound);
     break;
   case TYPE_LAMBDA:
     stack_push(bound,c->name);
-    resolve_refs_r(c->body,bound);
+    resolve_refs_r(src,c->body,bound);
     bound->count--;
     break;
   case TYPE_SYMBOL: {
@@ -57,7 +58,7 @@ static void resolve_refs_r(snode *c, stack *bound)
       scomb *sc;
       int bif;
 
-      if (NULL != (sc = get_scomb(sym))) {
+      if (NULL != (sc = get_scomb(src,sym))) {
         free(c->name);
         c->name = NULL;
         c->tag = TYPE_SCREF;
@@ -70,7 +71,7 @@ static void resolve_refs_r(snode *c, stack *bound)
         c->bif = bif;
       }
       else {
-        print_sourceloc(stderr,c->sl);
+        print_sourceloc(src,stderr,c->sl);
         fprintf(stderr,"Unbound variable: %s\n",sym);
         exit(1);
       }
@@ -83,8 +84,8 @@ static void resolve_refs_r(snode *c, stack *bound)
     for (rec = c->bindings; rec; rec = rec->next)
       stack_push(bound,rec->name);
     for (rec = c->bindings; rec; rec = rec->next)
-      resolve_refs_r(rec->value,bound);
-    resolve_refs_r(c->body,bound);
+      resolve_refs_r(src,rec->value,bound);
+    resolve_refs_r(src,c->body,bound);
     bound->count = oldcount;
     break;
   }
@@ -98,12 +99,12 @@ static void resolve_refs_r(snode *c, stack *bound)
   }
 }
 
-void resolve_refs(scomb *sc)
+void resolve_refs(source *src, scomb *sc)
 {
   stack *bound = stack_new();
   int i;
   for (i = 0; i < sc->nargs; i++)
     stack_push(bound,sc->argnames[i]);
-  resolve_refs_r(sc->body,bound);
+  resolve_refs_r(src,sc->body,bound);
   stack_free(bound);
 }

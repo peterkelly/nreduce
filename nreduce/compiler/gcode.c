@@ -24,9 +24,10 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
 #include "gcode.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -153,12 +154,13 @@ const char *op_names[OP_COUNT] = {
 "RESOLVE",
 };
 
-static void print_comp2(gprogram *gp, char *fname, snode *c, int n, const char *format, ...)
+static void print_comp2(source *src, gprogram *gp, char *fname, snode *c, int n,
+                        const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   va_list ap;
   debug(gp->cdepth,"%s [ ",fname);
-  print_code(c);
+  print_code(src,c);
   printf(" ]");
   printf(" %d",n);
   va_start(ap,format);
@@ -168,8 +170,8 @@ static void print_comp2(gprogram *gp, char *fname, snode *c, int n, const char *
 #endif
 }
 
-static void print_comp2_stack(gprogram *gp, char *fname, stack *exprs, int n,
-                              const char *format, ...)
+static void print_comp2_stack(source *src, gprogram *gp, char *fname, stack *exprs,
+                              int n, const char *format, ...)
 {
 #ifdef DEBUG_GCODE_COMPILATION
   int i;
@@ -178,7 +180,7 @@ static void print_comp2_stack(gprogram *gp, char *fname, stack *exprs, int n,
   for (i = exprs->count-1; 0 <= i; i--) {
     if (i < exprs->count-1)
       printf(", ");
-    print_code((snode*)exprs->data[i]);
+    print_code(src,(snode*)exprs->data[i]);
   }
   printf(" ]");
   printf(" %d",n);
@@ -272,7 +274,7 @@ static void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, in
 /*     } */
 /*     printf("\n"); */
   }
-  print_ginstr(stdout,gp,gp->count-1,instr);
+/*   print_ginstr(src,stdout,gp,gp->count-1,instr); */
   #endif
 
   if (!gp->si)
@@ -374,17 +376,7 @@ static int snode_fno(snode *c)
     return -1;
 }
 
-char *get_function_name(int fno)
-{
-  if (0 > fno)
-    return strdup("(unknown)");
-  else if (NUM_BUILTINS > fno)
-    return strdup(builtin_info[fno].name);
-  else
-    return real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
-}
-
-const char *function_name(gprogram *gp, int fno)
+const char *function_name(source *src, gprogram *gp, int fno)
 {
   if (0 > fno)
     return "(unknown)";
@@ -394,16 +386,16 @@ const char *function_name(gprogram *gp, int fno)
     return gp->fnames[fno];
 }
 
-int function_nargs(int fno)
+int function_nargs(source *src, int fno)
 {
   assert(0 <= fno);
   if (NUM_BUILTINS > fno)
     return builtin_info[fno].nargs;
   else
-    return get_scomb_index(fno-NUM_BUILTINS)->nargs;
+    return get_scomb_index(src,fno-NUM_BUILTINS)->nargs;
 }
 
-void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
+void print_ginstr(source *src, FILE *f, gprogram *gp, int address, ginstr *instr)
 {
   assert(OP_COUNT > instr->opcode);
 
@@ -416,7 +408,7 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
   fprintf(f,"    ");
 
   if (0 <= instr->sl.fileno)
-    fprintf(f,"%20s:%-4d ",lookup_parsedfile(instr->sl.fileno),instr->sl.lineno);
+    fprintf(f,"%20s:%-4d ",lookup_parsedfile(src,instr->sl.fileno),instr->sl.lineno);
   else
     fprintf(f,"%20s%-5s ","","");
 
@@ -426,7 +418,7 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
       fprintf(f,"; Builtin %s",builtin_info[instr->arg0].name);
     }
     else {
-      char *name = real_scname(get_scomb_index(instr->arg0-NUM_BUILTINS)->name);
+      char *name = real_scname(src,get_scomb_index(src,instr->arg0-NUM_BUILTINS)->name);
       fprintf(f,"; Supercombinator %s",name);
       free(name);
     }
@@ -439,10 +431,10 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
         funstart--;
       if ((OP_GLOBSTART == program[funstart].opcode) &&
           (NUM_BUILTINS <= program[funstart].arg0)) {
-        scomb *sc = get_scomb_index(program[funstart].arg0-NUM_BUILTINS);
+        scomb *sc = get_scomb_index(src,program[funstart].arg0-NUM_BUILTINS);
         int stackpos = instr->expcount-instr->arg0-1;
         if (stackpos < sc->nargs)
-          fprintf(f,"; PUSH %s",real_varname(sc->argnames[sc->nargs-1-stackpos]));
+          fprintf(f,"; PUSH %s",real_varname(src,sc->argnames[sc->nargs-1-stackpos]));
       }
     }
     break;
@@ -450,13 +442,13 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
     fprintf(f,"; PUSHSTRING \"%s\"",array_item(gp->stringmap,instr->arg0,char*));
     break;
   case OP_MKFRAME:
-    fprintf(f,"; MKFRAME %s %d",function_name(gp,instr->arg0),instr->arg1);
+    fprintf(f,"; MKFRAME %s %d",function_name(src,gp,instr->arg0),instr->arg1);
     break;
   case OP_MKCAP:
-    fprintf(f,"; MKCAP %s %d",function_name(gp,instr->arg0),instr->arg1);
+    fprintf(f,"; MKCAP %s %d",function_name(src,gp,instr->arg0),instr->arg1);
     break;
   case OP_JFUN:
-    fprintf(f,"; JFUN %s",function_name(gp,instr->arg0));
+    fprintf(f,"; JFUN %s",function_name(src,gp,instr->arg0));
     break;
   case OP_BIF:
     fprintf(f,"; %s",builtin_info[instr->arg0].name);
@@ -468,7 +460,7 @@ void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr)
   fprintf(f,"\n");
 }
 
-void print_program(gprogram *gp, int builtins)
+void print_program(source *src, gprogram *gp, int builtins)
 {
   int i;
   int prevfun = -1;
@@ -476,9 +468,9 @@ void print_program(gprogram *gp, int builtins)
     if ((OP_GLOBSTART == gp->ginstrs[i].opcode) &&
         (prevfun != gp->ginstrs[i].arg0)) {
       if (NUM_BUILTINS <= gp->ginstrs[i].arg0) {
-        scomb *sc = get_scomb_index(gp->ginstrs[i].arg0-NUM_BUILTINS);
+        scomb *sc = get_scomb_index(src,gp->ginstrs[i].arg0-NUM_BUILTINS);
         printf("\n");
-        print_scomb_code(sc);
+        print_scomb_code(src,sc);
         printf("\n");
       }
       else if (!builtins) {
@@ -487,7 +479,7 @@ void print_program(gprogram *gp, int builtins)
       printf("\n");
       prevfun = gp->ginstrs[i].arg0;
     }
-    print_ginstr(stdout,gp,i,&gp->ginstrs[i]);
+    print_ginstr(src,stdout,gp,i,&gp->ginstrs[i]);
   }
 
   printf("\n");
@@ -500,7 +492,7 @@ void print_program(gprogram *gp, int builtins)
   }
 }
 
-void print_profiling(process *proc, gprogram *gp)
+void print_profiling(source *src, process *proc, gprogram *gp)
 {
   int index = 0;
   scomb *sc;
@@ -511,9 +503,9 @@ void print_profiling(process *proc, gprogram *gp)
   int totalusage = 0;
   int addr = 0;
 
-  print_program(gp,1);
+  print_program(src,gp,1);
 
-  for (sc = scombs; sc; sc = sc->next)
+  for (sc = src->scombs; sc; sc = sc->next)
     sc->index = index++;
 
   usage = (int*)calloc((index+1)+NUM_BUILTINS,sizeof(int));
@@ -556,7 +548,7 @@ void print_profiling(process *proc, gprogram *gp)
       printf(" %s",builtin_info[fno].name);
     }
     else {
-      char *name = real_scname(get_scomb_index(fno-NUM_BUILTINS)->name);
+      char *name = real_scname(src,get_scomb_index(src,fno-NUM_BUILTINS)->name);
       printf(" %s",name);
       free(name);
     }
@@ -571,14 +563,14 @@ typedef struct pmap {
   stack *indexes;
 } pmap;
 
-static int presolve(pmap *pm, char *varname)
+static int presolve(source *src, pmap *pm, char *varname)
 {
   int i;
   assert(pm->names->count == pm->indexes->count);
   for (i = 0; i < pm->names->count; i++)
     if (!strcmp((char*)pm->names->data[i],varname))
       return (int)pm->indexes->data[i];
-  printf("unknown variable: %s\n",real_varname(varname));
+  printf("unknown variable: %s\n",real_varname(src,varname));
   abort();
   return -1;
 }
@@ -639,9 +631,9 @@ static int letrecs_used(snode *expr, letrec *first)
   return count;
 }
 
-static void C(gprogram *gp, snode *c, pmap *p, int n);
-static void E(gprogram *gp, snode *c, pmap *p, int n);
-static void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
+static void C(source *src, gprogram *gp, snode *c, pmap *p, int n);
+static void E(source *src, gprogram *gp, snode *c, pmap *p, int n);
+static void Cletrec(source *src, gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
   int count = 0;
@@ -654,7 +646,7 @@ static void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
   rec = c->bindings;
   for (; rec; rec = rec->next) {
     if (strictcontext && rec->strict && (0 == letrecs_used(rec->value,rec))) {
-      E(gp,rec->value,p,n);
+      E(src,gp,rec->value,p,n);
       n++;
       count--;
     }
@@ -671,17 +663,17 @@ static void Cletrec(gprogram *gp, snode *c, int n, pmap *p, int strictcontext)
 
   for (; rec; rec = rec->next) {
     if (strictcontext && rec->strict && (0 == letrecs_used(rec->value,rec)))
-      E(gp,rec->value,p,n);
+      E(src,gp,rec->value,p,n);
     else
-      C(gp,rec->value,p,n);
-    UPDATE(rec->value->sl,n+1-presolve(p,rec->name));
+      C(src,gp,rec->value,p,n);
+    UPDATE(rec->value->sl,n+1-presolve(src,p,rec->name));
   }
 }
 
-static void E(gprogram *gp, snode *c, pmap *p, int n)
+static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2(gp,"E",c,n,"");
+  print_comp2(src,gp,"E",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
@@ -692,11 +684,11 @@ static void E(gprogram *gp, snode *c, pmap *p, int n)
       m++;
 
     assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
+    parse_check(src,(TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
                 app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
-    k = function_nargs(fno);
+    k = function_nargs(src,fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if ((TYPE_BUILTIN == snodetype(app)) &&
@@ -715,17 +707,17 @@ static void E(gprogram *gp, snode *c, pmap *p, int n)
       app = app->left;
       cond = app->right;
 
-      E(gp,cond,p,n);
+      E(src,gp,cond,p,n);
       JFALSE(cond->sl,label);
 
       stackinfo_newswap(&gp->si,&oldsi);
-      E(gp,truebranch,p,n);
+      E(src,gp,truebranch,p,n);
       JUMP(cond->sl,end);
       stackinfo_freeswap(&gp->si,&oldsi);
 
       LABEL(label);
       stackinfo_newswap(&gp->si,&oldsi);
-      E(gp,falsebranch,p,n);
+      E(src,gp,falsebranch,p,n);
       stackinfo_freeswap(&gp->si,&oldsi);
 
       LABEL(end);
@@ -735,9 +727,9 @@ static void E(gprogram *gp, snode *c, pmap *p, int n)
       m = 0;
       for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
         if (app->tag & FLAG_STRICT)
-          E(gp,app->right,p,n+m);
+          E(src,gp,app->right,p,n+m);
         else
-          C(gp,app->right,p,n+m);
+          C(src,gp,app->right,p,n+m);
         m++;
       }
 
@@ -762,42 +754,42 @@ static void E(gprogram *gp, snode *c, pmap *p, int n)
   }
   case TYPE_LETREC: {
     int oldcount = p->names->count;
-    Cletrec(gp,c,n,p,1);
+    Cletrec(src,gp,c,n,p,1);
     n += pcount(p)-oldcount;
-    E(gp,c->body,p,n);
+    E(src,gp,c->body,p,n);
     SQUEEZE(c->sl,1,pcount(p)-oldcount);
     presize(p,oldcount);
     break;
   }
   case TYPE_SYMBOL:
-    EVAL(c->sl,n-presolve(p,c->name));
-    PUSH(c->sl,n-presolve(p,c->name));
+    EVAL(c->sl,n-presolve(src,p,c->name));
+    PUSH(c->sl,n-presolve(src,p,c->name));
     break;
   default:
-    C(gp,c,p,n);
+    C(src,gp,c,p,n);
     EVAL(c->sl,0);
     break;
   }
   gp->cdepth--;
 }
 
-static void S(gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
+static void S(source *src, gprogram *gp, snode *source, stack *exprs, stack *strict, pmap *p, int n)
 {
   int m;
-  print_comp2_stack(gp,"S",exprs,n,"");
+  print_comp2_stack(src,gp,"S",exprs,n,"");
   for (m = 0; m < exprs->count; m++) {
     if (strict->data[m])
-      E(gp,(snode*)exprs->data[m],p,n+m);
+      E(src,gp,(snode*)exprs->data[m],p,n+m);
     else
-      C(gp,(snode*)exprs->data[m],p,n+m);
+      C(src,gp,(snode*)exprs->data[m],p,n+m);
   }
   SQUEEZE(source->sl,m,n);
 }
 
-static void R(gprogram *gp, snode *c, pmap *p, int n)
+static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2(gp,"R",c,n,"");
+  print_comp2(src,gp,"R",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     stack *args = stack_new();
@@ -812,16 +804,16 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
     if (TYPE_SYMBOL == snodetype(app)) {
       stack_push(args,app);
       stack_push(argstrict,0);
-      S(gp,app,args,argstrict,p,n);
+      S(src,gp,app,args,argstrict,p,n);
       EVAL(app->sl,0);
       DO(app->sl,0);
     }
     else if ((TYPE_BUILTIN == snodetype(app)) ||
              (TYPE_SCREF == snodetype(app))) {
       int fno = snode_fno(app);
-      int k = function_nargs(fno);
+      int k = function_nargs(src,fno);
       if (m > k) {
-        S(gp,app,args,argstrict,p,n);
+        S(src,gp,app,args,argstrict,p,n);
         MKFRAME(app->sl,fno,k);
         EVAL(app->sl,0);
         DO(app->sl,0);
@@ -835,23 +827,23 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
           int label;
           stackinfo *oldsi;
 
-          E(gp,cond,p,n);
+          E(src,gp,cond,p,n);
           JFALSE(cond->sl,label);
 
           stackinfo_newswap(&gp->si,&oldsi);
-          R(gp,truebranch,p,n);
+          R(src,gp,truebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
 
           LABEL(label);
           stackinfo_newswap(&gp->si,&oldsi);
-          R(gp,falsebranch,p,n);
+          R(src,gp,falsebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
         }
         else if ((TYPE_BUILTIN == snodetype(app)) && (B_IF != app->bif)) {
           int bif;
           const builtin *bi;
           int argno;
-          S(gp,app,args,argstrict,p,n);
+          S(src,gp,app,args,argstrict,p,n);
           bif = app->bif;
           bi = &builtin_info[bif];
           assert(gp->si->count >= bi->nstrict);
@@ -885,19 +877,19 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
 
         }
         else {
-          S(gp,app,args,argstrict,p,n);
+          S(src,gp,app,args,argstrict,p,n);
           JFUN(app->sl,fno);
         }
       }
       else { /* m < k */
         for (m = 0; m < args->count; m++)
-          C(gp,(snode*)args->data[m],p,n+m);
+          C(src,gp,(snode*)args->data[m],p,n+m);
         MKCAP(app->sl,fno,m);
         RETURN(app->sl);
       }
     }
     else {
-      print_sourceloc(stderr,app->sl);
+      print_sourceloc(src,stderr,app->sl);
       fprintf(stderr,CONSTANT_APP_MSG"\n");
       exit(1);
     }
@@ -906,14 +898,14 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
     break;
   }
   case TYPE_SYMBOL:
-    C(gp,c,p,n);
+    C(src,gp,c,p,n);
     SQUEEZE(c->sl,1,n);
     EVAL(c->sl,0);
     RETURN(c->sl);
     break;
   case TYPE_BUILTIN:
   case TYPE_SCREF:
-    if (0 == function_nargs(snode_fno(c))) {
+    if (0 == function_nargs(src,snode_fno(c))) {
       JFUN(c->sl,snode_fno(c));
     }
     else {
@@ -924,14 +916,14 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
   case TYPE_NIL:
   case TYPE_NUMBER:
   case TYPE_STRING:
-    C(gp,c,p,n);
+    C(src,gp,c,p,n);
     RETURN(c->sl);
     break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;
-    Cletrec(gp,c,n,p,1);
+    Cletrec(src,gp,c,n,p,1);
     n += pcount(p)-oldcount;
-    R(gp,c->body,p,n);
+    R(src,gp,c->body,p,n);
     presize(p,oldcount);
     break;
   }
@@ -942,10 +934,10 @@ static void R(gprogram *gp, snode *c, pmap *p, int n)
   gp->cdepth--;
 }
 
-static void C(gprogram *gp, snode *c, pmap *p, int n)
+static void C(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
-  print_comp2(gp,"C",c,n,"");
+  print_comp2(src,gp,"C",c,n,"");
   switch (snodetype(c)) {
   case TYPE_APPLICATION: {
     int m = 0;
@@ -953,16 +945,16 @@ static void C(gprogram *gp, snode *c, pmap *p, int n)
     int fno;
     int k;
     for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
-      C(gp,app->right,p,n+m);
+      C(src,gp,app->right,p,n+m);
       m++;
     }
 
     assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check((TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
+    parse_check(src,(TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
                 app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
-    k = function_nargs(fno);
+    k = function_nargs(src,fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
     if (m == k)
@@ -972,20 +964,20 @@ static void C(gprogram *gp, snode *c, pmap *p, int n)
     break;
   }
   case TYPE_BUILTIN:
-  case TYPE_SCREF:   if (0 == function_nargs(snode_fno(c)))
+  case TYPE_SCREF:   if (0 == function_nargs(src,snode_fno(c)))
                        MKFRAME(c->sl,snode_fno(c),0);
                      else
                        MKCAP(c->sl,snode_fno(c),0);
                      break;
-  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(p,c->name));                        break;
+  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(src,p,c->name));                    break;
   case TYPE_NIL:     PUSHNIL(c->sl);                                           break;
   case TYPE_NUMBER:  PUSHNUMBER(c->sl,((int*)&c->num)[0],((int*)&c->num)[1]);  break;
   case TYPE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));                break;
   case TYPE_LETREC: {
     int oldcount = p->names->count;
-    Cletrec(gp,c,n,p,0);
+    Cletrec(src,gp,c,n,p,0);
     n += pcount(p)-oldcount;
-    C(gp,c->body,p,n);
+    C(src,gp,c->body,p,n);
     SQUEEZE(c->sl,1,pcount(p)-oldcount);
     presize(p,oldcount);
     break;
@@ -997,7 +989,7 @@ static void C(gprogram *gp, snode *c, pmap *p, int n)
 
 
 
-static void F(gprogram *gp, int fno, scomb *sc)
+static void F(source *src, gprogram *gp, int fno, scomb *sc)
 {
   int i;
   snode *copy = sc->body;
@@ -1008,7 +1000,7 @@ static void F(gprogram *gp, int fno, scomb *sc)
   gp->finfo[NUM_BUILTINS+sc->index].address = gp->count;
   gp->finfo[NUM_BUILTINS+sc->index].arity = sc->nargs;
 
-  namestr = real_scname(sc->name);
+  namestr = real_scname(src,sc->name);
   gp->finfo[NUM_BUILTINS+sc->index].name = add_string(gp,namestr);
   free(namestr);
 
@@ -1032,7 +1024,7 @@ static void F(gprogram *gp, int fno, scomb *sc)
 #ifdef DEBUG_GCODE_COMPILATION
   printf("\n");
   printf("Compiling supercombinator ");
-  print_scomb_code(sc);
+  print_scomb_code(src,sc);
   printf("\n");
 #endif
 
@@ -1044,7 +1036,7 @@ static void F(gprogram *gp, int fno, scomb *sc)
   }
 
 /*   R(gp,copy,sc->nargs,&pm); */
-  R(gp,copy,&pm,sc->nargs);
+  R(src,gp,copy,&pm,sc->nargs);
 
   stack_free(pm.names);
   stack_free(pm.indexes);
@@ -1079,7 +1071,7 @@ static void compute_stacksizes(gprogram *gp)
 }
 
 gprogram *cur_program = NULL;
-void compile(gprogram *gp)
+void compile(source *src, gprogram *gp)
 {
   scomb *sc;
   int index = 0;
@@ -1087,27 +1079,27 @@ void compile(gprogram *gp)
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
   sourceloc nosl;
 
-  scomb *startsc = get_scomb("__start");
+  scomb *startsc = get_scomb(src,"__start");
   assert(startsc);
 
   assert(0 == array_count(gp->stringmap));
-  for (i = 0; i < array_count(parsedfiles); i++) {
-    char *filename = array_item(parsedfiles,i,char*);
+  for (i = 0; i < array_count(src->parsedfiles); i++) {
+    char *filename = array_item(src->parsedfiles,i,char*);
     add_string(gp,filename);
   }
 
   nosl.fileno = -1;
   nosl.lineno = -1;
 
-  for (sc = scombs; sc; sc = sc->next)
+  for (sc = src->scombs; sc; sc = sc->next)
     sc->index = index++;
 
   gp->nfunctions = NUM_BUILTINS+index;
   gp->fnames = (char**)malloc(gp->nfunctions*sizeof(char*));
   for (i = 0; i < NUM_BUILTINS; i++)
     gp->fnames[i] = strdup(builtin_info[i].name);
-  for (sc = scombs; sc; sc = sc->next)
-    gp->fnames[i++] = real_scname(sc->name);
+  for (sc = src->scombs; sc; sc = sc->next)
+    gp->fnames[i++] = real_scname(src,sc->name);
 
   gp->finfo = (funinfo*)calloc(gp->nfunctions,sizeof(funinfo));
 
@@ -1123,8 +1115,8 @@ void compile(gprogram *gp)
   EVAL(nosl,0);
   DO(nosl,0);
 
-  for (sc = scombs; sc; sc = sc->next)
-    F(gp,NUM_BUILTINS+sc->index,sc);
+  for (sc = src->scombs; sc; sc = sc->next)
+    F(src,gp,NUM_BUILTINS+sc->index,sc);
 
   topsi = gp->si;
   for (i = 0; i < NUM_BUILTINS; i++) {

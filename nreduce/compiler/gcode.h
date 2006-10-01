@@ -23,7 +23,8 @@
 #ifndef _GCODE_H
 #define _GCODE_H
 
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
 
 #define OP_BEGIN         0
 #define OP_END           1
@@ -111,13 +112,9 @@ typedef struct gop {
 gprogram *gprogram_new(void);
 void gprogram_free(gprogram *gp);
 
-char *get_function_name(int fno);
-const char *function_name(gprogram *gp, int fno);
-int function_nargs(int fno);
-void print_ginstr(FILE *f, gprogram *gp, int address, ginstr *instr);
-void print_program(gprogram *gp, int builtins);
-void print_profiling(process *proc, gprogram *gp);
-void compile(gprogram *gp);
+void print_ginstr(source *src, FILE *f, gprogram *gp, int address, ginstr *instr);
+void print_program(source *src, gprogram *gp, int builtins);
+void compile(source *src, gprogram *gp);
 void print_bytecode(FILE *f, char *bcdata, int bcsize);
 void gen_bytecode(gprogram *gp, char **bcdata, int *bcsize);
 
@@ -125,13 +122,6 @@ const gop *bc_get_ops(const char *bcdata);
 const funinfo *bc_get_funinfo(const char *bcdata);
 const int *bc_get_stroffsets(const char *bcdata);
 const char *bc_function_name(const char *bcdata, int fno);
-
-/* gmachine */
-
-void check_stack(process *proc, frame *curf, pntr *stackdata, int stackcount, gprogram *gp);
-void add_pending_mark(process *proc, gaddr addr);
-void spark(process *proc, frame *f);
-void run(gprogram *gp, FILE *statsfile);
 
 /* jit */
 

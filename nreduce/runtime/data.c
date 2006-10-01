@@ -26,9 +26,10 @@
 
 #define MEMORY_C
 
-#include "grammar.tab.h"
-#include "nreduce.h"
-#include "gcode.h"
+#include "src/nreduce.h"
+#include "compiler/gcode.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -36,9 +37,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#ifdef USE_MPI
-#include <mpi.h>
-#endif
 
 reader read_start(const char *data, int size)
 {
@@ -595,7 +593,6 @@ static void msg_print(process *proc, int dest, int tag, const char *data, int si
 }
 #endif
 
-#ifndef USE_MPI
 static void msg_send_addcount(process *proc, int tag, const char *data, int size)
 {
   assert(0 <= tag);
@@ -603,7 +600,6 @@ static void msg_send_addcount(process *proc, int tag, const char *data, int size
   proc->stats.sendcount[tag]++;
   proc->stats.sendbytes[tag] += size;
 }
-#endif
 
 void msg_send(process *proc, int dest, int tag, char *data, int size)
 {
@@ -624,7 +620,6 @@ void msg_send(process *proc, int dest, int tag, char *data, int size)
     proc->inflight = NULL;
   }
 
-#ifndef USE_MPI
   message *msg = (message*)calloc(1,sizeof(message));
   process *destproc;
   msg->from = proc->pid;
@@ -647,11 +642,6 @@ void msg_send(process *proc, int dest, int tag, char *data, int size)
   list_append(&destproc->msgqueue,msg);
   pthread_cond_signal(&destproc->msgcond);
   pthread_mutex_unlock(&destproc->msglock);
-#else
-/*   fprintf(proc->output,"msg_send 1\n"); */
-  MPI_Send(data,size,MPI_BYTE,dest,tag,MPI_COMM_WORLD);
-/*   fprintf(proc->output,"msg_send 2\n"); */
-#endif
 }
 
 void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
@@ -668,7 +658,6 @@ void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
   write_end(wr);
 }
 
-#ifndef USE_MPI
 static int msg_recv2(process *proc, int *tag, char **data, int *size, int block,
                      struct timespec *abstime)
 {
@@ -706,122 +695,18 @@ static int msg_recv2(process *proc, int *tag, char **data, int *size, int block,
 
   return from;
 }
-#endif
-
-#ifdef USE_MPI
-#define RECV_BUFSIZE 1048576
-//#define RECV_BUFSIZE 1024
-static char recvbuf[RECV_BUFSIZE];
-static MPI_Request nbrequest = MPI_REQUEST_NULL;
-#endif
 
 int msg_recv(process *proc, int *tag, char **data, int *size)
 {
-#ifndef USE_MPI
   return msg_recv2(proc,tag,data,size,0,NULL);
-#else
-  int r;
-  MPI_Status status;
-  int count;
-  int flag = 0;
-
-/*   fprintf(proc->output,"msg_recv\n"); */
-
-  if (MPI_REQUEST_NULL == nbrequest) {
-    r = MPI_Irecv(recvbuf,RECV_BUFSIZE,MPI_BYTE,MPI_ANY_SOURCE,MPI_ANY_TAG,
-                  MPI_COMM_WORLD,&nbrequest);
-/*     fprintf(proc->output,"MPI_Irecv returned %d\n",r); */
-    if (MPI_SUCCESS != r) {
-/*       perror("MPI_Irecv"); */
-/*       fprintf(proc->output,"msg_recv return 1\n"); */
-      return -1;
-/*       abort(); */
-    }
-  }
-
-  r = MPI_Test(&nbrequest,&flag,&status);
-/*   fprintf(proc->output,"MPI_Test returned %d\n",r); */
-  if (MPI_SUCCESS != r) {
-/*     perror("MPI_Test"); */
-/*     fprintf(proc->output,"msg_recv return 2\n"); */
-    return -1;
-/*     abort(); */
-  }
-
-  if (!flag)
-    return -1;
-  nbrequest = MPI_REQUEST_NULL;
-
-  MPI_Get_count(&status,MPI_BYTE,&count);
-/*   fprintf(proc->output,"count = %d\n",count); */
-
-  *tag = status.MPI_TAG;
-  *size = count;
-  *data = malloc(count);
-  memcpy(*data,recvbuf,count);
-
-/*   fprintf(proc->output,"msg_recv return 3\n"); */
-  return status.MPI_SOURCE;
-#endif
 }
 
 int msg_recvb(process *proc, int *tag, char **data, int *size)
 {
-#ifndef USE_MPI
   return msg_recv2(proc,tag,data,size,1,NULL);
-#else
-  int r;
-  MPI_Status status;
-  int count;
-/*   int x; */
-/*   fprintf(proc->output,"msg_recvb\n"); */
-
-  r = MPI_Recv(recvbuf,RECV_BUFSIZE,MPI_BYTE,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status);
-/*   r = MPI_Recv(&x,1,MPI_INT,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status); */
-/*   fprintf(proc->output,"MPI_Recv returned %d\n",r); */
-  if (MPI_SUCCESS != r) {
-/*     fprintf(proc->output,"msg_recvb return 1\n"); */
-    return -1;
-  }
-
-  MPI_Get_count(&status,MPI_BYTE,&count);
-/*   fprintf(proc->output,"count = %d\n",count); */
-
-  *tag = status.MPI_TAG;
-  *size = count;
-  *data = malloc(count);
-  memcpy(*data,recvbuf,count);
-
-/*   fprintf(proc->output,"msg_recvb return 2\n"); */
-  return status.MPI_SOURCE;
-#endif
 }
 
 int msg_recvbt(process *proc, int *tag, char **data, int *size, struct timespec *abstime)
 {
-#ifndef USE_MPI
   return msg_recv2(proc,tag,data,size,1,abstime);
-#else
-  int r;
-
-  while (0 > (r = msg_recv(proc,tag,data,size))) {
-    struct timeval now;
-    struct timespec sleep;
-    gettimeofday(&now,NULL);
-
-    if ((now.tv_sec > abstime->tv_sec) ||
-        ((now.tv_sec == abstime->tv_sec) &&
-         (now.tv_usec*1000 > abstime->tv_nsec)))
-      return -1;
-
-    sleep.tv_sec = 0;
-    sleep.tv_nsec = 10*1000*1000;
-    nanosleep(&sleep,NULL);
-    #ifdef MSG_DEBUG
-/*     fprintf(proc->output,"sleeping\n"); */
-    #endif
-  }
-
-  return r;
-#endif
 }

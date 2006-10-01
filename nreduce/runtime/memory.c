@@ -26,9 +26,10 @@
 
 #define MEMORY_C
 
-#include "grammar.tab.h"
-#include "nreduce.h"
-#include "gcode.h"
+#include "src/nreduce.h"
+#include "compiler/gcode.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -39,10 +40,6 @@
 #include <pthread.h>
 
 int trace = 0;
-
-array *lexstring = NULL;
-array *oldnames = NULL;
-array *parsedfiles = NULL;
 
 int _pntrtype(pntr p) { return pntrtype(p); }
 const char *_pntrtname(pntr p) { return cell_types[pntrtype(p)]; }
@@ -96,10 +93,6 @@ pntr make_number(double d)
   return p;
 }
 #endif
-
-void initmem(void)
-{
-}
 
 static void mark(process *proc, pntr p, short bit);
 static void mark_frame(process *proc, frame *f, short bit);
@@ -542,154 +535,6 @@ void cap_dealloc(cap *c)
   free(c);
 }
 
-void cleanup(void)
-{
-  int i;
-  scomb_free_list(&scombs);
-
-  if (lexstring)
-    array_free(lexstring);
-  if (oldnames) {
-    for (i = 0; i < array_count(oldnames); i++)
-      free(array_item(oldnames,i,char*));
-    array_free(oldnames);
-  }
-  if (parsedfiles) {
-    for (i = 0; i < array_count(parsedfiles); i++)
-      free(array_item(parsedfiles,i,char*));
-    array_free(parsedfiles);
-  }
-}
-
-process *process_new(void)
-{
-  process *proc = (process*)calloc(1,sizeof(process));
-  cell *globnilvalue;
-
-  pthread_mutex_init(&proc->msglock,NULL);
-  pthread_cond_init(&proc->msgcond,NULL);
-
-  proc->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
-
-  globnilvalue = alloc_cell(proc);
-  globnilvalue->type = TYPE_NIL;
-  globnilvalue->flags |= FLAG_PINNED;
-
-  make_pntr(proc->globnilpntr,globnilvalue);
-  proc->globtruepntr = make_number(1.0);
-
-  if (is_pntr(proc->globtruepntr))
-    get_pntr(proc->globtruepntr)->flags |= FLAG_PINNED;
-
-  proc->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
-  proc->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
-
-  return proc;
-}
-
-void process_init(process *proc)
-{
-  int i;
-  bcheader *bch = (bcheader*)proc->bcdata;
-  int count = bch->nstrings;
-  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
-
-  assert(NULL == proc->strings);
-  assert(0 == proc->nstrings);
-  assert(0 < proc->groupsize);
-
-
-  proc->nstrings = count;
-  proc->strings = (pntr*)malloc(count*sizeof(pntr));
-  for (i = 0; i < count; i++) {
-    proc->strings[i] = string_to_array(proc,proc->bcdata+stroffsets[i]);
-  }
-  proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
-  proc->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->gcsent = (int*)calloc(proc->groupsize,sizeof(int));
-  proc->distmarks = (array**)calloc(proc->groupsize,sizeof(array*));
-
-  proc->inflight_addrs = (array**)calloc(proc->groupsize,sizeof(array*));
-  proc->unack_msg_acount = (array**)calloc(proc->groupsize,sizeof(array*));
-  for (i = 0; i < proc->groupsize; i++) {
-    proc->inflight_addrs[i] = array_new(sizeof(gaddr));
-    proc->unack_msg_acount[i] = array_new(sizeof(int));
-    proc->distmarks[i] = array_new(sizeof(gaddr));
-  }
-}
-
-static void message_free(message *msg)
-{
-  free(msg->data);
-  free(msg);
-}
-
-void process_free(process *proc)
-{
-  int i;
-  block *bl;
-  int h;
-
-  for (bl = proc->blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
-
-/*   local_collect(proc); */
-  sweep(proc);
-
-  bl = proc->blocks;
-  while (bl) {
-    block *next = bl->next;
-    free(bl);
-    bl = next;
-  }
-
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    global *glo = proc->pntrhash[h];
-    while (glo) {
-      global *next = glo->pntrnext;
-      free(glo);
-      glo = next;
-    }
-  }
-
-  for (i = 0; i < proc->groupsize; i++) {
-    array_free(proc->inflight_addrs[i]);
-    array_free(proc->unack_msg_acount[i]);
-    array_free(proc->distmarks[i]);
-  }
-
-  free(proc->strings);
-  free(proc->stats.funcalls);
-  free(proc->stats.framecompletions);
-  free(proc->stats.sendcount);
-  free(proc->stats.sendbytes);
-  free(proc->stats.recvcount);
-  free(proc->stats.recvbytes);
-  free(proc->stats.fusage);
-  free(proc->stats.usage);
-  free(proc->stats.op_usage);
-  free(proc->gcsent);
-  free(proc->error);
-  free(proc->distmarks);
-  free(proc->pntrhash);
-  free(proc->addrhash);
-
-  free(proc->inflight_addrs);
-  free(proc->unack_msg_acount);
-
-  list_free(proc->msgqueue,(list_d_t)message_free);
-  pthread_mutex_destroy(&proc->msglock);
-  pthread_cond_destroy(&proc->msgcond);
-  free(proc);
-}
-
 pntrstack *pntrstack_new(void)
 {
   pntrstack *s = (pntrstack*)calloc(1,sizeof(pntrstack));
@@ -754,9 +599,7 @@ void print_pntr(FILE *f, pntr p)
     break;
   case TYPE_FRAME: {
     frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
-    char *name = get_function_name(fr->fno);
-    fprintf(f,"frame(%s/%d)",name,fr->count);
-    free(name);
+    fprintf(f,"frame(%d/%d)",fr->fno,fr->count);
     break;
   }
   case TYPE_REMOTEREF: {

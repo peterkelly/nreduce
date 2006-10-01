@@ -26,8 +26,8 @@
 
 #define SUPER_C
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "source.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -36,14 +36,9 @@
 #include <stdarg.h>
 #include <math.h>
 
-scomb *scombs = NULL;
-scomb **lastsc = &scombs;
-
-int genvar = 0;
-
-scomb *get_scomb_index(int index)
+scomb *get_scomb_index(source *src, int index)
 {
-  scomb *sc = scombs;
+  scomb *sc = src->scombs;
   while (0 < index) {
     index--;
     sc = sc->next;
@@ -51,10 +46,10 @@ scomb *get_scomb_index(int index)
   return sc;
 }
 
-scomb *get_scomb(const char *name)
+scomb *get_scomb(source *src, const char *name)
 {
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next)
+  for (sc = src->scombs; sc; sc = sc->next)
     if (!strcmp(sc->name,name))
       return sc;
   return NULL;
@@ -69,7 +64,7 @@ int get_scomb_var(scomb *sc, const char *name)
   return -1;
 }
 
-scomb *add_scomb(const char *name1)
+scomb *add_scomb(source *src, const char *name1)
 {
   char *name = strdup(name1);
   char *hashpos = strchr(name,'#');
@@ -87,14 +82,14 @@ scomb *add_scomb(const char *name1)
       sprintf(sc->name,"%s#%d",name,num);
     else
       sprintf(sc->name,"%s",name);
-    if (NULL == get_scomb(sc->name))
+    if (NULL == get_scomb(src,sc->name))
       break;
     free(sc->name);
     num++;
   }
 
-  *lastsc = sc;
-  lastsc = &sc->next;
+  *src->lastsc = sc;
+  src->lastsc = &sc->next;
 
   sc->sl.fileno = -1;
   sc->sl.lineno = -1;
@@ -125,10 +120,11 @@ void scomb_free_list(scomb **list)
   }
 }
 
-void fix_partial_applications(void)
+/* Note: this is not actually used at the moment */
+void fix_partial_applications(source *src)
 {
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     snode *c = sc->body;
     int nargs = 0;
     scomb *other;
@@ -149,7 +145,7 @@ void fix_partial_applications(void)
           snode *arg = snode_new(-1,-1);
 
           sc->argnames[i] = (char*)malloc(20);
-          sprintf(sc->argnames[i],"N%d",genvar++);
+          sprintf(sc->argnames[i],"N%d",src->genvar++);
 
           arg->tag = TYPE_SYMBOL;
           arg->name = strdup(sc->argnames[i]);
@@ -164,15 +160,15 @@ void fix_partial_applications(void)
   }
 }
 
-static void shared_error(snode ***nodes, int *nnodes, snode *shared)
+static void shared_error(source *src, snode ***nodes, int *nnodes, snode *shared)
 {
   int i = 0;
   scomb *sc;
   fprintf(stderr,"Shared node: ");
-  print_codef(stderr,shared);
+  print_codef(src,stderr,shared);
   fprintf(stderr,"\n");
   fprintf(stderr,"Present in supercombinators:\n");
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     int j;
     for (j = 0; j < nnodes[i]; j++) {
       if (nodes[i][j] == shared)
@@ -183,7 +179,7 @@ static void shared_error(snode ***nodes, int *nnodes, snode *shared)
   abort();
 }
 
-void check_scombs_nosharing(void)
+void check_scombs_nosharing(source *src)
 {
   int count = 0;
   scomb *sc;
@@ -191,13 +187,13 @@ void check_scombs_nosharing(void)
   int *nnodes;
   int i;
 
-  for (sc = scombs; sc; sc = sc->next)
+  for (sc = src->scombs; sc; sc = sc->next)
     count++;
 
   nodes = (snode***)calloc(count,sizeof(snode**));
   nnodes = (int*)calloc(count,sizeof(snode**));
   i = 0;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     find_snodes(&nodes[i],&nnodes[i],sc->body);
     i++;
   }
@@ -207,7 +203,7 @@ void check_scombs_nosharing(void)
      used, so it can be removed after that. */
 
   i = 0;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     int j;
     for (j = 0; j < nnodes[i]; j++)
       nodes[i][j]->tag &= ~FLAG_PROCESSED;
@@ -215,11 +211,11 @@ void check_scombs_nosharing(void)
   }
 
   i = 0;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     int j;
     for (j = 0; j < nnodes[i]; j++) {
       if (nodes[i][j]->tag & FLAG_PROCESSED)
-        shared_error(nodes,nnodes,nodes[i][j]);
+        shared_error(src,nodes,nnodes,nodes[i][j]);
       nodes[i][j]->tag |= FLAG_PROCESSED;
     }
     i++;

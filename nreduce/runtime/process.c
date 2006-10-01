@@ -24,9 +24,10 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "gcode.h"
-#include "nreduce.h"
+#include "compiler/gcode.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -406,3 +407,215 @@ void set_error(process *proc, const char *format, ...)
   len = vsnprintf(proc->error,len+1,format,ap);
   va_end(ap);
 }
+
+void statistics(process *proc, FILE *f)
+{
+  int i;
+  int total;
+  bcheader *bch = (bcheader*)proc->bcdata;
+  fprintf(f,"totalallocs = %d\n",proc->stats.totalallocs);
+  fprintf(f,"ncollections = %d\n",proc->stats.ncollections);
+  fprintf(f,"nscombappls = %d\n",proc->stats.nscombappls);
+  fprintf(f,"nreductions = %d\n",proc->stats.nreductions);
+  fprintf(f,"nsparks = %d\n",proc->stats.nsparks);
+
+  total = 0;
+  for (i = 0; i < OP_COUNT; i++) {
+    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->stats.op_usage[i]);
+    total += proc->stats.op_usage[i];
+  }
+  fprintf(f,"usage total = %d\n",total);
+
+  fprintf(f,"\n");
+  for (i = 0; i < bch->nfunctions; i++)
+    fprintf(f,"%-20s %d\n",bc_function_name(proc->bcdata,i),proc->stats.fusage[i]);
+}
+
+void dump_info(process *proc)
+{
+  block *bl;
+  int i;
+  frame *f;
+
+  fprintf(proc->output,"Frames with things waiting on them:\n");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
+
+  for (bl = proc->blocks; bl; bl = bl->next) {
+    for (i = 0; i < BLOCK_SIZE; i++) {
+      cell *c = &bl->values[i];
+      if (TYPE_FRAME == c->type) {
+        f = (frame*)get_pntr(c->field1);
+        if (f->wq.frames || f->wq.fetchers) {
+          const char *fname = bc_function_name(proc->bcdata,f->fno);
+          int nframes = list_count(f->wq.frames);
+          int nfetchers = list_count(f->wq.fetchers);
+          fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
+                  f,fname,nframes,nfetchers);
+        }
+      }
+    }
+  }
+
+  fprintf(proc->output,"\n");
+  fprintf(proc->output,"Runnable queue (size %d):\n",proc->runnable.size);
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+          "frame*","function","frames","fetchers","state");
+  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+          "------","--------","------","--------","-------------");
+  for (f = proc->runnable.first; f; f = f->qnext) {
+    const char *fname = bc_function_name(proc->bcdata,f->fno);
+    int nframes = list_count(f->wq.frames);
+    int nfetchers = list_count(f->wq.fetchers);
+    fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
+            f,fname,nframes,nfetchers,frame_states[f->state]);
+  }
+
+}
+
+void dump_globals(process *proc)
+{
+  int h;
+  global *glo;
+
+  fprintf(proc->output,"\n");
+  fprintf(proc->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
+  fprintf(proc->output,"%-9s %-12s %-12s\n","-------","----","----");
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext) {
+      fprintf(proc->output,"%4d@%-4d %-12s %-12p\n",
+              glo->addr.lid,glo->addr.pid,cell_types[pntrtype(glo->p)],
+              is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
+    }
+  }
+}
+
+process *process_new(void)
+{
+  process *proc = (process*)calloc(1,sizeof(process));
+  cell *globnilvalue;
+
+  pthread_mutex_init(&proc->msglock,NULL);
+  pthread_cond_init(&proc->msgcond,NULL);
+
+  proc->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
+
+  globnilvalue = alloc_cell(proc);
+  globnilvalue->type = TYPE_NIL;
+  globnilvalue->flags |= FLAG_PINNED;
+
+  make_pntr(proc->globnilpntr,globnilvalue);
+  proc->globtruepntr = make_number(1.0);
+
+  if (is_pntr(proc->globtruepntr))
+    get_pntr(proc->globtruepntr)->flags |= FLAG_PINNED;
+
+  proc->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  proc->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+
+  return proc;
+}
+
+void process_init(process *proc)
+{
+  int i;
+  bcheader *bch = (bcheader*)proc->bcdata;
+  int count = bch->nstrings;
+  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
+
+  assert(NULL == proc->strings);
+  assert(0 == proc->nstrings);
+  assert(0 < proc->groupsize);
+
+
+  proc->nstrings = count;
+  proc->strings = (pntr*)malloc(count*sizeof(pntr));
+  for (i = 0; i < count; i++) {
+    proc->strings[i] = string_to_array(proc,proc->bcdata+stroffsets[i]);
+  }
+  proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
+  proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
+  proc->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
+  proc->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  proc->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
+  proc->gcsent = (int*)calloc(proc->groupsize,sizeof(int));
+  proc->distmarks = (array**)calloc(proc->groupsize,sizeof(array*));
+
+  proc->inflight_addrs = (array**)calloc(proc->groupsize,sizeof(array*));
+  proc->unack_msg_acount = (array**)calloc(proc->groupsize,sizeof(array*));
+  for (i = 0; i < proc->groupsize; i++) {
+    proc->inflight_addrs[i] = array_new(sizeof(gaddr));
+    proc->unack_msg_acount[i] = array_new(sizeof(int));
+    proc->distmarks[i] = array_new(sizeof(gaddr));
+  }
+}
+
+static void message_free(message *msg)
+{
+  free(msg->data);
+  free(msg);
+}
+
+void process_free(process *proc)
+{
+  int i;
+  block *bl;
+  int h;
+
+  for (bl = proc->blocks; bl; bl = bl->next)
+    for (i = 0; i < BLOCK_SIZE; i++)
+      bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
+
+/*   local_collect(proc); */
+  sweep(proc);
+
+  bl = proc->blocks;
+  while (bl) {
+    block *next = bl->next;
+    free(bl);
+    bl = next;
+  }
+
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    global *glo = proc->pntrhash[h];
+    while (glo) {
+      global *next = glo->pntrnext;
+      free(glo);
+      glo = next;
+    }
+  }
+
+  for (i = 0; i < proc->groupsize; i++) {
+    array_free(proc->inflight_addrs[i]);
+    array_free(proc->unack_msg_acount[i]);
+    array_free(proc->distmarks[i]);
+  }
+
+  free(proc->strings);
+  free(proc->stats.funcalls);
+  free(proc->stats.framecompletions);
+  free(proc->stats.sendcount);
+  free(proc->stats.sendbytes);
+  free(proc->stats.recvcount);
+  free(proc->stats.recvbytes);
+  free(proc->stats.fusage);
+  free(proc->stats.usage);
+  free(proc->stats.op_usage);
+  free(proc->gcsent);
+  free(proc->error);
+  free(proc->distmarks);
+  free(proc->pntrhash);
+  free(proc->addrhash);
+
+  free(proc->inflight_addrs);
+  free(proc->unack_msg_acount);
+
+  list_free(proc->msgqueue,(list_d_t)message_free);
+  pthread_mutex_destroy(&proc->msglock);
+  pthread_cond_destroy(&proc->msgcond);
+  free(proc);
+}
+

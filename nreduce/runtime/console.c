@@ -24,9 +24,9 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "gcode.h"
-#include "nreduce.h"
+#include "compiler/gcode.h"
+#include "src/nreduce.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,7 +38,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#ifndef USE_MPI
 static int send_around(process *proc, char tag)
 {
   array *wr;
@@ -431,4 +430,3 @@ void console(process *proc)
     write_end(wr);
   }
 }
-#endif

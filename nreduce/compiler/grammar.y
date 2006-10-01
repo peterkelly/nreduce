@@ -25,7 +25,9 @@
 #include "config.h"
 #endif
 
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -34,7 +36,7 @@
 #endif
 
 extern int yylineno;
-extern char *yyfilename;
+extern const char *yyfilename;
 extern int yyfileno;
 int yylex(void);
 int yyerror(const char *err);

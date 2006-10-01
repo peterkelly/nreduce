@@ -82,7 +82,9 @@
  * in the letrec expression; graphs constructed using a letrec must be evaluated lazily.
  */
 
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "runtime/runtime.h"
+#include "source.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -354,13 +356,13 @@ static void check_strictness(scomb *sc, int *changed)
 /**
  * Print strictness information about all supercobminators to standard output
  */
-void dump_strictinfo(void)
+void dump_strictinfo(source *src)
 {
   scomb *sc;
-  for (sc = scombs; sc; sc = sc->next) {
+  for (sc = src->scombs; sc; sc = sc->next) {
     if (!strncmp(sc->name,"__",2))
       continue;
-    print_scomb_code(sc);
+    print_scomb_code(src,sc);
     printf("\n");
   }
 }
@@ -378,7 +380,7 @@ void dump_strictinfo(void)
  * The process terminates when no changes to the argument strictness or application flags have
  * occurred.
  */
-void strictness_analysis(void)
+void strictness_analysis(source *src)
 {
   scomb *sc;
   int changed;
@@ -386,7 +388,7 @@ void strictness_analysis(void)
   if (trace)
     debug_stage("Strictness analysis (new version)");
 
-  for (sc = scombs; sc; sc = sc->next)
+  for (sc = src->scombs; sc; sc = sc->next)
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
 
 #if 1
@@ -394,7 +396,7 @@ void strictness_analysis(void)
      known to be strict. This will change as we perform the analysis. */
   do {
     changed = 0;
-    for (sc = scombs; sc; sc = sc->next)
+    for (sc = src->scombs; sc; sc = sc->next)
       check_strictness(sc,&changed);
 
     /* If there was any changes, we have to go back through and check the graphs again. One or
@@ -407,5 +409,5 @@ void strictness_analysis(void)
 #endif
 
   if (trace)
-    print_scombs1();
+    print_scombs1(src);
 }

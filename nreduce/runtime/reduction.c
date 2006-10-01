@@ -24,8 +24,9 @@
 #include "config.h"
 #endif
 
-#include "grammar.tab.h"
-#include "nreduce.h"
+#include "src/nreduce.h"
+#include "compiler/source.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -298,4 +299,80 @@ void reduce(process *proc, pntrstack *s)
     s->count = oldtop;
   }
   /* END */
+}
+
+static void stream(process *proc, pntr lst)
+{
+  proc->streamstack = pntrstack_new();
+  pntrstack_push(proc->streamstack,lst);
+  while (0 < proc->streamstack->count) {
+    pntr p;
+    reduce(proc,proc->streamstack);
+
+    p = pntrstack_pop(proc->streamstack);
+    p = resolve_pntr(p);
+    if (TYPE_NIL == pntrtype(p)) {
+      /* nothing */
+    }
+    else if (TYPE_NUMBER == pntrtype(p)) {
+      printf("%f",pntrdouble(p));
+    }
+    else if (TYPE_STRING == pntrtype(p)) {
+      printf("%s",(char*)get_pntr(get_pntr(p)->field1));
+    }
+    else if (TYPE_CONS == pntrtype(p)) {
+      pntrstack_push(proc->streamstack,get_pntr(p)->field2);
+      pntrstack_push(proc->streamstack,get_pntr(p)->field1);
+    }
+    else if (TYPE_APPLICATION == pntrtype(p)) {
+      fprintf(stderr,"Too many arguments applied to function\n");
+      exit(1);
+    }
+    else {
+      fprintf(stderr,"Bad cell type returned to printing mechanism: %s\n",cell_types[pntrtype(p)]);
+      exit(1);
+    }
+  }
+  pntrstack_free(proc->streamstack);
+  proc->streamstack = NULL;
+}
+
+void run_reduction(source *src, FILE *stats)
+{
+  scomb *mainsc;
+  cell *root;
+  pntr rootp;
+  process *proc = process_new();
+#ifdef TIMING
+  struct timeval start;
+  struct timeval end;
+  int ms;
+#endif
+
+  debug_stage("Reduction engine");
+  mainsc = get_scomb(src,"main");
+
+  root = alloc_cell(proc);
+  root->type = TYPE_SCREF;
+  make_pntr(root->field1,mainsc);
+  make_pntr(rootp,root);
+
+#ifdef TIMING
+  gettimeofday(&start,NULL);
+#endif
+  stream(proc,rootp);
+#ifdef TIMING
+  gettimeofday(&end,NULL);
+  ms = (end.tv_sec - start.tv_sec)*1000 +
+       (end.tv_usec - start.tv_usec)/1000;
+  if (stats)
+    fprintf(stats,"Execution time: %.3fs\n",((double)ms)/1000.0);
+#endif
+
+  printf("\n");
+
+  if (stats)
+    statistics(proc,stats);
+
+  process_free(proc);
 }
