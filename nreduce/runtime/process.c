@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: gmachine.c 333 2006-08-24 05:00:25Z pmkelly $
+ * $Id$
  *
  */
 
@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
@@ -359,7 +359,7 @@ void run_frame(process *proc, frame *f)
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     assert((0 == f->address) ||
-           (OP_GLOBSTART == bc_get_ops(proc->bcdata)[f->address].opcode));
+           (OP_GLOBSTART == bc_instructions(proc->bcdata)[f->address].opcode));
     add_frame_queue(&proc->runnable,f);
     f->state = STATE_RUNNING;
 
@@ -421,7 +421,7 @@ void statistics(process *proc, FILE *f)
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++) {
-    fprintf(f,"usage(%s) = %d\n",op_names[i],proc->stats.op_usage[i]);
+    fprintf(f,"usage(%s) = %d\n",opcodes[i],proc->stats.op_usage[i]);
     total += proc->stats.op_usage[i];
   }
   fprintf(f,"usage total = %d\n",total);
@@ -520,19 +520,16 @@ void process_init(process *proc)
 {
   int i;
   bcheader *bch = (bcheader*)proc->bcdata;
-  int count = bch->nstrings;
-  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
 
   assert(NULL == proc->strings);
   assert(0 == proc->nstrings);
   assert(0 < proc->groupsize);
 
 
-  proc->nstrings = count;
-  proc->strings = (pntr*)malloc(count*sizeof(pntr));
-  for (i = 0; i < count; i++) {
-    proc->strings[i] = string_to_array(proc,proc->bcdata+stroffsets[i]);
-  }
+  proc->nstrings = bch->nstrings;
+  proc->strings = (pntr*)malloc(bch->nstrings*sizeof(pntr));
+  for (i = 0; i < bch->nstrings; i++)
+    proc->strings[i] = string_to_array(proc,bc_string(proc->bcdata,i));
   proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
   proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
   proc->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));

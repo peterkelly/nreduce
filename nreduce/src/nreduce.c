@@ -25,7 +25,7 @@
 #endif
 
 #include "compiler/source.h"
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "nreduce.h"
 #include "runtime/runtime.h"
 #include <stdio.h>
@@ -57,7 +57,7 @@ struct arguments {
   char *statistics;
   int profiling;
   int juststrict;
-  int justgcode;
+  int bytecode;
   int engine;
   char *filename;
   int strictdebug;
@@ -82,7 +82,7 @@ static void usage()
 "  -s, --statistics FILE   Write statistics to FILE\n"
 "  -p, --profiling         Show profiling information\n"
 "  -j, --just-strictness   Just display strictness information\n"
-"  -g, --just-gcode        Just print compiled G-code and exit\n"
+"  -g, --just-bytecode     Just print compiled bytecode and exit\n"
 "  -e, --engine ENGINE     Use execution engine:\n"
 "                          (r)educer|(i)nterpreter|(n)ative\n"
 "                          (default: interpreter)\n"
@@ -122,7 +122,7 @@ void parse_args(int argc, char **argv)
       args.juststrict = 1;
     }
     else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-gcode")) {
-      args.justgcode = 1;
+      args.bytecode = 1;
     }
     else if (!strcmp(argv[i],"-e") || !strcmp(argv[i],"--engine")) {
       if (++i >= argc)
@@ -245,20 +245,13 @@ int main(int argc, char **argv)
       exit(0);
     }
 
-/*     if (args.justgcode) { */
-/*       print_program(src,global_program,0); */
-/*       exit(0); */
-/*     } */
-/*     else if (trace) { */
-/*       print_program(src,global_program,1); */
-/*     } */
-
+    if (args.bytecode) {
+      bc_print(bcdata,stdout,src,0);
+      exit(0);
+    }
 
     if (ENGINE_INTERPRETER == args.engine) {
-/*       char *bcdata; */
-/*       int bcsize; */
-
-      debug_stage("G-code interpreter");
+      debug_stage("Interpreter");
 
       run(bcdata,bcsize,statsfile);
 

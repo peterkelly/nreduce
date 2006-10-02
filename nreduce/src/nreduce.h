@@ -42,7 +42,7 @@
 
 //#define NDEBUG
 
-/* #define DEBUG_GCODE_COMPILATION */
+/* #define DEBUG_BYTECODE_COMPILATION */
 /* #define SHOW_SUBSTITUTED_NAMES */
 /* #define EXECUTION_TRACE */
 /* #define PROFILING */

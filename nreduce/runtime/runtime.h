@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: gcode.h 339 2006-09-21 01:18:34Z pmkelly $
+ * $Id$
  *
  */
 
@@ -25,7 +25,7 @@
 
 #include "src/nreduce.h"
 #include "compiler/source.h"
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include <stdio.h>
 
 #define MAX_FRAME_SIZE   1024
@@ -554,10 +554,9 @@ void statistics(process *proc, FILE *f);
 void dump_info(process *proc);
 void dump_globals(process *proc);
 
-/* gmachine */
+/* interpreter */
 
 void print_stack(FILE *f, pntr *stk, int size, int dir);
-void check_stack(process *proc, frame *curf, pntr *stackdata, int stackcount, gprogram *gp);
 void add_pending_mark(process *proc, gaddr addr);
 void spark(process *proc, frame *f);
 void run(const char *bcdata, int bcsize, FILE *statsfile);

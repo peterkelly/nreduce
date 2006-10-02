@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: memory.c 326 2006-08-22 06:11:26Z pmkelly $
+ * $Id$
  *
  */
 
@@ -27,7 +27,7 @@
 #define SOURCE_C
 
 #include "source.h"
-#include "gcode.h"
+#include "bytecode.h"
 #include "src/nreduce.h"
 #include "grammar.tab.h"
 #include <stdio.h>
@@ -125,7 +125,7 @@ void snode_free(snode *c)
 source *source_new()
 {
   source *src = (source*)calloc(1,sizeof(source));
-  src->scarr = array_new(sizeof(scomb*));
+  src->scombs = array_new(sizeof(scomb*));
   src->genvar = 0;
   return src;
 }
@@ -135,8 +135,8 @@ static void check_for_main(source *src)
   int gotmain = 0;
   int scno;
 
-  for (scno = 0; scno < array_count(src->scarr); scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+  for (scno = 0; scno < array_count(src->scombs); scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     if (!strcmp(sc->name,"main")) {
       gotmain = 1;
 
@@ -222,41 +222,41 @@ void compile_stage(source *src, const char *name)
 
 int source_process(source *src)
 {
-  int sccount = array_count(src->scarr);
+  int sccount = array_count(src->scombs);
   int scno;
 
   check_for_main(src);
 
   compile_stage(src,"Variable renaming"); /* renaming.c */
   for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     rename_variables(src,sc);
   }
 
   compile_stage(src,"Symbol resolution"); /* resolve.c */
   for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     resolve_refs(src,sc);
   }
 
-  compile_stage(src,"Lambda lifting");
+  compile_stage(src,"Lambda lifting"); /* lifting.c */
   for (scno = 0; scno < sccount; scno++)
-    lift(src,array_item(src->scarr,scno,scomb*));
-  sccount = array_count(src->scarr); /* lift() may have added some */
+    lift(src,array_item(src->scombs,scno,scomb*));
+  sccount = array_count(src->scombs); /* lift() may have added some */
 
 /*   if (args.lambdadebug) { */
 /*     print_scombs1(src); */
 /*     exit(0); */
 /*   } */
 
-  compile_stage(src,"Application lifting");
+  compile_stage(src,"Application lifting"); /* lifting.c */
   for (scno = 0; scno < sccount; scno++)
-    applift(src,array_item(src->scarr,scno,scomb*));
-  sccount = array_count(src->scarr); /* applift() may have added some */
+    applift(src,array_item(src->scombs,scno,scomb*));
+  sccount = array_count(src->scombs); /* applift() may have added some */
 
-  compile_stage(src,"Letrec reordering");
-  for (scno = 0; scno < array_count(src->scarr); scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+  compile_stage(src,"Letrec reordering"); /* reorder.c */
+  for (scno = 0; scno < array_count(src->scombs); scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     reorder_letrecs(sc->body);
   }
 
@@ -265,30 +265,25 @@ int source_process(source *src)
 
 int source_compile(source *src, char **bcdata, int *bcsize)
 {
-  gprogram *gp;
 
   strictness_analysis(src);
 
-  compile_stage(src,"G-code compilation");
-
-  gp = gprogram_new();
-  compile(src,gp);
+  compile_stage(src,"Bytecode compilation");
+  compile(src,bcdata,bcsize);
 
   if (trace)
-    print_program(src,gp,1);
+    bc_print(*bcdata,stdout,src,1);
 
-  gen_bytecode(gp,bcdata,bcsize);
-  gprogram_free(gp);
   return 0;
 }
 
 void source_free(source *src)
 {
   int i;
-  if (src->scarr) {
-    for (i = 0; i < array_count(src->scarr); i++)
-      scomb_free(array_item(src->scarr,i,scomb*));
-    array_free(src->scarr);
+  if (src->scombs) {
+    for (i = 0; i < array_count(src->scombs); i++)
+      scomb_free(array_item(src->scombs,i,scomb*));
+    array_free(src->scombs);
   }
   if (src->oldnames) {
     for (i = 0; i < array_count(src->oldnames); i++)

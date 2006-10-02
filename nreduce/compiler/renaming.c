@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: letrec.c 284 2006-07-25 07:09:57Z pmkelly $
+ * $Id$
  *
  */
 

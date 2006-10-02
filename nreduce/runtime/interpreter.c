@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
@@ -76,20 +76,17 @@ void print_stack(FILE *f, pntr *stk, int size, int dir)
 
 static void print_proc_sourceloc(process *proc, FILE *f, sourceloc sl)
 {
-  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
   if (0 <= sl.fileno)
-    fprintf(f,"%s:%d: ",proc->bcdata+stroffsets[sl.fileno],sl.lineno);
+    fprintf(f,"%s:%d: ",bc_string(proc->bcdata,sl.fileno),sl.lineno);
 }
 
-static void cap_error(process *proc, pntr cappntr, const gop *op)
+static void cap_error(process *proc, pntr cappntr, const instruction *op)
 {
   sourceloc sl;
   assert(CELL_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
-  const funinfo *finfo = bc_get_funinfo(proc->bcdata);
-  const int *stroffsets = bc_get_stroffsets(proc->bcdata);
-  const char *name = proc->bcdata+stroffsets[finfo[c->fno].name];
+  const char *name = bc_function_name(proc->bcdata,c->fno);
   int nargs = c->arity;
 
   sl.fileno = op->fileno;
@@ -102,7 +99,7 @@ static void cap_error(process *proc, pntr cappntr, const gop *op)
   abort();
 }
 
-static void constant_app_error(process *proc, pntr cappntr, const gop *op)
+static void constant_app_error(process *proc, pntr cappntr, const instruction *op)
 {
   sourceloc sl;
   sl.fileno = op->fileno;
@@ -113,7 +110,7 @@ static void constant_app_error(process *proc, pntr cappntr, const gop *op)
   abort();
 }
 
-static void handle_error(process *proc, int bif, const gop *op)
+static void handle_error(process *proc, int bif, const instruction *op)
 {
   sourceloc sl;
   sl.fileno = op->fileno;
@@ -776,11 +773,11 @@ static void execute(process *proc)
 /*   int nfunctions = ((bcheader*)proc->bcdata)->nfunctions; */
 /*   int nstrings = ((bcheader*)proc->bcdata)->nstrings; */
   int evaldoaddr = ((bcheader*)proc->bcdata)->evaldoaddr;
-  const gop *program_ops = bc_get_ops(proc->bcdata);
-  const funinfo *program_finfo = bc_get_funinfo(proc->bcdata);
+  const instruction *program_ops = bc_instructions(proc->bcdata);
+  const funinfo *program_finfo = bc_funinfo(proc->bcdata);
 
   while (!proc->done) {
-    const gop *op;
+    const instruction *instr;
     frame *curf;
 
     if ((NULL == proc->runnable.first) || (0 < proc->paused)) {
@@ -839,7 +836,7 @@ static void execute(process *proc)
     assert(proc->runnable.first);
 
     curf = proc->runnable.first;
-    op = &program_ops[curf->address];
+    instr = &program_ops[curf->address];
 
     #ifdef EXECUTION_TRACE
     if (trace) {
@@ -855,11 +852,11 @@ static void execute(process *proc)
     }
 
     #ifdef PROFILING
-    proc->stats.op_usage[op->opcode]++;
+    proc->stats.op_usage[instr->opcode]++;
     proc->stats.usage[curf->address]++;
     #endif
 
-    switch (op->opcode) {
+    switch (instr->opcode) {
     case OP_BEGIN:
       break;
     case OP_END:
@@ -869,15 +866,13 @@ static void execute(process *proc)
       frame_dealloc(proc,curf);
 /*       proc->done = 1; */
       continue;
-    case OP_LAST:
-      break;
     case OP_GLOBSTART:
       break;
     case OP_EVAL: {
       pntr p;
-      assert(0 <= curf->count-1-op->arg0);
-      curf->data[curf->count-1-op->arg0] = resolve_pntr(curf->data[curf->count-1-op->arg0]);
-      p = curf->data[curf->count-1-op->arg0];
+      assert(0 <= curf->count-1-instr->arg0);
+      curf->data[curf->count-1-instr->arg0] = resolve_pntr(curf->data[curf->count-1-instr->arg0]);
+      p = curf->data[curf->count-1-instr->arg0];
 
       if (CELL_FRAME == pntrtype(p)) {
         frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
@@ -924,7 +919,7 @@ static void execute(process *proc)
       p = resolve_pntr(p); /* FIXME: temp: is this necessary? superlife needs it */
       assert(CELL_IND != pntrtype(p));
 
-      if (op->arg0) {
+      if (instr->arg0) {
         if (CELL_FRAME == pntrtype(p)) {
           frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
           pntr val;
@@ -944,7 +939,7 @@ static void execute(process *proc)
       }
 
       if (CELL_CAP != pntrtype(p))
-        constant_app_error(proc,p,op);
+        constant_app_error(proc,p,instr);
       capholder = (cell*)get_pntr(p);
       curf->count--;
 
@@ -1018,8 +1013,8 @@ static void execute(process *proc)
       break;
     }
     case OP_JFUN:
-      curf->address = program_finfo[op->arg0].address;
-      curf->fno = op->arg0;
+      curf->address = program_finfo[instr->arg0].address;
+      curf->fno = instr->arg0;
       pntrstack_grow(&curf->alloc,&curf->data,program_finfo[curf->fno].stacksize);
       // curf->address--; /* so we process the GLOBSTART */
       break;
@@ -1030,24 +1025,24 @@ static void execute(process *proc)
       assert(CELL_FRAME != pntrtype(test));
 
       if (CELL_CAP == pntrtype(test))
-        cap_error(proc,test,op);
+        cap_error(proc,test,instr);
 
       if (CELL_NIL == pntrtype(test))
-        curf->address += op->arg0-1;
+        curf->address += instr->arg0-1;
       curf->count--;
       break;
     }
     case OP_JUMP:
-      curf->address += op->arg0-1;
+      curf->address += instr->arg0-1;
       break;
     case OP_PUSH: {
-      assert(op->arg0 < curf->count);
-      curf->data[curf->count] = curf->data[curf->count-1-op->arg0];
+      assert(instr->arg0 < curf->count);
+      curf->data[curf->count] = curf->data[curf->count-1-instr->arg0];
       curf->count++;
       break;
     }
     case OP_UPDATE: {
-      int n = op->arg0;
+      int n = instr->arg0;
       pntr targetp;
       cell *target;
       pntr res;
@@ -1071,7 +1066,7 @@ static void execute(process *proc)
     }
     case OP_ALLOC: {
       int i;
-      for (i = 0; i < op->arg0; i++) {
+      for (i = 0; i < instr->arg0; i++) {
         cell *hole = alloc_cell(proc);
         hole->type = CELL_HOLE;
         make_pntr(curf->data[curf->count],hole);
@@ -1080,8 +1075,8 @@ static void execute(process *proc)
       break;
     }
     case OP_SQUEEZE: {
-      int count = op->arg0;
-      int remove = op->arg1;
+      int count = instr->arg0;
+      int remove = instr->arg1;
       int base = curf->count-count-remove;
       int i;
       assert(0 <= base);
@@ -1091,13 +1086,13 @@ static void execute(process *proc)
       break;
     }
     case OP_MKCAP: {
-      int fno = op->arg0;
-      int n = op->arg1;
+      int fno = instr->arg0;
+      int n = instr->arg1;
       int i;
       cell *capv;
       cap *c = cap_alloc(program_finfo[fno].arity,program_finfo[fno].address,fno);
-      c->sl.fileno = op->fileno;
-      c->sl.lineno = op->lineno;
+      c->sl.fileno = instr->fileno;
+      c->sl.lineno = instr->lineno;
       c->data = (pntr*)malloc(n*sizeof(pntr));
       c->count = 0;
       for (i = curf->count-n; i < curf->count; i++)
@@ -1112,8 +1107,8 @@ static void execute(process *proc)
       break;
     }
     case OP_MKFRAME: {
-      int fno = op->arg0;
-      int n = op->arg1;
+      int fno = instr->arg0;
+      int n = instr->arg1;
       cell *newfholder;
       int i;
       frame *newf = frame_alloc(proc);
@@ -1137,7 +1132,7 @@ static void execute(process *proc)
       break;
     }
     case OP_BIF: {
-      int bif = op->arg0;
+      int bif = instr->arg0;
       int nargs = builtin_info[bif].nargs;
       int i;
       assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
@@ -1146,7 +1141,7 @@ static void execute(process *proc)
         assert(CELL_FRAME != pntrtype(curf->data[curf->count-1-i]));
 
         if (CELL_CAP == pntrtype(curf->data[curf->count-1-i]))
-          cap_error(proc,curf->data[curf->count-1-i],op);
+          cap_error(proc,curf->data[curf->count-1-i],instr);
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)
@@ -1157,7 +1152,7 @@ static void execute(process *proc)
       /* TODO: figure out a more efficient way of doing this that doesn't require an explicit
          check */
       if (proc->error)
-        handle_error(proc,bif,op);
+        handle_error(proc,bif,instr);
 
       curf->count -= (nargs-1);
       assert(!builtin_info[bif].reswhnf || (CELL_IND != pntrtype(curf->data[curf->count-1])));
@@ -1167,16 +1162,16 @@ static void execute(process *proc)
       curf->data[curf->count++] = proc->globnilpntr;
       break;
     case OP_PUSHNUMBER:
-      curf->data[curf->count++] = *((double*)&op->arg0);
+      curf->data[curf->count++] = *((double*)&instr->arg0);
       break;
     case OP_PUSHSTRING: {
-      curf->data[curf->count] = proc->strings[op->arg0];
+      curf->data[curf->count] = proc->strings[instr->arg0];
       curf->count++;
       break;
     }
     case OP_RESOLVE:
-      curf->data[curf->count-1-op->arg0] = resolve_pntr(curf->data[curf->count-1-op->arg0]);
-      assert(CELL_REMOTEREF != pntrtype(curf->data[curf->count-1-op->arg0]));
+      curf->data[curf->count-1-instr->arg0] = resolve_pntr(curf->data[curf->count-1-instr->arg0]);
+      assert(CELL_REMOTEREF != pntrtype(curf->data[curf->count-1-instr->arg0]));
       break;
     default:
       abort();

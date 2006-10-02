@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: memory.c 330 2006-08-23 06:15:19Z pmkelly $
+ * $Id$
  *
  */
 
@@ -24,12 +24,10 @@
 #include "config.h"
 #endif
 
-#define MEMORY_C
-
 #include "src/nreduce.h"
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "compiler/source.h"
-#include "runtime/runtime.h"
+#include "runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

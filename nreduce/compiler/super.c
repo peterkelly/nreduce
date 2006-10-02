@@ -38,14 +38,14 @@
 
 scomb *get_scomb_index(source *src, int index)
 {
-  return array_item(src->scarr,index,scomb*);
+  return array_item(src->scombs,index,scomb*);
 }
 
 scomb *get_scomb(source *src, const char *name)
 {
   int scno;
-  for (scno = 0; scno < array_count(src->scarr); scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+  for (scno = 0; scno < array_count(src->scombs); scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     if (!strcmp(sc->name,name))
       return sc;
   }
@@ -85,7 +85,8 @@ scomb *add_scomb(source *src, const char *name1)
     num++;
   }
 
-  array_append(src->scarr,&sc,sizeof(scomb*));
+  sc->index = array_count(src->scombs);
+  array_append(src->scombs,&sc,sizeof(scomb*));
 
   sc->sl.fileno = -1;
   sc->sl.lineno = -1;

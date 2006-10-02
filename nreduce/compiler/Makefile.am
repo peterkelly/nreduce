@@ -1,6 +1,6 @@
 noinst_LTLIBRARIES = libcompiler.la
 noinst_PROGRAMS = 
-noinst_HEADERS = util.h source.h gcode.h
+noinst_HEADERS = util.h source.h bytecode.h
 BUILT_SOURCES = grammar.tab.c lexer.yy.c
 EXTRA_DIST = grammar.y lexer.l grammar.tab.h
 libcompiler_la_SOURCES = util.c \
@@ -12,7 +12,7 @@ libcompiler_la_SOURCES = util.c \
 	resolve.c \
 	reorder.c \
 	source.c \
-	gcode.c \
+	bytecode.c \
 	debug.c \
 	grammar.tab.c \
 	lexer.yy.c

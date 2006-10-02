@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: gmachine.c 333 2006-08-24 05:00:25Z pmkelly $
+ * $Id$
  *
  */
 
@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime/runtime.h"
 #include <stdio.h>
@@ -213,7 +213,7 @@ static int handle_command(process *proc, const char *line, int *done)
     for (op = 0; op < OP_COUNT; op++) {
       int usage;
       CHECK_READ(read_int(&rd,&usage));
-      printf("%-12s",op_names[op]);
+      printf("%-12s",opcodes[op]);
       printf("  %-10d",usage);
       printf("\n");
     }
@@ -305,7 +305,7 @@ static int handle_command(process *proc, const char *line, int *done)
     printf("\n");
 
     for (op = 0; op < OP_COUNT; op++) {
-      printf("%-18s",op_names[op]);
+      printf("%-18s",opcodes[op]);
       for (from = 0; from < count; from++)
         printf("  %-16d",op_usage[from*OP_COUNT+op]);
       printf("\n");

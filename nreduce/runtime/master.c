@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: gmachine.c 339 2006-09-21 01:18:34Z pmkelly $
+ * $Id$
  *
  */
 
@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "network.h"
 #include "runtime.h"

@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: gcode.h 339 2006-09-21 01:18:34Z pmkelly $
+ * $Id$
  *
  */
 
@@ -81,7 +81,7 @@ typedef struct scomb {
 typedef struct source {
   int genvar;
   int varno;
-  array *scarr;
+  array *scombs;
   array *oldnames;
   array *parsedfiles;
 } source;

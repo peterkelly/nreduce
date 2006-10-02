@@ -29,7 +29,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

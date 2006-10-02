@@ -9,7 +9,7 @@ libruntime_la_SOURCES = 	master.c \
 	memory.c \
 	data.c \
 	console.c \
-	gmachine.c \
+	interpreter.c \
 	reduction.c
 
 INCLUDES = -I@top_srcdir@

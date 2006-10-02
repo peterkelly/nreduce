@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: super.c 276 2006-07-20 03:39:42Z pmkelly $
+ * $Id$
  *
  */
 
@@ -46,7 +46,7 @@
  *       (a (+ 1 2)))
  *      (* c 5)))
  *
- * The compiled G-code for this cannot evaluate c directly, because b and a have not yet been
+ * The compiled bytecode for this cannot evaluate c directly, because b and a have not yet been
  * evaluated (and will thus resolve to a cell with type HOLE). It must therefore create a delayed
  * evaluation of + using MKFRAME. The situation changes however if the expression is changed to the
  * following:

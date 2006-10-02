@@ -94,8 +94,11 @@ CHAR                     \'.\'
 "nil"                    { return NIL; }
 "super"                  { return SUPER; }
 "."                      { return '.'; }
-"("                      { return '('; }
-")"                      { return ')'; }
+"("                      { return LBRACE; }
+")"                      { return RBRACE; }
+"{"                      { return LBRACE; }
+"}"                      { return RBRACE; }
+":"                      { return ':'; }
 "+"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "-"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "*"                      { yylval.s = strdup(yytext); return SYMBOL; }

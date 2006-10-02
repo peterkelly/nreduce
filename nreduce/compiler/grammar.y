@@ -64,11 +64,14 @@ extern struct source *parse_src;
 %token LETREC
 %token IN
 %token EQUALS
+%token LBRACE
+%token RBRACE
 %token<i> INTEGER
 %token<d> DOUBLE
 %token<s> STRING
 
 %type <c> SingleExpr
+%type <c> ListExpr
 %type <c> AppliedExpr
 %type <c> Expr
 %type <c> SingleLambda
@@ -81,30 +84,48 @@ extern struct source *parse_src;
 %%
 
 SingleExpr:
-  NIL                             { $$ = snode_new(yyfileno,@1.first_line);
+  NIL                             { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_NIL; }
-| '(' ')'                         { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->type = SNODE_NIL; }
-| INTEGER                         { $$ = snode_new(yyfileno,@1.first_line);
+| INTEGER                         { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_NUMBER;
                                     $$->num = (double)($1); }
-| DOUBLE                          { $$ = snode_new(yyfileno,@1.first_line);
+| DOUBLE                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_NUMBER;
                                     $$->num = $1; }
-| STRING                          { $$ = snode_new(yyfileno,@1.first_line);
+| STRING                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_STRING;
                                     $$->value = strdup($1); }
-| SYMBOL                          { $$ = snode_new(yyfileno,@1.first_line);
+| SYMBOL                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_SYMBOL;
                                     $$->name = strdup($1); }
-| EQUALS                          { $$ = snode_new(yyfileno,@1.first_line);
+| EQUALS                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_SYMBOL;
                                     $$->name = strdup("="); }
-| '(' Expr ')'                    { $$ = $2; }
+| LBRACE Expr RBRACE              { $$ = $2; }
+;
+
+ListExpr:
+  SingleExpr                      { $$ = $1; }
+| SingleExpr ':' ListExpr         { snode *cons;
+                                    snode *app1;
+
+                                    cons = snode_new(yyfileno,@$.first_line);
+                                    cons->type = SNODE_SYMBOL;
+                                    cons->name = strdup("cons");
+
+                                    app1 = snode_new(yyfileno,@$.first_line);
+                                    app1->type = SNODE_APPLICATION;
+                                    app1->left = cons;
+                                    app1->right = $1;
+
+                                    $$ = snode_new(yyfileno,@$.first_line);
+                                    $$->type = SNODE_APPLICATION;
+                                    $$->left = app1;
+                                    $$->right = $3; }
 ;
 
 SingleLambda:
-  LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@1.first_line);
+  LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_LAMBDA;
                                     $$->name = (void*)strdup($2);
                                     $$->body = NULL; }
@@ -116,15 +137,15 @@ Lambdas:
 ;
 
 AppliedExpr:
-  SingleExpr                      { $$ = $1; }
-| AppliedExpr SingleExpr          { $$ = snode_new(yyfileno,@1.first_line);
+  ListExpr                        { $$ = $1; }
+| AppliedExpr ListExpr            { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_APPLICATION;
                                     $$->left = $1;
                                     $$->right = $2; }
 ;
 
 Letrec:
-  SYMBOL EQUALS SingleExpr        { $$ = (letrec*)calloc(1,sizeof(letrec));
+  SYMBOL EQUALS ListExpr          { $$ = (letrec*)calloc(1,sizeof(letrec));
                                     $$->name = $1;
                                     $$->value = $3; }
 ;
@@ -141,7 +162,7 @@ Expr:
                                     while (c->body)
                                       c = c->body;
                                     c->body = $2; }
-| LETREC Letrecs IN SingleExpr    { $$ = snode_new(yyfileno,@1.first_line);
+| LETREC Letrecs IN ListExpr      { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_LETREC;
                                     $$->bindings = $2;
                                     $$->body = $4; }
@@ -153,7 +174,7 @@ Arguments:
 ;
 
 Definition:
-  Arguments EQUALS SingleExpr     { char *name = (char*)$1->data;
+  Arguments EQUALS ListExpr       { char *name = (char*)$1->data;
                                     list *l;
                                     int argno = 0;
                                     scomb *sc;
@@ -164,12 +185,13 @@ Definition:
                                     }
 
                                     sc = add_scomb(parse_src,name);
-                                    //    sc->sl = name->sl; /* FIXME */
+                                    sc->sl.fileno = yyfileno;
+                                    sc->sl.lineno = @$.first_line;
                                     sc->nargs = list_count($1->next);
                                     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
                                     for (l = $1->next; l; l = l->next)
                                       sc->argnames[argno++] = strdup((char*)l->data);
-                                    list_free(l,free);
+                                    list_free($1,free);
 
                                     sc->body = $3; }
 ;

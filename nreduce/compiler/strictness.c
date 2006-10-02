@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: strictness.c 267 2006-07-06 14:07:53Z pmkelly $
+ * $Id$
  *
  */
 
@@ -71,11 +71,11 @@
  * y to be evaluated in this case (as the false branch is taken), and therefore we would be
  * changing the semantics of evaluation by trying to evaluate (len y) before we call the function.
  * So if there is any doubt about whether a function is strict in a particular argument, we assume
- * that it is not, and thus the G-code compiler would generate MKFRAME/MKCAP instructions instead
+ * that it is not, and thus the bytecode compiler would generate MKFRAME/MKCAP instructions instead
  * of evaluating the expression for that argument directly.
  *
  * We also try to detect the "strictness" of letrec bindings, so that when constructing a letrec
- * graph during G-code execution we can in some cases evaluate expressions directly rather than
+ * graph during bytecode execution we can in some cases evaluate expressions directly rather than
  * creating FRAME or CAP cells for them. For this reason, struct letrec contains a "strict" field
  * which indicates that the expression is definitely used in the body of the letrec expression.
  * Note however that we can only evaluate it directly if it does not depend on later bindings
@@ -253,7 +253,7 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
       for (argno = nargs-1; 0 <= argno; argno--) {
 
         /* If the function is strict in this argument, mark the application node as strict.
-           This will provide a hint to the G-code compiler that it may compile the expression
+           This will provide a hint to the bytecode compiler that it may compile the expression
            directly instead of adding MKAP instructions to create application nodes at runtime. */
         if (fun_strictin(fun,argno)) {
           *changed = (*changed || !app->strict);
@@ -276,7 +276,7 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
          Despite the 2nd and 3rd arguments to if not being strict, we treat the *contents* of these
          expressions as being so. Whichever branch is taken will definitely need to return a value,
          so they are treated as a strict context and analysed with another recursive call to
-         check_strictness_r(). This information is still relevant to the G-code compiler due to
+         check_strictness_r(). This information is still relevant to the bytecode compiler due to
          the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
          We also annotate application nodes within the true/false branches with strictness
          where appropriate. */
@@ -359,8 +359,8 @@ static void check_strictness(scomb *sc, int *changed)
 void dump_strictinfo(source *src)
 {
   int scno;
-  for (scno = 0; scno < array_count(src->scarr); scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+  for (scno = 0; scno < array_count(src->scombs); scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     if (!strncmp(sc->name,"__",2))
       continue;
     print_scomb_code(src,sc);
@@ -389,8 +389,8 @@ void strictness_analysis(source *src)
   if (trace)
     debug_stage("Strictness analysis (new version)");
 
-  for (scno = 0; scno < array_count(src->scarr); scno++) {
-    scomb *sc = array_item(src->scarr,scno,scomb*);
+  for (scno = 0; scno < array_count(src->scombs); scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
   }
 
@@ -399,8 +399,8 @@ void strictness_analysis(source *src)
      known to be strict. This will change as we perform the analysis. */
   do {
     changed = 0;
-    for (scno = 0; scno < array_count(src->scarr); scno++) {
-      scomb *sc = array_item(src->scarr,scno,scomb*);
+    for (scno = 0; scno < array_count(src->scombs); scno++) {
+      scomb *sc = array_item(src->scombs,scno,scomb*);
       check_strictness(sc,&changed);
     }
 

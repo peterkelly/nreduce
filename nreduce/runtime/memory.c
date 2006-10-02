@@ -27,7 +27,7 @@
 #define MEMORY_C
 
 #include "src/nreduce.h"
-#include "compiler/gcode.h"
+#include "compiler/bytecode.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
 #include <stdio.h>
