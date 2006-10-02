@@ -28,6 +28,9 @@
 #include "compiler/gcode.h"
 #include <stdio.h>
 
+#define MAX_FRAME_SIZE   1024
+#define MAX_CAP_SIZE     1024
+
 #define B_ADD            0
 #define B_SUBTRACT       1
 #define B_MULTIPLY       2
@@ -80,6 +83,95 @@
 #define B_READCHUNK      39
 
 #define NUM_BUILTINS     40
+
+#define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
+                          fatal("access to free'd cell %p",(_c)); \
+                        (_c); })
+
+//#define celltype(_c) ((_c)->type)
+#define celltype(_c) (checkcell(_c)->type)
+#define pntrtype(p) (is_pntr(p) ? celltype(get_pntr(p)) : CELL_NUMBER)
+
+typedef double pntr;
+
+#define CELL_EMPTY       0x00
+#define CELL_APPLICATION 0x01  /* left: function (cell*)   right: argument (cell*) */
+#define CELL_BUILTIN     0x02  /* left: bif (int)                                  */
+#define CELL_CONS        0x03  /* left: head (cell*)       right: tail (cell*)     */
+#define CELL_REMOTEREF   0x04  /*                                                  */
+#define CELL_IND         0x05  /* left: tgt (cell*)                                */
+#define CELL_SCREF       0x06  /* left: scomb (scomb*)                             */
+#define CELL_AREF        0x07  /* left: array (cell*)      right: index            */
+#define CELL_HOLE        0x08  /*                                                  */
+#define CELL_FRAME       0x09  /* left: frame (frame*)                             */
+#define CELL_CAP         0x0A  /* left: cap (cap*)                                 */
+#define CELL_NIL         0x0B  /*                                                  */
+#define CELL_NUMBER      0x0C  /*                                                  */
+#define CELL_ARRAY       0x0D  /* left: array (carray*)                            */
+#define CELL_COUNT       0x0E
+
+typedef struct cell {
+  short flags;
+  short type;
+  pntr field1;
+  pntr field2;
+} cell;
+
+#define PNTR_VALUE 0xFFF80000
+//#define MAX_ARRAY_SIZE (1 << 19)
+#define MAX_ARRAY_SIZE 2000
+
+#define pfield1(__p) (get_pntr(__p)->field1)
+#define pfield2(__p) (get_pntr(__p)->field2)
+#define ppfield1(__p) (get_pntr(pfield1(__p)))
+#define ppfield2(__p) (get_pntr(pfield2(__p)))
+#define pglobal(__p) ((global*)ppfield1(__p))
+#define pframe(__p) ((frame*)ppfield1(__p))
+
+#define is_pntr(__p) ((*(((unsigned int*)&(__p))+1) & PNTR_VALUE) == PNTR_VALUE)
+#define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
+                            *(((unsigned int*)&(__p))+1) = PNTR_VALUE; }
+
+#define make_aref_pntr(__p,__c,__i) { assert((__i) < MAX_ARRAY_SIZE); \
+                            *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
+                            *(((unsigned int*)&(__p))+1) = (PNTR_VALUE | (__i)); }
+
+#define aref_index(__p) (*(((unsigned int*)&(__p))+1) & ~PNTR_VALUE)
+#define aref_array(__p) ((carray*)get_pntr(get_pntr(__p)->field1))
+
+
+#define get_pntr(__p) (assert(is_pntr(__p)), ((cell*)(*((unsigned int*)&(__p)))))
+
+#define pntrequal(__a,__b) ((*(((unsigned int*)&(__a))+0) == *(((unsigned int*)&(__b))+0)) && \
+                            (*(((unsigned int*)&(__a))+1) == *(((unsigned int*)&(__b))+1)))
+
+#define is_nullpntr(__p) (is_pntr(__p) && (NULL == get_pntr(__p)))
+#ifndef NO_STATEMENT_EXPRS
+#define INLINE_RESOLVE_PNTR
+#endif
+
+#ifdef INLINE_RESOLVE_PNTR
+#define resolve_pntr(x) ({ pntr __x = (x);        \
+                           while (CELL_IND == pntrtype(__x)) \
+                             __x = get_pntr(__x)->field1; \
+                           __x; })
+#else
+pntr resolve_pntr(pntr p);
+#endif
+
+
+#define check_global(_g) (assert(!(_g)->freed))
+
+
+
+
+
+
+
+
+
+
+
 
 typedef struct message {
   int from;
@@ -464,6 +556,7 @@ void dump_globals(process *proc);
 
 /* gmachine */
 
+void print_stack(FILE *f, pntr *stk, int size, int dir);
 void check_stack(process *proc, frame *curf, pntr *stackdata, int stackcount, gprogram *gp);
 void add_pending_mark(process *proc, gaddr addr);
 void spark(process *proc, frame *f);
@@ -484,18 +577,10 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 extern const builtin builtin_info[NUM_BUILTINS];
 #endif
 
-#ifndef DEBUG_C
+#ifndef MEMORY_C
+extern const char *cell_types[CELL_COUNT];
 extern const char *msg_names[MSG_COUNT];
+extern const char *frame_states[5];
 #endif
-
-
-
-
-
-int _pntrtype(pntr p);
-const char *_pntrtname(pntr p);
-global *_pglobal(pntr p);
-frame *_pframe(pntr p);
-pntr _make_pntr(cell *c);
 
 #endif

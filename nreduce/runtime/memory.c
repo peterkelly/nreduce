@@ -39,57 +39,59 @@
 #include <math.h>
 #include <pthread.h>
 
-int trace = 0;
+const char *cell_types[CELL_COUNT] = {
+  "EMPTY",
+  "APPLICATION",
+  "BUILTIN",
+  "CONS",
+  "REMOTEREF",
+  "IND",
+  "SCREF",
+  "AREF",
+  "HOLE",
+  "FRAME",
+  "CAP",
+  "NIL",
+  "NUMBER",
+  "ARRAY",
+};
 
-int _pntrtype(pntr p) { return pntrtype(p); }
-const char *_pntrtname(pntr p) { return cell_types[pntrtype(p)]; }
-global *_pglobal(pntr p) { return pglobal(p); }
-frame *_pframe(pntr p) { return pframe(p); }
-pntr _make_pntr(cell *c) { pntr p; make_pntr(p,c); return p; }
+const char *msg_names[MSG_COUNT] = {
+  "ISTATS",
+  "ALLSTATS",
+  "DUMP_INFO",
+  "DONE",
+  "PAUSE",
+  "RESUME",
+  "FISH",
+  "FETCH",
+  "TRANSFER",
+  "ACK",
+  "MARKROOTS",
+  "MARKENTRY",
+  "SWEEP",
+  "SWEEPACK",
+  "UPDATE",
+  "RESPOND",
+  "SCHEDULE",
+  "UPDATEREF",
+  "TEST",
+  "STARTDISTGC",
+};
 
-#ifndef INLINE_PTRFUNS
-int is_pntr(pntr p)
-{
-  return (*(((unsigned int*)&p)+1) == 0xFFFFFFF1);
-}
-
-cell *get_pntr(pntr p)
-{
-  assert(is_pntr(p));
-  return (cell*)(*((unsigned int*)&p));
-}
-
-int pntrequal(pntr a, pntr b)
-{
-  return 
-    ((*(((unsigned int*)&(a))+0) == *(((unsigned int*)&(b))+0)) &&
-     (*(((unsigned int*)&(a))+1) == *(((unsigned int*)&(b))+1)));
-}
-
-int is_nullpntr(pntr p)
-{
-  return (is_pntr(p) && (NULL == get_pntr(p)));
-}
-
-#endif
+const char *frame_states[5] = {
+  "NEW",
+  "SPARKED",
+  "RUNNING",
+  "BLOCKED",
+  "DONE",
+};
 
 #ifndef INLINE_RESOLVE_PNTR
 pntr resolve_pntr(pntr p)
 {
   while (TYPE_IND == pntrtype(p))
     p = get_pntr(p)->field1;
-  return p;
-}
-#endif
-
-#ifndef UNBOXED_NUMBERS
-pntr make_number(double d)
-{
-  cell *v = alloc_cell(NULL);
-  pntr p;
-  v->type = TYPE_NUMBER;
-  v->field1 = d;
-  make_pntr(p,v);
   return p;
 }
 #endif
@@ -138,16 +140,16 @@ static void mark_cap(process *proc, cap *c, short bit)
 static void mark(process *proc, pntr p, short bit)
 {
   cell *c;
-  assert(TYPE_EMPTY != pntrtype(p));
+  assert(CELL_EMPTY != pntrtype(p));
 
   /* handle CONS and AREF specially - process the "spine" iteratively */
-  while ((TYPE_AREF == pntrtype(p)) || (TYPE_CONS == pntrtype(p))) {
+  while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
     c = get_pntr(p);
     if (c->flags & bit)
       return;
     c->flags |= bit;
 
-    if (TYPE_AREF == pntrtype(p)) {
+    if (CELL_AREF == pntrtype(p)) {
       carray *arr = (carray*)get_pntr(c->field1);
       int i;
       assert(MAX_ARRAY_SIZE >= arr->size);
@@ -178,32 +180,31 @@ static void mark(process *proc, pntr p, short bit)
 
   c->flags |= bit;
   switch (pntrtype(p)) {
-  case TYPE_IND:
+  case CELL_IND:
     mark(proc,c->field1,bit);
     break;
-  case TYPE_APPLICATION:
+  case CELL_APPLICATION:
     c->field1 = resolve_pntr(c->field1);
     c->field2 = resolve_pntr(c->field2);
     mark(proc,c->field1,bit);
     mark(proc,c->field2,bit);
     break;
-  case TYPE_FRAME:
+  case CELL_FRAME:
     mark_frame(proc,(frame*)get_pntr(c->field1),bit);
     break;
-  case TYPE_CAP:
+  case CELL_CAP:
     mark_cap(proc,(cap*)get_pntr(c->field1),bit);
     break;
-  case TYPE_REMOTEREF: {
+  case CELL_REMOTEREF: {
     global *glo = (global*)get_pntr(c->field1);
     mark_global(proc,glo,bit);
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
-  case TYPE_HOLE:
+  case CELL_BUILTIN:
+  case CELL_SCREF:
+  case CELL_NIL:
+  case CELL_NUMBER:
+  case CELL_HOLE:
     break;
   default:
     abort();
@@ -236,7 +237,7 @@ cell *alloc_cell(process *proc)
 
 static void free_global(process *proc, global *glo)
 {
-  if (TYPE_REMOTEREF == pntrtype(glo->p)) {
+  if (CELL_REMOTEREF == pntrtype(glo->p)) {
     cell *refcell = get_pntr(glo->p);
     global *target = (global*)get_pntr(refcell->field1);
     if (target == glo) {
@@ -250,30 +251,27 @@ static void free_global(process *proc, global *glo)
 
 void free_cell_fields(process *proc, cell *v)
 {
-  assert(TYPE_EMPTY != v->type);
+  assert(CELL_EMPTY != v->type);
   switch (celltype(v)) {
-  case TYPE_STRING:
-    free((char*)get_pntr(v->field1));
-    break;
-  case TYPE_AREF: {
+  case CELL_AREF: {
     carray *arr = (carray*)get_pntr(v->field1);
     free(arr->elements);
     free(arr);
     break;
   }
-  case TYPE_FRAME: {
+  case CELL_FRAME: {
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
     assert(proc->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
     frame_dealloc(proc,f);
     break;
   }
-  case TYPE_CAP: {
+  case CELL_CAP: {
     cap *cp = (cap*)get_pntr(v->field1);
     cap_dealloc(cp);
     break;
   }
-  case TYPE_REMOTEREF:
+  case CELL_REMOTEREF:
     break;
   }
 }
@@ -285,7 +283,7 @@ int count_alive(process *proc)
   int alive = 0;
   for (bl = proc->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
-      if (TYPE_EMPTY != bl->values[i].type)
+      if (CELL_EMPTY != bl->values[i].type)
         alive++;
   return alive;
 }
@@ -382,7 +380,7 @@ void print_cells(process *proc)
   int i;
   for (bl = proc->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
-      if (TYPE_EMPTY != bl->values[i].type) {
+      if (CELL_EMPTY != bl->values[i].type) {
         pntr p;
         make_pntr(p,&bl->values[i]);
         fprintf(proc->output,"remaining: ");
@@ -413,7 +411,7 @@ void sweep(process *proc)
 
     for (bl = proc->blocks; bl; bl = bl->next) {
       for (i = 0; i < BLOCK_SIZE; i++) {
-        if ((TYPE_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
+        if ((CELL_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
           pntr p;
           make_pntr(p,&bl->values[i]);
           mark(proc,p,FLAG_MARKED);
@@ -458,9 +456,9 @@ void sweep(process *proc)
       if (!(bl->values[i].flags & FLAG_MARKED) &&
           !(bl->values[i].flags & FLAG_DMB) &&
           !(bl->values[i].flags & FLAG_PINNED) &&
-          (TYPE_EMPTY != bl->values[i].type)) {
+          (CELL_EMPTY != bl->values[i].type)) {
         free_cell_fields(proc,&bl->values[i]);
-        bl->values[i].type = TYPE_EMPTY;
+        bl->values[i].type = CELL_EMPTY;
 
         /* comment out these two lines to avoid reallocating cells, to check invalid accesses */
         make_pntr(bl->values[i].field1,proc->freeptr);
@@ -506,7 +504,7 @@ frame *frame_alloc(process *proc)
 void frame_dealloc(process *proc, frame *f)
 {
   assert(proc->done || (NULL == f->c));
-/*   assert((NULL == f->c) || TYPE_FRAME != celltype(f->c)); */
+/*   assert((NULL == f->c) || CELL_FRAME != celltype(f->c)); */
   assert(proc->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
   assert(proc->done || (NULL == f->wq.frames));
   assert(proc->done || (NULL == f->wq.fetchers));
@@ -586,28 +584,23 @@ void pntrstack_grow(int *alloc, pntr **data, int size)
 void print_pntr(FILE *f, pntr p)
 {
   switch (pntrtype(p)) {
-  case TYPE_NUMBER:
+  case CELL_NUMBER:
     print_double(f,p);
     break;
-  case TYPE_STRING: {
-    char *str = (char*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"\"%s\"",str);
-    break;
-  }
-  case TYPE_NIL:
+  case CELL_NIL:
     fprintf(f,"nil");
     break;
-  case TYPE_FRAME: {
+  case CELL_FRAME: {
     frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
     fprintf(f,"frame(%d/%d)",fr->fno,fr->count);
     break;
   }
-  case TYPE_REMOTEREF: {
+  case CELL_REMOTEREF: {
     global *glo = (global*)get_pntr(get_pntr(p)->field1);
     fprintf(f,"%d@%d",glo->addr.lid,glo->addr.pid);
     break;
   }
-  case TYPE_IND: {
+  case CELL_IND: {
     fprintf(f,"(%s ",cell_types[pntrtype(p)]);
     print_pntr(f,get_pntr(p)->field1);
     fprintf(f,")");

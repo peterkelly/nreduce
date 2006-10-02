@@ -129,13 +129,13 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
   CHECK_READ(read_format(rd,proc,observe,"ai",&addr,&type));
 
   switch (type) {
-  case TYPE_IND:
+  case CELL_IND:
     /* shouldn't receive an IND cell */
     return READER_INCORRECT_CONTENTS;
-  case TYPE_AREF:
+  case CELL_AREF:
     /* shouldn't receive an AREF cell (yet...) */
     return READER_INCORRECT_CONTENTS;
-  case TYPE_CONS: {
+  case CELL_CONS: {
     cell *c;
     pntr head;
     pntr tail;
@@ -143,25 +143,25 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
     CHECK_READ(read_format(rd,proc,observe,"pp",&head,&tail));
 
     c = alloc_cell(proc);
-    c->type = TYPE_CONS;
+    c->type = CELL_CONS;
     c->field1 = head;
     c->field2 = tail;
     make_pntr(*pout,c);
     break;
   }
-  case TYPE_REMOTEREF:
+  case CELL_REMOTEREF:
     make_pntr(*pout,NULL);
     *pout = global_lookup(proc,addr,*pout);
     break;
-  case TYPE_HOLE:
+  case CELL_HOLE:
     fatal("shouldn't receive HOLE");
     break;
-  case TYPE_FRAME: {
+  case CELL_FRAME: {
     frame *fr = frame_alloc(proc);
     int i;
 
     fr->c = alloc_cell(proc);
-    fr->c->type = TYPE_FRAME;
+    fr->c->type = CELL_FRAME;
     make_pntr(fr->c->field1,fr);
     make_pntr(*pout,fr->c);
 
@@ -175,13 +175,13 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
       CHECK_READ(read_pntr(rd,proc,&fr->data[i],observe));
     break;
   }
-  case TYPE_CAP: {
+  case CELL_CAP: {
     cap *cp = cap_alloc(1,0,0);
     cell *capcell;
     int i;
 
     capcell = alloc_cell(proc);
-    capcell->type = TYPE_CAP;
+    capcell->type = CELL_CAP;
     make_pntr(capcell->field1,cp);
     make_pntr(*pout,capcell);
 
@@ -196,24 +196,13 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
       CHECK_READ(read_pntr(rd,proc,&cp->data[i],observe));
     break;
   }
-  case TYPE_NIL:
+  case CELL_NIL:
     *pout = proc->globnilpntr;
     break;
-  case TYPE_NUMBER:
+  case CELL_NUMBER:
     CHECK_READ(read_double(rd,pout));
     assert(!is_pntr(*pout));
     break;
-  case TYPE_STRING: {
-    cell *c;
-    char *str;
-    CHECK_READ(read_string(rd,&str));
-
-    c = alloc_cell(proc);
-    c->type = TYPE_STRING;
-    make_pntr(c->field1,str);
-    make_pntr(*pout,c);
-    break;
-  }
   default:
     return READER_INCORRECT_CONTENTS;
   }
@@ -256,7 +245,7 @@ int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_lis
     case 'r': {
       pntr *p = (va_arg(ap,pntr*));
       r = read_pntr(rd,proc,p,observe);
-      if ((READER_OK == r) && (TYPE_REMOTEREF != pntrtype(*p)))
+      if ((READER_OK == r) && (CELL_REMOTEREF != pntrtype(*p)))
         r = READER_INCORRECT_CONTENTS;
       break;
     }
@@ -422,13 +411,13 @@ void write_ref(array *arr, process *proc, pntr p)
   write_tag(arr,PNTR_TAG);
   if (is_pntr(p)) {
     global *glo = make_global(proc,p);
-    write_format(arr,proc,"ai",glo->addr,TYPE_REMOTEREF);
+    write_format(arr,proc,"ai",glo->addr,CELL_REMOTEREF);
   }
   else {
     gaddr addr;
     addr.pid = -1;
     addr.lid = -1;
-    write_format(arr,proc,"aid",addr,TYPE_NUMBER,p);
+    write_format(arr,proc,"aid",addr,CELL_NUMBER,p);
   }
 }
 
@@ -438,16 +427,16 @@ void write_pntr(array *arr, process *proc, pntr p)
   addr.pid = -1;
   addr.lid = -1;
 
-  if (TYPE_IND == pntrtype(p)) {
+  if (CELL_IND == pntrtype(p)) {
     write_pntr(arr,proc,get_pntr(p)->field1);
     return;
   }
 
-  if (TYPE_REMOTEREF == pntrtype(p)) {
+  if (CELL_REMOTEREF == pntrtype(p)) {
     global *glo = (global*)get_pntr(get_pntr(p)->field1);
     if (0 <= glo->addr.lid) {
       write_tag(arr,PNTR_TAG);
-      write_format(arr,proc,"ai",glo->addr,TYPE_REMOTEREF);
+      write_format(arr,proc,"ai",glo->addr,CELL_REMOTEREF);
     }
     else {
       /* FIXME: how to deal with this case? */
@@ -458,13 +447,13 @@ void write_pntr(array *arr, process *proc, pntr p)
     return;
   }
 
-  if (TYPE_NUMBER != pntrtype(p))
+  if (CELL_NUMBER != pntrtype(p))
     addr = global_addressof(proc,p);
 
 
   write_tag(arr,PNTR_TAG);
 
-  if (TYPE_AREF == pntrtype(p)) {
+  if (CELL_AREF == pntrtype(p)) {
     cell *c = get_pntr(p);
     cell *arrholder = get_pntr(c->field1);
     carray *carr = aref_array(p);
@@ -475,11 +464,11 @@ void write_pntr(array *arr, process *proc, pntr p)
     if (index+1 < carr->size) {
       pntr p;
       make_aref_pntr(p,arrholder,index+1);
-      write_format(arr,proc,"airr",addr,TYPE_CONS,
+      write_format(arr,proc,"airr",addr,CELL_CONS,
                    ((pntr*)carr->elements)[index],p);
     }
     else {
-      write_format(arr,proc,"airr",addr,TYPE_CONS,
+      write_format(arr,proc,"airr",addr,CELL_CONS,
                    ((pntr*)carr->elements)[index],carr->tail);
     }
     return;
@@ -487,15 +476,15 @@ void write_pntr(array *arr, process *proc, pntr p)
 
   write_format(arr,proc,"ai",addr,pntrtype(p));
   switch (pntrtype(p)) {
-  case TYPE_CONS: {
+  case CELL_CONS: {
     write_ref(arr,proc,get_pntr(p)->field1);
     write_ref(arr,proc,get_pntr(p)->field2);
     break;
   }
-  case TYPE_HOLE:
+  case CELL_HOLE:
     write_ref(arr,proc,p);
     break;
-  case TYPE_FRAME: {
+  case CELL_FRAME: {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     int i;
 
@@ -506,14 +495,14 @@ void write_pntr(array *arr, process *proc, pntr p)
     write_format(arr,proc,"iiii",f->address,f->fno,f->alloc,f->count);
     for (i = 0; i < f->count; i++) {
       pntr arg = resolve_pntr(f->data[i]);
-      if ((TYPE_NUMBER == pntrtype(arg)) || (TYPE_NIL == pntrtype(arg)))
+      if ((CELL_NUMBER == pntrtype(arg)) || (CELL_NIL == pntrtype(arg)))
         write_pntr(arr,proc,f->data[i]);
       else
         write_ref(arr,proc,f->data[i]);
     }
     break;
   }
-  case TYPE_CAP: {
+  case CELL_CAP: {
     cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
     int i;
     write_format(arr,proc,"iiiiii",cp->arity,cp->address,cp->fno,
@@ -522,13 +511,10 @@ void write_pntr(array *arr, process *proc, pntr p)
       write_ref(arr,proc,cp->data[i]);
     break;
   }
-  case TYPE_NIL:
+  case CELL_NIL:
     break;
-  case TYPE_NUMBER:
+  case CELL_NUMBER:
     write_double(arr,p);
-    break;
-  case TYPE_STRING:
-    write_string(arr,(char*)get_pntr(get_pntr(p)->field1));
     break;
   default:
     abort();

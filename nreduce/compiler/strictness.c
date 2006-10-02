@@ -101,9 +101,9 @@
  */
 static int fun_nargs(snode *c)
 {
-  if (TYPE_SCREF == snodetype(c))
+  if (SNODE_SCREF == c->type)
     return c->sc->nargs;
-  else if (TYPE_BUILTIN == snodetype(c))
+  else if (SNODE_BUILTIN == c->type)
     return builtin_info[c->bif].nargs;
   else
     abort();
@@ -118,9 +118,9 @@ static int fun_nargs(snode *c)
 static int fun_strictin(snode *c, int argno)
 {
   assert(argno < fun_nargs(c));
-  if (TYPE_SCREF == snodetype(c))
+  if (SNODE_SCREF == c->type)
     return c->sc->strictin[argno];
-  else if (TYPE_BUILTIN == snodetype(c))
+  else if (SNODE_BUILTIN == c->type)
     return (argno < builtin_info[c->bif].nstrict);
   else
     abort();
@@ -192,8 +192,8 @@ static void add_union(list **dest, list *a, list *b)
  */
 static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
 {
-  switch (snodetype(c)) {
-  case TYPE_LETREC: {
+  switch (c->type) {
+  case SNODE_LETREC: {
     letrec *rec;
     list *bodyused = NULL;
     list *l;
@@ -227,10 +227,10 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
     list_free(bodyused,NULL);
     break;
   }
-  case TYPE_APPLICATION: {
+  case SNODE_APPLICATION: {
     snode *fun;
     int nargs = 0;
-    for (fun = c; TYPE_APPLICATION == snodetype(fun); fun = fun->left)
+    for (fun = c; SNODE_APPLICATION == fun->type; fun = fun->left)
       nargs++;
 
     /* We have discovered the item at the bottom of the spine, which is the function to be called.
@@ -243,7 +243,7 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
        Additionally, we will wait until we have an application to the right number of arguments
        before doing the analysis - if this is not the case yet we'll just do a recursive call
        to the next item in the application chain and handle it later. */
-    if (((TYPE_SCREF == snodetype(fun)) || (TYPE_BUILTIN == snodetype(fun))) &&
+    if (((SNODE_SCREF == fun->type) || (SNODE_BUILTIN == fun->type)) &&
         (nargs == fun_nargs(fun))) {
 
       /* Follow the left branches down the tree, inspecting each argument and treating it as
@@ -252,12 +252,12 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
       int argno;
       for (argno = nargs-1; 0 <= argno; argno--) {
 
-        /* If the function is strict in this argument, mark the application node with FLAG_STRICT.
+        /* If the function is strict in this argument, mark the application node as strict.
            This will provide a hint to the G-code compiler that it may compile the expression
            directly instead of adding MKAP instructions to create application nodes at runtime. */
         if (fun_strictin(fun,argno)) {
-          *changed = (*changed || !(app->tag & FLAG_STRICT));
-          app->tag |= FLAG_STRICT;
+          *changed = (*changed || !app->strict);
+          app->strict = 1;
 
           /* The expression will definitely need to be evaluated, i.e. it is in a strictness
              context. Perform the analysis recursively. */
@@ -278,9 +278,9 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
          so they are treated as a strict context and analysed with another recursive call to
          check_strictness_r(). This information is still relevant to the G-code compiler due to
          the optimised way in which it compiles if statements using JFALSE and JUMP instructions.
-         We also annotate application nodes within the true/false branches with FLAG_STRICT
+         We also annotate application nodes within the true/false branches with strictness
          where appropriate. */
-      if ((TYPE_BUILTIN == snodetype(fun)) && (B_IF == fun->bif)) {
+      if ((SNODE_BUILTIN == fun->type) && (B_IF == fun->bif)) {
         snode *falsebranch = c->right;
         snode *truebranch = c->left->right;
 
@@ -303,17 +303,17 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
     check_strictness_r(sc,c->left,used,changed);
     break;
   }
-  case TYPE_SYMBOL:
+  case SNODE_SYMBOL:
     /* We are in a strict context and have an encountered a symbol, which must correspond to
        one of the supercombinator's arguments or a letrec binding. Add the variable to the list
        to indicate that this argument will definitely be evaluated. */
     add_var(used,c->name);
     break;
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();

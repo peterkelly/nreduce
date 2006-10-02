@@ -82,30 +82,30 @@ extern struct source *parse_src;
 
 SingleExpr:
   NIL                             { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_NIL; }
+                                    $$->type = SNODE_NIL; }
 | '(' ')'                         { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_NIL; }
+                                    $$->type = SNODE_NIL; }
 | INTEGER                         { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_NUMBER;
+                                    $$->type = SNODE_NUMBER;
                                     $$->num = (double)($1); }
 | DOUBLE                          { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_NUMBER;
+                                    $$->type = SNODE_NUMBER;
                                     $$->num = $1; }
 | STRING                          { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_STRING;
+                                    $$->type = SNODE_STRING;
                                     $$->value = strdup($1); }
 | SYMBOL                          { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_SYMBOL;
+                                    $$->type = SNODE_SYMBOL;
                                     $$->name = strdup($1); }
 | EQUALS                          { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_SYMBOL;
+                                    $$->type = SNODE_SYMBOL;
                                     $$->name = strdup("="); }
 | '(' Expr ')'                    { $$ = $2; }
 ;
 
 SingleLambda:
   LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_LAMBDA;
+                                    $$->type = SNODE_LAMBDA;
                                     $$->name = (void*)strdup($2);
                                     $$->body = NULL; }
 ;
@@ -118,7 +118,7 @@ Lambdas:
 AppliedExpr:
   SingleExpr                      { $$ = $1; }
 | AppliedExpr SingleExpr          { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_APPLICATION;
+                                    $$->type = SNODE_APPLICATION;
                                     $$->left = $1;
                                     $$->right = $2; }
 ;
@@ -142,7 +142,7 @@ Expr:
                                       c = c->body;
                                     c->body = $2; }
 | LETREC Letrecs IN SingleExpr    { $$ = snode_new(yyfileno,@1.first_line);
-                                    $$->tag = TYPE_LETREC;
+                                    $$->type = SNODE_LETREC;
                                     $$->bindings = $2;
                                     $$->body = $4; }
 ;

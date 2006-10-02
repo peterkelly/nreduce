@@ -76,13 +76,12 @@ static char *next_var(source *src, const char *oldname)
 
 static void rename_variables_r(source *src, snode *c, stack *mappings)
 {
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     rename_variables_r(src,c->left,mappings);
     rename_variables_r(src,c->right,mappings);
     break;
-  case TYPE_LAMBDA: {
+  case SNODE_LAMBDA: {
     char *newname = next_var(src,c->name);
     int oldcount = mappings->count;
     stack_push(mappings,mapping_new(c->name,newname));
@@ -92,7 +91,7 @@ static void rename_variables_r(source *src, snode *c, stack *mappings)
     mappings_set_count(mappings,oldcount);
     break;
   }
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = mappings->count;
     letrec *rec;
 
@@ -110,7 +109,7 @@ static void rename_variables_r(source *src, snode *c, stack *mappings)
     mappings_set_count(mappings,oldcount);
     break;
   }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     int i;
     for (i = mappings->count-1; 0 <= i; i--) {
       mapping *mp = (mapping*)mappings->data[i];
@@ -121,11 +120,11 @@ static void rename_variables_r(source *src, snode *c, stack *mappings)
     }
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();

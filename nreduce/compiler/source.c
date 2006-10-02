@@ -24,6 +24,8 @@
 #include "config.h"
 #endif
 
+#define SOURCE_C
+
 #include "source.h"
 #include "gcode.h"
 #include "src/nreduce.h"
@@ -35,6 +37,19 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+
+const char *snode_types[SNODE_COUNT] = {
+  "EMPTY",
+  "APPLICATION",
+  "LAMBDA",
+  "BUILTIN",
+  "SYMBOL",
+  "LETREC",
+  "SCREF",
+  "NIL",
+  "NUMBER",
+  "STRING",
+};
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -73,16 +88,15 @@ void snode_free(snode *c)
 {
   if (NULL == c)
     return;
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     snode_free(c->left);
     snode_free(c->right);
     break;
-  case TYPE_LAMBDA:
+  case SNODE_LAMBDA:
     snode_free(c->body);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec = c->bindings;
     while (rec) {
       letrec *next = rec->next;
@@ -93,12 +107,12 @@ void snode_free(snode *c)
     snode_free(c->body);
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SYMBOL:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SYMBOL:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();

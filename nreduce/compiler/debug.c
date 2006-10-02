@@ -40,82 +40,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-const char *snode_types[NUM_CELLTYPES] = {
-"EMPTY",
-"APPLICATION",
-"LAMBDA",
-"BUILTIN",
-"CONS",
-"SYMBOL",
-"LETREC",
-"REMOTEREF",
-"RES3",
-"IND",
-"RES1",
-"SCREF",
-"AREF",
-"HOLE",
-"FRAME",
-"CAP",
-"NIL",
-"NUMBER",
-"STRING",
-"ARRAY",
- };
-
-const char *cell_types[NUM_CELLTYPES] = {
-"EMPTY",
-"APPLICATION",
-"LAMBDA",
-"BUILTIN",
-"CONS",
-"SYMBOL",
-"LETREC",
-"REMOTEREF",
-"RES3",
-"IND",
-"RES1",
-"SCREF",
-"AREF",
-"HOLE",
-"FRAME",
-"CAP",
-"NIL",
-"NUMBER",
-"STRING",
-"ARRAY",
- };
-
-const char *msg_names[MSG_COUNT] = {
-"ISTATS",
-"ALLSTATS",
-"DUMP_INFO",
-"DONE",
-"PAUSE",
-"RESUME",
-"FISH",
-"FETCH",
-"TRANSFER",
-"ACK",
-"MARKROOTS",
-"MARKENTRY",
-"SWEEP",
-"SWEEPACK",
-"UPDATE",
-"RESPOND",
-"SCHEDULE",
-"UPDATEREF",
-"TEST",
-"STARTDISTGC",
-};
-
-const char *frame_states[5] = {
-"NEW",
-"SPARKED",
-"RUNNING",
-"BLOCKED",
-"DONE",
-};
+int trace = 0;
 
 void fatal(const char *format, ...)
 {
@@ -157,7 +82,7 @@ void debug_stage(const char *name)
 int count_args(snode *c)
 {
   int napps = 0;
-  while (TYPE_APPLICATION == snodetype(c)) {
+  while (SNODE_APPLICATION == c->type) {
     c = c->left;
     napps++;
   }
@@ -169,7 +94,7 @@ snode *get_arg(snode *c, int argno)
   argno = count_args(c)-argno-1;
   assert(0 <= argno);
   while (0 < argno) {
-    assert(TYPE_APPLICATION == snodetype(c));
+    assert(SNODE_APPLICATION == c->type);
     c = c->left;
     argno--;
   }
@@ -234,47 +159,41 @@ static void print1(char *prefix, snode *c, int indent)
 {
   int i;
 
-  printf("%s%p    %11s ",prefix,c,snode_types[snodetype(c)]);
+  printf("%s%p    %11s ",prefix,c,snode_types[c->type]);
   for (i = 0; i < indent; i++)
     printf("  ");
 
-  if (c->tag & FLAG_TMP) {
+  if (c->flags & FLAG_TMP) {
     printf("%p\n",c);
   }
   else {
-    c->tag |= FLAG_TMP;
-    switch (snodetype(c)) {
-    case TYPE_IND:
-      abort();
-      break;
-    case TYPE_EMPTY:
+    c->flags |= FLAG_TMP;
+    switch (c->type) {
+    case SNODE_EMPTY:
       printf("empty\n");
       break;
-    case TYPE_APPLICATION:
-      if (c->tag & FLAG_STRICT)
+    case SNODE_APPLICATION:
+      if (c->strict)
         printf("@S\n");
       else
         printf("@\n");
       print1(prefix,c->left,indent+1);
       print1(prefix,c->right,indent+1);
       break;
-    case TYPE_LAMBDA:
+    case SNODE_LAMBDA:
       printf("lambda %s\n",c->name);
       print1(prefix,c->body,indent+1);
       break;
-    case TYPE_BUILTIN:
+    case SNODE_BUILTIN:
       printf("%s\n",builtin_info[c->bif].name);
       break;
-    case TYPE_CONS:
-      abort();
-      break;
-    case TYPE_SYMBOL:
+    case SNODE_SYMBOL:
       printf("%s\n",c->name);
       break;
-    case TYPE_SCREF:
+    case SNODE_SCREF:
       printf("%s\n",c->sc->name);
       break;
-    case TYPE_LETREC: {
+    case SNODE_LETREC: {
       letrec *rec;
       printf("LETREC\n");
       for (rec = c->bindings; rec; rec = rec->next) {
@@ -290,15 +209,13 @@ static void print1(char *prefix, snode *c, int indent)
       print1(prefix,c->body,indent+1);
       break;
     }
-    case TYPE_HOLE:
-      printf("(hole)\n"); break;
-    case TYPE_NIL:
+    case SNODE_NIL:
       printf("nil\n"); break;
-    case TYPE_NUMBER:
+    case SNODE_NUMBER:
       print_double(stdout,c->num);
       printf("\n");
       break;
-    case TYPE_STRING:
+    case SNODE_STRING:
       printf("%s\n",c->value);
       break;
     default:
@@ -372,14 +289,11 @@ char *real_scname(source *src, const char *sym)
 static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *parent,
                         int *line, int *col)
 {
-  switch (snodetype(c)) {
-  case TYPE_IND:
-    abort();
-    break;
-  case TYPE_EMPTY:
+  switch (c->type) {
+  case SNODE_EMPTY:
     *col += fprintf(f,"empty");
     break;
-  case TYPE_APPLICATION: {
+  case SNODE_APPLICATION: {
     snode *tmp;
     list *l;
     int addedline = 0;
@@ -389,22 +303,22 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
     list *apps = NULL;
     if (needbr)
       *col += fprintf(f,"(");
-    for (tmp = c; TYPE_APPLICATION == snodetype(tmp); tmp = tmp->left)
+    for (tmp = c; SNODE_APPLICATION == tmp->type; tmp = tmp->left)
       list_push(&apps,tmp);
 
     print_code1(src,f,tmp,0,c,line,col);
     *col += fprintf(f," ");
     argscol = *col;
     argno = 0;
-    isif = (((TYPE_BUILTIN == snodetype(tmp)) && (B_IF == tmp->bif)) ||
-            ((TYPE_SYMBOL == snodetype(tmp)) && !strcmp(tmp->name,"if")));
+    isif = (((SNODE_BUILTIN == tmp->type) && (B_IF == tmp->bif)) ||
+            ((SNODE_SYMBOL == tmp->type) && !strcmp(tmp->name,"if")));
     for (l = apps; l; l = l->next) {
       snode *app = (snode*)l->data;
       snode *arg = app->right;
       int oldcol;
       int oldline;
 
-      if (!addedline && (0 < argno) && (isif || (TYPE_LAMBDA == snodetype(arg)))) {
+      if (!addedline && (0 < argno) && (isif || (SNODE_LAMBDA == arg->type))) {
         *col = argscol;
         down_line(f,line,col);
       }
@@ -412,7 +326,7 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
 
       oldcol = *col;
       oldline = *line;
-/*       if (app->tag & FLAG_STRICT) */
+/*       if (app->strict) */
 /*         *col += fprintf(f,"!"); */
       print_code1(src,f,arg,1,app,line,col);
       if (l->next) {
@@ -433,32 +347,18 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
       fprintf(f,")");
     break;
   }
-  case TYPE_LAMBDA:
-    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
+  case SNODE_LAMBDA:
+    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
       *col += fprintf(f,"(");
     *col += fprintf(f,"!%s.",real_varname(src,c->name));
     print_code1(src,f,c->body,0,c,line,col);
-    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
+    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
       *col += fprintf(f,")");
     break;
-  case TYPE_BUILTIN:
+  case SNODE_BUILTIN:
     *col += fprintf(f,"%s",builtin_info[c->bif].name);
     break;
-  case TYPE_CONS: {
-    int pos = 0;
-    snode *item;
-    *col += fprintf(f,"[");
-    for (item = c; TYPE_CONS == snodetype(item); item = item->right) {
-      if (0 < pos++)
-        *col += fprintf(f,",");
-      print_code1(src,f,item->left,1,c,line,col);
-    }
-    *col += fprintf(f,"]");
-    if (TYPE_NIL != snodetype(item))
-      print_code1(src,f,item,1,c,line,col);
-    break;
-  }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = c->name;
     if (!strncmp(sym,"__code",6)) {
       int fno = atoi(sym+6);
@@ -473,16 +373,16 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
     }
     break;
   }
-  case TYPE_SCREF: {
+  case SNODE_SCREF: {
     char *scname = real_scname(src,c->sc->name);
     *col += fprintf(f,"%s",scname);
     free(scname);
     break;
   }
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int count = 0;
     letrec *rec = c->bindings;
-    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
+    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
       *col += fprintf(f,"(");
     *col += fprintf(f,"let (");
     while (rec) {
@@ -501,20 +401,17 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
     (*col)--;
     down_line(f,line,col);
     print_code1(src,f,c->body,1,c,line,col);
-    if (parent && (TYPE_LAMBDA != snodetype(parent)) && (TYPE_LETREC != snodetype(parent)))
+    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
       *col += fprintf(f,")");
     break;
   }
-  case TYPE_HOLE:
-    fprintf(f,"(hole)");
-    break;
-  case TYPE_NIL:
+  case SNODE_NIL:
     fprintf(f,"nil");
     break;
-  case TYPE_NUMBER:
+  case SNODE_NUMBER:
     print_double(f,c->num);
     break;
-  case TYPE_STRING: {
+  case SNODE_STRING: {
     char *ch;
     fprintf(f,"\"");
     for (ch = c->value; *ch; ch++) {
@@ -528,15 +425,6 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
     fprintf(f,"\"");
     break;
   }
-  case TYPE_AREF:
-    abort();
-    break;
-  case TYPE_FRAME:
-    abort();
-    break;
-  case TYPE_CAP:
-    abort();
-    break;
   default:
     abort();
     break;
@@ -610,40 +498,5 @@ void print_scombs2(source *src)
     debug(0,"\n");
   }
   debug(0,"\n");
-}
-
-void print_stack(FILE *f, pntr *stk, int size, int dir)
-{
-  int i;
-
-  if (dir)
-    i = size-1;
-  else
-    i = 0;
-
-
-  while (1) {
-    pntr p;
-    int pos = dir ? (size-1-i) : i;
-
-    if (dir && i < 0)
-      break;
-
-    if (!dir && (i >= size))
-      break;
-
-    p = resolve_pntr(stk[i]);
-    if (TYPE_IND == pntrtype(stk[i]))
-      fprintf(f,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
-    else
-      fprintf(f,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
-    print_pntr(f,p);
-    fprintf(f,"\n");
-
-    if (dir)
-      i--;
-    else
-      i++;
-  }
 }
 

@@ -39,21 +39,21 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
 {
   cell *dest;
   pntr p;
-  switch (snodetype(source)) {
-  case TYPE_APPLICATION: {
+  switch (source->type) {
+  case SNODE_APPLICATION: {
     dest = alloc_cell(proc);
-    dest->type = TYPE_APPLICATION;
+    dest->type = CELL_APPLICATION;
     dest->field1 = instantiate_scomb_r(proc,source->left,names,values);
     dest->field2 = instantiate_scomb_r(proc,source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
       if (!strcmp((char*)names->data[pos],source->name)) {
         dest = alloc_cell(proc);
-        dest->type = TYPE_IND;
+        dest->type = CELL_IND;
         dest->field1 = values->data[pos];
         make_pntr(p,dest);
         return p;
@@ -64,14 +64,14 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     make_pntr(p,NULL);
     return p;
   }
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = names->count;
     letrec *rec;
     int i;
     pntr res;
     for (rec = source->bindings; rec; rec = rec->next) {
       cell *hole = alloc_cell(proc);
-      hole->type = TYPE_HOLE;
+      hole->type = CELL_HOLE;
       stack_push(names,(char*)rec->name);
       make_pntr(p,hole);
       pntrstack_push(values,p);
@@ -79,8 +79,8 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     i = 0;
     for (rec = source->bindings; rec; rec = rec->next) {
       res = instantiate_scomb_r(proc,rec->value,names,values);
-      assert(TYPE_HOLE == get_pntr(values->data[oldcount+i])->type);
-      get_pntr(values->data[oldcount+i])->type = TYPE_IND;
+      assert(CELL_HOLE == get_pntr(values->data[oldcount+i])->type);
+      get_pntr(values->data[oldcount+i])->type = CELL_IND;
       get_pntr(values->data[oldcount+i])->field1 = res;
       i++;
     }
@@ -89,27 +89,28 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     values->count = oldcount;
     return res;
   }
-  case TYPE_BUILTIN:
+  case SNODE_BUILTIN:
     dest = alloc_cell(proc);
-    dest->type = TYPE_BUILTIN;
+    dest->type = CELL_BUILTIN;
     make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
-  case TYPE_SCREF:
+  case SNODE_SCREF:
     dest = alloc_cell(proc);
-    dest->type = TYPE_SCREF;
+    dest->type = CELL_SCREF;
     make_pntr(dest->field1,source->sc);
     make_pntr(p,dest);
     return p;
-  case TYPE_NIL:
+  case SNODE_NIL:
     return proc->globnilpntr;
-  case TYPE_NUMBER:
-    return make_number(source->num);
-  case TYPE_STRING:
-    dest = alloc_cell(proc);
-    dest->type = TYPE_STRING;
-    make_pntr(dest->field1,strdup(source->value));
-    make_pntr(p,dest);
+  case SNODE_NUMBER:
+    return source->num;
+  case SNODE_STRING:
+    /* FIXME: this needs to be an array reference */
+/*     dest = alloc_cell(proc); */
+/*     dest->type = CELL_STRING; */
+/*     make_pntr(dest->field1,strdup(source->value)); */
+/*     make_pntr(p,dest); */
     return p;
   default:
     abort();
@@ -165,7 +166,7 @@ void reduce(process *proc, pntrstack *s)
     /* 1. Unwind the spine until something other than an application node is encountered. */
     pntrstack_push(s,target);
 
-    while (TYPE_APPLICATION == pntrtype(target)) {
+    while (CELL_APPLICATION == pntrtype(target)) {
       target = resolve_pntr(get_pntr(target)->field1);
       pntrstack_push(s,target);
     }
@@ -173,12 +174,7 @@ void reduce(process *proc, pntrstack *s)
     /* 2. Examine the cell at the tip of the spine */
     switch (pntrtype(target)) {
 
-    /* A variable. This should correspond to a supercombinator, and if it doesn't it means
-       something has gone wrong. */
-    case TYPE_SYMBOL:
-      fatal("variable encountered during reduction");
-      break;
-    case TYPE_SCREF: {
+    case CELL_SCREF: {
       scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
 
       int i;
@@ -203,24 +199,23 @@ void reduce(process *proc, pntrstack *s)
         pntr arg;
         assert(i > oldtop);
         arg = pntrstack_at(s,i-1);
-        assert(TYPE_APPLICATION == pntrtype(arg));
+        assert(CELL_APPLICATION == pntrtype(arg));
         s->data[i] = get_pntr(arg)->field2;
       }
 
-      assert((TYPE_APPLICATION == pntrtype(dest)) ||
-             (TYPE_SCREF == pntrtype(dest)));
+      assert((CELL_APPLICATION == pntrtype(dest)) ||
+             (CELL_SCREF == pntrtype(dest)));
       res = instantiate_scomb(proc,s,sc->body,sc);
-      get_pntr(dest)->type = TYPE_IND;
+      get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
 
       s->count = oldtop;
       continue;
     }
-    case TYPE_CONS:
-    case TYPE_AREF:
-    case TYPE_NIL:
-    case TYPE_NUMBER:
-    case TYPE_STRING:
+    case CELL_CONS:
+    case CELL_AREF:
+    case CELL_NIL:
+    case CELL_NUMBER:
       /* The item at the tip of the spine is a value; this means the expression is in WHNF.
          If there are one or more arguments "applied" to this value then it's considered an
          error, e.g. caused by an attempt to pass more arguments to a function than it requires. */
@@ -236,7 +231,7 @@ void reduce(process *proc, pntrstack *s)
       /* b. A built-in function. Check the number of arguments available. If there are too few
          arguments the expression is in WHNF so STOP. Otherwise evaluate any arguments required,
          execute the built-in function and overwrite the root of the redex with the result. */
-    case TYPE_BUILTIN: {
+    case CELL_BUILTIN: {
 
       int bif = (int)get_pntr(get_pntr(target)->field1);
       int reqargs;
@@ -257,7 +252,7 @@ void reduce(process *proc, pntrstack *s)
       for (i = s->count-1; i >= s->count-reqargs; i--) {
         pntr arg = pntrstack_at(s,i-1);
         assert(i > oldtop);
-        assert(TYPE_APPLICATION == pntrtype(arg));
+        assert(CELL_APPLICATION == pntrtype(arg));
         s->data[i] = get_pntr(arg)->field2;
       }
 
@@ -271,7 +266,7 @@ void reduce(process *proc, pntrstack *s)
       }
 
       for (i = 0; i < strictargs; i++)
-        assert(TYPE_IND != pntrtype(s->data[s->count-1-i]));
+        assert(CELL_IND != pntrtype(s->data[s->count-1-i]));
 
       builtin_info[bif].f(proc,&s->data[s->count-reqargs]);
       if (proc->error) {
@@ -284,7 +279,7 @@ void reduce(process *proc, pntrstack *s)
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
       free_cell_fields(proc,get_pntr(s->data[s->count-2]));
-      get_pntr(s->data[s->count-2])->type = TYPE_IND;
+      get_pntr(s->data[s->count-2])->type = CELL_IND;
       get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 
       s->count--;
@@ -311,20 +306,17 @@ static void stream(process *proc, pntr lst)
 
     p = pntrstack_pop(proc->streamstack);
     p = resolve_pntr(p);
-    if (TYPE_NIL == pntrtype(p)) {
+    if (CELL_NIL == pntrtype(p)) {
       /* nothing */
     }
-    else if (TYPE_NUMBER == pntrtype(p)) {
-      printf("%f",pntrdouble(p));
+    else if (CELL_NUMBER == pntrtype(p)) {
+      printf("%f",p);
     }
-    else if (TYPE_STRING == pntrtype(p)) {
-      printf("%s",(char*)get_pntr(get_pntr(p)->field1));
-    }
-    else if (TYPE_CONS == pntrtype(p)) {
+    else if (CELL_CONS == pntrtype(p)) {
       pntrstack_push(proc->streamstack,get_pntr(p)->field2);
       pntrstack_push(proc->streamstack,get_pntr(p)->field1);
     }
-    else if (TYPE_APPLICATION == pntrtype(p)) {
+    else if (CELL_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
       exit(1);
     }
@@ -353,7 +345,7 @@ void run_reduction(source *src, FILE *stats)
   mainsc = get_scomb(src,"main");
 
   root = alloc_cell(proc);
-  root->type = TYPE_SCREF;
+  root->type = CELL_SCREF;
   make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
 

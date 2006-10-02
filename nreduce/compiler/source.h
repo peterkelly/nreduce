@@ -25,8 +25,26 @@
 
 #include "src/nreduce.h"
 
+#define SNODE_EMPTY       0x00
+#define SNODE_APPLICATION 0x01
+#define SNODE_LAMBDA      0x02
+#define SNODE_BUILTIN     0x03
+#define SNODE_SYMBOL      0x04
+#define SNODE_LETREC      0x05
+#define SNODE_SCREF       0x06
+#define SNODE_NIL         0x07
+#define SNODE_NUMBER      0x08
+#define SNODE_STRING      0x09
+#define SNODE_COUNT       0x0A
+
+typedef struct sourceloc {
+  int fileno;
+  int lineno;
+} sourceloc;
+
 typedef struct snode {
-  int tag;
+  int flags;
+  int type;
 
   struct snode *left;
   struct snode *right;
@@ -38,7 +56,7 @@ typedef struct snode {
   struct scomb *sc;
   int bif;
   double num;
-
+  int strict;
   sourceloc sl;
 } snode;
 
@@ -133,11 +151,18 @@ void print_scombs1(source *src);
 void print_scombs2(source *src);
 const char *real_varname(source *src, const char *sym);
 char *real_scname(source *src, const char *sym);
-void print_stack(FILE *f, pntr *stk, int size, int dir);
 
 /* strictness */
 
 void dump_strictinfo(source *src);
 void strictness_analysis(source *src);
+
+#ifndef DEBUG_C
+extern int trace;
+#endif
+
+#ifndef SOURCE_C
+extern const char *snode_types[SNODE_COUNT];
+#endif
 
 #endif

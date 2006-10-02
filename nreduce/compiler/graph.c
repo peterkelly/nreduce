@@ -36,23 +36,19 @@
 
 static void setneedclear_r(snode *c)
 {
-  if (c->tag & FLAG_NEEDCLEAR)
+  if (c->flags & FLAG_NEEDCLEAR)
     return;
-  c->tag |= FLAG_NEEDCLEAR;
+  c->flags |= FLAG_NEEDCLEAR;
 
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     setneedclear_r(c->left);
     setneedclear_r(c->right);
     break;
-  case TYPE_LAMBDA:
+  case SNODE_LAMBDA:
     setneedclear_r(c->body);
     break;
-  case TYPE_IND:
-    abort();
-    break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     for (rec = c->bindings; rec; rec = rec->next)
       setneedclear_r(rec->value);
@@ -64,24 +60,20 @@ static void setneedclear_r(snode *c)
 
 static void cleargraph_r(snode *c, int flag)
 {
-  if (!(c->tag & FLAG_NEEDCLEAR))
+  if (!(c->flags & FLAG_NEEDCLEAR))
     return;
-  c->tag &= ~FLAG_NEEDCLEAR;
-  c->tag &= ~flag;
+  c->flags &= ~FLAG_NEEDCLEAR;
+  c->flags &= ~flag;
 
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
-  case TYPE_CONS:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     cleargraph_r(c->left,flag);
     cleargraph_r(c->right,flag);
     break;
-  case TYPE_LAMBDA:
+  case SNODE_LAMBDA:
     cleargraph_r(c->body,flag);
     break;
-  case TYPE_IND:
-    abort();
-    break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     for (rec = c->bindings; rec; rec = rec->next)
       cleargraph_r(rec->value,flag);

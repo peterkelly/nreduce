@@ -142,7 +142,7 @@ pntr global_lookup(process *proc, gaddr addr, pntr val)
     make_pntr(p,c);
     glo = add_global(proc,addr,p);
 
-    c->type = TYPE_REMOTEREF;
+    c->type = CELL_REMOTEREF;
     make_pntr(c->field1,glo);
   }
   return glo->p;
@@ -348,7 +348,7 @@ void unspark_frame(process *proc, frame *f)
   assert(NULL == f->wq.fetchers);
   assert(NULL == f->qnext);
   assert(NULL == f->qprev);
-  assert(TYPE_FRAME == celltype(f->c));
+  assert(CELL_FRAME == celltype(f->c));
   assert(f == (frame*)get_pntr(f->c->field1));
 }
 
@@ -444,7 +444,7 @@ void dump_info(process *proc)
   for (bl = proc->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
       cell *c = &bl->values[i];
-      if (TYPE_FRAME == c->type) {
+      if (CELL_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
           const char *fname = bc_function_name(proc->bcdata,f->fno);
@@ -501,11 +501,11 @@ process *process_new(void)
   proc->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
   globnilvalue = alloc_cell(proc);
-  globnilvalue->type = TYPE_NIL;
+  globnilvalue->type = CELL_NIL;
   globnilvalue->flags |= FLAG_PINNED;
 
   make_pntr(proc->globnilpntr,globnilvalue);
-  proc->globtruepntr = make_number(1.0);
+  proc->globtruepntr = 1.0;
 
   if (is_pntr(proc->globtruepntr))
     get_pntr(proc->globtruepntr)->flags |= FLAG_PINNED;

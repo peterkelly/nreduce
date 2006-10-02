@@ -76,7 +76,7 @@ const builtin builtin_info[NUM_BUILTINS];
 
 static void setnumber(pntr *cptr, double val)
 {
-  *cptr = make_number(val);
+  *cptr = val;
 }
 
 static void setbool(process *proc, pntr *cptr, int b)
@@ -118,28 +118,29 @@ static void b_other(process *proc, pntr *argstack, int bif)
   case B_LE:
   case B_GT:
   case B_GE:
-    if ((TYPE_STRING == pntrtype(val1)) && (TYPE_STRING == pntrtype(val2))) {
-      const char *str1 = (const char*)get_pntr(get_pntr(val1)->field1);
-      const char *str2 = (const char*)get_pntr(get_pntr(val2)->field1);
-      int cmp = strcmp(str1,str2);
-      switch (bif) {
-      case B_EQ: setbool(proc,&argstack[0],0 == cmp); break;
-      case B_NE: setbool(proc,&argstack[0],0 != cmp); break;
-      case B_LT: setbool(proc,&argstack[0],0 > cmp); break;
-      case B_LE: setbool(proc,&argstack[0],0 >= cmp); break;
-      case B_GT: setbool(proc,&argstack[0],0 < cmp); break;
-      case B_GE: setbool(proc,&argstack[0],0 <= cmp); break;
-      }
-      return;
-    }
+    /* FIXME: make this work for string/array/list comparisons */
+/*     if ((CELL_STRING == pntrtype(val1)) && (CELL_STRING == pntrtype(val2))) { */
+/*       const char *str1 = (const char*)get_pntr(get_pntr(val1)->field1); */
+/*       const char *str2 = (const char*)get_pntr(get_pntr(val2)->field1); */
+/*       int cmp = strcmp(str1,str2); */
+/*       switch (bif) { */
+/*       case B_EQ: setbool(proc,&argstack[0],0 == cmp); break; */
+/*       case B_NE: setbool(proc,&argstack[0],0 != cmp); break; */
+/*       case B_LT: setbool(proc,&argstack[0],0 > cmp); break; */
+/*       case B_LE: setbool(proc,&argstack[0],0 >= cmp); break; */
+/*       case B_GT: setbool(proc,&argstack[0],0 < cmp); break; */
+/*       case B_GE: setbool(proc,&argstack[0],0 <= cmp); break; */
+/*       } */
+/*       return; */
+/*     } */
     /* fall through */
   case B_ADD:
   case B_SUBTRACT:
   case B_MULTIPLY:
   case B_DIVIDE:
   case B_MOD:
-    if ((TYPE_NUMBER == pntrtype(val1)) && (TYPE_NUMBER == pntrtype(val2))) {
-      doubleop(proc,&argstack[0],bif,pntrdouble(val1),pntrdouble(val2));
+    if ((CELL_NUMBER == pntrtype(val1)) && (CELL_NUMBER == pntrtype(val2))) {
+      doubleop(proc,&argstack[0],bif,val1,val2);
     }
     else {
       int t1 = pntrtype(val1);
@@ -149,10 +150,10 @@ static void b_other(process *proc, pntr *argstack, int bif)
     }
     break;
   case B_AND:
-    setbool(proc,&argstack[0],(TYPE_NIL != pntrtype(val1)) && (TYPE_NIL != pntrtype(val2)));
+    setbool(proc,&argstack[0],(CELL_NIL != pntrtype(val1)) && (CELL_NIL != pntrtype(val2)));
     break;
   case B_OR:
-    setbool(proc,&argstack[0],(TYPE_NIL != pntrtype(val1)) || (TYPE_NIL != pntrtype(val2)));
+    setbool(proc,&argstack[0],(CELL_NIL != pntrtype(val1)) || (CELL_NIL != pntrtype(val2)));
     break;
   default:
     abort();
@@ -175,7 +176,7 @@ static void b_or(process *proc, pntr *argstack) { b_other(proc,argstack,B_OR); }
 
 static void b_not(process *proc, pntr *argstack)
 {
-  if (TYPE_NIL == pntrtype(argstack[0]))
+  if (CELL_NIL == pntrtype(argstack[0]))
     argstack[0] = proc->globtruepntr;
   else
     argstack[0] = proc->globnilpntr;
@@ -188,13 +189,13 @@ static void b_bitop(process *proc, pntr *argstack, int bif)
   int a;
   int b;
 
-  if ((TYPE_NUMBER != pntrtype(val1)) || (TYPE_NUMBER != pntrtype(val2))) {
+  if ((CELL_NUMBER != pntrtype(val1)) || (CELL_NUMBER != pntrtype(val2))) {
     fprintf(stderr,"%s: incompatible arguments (must be numbers)\n",builtin_info[bif].name);
     exit(1);
   }
 
-  a = (int)pntrdouble(val1);
-  b = (int)pntrdouble(val2);
+  a = (int)val1;
+  b = (int)val2;
 
   switch (bif) {
   case B_BITSHL:  setnumber(&argstack[0],(double)(a << b));  break;
@@ -216,31 +217,31 @@ static void b_bitnot(process *proc, pntr *argstack)
 {
   pntr arg = argstack[0];
   int val;
-  if (TYPE_NUMBER != pntrtype(arg)) {
+  if (CELL_NUMBER != pntrtype(arg)) {
     fprintf(stderr,"~: incompatible argument (must be a number)\n");
     exit(1);
   }
-  val = (int)pntrdouble(arg);
+  val = (int)arg;
   setnumber(&argstack[0],(double)(~val));
 }
 
 static void b_sqrt(process *proc, pntr *argstack)
 {
-  CHECK_ARG(0,TYPE_NUMBER,B_SQRT);
-  setnumber(&argstack[0],sqrt(pntrdouble(argstack[0])));
+  CHECK_ARG(0,CELL_NUMBER,B_SQRT);
+  setnumber(&argstack[0],sqrt(argstack[0]));
   /* FIXME: handle NaN result properly (it's not a pointer!) */
 }
 
 static void b_floor(process *proc, pntr *argstack)
 {
-  CHECK_ARG(0,TYPE_NUMBER,B_FLOOR);
-  setnumber(&argstack[0],floor(pntrdouble(argstack[0])));
+  CHECK_ARG(0,CELL_NUMBER,B_FLOOR);
+  setnumber(&argstack[0],floor(argstack[0]));
 }
 
 static void b_ceil(process *proc, pntr *argstack)
 {
-  CHECK_ARG(0,TYPE_NUMBER,B_CEIL);
-  setnumber(&argstack[0],ceil(pntrdouble(argstack[0])));
+  CHECK_ARG(0,CELL_NUMBER,B_CEIL);
+  setnumber(&argstack[0],ceil(argstack[0]));
 }
 
 static void b_seq(process *proc, pntr *argstack)
@@ -250,7 +251,7 @@ static void b_seq(process *proc, pntr *argstack)
 static void b_par(process *proc, pntr *argstack)
 {
   pntr p = resolve_pntr(argstack[1]);
-  if (TYPE_FRAME == pntrtype(p)) {
+  if (CELL_FRAME == pntrtype(p)) {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     spark_frame(proc,f);
   }
@@ -268,17 +269,18 @@ static void b_parhead(process *proc, pntr *argstack)
 
 static void b_echo(process *proc, pntr *argstack)
 {
-  if (TYPE_STRING == pntrtype(argstack[0]))
-    fprintf(proc->output,"%s",(char*)get_pntr(get_pntr(argstack[0])->field1));
-  else
-    print_pntr(proc->output,argstack[0]);
+  /* FIXME: remove */
+/*   if (CELL_STRING == pntrtype(argstack[0])) */
+/*     fprintf(proc->output,"%s",(char*)get_pntr(get_pntr(argstack[0])->field1)); */
+/*   else */
+/*     print_pntr(proc->output,argstack[0]); */
   argstack[0] = proc->globnilpntr;
 }
 
 static void printp(FILE *f, pntr p)
 {
-  if (TYPE_NUMBER == pntrtype(p)) {
-    double d = pntrdouble(p);
+  if (CELL_NUMBER == pntrtype(p)) {
+    double d = p;
     if ((d == floor(d)) && (0 < d) && (128 > d)) {
       fprintf(f,"%c",(int)d);
     }
@@ -286,17 +288,14 @@ static void printp(FILE *f, pntr p)
       fprintf(f,"?");
     }
   }
-  else if (TYPE_NIL == pntrtype(p)) {
+  else if (CELL_NIL == pntrtype(p)) {
   }
-  else if ((TYPE_CONS == pntrtype(p)) || (TYPE_AREF == pntrtype(p))) {
+  else if ((CELL_CONS == pntrtype(p)) || (CELL_AREF == pntrtype(p))) {
     fprintf(f,"(list)");
   }
-  else if (!isvaluetype(pntrtype(p))) {
+  else {
     fprintf(f,"print: encountered %s\n",cell_types[pntrtype(p)]);
     abort();
-  }
-  else {
-    fprintf(f,"#");
   }
 }
 
@@ -317,7 +316,7 @@ static void b_if(process *proc, pntr *argstack)
   pntr ifc = argstack[2];
   pntr source;
 
-  if (TYPE_NIL == pntrtype(ifc))
+  if (CELL_NIL == pntrtype(ifc))
     source = argstack[0];
   else
     source = argstack[1];
@@ -394,7 +393,7 @@ carray *carray_new(process *proc, int dsize, carray *oldarr, cell *usewrapper)
   arr->tail = proc->globnilpntr;
 
   arr->wrapper = usewrapper ? usewrapper : alloc_cell(proc);
-  arr->wrapper->type = TYPE_AREF;
+  arr->wrapper->type = CELL_AREF;
   make_pntr(arr->wrapper->field1,arr);
 
   if (oldarr)
@@ -405,8 +404,8 @@ carray *carray_new(process *proc, int dsize, carray *oldarr, cell *usewrapper)
 
 int pntr_is_char(pntr p)
 {
-  if (TYPE_NUMBER == pntrtype(p)) {
-    double d = pntrdouble(p);
+  if (CELL_NUMBER == pntrtype(p)) {
+    double d = p;
     if ((floor(d) == d) && (0 <= d) && (255 >= d))
       return 1;
   }
@@ -422,7 +421,7 @@ void convert_to_string(process *proc, carray *arr)
 
   newelements = (unsigned char*)malloc(arr->size);
   for (i = 0; i < arr->size; i++)
-    newelements[i] = (unsigned char)pntrdouble(((pntr*)arr->elements)[i]);
+    newelements[i] = (unsigned char)((pntr*)arr->elements)[i];
 
   free(arr->elements);
   arr->elements = newelements;
@@ -433,7 +432,7 @@ int check_array_convert(process *proc, carray *arr, const char *from)
 {
   int printed = 0;
   if ((sizeof(pntr) == arr->elemsize) &&
-      ((MAX_ARRAY_SIZE == arr->size) || (TYPE_NIL == pntrtype(arr->tail)))) {
+      ((MAX_ARRAY_SIZE == arr->size) || (CELL_NIL == pntrtype(arr->tail)))) {
     int oldchars = arr->nchars;
 
     while ((arr->nchars < arr->size) &&
@@ -489,12 +488,12 @@ void carray_append(process *proc, carray **arr, const void *data, int totalcount
 void maybe_expand_array(process *proc, pntr p)
 {
   int printed = 0;
-  if (TYPE_CONS == pntrtype(p)) {
+  if (CELL_CONS == pntrtype(p)) {
     cell *firstcell = get_pntr(p);
     pntr firsthead = resolve_pntr(firstcell->field1);
     pntr firsttail = resolve_pntr(firstcell->field2);
 
-    if (TYPE_CONS == pntrtype(firsttail)) {
+    if (CELL_CONS == pntrtype(firsttail)) {
 
       /* Case 1: Two consecutive CONS cells - convert to an array */
 
@@ -515,14 +514,14 @@ void maybe_expand_array(process *proc, pntr p)
     }
   }
 
-  if (TYPE_AREF == pntrtype(p)) {
+  if (CELL_AREF == pntrtype(p)) {
     carray *arr = aref_array(p);
     int count = 0;
     arr->tail = resolve_pntr(arr->tail);
 
     while (1) {
 
-      if (TYPE_CONS == pntrtype(arr->tail)) {
+      if (CELL_CONS == pntrtype(arr->tail)) {
         cell *tailcell = get_pntr(arr->tail);
         pntr tailhead = resolve_pntr(tailcell->field1);
         carray_append(proc,&arr,&tailhead,1,sizeof(pntr));
@@ -586,7 +585,7 @@ char *array_to_string(pntr refpntr)
     int pos = 0;
     for (i = 0; i < arr->size; i++) {
       pntr val = resolve_pntr(((pntr*)arr->elements)[i]);
-      if (TYPE_NUMBER == pntrtype(val))
+      if (CELL_NUMBER == pntrtype(val))
         str[pos++] = ((int)val) & 0xff;
     }
     str[pos++] = '\0';
@@ -622,7 +621,7 @@ static void b_cons(process *proc, pntr *argstack)
   pntr tail = argstack[0];
 
   cell *res = alloc_cell(proc);
-  res->type = TYPE_CONS;
+  res->type = CELL_CONS;
   res->field1 = head;
   res->field2 = tail;
 
@@ -633,10 +632,10 @@ static void b_head(process *proc, pntr *argstack)
 {
   pntr arg = argstack[0];
 
-  if (TYPE_CONS == pntrtype(arg)) {
+  if (CELL_CONS == pntrtype(arg)) {
     argstack[0] = get_pntr(arg)->field1;
   }
-  else if (TYPE_AREF == pntrtype(arg)) {
+  else if (CELL_AREF == pntrtype(arg)) {
     carray *arr = aref_array(arg);
     int index = aref_index(arg);
     assert(index < arr->size);
@@ -644,7 +643,7 @@ static void b_head(process *proc, pntr *argstack)
     if (sizeof(pntr) == arr->elemsize)
       argstack[0] = ((pntr*)arr->elements)[index];
     else if (1 == arr->elemsize)
-      argstack[0] = make_number((double)(((char*)arr->elements)[index]));
+      argstack[0] = (double)(((char*)arr->elements)[index]);
     else
       set_error(proc,"head: invalid array size");
   }
@@ -659,11 +658,11 @@ static void b_tail(process *proc, pntr *argstack)
 
   maybe_expand_array(proc,arg);
 
-  if (TYPE_CONS == pntrtype(arg)) {
+  if (CELL_CONS == pntrtype(arg)) {
     cell *conscell = get_pntr(arg);
     argstack[0] = conscell->field2;
   }
-  else if (TYPE_AREF == pntrtype(arg)) {
+  else if (CELL_AREF == pntrtype(arg)) {
     int index = aref_index(arg);
     carray *arr = aref_array(arg);
     assert(index < arr->size);
@@ -684,10 +683,10 @@ void b_arraysize(process *proc, pntr *argstack)
 {
   pntr refpntr = argstack[0];
   maybe_expand_array(proc,refpntr);
-  if (TYPE_CONS == pntrtype(refpntr)) {
+  if (CELL_CONS == pntrtype(refpntr)) {
     setnumber(&argstack[0],1);
   }
-  else if (TYPE_AREF == pntrtype(refpntr)) {
+  else if (CELL_AREF == pntrtype(refpntr)) {
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
     assert(index < arr->size);
@@ -704,15 +703,15 @@ void b_arrayskip(process *proc, pntr *argstack)
   pntr refpntr = argstack[0];
   int n;
 
-  CHECK_ARG(1,TYPE_NUMBER,B_ARRAYSIZE);
+  CHECK_ARG(1,CELL_NUMBER,B_ARRAYSIZE);
 
   maybe_expand_array(proc,refpntr);
 
-  n = (int)pntrdouble(npntr);
+  n = (int)npntr;
   assert(0 <= n);
 
 
-  if (TYPE_CONS == pntrtype(refpntr)) {
+  if (CELL_CONS == pntrtype(refpntr)) {
     #ifdef ARRAY_DEBUG2
     fprintf(proc->output,"[as %d,cons]\n",n);
     #endif
@@ -723,7 +722,7 @@ void b_arrayskip(process *proc, pntr *argstack)
     else
       argstack[0] = get_pntr(refpntr)->field2;
   }
-  else if (TYPE_AREF == pntrtype(refpntr)) {
+  else if (CELL_AREF == pntrtype(refpntr)) {
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
     assert(index < arr->size);
@@ -750,21 +749,21 @@ void b_arrayprefix(process *proc, pntr *argstack)
   int n;
   carray *prefix;
 
-  CHECK_ARG(2,TYPE_NUMBER,B_ARRAYPREFIX);
-  n = (int)pntrdouble(npntr);
+  CHECK_ARG(2,CELL_NUMBER,B_ARRAYPREFIX);
+  n = (int)npntr;
 
-  if (TYPE_CONS == pntrtype(refpntr)) {
+  if (CELL_CONS == pntrtype(refpntr)) {
     cell *newcons;
     assert(1 == n);
 
     newcons = alloc_cell(proc);
-    newcons->type = TYPE_CONS;
+    newcons->type = CELL_CONS;
     newcons->field1 = get_pntr(refpntr)->field1;
     newcons->field2 = restpntr;
 
     make_pntr(argstack[0],newcons);
   }
-  else if (TYPE_AREF == pntrtype(refpntr)) {
+  else if (CELL_AREF == pntrtype(refpntr)) {
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
 
@@ -794,7 +793,7 @@ void b_isvalarray(process *proc, pntr *argstack)
 
   maybe_expand_array(proc,p);
 
-  if ((TYPE_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
+  if ((CELL_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
     argstack[0] = proc->globtruepntr;
   else
     argstack[0] = proc->globnilpntr;
@@ -807,10 +806,10 @@ void b_printarray(process *proc, pntr *argstack)
   int i;
   int n;
 
-  CHECK_ARG(1,TYPE_NUMBER,B_PRINTARRAY);
-  CHECK_ARG(0,TYPE_AREF,B_PRINTARRAY);
+  CHECK_ARG(1,CELL_NUMBER,B_PRINTARRAY);
+  CHECK_ARG(0,CELL_AREF,B_PRINTARRAY);
 
-  n = (int)pntrdouble(argstack[1]);
+  n = (int)argstack[1];
   arr = aref_array(argstack[0]);
   index = aref_index(argstack[0]);
 
@@ -867,9 +866,9 @@ void b_numtostring(process *proc, pntr *argstack)
   double d;
   char str[100];
 
-  assert(TYPE_NUMBER == pntrtype(p));
+  assert(CELL_NUMBER == pntrtype(p));
 
-  d = pntrdouble(p);
+  d = p;
 
   sprintf(str,"%f",d);
   argstack[0] = string_to_array(proc,str);
@@ -886,7 +885,7 @@ void b_openfd(process *proc, pntr *argstack)
   /* FIXME: need to associate the fd with a garbage collectable wrapper so if the whole
      file isn't read it still gets closed */
 
-  CHECK_ARG(0,TYPE_AREF,B_OPENFD);
+  CHECK_ARG(0,CELL_AREF,B_OPENFD);
 
   filename = array_to_string(filenamepntr);
 
@@ -897,7 +896,7 @@ void b_openfd(process *proc, pntr *argstack)
   }
 
 /*   fprintf(proc->output,"Opened %s for reading\n",filename); */
-  argstack[0] = make_number(fd);
+  argstack[0] = fd;
 }
 
 void b_readchunk(process *proc, pntr *argstack)
@@ -909,8 +908,8 @@ void b_readchunk(process *proc, pntr *argstack)
   unsigned char buf[READBUFSIZE];
   carray *arr;
 
-  CHECK_ARG(1,TYPE_NUMBER,B_READCHUNK);
-  fd = (int)pntrdouble(fdpntr);
+  CHECK_ARG(1,CELL_NUMBER,B_READCHUNK);
+  fd = (int)fdpntr;
 
   r = read(fd,buf,READBUFSIZE);
   if (0 == r) {

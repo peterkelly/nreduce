@@ -366,11 +366,11 @@ static void add_instruction(gprogram *gp, sourceloc sl, int opcode, int arg0, in
 
 static int snode_fno(snode *c)
 {
-  assert((TYPE_BUILTIN == snodetype(c)) ||
-         (TYPE_SCREF == snodetype(c)));
-  if (TYPE_BUILTIN == snodetype(c))
+  assert((SNODE_BUILTIN == c->type) ||
+         (SNODE_SCREF == c->type));
+  if (SNODE_BUILTIN == c->type)
     return c->bif;
-  else if (TYPE_SCREF == snodetype(c))
+  else if (SNODE_SCREF == c->type)
     return c->sc->index+NUM_BUILTINS;
   else
     return -1;
@@ -593,27 +593,27 @@ static int pcount(pmap *pm)
 
 static void getusage(snode *c, list **used)
 {
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     getusage(c->left,used);
     getusage(c->right,used);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     for (rec = c->bindings; rec; rec = rec->next)
       getusage(rec->value,used);
     getusage(c->body,used);
     break;
   }
-  case TYPE_SYMBOL:
+  case SNODE_SYMBOL:
     if (!list_contains_string(*used,c->name))
       list_push(used,c->name);
     break;
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   }
 }
@@ -676,24 +676,24 @@ static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(src,gp,"E",c,n,"");
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION: {
+  switch (c->type) {
+  case SNODE_APPLICATION: {
     int m = 0;
     snode *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left)
+    for (app = c; SNODE_APPLICATION == app->type; app = app->left)
       m++;
 
-    assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check(src,(TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
+    assert(SNODE_SYMBOL != app->type); /* should be lifted into separate scomb otherwise */
+    parse_check(src,(SNODE_BUILTIN == app->type) || (SNODE_SCREF == app->type),
                 app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
     k = function_nargs(src,fno);
     assert(m <= k); /* should be lifted into separate supercombinator otherwise */
 
-    if ((TYPE_BUILTIN == snodetype(app)) &&
+    if ((SNODE_BUILTIN == app->type) &&
         (B_IF == app->bif) &&
         (3 == m)) {
       snode *falsebranch;
@@ -727,8 +727,8 @@ static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
     }
     else {
       m = 0;
-      for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
-        if (app->tag & FLAG_STRICT)
+      for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
+        if (app->strict)
           E(src,gp,app->right,p,n+m);
         else
           C(src,gp,app->right,p,n+m);
@@ -737,7 +737,7 @@ static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
 
       if (m == k) {
 
-        if (TYPE_BUILTIN == snodetype(app)) {
+        if (SNODE_BUILTIN == app->type) {
           BIF(app->sl,fno);
           if (!builtin_info[fno].reswhnf)
             EVAL(app->sl,0);
@@ -754,7 +754,7 @@ static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
     }
     break;
   }
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(src,gp,c,n,p,1);
     n += pcount(p)-oldcount;
@@ -763,7 +763,7 @@ static void E(source *src, gprogram *gp, snode *c, pmap *p, int n)
     presize(p,oldcount);
     break;
   }
-  case TYPE_SYMBOL:
+  case SNODE_SYMBOL:
     EVAL(c->sl,n-presolve(src,p,c->name));
     PUSH(c->sl,n-presolve(src,p,c->name));
     break;
@@ -792,26 +792,26 @@ static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(src,gp,"R",c,n,"");
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION: {
+  switch (c->type) {
+  case SNODE_APPLICATION: {
     stack *args = stack_new();
     stack *argstrict = stack_new();
     snode *app;
     int m;
-    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
+    for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
       stack_push(args,app->right);
-      stack_push(argstrict,(void*)(app->tag & FLAG_STRICT));
+      stack_push(argstrict,(void*)app->strict);
     }
     m = args->count;
-    if (TYPE_SYMBOL == snodetype(app)) {
+    if (SNODE_SYMBOL == app->type) {
       stack_push(args,app);
       stack_push(argstrict,0);
       S(src,gp,app,args,argstrict,p,n);
       EVAL(app->sl,0);
       DO(app->sl,0);
     }
-    else if ((TYPE_BUILTIN == snodetype(app)) ||
-             (TYPE_SCREF == snodetype(app))) {
+    else if ((SNODE_BUILTIN == app->type) ||
+             (SNODE_SCREF == app->type)) {
       int fno = snode_fno(app);
       int k = function_nargs(src,fno);
       if (m > k) {
@@ -821,7 +821,7 @@ static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
         DO(app->sl,0);
       }
       else if (m == k) {
-        if ((TYPE_BUILTIN == snodetype(app)) &&
+        if ((SNODE_BUILTIN == app->type) &&
             (B_IF == app->bif)) {
           snode *falsebranch = (snode*)args->data[0];
           snode *truebranch = (snode*)args->data[1];
@@ -841,7 +841,7 @@ static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
           R(src,gp,falsebranch,p,n);
           stackinfo_freeswap(&gp->si,&oldsi);
         }
-        else if ((TYPE_BUILTIN == snodetype(app)) && (B_IF != app->bif)) {
+        else if ((SNODE_BUILTIN == app->type) && (B_IF != app->bif)) {
           int bif;
           const builtin *bi;
           int argno;
@@ -899,14 +899,14 @@ static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
     stack_free(argstrict);
     break;
   }
-  case TYPE_SYMBOL:
+  case SNODE_SYMBOL:
     C(src,gp,c,p,n);
     SQUEEZE(c->sl,1,n);
     EVAL(c->sl,0);
     RETURN(c->sl);
     break;
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
     if (0 == function_nargs(src,snode_fno(c))) {
       JFUN(c->sl,snode_fno(c));
     }
@@ -915,13 +915,13 @@ static void R(source *src, gprogram *gp, snode *c, pmap *p, int n)
       RETURN(c->sl);
     }
     break;
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     C(src,gp,c,p,n);
     RETURN(c->sl);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(src,gp,c,n,p,1);
     n += pcount(p)-oldcount;
@@ -940,19 +940,19 @@ static void C(source *src, gprogram *gp, snode *c, pmap *p, int n)
 {
   gp->cdepth++;
   print_comp2(src,gp,"C",c,n,"");
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION: {
+  switch (c->type) {
+  case SNODE_APPLICATION: {
     int m = 0;
     snode *app;
     int fno;
     int k;
-    for (app = c; TYPE_APPLICATION == snodetype(app); app = app->left) {
+    for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
       C(src,gp,app->right,p,n+m);
       m++;
     }
 
-    assert(TYPE_SYMBOL != snodetype(app)); /* should be lifted into separate scomb otherwise */
-    parse_check(src,(TYPE_BUILTIN == snodetype(app)) || (TYPE_SCREF == snodetype(app)),
+    assert(SNODE_SYMBOL != app->type); /* should be lifted into separate scomb otherwise */
+    parse_check(src,(SNODE_BUILTIN == app->type) || (SNODE_SCREF == app->type),
                 app,CONSTANT_APP_MSG);
 
     fno = snode_fno(app);
@@ -965,17 +965,17 @@ static void C(source *src, gprogram *gp, snode *c, pmap *p, int n)
       MKCAP(app->sl,fno,m);
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:   if (0 == function_nargs(src,snode_fno(c)))
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:   if (0 == function_nargs(src,snode_fno(c)))
                        MKFRAME(c->sl,snode_fno(c),0);
                      else
                        MKCAP(c->sl,snode_fno(c),0);
                      break;
-  case TYPE_SYMBOL:  PUSH(c->sl,n-presolve(src,p,c->name));                    break;
-  case TYPE_NIL:     PUSHNIL(c->sl);                                           break;
-  case TYPE_NUMBER:  PUSHNUMBER(c->sl,((int*)&c->num)[0],((int*)&c->num)[1]);  break;
-  case TYPE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));                break;
-  case TYPE_LETREC: {
+  case SNODE_SYMBOL:  PUSH(c->sl,n-presolve(src,p,c->name));                    break;
+  case SNODE_NIL:     PUSHNIL(c->sl);                                           break;
+  case SNODE_NUMBER:  PUSHNUMBER(c->sl,((int*)&c->num)[0],((int*)&c->num)[1]);  break;
+  case SNODE_STRING:  PUSHSTRING(c->sl,add_string(gp,c->value));                break;
+  case SNODE_LETREC: {
     int oldcount = p->names->count;
     Cletrec(src,gp,c,n,p,0);
     n += pcount(p)-oldcount;

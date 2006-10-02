@@ -63,7 +63,7 @@ static int binding_level(stack *boundvars, const char *sym)
   for (i = boundvars->count-1; 0 <= i; i--) {
     binding *bnd = (binding*)boundvars->data[i];
     if (!strcmp(bnd->name,sym)) {
-      if (bnd->rec && (TYPE_LAMBDA == snodetype(bnd->rec->value)))
+      if (bnd->rec && (SNODE_LAMBDA == bnd->rec->value->type))
         return -1;
       else
         return i+1;
@@ -78,12 +78,12 @@ static void abstract(stack *boundvars, const char *sym, int level, snode **lambd
   int appdepth = 0;
   snode **reall = lambda;
   assert(lambda);
-  while (TYPE_APPLICATION == snodetype(*reall)) {
+  while (SNODE_APPLICATION == (*reall)->type) {
     reall = &(*reall)->left;
     appdepth++;
   }
 
-  while ((TYPE_LAMBDA == snodetype(*reall)) &&
+  while ((SNODE_LAMBDA == (*reall)->type) &&
          (level > binding_level(boundvars,(*reall)->name))) {
     reall = &(*reall)->body;
     appdepth--;
@@ -91,7 +91,7 @@ static void abstract(stack *boundvars, const char *sym, int level, snode **lambd
   if (strcmp(sym,(*reall)->name)) {
     snode *body = *reall;
     *reall = snode_new(-1,-1);
-    (*reall)->tag = TYPE_LAMBDA;
+    (*reall)->type = SNODE_LAMBDA;
     (*reall)->name = strdup(sym);
     (*reall)->body = body;
     (*reall)->sl = body->sl;
@@ -102,12 +102,12 @@ static void abstract(stack *boundvars, const char *sym, int level, snode **lambd
 static void create_scombs(source *src, stack *boundvars, snode **k,
                           letrec *inletrec, const char *prefix)
 {
-  switch (snodetype(*k)) {
-  case TYPE_APPLICATION:
+  switch ((*k)->type) {
+  case SNODE_APPLICATION:
     create_scombs(src,boundvars,&((*k)->left),NULL,prefix);
     create_scombs(src,boundvars,&((*k)->right),NULL,prefix);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = boundvars->count;
     letrec *rec;
     letrec **ptr;
@@ -117,7 +117,7 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
        and the recursive call to create_scombs() will fill in the supercombinator with the
        appropriate arguments and body. */
     for (rec = (*k)->bindings; rec; rec = rec->next) {
-      if (TYPE_LAMBDA == snodetype(rec->value)) {
+      if (SNODE_LAMBDA == rec->value->type) {
         rec->sc = add_scomb(src,rec->name);
         rec->sc->sl = rec->value->sl;
       }
@@ -135,7 +135,7 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
       if ((*ptr)->sc) {
         letrec *old = *ptr;
         *ptr = (*ptr)->next;
-        assert(TYPE_SCREF == snodetype(old->value));
+        assert(SNODE_SCREF == old->value->type);
         snode_free(old->value);
         free(old->name);
         free(old);
@@ -152,7 +152,7 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
     bindings_setcount(boundvars,oldcount);
     break;
   }
-  case TYPE_LAMBDA: {
+  case SNODE_LAMBDA: {
     int oldcount = boundvars->count;
     snode **tmp;
     int argno;
@@ -167,14 +167,14 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
       newsc->sl = (*k)->sl;
     }
 
-    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body) {
+    for (tmp = k; SNODE_LAMBDA == (*tmp)->type; tmp = &(*tmp)->body) {
       stack_push(boundvars,binding_new((*tmp)->name,NULL));
       newsc->nargs++;
     }
     newsc->body = *tmp;
     newsc->argnames = (char**)malloc(newsc->nargs*sizeof(char*));
     argno = 0;
-    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body)
+    for (tmp = k; SNODE_LAMBDA == (*tmp)->type; tmp = &(*tmp)->body)
       newsc->argnames[argno++] = strdup((*tmp)->name);
 
     create_scombs(src,boundvars,tmp,NULL,newsc->name);
@@ -183,14 +183,14 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
     snode_free(*k);
 
     (*k) = snode_new(-1,-1);
-    (*k)->tag = TYPE_SCREF;
+    (*k)->type = SNODE_SCREF;
     (*k)->sc = newsc;
     (*k)->sl = newsc->body->sl;
 
     bindings_setcount(boundvars,oldcount);
     break;
   }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = (*k)->name;
     sourceloc sl = (*k)->sl;
     int i;
@@ -200,7 +200,7 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
         if (bnd->rec && bnd->rec->sc) {
           snode_free(*k);
           (*k) = snode_new(-1,-1);
-          (*k)->tag = TYPE_SCREF;
+          (*k)->type = SNODE_SCREF;
           (*k)->sc = bnd->rec->sc;
           (*k)->sl = sl;
         }
@@ -209,11 +209,11 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
     }
     break;
   }
-  case TYPE_SCREF:
-  case TYPE_BUILTIN:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_SCREF:
+  case SNODE_BUILTIN:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();
@@ -228,11 +228,11 @@ static void make_app(snode **k, list *args)
     char *argname = (char*)l->data;
     snode *varref = snode_new(-1,-1);
     snode *left = *k;
-    varref->tag = TYPE_SYMBOL;
+    varref->type = SNODE_SYMBOL;
     varref->name = strdup(argname);
     varref->sl = left->sl;
     (*k) = snode_new(-1,-1);
-    (*k)->tag = TYPE_APPLICATION;
+    (*k)->type = SNODE_APPLICATION;
     (*k)->left = left;
     (*k)->right = varref;
     (*k)->sl = left->sl;
@@ -241,32 +241,32 @@ static void make_app(snode **k, list *args)
 
 static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
 {
-  switch (snodetype(*k)) {
-  case TYPE_APPLICATION:
+  switch ((*k)->type) {
+  case SNODE_APPLICATION:
     replace_usage(&((*k)->left),fun,extra,args);
     replace_usage(&((*k)->right),fun,extra,args);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     for (rec = (*k)->bindings; rec; rec = rec->next)
       replace_usage(&rec->value,fun,extra,args);
     replace_usage(&((*k)->body),fun,extra,args);
     break;
   }
-  case TYPE_LAMBDA:
+  case SNODE_LAMBDA:
     replace_usage(&((*k)->body),fun,extra,args);
     break;
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = (*k)->name;
     if (!strcmp(sym,fun))
       make_app(k,args);
     break;
   }
-  case TYPE_SCREF:
-  case TYPE_BUILTIN:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_SCREF:
+  case SNODE_BUILTIN:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();
@@ -277,12 +277,12 @@ static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
 static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
                    int *changed, letrec *inletrec)
 {
-  switch (snodetype(*k)) {
-  case TYPE_APPLICATION:
+  switch ((*k)->type) {
+  case SNODE_APPLICATION:
     lift_r(boundvars,&((*k)->left),noabsvars,lambda,changed,NULL);
     lift_r(boundvars,&((*k)->right),noabsvars,lambda,changed,NULL);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = boundvars->count;
     list *newnoabs = NULL;
     letrec *rec;
@@ -295,7 +295,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
       list_push(&newnoabs,strdup((char*)l->data));
 
     for (rec = (*k)->bindings; rec; rec = rec->next) {
-      int islambda = (TYPE_LAMBDA == snodetype(rec->value));
+      int islambda = (SNODE_LAMBDA == rec->value->type);
       snode *oldval = rec->value;
 
       lift_r(boundvars,&rec->value,newnoabs,lambda,changed,rec);
@@ -304,7 +304,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
         list *vars = NULL;
         snode *tmp;
         for (tmp = rec->value; tmp != oldval; tmp = tmp->body) {
-          assert(TYPE_LAMBDA == snodetype(tmp));
+          assert(SNODE_LAMBDA == tmp->type);
           list_append(&vars,tmp->name);
         }
         replace_usage(k,rec->name,rec->value,vars);
@@ -317,12 +317,12 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
     list_free(newnoabs,free);
     break;
   }
-  case TYPE_LAMBDA: {
+  case SNODE_LAMBDA: {
     int oldcount = boundvars->count;
     list *lambdavars = NULL;
     snode **tmp;
     snode *oldlambda;
-    for (tmp = k; TYPE_LAMBDA == snodetype(*tmp); tmp = &(*tmp)->body) {
+    for (tmp = k; SNODE_LAMBDA == (*tmp)->type; tmp = &(*tmp)->body) {
       stack_push(boundvars,binding_new((*tmp)->name,NULL));
       list_append(&lambdavars,strdup((*tmp)->name));
     }
@@ -339,12 +339,12 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
 
     bindings_setcount(boundvars,oldcount);
 
-    for (tmp = k; TYPE_APPLICATION == snodetype(*tmp); tmp = &(*tmp)->left)
+    for (tmp = k; SNODE_APPLICATION == (*tmp)->type; tmp = &(*tmp)->left)
       lift_r(boundvars,&(*tmp)->right,noabsvars,lambda,changed,NULL);
     list_free(lambdavars,free);
     break;
   }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = (*k)->name;
     if (lambda && !list_contains_string(noabsvars,sym)) {
       int level = binding_level(boundvars,sym);
@@ -353,11 +353,11 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
     }
     break;
   }
-  case TYPE_SCREF:
-  case TYPE_BUILTIN:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_SCREF:
+  case SNODE_BUILTIN:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();
@@ -387,12 +387,12 @@ void lift(source *src, scomb *sc)
 
 static void find_vars(snode *c, list **names, stack *ignore)
 {
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     find_vars(c->left,names,ignore);
     find_vars(c->right,names,ignore);
     break;
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = c->name;
     int i;
 
@@ -406,13 +406,13 @@ static void find_vars(snode *c, list **names, stack *ignore)
     list_push(names,strdup(sym));
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     int oldcount = ignore->count;
     letrec *rec;
     for (rec = c->bindings; rec; rec = rec->next)
@@ -431,17 +431,17 @@ static void find_vars(snode *c, list **names, stack *ignore)
 
 static void applift_r(source *src, snode **k, scomb *sc)
 {
-  switch (snodetype(*k)) {
-  case TYPE_APPLICATION: {
+  switch ((*k)->type) {
+  case SNODE_APPLICATION: {
     snode *fun = *k;
     int nargs = 0;
-    while (TYPE_APPLICATION == snodetype(fun)) {
+    while (SNODE_APPLICATION == fun->type) {
       fun = fun->left;
       nargs++;
     }
-    if ((TYPE_SYMBOL == snodetype(fun)) ||
-        ((TYPE_SCREF == snodetype(fun)) && (nargs > fun->sc->nargs)) ||
-        ((TYPE_BUILTIN == snodetype(fun)) && (nargs > builtin_info[fun->bif].nargs))) {
+    if ((SNODE_SYMBOL == fun->type) ||
+        ((SNODE_SCREF == fun->type) && (nargs > fun->sc->nargs)) ||
+        ((SNODE_BUILTIN == fun->type) && (nargs > builtin_info[fun->bif].nargs))) {
       scomb *newsc;
       int i;
       list *vars = NULL;
@@ -451,7 +451,7 @@ static void applift_r(source *src, snode **k, scomb *sc)
       if (*k == sc->body) {
         /* just do the arguments */
         snode *app;
-        for (app = *k; TYPE_APPLICATION == snodetype(app); app = app->left)
+        for (app = *k; SNODE_APPLICATION == app->type; app = app->left)
           applift_r(src,&app->right,sc);
         break;
       }
@@ -475,18 +475,18 @@ static void applift_r(source *src, snode **k, scomb *sc)
       list_free(vars,NULL);
 
       (*k) = snode_new(-1,-1);
-      (*k)->tag = TYPE_SCREF;
+      (*k)->type = SNODE_SCREF;
       (*k)->sc = newsc;
       (*k)->sl = newsc->body->sl;
       for (i = 0; i < newsc->nargs; i++) {
         snode *varref;
         snode *app;
         varref = snode_new(-1,-1);
-        varref->tag = TYPE_SYMBOL;
+        varref->type = SNODE_SYMBOL;
         varref->name = strdup(newsc->argnames[i]);
         varref->sl = (*k)->sl;
         app = snode_new(-1,-1);
-        app->tag = TYPE_APPLICATION;
+        app->type = SNODE_APPLICATION;
         app->left = *k;
         app->right = varref;
         app->sl = (*k)->sl;
@@ -501,20 +501,20 @@ static void applift_r(source *src, snode **k, scomb *sc)
     }
     break;
   }
-  case TYPE_SYMBOL:
+  case SNODE_SYMBOL:
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     for (rec = (*k)->bindings; rec; rec = rec->next)
       applift_r(src,&rec->value,sc);
     applift_r(src,&((*k)->body),sc);
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   }
 }

@@ -39,6 +39,41 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+void print_stack(FILE *f, pntr *stk, int size, int dir)
+{
+  int i;
+
+  if (dir)
+    i = size-1;
+  else
+    i = 0;
+
+
+  while (1) {
+    pntr p;
+    int pos = dir ? (size-1-i) : i;
+
+    if (dir && i < 0)
+      break;
+
+    if (!dir && (i >= size))
+      break;
+
+    p = resolve_pntr(stk[i]);
+    if (CELL_IND == pntrtype(stk[i]))
+      fprintf(f,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
+    else
+      fprintf(f,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
+    print_pntr(f,p);
+    fprintf(f,"\n");
+
+    if (dir)
+      i--;
+    else
+      i++;
+  }
+}
+
 static void print_proc_sourceloc(process *proc, FILE *f, sourceloc sl)
 {
   const int *stroffsets = bc_get_stroffsets(proc->bcdata);
@@ -49,7 +84,7 @@ static void print_proc_sourceloc(process *proc, FILE *f, sourceloc sl)
 static void cap_error(process *proc, pntr cappntr, const gop *op)
 {
   sourceloc sl;
-  assert(TYPE_CAP == pntrtype(cappntr));
+  assert(CELL_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
   const funinfo *finfo = bc_get_funinfo(proc->bcdata);
@@ -108,7 +143,7 @@ static void resume_waiters(process *proc, waitqueue *wq, pntr obj)
 
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
-    assert(TYPE_FRAME != pntrtype(obj));
+    assert(CELL_FRAME != pntrtype(obj));
 /*     fprintf(proc->output,"1: responding with %s\n",cell_types[pntrtype(obj)]); */
     msg_fsend(proc,ft->pid,MSG_RESPOND,"pa",obj,*ft);
   }
@@ -130,8 +165,8 @@ static void frame_return(process *proc, frame *curf, pntr val)
   assert(!is_nullpntr(val));
   assert(0 < curf->count);
   assert(NULL != curf->c);
-  assert(TYPE_FRAME == celltype(curf->c));
-  curf->c->type = TYPE_IND;
+  assert(CELL_FRAME == celltype(curf->c));
+  curf->c->type = CELL_IND;
   curf->c->field1 = val;
   curf->c = NULL;
 
@@ -170,7 +205,7 @@ static void schedule_frame(process *proc, frame *f, int destproc, array *msg)
   #endif
   write_format(msg,proc,"pa",glo->p,refglo->addr);
 
-  f->c->type = TYPE_REMOTEREF;
+  f->c->type = CELL_REMOTEREF;
   make_pntr(f->c->field1,glo);
 
   /* Delete the local copy of the frame */
@@ -394,12 +429,12 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     CHECK_EXPR(!is_nullpntr(obj)); /* we should only be asked for a cell we actually have */
     obj = resolve_pntr(obj);
 
-    if ((TYPE_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid))
+    if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid))
       add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
-    else if ((TYPE_FRAME == pntrtype(obj)) &&
+    else if ((CELL_FRAME == pntrtype(obj)) &&
              ((STATE_RUNNING == pframe(obj)->state) || (STATE_BLOCKED == pframe(obj)->state)))
       add_gaddr(&pframe(obj)->wq.fetchers,storeaddr);
-    else if ((TYPE_FRAME == pntrtype(obj)) &&
+    else if ((CELL_FRAME == pntrtype(obj)) &&
              ((STATE_SPARKED == pframe(obj)->state) ||
               (STATE_NEW == pframe(obj)->state))) {
       frame *f = pframe(obj);
@@ -422,7 +457,7 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       make_pntr(fcp,f->c);
       glo = add_global(proc,storeaddr,fcp);
 
-      f->c->type = TYPE_REMOTEREF;
+      f->c->type = CELL_REMOTEREF;
       make_pntr(f->c->field1,glo);
       f->c = NULL;
       frame_dealloc(proc,f);
@@ -457,7 +492,7 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
               storeaddr.lid,storeaddr.pid);
     }
     CHECK_EXPR(!is_nullpntr(ref));
-    CHECK_EXPR(TYPE_REMOTEREF == pntrtype(ref));
+    CHECK_EXPR(CELL_REMOTEREF == pntrtype(ref));
 
     objglo = pglobal(ref);
     CHECK_EXPR(objglo->fetching);
@@ -467,12 +502,12 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     CHECK_EXPR(pntrequal(objglo->p,ref));
 
     refcell = get_pntr(ref);
-    refcell->type = TYPE_IND;
+    refcell->type = CELL_IND;
     refcell->field1 = obj;
 
     resume_waiters(proc,&objglo->wq,obj);
 
-    if (TYPE_FRAME == pntrtype(obj))
+    if (CELL_FRAME == pntrtype(obj))
       run_frame(proc,pframe(obj));
     break;
   }
@@ -489,7 +524,7 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       r = read_format(&rd,proc,0,"pa",&framep,&tellsrc);
       CHECK_READ(r);
 
-      CHECK_EXPR(TYPE_FRAME == pntrtype(framep));
+      CHECK_EXPR(CELL_FRAME == pntrtype(framep));
       frameglo = make_global(proc,framep);
       write_format(urmsg,proc,"aa",tellsrc,frameglo->addr);
 
@@ -517,7 +552,7 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
 
       CHECK_EXPR(refaddr.pid == proc->pid);
       CHECK_EXPR(!is_nullpntr(ref));
-      CHECK_EXPR(TYPE_REMOTEREF == pntrtype(ref));
+      CHECK_EXPR(CELL_REMOTEREF == pntrtype(ref));
 
       glo = pglobal(ref);
       CHECK_EXPR(glo->addr.pid == from);
@@ -686,7 +721,7 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
         if (glo->addr.pid == proc->pid) {
           entries++;
         }
-        else if ((TYPE_REMOTEREF == pntrtype(glo->p)) &&
+        else if ((CELL_REMOTEREF == pntrtype(glo->p)) &&
                  ((global*)get_pntr(get_pntr(glo->p)->field1) == glo)) {
           remoterefs++;
         }
@@ -829,7 +864,7 @@ static void execute(process *proc)
       break;
     case OP_END:
       done_frame(proc,curf);
-      curf->c->type = TYPE_NIL;
+      curf->c->type = CELL_NIL;
       curf->c = NULL;
       frame_dealloc(proc,curf);
 /*       proc->done = 1; */
@@ -844,7 +879,7 @@ static void execute(process *proc)
       curf->data[curf->count-1-op->arg0] = resolve_pntr(curf->data[curf->count-1-op->arg0]);
       p = curf->data[curf->count-1-op->arg0];
 
-      if (TYPE_FRAME == pntrtype(p)) {
+      if (CELL_FRAME == pntrtype(p)) {
         frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
         run_frame(proc,newf);
         curf->waitframe = newf;
@@ -852,7 +887,7 @@ static void execute(process *proc)
         block_frame(proc,curf);
         continue;
       }
-      else if (TYPE_REMOTEREF == pntrtype(p)) {
+      else if (CELL_REMOTEREF == pntrtype(p)) {
         global *target = (global*)get_pntr(get_pntr(p)->field1);
         assert(target->addr.pid != proc->pid);
 
@@ -887,10 +922,10 @@ static void execute(process *proc)
 
       p = curf->data[curf->count-1];
       p = resolve_pntr(p); /* FIXME: temp: is this necessary? superlife needs it */
-      assert(TYPE_IND != pntrtype(p));
+      assert(CELL_IND != pntrtype(p));
 
       if (op->arg0) {
-        if (TYPE_FRAME == pntrtype(p)) {
+        if (CELL_FRAME == pntrtype(p)) {
           frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
           pntr val;
           run_frame(proc,newf);
@@ -902,13 +937,13 @@ static void execute(process *proc)
           continue;
         }
 
-        if (TYPE_CAP != pntrtype(p)) {
+        if (CELL_CAP != pntrtype(p)) {
           frame_return(proc,curf,p);
           continue;
         }
       }
 
-      if (TYPE_CAP != pntrtype(p))
+      if (CELL_CAP != pntrtype(p))
         constant_app_error(proc,p,op);
       capholder = (cell*)get_pntr(p);
       curf->count--;
@@ -933,7 +968,7 @@ static void execute(process *proc)
           newcp->data[newcp->count++] = cp->data[i];
 
         /* replace the current FRAME with the new CAP */
-        curf->c->type = TYPE_CAP;
+        curf->c->type = CELL_CAP;
         make_pntr(curf->c->field1,newcp);
         make_pntr(rep,curf->c);
         curf->c = NULL;
@@ -969,7 +1004,7 @@ static void execute(process *proc)
           newf->data[newf->count++] = cp->data[i];
 
         newf->c = alloc_cell(proc);
-        newf->c->type = TYPE_FRAME;
+        newf->c->type = CELL_FRAME;
         make_pntr(newf->c->field1,newf);
 
         curf->count -= extra;
@@ -990,14 +1025,14 @@ static void execute(process *proc)
       break;
     case OP_JFALSE: {
       pntr test = curf->data[curf->count-1];
-      assert(TYPE_IND != pntrtype(test));
-      assert(TYPE_APPLICATION != pntrtype(test));
-      assert(TYPE_FRAME != pntrtype(test));
+      assert(CELL_IND != pntrtype(test));
+      assert(CELL_APPLICATION != pntrtype(test));
+      assert(CELL_FRAME != pntrtype(test));
 
-      if (TYPE_CAP == pntrtype(test))
+      if (CELL_CAP == pntrtype(test))
         cap_error(proc,test,op);
 
-      if (TYPE_NIL == pntrtype(test))
+      if (CELL_NIL == pntrtype(test))
         curf->address += op->arg0-1;
       curf->count--;
       break;
@@ -1020,7 +1055,7 @@ static void execute(process *proc)
       assert(n > 0);
 
       targetp = curf->data[curf->count-1-n];
-      assert(TYPE_HOLE == pntrtype(targetp));
+      assert(CELL_HOLE == pntrtype(targetp));
       target = get_pntr(targetp);
 
       res = resolve_pntr(curf->data[curf->count-1]);
@@ -1028,7 +1063,7 @@ static void execute(process *proc)
         fprintf(stderr,"Attempt to update cell with itself\n");
         exit(1);
       }
-      target->type = TYPE_IND;
+      target->type = CELL_IND;
       target->field1 = res;
       curf->data[curf->count-1-n] = res;
       curf->count--;
@@ -1038,7 +1073,7 @@ static void execute(process *proc)
       int i;
       for (i = 0; i < op->arg0; i++) {
         cell *hole = alloc_cell(proc);
-        hole->type = TYPE_HOLE;
+        hole->type = CELL_HOLE;
         make_pntr(curf->data[curf->count],hole);
         curf->count++;
       }
@@ -1070,7 +1105,7 @@ static void execute(process *proc)
       curf->count -= n;
 
       capv = alloc_cell(proc);
-      capv->type = TYPE_CAP;
+      capv->type = CELL_CAP;
       make_pntr(capv->field1,c);
       make_pntr(curf->data[curf->count],capv);
       curf->count++;
@@ -1090,7 +1125,7 @@ static void execute(process *proc)
       newf->fno = fno;
 
       newfholder = alloc_cell(proc);
-      newfholder->type = TYPE_FRAME;
+      newfholder->type = CELL_FRAME;
       make_pntr(newfholder->field1,newf);
       newf->c = newfholder;
 
@@ -1107,15 +1142,15 @@ static void execute(process *proc)
       int i;
       assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
-        assert(TYPE_APPLICATION != pntrtype(curf->data[curf->count-1-i]));
-        assert(TYPE_FRAME != pntrtype(curf->data[curf->count-1-i]));
+        assert(CELL_APPLICATION != pntrtype(curf->data[curf->count-1-i]));
+        assert(CELL_FRAME != pntrtype(curf->data[curf->count-1-i]));
 
-        if (TYPE_CAP == pntrtype(curf->data[curf->count-1-i]))
+        if (CELL_CAP == pntrtype(curf->data[curf->count-1-i]))
           cap_error(proc,curf->data[curf->count-1-i],op);
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)
-        assert(TYPE_IND != pntrtype(curf->data[curf->count-1-i]));
+        assert(CELL_IND != pntrtype(curf->data[curf->count-1-i]));
 
       builtin_info[bif].f(proc,&curf->data[curf->count-nargs]);
 
@@ -1125,14 +1160,14 @@ static void execute(process *proc)
         handle_error(proc,bif,op);
 
       curf->count -= (nargs-1);
-      assert(!builtin_info[bif].reswhnf || (TYPE_IND != pntrtype(curf->data[curf->count-1])));
+      assert(!builtin_info[bif].reswhnf || (CELL_IND != pntrtype(curf->data[curf->count-1])));
       break;
     }
     case OP_PUSHNIL:
       curf->data[curf->count++] = proc->globnilpntr;
       break;
     case OP_PUSHNUMBER:
-      curf->data[curf->count++] = make_number(*((double*)&op->arg0));
+      curf->data[curf->count++] = *((double*)&op->arg0);
       break;
     case OP_PUSHSTRING: {
       curf->data[curf->count] = proc->strings[op->arg0];
@@ -1141,7 +1176,7 @@ static void execute(process *proc)
     }
     case OP_RESOLVE:
       curf->data[curf->count-1-op->arg0] = resolve_pntr(curf->data[curf->count-1-op->arg0]);
-      assert(TYPE_REMOTEREF != pntrtype(curf->data[curf->count-1-op->arg0]));
+      assert(CELL_REMOTEREF != pntrtype(curf->data[curf->count-1-op->arg0]));
       break;
     default:
       abort();
@@ -1219,7 +1254,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile)
   initial->count = 0;
   initial->alloc = 1;
   initial->c = alloc_cell(grp.procs[0]);
-  initial->c->type = TYPE_FRAME;
+  initial->c->type = CELL_FRAME;
   make_pntr(initial->c->field1,initial);
   run_frame(grp.procs[0],initial);
 

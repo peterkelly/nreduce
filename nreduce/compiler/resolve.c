@@ -37,17 +37,17 @@
 
 static void resolve_refs_r(source *src, snode *c, stack *bound)
 {
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     resolve_refs_r(src,c->left,bound);
     resolve_refs_r(src,c->right,bound);
     break;
-  case TYPE_LAMBDA:
+  case SNODE_LAMBDA:
     stack_push(bound,c->name);
     resolve_refs_r(src,c->body,bound);
     bound->count--;
     break;
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     char *sym = c->name;
     int found = 0;
     int i;
@@ -61,13 +61,13 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
       if (NULL != (sc = get_scomb(src,sym))) {
         free(c->name);
         c->name = NULL;
-        c->tag = TYPE_SCREF;
+        c->type = SNODE_SCREF;
         c->sc = sc;
       }
       else if (0 <= (bif = get_builtin(sym))) {
         free(c->name);
         c->name = NULL;
-        c->tag = TYPE_BUILTIN;
+        c->type = SNODE_BUILTIN;
         c->bif = bif;
       }
       else {
@@ -78,7 +78,7 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
     }
     break;
   }
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *rec;
     int oldcount = bound->count;
     for (rec = c->bindings; rec; rec = rec->next)
@@ -89,9 +89,9 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
     bound->count = oldcount;
     break;
   }
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   default:
     abort();

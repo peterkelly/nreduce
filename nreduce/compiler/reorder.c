@@ -72,12 +72,12 @@
  */
 static void reorder_letrecs_r(snode *c, list **used, stack *bound)
 {
-  switch (snodetype(c)) {
-  case TYPE_APPLICATION:
+  switch (c->type) {
+  case SNODE_APPLICATION:
     reorder_letrecs_r(c->left,used,bound);
     reorder_letrecs_r(c->right,used,bound);
     break;
-  case TYPE_LETREC: {
+  case SNODE_LETREC: {
     letrec *newrecs;
     letrec **newptr;
     list **lptr;
@@ -140,7 +140,7 @@ static void reorder_letrecs_r(snode *c, list **used, stack *bound)
     bound->count--;
     break;
   }
-  case TYPE_SYMBOL: {
+  case SNODE_SYMBOL: {
     int i;
     letrec *rec;
 
@@ -161,11 +161,11 @@ static void reorder_letrecs_r(snode *c, list **used, stack *bound)
     }
     break;
   }
-  case TYPE_BUILTIN:
-  case TYPE_SCREF:
-  case TYPE_NIL:
-  case TYPE_NUMBER:
-  case TYPE_STRING:
+  case SNODE_BUILTIN:
+  case SNODE_SCREF:
+  case SNODE_NIL:
+  case SNODE_NUMBER:
+  case SNODE_STRING:
     break;
   }
 }
