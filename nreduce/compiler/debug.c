@@ -583,8 +583,9 @@ void print_scomb_code(source *src, scomb *sc)
 
 void print_scombs1(source *src)
 {
-  scomb *sc;
-  for (sc = src->scombs; sc; sc = sc->next) {
+  int scno;
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     if (strncmp(sc->name,"__",2)) {
       print_scomb_code(src,sc);
       debug(0,"\n");
@@ -594,9 +595,10 @@ void print_scombs1(source *src)
 
 void print_scombs2(source *src)
 {
-  scomb *sc;
+  int scno;
   debug(0,"\n--------------------\n\n");
-  for (sc = src->scombs; sc; sc = sc->next) {
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     int i;
     debug(0,"%s ",sc->name);
     for (i = 0; i < sc->nargs; i++)

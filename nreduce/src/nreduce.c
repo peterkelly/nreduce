@@ -237,7 +237,6 @@ int main(int argc, char **argv)
       fclose(statsfile);
   }
   else {
-/*     graph_optimisation(src); */
     source_compile(src,&bcdata,&bcsize);
 
     if (args.strictdebug) {
@@ -272,6 +271,7 @@ int main(int argc, char **argv)
       native_execution_engine();
 #endif
     }
+    free(bcdata);
   }
 
   source_free(src);

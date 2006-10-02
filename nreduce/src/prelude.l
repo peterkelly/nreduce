@@ -1,52 +1,54 @@
-(__printer (lst) (if lst
+__printer lst = (if lst
                  (if (valarray? lst)
-                     (letrec ((partlen (arraysize lst)))
+                     (letrec partlen = (arraysize lst) in
                              (seq (printarray partlen lst) (__printer (arrayskip partlen lst))))
                      (seq (print (head lst)) (__printer (tail lst))))
-                     nil))
-(__sparklist (lst) (if lst
+                     nil)
+
+__sparklist lst = (if lst
                      (parhead lst (__sparklist (tail lst)))
-                     nil))
-(__spark (val) (seq (__sparklist val) val))
-(__start () (__printer main))
+                     nil)
 
-(streamfd   (fd)        (readchunk fd (streamfd fd)))
+__spark val = (seq (__sparklist val) val)
+__start = (__printer main)
 
-(readb      (filename)  (streamfd (openfd filename)))
+streamfd fd =  (readchunk fd (streamfd fd))
 
-(stdin () (streamfd 0))
+readb filename = (streamfd (openfd filename))
 
-(readt      (filename)  (readb filename))
+stdin = (streamfd 0)
 
-(len1       (total lst) (if lst
-                            (letrec ((partlen (arraysize lst)))
-                                     (len1 (+ total partlen) (arrayskip partlen lst)))
-                            total))
+readt filename = (readb filename)
 
-(len        (lst)       (len1 0 lst))
+len1 total lst = (if lst
+                     (letrec partlen = (arraysize lst) in
+                              (len1 (+ total partlen) (arrayskip partlen lst)))
+                              total)
+
+len lst = (len1 0 lst)
 
 
-(skip       (n lst)     (letrec ((partlen (arraysize lst)))
-                                (if (< n partlen)
-                                    (arrayskip n lst)
-                                (skip (- n partlen) (arrayskip partlen lst)))))
+skip n lst = (letrec partlen = (arraysize lst) in
+                     (if (< n partlen)
+                         (arrayskip n lst)
+                     (skip (- n partlen) (arrayskip partlen lst))))
 
-(item       (n lst)     (letrec ((partlen (arraysize lst)))
-                                (if (< n partlen)
-                                    (head (arrayskip n lst))
-                                (item (- n partlen) (arrayskip partlen lst)))))
+item n lst = (letrec partlen = (arraysize lst) in
+                     (if (< n partlen)
+                         (head (arrayskip n lst))
+                     (item (- n partlen) (arrayskip partlen lst))))
 
-(prefix     (n lst)     (if (<= n 0)
-                            nil
-                           (letrec ((partlen (arraysize lst)))
-                           (if (<= n partlen)
-                               (arrayprefix n lst nil)
-                               (arrayprefix partlen lst
-                                            (prefix (- n partlen) (arrayskip partlen lst)))))))
+prefix n lst = (if (<= n 0)
+                   nil
+               (letrec partlen = (arraysize lst) in
+                       (if (<= n partlen)
+                           (arrayprefix n lst nil)
+                       (arrayprefix partlen lst
+                                    (prefix (- n partlen) (arrayskip partlen lst))))))
 
-(sub (start count lst)  (prefix count (skip start lst)))
+sub start count lst = (prefix count (skip start lst))
 
-(append     (a b)     (if a
-                          (letrec ((partlen (arraysize a)))
-                                  (arrayprefix partlen a (append (arrayskip partlen a) b)))
-                          b))
+append a b = (if a
+                 (letrec partlen = (arraysize a) in
+                          (arrayprefix partlen a (append (arrayskip partlen a) b)))
+                 b)

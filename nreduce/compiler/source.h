@@ -58,14 +58,12 @@ typedef struct scomb {
   int index;
   int *strictin;
   sourceloc sl;
-  struct scomb *next;
 } scomb;
 
 typedef struct source {
-  scomb *scombs;
-  scomb **lastsc;
   int genvar;
   int varno;
+  array *scarr;
   array *oldnames;
   array *parsedfiles;
 } source;
@@ -100,9 +98,7 @@ scomb *get_scomb_index(source *src, int index);
 scomb *get_scomb(source *src, const char *name);
 int get_scomb_var(scomb *sc, const char *name);
 scomb *add_scomb(source *src, const char *name1);
-void scomb_free_list(scomb **list);
-void fix_partial_applications(source *src);
-void check_scombs_nosharing(source *src);
+void scomb_free(scomb *sc);
 
 /* lifting */
 
@@ -112,7 +108,6 @@ void applift(source *src, scomb *sc);
 /* graph */
 
 void cleargraph(snode *root, int flag);
-void find_snodes(snode ***nodes, int *nnodes, snode *root);
 
 /* new */
 

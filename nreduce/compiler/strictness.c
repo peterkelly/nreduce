@@ -358,8 +358,9 @@ static void check_strictness(scomb *sc, int *changed)
  */
 void dump_strictinfo(source *src)
 {
-  scomb *sc;
-  for (sc = src->scombs; sc; sc = sc->next) {
+  int scno;
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     if (!strncmp(sc->name,"__",2))
       continue;
     print_scomb_code(src,sc);
@@ -382,22 +383,26 @@ void dump_strictinfo(source *src)
  */
 void strictness_analysis(source *src)
 {
-  scomb *sc;
+  int scno;
   int changed;
 
   if (trace)
     debug_stage("Strictness analysis (new version)");
 
-  for (sc = src->scombs; sc; sc = sc->next)
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+  }
 
 #if 1
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
   do {
     changed = 0;
-    for (sc = src->scombs; sc; sc = sc->next)
+    for (scno = 0; scno < array_count(src->scarr); scno++) {
+      scomb *sc = array_item(src->scarr,scno,scomb*);
       check_strictness(sc,&changed);
+    }
 
     /* If there was any changes, we have to go back through and check the graphs again. One or
        more of the supercombinators is now known to be strict in one of its arguments that

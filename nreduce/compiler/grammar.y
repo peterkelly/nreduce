@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
+#include "util.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -35,13 +36,12 @@
 #define strdup _strdup
 #endif
 
-extern int yylineno;
 extern const char *yyfilename;
 extern int yyfileno;
 int yylex(void);
 int yyerror(const char *err);
 
-extern struct snode *parse_root;
+extern struct source *parse_src;
 
 %}
 
@@ -51,18 +51,18 @@ extern struct snode *parse_root;
   char *s;
   int i;
   double d;
-  int b;
+  struct list *l;
+  struct letrec *lr;
 }
 
 %start Program
 
 %token<s> SYMBOL
-%token<b> BUILTIN
 %token LAMBDA
 %token NIL
 %token SUPER
+%token LETREC
 %token IN
-%token PROGSTART
 %token EQUALS
 %token<i> INTEGER
 %token<d> DOUBLE
@@ -73,76 +73,120 @@ extern struct snode *parse_root;
 %type <c> Expr
 %type <c> SingleLambda
 %type <c> Lambdas
+%type <l> Arguments
+%type <lr> Letrec
+%type <lr> Letrecs
 %left SYMBOL
 
 %%
 
 SingleExpr:
-  NIL                                           { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_NIL; }
-| '(' ')'                                       { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_NIL; }
-| INTEGER                                       { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_NUMBER;
-                                                  $$->num = (double)($1); }
-| DOUBLE                                        { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_NUMBER;
-                                                  $$->num = $1; }
-| STRING                                        { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_STRING;
-                                                  $$->value = strdup($1); }
-| SYMBOL                                      { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_SYMBOL;
-                                                  $$->name = strdup($1); }
-| BUILTIN                                       { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_BUILTIN;
-                                                  $$->bif = $1; }
-| EQUALS                                        { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_BUILTIN;
-                                                  $$->bif = B_EQ; }
-| '(' Expr ')'                                  { $$ = $2; }
+  NIL                             { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_NIL; }
+| '(' ')'                         { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_NIL; }
+| INTEGER                         { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_NUMBER;
+                                    $$->num = (double)($1); }
+| DOUBLE                          { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_NUMBER;
+                                    $$->num = $1; }
+| STRING                          { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_STRING;
+                                    $$->value = strdup($1); }
+| SYMBOL                          { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_SYMBOL;
+                                    $$->name = strdup($1); }
+| EQUALS                          { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_SYMBOL;
+                                    $$->name = strdup("="); }
+| '(' Expr ')'                    { $$ = $2; }
 ;
 
 SingleLambda:
-  LAMBDA SYMBOL  '.'                          { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_LAMBDA;
-                                                  $$->name = (void*)strdup($2);
-                                                  $$->body = NULL; }
+  LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_LAMBDA;
+                                    $$->name = (void*)strdup($2);
+                                    $$->body = NULL; }
 ;
 
 Lambdas:
-  SingleLambda                                  { $$ = $1; }
-| SingleLambda Lambdas                          { $$ = $1; $$->body = $2; }
+  SingleLambda                    { $$ = $1; }
+| SingleLambda Lambdas            { $$ = $1; $$->body = $2; }
 ;
 
 AppliedExpr:
-  SingleExpr                                    { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_CONS;
-                                                  $$->left = $1;
-                                                  $$->right = snode_new(yyfileno,yylineno);
-                                                  $$->right->tag = TYPE_NIL; }
-| SingleExpr AppliedExpr                        { $$ = snode_new(yyfileno,yylineno);
-                                                  $$->tag = TYPE_CONS;
-                                                  $$->left = $1;
-                                                  $$->right = $2; }
+  SingleExpr                      { $$ = $1; }
+| AppliedExpr SingleExpr          { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_APPLICATION;
+                                    $$->left = $1;
+                                    $$->right = $2; }
+;
+
+Letrec:
+  SYMBOL EQUALS SingleExpr        { $$ = (letrec*)calloc(1,sizeof(letrec));
+                                    $$->name = $1;
+                                    $$->value = $3; }
+;
+
+Letrecs:
+  Letrec                          { $$ = $1; }
+| Letrec Letrecs                  { $$ = $1;
+                                    $$->next = $2; }
 ;
 
 Expr:
-  AppliedExpr                                   { $$ = $1; }
-| Lambdas AppliedExpr                           { snode *c = $1;
-                                                  while (c->body)
-                                                    c = c->body;
-                                                  c->body = $2; }
+  AppliedExpr                     { $$ = $1; }
+| Lambdas AppliedExpr             { snode *c = $1;
+                                    while (c->body)
+                                      c = c->body;
+                                    c->body = $2; }
+| LETREC Letrecs IN SingleExpr    { $$ = snode_new(yyfileno,@1.first_line);
+                                    $$->tag = TYPE_LETREC;
+                                    $$->bindings = $2;
+                                    $$->body = $4; }
+;
+
+Arguments:
+  SYMBOL                          { $$ = list_new($1,NULL); }
+| SYMBOL Arguments                { $$ = list_new($1,$2); }
+;
+
+Definition:
+  Arguments EQUALS SingleExpr     { char *name = (char*)$1->data;
+                                    list *l;
+                                    int argno = 0;
+                                    scomb *sc;
+
+                                    if (NULL != get_scomb(parse_src,name)) {
+                                      fprintf(stderr,"Duplicate supercombinator: %s\n",name);
+                                      return -1;
+                                    }
+
+                                    sc = add_scomb(parse_src,name);
+                                    //    sc->sl = name->sl; /* FIXME */
+                                    sc->nargs = list_count($1->next);
+                                    sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
+                                    for (l = $1->next; l; l = l->next)
+                                      sc->argnames[argno++] = strdup((char*)l->data);
+                                    list_free(l,free);
+
+                                    sc->body = $3; }
+;
+
+Definitions:
+  Definition                      { }
+| Definition Definitions          { }
 ;
 
 Program:
-  AppliedExpr { parse_root = $1; }
+  Definitions                     { }
 ;
 
 %%
 
 int yyerror(const char *err)
 {
-  fprintf(stderr,"%s:%d: parse error: %s\n",yyfilename,yylineno,err);
+  fprintf(stderr,"%s:%d: parse error: %s\n",yyfilename,yylloc.first_line,err);
   return 1;
 }

@@ -495,18 +495,20 @@ void print_program(source *src, gprogram *gp, int builtins)
 void print_profiling(source *src, process *proc, gprogram *gp)
 {
   int index = 0;
-  scomb *sc;
   int *usage;
   int prevfun = -1;
   int fno = -1;
   int curusage = 0;
   int totalusage = 0;
   int addr = 0;
+  int scno;
 
   print_program(src,gp,1);
 
-  for (sc = src->scombs; sc; sc = sc->next)
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     sc->index = index++;
+  }
 
   usage = (int*)calloc((index+1)+NUM_BUILTINS,sizeof(int));
 
@@ -1073,11 +1075,11 @@ static void compute_stacksizes(gprogram *gp)
 gprogram *cur_program = NULL;
 void compile(source *src, gprogram *gp)
 {
-  scomb *sc;
   int index = 0;
   int i;
   stackinfo *topsi = NULL; /* stackinfo_new(NULL); */
   sourceloc nosl;
+  int scno;
 
   scomb *startsc = get_scomb(src,"__start");
   assert(startsc);
@@ -1091,15 +1093,19 @@ void compile(source *src, gprogram *gp)
   nosl.fileno = -1;
   nosl.lineno = -1;
 
-  for (sc = src->scombs; sc; sc = sc->next)
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     sc->index = index++;
+  }
 
   gp->nfunctions = NUM_BUILTINS+index;
   gp->fnames = (char**)malloc(gp->nfunctions*sizeof(char*));
   for (i = 0; i < NUM_BUILTINS; i++)
     gp->fnames[i] = strdup(builtin_info[i].name);
-  for (sc = src->scombs; sc; sc = sc->next)
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     gp->fnames[i++] = real_scname(src,sc->name);
+  }
 
   gp->finfo = (funinfo*)calloc(gp->nfunctions,sizeof(funinfo));
 
@@ -1115,8 +1121,10 @@ void compile(source *src, gprogram *gp)
   EVAL(nosl,0);
   DO(nosl,0);
 
-  for (sc = src->scombs; sc; sc = sc->next)
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     F(src,gp,NUM_BUILTINS+sc->index,sc);
+  }
 
   topsi = gp->si;
   for (i = 0; i < NUM_BUILTINS; i++) {

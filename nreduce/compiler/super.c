@@ -38,20 +38,17 @@
 
 scomb *get_scomb_index(source *src, int index)
 {
-  scomb *sc = src->scombs;
-  while (0 < index) {
-    index--;
-    sc = sc->next;
-  }
-  return sc;
+  return array_item(src->scarr,index,scomb*);
 }
 
 scomb *get_scomb(source *src, const char *name)
 {
-  scomb *sc;
-  for (sc = src->scombs; sc; sc = sc->next)
+  int scno;
+  for (scno = 0; scno < array_count(src->scarr); scno++) {
+    scomb *sc = array_item(src->scarr,scno,scomb*);
     if (!strcmp(sc->name,name))
       return sc;
+  }
   return NULL;
 }
 
@@ -88,8 +85,7 @@ scomb *add_scomb(source *src, const char *name1)
     num++;
   }
 
-  *src->lastsc = sc;
-  src->lastsc = &sc->next;
+  array_append(src->scarr,&sc,sizeof(scomb*));
 
   sc->sl.fileno = -1;
   sc->sl.lineno = -1;
@@ -98,7 +94,7 @@ scomb *add_scomb(source *src, const char *name1)
   return sc;
 }
 
-static void scomb_free(scomb *sc)
+void scomb_free(scomb *sc)
 {
   int i;
   snode_free(sc->body);
@@ -111,118 +107,3 @@ static void scomb_free(scomb *sc)
   free(sc);
 }
 
-void scomb_free_list(scomb **list)
-{
-  while (*list) {
-    scomb *sc = *list;
-    *list = sc->next;
-    scomb_free(sc);
-  }
-}
-
-/* Note: this is not actually used at the moment */
-void fix_partial_applications(source *src)
-{
-  scomb *sc;
-  for (sc = src->scombs; sc; sc = sc->next) {
-    snode *c = sc->body;
-    int nargs = 0;
-    scomb *other;
-    while (TYPE_APPLICATION == snodetype(c)) {
-      c = c->left;
-      nargs++;
-    }
-    if (TYPE_SCREF == snodetype(c)) {
-      other = c->sc;
-      if (nargs < other->nargs) {
-        int oldargs = sc->nargs;
-        int extra = other->nargs - nargs;
-        int i;
-        sc->nargs += extra;
-        sc->argnames = (char**)realloc(sc->argnames,sc->nargs*sizeof(char*));
-        for (i = oldargs; i < sc->nargs; i++) {
-          snode *fun = sc->body;
-          snode *arg = snode_new(-1,-1);
-
-          sc->argnames[i] = (char*)malloc(20);
-          sprintf(sc->argnames[i],"N%d",src->genvar++);
-
-          arg->tag = TYPE_SYMBOL;
-          arg->name = strdup(sc->argnames[i]);
-
-          sc->body = snode_new(-1,-1);
-          sc->body->tag = TYPE_APPLICATION;
-          sc->body->left = fun;
-          sc->body->right = arg;
-        }
-      }
-    }
-  }
-}
-
-static void shared_error(source *src, snode ***nodes, int *nnodes, snode *shared)
-{
-  int i = 0;
-  scomb *sc;
-  fprintf(stderr,"Shared node: ");
-  print_codef(src,stderr,shared);
-  fprintf(stderr,"\n");
-  fprintf(stderr,"Present in supercombinators:\n");
-  for (sc = src->scombs; sc; sc = sc->next) {
-    int j;
-    for (j = 0; j < nnodes[i]; j++) {
-      if (nodes[i][j] == shared)
-        fprintf(stderr,"%s\n",sc->name);
-    }
-    i++;
-  }
-  abort();
-}
-
-void check_scombs_nosharing(source *src)
-{
-  int count = 0;
-  scomb *sc;
-  snode ***nodes;
-  int *nnodes;
-  int i;
-
-  for (sc = src->scombs; sc; sc = sc->next)
-    count++;
-
-  nodes = (snode***)calloc(count,sizeof(snode**));
-  nnodes = (int*)calloc(count,sizeof(snode**));
-  i = 0;
-  for (sc = src->scombs; sc; sc = sc->next) {
-    find_snodes(&nodes[i],&nnodes[i],sc->body);
-    i++;
-  }
-
-  /* FIXME: avoid use of FLAG_PROCESSED here; store the "found bit" in a
-     temporary array. This is the only plcae in the code FLAG_PROCESSED is still
-     used, so it can be removed after that. */
-
-  i = 0;
-  for (sc = src->scombs; sc; sc = sc->next) {
-    int j;
-    for (j = 0; j < nnodes[i]; j++)
-      nodes[i][j]->tag &= ~FLAG_PROCESSED;
-    i++;
-  }
-
-  i = 0;
-  for (sc = src->scombs; sc; sc = sc->next) {
-    int j;
-    for (j = 0; j < nnodes[i]; j++) {
-      if (nodes[i][j]->tag & FLAG_PROCESSED)
-        shared_error(src,nodes,nnodes,nodes[i][j]);
-      nodes[i][j]->tag |= FLAG_PROCESSED;
-    }
-    i++;
-  }
-
-  for (i = 0; i < count; i++)
-    free(nodes[i]);
-  free(nodes);
-  free(nnodes);
-}

@@ -36,7 +36,6 @@
 array *lexstring = NULL;
 const char *yyfilename = NULL;
 int yyfileno;
-int yylineno;
 
 %}
 
@@ -57,17 +56,17 @@ CHAR                     \'.\'
 "/*"                     { BEGIN(comment); }
 <comment>[^*\n]*         { }
 <comment>"*"+[^*/\n]*    { }
-<comment>\n              { yylineno++; }
+<comment>\n              { yylloc.first_line++; }
 <comment>"*"+"/"         { BEGIN(INITIAL); }
 
 "//"                     { BEGIN(comment2); }
 <comment2>[^\n]*         { }
-<comment2>\n             { yylineno++;
+<comment2>\n             { yylloc.first_line++;
                            BEGIN(INITIAL); }
 
 "#!"                     { BEGIN(intline); }
 <intline>[^\n]*          { }
-<intline>\n              { yylineno++;
+<intline>\n              { yylloc.first_line++;
                            BEGIN(INITIAL); }
 
 \"                       { BEGIN(string);
@@ -89,11 +88,11 @@ CHAR                     \'.\'
 <string>\\(.|\n)         { array_append(lexstring,&yytext[1],1); }
 <string>[^\\\n\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
 
-"progstart"              { return PROGSTART; }
+"letrec"                 { return LETREC; }
+"in"                     { return IN; }
 "!"                      { return LAMBDA; }
 "nil"                    { return NIL; }
 "super"                  { return SUPER; }
-"in"                     { return IN; }
 "."                      { return '.'; }
 "("                      { return '('; }
 ")"                      { return ')'; }
@@ -102,7 +101,7 @@ CHAR                     \'.\'
 "*"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "/"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "%"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"="                      { yylval.s = strdup(yytext); return SYMBOL; }
+"="                      { return EQUALS; }
 "!="                     { yylval.s = strdup(yytext); return SYMBOL; }
 "<"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "<="                     { yylval.s = strdup(yytext); return SYMBOL; }
@@ -131,7 +130,7 @@ CHAR                     \'.\'
 (" "|\n|\t)+             { char *c;
                            for (c = yytext; *c; c++)
                              if ('\n' == *c)
-                               yylineno++; }
+                               yylloc.first_line++; }
 .                        { printf("Unrecognised string: \"%s\"\n",yytext);
                            return -1;
 

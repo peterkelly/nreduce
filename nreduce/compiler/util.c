@@ -100,7 +100,7 @@ void array_free(array *arr)
   free(arr);
 }
 
-static list *list_new(void *data, list *next)
+list *list_new(void *data, list *next)
 {
   list *l = (list*)malloc(sizeof(list));
   l->data = data;

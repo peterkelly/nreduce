@@ -105,8 +105,7 @@
 #define TAG_MASK         0xFF
 
 #define FLAG_MARKED      0x100
-#define FLAG_PROCESSED   0x200
-#define FLAG_NEW         FLAG_PROCESSED
+#define FLAG_NEW         0x200
 #define FLAG_TMP         0x400
 #define FLAG_DMB         0x800
 #define FLAG_PINNED     0x1000
