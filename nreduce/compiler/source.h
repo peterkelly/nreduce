@@ -37,6 +37,9 @@
 #define SNODE_STRING      0x09
 #define SNODE_COUNT       0x0A
 
+#define MODULE_EXTENSION ".l"
+#define MODULE_REF '.'
+
 typedef struct sourceloc {
   int fileno;
   int lineno;
@@ -76,6 +79,7 @@ typedef struct scomb {
   int index;
   int *strictin;
   sourceloc sl;
+  char *modname;
 } scomb;
 
 typedef struct source {
@@ -84,16 +88,24 @@ typedef struct source {
   array *scombs;
   array *oldnames;
   array *parsedfiles;
+  list *imports;
+  list *newimports;
+  char *curmodname;
 } source;
+
+typedef struct unboundvar {
+  sourceloc sl;
+  char *name;
+} unboundvar;
 
 snode *snode_new(int fileno, int lineno);
 void snode_free(snode *c);
-void parse_check(source *src, int cond, snode *c, char *msg);
 void free_letrec(letrec *rec);
 
 source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename);
-int source_parse_file(source *src, const char *filename);
+int source_parse_file(source *src, const char *filename, const char *modname);
+void add_import(source *src, const char *name);
 int source_process(source *src);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
@@ -104,7 +116,7 @@ void print_sourceloc(source *src, FILE *f, sourceloc sl);
 
 /* resolve */
 
-void resolve_refs(source *src, scomb *sc);
+void resolve_refs(source *src, scomb *sc, list **unbound);
 
 /* reorder */
 
@@ -136,10 +148,6 @@ void rename_variables(source *src, scomb *sc);
 void fatal(const char *format, ...);
 int debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
-void print_hex(int c);
-void print_hexbyte(unsigned char val);
-void print_bin(void *ptr, int nbytes);
-void print_bin_rev(void *ptr, int nbytes);
 int count_args(snode *c);
 snode *get_arg(snode *c, int argno);
 void print(snode *c);

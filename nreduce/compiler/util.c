@@ -209,32 +209,6 @@ void list_remove_ptr(list **l, void *ptr)
   free(old);
 }
 
-void print_quoted_string(FILE *f, const char *str)
-{
-  const char *c;
-  fprintf(f,"\"");
-  for (c = str; *c; c++) {
-    switch (*c) {
-    case '\n':
-      fprintf(f,"\\n");
-      break;
-    case '\r':
-      fprintf(f,"\\r");
-      break;
-    case '\t':
-      fprintf(f,"\\t");
-      break;
-    case '"':
-      fprintf(f,"\\\"");
-      break;
-    default:
-      fprintf(f,"%c",*c);
-      break;
-    }
-  }
-  fprintf(f,"\"");
-}
-
 stack *stack_new(void)
 {
   stack *s = (stack*)calloc(1,sizeof(stack));
@@ -317,6 +291,86 @@ void print_double(FILE *f, double d)
   else {
     fprintf(f,"%f",d);
   }
+}
+
+void print_quoted_string(FILE *f, const char *str)
+{
+  const char *c;
+  fprintf(f,"\"");
+  for (c = str; *c; c++) {
+    switch (*c) {
+    case '\n':
+      fprintf(f,"\\n");
+      break;
+    case '\r':
+      fprintf(f,"\\r");
+      break;
+    case '\t':
+      fprintf(f,"\\t");
+      break;
+    case '"':
+      fprintf(f,"\\\"");
+      break;
+    default:
+      fprintf(f,"%c",*c);
+      break;
+    }
+  }
+  fprintf(f,"\"");
+}
+
+void print_hex(FILE *f, int c)
+{
+  if (0xA > c)
+    fprintf(f,"%c",'0'+c);
+  else
+    fprintf(f,"%c",'A'+(c-0xA));
+}
+
+void print_hexbyte(FILE *f, unsigned char val)
+{
+  unsigned char hi = (unsigned char)((val & 0xF0) >> 4);
+  unsigned char lo = (unsigned char)(val & 0x0F);
+  print_hex(f,hi);
+  print_hex(f,lo);
+}
+
+void print_bin(FILE *f, void *ptr, int nbytes)
+{
+  int i;
+  unsigned char *data = (unsigned char*)ptr;
+  fprintf(f,"   ");
+  for (i = 0; i < nbytes; i++) {
+    int bit;
+    for (bit = 7; 0 <= bit; bit--)
+      fprintf(f,"%c",(data[i] & (0x1 << bit)) ? '1' : '0');
+    fprintf(f," ");
+  }
+  fprintf(f,"\n0x ");
+  for (i = 0; i < nbytes; i++) {
+    print_hexbyte(f,data[i]);
+    fprintf(f,"       ");
+  }
+  fprintf(f,"\n");
+}
+
+void print_bin_rev(FILE *f, void *ptr, int nbytes)
+{
+  int i;
+  unsigned char *data = (unsigned char*)ptr;
+  fprintf(f,"   ");
+  for (i = nbytes-1; 0 <= i; i--) {
+    int bit;
+    for (bit = 7; 0 <= bit; bit--)
+      fprintf(f,"%c",(data[i] & (0x1 << bit)) ? '1' : '0');
+    fprintf(f," ");
+  }
+  fprintf(f,"\n0x ");
+  for (i = nbytes-1; 0 <= i; i--) {
+    print_hexbyte(f,data[i]);
+    fprintf(f,"       ");
+  }
+  fprintf(f,"\n");
 }
 
 struct timeval timeval_diff(struct timeval from, struct timeval to)

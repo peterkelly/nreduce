@@ -101,60 +101,6 @@ snode *get_arg(snode *c, int argno)
   return c->right;
 }
 
-void print_hex(int c)
-{
-  if (0xA > c)
-    printf("%c",'0'+c);
-  else
-    printf("%c",'A'+(c-0xA));
-}
-
-void print_hexbyte(unsigned char val)
-{
-  unsigned char hi = (unsigned char)((val & 0xF0) >> 4);
-  unsigned char lo = (unsigned char)(val & 0x0F);
-  print_hex(hi);
-  print_hex(lo);
-}
-
-void print_bin(void *ptr, int nbytes)
-{
-  int i;
-  unsigned char *data = (unsigned char*)ptr;
-  printf("   ");
-  for (i = 0; i < nbytes; i++) {
-    int bit;
-    for (bit = 7; 0 <= bit; bit--)
-      printf("%c",(data[i] & (0x1 << bit)) ? '1' : '0');
-    printf(" ");
-  }
-  printf("\n0x ");
-  for (i = 0; i < nbytes; i++) {
-    print_hexbyte(data[i]);
-    printf("       ");
-  }
-  printf("\n");
-}
-
-void print_bin_rev(void *ptr, int nbytes)
-{
-  int i;
-  unsigned char *data = (unsigned char*)ptr;
-  printf("   ");
-  for (i = nbytes-1; 0 <= i; i--) {
-    int bit;
-    for (bit = 7; 0 <= bit; bit--)
-      printf("%c",(data[i] & (0x1 << bit)) ? '1' : '0');
-    printf(" ");
-  }
-  printf("\n0x ");
-  for (i = nbytes-1; 0 <= i; i--) {
-    print_hexbyte(data[i]);
-    printf("       ");
-  }
-  printf("\n");
-}
-
 static void print1(char *prefix, snode *c, int indent)
 {
   int i;

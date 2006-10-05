@@ -47,7 +47,7 @@ HEXDIGITS               {HEXDIGIT}+
 INTEGER                  \-?{DIGITS}
 HEX                      \-?0[xX]{HEXDIGIT}+
 DOUBLE                   \-?{DIGITS}\.{DIGITS}
-IDCHAR                   [a-zA-Z_\-?]
+IDCHAR                   [a-zA-Z_\-?:]
 IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 CHAR                     \'.\'
 
@@ -92,13 +92,13 @@ CHAR                     \'.\'
 "in"                     { return IN; }
 "!"                      { return LAMBDA; }
 "nil"                    { return NIL; }
-"super"                  { return SUPER; }
+"import"                 { return IMPORT; }
 "."                      { return '.'; }
 "("                      { return LBRACE; }
 ")"                      { return RBRACE; }
 "{"                      { return LBRACE; }
 "}"                      { return RBRACE; }
-":"                      { return ':'; }
+","                      { return ','; }
 "+"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "-"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "*"                      { yylval.s = strdup(yytext); return SYMBOL; }

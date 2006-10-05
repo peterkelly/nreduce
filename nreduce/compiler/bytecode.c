@@ -171,6 +171,16 @@ static void stackinfo_freeswap(stackinfo **si, stackinfo **tmp)
   *si = *tmp;
 }
 
+static void parse_check(source *src, int cond, snode *c, char *msg)
+{
+  if (cond)
+    return;
+  if (0 <= c->sl.fileno)
+    fprintf(stderr,"%s:%d: ",lookup_parsedfile(src,c->sl.fileno),c->sl.lineno);
+  fprintf(stderr,"%s\n",msg);
+  exit(1);
+}
+
 static void print_comp2(source *src, compilation *comp, char *fname, snode *c, int n,
                         const char *format, ...)
 {
@@ -1132,5 +1142,5 @@ const char *bc_string(const char *bcdata, int sno)
 const char *bc_function_name(const char *bcdata, int fno)
 {
   const funinfo *finfo = bc_funinfo(bcdata);
-  return bc_string(bcdata,finfo->name);
+  return bc_string(bcdata,finfo[fno].name);
 }

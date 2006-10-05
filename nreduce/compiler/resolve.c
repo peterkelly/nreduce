@@ -35,16 +35,17 @@
 #include <stdarg.h>
 #include <math.h>
 
-static void resolve_refs_r(source *src, snode *c, stack *bound)
+static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
+                           const char *modname)
 {
   switch (c->type) {
   case SNODE_APPLICATION:
-    resolve_refs_r(src,c->left,bound);
-    resolve_refs_r(src,c->right,bound);
+    resolve_refs_r(src,c->left,bound,unbound,modname);
+    resolve_refs_r(src,c->right,bound,unbound,modname);
     break;
   case SNODE_LAMBDA:
     stack_push(bound,c->name);
-    resolve_refs_r(src,c->body,bound);
+    resolve_refs_r(src,c->body,bound,unbound,modname);
     bound->count--;
     break;
   case SNODE_SYMBOL: {
@@ -57,8 +58,17 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
     if (!found) {
       scomb *sc;
       int bif;
+      char *scname;
 
-      if (NULL != (sc = get_scomb(src,sym))) {
+      if (modname && (NULL == strchr(sym,'.'))) {
+        scname = (char*)malloc(strlen(modname)+1+strlen(sym)+1);
+        sprintf(scname,"%s:%s",modname,sym);
+      }
+      else {
+        scname = strdup(sym);
+      }
+
+      if (NULL != (sc = get_scomb(src,scname))) {
         free(c->name);
         c->name = NULL;
         c->type = SNODE_SCREF;
@@ -71,10 +81,13 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
         c->bif = bif;
       }
       else {
-        print_sourceloc(src,stderr,c->sl);
-        fprintf(stderr,"Unbound variable: %s\n",sym);
-        exit(1);
+        unboundvar *ubv = (unboundvar*)calloc(1,sizeof(unboundvar));
+        ubv->sl = c->sl;
+        ubv->name = strdup(sym);
+        list_append(unbound,ubv);
       }
+
+      free(scname);
     }
     break;
   }
@@ -84,8 +97,8 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
     for (rec = c->bindings; rec; rec = rec->next)
       stack_push(bound,rec->name);
     for (rec = c->bindings; rec; rec = rec->next)
-      resolve_refs_r(src,rec->value,bound);
-    resolve_refs_r(src,c->body,bound);
+      resolve_refs_r(src,rec->value,bound,unbound,modname);
+    resolve_refs_r(src,c->body,bound,unbound,modname);
     bound->count = oldcount;
     break;
   }
@@ -99,12 +112,12 @@ static void resolve_refs_r(source *src, snode *c, stack *bound)
   }
 }
 
-void resolve_refs(source *src, scomb *sc)
+void resolve_refs(source *src, scomb *sc, list **unbound)
 {
   stack *bound = stack_new();
   int i;
   for (i = 0; i < sc->nargs; i++)
     stack_push(bound,sc->argnames[i]);
-  resolve_refs_r(src,sc->body,bound);
+  resolve_refs_r(src,sc->body,bound,unbound,sc->modname);
   stack_free(bound);
 }

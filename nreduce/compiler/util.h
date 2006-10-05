@@ -23,8 +23,6 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
-/* util */
-
 typedef struct list list;
 struct list {
   void *data;
@@ -55,8 +53,6 @@ void *array_at(array *arr, int index);
 int array_count(array *arr);
 void array_free(array *arr);
 
-void print_quoted_string(FILE *f, const char *str);
-
 typedef void (*list_d_t)(void *a);
 typedef void* (*list_copy_t)(void *a);
 
@@ -78,6 +74,11 @@ void stack_free(stack *s);
 void stack_push(stack *s, void *c);
 
 void print_double(FILE *f, double d);
+void print_quoted_string(FILE *f, const char *str);
+void print_hex(FILE *f, int c);
+void print_hexbyte(FILE *f, unsigned char val);
+void print_bin(FILE *f, void *ptr, int nbytes);
+void print_bin_rev(FILE *f, void *ptr, int nbytes);
 
 struct timeval timeval_diff(struct timeval from, struct timeval to);
 

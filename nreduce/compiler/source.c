@@ -69,6 +69,7 @@ int yylex_destroy(void);
 extern const char *yyfilename;
 extern int yyfileno;
 source *parse_src = NULL;
+const char *parse_modname = NULL;
 
 snode *snode_new(int fileno, int lineno)
 {
@@ -130,7 +131,7 @@ source *source_new()
   return src;
 }
 
-static void check_for_main(source *src)
+static int check_for_main(source *src)
 {
   int gotmain = 0;
   int scno;
@@ -142,30 +143,23 @@ static void check_for_main(source *src)
 
       if (0 != sc->nargs) {
         fprintf(stderr,"Supercombinator \"main\" must have 0 arguments\n");
-        exit(1);
+        return -1;
       }
     }
   }
 
   if (!gotmain) {
     fprintf(stderr,"No \"main\" function defined\n");
-    exit(1);
+    return -1;
   }
-}
 
-void parse_check(source *src, int cond, snode *c, char *msg)
-{
-  if (cond)
-    return;
-  if (0 <= c->sl.fileno)
-    fprintf(stderr,"%s:%d: ",lookup_parsedfile(src,c->sl.fileno),c->sl.lineno);
-  fprintf(stderr,"%s\n",msg);
-  exit(1);
+  return 0;
 }
 
 int source_parse_string(source *src, const char *str, const char *filename)
 {
   YY_BUFFER_STATE bufstate;
+  int r;
   yyfilename = filename;
   yyfileno = add_parsedfile(src,filename);
   yylloc.first_line = 1;
@@ -174,23 +168,26 @@ int source_parse_string(source *src, const char *str, const char *filename)
   yy_switch_to_buffer(bufstate);
 
   parse_src = src;
-  if (0 != yyparse())
-    exit(1);
+  parse_modname = "";
+  r = yyparse();
 
   yy_delete_buffer(bufstate);
 #if HAVE_YYLEX_DESTROY
   yylex_destroy();
 #endif
 
-  return 0;
+  return r;
 }
 
-int source_parse_file(source *src, const char *filename)
+int source_parse_file(source *src, const char *filename, const char *modname)
 {
   YY_BUFFER_STATE bufstate;
+  int r;
+  list *newimports;
+
   if (NULL == (yyin = fopen(filename,"r"))) {
     perror(filename);
-    exit(1);
+    return -1;
   }
 
   yyfilename = filename;
@@ -200,8 +197,8 @@ int source_parse_file(source *src, const char *filename)
   bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
   yy_switch_to_buffer(bufstate);
   parse_src = src;
-  if (0 != yyparse())
-    exit(1);
+  parse_modname = modname;
+  r = yyparse();
   yy_delete_buffer(bufstate);
 #if HAVE_YYLEX_DESTROY
   yylex_destroy();
@@ -209,7 +206,44 @@ int source_parse_file(source *src, const char *filename)
 
   fclose(yyin);
 
-  return 0;
+  if (0 == r) {
+    list *l;
+
+    newimports = src->newimports;
+    src->newimports = NULL;
+
+    for (l = newimports; l; l = l->next) {
+      char *modname = (char*)l->data;
+      list_push(&src->imports,strdup(modname));
+    }
+
+    for (l = newimports; l && (0 == r); l = l->next) {
+      char *modname = (char*)l->data;
+      char *modfilename;
+
+      modfilename = (char*)malloc(strlen(modname)+strlen(MODULE_EXTENSION)+1);
+      sprintf(modfilename,"%s%s",modname,MODULE_EXTENSION);
+
+      r = source_parse_file(src,modfilename,modname);
+
+      free(modfilename);
+    }
+    list_free(newimports,free);
+  }
+
+  return r;
+}
+
+void add_import(source *src, const char *name)
+{
+  list *l;
+  for (l = src->imports; l; l = l->next)
+    if (!strcmp(name,(char*)l->data))
+      return;
+  for (l = src->newimports; l; l = l->next)
+    if (!strcmp(name,(char*)l->data))
+      return;
+  list_push(&src->newimports,strdup(name));
 }
 
 void compile_stage(source *src, const char *name)
@@ -220,12 +254,31 @@ void compile_stage(source *src, const char *name)
   debug_stage(name);
 }
 
+int handle_unbound(source *src, list *unbound)
+{
+  list *l;
+  for (l = unbound; l; l = l->next) {
+    unboundvar *ubv = (unboundvar*)l->data;
+    print_sourceloc(src,stderr,ubv->sl);
+    fprintf(stderr,"Unbound variable: %s\n",ubv->name);
+    free(ubv->name);
+  }
+  list_free(unbound,free);
+
+  if (0 == list_count(unbound))
+    return 0;
+  else
+    return -1;
+}
+
 int source_process(source *src)
 {
   int sccount = array_count(src->scombs);
   int scno;
+  list *unbound = NULL;
 
-  check_for_main(src);
+  if (0 != check_for_main(src))
+    return -1;
 
   compile_stage(src,"Variable renaming"); /* renaming.c */
   for (scno = 0; scno < sccount; scno++) {
@@ -236,8 +289,11 @@ int source_process(source *src)
   compile_stage(src,"Symbol resolution"); /* resolve.c */
   for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
-    resolve_refs(src,sc);
+    resolve_refs(src,sc,&unbound);
   }
+
+  if (0 != handle_unbound(src,unbound))
+    return -1;
 
   compile_stage(src,"Lambda lifting"); /* lifting.c */
   for (scno = 0; scno < sccount; scno++)
@@ -295,6 +351,8 @@ void source_free(source *src)
       free(array_item(src->parsedfiles,i,char*));
     array_free(src->parsedfiles);
   }
+  list_free(src->imports,free);
+  list_free(src->newimports,free);
   free(src);
 }
 

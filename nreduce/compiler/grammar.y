@@ -42,6 +42,7 @@ int yylex(void);
 int yyerror(const char *err);
 
 extern struct source *parse_src;
+extern const char *parse_modname;
 
 %}
 
@@ -60,7 +61,7 @@ extern struct source *parse_src;
 %token<s> SYMBOL
 %token LAMBDA
 %token NIL
-%token SUPER
+%token IMPORT
 %token LETREC
 %token IN
 %token EQUALS
@@ -106,7 +107,7 @@ SingleExpr:
 
 ListExpr:
   SingleExpr                      { $$ = $1; }
-| SingleExpr ':' ListExpr         { snode *cons;
+| SingleExpr ',' ListExpr         { snode *cons;
                                     snode *app1;
 
                                     cons = snode_new(yyfileno,@$.first_line);
@@ -178,13 +179,30 @@ Definition:
                                     list *l;
                                     int argno = 0;
                                     scomb *sc;
+                                    char *scname;
 
-                                    if (NULL != get_scomb(parse_src,name)) {
+                                    if (0 < strlen(parse_modname)) {
+                                      scname = (char*)malloc(strlen(parse_modname)+1+
+                                                             strlen(name)+1);
+                                      sprintf(scname,"%s:%s",parse_modname,name);
+                                    }
+                                    else {
+                                      scname = strdup(name);
+                                    }
+
+                                    if (NULL != get_scomb(parse_src,scname)) {
+                                      sourceloc sl;
+                                      sl.fileno = yyfileno;
+                                      sl.lineno = @$.first_line;
+                                      print_sourceloc(parse_src,stderr,sl);
                                       fprintf(stderr,"Duplicate supercombinator: %s\n",name);
+                                      list_free($1,free);
+                                      free(scname);
                                       return -1;
                                     }
 
-                                    sc = add_scomb(parse_src,name);
+
+                                    sc = add_scomb(parse_src,scname);
                                     sc->sl.fileno = yyfileno;
                                     sc->sl.lineno = @$.first_line;
                                     sc->nargs = list_count($1->next);
@@ -192,6 +210,7 @@ Definition:
                                     for (l = $1->next; l; l = l->next)
                                       sc->argnames[argno++] = strdup((char*)l->data);
                                     list_free($1,free);
+                                    free(scname);
 
                                     sc->body = $3; }
 ;
@@ -201,8 +220,17 @@ Definitions:
 | Definition Definitions          { }
 ;
 
+Import:
+IMPORT SYMBOL                     { add_import(parse_src,$2); free($2); }
+;
+
+Imports:
+  Import Imports                  { }
+| /* empty */                     { }
+;
+
 Program:
-  Definitions                     { }
+  Imports Definitions             { }
 ;
 
 %%

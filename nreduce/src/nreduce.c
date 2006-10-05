@@ -212,13 +212,16 @@ int main(int argc, char **argv)
 
 /*   debug_stage("Source code parsing"); */
 
-  source_parse_string(src,prelude,"prelude.l");
-  source_parse_file(src,args.filename);
+  if (0 != source_parse_string(src,prelude,"prelude.l"))
+    return -1;
+  if (0 != source_parse_file(src,args.filename,""))
+    return -1;
 
 /*   if (trace) */
 /*     print_scombs1(src); */
 
-  source_process(src);
+  if (0 != source_process(src))
+    return -1;
 
 
 
