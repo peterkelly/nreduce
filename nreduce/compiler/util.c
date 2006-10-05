@@ -244,21 +244,21 @@ static int getsignbit(double d)
   return ('-' == tmp[0]);
 }
 
-void print_double(FILE *f, double d)
+void format_double(char *str, int size, double d)
 {
   if (d == (double)((int)(d))) {
     int i = (int)d;
     if (getsignbit(d) && (0.0 == d))
-      fprintf(f,"-0");
+      snprintf(str,size,"-0");
     else
-      fprintf(f,"%d",i);
+      snprintf(str,size,"%d",i);
   }
   else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
     int ipart = (int)d;
     double fraction;
-	int start;
+    int start;
     char tmp[100];
-	int pos;
+    int pos;
 
     if (0.0 < d)
       fraction = d - floor(d);
@@ -274,23 +274,30 @@ void print_double(FILE *f, double d)
     assert('0' == tmp[start]);
     assert('.' == tmp[start+1]);
 
-    fprintf(f,"%d.%s",ipart,tmp+start+2);
+    snprintf(str,size,"%d.%s",ipart,tmp+start+2);
   }
   else if (0.0 == d) {
-    fprintf(f,"0");
+    snprintf(str,size,"0");
   }
   else if (isnan(d)) {
-    fprintf(f,"NaN");
+    snprintf(str,size,"NaN");
   }
   else if (isinf(d) && (0.0 < d)) {
-    fprintf(f,"INF");
+    snprintf(str,size,"INF");
   }
   else if (isinf(d) && (0.0 > d)) {
-    fprintf(f,"-INF");
+    snprintf(str,size,"-INF");
   }
   else {
-    fprintf(f,"%f",d);
+    snprintf(str,size,"%f",d);
   }
+}
+
+void print_double(FILE *f, double d)
+{
+  char str[100];
+  format_double(str,100,d);
+  fprintf(f,"%s",str);
 }
 
 void print_quoted_string(FILE *f, const char *str)

@@ -39,7 +39,8 @@
 #define BYTECODE_C
 
 #define MKCAP(_s,_a,_b)       add_instruction(comp,_s,OP_MKCAP,(_a),(_b))
-#define MKFRAME(_s,_a,_b)     add_instruction(comp,_s,OP_MKFRAME,(_a),(_b))
+//#define MKFRAME(_s,_a,_b)     add_instruction(comp,_s,OP_MKFRAME,(_a),(_b))
+#define MKFRAME(_s,_a,_b)     domkframe(src,comp,(_s),(_a),(_b))
 #define JFUN(_s,_a)           add_instruction(comp,_s,OP_JFUN,(_a),0)
 #define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,(_a),0)
 #define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0)
@@ -220,8 +221,16 @@ static void print_comp2_stack(source *src, compilation *comp, char *fname, stack
 
 static int add_string(compilation *comp, const char *str)
 {
-  int pos = array_count(comp->stringmap);
-  char *copy = strdup(str);
+  int count = array_count(comp->stringmap);
+  int pos;
+  char *copy;
+  for (pos = 0; pos < count; pos++) {
+    const char *existing = array_item(comp->stringmap,pos,const char*);
+    if (!strcmp(existing,str))
+      return pos;
+  }
+
+  copy = strdup(str);
   array_append(comp->stringmap,&copy,sizeof(cell*));
   return pos;
 }
@@ -446,6 +455,35 @@ static int letrecs_used(snode *expr, letrec *first)
 
   list_free(used,NULL);
   return count;
+}
+
+static void domkframe(source *src, compilation *comp, sourceloc sl, int fno, int n)
+{
+  if (NUM_BUILTINS <= fno) {
+    scomb *sc = get_scomb_index(src,fno-NUM_BUILTINS);
+    if (0 == sc->nargs) {
+      snode *c = sc->body;
+      assert(0 == n);
+      if (SNODE_NUMBER == c->type) {
+        PUSHNUMBER(c->sl,((int*)&c->num)[0],((int*)&c->num)[1]);
+        return;
+      }
+      else if (SNODE_STRING == c->type) {
+        PUSHSTRING(c->sl,add_string(comp,c->value));
+        return;
+      }
+      else if (SNODE_NIL == c->type) {
+        PUSHNIL(c->sl);
+        return;
+      }
+      else if (SNODE_SCREF == c->type) {
+        domkframe(src,comp,sl,NUM_BUILTINS+c->sc->index,0);
+        return;
+      }
+    }
+  }
+
+  add_instruction(comp,sl,OP_MKFRAME,fno,n);
 }
 
 static void C(source *src, compilation *comp, snode *c, pmap *p, int n);

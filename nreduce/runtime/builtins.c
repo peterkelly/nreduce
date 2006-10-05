@@ -56,10 +56,6 @@ static const char *numnames[4] = {"first", "second", "third", "fourth"};
     }                                                                   \
   }
 
-
-
-
-
 void arrdebug(process *proc, const char *format, ...)
 {
 #ifdef ARRAY_DEBUG
@@ -69,8 +65,6 @@ void arrdebug(process *proc, const char *format, ...)
   va_end(ap);
 #endif
 }
-
-
 
 const builtin builtin_info[NUM_BUILTINS];
 
@@ -324,65 +318,6 @@ static void b_if(process *proc, pntr *argstack)
   argstack[0] = source;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 carray *carray_new(process *proc, int dsize, carray *oldarr, cell *usewrapper)
 {
   carray *arr = (carray*)calloc(1,sizeof(carray));
@@ -543,8 +478,6 @@ void maybe_expand_array(process *proc, pntr p)
 
     if (check_array_convert(proc,arr,"expand"))
       printed = 1;
-
-
   }
 
 
@@ -595,25 +528,6 @@ char *array_to_string(pntr refpntr)
 
   return str;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 static void b_cons(process *proc, pntr *argstack)
 {
@@ -842,35 +756,13 @@ void b_printarray(process *proc, pntr *argstack)
   argstack[0] = proc->globnilpntr;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void b_numtostring(process *proc, pntr *argstack)
 {
   pntr p = argstack[0];
-  double d;
   char str[100];
 
   assert(CELL_NUMBER == pntrtype(p));
-
-  d = p;
-
-  sprintf(str,"%f",d);
+  format_double(str,100,p);
   argstack[0] = string_to_array(proc,str);
 }
 
@@ -926,30 +818,6 @@ void b_readchunk(process *proc, pntr *argstack)
   carray_append(proc,&arr,buf,r,1);
   arr->tail = nextpntr;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 int get_builtin(const char *name)
 {
