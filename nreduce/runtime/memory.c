@@ -116,12 +116,13 @@ void mark_global(process *proc, global *glo, short bit)
 static void mark_frame(process *proc, frame *f, short bit)
 {
   int i;
+  int count = bc_instructions(proc->bcdata)[f->address].expcount;
   if (f->c) {
     pntr p;
     make_pntr(p,f->c);
     mark(proc,p,bit);
   }
-  for (i = 0; i < f->count; i++) {
+  for (i = 0; i < count; i++) {
     if (!is_nullpntr(f->data[i])) {
       f->data[i] = resolve_pntr(f->data[i]);
       mark(proc,f->data[i],bit);
@@ -473,6 +474,8 @@ void local_collect(process *proc)
   int h;
   global *glo;
 
+  proc->stats.nallocs = 0;
+
   /* clear */
   clear_marks(proc,FLAG_MARKED);
 
@@ -592,7 +595,7 @@ void print_pntr(FILE *f, pntr p)
     break;
   case CELL_FRAME: {
     frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"frame(%d/%d)",fr->fno,fr->count);
+    fprintf(f,"frame(%d)",fr->fno);
     break;
   }
   case CELL_REMOTEREF: {

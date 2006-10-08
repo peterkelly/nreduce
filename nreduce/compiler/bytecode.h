@@ -46,9 +46,12 @@
 #define OP_PUSHNUMBER    17
 #define OP_PUSHSTRING    18
 #define OP_RESOLVE       19
-#define OP_COUNT         20
+#define OP_POP           20
+#define OP_ERROR         21
+#define OP_COUNT         22
 
 #define CONSTANT_APP_MSG "constant cannot be applied to arguments"
+#define EVALDO_SEQUENCE_SIZE 3
 
 typedef struct instruction {
   int opcode;
@@ -72,11 +75,12 @@ typedef struct bcheader {
   int nfunctions;
   int nstrings;
   int evaldoaddr;
+  int erroraddr;
 } bcheader;
 
 void compile(source *src, char **bcdata, int *bcsize);
 
-void bc_print(const char *bcdata, FILE *f, source *src, int builtins);
+void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage);
 const instruction *bc_instructions(const char *bcdata);
 const funinfo *bc_funinfo(const char *bcdata);
 const char *bc_string(const char *bcdata, int sno);

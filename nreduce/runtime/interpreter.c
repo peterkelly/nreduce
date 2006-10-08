@@ -110,12 +110,9 @@ static void constant_app_error(process *proc, pntr cappntr, const instruction *o
   abort();
 }
 
-static void handle_error(process *proc, int bif, const instruction *op)
+static void handle_error(process *proc)
 {
-  sourceloc sl;
-  sl.fileno = op->fileno;
-  sl.lineno = op->lineno;
-  print_proc_sourceloc(proc,stderr,sl);
+  print_proc_sourceloc(proc,stderr,proc->errorsl);
   fprintf(stderr,"%s\n",proc->error);
   abort();
 }
@@ -160,7 +157,6 @@ static void frame_return(process *proc, frame *curf, pntr val)
 
 
   assert(!is_nullpntr(val));
-  assert(0 < curf->count);
   assert(NULL != curf->c);
   assert(CELL_FRAME == celltype(curf->c));
   curf->c->type = CELL_IND;
@@ -767,19 +763,24 @@ static void execute(process *proc)
   int msgsize;
   int from;
   int tag;
+#ifdef PARALLELISM
   int fishdue = 1;
-  int nextcollect = COLLECT_INTERVAL;
+#endif
+/*   int nextcollect = COLLECT_INTERVAL; */
 /*   int nops = ((bcheader*)proc->bcdata)->nops; */
 /*   int nfunctions = ((bcheader*)proc->bcdata)->nfunctions; */
 /*   int nstrings = ((bcheader*)proc->bcdata)->nstrings; */
   int evaldoaddr = ((bcheader*)proc->bcdata)->evaldoaddr;
   const instruction *program_ops = bc_instructions(proc->bcdata);
   const funinfo *program_finfo = bc_funinfo(proc->bcdata);
+  frame *curf;
+  const instruction *instr;
+
+  proc->curfptr = &curf;
 
   while (!proc->done) {
-    const instruction *instr;
-    frame *curf;
 
+#ifdef PARALLELISM
     if ((NULL == proc->runnable.first) || (0 < proc->paused)) {
 
       if (0 == proc->paused) {
@@ -832,8 +833,12 @@ static void execute(process *proc)
       if (0 <= (from = msg_recv(proc,&tag,&msgdata,&msgsize)))
         handle_message(proc,from,tag,msgdata,msgsize);
     }
-
     assert(proc->runnable.first);
+#else
+    if (NULL == proc->runnable.first)
+      return;
+#endif
+
 
     curf = proc->runnable.first;
     instr = &program_ops[curf->address];
@@ -841,14 +846,16 @@ static void execute(process *proc)
     #ifdef EXECUTION_TRACE
     if (trace) {
 /*       print_ginstr(proc->output,gp,curf->address,instr); */
-      print_stack(proc->output,curf->data,curf->count,0);
+      printf("%-6d %s\n",curf->address,opcodes[instr->opcode]);
+/*       print_stack(proc->output,curf->data,instr->expcount,0); */
     }
     #endif
 
-    if (0 == nextcollect--) {
+/*     if (0 == nextcollect--) { */
+    if (proc->stats.nallocs >= COLLECT_THRESHOLD) {
 /*       fprintf(proc->output,"Garbage collecting\n"); */
       local_collect(proc);
-      nextcollect = COLLECT_INTERVAL;
+/*       nextcollect = COLLECT_INTERVAL; */
     }
 
     #ifdef PROFILING
@@ -870,9 +877,9 @@ static void execute(process *proc)
       break;
     case OP_EVAL: {
       pntr p;
-      assert(0 <= curf->count-1-instr->arg0);
-      curf->data[curf->count-1-instr->arg0] = resolve_pntr(curf->data[curf->count-1-instr->arg0]);
-      p = curf->data[curf->count-1-instr->arg0];
+      curf->data[instr->arg0] =
+        resolve_pntr(curf->data[instr->arg0]);
+      p = curf->data[instr->arg0];
 
       if (CELL_FRAME == pntrtype(p)) {
         frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
@@ -904,19 +911,17 @@ static void execute(process *proc)
       break;
     }
     case OP_RETURN:
-      frame_return(proc,curf,curf->data[curf->count-1]);
+      frame_return(proc,curf,curf->data[instr->expcount-1]);
       continue;
     case OP_DO: {
       cell *capholder;
       cap *cp;
       int s;
-      int s1;
-      int a1;
+      int have;
+      int arity;
       pntr p;
-      assert(0 < curf->count);
 
-      p = curf->data[curf->count-1];
-      p = resolve_pntr(p); /* FIXME: temp: is this necessary? superlife needs it */
+      p = curf->data[instr->expcount-1];
       assert(CELL_IND != pntrtype(p));
 
       if (instr->arg0) {
@@ -941,23 +946,22 @@ static void execute(process *proc)
       if (CELL_CAP != pntrtype(p))
         constant_app_error(proc,p,instr);
       capholder = (cell*)get_pntr(p);
-      curf->count--;
 
       cp = (cap*)get_pntr(capholder->field1);
-      s = curf->count;
-      s1 = cp->count;
-      a1 = cp->arity;
+      s = instr->expcount-1;
+      have = cp->count;
+      arity = cp->arity;
 
-      if (s+s1 < a1) {
+      if (s+have < arity) {
         /* create a new CAP with the existing CAPs arguments and those from the current
            FRAME's stack */
         int i;
         pntr rep;
         cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
         newcp->sl = cp->sl;
-        newcp->data = (pntr*)malloc((curf->count+cp->count)*sizeof(pntr));
+        newcp->data = (pntr*)malloc((instr->expcount-1+cp->count)*sizeof(pntr));
         newcp->count = 0;
-        for (i = 0; i < curf->count; i++)
+        for (i = 0; i < instr->expcount-1; i++)
           newcp->data[newcp->count++] = curf->data[i];
         for (i = 0; i < cp->count; i++)
           newcp->data[newcp->count++] = cp->data[i];
@@ -974,52 +978,58 @@ static void execute(process *proc)
         frame_dealloc(proc,curf);
         continue;
       }
-      else if (s+s1 == a1) {
+      else if (s+have == arity) {
         int i;
+        int base = instr->expcount-1;
         curf->address = cp->address;
         curf->fno = cp->fno;
         pntrstack_grow(&curf->alloc,&curf->data,program_finfo[cp->fno].stacksize);
         for (i = 0; i < cp->count; i++)
-          curf->data[curf->count++] = cp->data[i];
+          curf->data[base+i] = cp->data[i];
         // curf->address--; /* so we process the GLOBSTART */
       }
-      else { /* s+s1 > a1 */
+      else { /* s+have > arity */
+        int newcount = instr->expcount-1;
         frame *newf = frame_alloc(proc);
         int i;
-        int extra;
+        int extra = arity-have;
+        int nfc = 0;
         newf->alloc = program_finfo[cp->fno].stacksize;
         newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
-        newf->count = 0;
         newf->address = cp->address;
         newf->fno = cp->fno;
-        extra = a1-s1;
-        for (i = curf->count-extra; i < curf->count; i++)
-          newf->data[newf->count++] = curf->data[i];
+        for (i = newcount-extra; i < newcount; i++)
+          newf->data[nfc++] = curf->data[i];
         for (i = 0; i < cp->count; i++)
-          newf->data[newf->count++] = cp->data[i];
+          newf->data[nfc++] = cp->data[i];
 
         newf->c = alloc_cell(proc);
         newf->c->type = CELL_FRAME;
         make_pntr(newf->c->field1,newf);
 
-        curf->count -= extra;
-        make_pntr(curf->data[curf->count],newf->c);
-        curf->count++;
+        make_pntr(curf->data[newcount-extra],newf->c);
+        newcount += 1-extra;
+
 
         curf->address = evaldoaddr-1;
         curf->fno = -1;
+
+        curf->address += (newcount-1)*EVALDO_SEQUENCE_SIZE;
       }
 
       break;
     }
     case OP_JFUN:
-      curf->address = program_finfo[instr->arg0].address;
+      if (instr->arg1)
+        curf->address = program_finfo[instr->arg0].addressne;
+      else
+        curf->address = program_finfo[instr->arg0].address;
       curf->fno = instr->arg0;
       pntrstack_grow(&curf->alloc,&curf->data,program_finfo[curf->fno].stacksize);
       // curf->address--; /* so we process the GLOBSTART */
       break;
     case OP_JFALSE: {
-      pntr test = curf->data[curf->count-1];
+      pntr test = curf->data[instr->expcount-1];
       assert(CELL_IND != pntrtype(test));
       assert(CELL_APPLICATION != pntrtype(test));
       assert(CELL_FRAME != pntrtype(test));
@@ -1029,39 +1039,33 @@ static void execute(process *proc)
 
       if (CELL_NIL == pntrtype(test))
         curf->address += instr->arg0-1;
-      curf->count--;
       break;
     }
     case OP_JUMP:
       curf->address += instr->arg0-1;
       break;
-    case OP_PUSH: {
-      assert(instr->arg0 < curf->count);
-      curf->data[curf->count] = curf->data[curf->count-1-instr->arg0];
-      curf->count++;
+    case OP_PUSH:
+      curf->data[instr->expcount] = curf->data[instr->arg0];
       break;
-    }
+    case OP_POP:
+      break;
     case OP_UPDATE: {
-      int n = instr->arg0;
       pntr targetp;
       cell *target;
       pntr res;
-      assert(n < curf->count);
-      assert(n > 0);
 
-      targetp = curf->data[curf->count-1-n];
+      targetp = curf->data[instr->arg0];
       assert(CELL_HOLE == pntrtype(targetp));
       target = get_pntr(targetp);
 
-      res = resolve_pntr(curf->data[curf->count-1]);
+      res = resolve_pntr(curf->data[instr->expcount-1]);
       if (pntrequal(targetp,res)) {
         fprintf(stderr,"Attempt to update cell with itself\n");
         exit(1);
       }
       target->type = CELL_IND;
       target->field1 = res;
-      curf->data[curf->count-1-n] = res;
-      curf->count--;
+      curf->data[instr->arg0] = res;
       break;
     }
     case OP_ALLOC: {
@@ -1069,20 +1073,17 @@ static void execute(process *proc)
       for (i = 0; i < instr->arg0; i++) {
         cell *hole = alloc_cell(proc);
         hole->type = CELL_HOLE;
-        make_pntr(curf->data[curf->count],hole);
-        curf->count++;
+        make_pntr(curf->data[instr->expcount+i],hole);
       }
       break;
     }
     case OP_SQUEEZE: {
       int count = instr->arg0;
       int remove = instr->arg1;
-      int base = curf->count-count-remove;
+      int base = instr->expcount-count-remove;
       int i;
-      assert(0 <= base);
       for (i = 0; i < count; i++)
         curf->data[base+i] = curf->data[base+i+remove];
-      curf->count -= remove;
       break;
     }
     case OP_MKCAP: {
@@ -1095,15 +1096,13 @@ static void execute(process *proc)
       c->sl.lineno = instr->lineno;
       c->data = (pntr*)malloc(n*sizeof(pntr));
       c->count = 0;
-      for (i = curf->count-n; i < curf->count; i++)
+      for (i = instr->expcount-n; i < instr->expcount; i++)
         c->data[c->count++] = curf->data[i];
-      curf->count -= n;
 
       capv = alloc_cell(proc);
       capv->type = CELL_CAP;
       make_pntr(capv->field1,c);
-      make_pntr(curf->data[curf->count],capv);
-      curf->count++;
+      make_pntr(curf->data[instr->expcount-n],capv);
       break;
     }
     case OP_MKFRAME: {
@@ -1112,9 +1111,9 @@ static void execute(process *proc)
       cell *newfholder;
       int i;
       frame *newf = frame_alloc(proc);
+      int nfc = 0;
       newf->alloc = program_finfo[fno].stacksize;
       newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
-      newf->count = 0;
 
       newf->address = program_finfo[fno].address;
       newf->fno = fno;
@@ -1124,54 +1123,51 @@ static void execute(process *proc)
       make_pntr(newfholder->field1,newf);
       newf->c = newfholder;
 
-      for (i = curf->count-n; i < curf->count; i++)
-        newf->data[newf->count++] = curf->data[i];
-      curf->count -= n;
-      make_pntr(curf->data[curf->count],newfholder);
-      curf->count++;
+      for (i = instr->expcount-n; i < instr->expcount; i++)
+        newf->data[nfc++] = curf->data[i];
+      make_pntr(curf->data[instr->expcount-n],newfholder);
       break;
     }
     case OP_BIF: {
       int bif = instr->arg0;
       int nargs = builtin_info[bif].nargs;
       int i;
-      assert(0 <= builtin_info[bif].nargs); /* should we support 0-arg bifs? */
+      #ifndef NDEBUG
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
-        assert(CELL_APPLICATION != pntrtype(curf->data[curf->count-1-i]));
-        assert(CELL_FRAME != pntrtype(curf->data[curf->count-1-i]));
+        assert(CELL_APPLICATION != pntrtype(curf->data[instr->expcount-1-i]));
+        assert(CELL_FRAME != pntrtype(curf->data[instr->expcount-1-i]));
 
-        if (CELL_CAP == pntrtype(curf->data[curf->count-1-i]))
-          cap_error(proc,curf->data[curf->count-1-i],instr);
+        if (CELL_CAP == pntrtype(curf->data[instr->expcount-1-i]))
+          cap_error(proc,curf->data[instr->expcount-1-i],instr);
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)
-        assert(CELL_IND != pntrtype(curf->data[curf->count-1-i]));
+        assert(CELL_IND != pntrtype(curf->data[instr->expcount-1-i]));
+      #endif
 
-      builtin_info[bif].f(proc,&curf->data[curf->count-nargs]);
+      builtin_info[bif].f(proc,&curf->data[instr->expcount-nargs]);
 
-      /* TODO: figure out a more efficient way of doing this that doesn't require an explicit
-         check */
-      if (proc->error)
-        handle_error(proc,bif,instr);
-
-      curf->count -= (nargs-1);
-      assert(!builtin_info[bif].reswhnf || (CELL_IND != pntrtype(curf->data[curf->count-1])));
+      assert(!builtin_info[bif].reswhnf ||
+             (CELL_IND != pntrtype(curf->data[instr->expcount-nargs])));
       break;
     }
     case OP_PUSHNIL:
-      curf->data[curf->count++] = proc->globnilpntr;
+      curf->data[instr->expcount] = proc->globnilpntr;
       break;
     case OP_PUSHNUMBER:
-      curf->data[curf->count++] = *((double*)&instr->arg0);
+      curf->data[instr->expcount] = *((double*)&instr->arg0);
       break;
     case OP_PUSHSTRING: {
-      curf->data[curf->count] = proc->strings[instr->arg0];
-      curf->count++;
+      curf->data[instr->expcount] = proc->strings[instr->arg0];
       break;
     }
     case OP_RESOLVE:
-      curf->data[curf->count-1-instr->arg0] = resolve_pntr(curf->data[curf->count-1-instr->arg0]);
-      assert(CELL_REMOTEREF != pntrtype(curf->data[curf->count-1-instr->arg0]));
+      curf->data[instr->arg0] =
+        resolve_pntr(curf->data[instr->arg0]);
+      assert(CELL_REMOTEREF != pntrtype(curf->data[instr->arg0]));
+      break;
+    case OP_ERROR:
+      handle_error(proc);
       break;
     default:
       abort();
@@ -1205,7 +1201,7 @@ static void *execthread(void *param)
   return NULL;
 }
 
-void run(const char *bcdata, int bcsize, FILE *statsfile)
+void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
 {
   group grp;
   int i;
@@ -1246,7 +1242,6 @@ void run(const char *bcdata, int bcsize, FILE *statsfile)
   initial->address = 0;
   initial->fno = -1;
   initial->data = (pntr*)malloc(sizeof(pntr));
-  initial->count = 0;
   initial->alloc = 1;
   initial->c = alloc_cell(grp.procs[0]);
   initial->c->type = CELL_FRAME;
@@ -1269,6 +1264,11 @@ void run(const char *bcdata, int bcsize, FILE *statsfile)
 
   if ((1 == grp.nprocs) && (NULL != statsfile))
     statistics(grp.procs[0],statsfile);
+
+  if ((1 == grp.nprocs) && (NULL != usage)) {
+    const bcheader *bch = (const bcheader*)bcdata;
+    memcpy(usage,grp.procs[0]->stats.usage,bch->nops*sizeof(int));
+  }
 
 /*   printf("Cleaning up\n"); */
   for (i = 0; i < grp.nprocs; i++) {

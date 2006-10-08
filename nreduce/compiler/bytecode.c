@@ -38,20 +38,27 @@
 
 #define BYTECODE_C
 
+
 #define MKCAP(_s,_a,_b)       add_instruction(comp,_s,OP_MKCAP,(_a),(_b))
 //#define MKFRAME(_s,_a,_b)     add_instruction(comp,_s,OP_MKFRAME,(_a),(_b))
 #define MKFRAME(_s,_a,_b)     domkframe(src,comp,(_s),(_a),(_b))
-#define JFUN(_s,_a)           add_instruction(comp,_s,OP_JFUN,(_a),0)
-#define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,(_a),0)
-#define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0)
+#define JFUN(_s,_a)           { if (!have_values(src,(_a),comp->si)) \
+                                  add_instruction(comp,_s,OP_JFUN,(_a),0); \
+                                else \
+                                  add_instruction(comp,_s,OP_JFUN,(_a),1); }
+#define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,comp->si->count-1-(_a),0)
+#define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0);
+
 #define EVAL(_s,_a)           { int arg0 = (_a);                \
-                                if (!comp->si || !statusat(comp->si,comp->si->count-1-arg0)) { \
-                                   add_instruction(comp,_s,OP_EVAL,arg0,0); \
-                                   add_instruction(comp,_s,OP_RESOLVE,arg0,0); \
+                                int pos = comp->si->count-1-arg0; \
+                                if (!comp->si || !statusat(comp->si,pos)) { \
+                                   add_instruction(comp,_s,OP_EVAL,pos,0); \
+                                   add_instruction(comp,_s,OP_RESOLVE,pos,0); \
                                 }}
-#define RESOLVE(_s,_a)        add_instruction(comp,_s,OP_RESOLVE,(_a),0)
+#define RESOLVE(_s,_a)        add_instruction(comp,_s,OP_RESOLVE,comp->si->count-1-(_a),0)
 #define RETURN(_s)            add_instruction(comp,_s,OP_RETURN,0,0)
-#define PUSH(_s,_a)           add_instruction(comp,_s,OP_PUSH,(_a),0)
+#define PUSH(_s,_a)           add_instruction(comp,_s,OP_PUSH,comp->si->count-1-(_a),0)
+#define POP(_s,_a)            add_instruction(comp,_s,OP_POP,(_a),0)
 #define BIF(_s,_a)            add_instruction(comp,_s,OP_BIF,(_a),0)
 #define JUMPrel(_s,_a)        add_instruction(comp,_s,OP_JUMP,(_a),0)
 #define GLOBSTART(_s,_a,_b)   add_instruction(comp,_s,OP_GLOBSTART,(_a),(_b))
@@ -63,6 +70,7 @@
 #define PUSHNUMBER(_s,_a,_b)  add_instruction(comp,_s,OP_PUSHNUMBER,(_a),(_b))
 #define PUSHSTRING(_s,_a)     add_instruction(comp,_s,OP_PUSHSTRING,(_a),0)
 #define SQUEEZE(_s,_a,_b)     add_instruction(comp,_s,OP_SQUEEZE,(_a),(_b))
+#define ERROR(_s)             add_instruction(comp,_s,OP_ERROR,0,0)
 
 #define JFALSE(_s,addr)       { addr = array_count(comp->instructions); \
                                 add_instruction(comp,_s,OP_JFALSE,0,0); }
@@ -108,6 +116,8 @@ const char *opcodes[OP_COUNT] = {
 "PUSHNUMBER",
 "PUSHSTRING",
 "RESOLVE",
+"POP",
+"ERROR",
 };
 
 static stackinfo *stackinfo_new(stackinfo *source)
@@ -289,8 +299,8 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_GLOBSTART:
     break;
   case OP_EVAL:
-    assert(0 <= comp->si->count-1-arg0);
-    setstatusat(comp->si,comp->si->count-1-arg0,1);
+    assert(0 <= arg0);
+    setstatusat(comp->si,arg0,1);
     break;
   case OP_RETURN:
     // After RETURN we don't know what the stack size will be... but since it's always the
@@ -299,7 +309,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     comp->si->invalid = 1;
     break;
   case OP_DO:
-    comp->si->invalid = 1;
+/*     comp->si->invalid = 1; */
     break;
   case OP_JFUN:
     comp->si->invalid = 1;
@@ -310,8 +320,12 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_JUMP:
     break;
   case OP_PUSH:
-    assert(0 <= comp->si->count-1-arg0);
-    pushstatus(comp->si,statusat(comp->si,comp->si->count-1-arg0));
+    assert(0 <= arg0);
+    pushstatus(comp->si,statusat(comp->si,arg0));
+    break;
+  case OP_POP:
+    assert(arg0 <= comp->si->count);
+    popstatus(comp->si,arg0);
     break;
   case OP_UPDATE:
     assert(0 <= comp->si->count-1-arg0);
@@ -355,7 +369,9 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     pushstatus(comp->si,1);
     break;
   case OP_RESOLVE:
-    assert(statusat(comp->si,comp->si->count-1-arg0));
+    break;
+  case OP_ERROR:
+    comp->si->invalid = 1;
     break;
   default:
     abort();
@@ -382,6 +398,27 @@ int function_nargs(source *src, int fno)
     return builtin_info[fno].nargs;
   else
     return get_scomb_index(src,fno-NUM_BUILTINS)->nargs;
+}
+
+int function_strictin(source *src, int fno, int argno)
+{
+  assert(0 <= fno);
+  assert(0 <= argno);
+  assert(argno < function_nargs(src,fno));
+  if (NUM_BUILTINS > fno)
+    return (argno < builtin_info[fno].nstrict);
+  else
+    return get_scomb_index(src,fno-NUM_BUILTINS)->strictin[argno];
+}
+
+int have_values(source *src, int fno, stackinfo *si)
+{
+  int nargs = function_nargs(src,fno);
+  int i;
+  for (i = 0; i < nargs; i++)
+    if (!statusat(si,si->count-nargs+i) && function_strictin(src,fno,i))
+      return 0;
+  return 1;
 }
 
 typedef struct pmap {
@@ -477,10 +514,18 @@ static void domkframe(source *src, compilation *comp, sourceloc sl, int fno, int
         return;
       }
       else if (SNODE_SCREF == c->type) {
-        domkframe(src,comp,sl,NUM_BUILTINS+c->sc->index,0);
+        if (0 == function_nargs(src,snode_fno(c)))
+          MKFRAME(c->sl,snode_fno(c),0);
+        else
+          MKCAP(c->sl,snode_fno(c),0);
         return;
       }
     }
+  }
+  else if (B_CONS == fno) {
+    assert(2 == n);
+    BIF(sl,B_CONS);
+    return;
   }
 
   add_instruction(comp,sl,OP_MKFRAME,fno,n);
@@ -577,6 +622,15 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
 
       LABEL(end);
       pushstatus(comp->si,1);
+    }
+    else if ((SNODE_BUILTIN == app->type) &&
+        (B_SEQ == app->bif) &&
+        (2 == m)) {
+      snode *expr2 = c->right;
+      snode *expr1 = c->left->right;
+      E(src,comp,expr1,p,n);
+      POP(expr2->sl,1);
+      E(src,comp,expr2,p,n);
     }
     else {
       m = 0;
@@ -675,52 +729,55 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
         DO(app->sl,0);
       }
       else if (m == k) {
-        if ((SNODE_BUILTIN == app->type) &&
-            (B_IF == app->bif)) {
-          snode *falsebranch = (snode*)args->data[0];
-          snode *truebranch = (snode*)args->data[1];
-          snode *cond = (snode*)args->data[2];
-          int label;
-          stackinfo *oldsi;
+        if (SNODE_BUILTIN == app->type) {
+          if (B_IF == app->bif) {
+            snode *falsebranch = (snode*)args->data[0];
+            snode *truebranch = (snode*)args->data[1];
+            snode *cond = (snode*)args->data[2];
+            int label;
+            stackinfo *oldsi;
 
-          E(src,comp,cond,p,n);
-          JFALSE(cond->sl,label);
+            E(src,comp,cond,p,n);
+            JFALSE(cond->sl,label);
 
-          stackinfo_newswap(&comp->si,&oldsi);
-          R(src,comp,truebranch,p,n);
-          stackinfo_freeswap(&comp->si,&oldsi);
+            stackinfo_newswap(&comp->si,&oldsi);
+            R(src,comp,truebranch,p,n);
+            stackinfo_freeswap(&comp->si,&oldsi);
 
-          LABEL(label);
-          stackinfo_newswap(&comp->si,&oldsi);
-          R(src,comp,falsebranch,p,n);
-          stackinfo_freeswap(&comp->si,&oldsi);
-        }
-        else if ((SNODE_BUILTIN == app->type) && (B_IF != app->bif)) {
-          int bif;
-          const builtin *bi;
-          int argno;
-          S(src,comp,app,args,argstrict,p,n);
-          bif = app->bif;
-          bi = &builtin_info[bif];
-          assert(comp->si->count >= bi->nstrict);
-
-          for (argno = 0; argno < bi->nstrict; argno++)
-            assert(statusat(comp->si,comp->si->count-1-argno));
-
-          BIF(app->sl,bif);
-
-/*           if (!bi->reswhnf) */
-/*             EVAL(app->sl,0); */
-/*           RETURN(app->sl); */
-
-          if (!bi->reswhnf) {
-            DO(app->sl,1);
+            LABEL(label);
+            stackinfo_newswap(&comp->si,&oldsi);
+            R(src,comp,falsebranch,p,n);
+            stackinfo_freeswap(&comp->si,&oldsi);
+          }
+          else if (B_SEQ == app->bif) {
+            snode *expr2 = args->data[0];
+            snode *expr1 = args->data[1];
+            E(src,comp,expr1,p,n);
+            POP(expr2->sl,1);
+            R(src,comp,expr2,p,n);
           }
           else {
-            RETURN(app->sl);
+            int bif;
+            const builtin *bi;
+            int argno;
+            S(src,comp,app,args,argstrict,p,n);
+            bif = app->bif;
+            bi = &builtin_info[bif];
+            assert(comp->si->count >= bi->nstrict);
+
+            for (argno = 0; argno < bi->nstrict; argno++)
+              assert(statusat(comp->si,comp->si->count-1-argno));
+
+            BIF(app->sl,bif);
+
+            if (!bi->reswhnf) {
+              RESOLVE(app->sl,0);
+              DO(app->sl,1);
+            }
+            else {
+              RETURN(app->sl);
+            }
           }
-
-
         }
         else {
           S(src,comp,app,args,argstrict,p,n);
@@ -867,7 +924,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
 #ifdef DEBUG_BYTECODE_COMPILATION
   printf("\n");
   printf("Compiling supercombinator ");
-  print_scomb_code(src,sc);
+  print_scomb_code(src,stdout,sc);
   printf("\n");
 #endif
 
@@ -977,11 +1034,41 @@ static void compile_prologue(compilation *comp, source *src)
   EVAL(startsc->sl,0);
   END(startsc->sl);
   stackinfo_free(comp->si);
-  comp->si = NULL;
 
-  comp->bch.evaldoaddr = array_count(comp->instructions);
-  EVAL(nosl,0);
-  DO(nosl,0);
+  comp->bch.erroraddr = array_count(comp->instructions);
+  comp->si = stackinfo_new(NULL);
+  pushstatus(comp->si,0);
+  ERROR(nosl);
+  stackinfo_free(comp->si);
+  comp->si = NULL;
+}
+
+static void compile_evaldo(compilation *comp, source *src)
+{
+  int ninstrs = array_count(comp->instructions);
+  int maxcount = -1;
+  int addr;
+  int i;
+  sourceloc nosl;
+  nosl.fileno = -1;
+  nosl.lineno = -1;
+  for (addr = 0; addr < ninstrs; addr++) {
+    instruction *instr = &array_item(comp->instructions,addr,instruction);
+    if ((-1 == maxcount) || (maxcount < instr->expcount))
+      maxcount = instr->expcount;
+  }
+
+  comp->bch.evaldoaddr = ninstrs;
+  for (i = 1; i < maxcount; i++) {
+    int j;
+    comp->si = stackinfo_new(NULL);
+    for (j = 0; j < i; j++)
+      pushstatus(comp->si,0);
+    EVAL(nosl,0);
+    DO(nosl,0);
+    stackinfo_free(comp->si);
+  }
+  comp->si = NULL;
 }
 
 static void compile_scombs(compilation *comp, source *src)
@@ -1075,6 +1162,7 @@ void compile(source *src, char **bcdata, int *bcsize)
   compile_prologue(comp,src);
   compile_scombs(comp,src);
   compile_builtins(comp);
+  compile_evaldo(comp,src);
 
   compute_stacksizes(comp);
 
@@ -1089,7 +1177,7 @@ void compile(source *src, char **bcdata, int *bcsize)
   free(comp);
 }
 
-void bc_print(const char *bcdata, FILE *f, source *src, int builtins)
+void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage)
 {
   int i;
   int addr;
@@ -1103,12 +1191,15 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins)
   fprintf(f,"nfunctions = %d\n",bch->nfunctions);
   fprintf(f,"nstrings = %d\n",bch->nstrings);
   fprintf(f,"evaldoaddr = %d\n",bch->evaldoaddr);
+  fprintf(f,"erroraddr = %d\n",bch->erroraddr);
 
   fprintf(f,"\n");
   fprintf(f,"Ops:\n");
   fprintf(f,"\n");
-  fprintf(f,"%8s %-12s %-12s %-12s %s\n","address","opcode","arg0","arg1","fileno/lineno");
-  fprintf(f,"%8s %-12s %-12s %-12s %s\n","-------","------","----","----","-------------");
+  fprintf(f,"%8s %-12s %-12s %-12s %-12s %s\n",
+          "address","opcode","arg0","arg1","usage","fileno/lineno");
+  fprintf(f,"%8s %-12s %-12s %-12s %-12s %s\n",
+          "-------","------","----","----","-----","-------------");
   for (addr = 0; addr < bch->nops; addr++) {
     const instruction *instr = &instructions[addr];
     const char *filename = (0 <= instr->fileno) ? bc_string(bcdata,instr->fileno) : "_";
@@ -1116,35 +1207,60 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins)
     if ((OP_GLOBSTART == instr->opcode) && (prevfun != instr->arg0)) {
       if (NUM_BUILTINS <= instr->arg0) {
         scomb *sc = get_scomb_index(src,instr->arg0-NUM_BUILTINS);
-        printf("\n");
-        print_scomb_code(src,sc);
-        printf("\n");
+        fprintf(f,"\n");
+        print_scomb_code(src,f,sc);
+        fprintf(f,"\n");
       }
       else if (!builtins) {
         break;
       }
       else {
-        printf("\n");
-        printf("Builtin: %s\n",builtin_info[instr->arg0].name);
+        fprintf(f,"\n");
+        fprintf(f,"Builtin: %s\n",builtin_info[instr->arg0].name);
       }
-      printf("\n");
+      fprintf(f,"\n");
       prevfun = instr->arg0;
     }
 
-    fprintf(f,"%8d %-12s %-12d %-12d %s:%d\n",
-            addr,opcodes[instr->opcode],instr->arg0,instr->arg1,filename,instr->lineno);
+    fprintf(f,"%-3d/",instr->expcount);
+    fprintf(f,"%4d %-12s %-12d %-12d",addr,opcodes[instr->opcode],instr->arg0,instr->arg1);
+    if (usage)
+      fprintf(f," %-12d",usage[addr]);
+    else
+      fprintf(f,"              ");
+    fprintf(f,"%s:%d",filename,instr->lineno);
+
+    switch (instr->opcode) {
+    case OP_MKFRAME:
+    case OP_MKCAP:
+    case OP_JFUN:
+      fprintf(f,"     (%s)",bc_function_name(bcdata,instr->arg0));
+      break;
+    case OP_BIF:
+      fprintf(f,"     (%s)",builtin_info[instr->arg0].name);
+      break;
+    case OP_PUSHNUMBER:
+      fprintf(f,"     ");
+      print_double(f,*((double*)&instr->arg0));
+      break;
+    default:
+      break;
+    }
+
+    fprintf(f,"\n");
   }
 
 
   fprintf(f,"\n");
   fprintf(f,"Functions:\n");
   fprintf(f,"\n");
-  fprintf(f,"%-8s %-8s %-8s %-8s %s\n","fno","address","arity","stacksize","name");
-  fprintf(f,"%-8s %-8s %-8s %-8s %s\n","---","-------","-----","---------","----");
+  fprintf(f,"%-8s %-8s %-8s %-8s %-8s %s\n","fno","address","noeval","arity","stacksize","name");
+  fprintf(f,"%-8s %-8s %-8s %-8s %-8s %s\n","---","-------","------","-----","---------","----");
   for (fno = 0; fno < bch->nfunctions; fno++) {
     const funinfo *fi = &finfo[fno];
     const char *name = bc_function_name(bcdata,fno);
-    fprintf(f,"%-8d %-8d %-8d %-8d %s\n",fno,fi->address,fi->arity,fi->stacksize,name);
+    fprintf(f,"%-8d %-8d %-8d %-8d %-8d %s\n",
+            fno,fi->address,fi->addressne,fi->arity,fi->stacksize,name);
   }
   fprintf(f,"\n");
   fprintf(f,"Strings:\n");

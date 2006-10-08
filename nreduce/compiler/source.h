@@ -154,7 +154,7 @@ void print(snode *c);
 void print_codef2(source *src, FILE *f, snode *c, int pos);
 void print_codef(source *src, FILE *f, snode *c);
 void print_code(source *src, snode *c);
-void print_scomb_code(source *src, scomb *sc);
+void print_scomb_code(source *src, FILE *f, scomb *sc);
 void print_scombs1(source *src);
 void print_scombs2(source *src);
 const char *real_varname(source *src, const char *sym);

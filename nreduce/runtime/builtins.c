@@ -78,95 +78,95 @@ static void setbool(process *proc, pntr *cptr, int b)
   *cptr = (b ? proc->globtruepntr : proc->globnilpntr);
 }
 
-static void doubleop(process *proc, pntr *cptr, int bif, double a, double b)
-{
-  switch (bif) {
-  case B_ADD:       setnumber(cptr,a +  b);  break;
-  case B_SUBTRACT:  setnumber(cptr,a -  b);  break;
-  case B_MULTIPLY:  setnumber(cptr,a *  b);  break;
-  case B_DIVIDE:    if (0.0 == b) {
-                      fprintf(stderr,"Divide by zero\n");
-                      exit(1);
-                    }
-                    setnumber(cptr,a /  b);  break;
-  case B_MOD:       setnumber(cptr,fmod(a,b));  break;
-  case B_EQ:       setbool(proc,cptr,a == b);  break;
-  case B_NE:       setbool(proc,cptr,a != b);  break;
-  case B_LT:       setbool(proc,cptr,a <  b);  break;
-  case B_LE:       setbool(proc,cptr,a <= b);  break;
-  case B_GT:       setbool(proc,cptr,a >  b);  break;
-  case B_GE:       setbool(proc,cptr,a >= b);  break;
-  default:         abort();        break;
+#define CHECK_NUMERIC_ARGS(bif)                                         \
+  if ((CELL_NUMBER != pntrtype(argstack[1])) || (CELL_NUMBER != pntrtype(argstack[0]))) { \
+    int t1 = pntrtype(argstack[1]); \
+    int t2 = pntrtype(argstack[0]); \
+    set_error(proc,"%s: incompatible arguments: (%s,%s)", \
+              builtin_info[bif].name,cell_types[t1],cell_types[t2]); \
+    argstack[0] = proc->globnilpntr; \
+    return; \
   }
+
+static void b_add(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_ADD);
+  argstack[0] = argstack[1] + argstack[0];
 }
 
-static void b_other(process *proc, pntr *argstack, int bif)
+static void b_subtract(process *proc, pntr *argstack)
 {
-  pntr val2 = argstack[0];
-  pntr val1 = argstack[1];
-
-  switch (bif) {
-  case B_EQ:
-  case B_NE:
-  case B_LT:
-  case B_LE:
-  case B_GT:
-  case B_GE:
-    /* FIXME: make this work for string/array/list comparisons */
-/*     if ((CELL_STRING == pntrtype(val1)) && (CELL_STRING == pntrtype(val2))) { */
-/*       const char *str1 = (const char*)get_pntr(get_pntr(val1)->field1); */
-/*       const char *str2 = (const char*)get_pntr(get_pntr(val2)->field1); */
-/*       int cmp = strcmp(str1,str2); */
-/*       switch (bif) { */
-/*       case B_EQ: setbool(proc,&argstack[0],0 == cmp); break; */
-/*       case B_NE: setbool(proc,&argstack[0],0 != cmp); break; */
-/*       case B_LT: setbool(proc,&argstack[0],0 > cmp); break; */
-/*       case B_LE: setbool(proc,&argstack[0],0 >= cmp); break; */
-/*       case B_GT: setbool(proc,&argstack[0],0 < cmp); break; */
-/*       case B_GE: setbool(proc,&argstack[0],0 <= cmp); break; */
-/*       } */
-/*       return; */
-/*     } */
-    /* fall through */
-  case B_ADD:
-  case B_SUBTRACT:
-  case B_MULTIPLY:
-  case B_DIVIDE:
-  case B_MOD:
-    if ((CELL_NUMBER == pntrtype(val1)) && (CELL_NUMBER == pntrtype(val2))) {
-      doubleop(proc,&argstack[0],bif,val1,val2);
-    }
-    else {
-      int t1 = pntrtype(val1);
-      int t2 = pntrtype(val2);
-      set_error(proc,"%s: incompatible arguments: (%s,%s)",
-                      builtin_info[bif].name,cell_types[t1],cell_types[t2]);
-    }
-    break;
-  case B_AND:
-    setbool(proc,&argstack[0],(CELL_NIL != pntrtype(val1)) && (CELL_NIL != pntrtype(val2)));
-    break;
-  case B_OR:
-    setbool(proc,&argstack[0],(CELL_NIL != pntrtype(val1)) || (CELL_NIL != pntrtype(val2)));
-    break;
-  default:
-    abort();
-  }
+  CHECK_NUMERIC_ARGS(B_SUBTRACT);
+  argstack[0] = argstack[1] - argstack[0];
 }
 
-static void b_add(process *proc, pntr *argstack) { b_other(proc,argstack,B_ADD); }
-static void b_subtract(process *proc, pntr *argstack) { b_other(proc,argstack,B_SUBTRACT); }
-static void b_multiply(process *proc, pntr *argstack) { b_other(proc,argstack,B_MULTIPLY); }
-static void b_divide(process *proc, pntr *argstack) { b_other(proc,argstack,B_DIVIDE); }
-static void b_mod(process *proc, pntr *argstack) { b_other(proc,argstack,B_MOD); }
-static void b_eq(process *proc, pntr *argstack) { b_other(proc,argstack,B_EQ); }
-static void b_ne(process *proc, pntr *argstack) { b_other(proc,argstack,B_NE); }
-static void b_lt(process *proc, pntr *argstack) { b_other(proc,argstack,B_LT); }
-static void b_le(process *proc, pntr *argstack) { b_other(proc,argstack,B_LE); }
-static void b_gt(process *proc, pntr *argstack) { b_other(proc,argstack,B_GT); }
-static void b_ge(process *proc, pntr *argstack) { b_other(proc,argstack,B_GE); }
-static void b_and(process *proc, pntr *argstack) { b_other(proc,argstack,B_AND); }
-static void b_or(process *proc, pntr *argstack) { b_other(proc,argstack,B_OR); }
+static void b_multiply(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_MULTIPLY);
+  argstack[0] = argstack[1] * argstack[0];
+}
+
+static void b_divide(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_DIVIDE);
+  /* FIXME: handle divide by zero -> NaN properly, i.e. without confusing
+     a true NaN value with a pointer */
+  argstack[0] = argstack[1] / argstack[0];
+}
+
+static void b_mod(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_MOD);
+  argstack[0] = fmod(argstack[1],argstack[0]);
+}
+
+static void b_eq(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_EQ);
+  setbool(proc,&argstack[0],argstack[1] == argstack[0]);
+}
+
+static void b_ne(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_NE);
+  setbool(proc,&argstack[0],argstack[1] != argstack[0]);
+}
+
+static void b_lt(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_LT);
+  setbool(proc,&argstack[0],argstack[1] <  argstack[0]);
+}
+
+static void b_le(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_LE);
+  setbool(proc,&argstack[0],argstack[1] <= argstack[0]);
+}
+
+static void b_gt(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_GT);
+  setbool(proc,&argstack[0],argstack[1] >  argstack[0]);
+}
+
+static void b_ge(process *proc, pntr *argstack)
+{
+  CHECK_NUMERIC_ARGS(B_GE);
+  setbool(proc,&argstack[0],argstack[1] >= argstack[0]);
+}
+
+static void b_and(process *proc, pntr *argstack)
+{
+  setbool(proc,&argstack[0],
+          (CELL_NIL != pntrtype(argstack[0])) && (CELL_NIL != pntrtype(argstack[1])));
+}
+
+static void b_or(process *proc, pntr *argstack)
+{
+  setbool(proc,&argstack[0],
+          (CELL_NIL != pntrtype(argstack[0])) || (CELL_NIL != pntrtype(argstack[1])));
+}
 
 static void b_not(process *proc, pntr *argstack)
 {
@@ -766,8 +766,6 @@ void b_numtostring(process *proc, pntr *argstack)
   argstack[0] = string_to_array(proc,str);
 }
 
-/* FIXME: use a larger buffer size! */
-#define READBUFSIZE 1024
 void b_openfd(process *proc, pntr *argstack)
 {
   pntr filenamepntr = argstack[0];

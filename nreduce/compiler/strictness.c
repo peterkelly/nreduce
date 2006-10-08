@@ -343,7 +343,7 @@ static void check_strictness(scomb *sc, int *changed)
 
   strictin = (int*)malloc(sc->nargs*sizeof(int));
   for (i = 0; i < sc->nargs; i++)
-    strictin[i] = list_contains_string(used,sc->argnames[i]);
+    strictin[i] = sc->strictin[i] || list_contains_string(used,sc->argnames[i]);
 
   if (memcmp(sc->strictin,strictin,sc->nargs*sizeof(int)))
     *changed = 1;
@@ -363,7 +363,7 @@ void dump_strictinfo(source *src)
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (!strncmp(sc->name,"__",2))
       continue;
-    print_scomb_code(src,sc);
+    print_scomb_code(src,stdout,sc);
     printf("\n");
   }
 }
@@ -391,7 +391,8 @@ void strictness_analysis(source *src)
 
   for (scno = 0; scno < array_count(src->scombs); scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
-    sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+    if (NULL == sc->strictin)
+      sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
   }
 
 #if 1

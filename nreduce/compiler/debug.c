@@ -397,22 +397,22 @@ void print_code(source *src, snode *c)
   print_codef(src,stdout,c);
 }
 
-void print_scomb_code(source *src, scomb *sc)
+void print_scomb_code(source *src, FILE *f, scomb *sc)
 {
   int i;
   int col = 0;
   char *scname = real_scname(src,sc->name);
-  col += debug(0,"%s ",scname);
+  col += fprintf(f,"%s ",scname);
   free(scname);
   for (i = 0; i < sc->nargs; i++) {
     if (sc->strictin) {
       if (sc->strictin[i])
-        col += debug(0,"!");
+        col += fprintf(f,"!");
     }
-    col += debug(0,"%s ",real_varname(src,sc->argnames[i]));
+    col += fprintf(f,"%s ",real_varname(src,sc->argnames[i]));
   }
-  col += debug(0,"= ");
-  print_codef2(src,stdout,sc->body,col);
+  col += fprintf(f,"= ");
+  print_codef2(src,f,sc->body,col);
 }
 
 void print_scombs1(source *src)
@@ -421,7 +421,7 @@ void print_scombs1(source *src)
   for (scno = 0; scno < array_count(src->scombs); scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (strncmp(sc->name,"__",2)) {
-      print_scomb_code(src,sc);
+      print_scomb_code(src,stdout,sc);
       debug(0,"\n");
     }
   }

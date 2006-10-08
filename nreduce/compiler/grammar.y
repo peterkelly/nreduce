@@ -77,6 +77,7 @@ extern const char *parse_modname;
 %type <c> Expr
 %type <c> SingleLambda
 %type <c> Lambdas
+%type <s> Argument
 %type <l> Arguments
 %type <lr> Letrec
 %type <lr> Letrecs
@@ -149,6 +150,10 @@ Letrec:
   SYMBOL EQUALS ListExpr          { $$ = (letrec*)calloc(1,sizeof(letrec));
                                     $$->name = $1;
                                     $$->value = $3; }
+| LAMBDA SYMBOL EQUALS ListExpr   { $$ = (letrec*)calloc(1,sizeof(letrec));
+                                    $$->name = $2;
+                                    $$->value = $4;
+                                    $$->strict = 1; }
 ;
 
 Letrecs:
@@ -169,9 +174,16 @@ Expr:
                                     $$->body = $4; }
 ;
 
+Argument:
+  SYMBOL                          { $$ = $1; }
+| LAMBDA SYMBOL                   { $$ = (char*)malloc(strlen($2)+2);
+                                    sprintf($$,"!%s",$2);
+                                    free($2); }
+;
+
 Arguments:
-  SYMBOL                          { $$ = list_new($1,NULL); }
-| SYMBOL Arguments                { $$ = list_new($1,$2); }
+  Argument                        { $$ = list_new($1,NULL); }
+| Argument Arguments              { $$ = list_new($1,$2); }
 ;
 
 Definition:
@@ -201,14 +213,20 @@ Definition:
                                       return -1;
                                     }
 
-
                                     sc = add_scomb(parse_src,scname);
                                     sc->sl.fileno = yyfileno;
                                     sc->sl.lineno = @$.first_line;
                                     sc->nargs = list_count($1->next);
                                     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
-                                    for (l = $1->next; l; l = l->next)
-                                      sc->argnames[argno++] = strdup((char*)l->data);
+                                    sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+                                    for (l = $1->next; l; l = l->next) {
+                                      char *argname = (char*)l->data;
+                                      if ('!' == argname[0]) {
+                                        argname++;
+                                        sc->strictin[argno] = 1;
+                                      }
+                                      sc->argnames[argno++] = strdup(argname);
+                                    }
                                     list_free($1,free);
                                     free(scname);
 

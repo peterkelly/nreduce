@@ -119,7 +119,8 @@ typedef struct cell {
 
 #define PNTR_VALUE 0xFFF80000
 //#define MAX_ARRAY_SIZE (1 << 19)
-#define MAX_ARRAY_SIZE 2000
+#define MAX_ARRAY_SIZE 65536
+#define READBUFSIZE 16384
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
@@ -243,7 +244,6 @@ typedef struct frame {
   int fno; /* temp */
 
   int alloc;
-  int count;
   pntr *data;
 
   int state;
@@ -354,6 +354,8 @@ typedef struct process {
   int *gcsent;
   list *inflight;
   char *error;
+  sourceloc errorsl;
+  frame **curfptr;
 
   gaddr **infaddrs;
   int *infcount;
@@ -559,7 +561,7 @@ void dump_globals(process *proc);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(process *proc, gaddr addr);
 void spark(process *proc, frame *f);
-void run(const char *bcdata, int bcsize, FILE *statsfile);
+void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage);
 
 /* memory */
 

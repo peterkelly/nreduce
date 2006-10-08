@@ -397,6 +397,8 @@ void set_error(process *proc, const char *format, ...)
 {
   va_list ap;
   int len;
+  frame *f = *proc->curfptr;
+  const instruction *instr;
   va_start(ap,format);
   len = vsnprintf(NULL,0,format,ap);
   va_end(ap);
@@ -406,6 +408,16 @@ void set_error(process *proc, const char *format, ...)
   va_start(ap,format);
   len = vsnprintf(proc->error,len+1,format,ap);
   va_end(ap);
+
+  instr = &bc_instructions(proc->bcdata)[f->address];
+  proc->errorsl.fileno = instr->fileno;
+  proc->errorsl.lineno = instr->lineno;
+
+  (*proc->curfptr)->fno = -1;
+  (*proc->curfptr)->address = ((bcheader*)proc->bcdata)->erroraddr-1;
+  /* ensure it's at the front */
+  remove_frame_queue(&proc->runnable,f);
+  add_frame_queue(&proc->runnable,f);
 }
 
 void statistics(process *proc, FILE *f)
@@ -420,10 +432,15 @@ void statistics(process *proc, FILE *f)
   fprintf(f,"nsparks = %d\n",proc->stats.nsparks);
 
   total = 0;
-  for (i = 0; i < OP_COUNT; i++) {
-    fprintf(f,"usage(%s) = %d\n",opcodes[i],proc->stats.op_usage[i]);
+  for (i = 0; i < OP_COUNT; i++)
     total += proc->stats.op_usage[i];
+
+  for (i = 0; i < OP_COUNT; i++) {
+    double pct = 100.0*(((double)proc->stats.op_usage[i])/((double)total));
+    fprintf(f,"usage %-12s %-12d %.2f%%\n",opcodes[i],proc->stats.op_usage[i],pct);
   }
+
+
   fprintf(f,"usage total = %d\n",total);
 
   fprintf(f,"\n");

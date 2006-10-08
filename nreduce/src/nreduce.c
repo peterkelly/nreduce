@@ -249,14 +249,25 @@ int main(int argc, char **argv)
     }
 
     if (args.bytecode) {
-      bc_print(bcdata,stdout,src,0);
+      bc_print(bcdata,stdout,src,0,NULL);
       exit(0);
     }
 
     if (ENGINE_INTERPRETER == args.engine) {
+      const bcheader *bch = (const bcheader*)bcdata;
+      int *usage = NULL;
       debug_stage("Interpreter");
 
-      run(bcdata,bcsize,statsfile);
+      if (args.profiling)
+        usage = (int*)malloc(bch->nops*sizeof(int));
+
+      run(bcdata,bcsize,statsfile,usage);
+
+      if (args.profiling) {
+        fprintf(statsfile,"\n");
+        bc_print(bcdata,statsfile,src,1,usage);
+        free(usage);
+      }
 
       if (args.statistics)
         fclose(statsfile);

@@ -157,19 +157,21 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
   case CELL_FRAME: {
     frame *fr = frame_alloc(proc);
     int i;
+    int count;
 
     fr->c = alloc_cell(proc);
     fr->c->type = CELL_FRAME;
     make_pntr(fr->c->field1,fr);
     make_pntr(*pout,fr->c);
 
-    CHECK_READ(read_format(rd,proc,observe,"iiii",&fr->address,&fr->fno,&fr->alloc,&fr->count));
+    CHECK_READ(read_format(rd,proc,observe,"iii",&fr->address,&fr->fno,&fr->alloc));
 
-    if ((fr->count > fr->alloc) || (MAX_FRAME_SIZE <= fr->alloc))
+    count = bc_instructions(proc->bcdata)[fr->address].expcount;
+    if ((count > fr->alloc) || (MAX_FRAME_SIZE <= fr->alloc))
       return READER_INCORRECT_CONTENTS;
 
     fr->data = (pntr*)calloc(fr->alloc,sizeof(pntr));
-    for (i = 0; i < fr->count; i++)
+    for (i = 0; i < count; i++)
       CHECK_READ(read_pntr(rd,proc,&fr->data[i],observe));
     break;
   }
@@ -485,13 +487,14 @@ void write_pntr(array *arr, process *proc, pntr p)
   case CELL_FRAME: {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     int i;
+    int count = bc_instructions(proc->bcdata)[f->address].expcount;
 
     /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref */
     assert(STATE_NEW == f->state);
     assert(!f->qprev && !f->qnext);
 
-    write_format(arr,proc,"iiii",f->address,f->fno,f->alloc,f->count);
-    for (i = 0; i < f->count; i++) {
+    write_format(arr,proc,"iii",f->address,f->fno,f->alloc);
+    for (i = 0; i < count; i++) {
       pntr arg = resolve_pntr(f->data[i]);
       if ((CELL_NUMBER == pntrtype(arg)) || (CELL_NIL == pntrtype(arg)))
         write_pntr(arr,proc,f->data[i]);

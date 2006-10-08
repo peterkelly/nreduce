@@ -1,7 +1,9 @@
+__printer1 partlen lst = (__printer (arrayskip partlen lst))
+
 __printer lst = (if lst
                  (if (valarray? lst)
                      (letrec partlen = (arraysize lst) in
-                             (seq (printarray partlen lst) (__printer (arrayskip partlen lst))))
+                             (seq (printarray partlen lst) (__printer1 partlen lst)))
                      (seq (print (head lst)) (__printer (tail lst))))
                      nil)
 
@@ -20,7 +22,7 @@ stdin = (streamfd 0)
 
 readt filename = (readb filename)
 
-len1 total lst = (if lst
+len1 !total lst = (if lst
                      (letrec partlen = (arraysize lst) in
                               (len1 (+ total partlen) (arrayskip partlen lst)))
                               total)
@@ -46,9 +48,11 @@ prefix n lst = (if (<= n 0)
                        (arrayprefix partlen lst
                                     (prefix (- n partlen) (arrayskip partlen lst))))))
 
-sub start count lst = (prefix count (skip start lst))
+sub !start !count lst = (prefix count (skip start lst))
+
+append2 a partlen b = (append (arrayskip partlen a) b)
 
 append a b = (if a
                  (letrec partlen = (arraysize a) in
-                          (arrayprefix partlen a (append (arrayskip partlen a) b)))
+                          (arrayprefix partlen a (append2 a partlen b)))
                  b)

@@ -328,7 +328,7 @@ int source_compile(source *src, char **bcdata, int *bcsize)
   compile(src,bcdata,bcsize);
 
   if (trace)
-    bc_print(*bcdata,stdout,src,1);
+    bc_print(*bcdata,stdout,src,1,NULL);
 
   return 0;
 }
