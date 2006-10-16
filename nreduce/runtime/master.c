@@ -20,6 +20,8 @@
  *
  */
 
+#define _GNU_SOURCE /* for asprintf */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -41,9 +43,11 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+extern const char *prelude;
+
 pid_t launch_worker(struct in_addr ip, const char *dir, const char *cmd, const char *hostsfile,
                     const char *mhost, int mport,
-                    int *outfd)
+                    int *outfd, int listenfd)
 {
   int fds[2];
   pid_t pid;
@@ -64,19 +68,18 @@ pid_t launch_worker(struct in_addr ip, const char *dir, const char *cmd, const c
   }
   else if (0 == pid) {
     /* child process */
-    char *ipstr;
-    char *rshcmd;
+    char *ipstr = NULL;
+    char *rshcmd = NULL;
     char *args[6];
     unsigned char *ipaddr = (char*)&ip.s_addr;
-    int len;
 
-    len = snprintf(NULL,0,"%d.%d.%d.%d",ipaddr[0],ipaddr[1],ipaddr[1],ipaddr[1]);
-    ipstr = (char*)malloc(len+1);
-    sprintf(ipstr,"%d.%d.%d.%d",ipaddr[0],ipaddr[1],ipaddr[2],ipaddr[3]);
+    close(listenfd);
 
-    len = snprintf(NULL,0,"cd %s && %s -w %s:%d",dir,cmd,mhost,mport);
-    rshcmd = (char*)malloc(len+1);
-    sprintf(rshcmd,"cd %s && %s -w %s %s:%d",dir,cmd,hostsfile,mhost,mport);
+    asprintf(&ipstr,"%d.%d.%d.%d",ipaddr[0],ipaddr[1],ipaddr[2],ipaddr[3]);
+    printf("ipstr = %s\n",ipstr);
+
+    asprintf(&rshcmd,"cd %s && %s -w %s %s:%d",dir,cmd,hostsfile,mhost,mport);
+    printf("rshcmd = %s\n",rshcmd);
 
     args[0] = "rsh";
     args[1] = ipstr;
@@ -179,14 +182,65 @@ int notify_startup(nodeinfo *ni)
   return 0;
 }
 
+int send_bytecode(nodeinfo *ni, const char *bcdata, int bcsize)
+{
+  int i;
+  int chunksize = 1024;
+  int fullsize = sizeof(int)+bcsize;
+  char *fulldata = (char*)malloc(fullsize);
+  memcpy(fulldata,&bcsize,sizeof(int));
+  memcpy(&fulldata[sizeof(int)],bcdata,bcsize);
+  for (i = 0; i < ni->nworkers; i++) {
+    int done = 0;
+    printf("Sending bytecode to %s (%d bytes)...",ni->workers[i].hostname,bcsize);
+    if (0 > fdsetblocking(ni->workers[i].sock,1))
+      return -1;
+    while (done < fullsize) {
+      int size = (chunksize < fullsize-done) ? chunksize : fullsize-done;
+      int w = write(ni->workers[i].sock,&fulldata[done],size);
+      if (0 > w) {
+        fprintf(stderr,"Error sending bytecode to %s: %s\n",
+                ni->workers[i].hostname,strerror(errno));
+        return -1;
+      }
+      done += w;
+    }
+/*     if (0 > fdsetblocking(ni->workers[i].sock,0)) */
+/*       return -1; */
+    printf("done\n");
+  }
+  free(fulldata);
+  return 0;
+}
+
+int run_program(nodeinfo *ni, const char *bcdata, int bcsize)
+{
+  if (0 != send_bytecode(ni,bcdata,bcsize))
+    return -1;
+  return 0;
+}
+
 int master(const char *hostsfile, const char *myaddr, const char *filename, const char *cmd)
 {
   char *host;
   int port;
   int r = 0;
-  int i;
   nodeinfo *ni;
   char *dir;
+  source *src;
+  int bcsize;
+  char *bcdata = NULL;
+
+  src = source_new();
+  if (0 != source_parse_string(src,prelude,"prelude.l"))
+    return -1;
+  if (0 != source_parse_file(src,filename,""))
+    return -1;
+  if (0 != source_process(src))
+    return -1;
+  if (0 != source_compile(src,&bcdata,&bcsize))
+    return -1;
+  source_free(src);
 
   if (NULL == (dir = getcwd_alloc())) {
     perror("getcwd");
@@ -211,10 +265,11 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
   }
 
   if (0 == r) {
+    int i;
     for (i = 0; (i < ni->nworkers) && (0 == r); i++) {
       ni->workers[i].pid = launch_worker(ni->workers[i].ip,
                                          dir,cmd,hostsfile,host,port,
-                                         &ni->workers[i].readfd);
+                                         &ni->workers[i].readfd,ni->listenfd);
       if (0 > ni->workers[i].pid)
         r = -1;
     }
@@ -228,7 +283,6 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
     r = wait_for_connections(ni);
   }
 
-
   if (0 == r) {
     printf("All workers connected; sending notifications...\n");
     r = notify_startup(ni);
@@ -237,9 +291,24 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
   if (0 == r)
     printf("Notifications sent\n");
 
+  if (0 == r)
+    r = run_program(ni,bcdata,bcsize);
+
+  if (0 == r) {
+    int i;
+    printf("Closing connections\n");
+    for (i = 0; i < ni->nworkers; i++) {
+      close(ni->workers[i].sock);
+      close(ni->workers[i].readfd);
+    }
+  }
+
   free(dir);
   free(host);
+  free(bcdata);
   if (ni)
     nodeinfo_free(ni);
+  printf("exiting\n");
+  exit(r);
   return r;
 }

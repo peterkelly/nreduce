@@ -392,6 +392,12 @@ struct timeval timeval_diff(struct timeval from, struct timeval to)
   return diff;
 }
 
+int timeval_diffms(struct timeval from, struct timeval to)
+{
+  struct timeval diff = timeval_diff(from,to);
+  return diff.tv_sec*1000 + diff.tv_usec/1000;
+}
+
 int hash(void *mem, int size)
 {
   int h = 0;

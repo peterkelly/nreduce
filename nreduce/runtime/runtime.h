@@ -27,6 +27,7 @@
 #include "compiler/source.h"
 #include "compiler/bytecode.h"
 #include <stdio.h>
+#include <sys/time.h>
 
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
@@ -115,6 +116,8 @@ typedef struct cell {
   short type;
   pntr field1;
   pntr field2;
+  int indsource;
+  char *msg;
 } cell;
 
 #define PNTR_VALUE 0xFFF80000
@@ -249,8 +252,8 @@ typedef struct frame {
   int state;
 
   struct frame *freelnk;
-  struct frame *qnext;
-  struct frame *qprev;
+  struct frame *next;
+  struct frame *prev;
 
   struct frame *waitframe;
   struct global *waitglo;
@@ -259,7 +262,6 @@ typedef struct frame {
 typedef struct frameq {
   frame *first;
   frame *last;
-  int size;
 } frameq;
 
 typedef struct procstats {
@@ -279,6 +281,9 @@ typedef struct procstats {
   int *recvcount;
   int *recvbytes;
   int *fusage;
+  int sparks;
+  int sparksused;
+  int fetches;
 } procstats;
 
 typedef struct gaddr {
@@ -319,6 +324,11 @@ typedef struct block {
   cell values[BLOCK_SIZE];
 } block;
 
+struct process;
+typedef void (*send_fun)(struct process *proc, int dest, int tag, char *data, int size);
+typedef int (*recv_fun)(struct process *proc, int *tag, char **data, int *size, int block,
+                        int delayms);
+
 typedef struct process {
   int memdebug;
 
@@ -333,6 +343,7 @@ typedef struct process {
   int groupsize;
   pthread_mutex_t msglock;
   pthread_cond_t msgcond;
+  int *ioreadyptr;
   int ackmsgsize;
   int naddrsread;
   array *ackmsg;
@@ -356,6 +367,7 @@ typedef struct process {
   char *error;
   sourceloc errorsl;
   frame **curfptr;
+  int newfish;
 
   gaddr **infaddrs;
   int *infcount;
@@ -389,6 +401,10 @@ typedef struct process {
   /* general */
   FILE *output;
   procstats stats;
+
+  send_fun sendf;
+  recv_fun recvf;
+  void *commdata;
 } process;
 
 process *process_new(void);
@@ -506,7 +522,11 @@ void msg_send(process *proc, int dest, int tag, char *data, int size);
 void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...);
 int msg_recv(process *proc, int *tag, char **data, int *size);
 int msg_recvb(process *proc, int *tag, char **data, int *size);
-int msg_recvbt(process *proc, int *tag, char **data, int *size, struct timespec *abstime);
+int msg_recvbt(process *proc, int *tag, char **data, int *size, int delayms);
+
+void msg_print(process *proc, int dest, int tag, const char *data, int size);
+void mem_send(process *proc, int dest, int tag, char *data, int size);
+int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms);
 
 /* reduction */
 
@@ -561,9 +581,14 @@ void dump_globals(process *proc);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(process *proc, gaddr addr);
 void spark(process *proc, frame *f);
+void execute(process *proc);
 void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage);
 
 /* memory */
+
+cell *pntrcell(pntr p);
+global *pntrglobal(pntr p);
+frame *pntrframe(pntr p);
 
 pntrstack *pntrstack_new(void);
 void pntrstack_push(pntrstack *s, pntr p);

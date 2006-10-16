@@ -69,7 +69,10 @@ int connect_host(const char *hostname, int port)
     perror("connect");
     return -1;
   }
-  setsockopt(sockfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int));
+  if (0 > setsockopt(sockfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+    perror("setsockopt TCP_NODELAY");
+    return -1;
+  }
 
   return sockfd;
 }
@@ -302,7 +305,12 @@ int wait_for_connections(nodeinfo *ni)
       perror("accept");
       return -1;
     }
-    setsockopt(clientfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int));
+    if (0 > setsockopt(clientfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+      perror("setsockopt");
+      return -1;
+    }
+    if (0 > fdsetblocking(clientfd,0))
+      return -1;
 
     for (i = 0; i < ni->nworkers; i++) {
       if (!memcmp(&ni->workers[i].ip,&remote_addr.sin_addr,sizeof(struct in_addr))) {
@@ -349,5 +357,21 @@ int fdsetflag(int fd, int flag, int on)
     perror("fcntl(F_SETFL)");
     return -1;
   }
+  return 0;
+}
+
+int fdsetblocking(int fd, int blocking)
+{
+  return fdsetflag(fd,O_NONBLOCK,!blocking);
+}
+
+int fdsetasync(int fd, int async)
+{
+  if (0 > fdsetflag(fd,O_ASYNC,async))
+    return -1;
+
+  if (async && (0 > fcntl(fd,F_SETOWN,getpid())))
+    return -1;
+
   return 0;
 }

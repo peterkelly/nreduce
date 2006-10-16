@@ -53,7 +53,7 @@
 /* #define DISTGC_DEBUG */
 /* #define SHOW_FRAME_COMPLETION */
 /* #define COLLECTION_DEBUG */
-/* #define PARALLELISM */
+#define PARALLELISM
 
 /* #define ARRAY_DEBUG */
 /* #define PRINT_DEBUG */

@@ -7,11 +7,11 @@ __printer lst = (if lst
                      (seq (print (head lst)) (__printer (tail lst))))
                      nil)
 
-__sparklist lst = (if lst
-                     (parhead lst (__sparklist (tail lst)))
+sparklist lst = (if lst
+                     (parhead lst (sparklist (tail lst)))
                      nil)
 
-__spark val = (seq (__sparklist val) val)
+spark val = (seq (sparklist val) val)
 __start = (__printer main)
 
 streamfd fd =  (readchunk fd (streamfd fd))

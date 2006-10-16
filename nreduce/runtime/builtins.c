@@ -248,15 +248,17 @@ static void b_par(process *proc, pntr *argstack)
   if (CELL_FRAME == pntrtype(p)) {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     spark_frame(proc,f);
+/*     fprintf(proc->output,"sparking\n"); */
   }
   else {
-/*     printf("not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
+/*     fprintf(proc->output,"not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
   }
 }
 
 static void b_head(process *proc, pntr *argstack);
 static void b_parhead(process *proc, pntr *argstack)
 {
+/*   fprintf(proc->output,"b_parhead: first arg is a %s\n",cell_types[pntrtype(argstack[1])]); */
   b_head(proc,&argstack[1]);
   b_par(proc,argstack);
 }

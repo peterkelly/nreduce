@@ -53,6 +53,45 @@ void *array_at(array *arr, int index);
 int array_count(array *arr);
 void array_free(array *arr);
 
+#define llist_prepend(_ll,_obj) {                         \
+    assert(!(_obj)->prev && !(_obj)->next);               \
+    if ((_ll)->first) {                                   \
+      (_obj)->next = (_ll)->first;                        \
+      (_ll)->first->prev = (_obj);                        \
+      (_ll)->first = (_obj);                              \
+    }                                                     \
+    else {                                                \
+      (_ll)->first = (_ll)->last = (_obj);                \
+    }                                                     \
+  }
+
+#define llist_append(_ll,_obj) {                          \
+    assert(!(_obj)->prev && !(_obj)->next);               \
+    if ((_ll)->last) {                                    \
+      (_obj)->prev = (_ll)->last;                         \
+      (_ll)->last->next = (_obj);                         \
+      (_ll)->last = (_obj);                               \
+    }                                                     \
+    else {                                                \
+      (_ll)->first = (_ll)->last = (_obj);                \
+    }                                                     \
+  }
+
+#define llist_remove(_ll,_obj) {                          \
+    assert((_obj)->prev || ((_ll)->first == (_obj)));     \
+    assert((_obj)->next || ((_ll)->last == (_obj)));      \
+    if ((_ll)->first == (_obj))                           \
+      (_ll)->first = (_obj)->next;                        \
+    if ((_ll)->last == (_obj))                            \
+      (_ll)->last = (_obj)->prev;                         \
+    if ((_obj)->next)                                     \
+      (_obj)->next->prev = (_obj)->prev;                  \
+    if ((_obj)->prev)                                     \
+      (_obj)->prev->next = (_obj)->next;                  \
+    (_obj)->next = NULL;                                  \
+    (_obj)->prev = NULL;                                  \
+  }
+
 typedef void (*list_d_t)(void *a);
 typedef void* (*list_copy_t)(void *a);
 
@@ -82,6 +121,7 @@ void print_bin(FILE *f, void *ptr, int nbytes);
 void print_bin_rev(FILE *f, void *ptr, int nbytes);
 
 struct timeval timeval_diff(struct timeval from, struct timeval to);
+int timeval_diffms(struct timeval from, struct timeval to);
 
 int hash(void *mem, int size);
 char *getcwd_alloc();

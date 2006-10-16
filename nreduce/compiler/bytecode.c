@@ -335,7 +335,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_ALLOC: {
     int i;
     for (i = 0; i < arg0; i++)
-      pushstatus(comp->si,1);
+      pushstatus(comp->si,0);
     break;
   }
   case OP_SQUEEZE:
@@ -415,6 +415,7 @@ int have_values(source *src, int fno, stackinfo *si)
 {
   int nargs = function_nargs(src,fno);
   int i;
+  assert(nargs <= si->count);
   for (i = 0; i < nargs; i++)
     if (!statusat(si,si->count-nargs+i) && function_strictin(src,fno,i))
       return 0;
@@ -629,7 +630,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       snode *expr2 = c->right;
       snode *expr1 = c->left->right;
       E(src,comp,expr1,p,n);
-      POP(expr2->sl,1);
+      POP(expr1->sl,1);
       E(src,comp,expr2,p,n);
     }
     else {
@@ -753,7 +754,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             snode *expr2 = args->data[0];
             snode *expr1 = args->data[1];
             E(src,comp,expr1,p,n);
-            POP(expr2->sl,1);
+            POP(expr1->sl,1);
             R(src,comp,expr2,p,n);
           }
           else {

@@ -35,6 +35,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <errno.h>
 
 reader read_start(const char *data, int size)
 {
@@ -491,7 +492,7 @@ void write_pntr(array *arr, process *proc, pntr p)
 
     /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref */
     assert(STATE_NEW == f->state);
-    assert(!f->qprev && !f->qnext);
+    assert(!f->prev && !f->next);
 
     write_format(arr,proc,"iii",f->address,f->fno,f->alloc);
     for (i = 0; i < count; i++) {
@@ -567,8 +568,7 @@ void write_end(array *wr)
   array_free(wr);
 }
 
-#ifdef MSG_DEBUG
-static void msg_print(process *proc, int dest, int tag, const char *data, int size)
+void msg_print(process *proc, int dest, int tag, const char *data, int size)
 {
   reader rd = read_start(data,size);
   int r;
@@ -578,7 +578,6 @@ static void msg_print(process *proc, int dest, int tag, const char *data, int si
   assert(READER_OK == r);
   fprintf(proc->output,"\n");
 }
-#endif
 
 static void msg_send_addcount(process *proc, int tag, const char *data, int size)
 {
@@ -590,10 +589,6 @@ static void msg_send_addcount(process *proc, int tag, const char *data, int size
 
 void msg_send(process *proc, int dest, int tag, char *data, int size)
 {
-  #ifdef MSG_DEBUG
-  msg_print(proc,dest,tag,data,size);
-  #endif
-
   if (NULL != proc->inflight) {
     int count = 0;
     list *l;
@@ -606,6 +601,15 @@ void msg_send(process *proc, int dest, int tag, char *data, int size)
     list_free(proc->inflight,free);
     proc->inflight = NULL;
   }
+
+  proc->sendf(proc,dest,tag,data,size);
+}
+
+void mem_send(process *proc, int dest, int tag, char *data, int size)
+{
+  #ifdef MSG_DEBUG
+  msg_print(proc,dest,tag,data,size);
+  #endif
 
   message *msg = (message*)calloc(1,sizeof(message));
   process *destproc;
@@ -629,6 +633,9 @@ void msg_send(process *proc, int dest, int tag, char *data, int size)
   list_append(&destproc->msgqueue,msg);
   pthread_cond_signal(&destproc->msgcond);
   pthread_mutex_unlock(&destproc->msglock);
+
+  if (destproc->ioreadyptr)
+    *destproc->ioreadyptr = 1;
 }
 
 void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
@@ -645,19 +652,39 @@ void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
   write_end(wr);
 }
 
-static int msg_recv2(process *proc, int *tag, char **data, int *size, int block,
-                     struct timespec *abstime)
+int msg_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms)
+{
+  return proc->recvf(proc,tag,data,size,block,delayms);
+}
+
+int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms)
 {
   list *l = NULL;
   message *msg;
   int from;
 
   pthread_mutex_lock(&proc->msglock);
-  if (block && (NULL == proc->msgqueue)) {
-    if (abstime) {
-      pthread_cond_timedwait(&proc->msgcond,&proc->msglock,abstime);
+  if (NULL == proc->msgqueue) {
+    if (0 < delayms) {
+      struct timeval now;
+      struct timespec abstime;
+      int r;
+      gettimeofday(&now,NULL);
+
+      now.tv_sec += delayms/1000;
+      now.tv_usec += (delayms%1000)*1000;
+      if (now.tv_usec >= 1000000) {
+        now.tv_usec -= 1000000;
+        now.tv_sec++;
+      }
+      abstime.tv_sec = now.tv_sec;
+      abstime.tv_nsec = now.tv_usec * 1000;
+/*       fprintf(proc->output,"timedwait %d...",delayms); */
+/*       errno = 0; */
+      r = pthread_cond_timedwait(&proc->msgcond,&proc->msglock,&abstime);
+/*       fprintf(proc->output,"%s\n",strerror(r)); */
     }
-    else {
+    else if (block) {
       pthread_cond_wait(&proc->msgcond,&proc->msglock);
       assert(proc->msgqueue);
     }
@@ -685,15 +712,15 @@ static int msg_recv2(process *proc, int *tag, char **data, int *size, int block,
 
 int msg_recv(process *proc, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,tag,data,size,0,NULL);
+  return msg_recv2(proc,tag,data,size,0,0);
 }
 
 int msg_recvb(process *proc, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,tag,data,size,1,NULL);
+  return msg_recv2(proc,tag,data,size,1,0);
 }
 
-int msg_recvbt(process *proc, int *tag, char **data, int *size, struct timespec *abstime)
+int msg_recvbt(process *proc, int *tag, char **data, int *size, int delayms)
 {
-  return msg_recv2(proc,tag,data,size,1,abstime);
+  return msg_recv2(proc,tag,data,size,0,delayms);
 }

@@ -56,5 +56,7 @@ nodeinfo *nodeinfo_init(const char *hostsfile);
 void nodeinfo_free(nodeinfo *ni);
 int wait_for_connections(nodeinfo *ni);
 int fdsetflag(int fd, int flag, int on);
+int fdsetblocking(int fd, int blocking);
+int fdsetasync(int fd, int async);
 
 #endif

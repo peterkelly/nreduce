@@ -219,7 +219,7 @@ static int queue_size(frameq *q)
 {
   int count = 0;
   frame *f;
-  for (f = q->first; f; f = f->qnext)
+  for (f = q->first; f; f = f->next)
     count++;
   return count;
 }
@@ -227,7 +227,7 @@ static int queue_size(frameq *q)
 static int queue_contains_frame(frameq *q, frame *f)
 {
   frame *c;
-  for (c = q->first; c; c = c->qnext)
+  for (c = q->first; c; c = c->next)
     if (c == f)
       return 1;
   return 0;
@@ -237,12 +237,12 @@ static int check_queue(frameq *q)
 {
   frame *f;
   assert((!q->first && !q->last) || (q->first && q->last));
-  assert(!q->last || !q->last->qnext);
-  assert(!q->first || !q->first->qprev);
+  assert(!q->last || !q->last->next);
+  assert(!q->first || !q->first->prev);
   assert(q->size == queue_size(q));
-  for (f = q->first; f; f = f->qnext) {
-    assert((q->last == f) || (f->qnext->qprev == f));
-    assert((q->first == f) || (f->qprev->qnext == f));
+  for (f = q->first; f; f = f->next) {
+    assert((q->last == f) || (f->next->prev == f));
+    assert((q->first == f) || (f->prev->next == f));
   }
   return 1;
 }
@@ -254,17 +254,8 @@ void add_frame_queue(frameq *q, frame *f)
   assert(check_queue(q));
   assert(!queue_contains_frame(q,f));
   #endif
-  assert(!f->qprev && !f->qnext);
 
-  if (q->first) {
-    f->qnext = q->first;
-    q->first->qprev = f;
-    q->first = f;
-  }
-  else {
-    q->first = q->last = f;
-  }
-  q->size++;
+  llist_prepend(q,f);
 }
 
 void add_frame_queue_end(frameq *q, frame *f)
@@ -273,17 +264,8 @@ void add_frame_queue_end(frameq *q, frame *f)
   assert(check_queue(q));
   assert(!queue_contains_frame(q,f));
   #endif
-  assert(!f->qprev && !f->qnext);
 
-  if (q->last) {
-    f->qprev = q->last;
-    q->last->qnext = f;
-    q->last = f;
-  }
-  else {
-    q->first = q->last = f;
-  }
-  q->size++;
+  llist_append(q,f);
 }
 
 void remove_frame_queue(frameq *q, frame *f)
@@ -292,22 +274,8 @@ void remove_frame_queue(frameq *q, frame *f)
   assert(check_queue(q));
   assert(queue_contains_frame(q,f));
   #endif
-  assert(f->qprev || (q->first == f));
-  assert(f->qnext || (q->last == f));
 
-  if (q->first == f)
-    q->first = f->qnext;
-  if (q->last == f)
-    q->last = f->qprev;
-
-  if (f->qnext)
-    f->qnext->qprev = f->qprev;
-  if (f->qprev)
-    f->qprev->qnext = f->qnext;
-
-  f->qnext = NULL;
-  f->qprev = NULL;
-  q->size--;
+  llist_remove(q,f);
 
   #ifdef QUEUE_CHECKS
   assert(!queue_contains_frame(q,f));
@@ -346,16 +314,18 @@ void unspark_frame(process *proc, frame *f)
   f->state = STATE_NEW;
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);
-  assert(NULL == f->qnext);
-  assert(NULL == f->qprev);
+  assert(NULL == f->next);
+  assert(NULL == f->prev);
   assert(CELL_FRAME == celltype(f->c));
   assert(f == (frame*)get_pntr(f->c->field1));
 }
 
 void run_frame(process *proc, frame *f)
 {
-  if (STATE_SPARKED == f->state)
+  if (STATE_SPARKED == f->state) {
+    proc->stats.sparksused++;
     remove_frame_queue(&proc->sparked,f);
+  }
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     assert((0 == f->address) ||
@@ -475,12 +445,12 @@ void dump_info(process *proc)
   }
 
   fprintf(proc->output,"\n");
-  fprintf(proc->output,"Runnable queue (size %d):\n",proc->runnable.size);
+  fprintf(proc->output,"Runnable queue:\n");
   fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "frame*","function","frames","fetchers","state");
   fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
-  for (f = proc->runnable.first; f; f = f->qnext) {
+  for (f = proc->runnable.first; f; f = f->next) {
     const char *fname = bc_function_name(proc->bcdata,f->fno);
     int nframes = list_count(f->wq.frames);
     int nfetchers = list_count(f->wq.fetchers);

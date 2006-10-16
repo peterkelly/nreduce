@@ -96,6 +96,21 @@ pntr resolve_pntr(pntr p)
 }
 #endif
 
+cell *pntrcell(pntr p)
+{
+  return (cell*)get_pntr(p);
+}
+
+global *pntrglobal(pntr p)
+{
+  return (global*)get_pntr(p);
+}
+
+frame *pntrframe(pntr p)
+{
+  return (frame*)get_pntr(p);
+}
+
 static void mark(process *proc, pntr p, short bit);
 static void mark_frame(process *proc, frame *f, short bit);
 
@@ -230,6 +245,8 @@ cell *alloc_cell(process *proc)
   }
   v = proc->freeptr;
   v->flags = proc->indistgc ? FLAG_NEW : 0;
+  v->indsource = 0;
+  v->msg = NULL;
   proc->freeptr = (cell*)get_pntr(proc->freeptr->field1);
   proc->stats.nallocs++;
   proc->stats.totalallocs++;
@@ -324,17 +341,17 @@ void mark_roots(process *proc, short bit)
       mark(proc,proc->streamstack->data[i],bit);
   }
 
-  for (f = proc->sparked.first; f; f = f->qnext) {
+  for (f = proc->sparked.first; f; f = f->next) {
     mark_frame(proc,f,bit);
     assert(NULL == f->wq.frames);
     assert(NULL == f->wq.fetchers);
   }
 
-  for (f = proc->runnable.first; f; f = f->qnext) {
+  for (f = proc->runnable.first; f; f = f->next) {
     mark_frame(proc,f,bit);
   }
 
-  for (f = proc->blocked.first; f; f = f->qnext) {
+  for (f = proc->blocked.first; f; f = f->next) {
     mark_frame(proc,f,bit);
   }
 

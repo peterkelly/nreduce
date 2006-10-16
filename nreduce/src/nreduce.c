@@ -240,7 +240,8 @@ int main(int argc, char **argv)
       fclose(statsfile);
   }
   else {
-    source_compile(src,&bcdata,&bcsize);
+    if (0 != source_compile(src,&bcdata,&bcsize))
+      return -1;
 
     if (args.strictdebug) {
       dump_strictinfo(src);
