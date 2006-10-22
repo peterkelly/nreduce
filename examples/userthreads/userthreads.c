@@ -130,7 +130,6 @@ void *malloc_protected(int size)
 void newthread(void (*func)(void), void *arg)
 {
   ucontext_t *uc = &threads[numthreads];
-  memset(uc,0,sizeof(ucontext_t));
   getcontext(uc);
   uc->uc_link = NULL;
   uc->uc_stack.ss_sp = malloc_protected(STACK_SIZE*2)+STACK_SIZE;
