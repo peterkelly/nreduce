@@ -405,7 +405,7 @@ void process_valgrind_log(struct arguments *args, stringbuf *output)
     exit(1);
   }
   while (NULL != (entry = readdir(dir))) {
-    if (!strncmp(entry->d_name,"vglog.pid",strlen("vglog.pid"))) {
+    if (!strncmp(entry->d_name,"vglog.",strlen("vglog."))) {
       vglog = (char*)malloc(strlen(TEMP_DIR)+1+strlen(entry->d_name)+1);
       sprintf(vglog,"%s/%s",TEMP_DIR,entry->d_name);
     }
