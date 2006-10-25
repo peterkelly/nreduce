@@ -83,6 +83,9 @@ errors:
 
   valgrind --max-stackframe=32768 ./userthreads
 
+It may also be necessary to increase the scheduling interval (e.g. to 100+ms)
+to avoid spurious(?) errors from valgrind.
+
 */
 
 #include <stdio.h>
@@ -100,14 +103,18 @@ errors:
 #define SCHEDULE_MS 10
 
 ucontext_t threads[MAXTHREADS];
-int curthread = 0;
+int curthread = -1;
 int numthreads = 0;
 
 void yield()
 {
   int old = curthread;
   curthread = (curthread+1) % numthreads;
-  swapcontext(&threads[old],&threads[curthread]);
+
+  if (0 > old)
+    setcontext(&threads[curthread]);
+  else
+    swapcontext(&threads[old],&threads[curthread]);
 }
 
 void *malloc_protected(int size)
@@ -132,7 +139,7 @@ void newthread(void (*func)(void), void *arg)
   ucontext_t *uc = &threads[numthreads];
   getcontext(uc);
   uc->uc_link = NULL;
-  uc->uc_stack.ss_sp = malloc_protected(STACK_SIZE*2)+STACK_SIZE;
+  uc->uc_stack.ss_sp = malloc_protected(STACK_SIZE);
   uc->uc_stack.ss_size = STACK_SIZE;
   uc->uc_stack.ss_flags = 0;
   makecontext(uc,func,1,arg);
@@ -185,6 +192,6 @@ int main(int argc, char **argv)
     newthread((void*)userfun,(void*)i);
 
   init();
-  setcontext(&threads[0]);
+  raise(SIGALRM);
   return 0;
 }
