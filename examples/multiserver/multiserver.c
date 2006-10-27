@@ -20,7 +20,7 @@ necessitates the use of select(), which is where the blocking occurs instead.
 In this case the program blocks only until data is available from *any* of the
 clients, rather than just a specific one.
 
-The set of connectied clients is stored in a fixed-size array. This allows up
+The set of connected clients is stored in a fixed-size array. This allows up
 to MAXCLIENTS to be connected at any one time, not counting any that may be
 waiting in the connection queue. However, if more clients try to connect and
 the array is already full then they will be turned away with an immediate socket
@@ -31,9 +31,9 @@ client is considered connected if the socket is >= 0. For elements in the array
 that do not represent a client connection, the value is set to -1. At the
 beginning of the program, all elements in the array are initialised to -1. When
 a new client connection request is retrieved the program will look through this
-array for an empty slot and set the appropriate value to to new client's socket.
-When a client disconnects, then that element in the array is cleared and can
-be reused for a subsequent connection.
+array for an empty slot and set the appropriate value to the new client's
+socket. When a client disconnects, then that element in the array is cleared
+and can be reused for a subsequent connection.
 
 The program is run as follows:
 

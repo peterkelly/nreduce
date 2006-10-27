@@ -42,7 +42,7 @@ context from the next thread is loaded into the CPU registers.
 A new thread is created by calling the newthread() function, which takes
 the initial function to execute in the thread as well as a single argument.
 This sets up a new user context structure and allocates a stack for the thread,
-whos size is determined by STACK_SIZE. The thread will not actually begin
+whose size is determined by STACK_SIZE. The thread will not actually begin
 execution until init() has been called.
 
 As a precautionary measure, we want to be able to catch stack overflows within

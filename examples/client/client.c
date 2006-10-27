@@ -14,7 +14,7 @@ demonstrate how to open a connection to a server.
 Note: *All* system calls should be checked for errors and handled cleanly,
 as there are various things that can go wrong when setting up and using
 network connections. We chose to return a -1 error code from the functions
-rather than exiting the program altoghether. While it doesn't make any
+rather than exiting the program altogether. While it doesn't make any
 difference for this small program, this enables the code to be reused in larger
 programs that want to handle the errors appropriately and maybe keep running
 or retry the operation.

@@ -25,19 +25,19 @@ To get around this problem, we maintain our own buffer for each client. This
 contains the data that is waiting to be written to the client. It may be
 considerably larger than the kernel's buffer, due to the fact that we might
 have received a lot of data from some of the clients that we have not been able
-to send out yet. Each time that select() indicates writeability of a socket, we
+to send out yet. Each time that select() indicates writability of a socket, we
 try to write some of the data from this buffer out to the client. The portion
 that is written is removed from our own buffer. There may be some left which we
 have to hold on to until the socket is ready for more data to be written to it.
 
 Whenever some data is received from one of the clients, that data is appended
-to the ouptut buffer of every other client, as well as the sending client
+to the output buffer of every other client, as well as the sending client
 itself. The reason we need to maintain separate output buffers is that for each
 connection there may be a different amount of data that has been written to it,
 so we need to keep track of what data is remaining to be sent to each client.
 The differences in the amount of data sent are affected in part by the speed of
 a client's connection; for a local client it will typically be very fast to
-transmit the data but for another client elshwere on the internet it may take
+transmit the data but for another client elsewhere on the Internet it may take
 longer and thus data could remain in the buffer for a longer period of time.
 
 The mechanism for keeping track of client connections is similar to that used

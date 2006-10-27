@@ -28,7 +28,7 @@ unaware that the process is also acting as a server.
 To accomplish this, the listening socket and all client sockets are set up
 in asynchronous mode. This tells the kernel that when data becomes available
 on these sockets it should send a SIGIO to the process. Inside the signal
-handler, the usual things are done to accept connectoins or perform a read.
+handler, the usual things are done to accept connections or perform a read.
 The client sockets are also used in non-blocking mode, so if some data has
 been read but there is no more yet available, the program can go back to
 computing prime numbers until another SIGIO is received.

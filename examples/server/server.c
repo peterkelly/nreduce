@@ -3,7 +3,7 @@
 Basic single-threaded server
 
 This program listens on a specified port for connections. When a client
-connects, the server reads continously from the client until it has finished
+connects, the server reads continuously from the client until it has finished
 sending data. The data read is output to the server's terminal.
 
 Only one client connection is permitted at a time. If one is currently open,
@@ -27,7 +27,7 @@ subsequently be used with it.
 Note: *All* system calls should be checked for errors and handled cleanly,
 as there are various things that can go wrong when setting up and using
 network connections. We chose to return a -1 error code from the functions
-rather than exiting the program altoghether. While it doesn't make any
+rather than exiting the program altogether. While it doesn't make any
 difference for this small program, this enables the code to be reused in larger
 programs that want to handle the errors appropriately and maybe keep running
 or retry the operation.
