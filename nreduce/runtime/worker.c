@@ -63,7 +63,6 @@ extern int *ioreadyptr;
 typedef struct socketmsg {
   char *rawdata;
   int rawsize;
-  int alloc;
   int sent;
 
   int rsize;
@@ -163,8 +162,7 @@ static void socket_send(process *proc, int dest, int tag, char *data, int size)
 
   newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
   newmsg->rawsize = MSG_HEADER_SIZE+size;
-  newmsg->alloc = newmsg->rawsize;
-  newmsg->rawdata = (char*)malloc(newmsg->alloc);
+  newmsg->rawdata = (char*)malloc(newmsg->rawsize);
   memcpy(&newmsg->rawdata[0],&size,sizeof(int));
   memcpy(&newmsg->rawdata[sizeof(int)],&tag,sizeof(int));
   memcpy(&newmsg->rawdata[MSG_HEADER_SIZE],data,size);
@@ -181,66 +179,36 @@ static void socket_send(process *proc, int dest, int tag, char *data, int size)
 static void process_received(process *proc, int worker)
 {
   socketcomm *sc = (socketcomm*)proc->commdata;
-  int base = 0;
-  int count = sc->recvbuf[worker]->nbytes;
-  #ifdef SOCKET_DEBUG
-  printf("process_received: %d bytes in receive buffer\n",count);
-  #endif
-  while (0 < count) {
-    socketmsg *last = sc->incoming[worker].last;
-    if ((NULL != last) && (last->rsize > last->rawsize)) {
+  int start = 0;
 
-      int remaining = last->rsize-last->rawsize;
-      int take = (remaining > count) ? count : remaining;
+  /* inspect the next section of the input buffer to see if it contains a complete message */
+  while (MSG_HEADER_SIZE <= sc->recvbuf[worker]->nbytes-start) {
+    int rsize = *(int*)&sc->recvbuf[worker]->data[start];
+    int rtag = *(int*)&sc->recvbuf[worker]->data[start+sizeof(int)];
+    socketmsg *newmsg;
 
-      #ifdef SOCKET_DEBUG
-      printf("more data: source = %s, rsize = %d, rtag = %d, rem = %d, "
-             "count = %d, take = %d\n",
-             sc->ni->workers[worker].hostname,last->rsize,last->rtag,remaining,count,take);
-      #endif
+    /* verify header */
+    assert(0 <= rsize);
+    assert(0 <= rtag);
+    assert(MSG_COUNT > rtag);
 
-      if (last->alloc < last->rawsize+take) {
-        while (last->alloc < last->rawsize+take)
-          last->alloc *= 2;
-        last->rawdata = (char*)realloc(last->rawdata,last->alloc);
-      }
+    if (MSG_HEADER_SIZE+rsize > sc->recvbuf[worker]->nbytes-start)
+      break; /* incomplete message */
 
-      memcpy(&last->rawdata[last->rawsize],&sc->recvbuf[worker]->data[base],take);
-      last->rawsize += take;
-      base += take;
-      count -= take;
-    }
-    else if (MSG_HEADER_SIZE <= count) {
-      socketmsg *newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
-      newmsg->rawsize = 0;
-      newmsg->alloc = CHUNKSIZE;
-      newmsg->rawdata = (char*)malloc(newmsg->alloc);
-      memcpy(&newmsg->rsize,&sc->recvbuf[worker]->data[base],sizeof(int));
-      memcpy(&newmsg->rtag,&sc->recvbuf[worker]->data[base+sizeof(int)],sizeof(int));
-      base += MSG_HEADER_SIZE;
-      count -= MSG_HEADER_SIZE;
-      llist_append(&sc->incoming[worker],newmsg);
+    /* complete message present; add it to the mailbox */
+    newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
+    newmsg->rsize = rsize;
+    newmsg->rtag = rtag;
+    newmsg->rawsize = rsize;
+    newmsg->rawdata = (char*)malloc(rsize);
+    memcpy(newmsg->rawdata,&sc->recvbuf[worker]->data[start+MSG_HEADER_SIZE],rsize);
+    llist_append(&sc->incoming[worker],newmsg);
 
-      #ifdef SOCKET_DEBUG
-      if ((0 <= newmsg->rtag) && (MSG_COUNT > newmsg->rtag)) {
-        printf(" incoming: source = %s, rsize = %d, rtag = %s\n",
-               sc->ni->workers[worker].hostname,newmsg->rsize,msg_names[newmsg->rtag]);
-      }
-      else {
-        printf(" incoming: source = %s, rsize = %d, rtag = %d\n",
-               sc->ni->workers[worker].hostname,newmsg->rsize,newmsg->rtag);
-      }
-      #endif
-      assert(0 <= newmsg->rsize);
-      assert(0 <= newmsg->rtag);
-      assert(MSG_COUNT > newmsg->rtag);
-    }
-    else {
-      break;
-    }
+    start += MSG_HEADER_SIZE+rsize;
   }
-  array_remove_data(sc->recvbuf[worker],base);
-  assert(sc->recvbuf[worker]->nbytes == count);
+
+  /* remove the data we've consumed from the receive buffer */
+  array_remove_data(sc->recvbuf[worker],start);
 }
 
 static int receive_incoming(process *proc, int i, int *tag, char **data, int *size)
@@ -301,31 +269,9 @@ static int wait_for_data(process *proc, int block, int delayms, fd_set *rfds)
   }
   else {
     struct timeval timeout;
-    struct timeval before;
-    struct timeval after;
-/*     if (0 < delayms) { */
-/*       printf("Timed select() of %dms...",delayms); */
-/*     } */
     timeout.tv_sec = delayms/1000;
     timeout.tv_usec = (delayms%1000)*1000;
-
-    gettimeofday(&before,NULL);
     s = rselect(highest+1,rfds,NULL,NULL,&timeout);
-    gettimeofday(&after,NULL);
-
-/*     printf("%d.%06d -> %d.%06d ", */
-/*            (int)before.tv_sec,(int)before.tv_usec, */
-/*            (int)after.tv_sec,(int)after.tv_usec); */
-
-/*     if (0 < delayms) { */
-/*       int took = timeval_diffms(before,after); */
-/*       if (0 > s) */
-/*         printf("error %d\n",took); */
-/*       else if (0 == s) */
-/*         printf("done %d\n",took); */
-/*       else */
-/*         printf("done %d (data received before timeout)\n",took); */
-/*     } */
   }
 
   return s;
@@ -336,7 +282,6 @@ static int receive_data(process *proc, fd_set *rfds, int *tag, char **data, int 
   socketcomm *sc = (socketcomm*)proc->commdata;
   int i;
   for (i = 0; i < sc->ni->nworkers; i++) {
-    char buf[CHUNKSIZE];
     char *hostname = sc->ni->workers[i].hostname;
     int from;
 
@@ -344,10 +289,12 @@ static int receive_data(process *proc, fd_set *rfds, int *tag, char **data, int 
       continue;
 
     while (1) {
-/*       errno = 0; */
-      int r = TEMP_FAILURE_RETRY(read(sc->ni->workers[i].sock,buf,CHUNKSIZE));
-/*       printf("receive_data: i = %d, r = %d, errno = %s\n", */
-/*              i,r,strerror(errno)); */
+      int r;
+
+      array_mkroom(sc->recvbuf[i],CHUNKSIZE);
+      r = TEMP_FAILURE_RETRY(read(sc->ni->workers[i].sock,
+                                  &sc->recvbuf[i]->data[sc->recvbuf[i]->nbytes],
+                                  CHUNKSIZE));
 
       if ((0 > r) && (EAGAIN == errno))
         break;
@@ -362,7 +309,7 @@ static int receive_data(process *proc, fd_set *rfds, int *tag, char **data, int 
       printf("Received %d bytes from %s\n",r,sc->ni->workers[i].hostname);
       #endif
 
-      array_append(sc->recvbuf[i],buf,r);
+      sc->recvbuf[i]->nbytes += r;
       process_received(proc,i);
 
       if (0 <= (from = receive_incoming(proc,i,tag,data,size)))
@@ -754,14 +701,6 @@ int worker(const char *hostsfile, const char *masteraddr)
     make_pntr(initial->c->field1,initial);
     run_frame(proc,initial);
   }
-
-/*   printf("before abort()\n"); */
-/*   abort(); */
-/*   printf("after abort()\n"); */
-
-/*   printf("before assert(0)\n"); */
-/*   assert(0); */
-/*   printf("after assert(0)\n"); */
 
   printf("before execute()\n");
   execute(proc);
