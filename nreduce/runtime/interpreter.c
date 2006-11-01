@@ -83,50 +83,50 @@ void print_stack(FILE *f, pntr *stk, int size, int dir)
   }
 }
 
-static void print_proc_sourceloc(process *proc, FILE *f, sourceloc sl)
+static void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl)
 {
   if (0 <= sl.fileno)
-    fprintf(f,"%s:%d: ",bc_string(proc->bcdata,sl.fileno),sl.lineno);
+    fprintf(f,"%s:%d: ",bc_string(tsk->bcdata,sl.fileno),sl.lineno);
 }
 
-static void cap_error(process *proc, pntr cappntr, const instruction *op)
+static void cap_error(task *tsk, pntr cappntr, const instruction *op)
 {
   sourceloc sl;
   assert(CELL_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
-  const char *name = bc_function_name(proc->bcdata,c->fno);
+  const char *name = bc_function_name(tsk->bcdata,c->fno);
   int nargs = c->arity;
 
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
-  print_proc_sourceloc(proc,stderr,sl);
+  print_task_sourceloc(tsk,stderr,sl);
   fprintf(stderr,"Attempt to evaluate incomplete function application\n");
 
-  print_proc_sourceloc(proc,stderr,c->sl);
+  print_task_sourceloc(tsk,stderr,c->sl);
   fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
   abort();
 }
 
-static void constant_app_error(process *proc, pntr cappntr, const instruction *op)
+static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
 {
   sourceloc sl;
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
-  print_proc_sourceloc(proc,stderr,sl);
+  print_task_sourceloc(tsk,stderr,sl);
   fprintf(stderr,CONSTANT_APP_MSG"\n");
   /* FIXME: need to print the expression here */
   abort();
 }
 
-static void handle_error(process *proc)
+static void handle_error(task *tsk)
 {
-  print_proc_sourceloc(proc,stderr,proc->errorsl);
-  fprintf(stderr,"%s\n",proc->error);
+  print_task_sourceloc(tsk,stderr,tsk->errorsl);
+  fprintf(stderr,"%s\n",tsk->error);
   abort();
 }
 
-static void resume_waiters(process *proc, waitqueue *wq, pntr obj)
+static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
 {
   list *l;
 
@@ -139,7 +139,7 @@ static void resume_waiters(process *proc, waitqueue *wq, pntr obj)
     frame *f = (frame*)l->data;
     f->waitframe = NULL;
     f->waitglo = NULL;
-    unblock_frame(proc,f);
+    unblock_frame(tsk,f);
   }
   list_free(wq->frames,NULL);
   wq->frames = NULL;
@@ -147,19 +147,19 @@ static void resume_waiters(process *proc, waitqueue *wq, pntr obj)
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
     assert(CELL_FRAME != pntrtype(obj));
-/*     fprintf(proc->output,"1: responding with %s\n",cell_types[pntrtype(obj)]); */
-    msg_fsend(proc,ft->pid,MSG_RESPOND,"pa",obj,*ft);
+/*     fprintf(tsk->output,"1: responding with %s\n",cell_types[pntrtype(obj)]); */
+    msg_fsend(tsk,ft->pid,MSG_RESPOND,"pa",obj,*ft);
   }
   list_free(wq->fetchers,free);
   wq->fetchers = NULL;
 }
 
-static void frame_return(process *proc, frame *curf, pntr val)
+static void frame_return(task *tsk, frame *curf, pntr val)
 {
   #ifdef SHOW_FRAME_COMPLETION
-  if (0 <= proc->pid) {
+  if (0 <= tsk->pid) {
     int valtype = pntrtype(val);
-    fprintf(proc->output,"FRAME(%d) completed; result is a %s\n",
+    fprintf(tsk->output,"FRAME(%d) completed; result is a %s\n",
             curf->fno,cell_types[valtype]);
   }
   #endif
@@ -175,12 +175,12 @@ static void frame_return(process *proc, frame *curf, pntr val)
   curf->c->field1 = val;
   curf->c = NULL;
 
-  resume_waiters(proc,&curf->wq,val);
-  done_frame(proc,curf);
-  frame_dealloc(proc,curf);
+  resume_waiters(tsk,&curf->wq,val);
+  done_frame(tsk,curf);
+  frame_dealloc(tsk,curf);
 }
 
-static void schedule_frame(process *proc, frame *f, int destproc, array *msg)
+static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 {
   global *glo;
   global *refglo;
@@ -189,103 +189,103 @@ static void schedule_frame(process *proc, frame *f, int destproc, array *msg)
   gaddr refaddr;
 
   /* Remove the frame from the runnable queue */
-  unspark_frame(proc,f);
+  unspark_frame(tsk,f);
 
-  /* Create remote reference which will point to the frame on destproc once an ACK is sent back */
+  /* Create remote reference which will point to the frame on desttsk once an ACK is sent back */
 
   make_pntr(fcp,f->c);
-  addr.pid = destproc;
+  addr.pid = desttsk;
   addr.lid = -1;
-  glo = add_global(proc,addr,fcp);
+  glo = add_global(tsk,addr,fcp);
 
-  refaddr.pid = proc->pid;
-  refaddr.lid = proc->nextlid++;
-  refglo = add_global(proc,refaddr,fcp);
+  refaddr.pid = tsk->pid;
+  refaddr.lid = tsk->nextlid++;
+  refglo = add_global(tsk,refaddr,fcp);
 
   /* Transfer the frame to the destination, and tell it to notfy us of the global address it
      assigns to the frame (which we'll store in newref) */
   #ifdef PAREXEC_DEBUG
-/*   fprintf(proc->output,"Scheduling frame %s on process %d, newrefaddr = %d@%d\n", */
-/*           function_name(proc->gp,f->fno),destproc,newrefaddr.lid,newrefaddr.pid); */
+/*   fprintf(tsk->output,"Scheduling frame %s on task %d, newrefaddr = %d@%d\n", */
+/*           function_name(tsk->gp,f->fno),desttsk,newrefaddr.lid,newrefaddr.pid); */
   #endif
-  write_format(msg,proc,"pa",glo->p,refglo->addr);
+  write_format(msg,tsk,"pa",glo->p,refglo->addr);
 
   f->c->type = CELL_REMOTEREF;
   make_pntr(f->c->field1,glo);
 
   /* Delete the local copy of the frame */
   f->c = NULL;
-  frame_dealloc(proc,f);
+  frame_dealloc(tsk,f);
 }
 
-static void send_update(process *proc)
+static void send_update(task *tsk)
 {
-  int homesite = proc->groupsize-1;
+  int homesite = tsk->groupsize-1;
   array *wr = write_start();
   int i;
-  for (i = 0; i < proc->groupsize-1; i++) {
-    write_int(wr,proc->gcsent[i]);
-    proc->gcsent[i] = 0;
+  for (i = 0; i < tsk->groupsize-1; i++) {
+    write_int(wr,tsk->gcsent[i]);
+    tsk->gcsent[i] = 0;
   }
-  msg_send(proc,homesite,MSG_UPDATE,wr->data,wr->nbytes);
+  msg_send(tsk,homesite,MSG_UPDATE,wr->data,wr->nbytes);
   write_end(wr);
 }
 
-static void start_address_reading(process *proc, int from, int msgtype)
+static void start_address_reading(task *tsk, int from, int msgtype)
 {
-  proc->ackmsg = write_start();
-  proc->ackmsgsize = proc->ackmsg->nbytes;
+  tsk->ackmsg = write_start();
+  tsk->ackmsgsize = tsk->ackmsg->nbytes;
 }
 
-static void finish_address_reading(process *proc, int from, int msgtype)
+static void finish_address_reading(task *tsk, int from, int msgtype)
 {
-  int haveaddrs = (proc->ackmsg->nbytes != proc->ackmsgsize);
-  int ackcount = proc->naddrsread;
+  int haveaddrs = (tsk->ackmsg->nbytes != tsk->ackmsgsize);
+  int ackcount = tsk->naddrsread;
 
-  write_end(proc->ackmsg);
-  proc->ackmsg = NULL;
-  proc->naddrsread = 0;
-  proc->ackmsgsize = 0;
+  write_end(tsk->ackmsg);
+  tsk->ackmsg = NULL;
+  tsk->naddrsread = 0;
+  tsk->ackmsgsize = 0;
 
 
   if (haveaddrs) {
     assert(0 < ackcount);
-    msg_fsend(proc,from,MSG_ACK,"iii",1,ackcount,msgtype);
+    msg_fsend(tsk,from,MSG_ACK,"iii",1,ackcount,msgtype);
   }
   else {
     assert(0 == ackcount);
   }
 }
 
-void add_pending_mark(process *proc, gaddr addr)
+void add_pending_mark(task *tsk, gaddr addr)
 {
   assert(0 <= addr.pid);
-  assert(proc->groupsize-1 >= addr.pid);
-  assert(proc->inmark);
-  array_append(proc->distmarks[addr.pid],&addr,sizeof(gaddr));
+  assert(tsk->groupsize-1 >= addr.pid);
+  assert(tsk->inmark);
+  array_append(tsk->distmarks[addr.pid],&addr,sizeof(gaddr));
 }
 
-static void send_mark_messages(process *proc)
+static void send_mark_messages(task *tsk)
 {
   int pid;
-  for (pid = 0; pid < proc->groupsize; pid++) {
-    if (0 < array_count(proc->distmarks[pid])) {
+  for (pid = 0; pid < tsk->groupsize; pid++) {
+    if (0 < array_count(tsk->distmarks[pid])) {
       int a;
       array *msg = write_start();
-      for (a = 0; a < array_count(proc->distmarks[pid]); a++) {
-        gaddr addr = array_item(proc->distmarks[pid],a,gaddr);
-        write_gaddr(msg,proc,addr);
-        proc->gcsent[addr.pid]++;
+      for (a = 0; a < array_count(tsk->distmarks[pid]); a++) {
+        gaddr addr = array_item(tsk->distmarks[pid],a,gaddr);
+        write_gaddr(msg,tsk,addr);
+        tsk->gcsent[addr.pid]++;
       }
-      msg_send(proc,pid,MSG_MARKENTRY,msg->data,msg->nbytes);
+      msg_send(tsk,pid,MSG_MARKENTRY,msg->data,msg->nbytes);
       write_end(msg);
 
-      proc->distmarks[pid]->nbytes = 0;
+      tsk->distmarks[pid]->nbytes = 0;
     }
   }
 }
 
-static int handle_message2(process *proc, int from, int tag, char *data, int size)
+static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 {
   int r = READER_OK;
   reader rd = read_start(data,size);
@@ -293,15 +293,15 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
   if ((0 > tag) || (MSG_COUNT <= tag))
     return READER_INCORRECT_CONTENTS;
 
-  proc->stats.recvcount[tag]++;
-  proc->stats.recvbytes[tag] += size;
+  tsk->stats.recvcount[tag]++;
+  tsk->stats.recvbytes[tag] += size;
 
   #ifdef MSG_DEBUG
-/*   fprintf(proc->output,"[%d] ",list_count(proc->inflight)); */
-  fprintf(proc->output,"%d => %s ",from,msg_names[tag]);
-  CHECK_READ(print_data(proc,data+rd.pos,size-rd.pos));
-  fprintf(proc->output," (%d bytes)\n",size);
-  fprintf(proc->output,"\n");
+/*   fprintf(tsk->output,"[%d] ",list_count(tsk->inflight)); */
+  fprintf(tsk->output,"%d => %s ",from,msg_names[tag]);
+  CHECK_READ(print_data(tsk,data+rd.pos,size-rd.pos));
+  fprintf(tsk->output," (%d bytes)\n",size);
+  fprintf(tsk->output,"\n");
   #endif
 
   switch (tag) {
@@ -312,24 +312,24 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     global *glo;
     int globals = 0;
 
-    write_int(wr,proc->stats.totalallocs);
+    write_int(wr,tsk->stats.totalallocs);
 
     for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-      for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
         globals++;
     write_int(wr,globals);
 
     for (i = 0; i < OP_COUNT; i++)
-      write_int(wr,proc->stats.op_usage[i]);
+      write_int(wr,tsk->stats.op_usage[i]);
     for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,proc->stats.sendcount[i]);
+      write_int(wr,tsk->stats.sendcount[i]);
     for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,proc->stats.sendbytes[i]);
+      write_int(wr,tsk->stats.sendbytes[i]);
     for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,proc->stats.recvcount[i]);
+      write_int(wr,tsk->stats.recvcount[i]);
     for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,proc->stats.recvbytes[i]);
-    msg_send(proc,from,MSG_ISTATS,wr->data,wr->nbytes);
+      write_int(wr,tsk->stats.recvbytes[i]);
+    msg_send(tsk,from,MSG_ISTATS,wr->data,wr->nbytes);
     write_end(wr);
     break;
   }
@@ -353,87 +353,87 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       return r;
     }
 
-    totalallocs += proc->stats.totalallocs;
+    totalallocs += tsk->stats.totalallocs;
     for (op = 0; op < OP_COUNT; op++)
-      usage[op] += proc->stats.op_usage[op];
+      usage[op] += tsk->stats.op_usage[op];
 
     wr = write_start();
     write_int(wr,totalallocs);
     for (op = 0; op < OP_COUNT; op++)
       write_int(wr,usage[op]);
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_ALLSTATS,wr->data,wr->nbytes);
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_ALLSTATS,wr->data,wr->nbytes);
     write_end(wr);
     break;
   }
   case MSG_DONE:
-    proc->done = 1;
-    fprintf(proc->output,"%d: done\n",proc->pid);
+    tsk->done = 1;
+    fprintf(tsk->output,"%d: done\n",tsk->pid);
     break;
   case MSG_PAUSE: {
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_PAUSE,data,size);
-    proc->paused++;
-    fprintf(proc->output,"%d: paused\n",proc->pid);
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_PAUSE,data,size);
+    tsk->paused++;
+    fprintf(tsk->output,"%d: paused\n",tsk->pid);
     break;
   }
   case MSG_RESUME:
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_RESUME,data,size);
-    fprintf(proc->output,"%d: resumed\n",proc->pid);
-    proc->paused--;
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_RESUME,data,size);
+    fprintf(tsk->output,"%d: resumed\n",tsk->pid);
+    tsk->paused--;
     break;
   case MSG_FISH: {
-    int reqproc, age, nframes;
+    int reqtsk, age, nframes;
     int scheduled = 0;
     array *msg;
 
-    start_address_reading(proc,from,tag);
-    r = read_format(&rd,proc,0,"iii.",&reqproc,&age,&nframes);
-    finish_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
+    r = read_format(&rd,tsk,0,"iii.",&reqtsk,&age,&nframes);
+    finish_address_reading(tsk,from,tag);
     CHECK_READ(r);
 
-    if (reqproc == proc->pid)
+    if (reqtsk == tsk->pid)
       break;
 
     msg = write_start();
-    while ((NULL != proc->sparked.first) && (1 <= nframes--)) {
-      schedule_frame(proc,proc->sparked.last,reqproc,msg);
+    while ((NULL != tsk->sparked.first) && (1 <= nframes--)) {
+      schedule_frame(tsk,tsk->sparked.last,reqtsk,msg);
       scheduled++;
     }
     if (0 < scheduled)
-      msg_send(proc,reqproc,MSG_SCHEDULE,msg->data,msg->nbytes);
+      msg_send(tsk,reqtsk,MSG_SCHEDULE,msg->data,msg->nbytes);
     write_end(msg);
 
     #ifdef PARALLELISM_DEBUG
-/*     fprintf(proc->output,"received FISH from process %d; scheduled %d\n",reqproc,scheduled); */
+/*     fprintf(tsk->output,"received FISH from task %d; scheduled %d\n",reqtsk,scheduled); */
     #endif
 
     if (!scheduled && (0 < (age)--))
-      msg_fsend(proc,(proc->pid+1) % (proc->groupsize-1),MSG_FISH,"iii",reqproc,age,nframes);
+      msg_fsend(tsk,(tsk->pid+1) % (tsk->groupsize-1),MSG_FISH,"iii",reqtsk,age,nframes);
     break;
   }
   case MSG_FETCH: {
     /* FETCH (objaddr) (storeaddr)
-       Request to send the requested object (or a copy of it) to another process
+       Request to send the requested object (or a copy of it) to another task
 
-       (objaddr)   is the global address of the object *in this process* that is to be sent
+       (objaddr)   is the global address of the object *in this task* that is to be sent
 
-       (storeaddr) is the global address of a remote reference *in the other process*, which
+       (storeaddr) is the global address of a remote reference *in the other task*, which
                    points to the requested object. When we send the response, the other address
                    will store the object in the p field of the relevant "global" structure. */
     pntr obj;
     gaddr storeaddr;
     gaddr objaddr;
 
-    start_address_reading(proc,from,tag);
-    r = read_format(&rd,proc,0,"aa.",&objaddr,&storeaddr);
-    finish_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
+    r = read_format(&rd,tsk,0,"aa.",&objaddr,&storeaddr);
+    finish_address_reading(tsk,from,tag);
     CHECK_READ(r);
 
-    CHECK_EXPR(objaddr.pid == proc->pid);
+    CHECK_EXPR(objaddr.pid == tsk->pid);
     CHECK_EXPR(storeaddr.pid == from);
-    obj = global_lookup_existing(proc,objaddr);
+    obj = global_lookup_existing(tsk,objaddr);
 
     if (is_nullpntr(obj)) {
-      fprintf(proc->output,"Request for deleted global %d@%d, from process %d\n",
+      fprintf(tsk->output,"Request for deleted global %d@%d, from task %d\n",
               objaddr.lid,objaddr.pid,from);
     }
 
@@ -441,20 +441,20 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     obj = resolve_pntr(obj);
 
     #ifdef FETCH_DEBUG
-    fprintf(proc->output,"received FETCH %d@%d -> %d@%d",
+    fprintf(tsk->output,"received FETCH %d@%d -> %d@%d",
             objaddr.lid,objaddr.pid,storeaddr.lid,storeaddr.pid);
     #endif
 
     if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
       #ifdef FETCH_DEBUG
-      fprintf(proc->output,": case 1\n");
+      fprintf(tsk->output,": case 1\n");
       #endif
       add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
     }
     else if ((CELL_FRAME == pntrtype(obj)) &&
              ((STATE_RUNNING == pframe(obj)->state) || (STATE_BLOCKED == pframe(obj)->state))) {
       #ifdef FETCH_DEBUG
-      fprintf(proc->output,": case 2\n");
+      fprintf(tsk->output,": case 2\n");
       #endif
       add_gaddr(&pframe(obj)->wq.fetchers,storeaddr);
     }
@@ -467,38 +467,38 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       pntr fcp;
 
       #ifdef FETCH_DEBUG
-      fprintf(proc->output,": case 3\n");
+      fprintf(tsk->output,": case 3\n");
       #endif
       /* Remove the frame from the runnable queue */
-      unspark_frame(proc,f);
+      unspark_frame(tsk,f);
 
       /* Send the actual frame */
-      msg_fsend(proc,from,MSG_RESPOND,"pa",obj,storeaddr);
+      msg_fsend(tsk,from,MSG_RESPOND,"pa",obj,storeaddr);
 
       /* Check that we don't already have a reference to the remote addr
          (FIXME: is this safe?) */
-      ref = global_lookup_existing(proc,storeaddr);
+      ref = global_lookup_existing(tsk,storeaddr);
       CHECK_EXPR(is_nullpntr(ref));
 
       /* Replace our copy of a frame to a reference to the remote object */
       make_pntr(fcp,f->c);
-      glo = add_global(proc,storeaddr,fcp);
+      glo = add_global(tsk,storeaddr,fcp);
 
       f->c->type = CELL_REMOTEREF;
       make_pntr(f->c->field1,glo);
       f->c = NULL;
-      frame_dealloc(proc,f);
+      frame_dealloc(tsk,f);
     }
     else {
       #ifdef PAREXEC_DEBUG
-      fprintf(proc->output,
-              "Responding to fetch: val %s, req process %d, storeaddr = %d@%d, objaddr = %d@%d\n",
+      fprintf(tsk->output,
+              "Responding to fetch: val %s, req task %d, storeaddr = %d@%d, objaddr = %d@%d\n",
               cell_types[pntrtype(obj)],from,storeaddr.lid,storeaddr.pid,objaddr.lid,objaddr.pid);
       #endif
       #ifdef FETCH_DEBUG
-      fprintf(proc->output,": case 4\n");
+      fprintf(tsk->output,": case 4\n");
       #endif
-      msg_fsend(proc,from,MSG_RESPOND,"pa",obj,storeaddr);
+      msg_fsend(tsk,from,MSG_RESPOND,"pa",obj,storeaddr);
     }
     break;
   }
@@ -509,16 +509,16 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     cell *refcell;
     global *objglo;
 
-    start_address_reading(proc,from,tag);
-    r = read_format(&rd,proc,0,"pa",&obj,&storeaddr);
-    finish_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
+    r = read_format(&rd,tsk,0,"pa",&obj,&storeaddr);
+    finish_address_reading(tsk,from,tag);
     CHECK_READ(r);
 
-    ref = global_lookup_existing(proc,storeaddr);
+    ref = global_lookup_existing(tsk,storeaddr);
 
-    CHECK_EXPR(storeaddr.pid == proc->pid);
+    CHECK_EXPR(storeaddr.pid == tsk->pid);
     if (is_nullpntr(ref)) {
-      fprintf(proc->output,"Respond tried to store in deleted global %d@%d\n",
+      fprintf(tsk->output,"Respond tried to store in deleted global %d@%d\n",
               storeaddr.lid,storeaddr.pid);
     }
     CHECK_EXPR(!is_nullpntr(ref));
@@ -536,11 +536,11 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     refcell->type = CELL_IND;
     refcell->field1 = obj;
 
-    resume_waiters(proc,&objglo->wq,obj);
+    resume_waiters(tsk,&objglo->wq,obj);
 
     if (CELL_FRAME == pntrtype(obj))
-      run_frame(proc,pframe(obj));
-    proc->stats.fetches--;
+      run_frame(tsk,pframe(obj));
+    tsk->stats.fetches--;
     break;
   }
   case MSG_SCHEDULE: {
@@ -550,43 +550,43 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     array *urmsg;
     int count = 0;
 
-/*     fprintf(proc->output,"processing SCHEDULE\n"); */
+/*     fprintf(tsk->output,"processing SCHEDULE\n"); */
 
     urmsg = write_start();
 
-    start_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
     while (rd.pos < rd.size) {
-      r = read_format(&rd,proc,0,"pa",&framep,&tellsrc);
+      r = read_format(&rd,tsk,0,"pa",&framep,&tellsrc);
       CHECK_READ(r);
 
       CHECK_EXPR(CELL_FRAME == pntrtype(framep));
-/*       fprintf(proc->output,"got frame\n"); */
-      frameglo = make_global(proc,framep);
-      write_format(urmsg,proc,"aa",tellsrc,frameglo->addr);
+/*       fprintf(tsk->output,"got frame\n"); */
+      frameglo = make_global(tsk,framep);
+      write_format(urmsg,tsk,"aa",tellsrc,frameglo->addr);
 
-      spark_frame(proc,pframe(framep)); /* FIXME: temp; just to count sparks */
-      run_frame(proc,pframe(framep));
+      spark_frame(tsk,pframe(framep)); /* FIXME: temp; just to count sparks */
+      run_frame(tsk,pframe(framep));
 
 
 /*       { */
 /*         frame *f = pframe(framep); */
-/*         fprintf(proc->output,"schedule: frame %d (%s)\n", */
-/*                 f->fno,bc_function_name(proc->bcdata,f->fno)); */
+/*         fprintf(tsk->output,"schedule: frame %d (%s)\n", */
+/*                 f->fno,bc_function_name(tsk->bcdata,f->fno)); */
 /*       } */
 
       count++;
-      proc->stats.sparks++;
+      tsk->stats.sparks++;
     }
-    finish_address_reading(proc,from,tag);
+    finish_address_reading(tsk,from,tag);
 
-    msg_send(proc,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
+    msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
     write_end(urmsg);
 
-    fprintf(proc->output,"Got %d new frames\n",count);
-    proc->newfish = 1;
+    fprintf(tsk->output,"Got %d new frames\n",count);
+    tsk->newfish = 1;
 
     #ifdef PARALLELISM_DEBUG
-    fprintf(proc->output,"done processing SCHEDULE: count = %d\n",count);
+    fprintf(tsk->output,"done processing SCHEDULE: count = %d\n",count);
     #endif
 
     break;
@@ -597,14 +597,14 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     gaddr remoteaddr;
     global *glo;
 
-    start_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
     while (rd.pos < rd.size) {
-      r = read_format(&rd,proc,0,"aa",&refaddr,&remoteaddr);
+      r = read_format(&rd,tsk,0,"aa",&refaddr,&remoteaddr);
       CHECK_READ(r);
 
-      ref = global_lookup_existing(proc,refaddr);
+      ref = global_lookup_existing(tsk,refaddr);
 
-      CHECK_EXPR(refaddr.pid == proc->pid);
+      CHECK_EXPR(refaddr.pid == tsk->pid);
       CHECK_EXPR(!is_nullpntr(ref));
       CHECK_EXPR(CELL_REMOTEREF == pntrtype(ref));
 
@@ -614,13 +614,13 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       CHECK_EXPR(pntrequal(glo->p,ref));
       CHECK_EXPR(remoteaddr.pid == from);
 
-      addrhash_remove(proc,glo);
+      addrhash_remove(tsk,glo);
       glo->addr.lid = remoteaddr.lid;
-      addrhash_add(proc,glo);
+      addrhash_add(tsk,glo);
 
-      resume_waiters(proc,&glo->wq,glo->p);
+      resume_waiters(tsk,&glo->wq,glo->p);
     }
-    finish_address_reading(proc,from,tag);
+    finish_address_reading(tsk,from,tag);
     break;
   }
   case MSG_ACK: {
@@ -634,36 +634,36 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     CHECK_READ(read_int(&rd,&fromtype));
     assert(0 < naddrs);
 
-    if (count > array_count(proc->unack_msg_acount[from])) {
-      fprintf(proc->output,"ACK: count = %d, array count = %d\n",
-              count,array_count(proc->unack_msg_acount[from]));
+    if (count > array_count(tsk->unack_msg_acount[from])) {
+      fprintf(tsk->output,"ACK: count = %d, array count = %d\n",
+              count,array_count(tsk->unack_msg_acount[from]));
     }
 
-    CHECK_EXPR(count <= array_count(proc->unack_msg_acount[from]));
+    CHECK_EXPR(count <= array_count(tsk->unack_msg_acount[from]));
 
     remove = 0;
     for (i = 0; i < count; i++)
-      remove += array_item(proc->unack_msg_acount[from],i,int);
+      remove += array_item(tsk->unack_msg_acount[from],i,int);
 
 
     /* temp */
     assert(1 == count);
-    assert(naddrs == array_item(proc->unack_msg_acount[from],0,int));
+    assert(naddrs == array_item(tsk->unack_msg_acount[from],0,int));
 
 
-    CHECK_EXPR(remove <= array_count(proc->inflight_addrs[from]));
+    CHECK_EXPR(remove <= array_count(tsk->inflight_addrs[from]));
 
-    array_remove_items(proc->unack_msg_acount[from],count);
-    array_remove_items(proc->inflight_addrs[from],remove);
+    array_remove_items(tsk->unack_msg_acount[from],count);
+    array_remove_items(tsk->inflight_addrs[from],remove);
     break;
   }
   case MSG_STARTDISTGC: {
-    CHECK_EXPR(!proc->indistgc);
-    proc->indistgc = 1;
-    clear_marks(proc,FLAG_DMB);
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_STARTDISTGC,data,size);
+    CHECK_EXPR(!tsk->indistgc);
+    tsk->indistgc = 1;
+    clear_marks(tsk,FLAG_DMB);
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_STARTDISTGC,data,size);
     #ifdef DISTGC_DEBUG
-    fprintf(proc->output,"Started distributed garbage collection\n");
+    fprintf(tsk->output,"Started distributed garbage collection\n");
     #endif
     break;
   }
@@ -674,94 +674,94 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     int h;
     global *glo;
 
-    CHECK_EXPR(proc->indistgc);
+    CHECK_EXPR(tsk->indistgc);
 
     /* sanity check: shouldn't have any pending mark messages at this point */
-    for (pid = 0; pid < proc->groupsize; pid++)
-      assert(0 == array_count(proc->distmarks[pid]));
-    proc->inmark = 1;
+    for (pid = 0; pid < tsk->groupsize; pid++)
+      assert(0 == array_count(tsk->distmarks[pid]));
+    tsk->inmark = 1;
 
-    proc->memdebug = 1;
-    mark_roots(proc,FLAG_DMB);
-    proc->memdebug = 0;
+    tsk->memdebug = 1;
+    mark_roots(tsk,FLAG_DMB);
+    tsk->memdebug = 0;
 
     /* mark any in-flight gaddrs that refer to remote objects */
-    for (l = proc->inflight; l; l = l->next) {
+    for (l = tsk->inflight; l; l = l->next) {
       gaddr *addr = (gaddr*)l->data;
-      if ((0 <= addr->lid) && (proc->pid != addr->pid))
-        add_pending_mark(proc,*addr);
+      if ((0 <= addr->lid) && (tsk->pid != addr->pid))
+        add_pending_mark(tsk,*addr);
     }
 
-    for (pid = 0; pid < proc->groupsize; pid++) {
-      for (i = 0; i < array_count(proc->inflight_addrs[pid]); i++) {
-        gaddr addr = array_item(proc->inflight_addrs[pid],i,gaddr);
-        if ((0 <= addr.lid) && (proc->pid != addr.pid))
-          add_pending_mark(proc,addr);
+    for (pid = 0; pid < tsk->groupsize; pid++) {
+      for (i = 0; i < array_count(tsk->inflight_addrs[pid]); i++) {
+        gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
+        if ((0 <= addr.lid) && (tsk->pid != addr.pid))
+          add_pending_mark(tsk,addr);
       }
     }
 
     /* make sure that for all marked globals, the pointer is also marked */
     for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-      for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext)
+      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
         if (glo->flags & FLAG_DMB)
-          mark_global(proc,glo,FLAG_DMB);
+          mark_global(tsk,glo,FLAG_DMB);
 
 
-    proc->gcsent[proc->pid]--;
-    send_mark_messages(proc);
-    send_update(proc);
-    proc->inmark = 0;
+    tsk->gcsent[tsk->pid]--;
+    send_mark_messages(tsk);
+    send_update(tsk);
+    tsk->inmark = 0;
     break;
   }
   case MSG_MARKENTRY: { /* A DAMT (Distributed Address Marking Task) */
     global *glo;
     gaddr addr;
     int pid;
-    CHECK_EXPR(proc->indistgc);
+    CHECK_EXPR(tsk->indistgc);
 
     /* sanity check: shouldn't have any pending mark messages at this point */
-    for (pid = 0; pid < proc->groupsize; pid++)
-      assert(0 == array_count(proc->distmarks[pid]));
-    proc->inmark = 1;
+    for (pid = 0; pid < tsk->groupsize; pid++)
+      assert(0 == array_count(tsk->distmarks[pid]));
+    tsk->inmark = 1;
 
-    start_address_reading(proc,from,tag);
+    start_address_reading(tsk,from,tag);
     while (rd.pos < rd.size) {
-      CHECK_READ(read_gaddr(&rd,proc,&addr));
-      CHECK_EXPR(addr.pid == proc->pid);
-      glo = addrhash_lookup(proc,addr);
+      CHECK_READ(read_gaddr(&rd,tsk,&addr));
+      CHECK_EXPR(addr.pid == tsk->pid);
+      glo = addrhash_lookup(tsk,addr);
       if (!glo) {
-        fprintf(proc->output,"Marking request for deleted global %d@%d\n",
+        fprintf(tsk->output,"Marking request for deleted global %d@%d\n",
                 addr.lid,addr.pid);
       }
       CHECK_EXPR(glo);
-      mark_global(proc,glo,FLAG_DMB);
-      proc->gcsent[proc->pid]--;
+      mark_global(tsk,glo,FLAG_DMB);
+      tsk->gcsent[tsk->pid]--;
     }
-    finish_address_reading(proc,from,tag);
+    finish_address_reading(tsk,from,tag);
 
-    send_mark_messages(proc);
-    send_update(proc);
-    proc->inmark = 0;
+    send_mark_messages(tsk);
+    send_update(tsk);
+    tsk->inmark = 0;
     break;
   }
   case MSG_SWEEP: {
-    CHECK_EXPR(proc->indistgc);
+    CHECK_EXPR(tsk->indistgc);
 
     /* do sweep */
-    proc->memdebug = 1;
-    msg_fsend(proc,from,MSG_SWEEPACK,"");
+    tsk->memdebug = 1;
+    msg_fsend(tsk,from,MSG_SWEEPACK,"");
 
-    clear_marks(proc,FLAG_MARKED);
-    mark_roots(proc,FLAG_MARKED);
+    clear_marks(tsk,FLAG_MARKED);
+    mark_roots(tsk,FLAG_MARKED);
 
-    sweep(proc);
-    clear_marks(proc,FLAG_NEW);
+    sweep(tsk);
+    clear_marks(tsk,FLAG_NEW);
 
-    proc->memdebug = 0;
-    proc->indistgc = 0;
+    tsk->memdebug = 0;
+    tsk->indistgc = 0;
     #ifdef DISTGC_DEBUG
-    fprintf(proc->output,"Completed distributed garbage collection: %d cells remaining\n",
-            count_alive(proc));
+    fprintf(tsk->output,"Completed distributed garbage collection: %d cells remaining\n",
+            count_alive(tsk));
     #endif
     break;
   }
@@ -773,14 +773,14 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
     int h;
     int pid;
     global *glo;
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_TEST,data,size);
-    local_collect(proc);
-    fprintf(proc->output,"In-flight addresses: %d\n",list_count(proc->inflight));
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_TEST,data,size);
+    local_collect(tsk);
+    fprintf(tsk->output,"In-flight addresses: %d\n",list_count(tsk->inflight));
 
     for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-      for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext) {
+      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext) {
         globals++;
-        if (glo->addr.pid == proc->pid) {
+        if (glo->addr.pid == tsk->pid) {
           entries++;
         }
         else if ((CELL_REMOTEREF == pntrtype(glo->p)) &&
@@ -793,24 +793,24 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
       }
     }
 
-    fprintf(proc->output,"Globals: %d\n",globals);
-    fprintf(proc->output,"Remote references: %d\n",remoterefs);
-    fprintf(proc->output,"Resolved references: %d\n",resolved);
-    fprintf(proc->output,"Entry items: %d\n",entries);
+    fprintf(tsk->output,"Globals: %d\n",globals);
+    fprintf(tsk->output,"Remote references: %d\n",remoterefs);
+    fprintf(tsk->output,"Resolved references: %d\n",resolved);
+    fprintf(tsk->output,"Entry items: %d\n",entries);
 
-    for (pid = 0; pid < proc->groupsize; pid++) {
-      fprintf(proc->output,"inflight_addrs[%d] = %-6d     unack_msg_acount[%d] = %-6d\n",
-              pid,array_count(proc->inflight_addrs[pid]),
-              pid,array_count(proc->unack_msg_acount[pid]));
+    for (pid = 0; pid < tsk->groupsize; pid++) {
+      fprintf(tsk->output,"inflight_addrs[%d] = %-6d     unack_msg_acount[%d] = %-6d\n",
+              pid,array_count(tsk->inflight_addrs[pid]),
+              pid,array_count(tsk->unack_msg_acount[pid]));
     }
 
-    dump_globals(proc);
+    dump_globals(tsk);
     break;
   }
   case MSG_DUMP_INFO:
-    msg_send(proc,(proc->pid+1)%proc->groupsize,MSG_DUMP_INFO,data,size);
-    dump_info(proc);
-    print_cells(proc);
+    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_DUMP_INFO,data,size);
+    dump_info(tsk);
+    print_cells(tsk);
     break;
   default:
     fatal("unknown message");
@@ -820,9 +820,9 @@ static int handle_message2(process *proc, int from, int tag, char *data, int siz
   return r;
 }
 
-static void handle_message(process *proc, int from, int tag, char *data, int size)
+static void handle_message(task *tsk, int from, int tag, char *data, int size)
 {
-  int r = handle_message2(proc,from,tag,data,size);
+  int r = handle_message2(tsk,from,tag,data,size);
   assert(READER_OK == r);
 }
 
@@ -839,7 +839,7 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
-void execute(process *proc)
+void execute(task *tsk)
 {
   char *msgdata;
   int msgsize;
@@ -849,139 +849,139 @@ void execute(process *proc)
   struct timeval lastfish;
 #endif
 /*   int nextcollect = COLLECT_INTERVAL; */
-/*   int nops = ((bcheader*)proc->bcdata)->nops; */
-/*   int nfunctions = ((bcheader*)proc->bcdata)->nfunctions; */
-/*   int nstrings = ((bcheader*)proc->bcdata)->nstrings; */
-  int evaldoaddr = ((bcheader*)proc->bcdata)->evaldoaddr;
-  const instruction *program_ops = bc_instructions(proc->bcdata);
-  const funinfo *program_finfo = bc_funinfo(proc->bcdata);
+/*   int nops = ((bcheader*)tsk->bcdata)->nops; */
+/*   int nfunctions = ((bcheader*)tsk->bcdata)->nfunctions; */
+/*   int nstrings = ((bcheader*)tsk->bcdata)->nstrings; */
+  int evaldoaddr = ((bcheader*)tsk->bcdata)->evaldoaddr;
+  const instruction *program_ops = bc_instructions(tsk->bcdata);
+  const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
   frame *curf;
   const instruction *instr;
   int mycount = 0;
   static int oldused = 0;
   int ioready = 0;
 
-  proc->newfish = 1;
+  tsk->newfish = 1;
 
   ioreadyptr = &ioready;
-  proc->ioreadyptr = &ioready; /* race condition? */
+  tsk->ioreadyptr = &ioready; /* race condition? */
 
   lastfish.tv_sec = 0;
   lastfish.tv_usec = 0;
 
-  proc->curfptr = &curf;
+  tsk->curfptr = &curf;
 
-  while (!proc->done) {
+  while (!tsk->done) {
 
 #ifdef PARALLELISM
-    if ((NULL == proc->runnable.first) || (0 < proc->paused)) {
+    if ((NULL == tsk->runnable.first) || (0 < tsk->paused)) {
 
-      if (oldused < proc->stats.sparksused) {
+      if (oldused < tsk->stats.sparksused) {
         #ifdef PARALLELISM_DEBUG
-        fprintf(proc->output,"done %d sparks; need some more; outstanding fetches = %d\n",
-               proc->stats.sparksused,proc->stats.fetches);
+        fprintf(tsk->output,"done %d sparks; need some more; outstanding fetches = %d\n",
+               tsk->stats.sparksused,tsk->stats.fetches);
         #endif
-        oldused = proc->stats.sparksused;
+        oldused = tsk->stats.sparksused;
       }
 
-      if (0 == proc->paused) {
+      if (0 == tsk->paused) {
         struct timeval now;
         int diffms;
 
-        if ((NULL == proc->runnable.first) && (NULL != proc->sparked.first)) {
-          run_frame(proc,proc->sparked.first);
+        if ((NULL == tsk->runnable.first) && (NULL != tsk->sparked.first)) {
+          run_frame(tsk,tsk->sparked.first);
           continue;
         }
 
-        if (1 == proc->groupsize)
+        if (1 == tsk->groupsize)
           return;
 
         gettimeofday(&now,NULL);
         diffms = timeval_diffms(lastfish,now);
 
-/*         fprintf(proc->output,"diffms = %d, ratio = %f\n",diffms, */
+/*         fprintf(tsk->output,"diffms = %d, ratio = %f\n",diffms, */
 /*                 ((double)diffms)/((double)FISH_DELAY_MS)); */
 
-        if (proc->newfish || ((double)diffms)/((double)FISH_DELAY_MS) > 0.9) {
+        if (tsk->newfish || ((double)diffms)/((double)FISH_DELAY_MS) > 0.9) {
           #ifdef PARALLELISM_DEBUG
-          fprintf(proc->output,
+          fprintf(tsk->output,
                   "sending FISH; outstanding fetches = %d, sparks = %d, "
                   "sparksused = %d, blocked = %d\n",
-                  proc->stats.fetches,proc->stats.sparks,proc->stats.sparksused,
-                  frameq_count(&proc->blocked));
+                  tsk->stats.fetches,tsk->stats.sparks,tsk->stats.sparksused,
+                  frameq_count(&tsk->blocked));
           #endif
           lastfish = now; /* avoid sending another until after the sleep period */
-          msg_fsend(proc,(proc->pid+1) % (proc->groupsize-1),MSG_FISH,
-                    "iii",proc->pid,10,50);
-          proc->newfish = 0;
+          msg_fsend(tsk,(tsk->pid+1) % (tsk->groupsize-1),MSG_FISH,
+                    "iii",tsk->pid,10,50);
+          tsk->newfish = 0;
         }
 
-        from = msg_recvbt(proc,&tag,&msgdata,&msgsize,FISH_DELAY_MS);
+        from = msg_recvbt(tsk,&tag,&msgdata,&msgsize,FISH_DELAY_MS);
 
         #ifdef PARALLELISM_DEBUG
         /* DEBUG */
         if (0 > from) {
-          fprintf(proc->output,
+          fprintf(tsk->output,
                   "%d: no runnable frames; slept; mycount = %d, sparks = %d, sparksused = %d"
                   ", fetches = %d\n",
-                  proc->pid,mycount,proc->stats.sparks,proc->stats.sparksused,proc->stats.fetches);
+                  tsk->pid,mycount,tsk->stats.sparks,tsk->stats.sparksused,tsk->stats.fetches);
         }
         /* END DEBUG */
         #endif
       }
       else {
-        from = msg_recvb(proc,&tag,&msgdata,&msgsize);
+        from = msg_recvb(tsk,&tag,&msgdata,&msgsize);
         assert(0 <= from);
       }
       if (0 <= from)
-        handle_message(proc,from,tag,msgdata,msgsize);
+        handle_message(tsk,from,tag,msgdata,msgsize);
       continue;
     }
     else if (ioready) {
-      if (0 <= (from = msg_recv(proc,&tag,&msgdata,&msgsize)))
-        handle_message(proc,from,tag,msgdata,msgsize);
+      if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize)))
+        handle_message(tsk,from,tag,msgdata,msgsize);
     }
-    assert(proc->runnable.first);
+    assert(tsk->runnable.first);
 #else
-    if (NULL == proc->runnable.first)
+    if (NULL == tsk->runnable.first)
       return;
 #endif
 
 
-    curf = proc->runnable.first;
+    curf = tsk->runnable.first;
     instr = &program_ops[curf->address];
     mycount++;
 
     #ifdef EXECUTION_TRACE
     if (trace) {
-/*       print_ginstr(proc->output,gp,curf->address,instr); */
-      fprintf(proc->output,"%-6d %s\n",curf->address,opcodes[instr->opcode]);
-/*       print_stack(proc->output,curf->data,instr->expcount,0); */
+/*       print_ginstr(tsk->output,gp,curf->address,instr); */
+      fprintf(tsk->output,"%-6d %s\n",curf->address,opcodes[instr->opcode]);
+/*       print_stack(tsk->output,curf->data,instr->expcount,0); */
     }
     #endif
 
 /*     if (0 == nextcollect--) { */
-    if (proc->stats.nallocs >= COLLECT_THRESHOLD) {
-/*       fprintf(proc->output,"Garbage collecting\n"); */
-      local_collect(proc);
+    if (tsk->stats.nallocs >= COLLECT_THRESHOLD) {
+/*       fprintf(tsk->output,"Garbage collecting\n"); */
+      local_collect(tsk);
 /*       nextcollect = COLLECT_INTERVAL; */
     }
 
     #ifdef PROFILING
-    proc->stats.op_usage[instr->opcode]++;
-    proc->stats.usage[curf->address]++;
+    tsk->stats.op_usage[instr->opcode]++;
+    tsk->stats.usage[curf->address]++;
     #endif
 
     switch (instr->opcode) {
     case OP_BEGIN:
       break;
     case OP_END:
-      done_frame(proc,curf);
+      done_frame(tsk,curf);
       curf->c->type = CELL_NIL;
       curf->c = NULL;
-      frame_dealloc(proc,curf);
-/*       fprintf(proc->output,"END\n"); */
-/*       proc->done = 1; */
+      frame_dealloc(tsk,curf);
+/*       fprintf(tsk->output,"END\n"); */
+/*       tsk->done = 1; */
       continue;
     case OP_GLOBSTART:
       break;
@@ -993,27 +993,27 @@ void execute(process *proc)
 
       if (CELL_FRAME == pntrtype(p)) {
         frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
-        run_frame(proc,newf);
+        run_frame(tsk,newf);
         curf->waitframe = newf;
         list_push(&newf->wq.frames,curf);
-        block_frame(proc,curf);
+        block_frame(tsk,curf);
         continue;
       }
       else if (CELL_REMOTEREF == pntrtype(p)) {
         global *target = (global*)get_pntr(get_pntr(p)->field1);
-        assert(target->addr.pid != proc->pid);
+        assert(target->addr.pid != tsk->pid);
 
         if (!target->fetching && (0 <= target->addr.lid)) {
-          global *refglo = make_global(proc,p);
-          assert(refglo->addr.pid == proc->pid);
-          msg_fsend(proc,target->addr.pid,MSG_FETCH,"aa",target->addr,refglo->addr);
+          global *refglo = make_global(tsk,p);
+          assert(refglo->addr.pid == tsk->pid);
+          msg_fsend(tsk,target->addr.pid,MSG_FETCH,"aa",target->addr,refglo->addr);
 
           #ifdef FETCH_DEBUG
-          fprintf(proc->output,"sent FETCH %d@%d -> %d@%d\n",
+          fprintf(tsk->output,"sent FETCH %d@%d -> %d@%d\n",
                   target->addr.lid,target->addr.pid,refglo->addr.lid,refglo->addr.pid);
           #endif
 
-          proc->stats.fetches++;
+          tsk->stats.fetches++;
           target->fetching = 1;
         }
         else if (!target->fetching) {
@@ -1022,7 +1022,7 @@ void execute(process *proc)
         }
         curf->waitglo = target;
         list_push(&target->wq.frames,curf);
-        block_frame(proc,curf);
+        block_frame(tsk,curf);
         continue;
       }
       else {
@@ -1032,7 +1032,7 @@ void execute(process *proc)
       break;
     }
     case OP_RETURN:
-      frame_return(proc,curf,curf->data[instr->expcount-1]);
+      frame_return(tsk,curf,curf->data[instr->expcount-1]);
       continue;
     case OP_DO: {
       cell *capholder;
@@ -1049,23 +1049,23 @@ void execute(process *proc)
         if (CELL_FRAME == pntrtype(p)) {
           frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
           pntr val;
-          run_frame(proc,newf);
+          run_frame(tsk,newf);
 
           /* Deactivate the current frame */
           transfer_waiters(&curf->wq,&newf->wq);
           make_pntr(val,newf->c);
-          frame_return(proc,curf,val);
+          frame_return(tsk,curf,val);
           continue;
         }
 
         if (CELL_CAP != pntrtype(p)) {
-          frame_return(proc,curf,p);
+          frame_return(tsk,curf,p);
           continue;
         }
       }
 
       if (CELL_CAP != pntrtype(p))
-        constant_app_error(proc,p,instr);
+        constant_app_error(tsk,p,instr);
       capholder = (cell*)get_pntr(p);
 
       cp = (cap*)get_pntr(capholder->field1);
@@ -1094,9 +1094,9 @@ void execute(process *proc)
         curf->c = NULL;
 
         /* return to caller */
-        resume_waiters(proc,&curf->wq,rep);
-        done_frame(proc,curf);
-        frame_dealloc(proc,curf);
+        resume_waiters(tsk,&curf->wq,rep);
+        done_frame(tsk,curf);
+        frame_dealloc(tsk,curf);
         continue;
       }
       else if (s+have == arity) {
@@ -1111,7 +1111,7 @@ void execute(process *proc)
       }
       else { /* s+have > arity */
         int newcount = instr->expcount-1;
-        frame *newf = frame_alloc(proc);
+        frame *newf = frame_alloc(tsk);
         int i;
         int extra = arity-have;
         int nfc = 0;
@@ -1124,7 +1124,7 @@ void execute(process *proc)
         for (i = 0; i < cp->count; i++)
           newf->data[nfc++] = cp->data[i];
 
-        newf->c = alloc_cell(proc);
+        newf->c = alloc_cell(tsk);
         newf->c->type = CELL_FRAME;
         make_pntr(newf->c->field1,newf);
 
@@ -1156,7 +1156,7 @@ void execute(process *proc)
       assert(CELL_FRAME != pntrtype(test));
 
       if (CELL_CAP == pntrtype(test))
-        cap_error(proc,test,instr);
+        cap_error(tsk,test,instr);
 
       if (CELL_NIL == pntrtype(test))
         curf->address += instr->arg0-1;
@@ -1193,7 +1193,7 @@ void execute(process *proc)
     case OP_ALLOC: {
       int i;
       for (i = 0; i < instr->arg0; i++) {
-        cell *hole = alloc_cell(proc);
+        cell *hole = alloc_cell(tsk);
         hole->type = CELL_HOLE;
         make_pntr(curf->data[instr->expcount+i],hole);
       }
@@ -1221,7 +1221,7 @@ void execute(process *proc)
       for (i = instr->expcount-n; i < instr->expcount; i++)
         c->data[c->count++] = curf->data[i];
 
-      capv = alloc_cell(proc);
+      capv = alloc_cell(tsk);
       capv->type = CELL_CAP;
       make_pntr(capv->field1,c);
       make_pntr(curf->data[instr->expcount-n],capv);
@@ -1232,7 +1232,7 @@ void execute(process *proc)
       int n = instr->arg1;
       cell *newfholder;
       int i;
-      frame *newf = frame_alloc(proc);
+      frame *newf = frame_alloc(tsk);
       int nfc = 0;
       newf->alloc = program_finfo[fno].stacksize;
       newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
@@ -1240,7 +1240,7 @@ void execute(process *proc)
       newf->address = program_finfo[fno].address;
       newf->fno = fno;
 
-      newfholder = alloc_cell(proc);
+      newfholder = alloc_cell(tsk);
       newfholder->type = CELL_FRAME;
       make_pntr(newfholder->field1,newf);
       newf->c = newfholder;
@@ -1260,27 +1260,27 @@ void execute(process *proc)
         assert(CELL_FRAME != pntrtype(curf->data[instr->expcount-1-i]));
 
         if (CELL_CAP == pntrtype(curf->data[instr->expcount-1-i]))
-          cap_error(proc,curf->data[instr->expcount-1-i],instr);
+          cap_error(tsk,curf->data[instr->expcount-1-i],instr);
       }
 
       for (i = 0; i < builtin_info[bif].nstrict; i++)
         assert(CELL_IND != pntrtype(curf->data[instr->expcount-1-i]));
       #endif
 
-      builtin_info[bif].f(proc,&curf->data[instr->expcount-nargs]);
+      builtin_info[bif].f(tsk,&curf->data[instr->expcount-nargs]);
 
       assert(!builtin_info[bif].reswhnf ||
              (CELL_IND != pntrtype(curf->data[instr->expcount-nargs])));
       break;
     }
     case OP_PUSHNIL:
-      curf->data[instr->expcount] = proc->globnilpntr;
+      curf->data[instr->expcount] = tsk->globnilpntr;
       break;
     case OP_PUSHNUMBER:
       curf->data[instr->expcount] = *((double*)&instr->arg0);
       break;
     case OP_PUSHSTRING: {
-      curf->data[instr->expcount] = proc->strings[instr->arg0];
+      curf->data[instr->expcount] = tsk->strings[instr->arg0];
       break;
     }
     case OP_RESOLVE:
@@ -1289,7 +1289,7 @@ void execute(process *proc)
       assert(CELL_REMOTEREF != pntrtype(curf->data[instr->arg0]));
       break;
     case OP_ERROR:
-      handle_error(proc);
+      handle_error(tsk);
       break;
     default:
       abort();
@@ -1299,11 +1299,11 @@ void execute(process *proc)
     curf->address++;
   }
 
-  if (1 < proc->groupsize) {
-    fprintf(proc->output,"%d: finished execution, waiting for shutdown\n",proc->pid);
-    while (!proc->done) {
-      if (0 <= (from = msg_recvb(proc,&tag,&msgdata,&msgsize)))
-        handle_message(proc,from,tag,msgdata,msgsize);
+  if (1 < tsk->groupsize) {
+    fprintf(tsk->output,"%d: finished execution, waiting for shutdown\n",tsk->pid);
+    while (!tsk->done) {
+      if (0 <= (from = msg_recvb(tsk,&tag,&msgdata,&msgsize)))
+        handle_message(tsk,from,tag,msgdata,msgsize);
     }
   }
 
@@ -1311,14 +1311,14 @@ void execute(process *proc)
 
 static void *execthread(void *param)
 {
-  process *proc = (process*)param;
+  task *tsk = (task*)param;
 
-  if ((1 < proc->groupsize) && (proc->pid == proc->groupsize-1)) {
-    console(proc);
+  if ((1 < tsk->groupsize) && (tsk->pid == tsk->groupsize-1)) {
+    console(tsk);
   }
   else {
-    execute(proc);
-/*     fprintf(proc->output,"\n"); */
+    execute(tsk);
+/*     fprintf(tsk->output,"\n"); */
   }
   return NULL;
 }
@@ -1331,13 +1331,13 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   frame *initial;
 
   grp.nprocs = 1;
-  grp.procs = (process**)calloc(grp.nprocs,sizeof(process*));
+  grp.procs = (task**)calloc(grp.nprocs,sizeof(task*));
 
-/*   printf("Initializing processes\n"); */
+/*   printf("Initializing tasks\n"); */
   for (i = 0; i < grp.nprocs; i++) {
     char filename[100];
 
-    grp.procs[i] = process_new();
+    grp.procs[i] = task_new();
     grp.procs[i]->pid = i;
     grp.procs[i]->groupsize = grp.nprocs;
     grp.procs[i]->grp = &grp;
@@ -1346,7 +1346,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
     grp.procs[i]->sendf = mem_send;
     grp.procs[i]->recvf = mem_recv2;
 
-    process_init(grp.procs[i]);
+    task_init(grp.procs[i]);
 
     if (1 == grp.nprocs) {
       grp.procs[i]->output = stdout;
@@ -1398,7 +1398,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   for (i = 0; i < grp.nprocs; i++) {
     if (1 < grp.nprocs)
       fclose(grp.procs[i]->output);
-    process_free(grp.procs[i]);
+    task_free(grp.procs[i]);
   }
   free(grp.procs);
 

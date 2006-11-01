@@ -47,7 +47,7 @@ static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
 #define CHECK_ARG(_argno,_type,_bif) {                                  \
     if ((_type) != pntrtype(argstack[(_argno)])) {                      \
-      set_error(proc,"%s: %s argument must be of type %s, but got %s",  \
+      set_error(tsk,"%s: %s argument must be of type %s, but got %s",  \
                 builtin_info[(_bif)].name,                              \
                 numnames[builtin_info[(_bif)].nargs-1-(_argno)],        \
                 cell_types[(_type)],                                    \
@@ -56,12 +56,12 @@ static const char *numnames[4] = {"first", "second", "third", "fourth"};
     }                                                                   \
   }
 
-void arrdebug(process *proc, const char *format, ...)
+void arrdebug(task *tsk, const char *format, ...)
 {
 #ifdef ARRAY_DEBUG
   va_list ap;
   va_start(ap,format);
-  vfprintf(proc->output,format,ap);
+  vfprintf(tsk->output,format,ap);
   va_end(ap);
 #endif
 }
@@ -73,40 +73,40 @@ static void setnumber(pntr *cptr, double val)
   *cptr = val;
 }
 
-static void setbool(process *proc, pntr *cptr, int b)
+static void setbool(task *tsk, pntr *cptr, int b)
 {
-  *cptr = (b ? proc->globtruepntr : proc->globnilpntr);
+  *cptr = (b ? tsk->globtruepntr : tsk->globnilpntr);
 }
 
 #define CHECK_NUMERIC_ARGS(bif)                                         \
   if ((CELL_NUMBER != pntrtype(argstack[1])) || (CELL_NUMBER != pntrtype(argstack[0]))) { \
     int t1 = pntrtype(argstack[1]); \
     int t2 = pntrtype(argstack[0]); \
-    set_error(proc,"%s: incompatible arguments: (%s,%s)", \
+    set_error(tsk,"%s: incompatible arguments: (%s,%s)", \
               builtin_info[bif].name,cell_types[t1],cell_types[t2]); \
-    argstack[0] = proc->globnilpntr; \
+    argstack[0] = tsk->globnilpntr; \
     return; \
   }
 
-static void b_add(process *proc, pntr *argstack)
+static void b_add(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_ADD);
   argstack[0] = argstack[1] + argstack[0];
 }
 
-static void b_subtract(process *proc, pntr *argstack)
+static void b_subtract(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_SUBTRACT);
   argstack[0] = argstack[1] - argstack[0];
 }
 
-static void b_multiply(process *proc, pntr *argstack)
+static void b_multiply(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MULTIPLY);
   argstack[0] = argstack[1] * argstack[0];
 }
 
-static void b_divide(process *proc, pntr *argstack)
+static void b_divide(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_DIVIDE);
   /* FIXME: handle divide by zero -> NaN properly, i.e. without confusing
@@ -114,69 +114,69 @@ static void b_divide(process *proc, pntr *argstack)
   argstack[0] = argstack[1] / argstack[0];
 }
 
-static void b_mod(process *proc, pntr *argstack)
+static void b_mod(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MOD);
   argstack[0] = fmod(argstack[1],argstack[0]);
 }
 
-static void b_eq(process *proc, pntr *argstack)
+static void b_eq(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_EQ);
-  setbool(proc,&argstack[0],argstack[1] == argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] == argstack[0]);
 }
 
-static void b_ne(process *proc, pntr *argstack)
+static void b_ne(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_NE);
-  setbool(proc,&argstack[0],argstack[1] != argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] != argstack[0]);
 }
 
-static void b_lt(process *proc, pntr *argstack)
+static void b_lt(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_LT);
-  setbool(proc,&argstack[0],argstack[1] <  argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] <  argstack[0]);
 }
 
-static void b_le(process *proc, pntr *argstack)
+static void b_le(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_LE);
-  setbool(proc,&argstack[0],argstack[1] <= argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] <= argstack[0]);
 }
 
-static void b_gt(process *proc, pntr *argstack)
+static void b_gt(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_GT);
-  setbool(proc,&argstack[0],argstack[1] >  argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] >  argstack[0]);
 }
 
-static void b_ge(process *proc, pntr *argstack)
+static void b_ge(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_GE);
-  setbool(proc,&argstack[0],argstack[1] >= argstack[0]);
+  setbool(tsk,&argstack[0],argstack[1] >= argstack[0]);
 }
 
-static void b_and(process *proc, pntr *argstack)
+static void b_and(task *tsk, pntr *argstack)
 {
-  setbool(proc,&argstack[0],
+  setbool(tsk,&argstack[0],
           (CELL_NIL != pntrtype(argstack[0])) && (CELL_NIL != pntrtype(argstack[1])));
 }
 
-static void b_or(process *proc, pntr *argstack)
+static void b_or(task *tsk, pntr *argstack)
 {
-  setbool(proc,&argstack[0],
+  setbool(tsk,&argstack[0],
           (CELL_NIL != pntrtype(argstack[0])) || (CELL_NIL != pntrtype(argstack[1])));
 }
 
-static void b_not(process *proc, pntr *argstack)
+static void b_not(task *tsk, pntr *argstack)
 {
   if (CELL_NIL == pntrtype(argstack[0]))
-    argstack[0] = proc->globtruepntr;
+    argstack[0] = tsk->globtruepntr;
   else
-    argstack[0] = proc->globnilpntr;
+    argstack[0] = tsk->globnilpntr;
 }
 
-static void b_bitop(process *proc, pntr *argstack, int bif)
+static void b_bitop(task *tsk, pntr *argstack, int bif)
 {
   pntr val2 = argstack[0];
   pntr val1 = argstack[1];
@@ -201,13 +201,13 @@ static void b_bitop(process *proc, pntr *argstack, int bif)
   }
 }
 
-static void b_bitshl(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHL); }
-static void b_bitshr(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITSHR); }
-static void b_bitand(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITAND); }
-static void b_bitor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITOR); }
-static void b_bitxor(process *proc, pntr *argstack) { b_bitop(proc,argstack,B_BITXOR); }
+static void b_bitshl(task *tsk, pntr *argstack) { b_bitop(tsk,argstack,B_BITSHL); }
+static void b_bitshr(task *tsk, pntr *argstack) { b_bitop(tsk,argstack,B_BITSHR); }
+static void b_bitand(task *tsk, pntr *argstack) { b_bitop(tsk,argstack,B_BITAND); }
+static void b_bitor(task *tsk, pntr *argstack) { b_bitop(tsk,argstack,B_BITOR); }
+static void b_bitxor(task *tsk, pntr *argstack) { b_bitop(tsk,argstack,B_BITXOR); }
 
-static void b_bitnot(process *proc, pntr *argstack)
+static void b_bitnot(task *tsk, pntr *argstack)
 {
   pntr arg = argstack[0];
   int val;
@@ -219,58 +219,58 @@ static void b_bitnot(process *proc, pntr *argstack)
   setnumber(&argstack[0],(double)(~val));
 }
 
-static void b_sqrt(process *proc, pntr *argstack)
+static void b_sqrt(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER,B_SQRT);
   setnumber(&argstack[0],sqrt(argstack[0]));
   /* FIXME: handle NaN result properly (it's not a pointer!) */
 }
 
-static void b_floor(process *proc, pntr *argstack)
+static void b_floor(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER,B_FLOOR);
   setnumber(&argstack[0],floor(argstack[0]));
 }
 
-static void b_ceil(process *proc, pntr *argstack)
+static void b_ceil(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER,B_CEIL);
   setnumber(&argstack[0],ceil(argstack[0]));
 }
 
-static void b_seq(process *proc, pntr *argstack)
+static void b_seq(task *tsk, pntr *argstack)
 {
 }
 
-static void b_par(process *proc, pntr *argstack)
+static void b_par(task *tsk, pntr *argstack)
 {
   pntr p = resolve_pntr(argstack[1]);
   if (CELL_FRAME == pntrtype(p)) {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
-    spark_frame(proc,f);
-/*     fprintf(proc->output,"sparking\n"); */
+    spark_frame(tsk,f);
+/*     fprintf(tsk->output,"sparking\n"); */
   }
   else {
-/*     fprintf(proc->output,"not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
+/*     fprintf(tsk->output,"not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
   }
 }
 
-static void b_head(process *proc, pntr *argstack);
-static void b_parhead(process *proc, pntr *argstack)
+static void b_head(task *tsk, pntr *argstack);
+static void b_parhead(task *tsk, pntr *argstack)
 {
-/*   fprintf(proc->output,"b_parhead: first arg is a %s\n",cell_types[pntrtype(argstack[1])]); */
-  b_head(proc,&argstack[1]);
-  b_par(proc,argstack);
+/*   fprintf(tsk->output,"b_parhead: first arg is a %s\n",cell_types[pntrtype(argstack[1])]); */
+  b_head(tsk,&argstack[1]);
+  b_par(tsk,argstack);
 }
 
-static void b_echo(process *proc, pntr *argstack)
+static void b_echo(task *tsk, pntr *argstack)
 {
   /* FIXME: remove */
 /*   if (CELL_STRING == pntrtype(argstack[0])) */
-/*     fprintf(proc->output,"%s",(char*)get_pntr(get_pntr(argstack[0])->field1)); */
+/*     fprintf(tsk->output,"%s",(char*)get_pntr(get_pntr(argstack[0])->field1)); */
 /*   else */
-/*     print_pntr(proc->output,argstack[0]); */
-  argstack[0] = proc->globnilpntr;
+/*     print_pntr(tsk->output,argstack[0]); */
+  argstack[0] = tsk->globnilpntr;
 }
 
 static void printp(FILE *f, pntr p)
@@ -295,19 +295,19 @@ static void printp(FILE *f, pntr p)
   }
 }
 
-static void b_print(process *proc, pntr *argstack)
+static void b_print(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
 #ifdef PRINT_DEBUG
-  fprintf(proc->output,"p"); /* FIXME: temp */
+  fprintf(tsk->output,"p"); /* FIXME: temp */
 #endif
-  printp(proc->output,p);
-  fflush(proc->output);
+  printp(tsk->output,p);
+  fflush(tsk->output);
 
-  argstack[0] = proc->globnilpntr;
+  argstack[0] = tsk->globnilpntr;
 }
 
-static void b_if(process *proc, pntr *argstack)
+static void b_if(task *tsk, pntr *argstack)
 {
   pntr ifc = argstack[2];
   pntr source;
@@ -320,16 +320,16 @@ static void b_if(process *proc, pntr *argstack)
   argstack[0] = source;
 }
 
-carray *carray_new(process *proc, int dsize, carray *oldarr, cell *usewrapper)
+carray *carray_new(task *tsk, int dsize, carray *oldarr, cell *usewrapper)
 {
   carray *arr = (carray*)calloc(1,sizeof(carray));
   arr->alloc = 8;
   arr->size = 0;
   arr->elemsize = dsize;
   arr->elements = (pntr*)calloc(arr->alloc,arr->elemsize);
-  arr->tail = proc->globnilpntr;
+  arr->tail = tsk->globnilpntr;
 
-  arr->wrapper = usewrapper ? usewrapper : alloc_cell(proc);
+  arr->wrapper = usewrapper ? usewrapper : alloc_cell(tsk);
   arr->wrapper->type = CELL_AREF;
   make_pntr(arr->wrapper->field1,arr);
 
@@ -349,7 +349,7 @@ int pntr_is_char(pntr p)
   return 0;
 }
 
-void convert_to_string(process *proc, carray *arr)
+void convert_to_string(task *tsk, carray *arr)
 {
   unsigned char *newelements;
   int i;
@@ -365,7 +365,7 @@ void convert_to_string(process *proc, carray *arr)
   arr->elemsize = 1;
 }
 
-int check_array_convert(process *proc, carray *arr, const char *from)
+int check_array_convert(task *tsk, carray *arr, const char *from)
 {
   int printed = 0;
   if ((sizeof(pntr) == arr->elemsize) &&
@@ -377,22 +377,22 @@ int check_array_convert(process *proc, carray *arr, const char *from)
       arr->nchars++;
 
     if (arr->nchars != oldchars) {
-      arrdebug(proc,"%s: now arr->nchars = %d, was %d; array size = %d\n",
+      arrdebug(tsk,"%s: now arr->nchars = %d, was %d; array size = %d\n",
                from,arr->nchars,oldchars,arr->size);
       printed = 1;
     }
 
     if (arr->nchars == arr->size) {
-      arrdebug(proc,"%s: converting %d-element array to string\n",from,arr->size);
+      arrdebug(tsk,"%s: converting %d-element array to string\n",from,arr->size);
       printed = 1;
 
-      convert_to_string(proc,arr);
+      convert_to_string(tsk,arr);
     }
   }
   return printed;
 }
 
-void carray_append(process *proc, carray **arr, const void *data, int totalcount, int dsize)
+void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize)
 {
   assert(dsize == (*arr)->elemsize); /* sanity check */
 
@@ -416,13 +416,13 @@ void carray_append(process *proc, carray **arr, const void *data, int totalcount
     if (0 == totalcount)
       break;
 
-    check_array_convert(proc,*arr,"append");
+    check_array_convert(tsk,*arr,"append");
 
-    *arr = carray_new(proc,dsize,*arr,NULL);
+    *arr = carray_new(tsk,dsize,*arr,NULL);
   }
 }
 
-void maybe_expand_array(process *proc, pntr p)
+void maybe_expand_array(task *tsk, pntr p)
 {
   int printed = 0;
   if (CELL_CONS == pntrtype(p)) {
@@ -439,14 +439,14 @@ void maybe_expand_array(process *proc, pntr p)
       pntr secondtail = resolve_pntr(secondcell->field2);
       carray *arr;
 
-      arrdebug(proc,"expand: replacing double cons %s, %s with array (secondtail is %s)\n",
+      arrdebug(tsk,"expand: replacing double cons %s, %s with array (secondtail is %s)\n",
                cell_types[pntrtype(firsthead)],cell_types[pntrtype(secondhead)],
                cell_types[pntrtype(secondtail)]);
       printed = 1;
 
-      arr = carray_new(proc,sizeof(pntr),NULL,firstcell);
-      carray_append(proc,&arr,&firsthead,1,sizeof(pntr));
-      carray_append(proc,&arr,&secondhead,1,sizeof(pntr));
+      arr = carray_new(tsk,sizeof(pntr),NULL,firstcell);
+      carray_append(tsk,&arr,&firsthead,1,sizeof(pntr));
+      carray_append(tsk,&arr,&secondhead,1,sizeof(pntr));
       arr->tail = secondtail;
     }
   }
@@ -461,7 +461,7 @@ void maybe_expand_array(process *proc, pntr p)
       if (CELL_CONS == pntrtype(arr->tail)) {
         cell *tailcell = get_pntr(arr->tail);
         pntr tailhead = resolve_pntr(tailcell->field1);
-        carray_append(proc,&arr,&tailhead,1,sizeof(pntr));
+        carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
         arr->tail = resolve_pntr(tailcell->field2);
 
         count++;
@@ -472,32 +472,32 @@ void maybe_expand_array(process *proc, pntr p)
     }
 
     if (0 < count) {
-      arrdebug(proc,"expand: appended %d new values from conses; nchars = %d, elemsize = %d\n",
+      arrdebug(tsk,"expand: appended %d new values from conses; nchars = %d, elemsize = %d\n",
                count,arr->nchars,arr->elemsize);
       printed = 1;
     }
 
 
-    if (check_array_convert(proc,arr,"expand"))
+    if (check_array_convert(tsk,arr,"expand"))
       printed = 1;
   }
 
 
   if (printed) {
-    arrdebug(proc,"expand: done\n");
+    arrdebug(tsk,"expand: done\n");
   }
 }
 
-pntr string_to_array(process *proc, const char *str)
+pntr string_to_array(task *tsk, const char *str)
 {
   /* FIXME: handle case where strlen(str) > MAX_ARRAY_SIZE */
   if (0 == strlen(str)) {
-    return proc->globnilpntr;
+    return tsk->globnilpntr;
   }
   else {
-    carray *arr = carray_new(proc,1,NULL,NULL);
+    carray *arr = carray_new(tsk,1,NULL,NULL);
     pntr p;
-    carray_append(proc,&arr,str,strlen(str),1);
+    carray_append(tsk,&arr,str,strlen(str),1);
     make_aref_pntr(p,arr->wrapper,0);
     return p;
   }
@@ -531,12 +531,12 @@ char *array_to_string(pntr refpntr)
   return str;
 }
 
-static void b_cons(process *proc, pntr *argstack)
+static void b_cons(task *tsk, pntr *argstack)
 {
   pntr head = argstack[1];
   pntr tail = argstack[0];
 
-  cell *res = alloc_cell(proc);
+  cell *res = alloc_cell(tsk);
   res->type = CELL_CONS;
   res->field1 = head;
   res->field2 = tail;
@@ -544,7 +544,7 @@ static void b_cons(process *proc, pntr *argstack)
   make_pntr(argstack[0],res);
 }
 
-static void b_head(process *proc, pntr *argstack)
+static void b_head(task *tsk, pntr *argstack)
 {
   pntr arg = argstack[0];
 
@@ -561,18 +561,18 @@ static void b_head(process *proc, pntr *argstack)
     else if (1 == arr->elemsize)
       argstack[0] = (double)(((char*)arr->elements)[index]);
     else
-      set_error(proc,"head: invalid array size");
+      set_error(tsk,"head: invalid array size");
   }
   else {
-    set_error(proc,"head: expected aref or cons, got %s",cell_types[pntrtype(arg)]);
+    set_error(tsk,"head: expected aref or cons, got %s",cell_types[pntrtype(arg)]);
   }
 }
 
-static void b_tail(process *proc, pntr *argstack)
+static void b_tail(task *tsk, pntr *argstack)
 {
   pntr arg = argstack[0];
 
-  maybe_expand_array(proc,arg);
+  maybe_expand_array(tsk,arg);
 
   if (CELL_CONS == pntrtype(arg)) {
     cell *conscell = get_pntr(arg);
@@ -591,14 +591,14 @@ static void b_tail(process *proc, pntr *argstack)
     }
   }
   else {
-    set_error(proc,"tail: expected aref or cons, got %s",cell_types[pntrtype(arg)]);
+    set_error(tsk,"tail: expected aref or cons, got %s",cell_types[pntrtype(arg)]);
   }
 }
 
-void b_arraysize(process *proc, pntr *argstack)
+void b_arraysize(task *tsk, pntr *argstack)
 {
   pntr refpntr = argstack[0];
-  maybe_expand_array(proc,refpntr);
+  maybe_expand_array(tsk,refpntr);
   if (CELL_CONS == pntrtype(refpntr)) {
     setnumber(&argstack[0],1);
   }
@@ -609,11 +609,11 @@ void b_arraysize(process *proc, pntr *argstack)
     setnumber(&argstack[0],arr->size-index);
   }
   else {
-    set_error(proc,"arraysize: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
+    set_error(tsk,"arraysize: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
   }
 }
 
-void b_arrayskip(process *proc, pntr *argstack)
+void b_arrayskip(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[1];
   pntr refpntr = argstack[0];
@@ -621,7 +621,7 @@ void b_arrayskip(process *proc, pntr *argstack)
 
   CHECK_ARG(1,CELL_NUMBER,B_ARRAYSIZE);
 
-  maybe_expand_array(proc,refpntr);
+  maybe_expand_array(tsk,refpntr);
 
   n = (int)npntr;
   assert(0 <= n);
@@ -629,7 +629,7 @@ void b_arrayskip(process *proc, pntr *argstack)
 
   if (CELL_CONS == pntrtype(refpntr)) {
     #ifdef ARRAY_DEBUG2
-    fprintf(proc->output,"[as %d,cons]\n",n);
+    fprintf(tsk->output,"[as %d,cons]\n",n);
     #endif
     assert((0 == n) || (1 == n));
 
@@ -644,7 +644,7 @@ void b_arrayskip(process *proc, pntr *argstack)
     assert(index < arr->size);
     assert(index+n <= arr->size);
     #ifdef ARRAY_DEBUG2
-    fprintf(proc->output,"[as %d,%d]\n",n,arr->size);
+    fprintf(tsk->output,"[as %d,%d]\n",n,arr->size);
     #endif
 
     if (index+n == arr->size)
@@ -653,11 +653,11 @@ void b_arrayskip(process *proc, pntr *argstack)
       make_aref_pntr(argstack[0],arr->wrapper,index+n);
   }
   else {
-    set_error(proc,"arrayskip: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
+    set_error(tsk,"arrayskip: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
   }
 }
 
-void b_arrayprefix(process *proc, pntr *argstack)
+void b_arrayprefix(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[2];
   pntr refpntr = argstack[1];
@@ -672,7 +672,7 @@ void b_arrayprefix(process *proc, pntr *argstack)
     cell *newcons;
     assert(1 == n);
 
-    newcons = alloc_cell(proc);
+    newcons = alloc_cell(tsk);
     newcons->type = CELL_CONS;
     newcons->field1 = get_pntr(refpntr)->field1;
     newcons->field2 = restpntr;
@@ -683,39 +683,39 @@ void b_arrayprefix(process *proc, pntr *argstack)
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
 
-    arrdebug(proc,"arrayprefix: index = %d, arr->size = %d, n = %d\n",index,arr->size,n);
+    arrdebug(tsk,"arrayprefix: index = %d, arr->size = %d, n = %d\n",index,arr->size,n);
 
     if (0 >= n) {
-      argstack[0] = proc->globnilpntr;
+      argstack[0] = tsk->globnilpntr;
       return;
     }
 
     if (n > arr->size-index)
       n = arr->size-index;
 
-    prefix = carray_new(proc,arr->elemsize,NULL,NULL);
+    prefix = carray_new(tsk,arr->elemsize,NULL,NULL);
     prefix->tail = restpntr;
     make_aref_pntr(argstack[0],prefix->wrapper,0);
-    carray_append(proc,&prefix,arr->elements+index*arr->elemsize,n,arr->elemsize);
+    carray_append(tsk,&prefix,arr->elements+index*arr->elemsize,n,arr->elemsize);
   }
   else {
-    set_error(proc,"arrayprefix: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
+    set_error(tsk,"arrayprefix: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
   }
 }
 
-void b_isvalarray(process *proc, pntr *argstack)
+void b_isvalarray(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
 
-  maybe_expand_array(proc,p);
+  maybe_expand_array(tsk,p);
 
   if ((CELL_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
-    argstack[0] = proc->globtruepntr;
+    argstack[0] = tsk->globtruepntr;
   else
-    argstack[0] = proc->globnilpntr;
+    argstack[0] = tsk->globnilpntr;
 }
 
-void b_printarray(process *proc, pntr *argstack)
+void b_printarray(task *tsk, pntr *argstack)
 {
   carray *arr;
   int index;
@@ -741,34 +741,34 @@ void b_printarray(process *proc, pntr *argstack)
     char *str = (char*)malloc(n+1);
     memcpy(str,arr->elements+index,n);
     str[n] = '\0';
-    fprintf(proc->output,"%s",str);
+    fprintf(tsk->output,"%s",str);
     free(str);
   }
   else if (sizeof(pntr) == arr->elemsize) {
     for (i = 0; i < n; i++) {
       pntr p = ((pntr*)arr->elements)[index+i];
-      printp(proc->output,p);
+      printp(tsk->output,p);
     }
   }
   else {
     fatal("printarray: invalid array size");
   }
-  fflush(proc->output);
+  fflush(tsk->output);
 
-  argstack[0] = proc->globnilpntr;
+  argstack[0] = tsk->globnilpntr;
 }
 
-void b_numtostring(process *proc, pntr *argstack)
+void b_numtostring(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
   char str[100];
 
   assert(CELL_NUMBER == pntrtype(p));
   format_double(str,100,p);
-  argstack[0] = string_to_array(proc,str);
+  argstack[0] = string_to_array(tsk,str);
 }
 
-void b_openfd(process *proc, pntr *argstack)
+void b_openfd(task *tsk, pntr *argstack)
 {
   pntr filenamepntr = argstack[0];
   char *filename;
@@ -783,15 +783,15 @@ void b_openfd(process *proc, pntr *argstack)
 
   if (0 > (fd = open(filename,O_RDONLY))) {
     fprintf(stderr,"Can't open %s: %s\n",filename,strerror(errno));
-    argstack[0] = proc->globnilpntr;
+    argstack[0] = tsk->globnilpntr;
     return;
   }
 
-/*   fprintf(proc->output,"Opened %s for reading\n",filename); */
+/*   fprintf(tsk->output,"Opened %s for reading\n",filename); */
   argstack[0] = fd;
 }
 
-void b_readchunk(process *proc, pntr *argstack)
+void b_readchunk(task *tsk, pntr *argstack)
 {
   pntr fdpntr = argstack[1];
   pntr nextpntr = argstack[0];
@@ -805,17 +805,17 @@ void b_readchunk(process *proc, pntr *argstack)
 
   r = read(fd,buf,READBUFSIZE);
   if (0 == r) {
-/*     fprintf(proc->output,"End of file\n"); */
+/*     fprintf(tsk->output,"End of file\n"); */
     close(fd);
-    argstack[0] = proc->globnilpntr;
+    argstack[0] = tsk->globnilpntr;
     return;
   }
 
-/*   fprintf(proc->output,"Read %d bytes\n",r); */
-  arr = carray_new(proc,1,NULL,NULL);
+/*   fprintf(tsk->output,"Read %d bytes\n",r); */
+  arr = carray_new(tsk,1,NULL,NULL);
   make_aref_pntr(argstack[0],arr->wrapper,0);
 
-  carray_append(proc,&arr,buf,r,1);
+  carray_append(tsk,&arr,buf,r,1);
   arr->tail = nextpntr;
 }
 

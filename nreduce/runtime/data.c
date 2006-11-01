@@ -107,25 +107,25 @@ int read_gaddr_noack(reader *rd, gaddr *a)
   return READER_OK;
 }
 
-int read_gaddr(reader *rd, process *proc, gaddr *a)
+int read_gaddr(reader *rd, task *tsk, gaddr *a)
 {
-  assert(proc->ackmsg);
+  assert(tsk->ackmsg);
   CHECK_READ(read_gaddr_noack(rd,a));
   if ((-1 != a->pid) || (-1 != a->lid)) {
-    write_gaddr_noack(proc->ackmsg,*a);
-    proc->naddrsread++;
+    write_gaddr_noack(tsk->ackmsg,*a);
+    tsk->naddrsread++;
   }
   return READER_OK;
 }
 
-int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
+int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
 {
   /* TODO: determine if this refers to an object we already have a copy of, and return
      that object instead. (see Trinder96 2.3.2) */
   gaddr addr;
   int type;
   CHECK_READ(read_check_tag(rd,PNTR_TAG));
-  CHECK_READ(read_format(rd,proc,observe,"ai",&addr,&type));
+  CHECK_READ(read_format(rd,tsk,observe,"ai",&addr,&type));
 
   switch (type) {
   case CELL_IND:
@@ -139,9 +139,9 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
     pntr head;
     pntr tail;
 
-    CHECK_READ(read_format(rd,proc,observe,"pp",&head,&tail));
+    CHECK_READ(read_format(rd,tsk,observe,"pp",&head,&tail));
 
-    c = alloc_cell(proc);
+    c = alloc_cell(tsk);
     c->type = CELL_CONS;
     c->field1 = head;
     c->field2 = tail;
@@ -150,30 +150,30 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
   }
   case CELL_REMOTEREF:
     make_pntr(*pout,NULL);
-    *pout = global_lookup(proc,addr,*pout);
+    *pout = global_lookup(tsk,addr,*pout);
     break;
   case CELL_HOLE:
     fatal("shouldn't receive HOLE");
     break;
   case CELL_FRAME: {
-    frame *fr = frame_alloc(proc);
+    frame *fr = frame_alloc(tsk);
     int i;
     int count;
 
-    fr->c = alloc_cell(proc);
+    fr->c = alloc_cell(tsk);
     fr->c->type = CELL_FRAME;
     make_pntr(fr->c->field1,fr);
     make_pntr(*pout,fr->c);
 
-    CHECK_READ(read_format(rd,proc,observe,"iii",&fr->address,&fr->fno,&fr->alloc));
+    CHECK_READ(read_format(rd,tsk,observe,"iii",&fr->address,&fr->fno,&fr->alloc));
 
-    count = bc_instructions(proc->bcdata)[fr->address].expcount;
+    count = bc_instructions(tsk->bcdata)[fr->address].expcount;
     if ((count > fr->alloc) || (MAX_FRAME_SIZE <= fr->alloc))
       return READER_INCORRECT_CONTENTS;
 
     fr->data = (pntr*)calloc(fr->alloc,sizeof(pntr));
     for (i = 0; i < count; i++)
-      CHECK_READ(read_pntr(rd,proc,&fr->data[i],observe));
+      CHECK_READ(read_pntr(rd,tsk,&fr->data[i],observe));
     break;
   }
   case CELL_CAP: {
@@ -181,12 +181,12 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
     cell *capcell;
     int i;
 
-    capcell = alloc_cell(proc);
+    capcell = alloc_cell(tsk);
     capcell->type = CELL_CAP;
     make_pntr(capcell->field1,cp);
     make_pntr(*pout,capcell);
 
-    CHECK_READ(read_format(rd,proc,observe,"iiiiii",&cp->arity,&cp->address,&cp->fno,
+    CHECK_READ(read_format(rd,tsk,observe,"iiiiii",&cp->arity,&cp->address,&cp->fno,
                            &cp->sl.fileno,&cp->sl.lineno,&cp->count));
 
     if (MAX_CAP_SIZE <= cp->count)
@@ -194,11 +194,11 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
 
     cp->data = (pntr*)calloc(cp->count,sizeof(pntr));
     for (i = 0; i < cp->count; i++)
-      CHECK_READ(read_pntr(rd,proc,&cp->data[i],observe));
+      CHECK_READ(read_pntr(rd,tsk,&cp->data[i],observe));
     break;
   }
   case CELL_NIL:
-    *pout = proc->globnilpntr;
+    *pout = tsk->globnilpntr;
     break;
   case CELL_NUMBER:
     CHECK_READ(read_double(rd,pout));
@@ -211,13 +211,13 @@ int read_pntr(reader *rd, process *proc, pntr *pout, int observe)
   return READER_OK;
 }
 
-int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_list ap)
+int read_vformat(reader *rd, task *tsk, int observe, const char *fmt, va_list ap)
 {
   int r = READER_OK;
   void **allocs = (void**)calloc(strlen(fmt),sizeof(void*));
   int done = 0;
 
-  assert(proc->ackmsg);
+  assert(tsk->ackmsg);
 
   for (; *fmt && (READER_OK == r); fmt++) {
     switch (*fmt) {
@@ -238,14 +238,14 @@ int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_lis
       break;
     }
     case 'a':
-      r = read_gaddr(rd,proc,va_arg(ap,gaddr*));
+      r = read_gaddr(rd,tsk,va_arg(ap,gaddr*));
       break;
     case 'p':
-      r = read_pntr(rd,proc,(va_arg(ap,pntr*)),observe);
+      r = read_pntr(rd,tsk,(va_arg(ap,pntr*)),observe);
       break;
     case 'r': {
       pntr *p = (va_arg(ap,pntr*));
-      r = read_pntr(rd,proc,p,observe);
+      r = read_pntr(rd,tsk,p,observe);
       if ((READER_OK == r) && (CELL_REMOTEREF != pntrtype(*p)))
         r = READER_INCORRECT_CONTENTS;
       break;
@@ -269,27 +269,27 @@ int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_lis
   return r;
 }
 
-int read_format(reader *rd, process *proc, int observe, const char *fmt, ...)
+int read_format(reader *rd, task *tsk, int observe, const char *fmt, ...)
 {
   int r;
   va_list ap;
   va_start(ap,fmt);
-  r = read_vformat(rd,proc,observe,fmt,ap);
+  r = read_vformat(rd,tsk,observe,fmt,ap);
   va_end(ap);
   return r;
 }
 
-int print_data(process *proc, const char *data, int size)
+int print_data(task *tsk, const char *data, int size)
 {
-  FILE *f = proc->output;
+  FILE *f = tsk->output;
   reader rd = read_start(data,size);
   int r;
   int count = 0;
 
-  assert(NULL == proc->ackmsg);
-  assert(0 == proc->ackmsgsize);
-  assert(0 == proc->naddrsread);
-  proc->ackmsg = write_start();
+  assert(NULL == tsk->ackmsg);
+  assert(0 == tsk->ackmsgsize);
+  assert(0 == tsk->naddrsread);
+  tsk->ackmsg = write_start();
 
   while (rd.pos < rd.size) {
     int tag;
@@ -326,13 +326,13 @@ int print_data(process *proc, const char *data, int size)
     }
     case GADDR_TAG: {
       gaddr a;
-      CHECK_READ(read_gaddr(&rd,proc,&a));
+      CHECK_READ(read_gaddr(&rd,tsk,&a));
       fprintf(f,"%d@%d",a.lid,a.pid);
       break;
     }
     case PNTR_TAG: {
       pntr p;
-      CHECK_READ(read_format(&rd,proc,1,"p",&p));
+      CHECK_READ(read_format(&rd,tsk,1,"p",&p));
       fprintf(f,"#");
       print_pntr(f,p);
       break;
@@ -343,10 +343,10 @@ int print_data(process *proc, const char *data, int size)
     }
   }
 
-  write_end(proc->ackmsg); /* don't want to send acks in this case */
-  proc->ackmsg = NULL;
-  proc->naddrsread = 0;
-  proc->ackmsgsize = 0;
+  write_end(tsk->ackmsg); /* don't want to send acks in this case */
+  tsk->ackmsg = NULL;
+  tsk->naddrsread = 0;
+  tsk->ackmsgsize = 0;
 
   return READER_OK;
 }
@@ -401,35 +401,35 @@ void write_gaddr_noack(array *wr, gaddr a)
   array_append(wr,&a.lid,sizeof(int));
 }
 
-void write_gaddr(array *wr, process *proc, gaddr a)
+void write_gaddr(array *wr, task *tsk, gaddr a)
 {
-  add_gaddr(&proc->inflight,a);
+  add_gaddr(&tsk->inflight,a);
   write_gaddr_noack(wr,a);
 }
 
-void write_ref(array *arr, process *proc, pntr p)
+void write_ref(array *arr, task *tsk, pntr p)
 {
   write_tag(arr,PNTR_TAG);
   if (is_pntr(p)) {
-    global *glo = make_global(proc,p);
-    write_format(arr,proc,"ai",glo->addr,CELL_REMOTEREF);
+    global *glo = make_global(tsk,p);
+    write_format(arr,tsk,"ai",glo->addr,CELL_REMOTEREF);
   }
   else {
     gaddr addr;
     addr.pid = -1;
     addr.lid = -1;
-    write_format(arr,proc,"aid",addr,CELL_NUMBER,p);
+    write_format(arr,tsk,"aid",addr,CELL_NUMBER,p);
   }
 }
 
-void write_pntr(array *arr, process *proc, pntr p)
+void write_pntr(array *arr, task *tsk, pntr p)
 {
   gaddr addr;
   addr.pid = -1;
   addr.lid = -1;
 
   if (CELL_IND == pntrtype(p)) {
-    write_pntr(arr,proc,get_pntr(p)->field1);
+    write_pntr(arr,tsk,get_pntr(p)->field1);
     return;
   }
 
@@ -437,19 +437,19 @@ void write_pntr(array *arr, process *proc, pntr p)
     global *glo = (global*)get_pntr(get_pntr(p)->field1);
     if (0 <= glo->addr.lid) {
       write_tag(arr,PNTR_TAG);
-      write_format(arr,proc,"ai",glo->addr,CELL_REMOTEREF);
+      write_format(arr,tsk,"ai",glo->addr,CELL_REMOTEREF);
     }
     else {
       /* FIXME: how to deal with this case? */
       /* Want to make another ref which points to this */
       abort();
-      write_ref(arr,proc,p);
+      write_ref(arr,tsk,p);
     }
     return;
   }
 
   if (CELL_NUMBER != pntrtype(p))
-    addr = global_addressof(proc,p);
+    addr = global_addressof(tsk,p);
 
 
   write_tag(arr,PNTR_TAG);
@@ -465,52 +465,52 @@ void write_pntr(array *arr, process *proc, pntr p)
     if (index+1 < carr->size) {
       pntr p;
       make_aref_pntr(p,arrholder,index+1);
-      write_format(arr,proc,"airr",addr,CELL_CONS,
+      write_format(arr,tsk,"airr",addr,CELL_CONS,
                    ((pntr*)carr->elements)[index],p);
     }
     else {
-      write_format(arr,proc,"airr",addr,CELL_CONS,
+      write_format(arr,tsk,"airr",addr,CELL_CONS,
                    ((pntr*)carr->elements)[index],carr->tail);
     }
     return;
   }
 
-  write_format(arr,proc,"ai",addr,pntrtype(p));
+  write_format(arr,tsk,"ai",addr,pntrtype(p));
   switch (pntrtype(p)) {
   case CELL_CONS: {
-    write_ref(arr,proc,get_pntr(p)->field1);
-    write_ref(arr,proc,get_pntr(p)->field2);
+    write_ref(arr,tsk,get_pntr(p)->field1);
+    write_ref(arr,tsk,get_pntr(p)->field2);
     break;
   }
   case CELL_HOLE:
-    write_ref(arr,proc,p);
+    write_ref(arr,tsk,p);
     break;
   case CELL_FRAME: {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     int i;
-    int count = bc_instructions(proc->bcdata)[f->address].expcount;
+    int count = bc_instructions(tsk->bcdata)[f->address].expcount;
 
     /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref */
     assert(STATE_NEW == f->state);
     assert(!f->prev && !f->next);
 
-    write_format(arr,proc,"iii",f->address,f->fno,f->alloc);
+    write_format(arr,tsk,"iii",f->address,f->fno,f->alloc);
     for (i = 0; i < count; i++) {
       pntr arg = resolve_pntr(f->data[i]);
       if ((CELL_NUMBER == pntrtype(arg)) || (CELL_NIL == pntrtype(arg)))
-        write_pntr(arr,proc,f->data[i]);
+        write_pntr(arr,tsk,f->data[i]);
       else
-        write_ref(arr,proc,f->data[i]);
+        write_ref(arr,tsk,f->data[i]);
     }
     break;
   }
   case CELL_CAP: {
     cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
     int i;
-    write_format(arr,proc,"iiiiii",cp->arity,cp->address,cp->fno,
+    write_format(arr,tsk,"iiiiii",cp->arity,cp->address,cp->fno,
                  cp->sl.fileno,cp->sl.lineno,cp->count);
     for (i = 0; i < cp->count; i++)
-      write_ref(arr,proc,cp->data[i]);
+      write_ref(arr,tsk,cp->data[i]);
     break;
   }
   case CELL_NIL:
@@ -524,7 +524,7 @@ void write_pntr(array *arr, process *proc, pntr p)
   }
 }
 
-void write_vformat(array *wr, process *proc, const char *fmt, va_list ap)
+void write_vformat(array *wr, task *tsk, const char *fmt, va_list ap)
 {
   for (; *fmt; fmt++) {
     switch (*fmt) {
@@ -541,13 +541,13 @@ void write_vformat(array *wr, process *proc, const char *fmt, va_list ap)
       write_string(wr,va_arg(ap,char*));
       break;
     case 'a':
-      write_gaddr(wr,proc,va_arg(ap,gaddr));
+      write_gaddr(wr,tsk,va_arg(ap,gaddr));
       break;
     case 'p':
-      write_pntr(wr,proc,va_arg(ap,pntr));
+      write_pntr(wr,tsk,va_arg(ap,pntr));
       break;
     case 'r':
-      write_ref(wr,proc,va_arg(ap,pntr));
+      write_ref(wr,tsk,va_arg(ap,pntr));
       break;
     default:
       fatal("invalid write format character");
@@ -555,11 +555,11 @@ void write_vformat(array *wr, process *proc, const char *fmt, va_list ap)
   }
 }
 
-void write_format(array *wr, process *proc, const char *fmt, ...)
+void write_format(array *wr, task *tsk, const char *fmt, ...)
 {
   va_list ap;
   va_start(ap,fmt);
-  write_vformat(wr,proc,fmt,ap);
+  write_vformat(wr,tsk,fmt,ap);
   va_end(ap);
 }
 
@@ -568,103 +568,103 @@ void write_end(array *wr)
   array_free(wr);
 }
 
-void msg_print(process *proc, int dest, int tag, const char *data, int size)
+void msg_print(task *tsk, int dest, int tag, const char *data, int size)
 {
   reader rd = read_start(data,size);
   int r;
 
-  fprintf(proc->output,"%d <= %s ",dest,msg_names[tag]);
-  r = print_data(proc,data+rd.pos,size-rd.pos);
+  fprintf(tsk->output,"%d <= %s ",dest,msg_names[tag]);
+  r = print_data(tsk,data+rd.pos,size-rd.pos);
   assert(READER_OK == r);
-  fprintf(proc->output,"\n");
+  fprintf(tsk->output,"\n");
 }
 
-static void msg_send_addcount(process *proc, int tag, const char *data, int size)
+static void msg_send_addcount(task *tsk, int tag, const char *data, int size)
 {
   assert(0 <= tag);
   assert(MSG_COUNT > tag);
-  proc->stats.sendcount[tag]++;
-  proc->stats.sendbytes[tag] += size;
+  tsk->stats.sendcount[tag]++;
+  tsk->stats.sendbytes[tag] += size;
 }
 
-void msg_send(process *proc, int dest, int tag, char *data, int size)
+void msg_send(task *tsk, int dest, int tag, char *data, int size)
 {
-  if (NULL != proc->inflight) {
+  if (NULL != tsk->inflight) {
     int count = 0;
     list *l;
-    for (l = proc->inflight; l; l = l->next) {
+    for (l = tsk->inflight; l; l = l->next) {
       gaddr *addr = (gaddr*)l->data;
-      array_append(proc->inflight_addrs[dest],addr,sizeof(gaddr));
+      array_append(tsk->inflight_addrs[dest],addr,sizeof(gaddr));
       count++;
     }
-    array_append(proc->unack_msg_acount[dest],&count,sizeof(int));
-    list_free(proc->inflight,free);
-    proc->inflight = NULL;
+    array_append(tsk->unack_msg_acount[dest],&count,sizeof(int));
+    list_free(tsk->inflight,free);
+    tsk->inflight = NULL;
   }
 
-  proc->sendf(proc,dest,tag,data,size);
+  tsk->sendf(tsk,dest,tag,data,size);
 }
 
-void mem_send(process *proc, int dest, int tag, char *data, int size)
+void mem_send(task *tsk, int dest, int tag, char *data, int size)
 {
   #ifdef MSG_DEBUG
-  msg_print(proc,dest,tag,data,size);
+  msg_print(tsk,dest,tag,data,size);
   #endif
 
   message *msg = (message*)calloc(1,sizeof(message));
-  process *destproc;
-  msg->from = proc->pid;
+  task *desttsk;
+  msg->from = tsk->pid;
   msg->to = dest;
   msg->tag = tag;
   msg->size = size;
   msg->data = (char*)malloc(size);
   memcpy(msg->data,data,size);
 
-  msg_send_addcount(proc,tag,data,size);
+  msg_send_addcount(tsk,tag,data,size);
 
   assert(0 <= dest);
-  assert(dest < proc->grp->nprocs);
-  destproc = proc->grp->procs[dest];
+  assert(dest < tsk->grp->nprocs);
+  desttsk = tsk->grp->procs[dest];
 
-/*   fprintf(proc->output,"msg_send %d -> %d : data %p, size %d\n", */
-/*           proc->pid,dest,msg->data,msg->size); */
+/*   fprintf(tsk->output,"msg_send %d -> %d : data %p, size %d\n", */
+/*           tsk->pid,dest,msg->data,msg->size); */
 
-  pthread_mutex_lock(&destproc->msglock);
-  list_append(&destproc->msgqueue,msg);
-  pthread_cond_signal(&destproc->msgcond);
-  pthread_mutex_unlock(&destproc->msglock);
+  pthread_mutex_lock(&desttsk->msglock);
+  list_append(&desttsk->msgqueue,msg);
+  pthread_cond_signal(&desttsk->msgcond);
+  pthread_mutex_unlock(&desttsk->msglock);
 
-  if (destproc->ioreadyptr)
-    *destproc->ioreadyptr = 1;
+  if (desttsk->ioreadyptr)
+    *desttsk->ioreadyptr = 1;
 }
 
-void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...)
+void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
 {
   va_list ap;
   array *wr;
 
   wr = write_start();
   va_start(ap,fmt);
-  write_vformat(wr,proc,fmt,ap);
+  write_vformat(wr,tsk,fmt,ap);
   va_end(ap);
 
-  msg_send(proc,dest,tag,wr->data,wr->nbytes);
+  msg_send(tsk,dest,tag,wr->data,wr->nbytes);
   write_end(wr);
 }
 
-int msg_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms)
+int msg_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
-  return proc->recvf(proc,tag,data,size,block,delayms);
+  return tsk->recvf(tsk,tag,data,size,block,delayms);
 }
 
-int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms)
+int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
   list *l = NULL;
   message *msg;
   int from;
 
-  pthread_mutex_lock(&proc->msglock);
-  if (NULL == proc->msgqueue) {
+  pthread_mutex_lock(&tsk->msglock);
+  if (NULL == tsk->msgqueue) {
     if (0 < delayms) {
       struct timeval now;
       struct timespec abstime;
@@ -679,26 +679,26 @@ int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int de
       }
       abstime.tv_sec = now.tv_sec;
       abstime.tv_nsec = now.tv_usec * 1000;
-/*       fprintf(proc->output,"timedwait %d...",delayms); */
+/*       fprintf(tsk->output,"timedwait %d...",delayms); */
 /*       errno = 0; */
-      r = pthread_cond_timedwait(&proc->msgcond,&proc->msglock,&abstime);
-/*       fprintf(proc->output,"%s\n",strerror(r)); */
+      r = pthread_cond_timedwait(&tsk->msgcond,&tsk->msglock,&abstime);
+/*       fprintf(tsk->output,"%s\n",strerror(r)); */
     }
     else if (block) {
-      pthread_cond_wait(&proc->msgcond,&proc->msglock);
-      assert(proc->msgqueue);
+      pthread_cond_wait(&tsk->msgcond,&tsk->msglock);
+      assert(tsk->msgqueue);
     }
   }
-  if (NULL != (l = proc->msgqueue))
-    proc->msgqueue = l->next;
-  pthread_mutex_unlock(&proc->msglock);
+  if (NULL != (l = tsk->msgqueue))
+    tsk->msgqueue = l->next;
+  pthread_mutex_unlock(&tsk->msglock);
 
   if (NULL == l)
     return -1;
 
   msg = (message*)l->data;
-/*   fprintf(proc->output,"msg_recv %d -> %d : data %p, size %d\n", */
-/*           msg->from,proc->pid,msg->data,msg->size); */
+/*   fprintf(tsk->output,"msg_recv %d -> %d : data %p, size %d\n", */
+/*           msg->from,tsk->pid,msg->data,msg->size); */
 
   *tag = msg->tag;
   *data = msg->data;
@@ -710,17 +710,17 @@ int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int de
   return from;
 }
 
-int msg_recv(process *proc, int *tag, char **data, int *size)
+int msg_recv(task *tsk, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,tag,data,size,0,0);
+  return msg_recv2(tsk,tag,data,size,0,0);
 }
 
-int msg_recvb(process *proc, int *tag, char **data, int *size)
+int msg_recvb(task *tsk, int *tag, char **data, int *size)
 {
-  return msg_recv2(proc,tag,data,size,1,0);
+  return msg_recv2(tsk,tag,data,size,1,0);
 }
 
-int msg_recvbt(process *proc, int *tag, char **data, int *size, int delayms)
+int msg_recvbt(task *tsk, int *tag, char **data, int *size, int delayms)
 {
-  return msg_recv2(proc,tag,data,size,0,delayms);
+  return msg_recv2(tsk,tag,data,size,0,delayms);
 }

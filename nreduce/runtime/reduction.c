@@ -35,16 +35,16 @@
 #include <stdarg.h>
 #include <math.h>
 
-static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntrstack *values)
+static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstack *values)
 {
   cell *dest;
   pntr p;
   switch (source->type) {
   case SNODE_APPLICATION: {
-    dest = alloc_cell(proc);
+    dest = alloc_cell(tsk);
     dest->type = CELL_APPLICATION;
-    dest->field1 = instantiate_scomb_r(proc,source->left,names,values);
-    dest->field2 = instantiate_scomb_r(proc,source->right,names,values);
+    dest->field1 = instantiate_scomb_r(tsk,source->left,names,values);
+    dest->field2 = instantiate_scomb_r(tsk,source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
@@ -52,7 +52,7 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     int pos;
     for (pos = names->count-1; 0 <= pos; pos--) {
       if (!strcmp((char*)names->data[pos],source->name)) {
-        dest = alloc_cell(proc);
+        dest = alloc_cell(tsk);
         dest->type = CELL_IND;
         dest->field1 = values->data[pos];
         make_pntr(p,dest);
@@ -70,7 +70,7 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     int i;
     pntr res;
     for (rec = source->bindings; rec; rec = rec->next) {
-      cell *hole = alloc_cell(proc);
+      cell *hole = alloc_cell(tsk);
       hole->type = CELL_HOLE;
       stack_push(names,(char*)rec->name);
       make_pntr(p,hole);
@@ -78,36 +78,36 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
     }
     i = 0;
     for (rec = source->bindings; rec; rec = rec->next) {
-      res = instantiate_scomb_r(proc,rec->value,names,values);
+      res = instantiate_scomb_r(tsk,rec->value,names,values);
       assert(CELL_HOLE == get_pntr(values->data[oldcount+i])->type);
       get_pntr(values->data[oldcount+i])->type = CELL_IND;
       get_pntr(values->data[oldcount+i])->field1 = res;
       i++;
     }
-    res = instantiate_scomb_r(proc,source->body,names,values);
+    res = instantiate_scomb_r(tsk,source->body,names,values);
     names->count = oldcount;
     values->count = oldcount;
     return res;
   }
   case SNODE_BUILTIN:
-    dest = alloc_cell(proc);
+    dest = alloc_cell(tsk);
     dest->type = CELL_BUILTIN;
     make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
   case SNODE_SCREF:
-    dest = alloc_cell(proc);
+    dest = alloc_cell(tsk);
     dest->type = CELL_SCREF;
     make_pntr(dest->field1,source->sc);
     make_pntr(p,dest);
     return p;
   case SNODE_NIL:
-    return proc->globnilpntr;
+    return tsk->globnilpntr;
   case SNODE_NUMBER:
     return source->num;
   case SNODE_STRING:
     /* FIXME: this needs to be an array reference */
-/*     dest = alloc_cell(proc); */
+/*     dest = alloc_cell(tsk); */
 /*     dest->type = CELL_STRING; */
 /*     make_pntr(dest->field1,strdup(source->value)); */
 /*     make_pntr(p,dest); */
@@ -118,7 +118,7 @@ static pntr instantiate_scomb_r(process *proc, snode *source, stack *names, pntr
   }
 }
 
-static pntr instantiate_scomb(process *proc, pntrstack *s, snode *source, scomb *sc)
+static pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc)
 {
   stack *names = stack_new();
   pntrstack *values = pntrstack_new();
@@ -132,18 +132,18 @@ static pntr instantiate_scomb(process *proc, pntrstack *s, snode *source, scomb 
     pntrstack_push(values,pntrstack_at(s,pos));
   }
 
-  res = instantiate_scomb_r(proc,source,names,values);
+  res = instantiate_scomb_r(tsk,source,names,values);
 
   stack_free(names);
   pntrstack_free(values);
   return res;
 }
 
-void reduce(process *proc, pntrstack *s)
+void reduce(task *tsk, pntrstack *s)
 {
   int reductions = 0;
 
-  assert(proc);
+  assert(tsk);
 
   /* REPEAT */
   while (1) {
@@ -151,12 +151,12 @@ void reduce(process *proc, pntrstack *s)
     pntr target;
     pntr redex;
 
-    proc->stats.nreductions++;
+    tsk->stats.nreductions++;
 
 
     /* FIXME: if we call collect() here then sometimes the redex gets collected */
-    if (proc->stats.nallocs > COLLECT_THRESHOLD)
-      local_collect(proc);
+    if (tsk->stats.nallocs > COLLECT_THRESHOLD)
+      local_collect(tsk);
 
     redex = s->data[s->count-1];
     reductions++;
@@ -185,7 +185,7 @@ void reduce(process *proc, pntrstack *s)
       destno = s->count-1-sc->nargs;
       dest = pntrstack_at(s,destno);
 
-      proc->stats.nscombappls++;
+      tsk->stats.nscombappls++;
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
@@ -205,7 +205,7 @@ void reduce(process *proc, pntrstack *s)
 
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
-      res = instantiate_scomb(proc,s,sc->body,sc);
+      res = instantiate_scomb(tsk,s,sc->body,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
 
@@ -260,7 +260,7 @@ void reduce(process *proc, pntrstack *s)
       for (i = 0; i < strictargs; i++) {
         pntr val;
         pntrstack_push(s,s->data[s->count-1-i]);
-        reduce(proc,s);
+        reduce(tsk,s);
         val = pntrstack_pop(s);
         s->data[s->count-1-i] = val;
       }
@@ -268,8 +268,8 @@ void reduce(process *proc, pntrstack *s)
       for (i = 0; i < strictargs; i++)
         assert(CELL_IND != pntrtype(s->data[s->count-1-i]));
 
-      builtin_info[bif].f(proc,&s->data[s->count-reqargs]);
-      if (proc->error) {
+      builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
+      if (tsk->error) {
         abort();
       }
       s->count -= (reqargs-1);
@@ -278,7 +278,7 @@ void reduce(process *proc, pntrstack *s)
 
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_cell_fields(proc,get_pntr(s->data[s->count-2]));
+      free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
       get_pntr(s->data[s->count-2])->type = CELL_IND;
       get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 
@@ -296,15 +296,15 @@ void reduce(process *proc, pntrstack *s)
   /* END */
 }
 
-static void stream(process *proc, pntr lst)
+static void stream(task *tsk, pntr lst)
 {
-  proc->streamstack = pntrstack_new();
-  pntrstack_push(proc->streamstack,lst);
-  while (0 < proc->streamstack->count) {
+  tsk->streamstack = pntrstack_new();
+  pntrstack_push(tsk->streamstack,lst);
+  while (0 < tsk->streamstack->count) {
     pntr p;
-    reduce(proc,proc->streamstack);
+    reduce(tsk,tsk->streamstack);
 
-    p = pntrstack_pop(proc->streamstack);
+    p = pntrstack_pop(tsk->streamstack);
     p = resolve_pntr(p);
     if (CELL_NIL == pntrtype(p)) {
       /* nothing */
@@ -313,8 +313,8 @@ static void stream(process *proc, pntr lst)
       printf("%f",p);
     }
     else if (CELL_CONS == pntrtype(p)) {
-      pntrstack_push(proc->streamstack,get_pntr(p)->field2);
-      pntrstack_push(proc->streamstack,get_pntr(p)->field1);
+      pntrstack_push(tsk->streamstack,get_pntr(p)->field2);
+      pntrstack_push(tsk->streamstack,get_pntr(p)->field1);
     }
     else if (CELL_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
@@ -325,8 +325,8 @@ static void stream(process *proc, pntr lst)
       exit(1);
     }
   }
-  pntrstack_free(proc->streamstack);
-  proc->streamstack = NULL;
+  pntrstack_free(tsk->streamstack);
+  tsk->streamstack = NULL;
 }
 
 void run_reduction(source *src, FILE *stats)
@@ -334,7 +334,7 @@ void run_reduction(source *src, FILE *stats)
   scomb *mainsc;
   cell *root;
   pntr rootp;
-  process *proc = process_new();
+  task *tsk = task_new();
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
@@ -344,7 +344,7 @@ void run_reduction(source *src, FILE *stats)
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
 
-  root = alloc_cell(proc);
+  root = alloc_cell(tsk);
   root->type = CELL_SCREF;
   make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
@@ -352,7 +352,7 @@ void run_reduction(source *src, FILE *stats)
 #ifdef TIMING
   gettimeofday(&start,NULL);
 #endif
-  stream(proc,rootp);
+  stream(tsk,rootp);
 #ifdef TIMING
   gettimeofday(&end,NULL);
   ms = (end.tv_sec - start.tv_sec)*1000 +
@@ -364,7 +364,7 @@ void run_reduction(source *src, FILE *stats)
   printf("\n");
 
   if (stats)
-    statistics(proc,stats);
+    statistics(tsk,stats);
 
-  process_free(proc);
+  task_free(tsk);
 }

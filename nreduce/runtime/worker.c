@@ -139,22 +139,22 @@ static int send_outstanding(socketcomm *sc, int dest)
   abort(); /* should never get here */
 }
 
-static void socket_send(process *proc, int dest, int tag, char *data, int size)
+static void socket_send(task *tsk, int dest, int tag, char *data, int size)
 {
   socketcomm *sc;
   socketmsg *newmsg;
-  sc = (socketcomm*)proc->commdata;
+  sc = (socketcomm*)tsk->commdata;
 
   #ifdef MSG_DEBUG
-  msg_print(proc,dest,tag,data,size);
+  msg_print(tsk,dest,tag,data,size);
   #endif
 
   #ifdef SOCKET_DEBUG
   printf("socket_send: tag = %s, dest = %d, size = %d, my pid = %d\n",
-         msg_names[tag],dest,size,proc->pid);
+         msg_names[tag],dest,size,tsk->pid);
   #endif
 
-  if (dest == proc->pid) {
+  if (dest == tsk->pid) {
     printf("%s sending to %s (that's me!): FIXME: support this case\n",
            sc->ni->workers[dest].hostname,sc->ni->workers[dest].hostname);
     abort();
@@ -176,9 +176,9 @@ static void socket_send(process *proc, int dest, int tag, char *data, int size)
     abort();
 }
 
-static void process_received(process *proc, int worker)
+static void task_received(task *tsk, int worker)
 {
-  socketcomm *sc = (socketcomm*)proc->commdata;
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   int start = 0;
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -211,9 +211,9 @@ static void process_received(process *proc, int worker)
   array_remove_data(sc->recvbuf[worker],start);
 }
 
-static int receive_incoming(process *proc, int i, int *tag, char **data, int *size)
+static int receive_incoming(task *tsk, int i, int *tag, char **data, int *size)
 {
-  socketcomm *sc = (socketcomm*)proc->commdata;
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   socketmsg *msg = sc->incoming[i].first;
   if ((NULL != msg) && (msg->rsize == msg->rawsize)) {
     #ifdef SOCKET_DEBUG
@@ -245,9 +245,9 @@ int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds,  struc
   }
 }
 
-static int wait_for_data(process *proc, int block, int delayms, fd_set *rfds)
+static int wait_for_data(task *tsk, int block, int delayms, fd_set *rfds)
 {
-  socketcomm *sc = (socketcomm*)proc->commdata;
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   int i;
   int highest = -1;
   int s;
@@ -277,9 +277,9 @@ static int wait_for_data(process *proc, int block, int delayms, fd_set *rfds)
   return s;
 }
 
-static int receive_data(process *proc, fd_set *rfds, int *tag, char **data, int *size)
+static int receive_data(task *tsk, fd_set *rfds, int *tag, char **data, int *size)
 {
-  socketcomm *sc = (socketcomm*)proc->commdata;
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   int i;
   for (i = 0; i < sc->ni->nworkers; i++) {
     char *hostname = sc->ni->workers[i].hostname;
@@ -310,18 +310,18 @@ static int receive_data(process *proc, fd_set *rfds, int *tag, char **data, int 
       #endif
 
       sc->recvbuf[i]->nbytes += r;
-      process_received(proc,i);
+      task_received(tsk,i);
 
-      if (0 <= (from = receive_incoming(proc,i,tag,data,size)))
+      if (0 <= (from = receive_incoming(tsk,i,tag,data,size)))
         return from;
     }
   }
   return -1;
 }
 
-static int socket_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms)
+static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
-  socketcomm *sc = (socketcomm*)proc->commdata;
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   int i;
   fd_set rfds;
   int nready;
@@ -333,17 +333,17 @@ static int socket_recv2(process *proc, int *tag, char **data, int *size, int blo
   /* first see if there's any complete messages in the queue */
   for (i = 0; i < sc->ni->nworkers; i++) {
     int from;
-    if (0 <= (from = receive_incoming(proc,i,tag,data,size)))
+    if (0 <= (from = receive_incoming(tsk,i,tag,data,size)))
       return from;
   }
 
   /* Clear the I/O ready flag. If we got a SIGIO flag just before this it doesn't matter,
      because we're about to do a select() anyway. If a SIGIO comes in after we've cleared
      the flag it will just be set again. */
-  *proc->ioreadyptr = 0;
+  *tsk->ioreadyptr = 0;
 
   /* now try to read some more messages from the network */
-  nready = wait_for_data(proc,block,delayms,&rfds);
+  nready = wait_for_data(tsk,block,delayms,&rfds);
 
   if (0 > nready) {
     perror("select");
@@ -359,14 +359,14 @@ static int socket_recv2(process *proc, int *tag, char **data, int *size, int blo
 
   /* Set the I/O ready flag again, because receive_data() may not consume all of the data that is
      available to be read - it only reads the minimum necessary to get the next message */
-  *proc->ioreadyptr = 1;
+  *tsk->ioreadyptr = 1;
 
-  return receive_data(proc,&rfds,tag,data,size);
+  return receive_data(tsk,&rfds,tag,data,size);
 }
 
-static int socket_recv(process *proc, int *tag, char **data, int *size, int block, int delayms)
+static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
-  return socket_recv2(proc,tag,data,size,block,delayms);
+  return socket_recv2(tsk,tag,data,size,block,delayms);
 }
 
 void sigabrt(int sig)
@@ -615,7 +615,7 @@ int worker(const char *hostsfile, const char *masteraddr)
   nodeinfo *ni;
   int i;
   int myindex;
-  process *proc;
+  task *tsk;
   array *bcarr = NULL;
   socketcomm *sc;
   int logfd;
@@ -679,36 +679,36 @@ int worker(const char *hostsfile, const char *masteraddr)
 
   sc = socketcomm_new(ni);
 
-  proc = process_new();
-  proc->pid = myindex;
-  proc->groupsize = ni->nworkers;
-  proc->bcdata = bcarr->data;
-  proc->bcsize = bcarr->nbytes;
-  proc->commdata = sc;
-  proc->sendf = socket_send;
-  proc->recvf = socket_recv;
-  process_init(proc);
-  proc->output = stdout;
+  tsk = task_new();
+  tsk->pid = myindex;
+  tsk->groupsize = ni->nworkers;
+  tsk->bcdata = bcarr->data;
+  tsk->bcsize = bcarr->nbytes;
+  tsk->commdata = sc;
+  tsk->sendf = socket_send;
+  tsk->recvf = socket_recv;
+  task_init(tsk);
+  tsk->output = stdout;
 
   if (0 == myindex) {
-    frame *initial = frame_alloc(proc);
+    frame *initial = frame_alloc(tsk);
     initial->address = 0;
     initial->fno = -1;
     initial->data = (pntr*)malloc(sizeof(pntr));
     initial->alloc = 1;
-    initial->c = alloc_cell(proc);
+    initial->c = alloc_cell(tsk);
     initial->c->type = CELL_FRAME;
     make_pntr(initial->c->field1,initial);
-    run_frame(proc,initial);
+    run_frame(tsk,initial);
   }
 
   printf("before execute()\n");
-  execute(proc);
+  execute(tsk);
 
   printf("execute() returned; sleeping for 60 seconds\n");
   sleep(60);
 
-  process_free(proc);
+  task_free(tsk);
   socketcomm_free(sc);
 
   if (bcarr)

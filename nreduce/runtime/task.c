@@ -37,44 +37,44 @@
 #include <math.h>
 #include <errno.h>
 
-global *pntrhash_lookup(process *proc, pntr p)
+global *pntrhash_lookup(task *tsk, pntr p)
 {
   int h = hash(&p,sizeof(pntr));
-  global *g = proc->pntrhash[h];
+  global *g = tsk->pntrhash[h];
   while (g && !pntrequal(g->p,p))
     g = g->pntrnext;
   return g;
 }
 
-global *addrhash_lookup(process *proc, gaddr addr)
+global *addrhash_lookup(task *tsk, gaddr addr)
 {
   int h = hash(&addr,sizeof(gaddr));
-  global *g = proc->addrhash[h];
+  global *g = tsk->addrhash[h];
   while (g && ((g->addr.pid != addr.pid) || (g->addr.lid != addr.lid)))
     g = g->addrnext;
   return g;
 }
 
-void pntrhash_add(process *proc, global *glo)
+void pntrhash_add(task *tsk, global *glo)
 {
   int h = hash(&glo->p,sizeof(pntr));
   assert(NULL == glo->pntrnext);
-  glo->pntrnext = proc->pntrhash[h];
-  proc->pntrhash[h] = glo;
+  glo->pntrnext = tsk->pntrhash[h];
+  tsk->pntrhash[h] = glo;
 }
 
-void addrhash_add(process *proc, global *glo)
+void addrhash_add(task *tsk, global *glo)
 {
   int h = hash(&glo->addr,sizeof(gaddr));
   assert(NULL == glo->addrnext);
-  glo->addrnext = proc->addrhash[h];
-  proc->addrhash[h] = glo;
+  glo->addrnext = tsk->addrhash[h];
+  tsk->addrhash[h] = glo;
 }
 
-void pntrhash_remove(process *proc, global *glo)
+void pntrhash_remove(task *tsk, global *glo)
 {
   int h = hash(&glo->p,sizeof(pntr));
-  global **ptr = &proc->pntrhash[h];
+  global **ptr = &tsk->pntrhash[h];
 
   assert(glo);
   while (*ptr != glo) {
@@ -87,10 +87,10 @@ void pntrhash_remove(process *proc, global *glo)
   glo->pntrnext = NULL;
 }
 
-void addrhash_remove(process *proc, global *glo)
+void addrhash_remove(task *tsk, global *glo)
 {
   int h = hash(&glo->addr,sizeof(gaddr));
-  global **ptr = &proc->addrhash[h];
+  global **ptr = &tsk->addrhash[h];
 
   assert(glo);
   while (*ptr != glo) {
@@ -103,44 +103,44 @@ void addrhash_remove(process *proc, global *glo)
   glo->addrnext = NULL;
 }
 
-global *add_global(process *proc, gaddr addr, pntr p)
+global *add_global(task *tsk, gaddr addr, pntr p)
 {
   global *glo = (global*)calloc(1,sizeof(global));
   glo->addr = addr;
   glo->p = p;
-  glo->flags = proc->indistgc ? FLAG_NEW : 0;
+  glo->flags = tsk->indistgc ? FLAG_NEW : 0;
 
-  pntrhash_add(proc,glo);
-  addrhash_add(proc,glo);
+  pntrhash_add(tsk,glo);
+  addrhash_add(tsk,glo);
   return glo;
 }
 
-pntr global_lookup_existing(process *proc, gaddr addr)
+pntr global_lookup_existing(task *tsk, gaddr addr)
 {
   global *glo;
   pntr p;
-  if (NULL != (glo = addrhash_lookup(proc,addr)))
+  if (NULL != (glo = addrhash_lookup(tsk,addr)))
     return glo->p;
   make_pntr(p,NULL);
   return p;
 }
 
-pntr global_lookup(process *proc, gaddr addr, pntr val)
+pntr global_lookup(task *tsk, gaddr addr, pntr val)
 {
   cell *c;
   global *glo;
 
-  if (NULL != (glo = addrhash_lookup(proc,addr)))
+  if (NULL != (glo = addrhash_lookup(tsk,addr)))
     return glo->p;
 
   if (!is_nullpntr(val)) {
-    glo = add_global(proc,addr,val);
+    glo = add_global(tsk,addr,val);
   }
   else {
     pntr p;
-    c = alloc_cell(proc);
+    c = alloc_cell(tsk);
     make_pntr(p,c);
-    glo = add_global(proc,addr,p);
+    glo = add_global(tsk,addr,p);
 
     c->type = CELL_REMOTEREF;
     make_pntr(c->field1,glo);
@@ -148,39 +148,39 @@ pntr global_lookup(process *proc, gaddr addr, pntr val)
   return glo->p;
 }
 
-gaddr global_addressof(process *proc, pntr p)
+gaddr global_addressof(task *tsk, pntr p)
 {
   global *glo;
   gaddr addr;
 
   /* If this object is registered in the global address map, return the address
      that it corresponds to */
-  glo = pntrhash_lookup(proc,p);
+  glo = pntrhash_lookup(tsk,p);
   if (glo && (0 <= glo->addr.lid))
     return glo->addr;
 
   /* It's a local object; give it a global address */
-  addr.pid = proc->pid;
-  addr.lid = proc->nextlid++;
-  glo = add_global(proc,addr,p);
+  addr.pid = tsk->pid;
+  addr.lid = tsk->nextlid++;
+  glo = add_global(tsk,addr,p);
   return glo->addr;
 }
 
 /* Obtain a global address for the specified local object. Differs from global_addressof()
    in that if p is a remoteref, then make_global() will return the address of the *actual
    reference*, not the thing that it points to */
-global *make_global(process *proc, pntr p)
+global *make_global(task *tsk, pntr p)
 {
   global *glo;
   gaddr addr;
 
-  glo = pntrhash_lookup(proc,p);
-  if (glo && (glo->addr.pid == proc->pid))
+  glo = pntrhash_lookup(tsk,p);
+  if (glo && (glo->addr.pid == tsk->pid))
     return glo;
 
-  addr.pid = proc->pid;
-  addr.lid = proc->nextlid++;
-  glo = add_global(proc,addr,p);
+  addr.pid = tsk->pid;
+  addr.lid = tsk->nextlid++;
+  glo = add_global(tsk,addr,p);
   return glo;
 }
 
@@ -194,7 +194,7 @@ void add_gaddr(list **l, gaddr addr)
 }
 
 /* note: we only remove the first instance */
-void remove_gaddr(process *proc, list **l, gaddr addr)
+void remove_gaddr(task *tsk, list **l, gaddr addr)
 {
   while (*l) {
     gaddr *item = (gaddr*)(*l)->data;
@@ -203,14 +203,14 @@ void remove_gaddr(process *proc, list **l, gaddr addr)
       *l = (*l)->next;
       free(old->data);
       free(old);
-/*       fprintf(proc->output,"removed gaddr %d@%d\n",addr.lid,addr.pid); */
+/*       fprintf(tsk->output,"removed gaddr %d@%d\n",addr.lid,addr.pid); */
       return;
     }
     else {
       l = &((*l)->next);
     }
   }
-  fprintf(proc->output,"gaddr %d@%d not found\n",addr.lid,addr.pid);
+  fprintf(tsk->output,"gaddr %d@%d not found\n",addr.lid,addr.pid);
   fatal("gaddr not found");
 }
 
@@ -297,20 +297,20 @@ void transfer_waiters(waitqueue *from, waitqueue *to)
   from->fetchers = NULL;
 }
 
-void spark_frame(process *proc, frame *f)
+void spark_frame(task *tsk, frame *f)
 {
   if (STATE_NEW == f->state) {
-    add_frame_queue_end(&proc->sparked,f);
+    add_frame_queue_end(&tsk->sparked,f);
     f->state = STATE_SPARKED;
-    proc->stats.nsparks++;
+    tsk->stats.nsparks++;
   }
 }
 
-void unspark_frame(process *proc, frame *f)
+void unspark_frame(task *tsk, frame *f)
 {
   assert((STATE_SPARKED == f->state) || (STATE_NEW == f->state));
   if (STATE_SPARKED == f->state)
-    remove_frame_queue(&proc->sparked,f);
+    remove_frame_queue(&tsk->sparked,f);
   f->state = STATE_NEW;
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);
@@ -320,94 +320,94 @@ void unspark_frame(process *proc, frame *f)
   assert(f == (frame*)get_pntr(f->c->field1));
 }
 
-void run_frame(process *proc, frame *f)
+void run_frame(task *tsk, frame *f)
 {
   if (STATE_SPARKED == f->state) {
-    proc->stats.sparksused++;
-    remove_frame_queue(&proc->sparked,f);
+    tsk->stats.sparksused++;
+    remove_frame_queue(&tsk->sparked,f);
   }
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     assert((0 == f->address) ||
-           (OP_GLOBSTART == bc_instructions(proc->bcdata)[f->address].opcode));
-    add_frame_queue(&proc->runnable,f);
+           (OP_GLOBSTART == bc_instructions(tsk->bcdata)[f->address].opcode));
+    add_frame_queue(&tsk->runnable,f);
     f->state = STATE_RUNNING;
 
     #ifdef PROFILING
     if (0 <= f->fno)
-      proc->stats.fusage[f->fno]++;
+      tsk->stats.fusage[f->fno]++;
     #endif
   }
 }
 
-void block_frame(process *proc, frame *f)
+void block_frame(task *tsk, frame *f)
 {
   assert(STATE_RUNNING == f->state);
-  remove_frame_queue(&proc->runnable,f);
-  add_frame_queue(&proc->blocked,f);
+  remove_frame_queue(&tsk->runnable,f);
+  add_frame_queue(&tsk->blocked,f);
   f->state = STATE_BLOCKED;
 }
 
-void unblock_frame(process *proc, frame *f)
+void unblock_frame(task *tsk, frame *f)
 {
   assert(STATE_BLOCKED == f->state);
-  remove_frame_queue(&proc->blocked,f);
-  add_frame_queue(&proc->runnable,f);
+  remove_frame_queue(&tsk->blocked,f);
+  add_frame_queue(&tsk->runnable,f);
   f->state = STATE_RUNNING;
 }
 
-void done_frame(process *proc, frame *f)
+void done_frame(task *tsk, frame *f)
 {
   assert(STATE_RUNNING == f->state);
-  remove_frame_queue(&proc->runnable,f);
+  remove_frame_queue(&tsk->runnable,f);
   f->state = STATE_DONE;
 }
 
-void set_error(process *proc, const char *format, ...)
+void set_error(task *tsk, const char *format, ...)
 {
   va_list ap;
   int len;
-  frame *f = *proc->curfptr;
+  frame *f = *tsk->curfptr;
   const instruction *instr;
   va_start(ap,format);
   len = vsnprintf(NULL,0,format,ap);
   va_end(ap);
 
-  assert(NULL == proc->error);
-  proc->error = (char*)malloc(len+1);
+  assert(NULL == tsk->error);
+  tsk->error = (char*)malloc(len+1);
   va_start(ap,format);
-  len = vsnprintf(proc->error,len+1,format,ap);
+  len = vsnprintf(tsk->error,len+1,format,ap);
   va_end(ap);
 
-  instr = &bc_instructions(proc->bcdata)[f->address];
-  proc->errorsl.fileno = instr->fileno;
-  proc->errorsl.lineno = instr->lineno;
+  instr = &bc_instructions(tsk->bcdata)[f->address];
+  tsk->errorsl.fileno = instr->fileno;
+  tsk->errorsl.lineno = instr->lineno;
 
-  (*proc->curfptr)->fno = -1;
-  (*proc->curfptr)->address = ((bcheader*)proc->bcdata)->erroraddr-1;
+  (*tsk->curfptr)->fno = -1;
+  (*tsk->curfptr)->address = ((bcheader*)tsk->bcdata)->erroraddr-1;
   /* ensure it's at the front */
-  remove_frame_queue(&proc->runnable,f);
-  add_frame_queue(&proc->runnable,f);
+  remove_frame_queue(&tsk->runnable,f);
+  add_frame_queue(&tsk->runnable,f);
 }
 
-void statistics(process *proc, FILE *f)
+void statistics(task *tsk, FILE *f)
 {
   int i;
   int total;
-  bcheader *bch = (bcheader*)proc->bcdata;
-  fprintf(f,"totalallocs = %d\n",proc->stats.totalallocs);
-  fprintf(f,"ncollections = %d\n",proc->stats.ncollections);
-  fprintf(f,"nscombappls = %d\n",proc->stats.nscombappls);
-  fprintf(f,"nreductions = %d\n",proc->stats.nreductions);
-  fprintf(f,"nsparks = %d\n",proc->stats.nsparks);
+  bcheader *bch = (bcheader*)tsk->bcdata;
+  fprintf(f,"totalallocs = %d\n",tsk->stats.totalallocs);
+  fprintf(f,"ncollections = %d\n",tsk->stats.ncollections);
+  fprintf(f,"nscombappls = %d\n",tsk->stats.nscombappls);
+  fprintf(f,"nreductions = %d\n",tsk->stats.nreductions);
+  fprintf(f,"nsparks = %d\n",tsk->stats.nsparks);
 
   total = 0;
   for (i = 0; i < OP_COUNT; i++)
-    total += proc->stats.op_usage[i];
+    total += tsk->stats.op_usage[i];
 
   for (i = 0; i < OP_COUNT; i++) {
-    double pct = 100.0*(((double)proc->stats.op_usage[i])/((double)total));
-    fprintf(f,"usage %-12s %-12d %.2f%%\n",opcodes[i],proc->stats.op_usage[i],pct);
+    double pct = 100.0*(((double)tsk->stats.op_usage[i])/((double)total));
+    fprintf(f,"usage %-12s %-12d %.2f%%\n",opcodes[i],tsk->stats.op_usage[i],pct);
   }
 
 
@@ -415,125 +415,125 @@ void statistics(process *proc, FILE *f)
 
   fprintf(f,"\n");
   for (i = 0; i < bch->nfunctions; i++)
-    fprintf(f,"%-20s %d\n",bc_function_name(proc->bcdata,i),proc->stats.fusage[i]);
+    fprintf(f,"%-20s %d\n",bc_function_name(tsk->bcdata,i),tsk->stats.fusage[i]);
 }
 
-void dump_info(process *proc)
+void dump_info(task *tsk)
 {
   block *bl;
   int i;
   frame *f;
 
-  fprintf(proc->output,"Frames with things waiting on them:\n");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
+  fprintf(tsk->output,"Frames with things waiting on them:\n");
+  fprintf(tsk->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
+  fprintf(tsk->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
 
-  for (bl = proc->blocks; bl; bl = bl->next) {
+  for (bl = tsk->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
       cell *c = &bl->values[i];
       if (CELL_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = bc_function_name(proc->bcdata,f->fno);
+          const char *fname = bc_function_name(tsk->bcdata,f->fno);
           int nframes = list_count(f->wq.frames);
           int nfetchers = list_count(f->wq.fetchers);
-          fprintf(proc->output,"%-12p %-20s %-12d %-12d\n",
+          fprintf(tsk->output,"%-12p %-20s %-12d %-12d\n",
                   f,fname,nframes,nfetchers);
         }
       }
     }
   }
 
-  fprintf(proc->output,"\n");
-  fprintf(proc->output,"Runnable queue:\n");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+  fprintf(tsk->output,"\n");
+  fprintf(tsk->output,"Runnable queue:\n");
+  fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "frame*","function","frames","fetchers","state");
-  fprintf(proc->output,"%-12s %-20s %-12s %-12s %-16s\n",
+  fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
-  for (f = proc->runnable.first; f; f = f->next) {
-    const char *fname = bc_function_name(proc->bcdata,f->fno);
+  for (f = tsk->runnable.first; f; f = f->next) {
+    const char *fname = bc_function_name(tsk->bcdata,f->fno);
     int nframes = list_count(f->wq.frames);
     int nfetchers = list_count(f->wq.fetchers);
-    fprintf(proc->output,"%-12p %-20s %-12d %-12d %-16s\n",
+    fprintf(tsk->output,"%-12p %-20s %-12d %-12d %-16s\n",
             f,fname,nframes,nfetchers,frame_states[f->state]);
   }
 
 }
 
-void dump_globals(process *proc)
+void dump_globals(task *tsk)
 {
   int h;
   global *glo;
 
-  fprintf(proc->output,"\n");
-  fprintf(proc->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
-  fprintf(proc->output,"%-9s %-12s %-12s\n","-------","----","----");
+  fprintf(tsk->output,"\n");
+  fprintf(tsk->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
+  fprintf(tsk->output,"%-9s %-12s %-12s\n","-------","----","----");
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    for (glo = proc->pntrhash[h]; glo; glo = glo->pntrnext) {
-      fprintf(proc->output,"%4d@%-4d %-12s %-12p\n",
+    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext) {
+      fprintf(tsk->output,"%4d@%-4d %-12s %-12p\n",
               glo->addr.lid,glo->addr.pid,cell_types[pntrtype(glo->p)],
               is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
     }
   }
 }
 
-process *process_new(void)
+task *task_new(void)
 {
-  process *proc = (process*)calloc(1,sizeof(process));
+  task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
 
-  pthread_mutex_init(&proc->msglock,NULL);
-  pthread_cond_init(&proc->msgcond,NULL);
+  pthread_mutex_init(&tsk->msglock,NULL);
+  pthread_cond_init(&tsk->msgcond,NULL);
 
-  proc->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
+  tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
-  globnilvalue = alloc_cell(proc);
+  globnilvalue = alloc_cell(tsk);
   globnilvalue->type = CELL_NIL;
   globnilvalue->flags |= FLAG_PINNED;
 
-  make_pntr(proc->globnilpntr,globnilvalue);
-  proc->globtruepntr = 1.0;
+  make_pntr(tsk->globnilpntr,globnilvalue);
+  tsk->globtruepntr = 1.0;
 
-  if (is_pntr(proc->globtruepntr))
-    get_pntr(proc->globtruepntr)->flags |= FLAG_PINNED;
+  if (is_pntr(tsk->globtruepntr))
+    get_pntr(tsk->globtruepntr)->flags |= FLAG_PINNED;
 
-  proc->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
-  proc->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  tsk->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  tsk->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
 
-  return proc;
+  return tsk;
 }
 
-void process_init(process *proc)
+void task_init(task *tsk)
 {
   int i;
-  bcheader *bch = (bcheader*)proc->bcdata;
+  bcheader *bch = (bcheader*)tsk->bcdata;
 
-  assert(NULL == proc->strings);
-  assert(0 == proc->nstrings);
-  assert(0 < proc->groupsize);
+  assert(NULL == tsk->strings);
+  assert(0 == tsk->nstrings);
+  assert(0 < tsk->groupsize);
 
 
-  proc->nstrings = bch->nstrings;
-  proc->strings = (pntr*)malloc(bch->nstrings*sizeof(pntr));
+  tsk->nstrings = bch->nstrings;
+  tsk->strings = (pntr*)malloc(bch->nstrings*sizeof(pntr));
   for (i = 0; i < bch->nstrings; i++)
-    proc->strings[i] = string_to_array(proc,bc_string(proc->bcdata,i));
-  proc->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->stats.usage = (int*)calloc(bch->nops,sizeof(int));
-  proc->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  proc->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
-  proc->gcsent = (int*)calloc(proc->groupsize,sizeof(int));
-  proc->distmarks = (array**)calloc(proc->groupsize,sizeof(array*));
+    tsk->strings[i] = string_to_array(tsk,bc_string(tsk->bcdata,i));
+  tsk->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
+  tsk->stats.usage = (int*)calloc(bch->nops,sizeof(int));
+  tsk->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
+  tsk->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  tsk->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  tsk->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
+  tsk->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
+  tsk->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
+  tsk->gcsent = (int*)calloc(tsk->groupsize,sizeof(int));
+  tsk->distmarks = (array**)calloc(tsk->groupsize,sizeof(array*));
 
-  proc->inflight_addrs = (array**)calloc(proc->groupsize,sizeof(array*));
-  proc->unack_msg_acount = (array**)calloc(proc->groupsize,sizeof(array*));
-  for (i = 0; i < proc->groupsize; i++) {
-    proc->inflight_addrs[i] = array_new(sizeof(gaddr));
-    proc->unack_msg_acount[i] = array_new(sizeof(int));
-    proc->distmarks[i] = array_new(sizeof(gaddr));
+  tsk->inflight_addrs = (array**)calloc(tsk->groupsize,sizeof(array*));
+  tsk->unack_msg_acount = (array**)calloc(tsk->groupsize,sizeof(array*));
+  for (i = 0; i < tsk->groupsize; i++) {
+    tsk->inflight_addrs[i] = array_new(sizeof(gaddr));
+    tsk->unack_msg_acount[i] = array_new(sizeof(int));
+    tsk->distmarks[i] = array_new(sizeof(gaddr));
   }
 }
 
@@ -543,20 +543,20 @@ static void message_free(message *msg)
   free(msg);
 }
 
-void process_free(process *proc)
+void task_free(task *tsk)
 {
   int i;
   block *bl;
   int h;
 
-  for (bl = proc->blocks; bl; bl = bl->next)
+  for (bl = tsk->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
       bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
 
-/*   local_collect(proc); */
-  sweep(proc);
+/*   local_collect(tsk); */
+  sweep(tsk);
 
-  bl = proc->blocks;
+  bl = tsk->blocks;
   while (bl) {
     block *next = bl->next;
     free(bl);
@@ -564,7 +564,7 @@ void process_free(process *proc)
   }
 
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    global *glo = proc->pntrhash[h];
+    global *glo = tsk->pntrhash[h];
     while (glo) {
       global *next = glo->pntrnext;
       free(glo);
@@ -572,34 +572,34 @@ void process_free(process *proc)
     }
   }
 
-  for (i = 0; i < proc->groupsize; i++) {
-    array_free(proc->inflight_addrs[i]);
-    array_free(proc->unack_msg_acount[i]);
-    array_free(proc->distmarks[i]);
+  for (i = 0; i < tsk->groupsize; i++) {
+    array_free(tsk->inflight_addrs[i]);
+    array_free(tsk->unack_msg_acount[i]);
+    array_free(tsk->distmarks[i]);
   }
 
-  free(proc->strings);
-  free(proc->stats.funcalls);
-  free(proc->stats.framecompletions);
-  free(proc->stats.sendcount);
-  free(proc->stats.sendbytes);
-  free(proc->stats.recvcount);
-  free(proc->stats.recvbytes);
-  free(proc->stats.fusage);
-  free(proc->stats.usage);
-  free(proc->stats.op_usage);
-  free(proc->gcsent);
-  free(proc->error);
-  free(proc->distmarks);
-  free(proc->pntrhash);
-  free(proc->addrhash);
+  free(tsk->strings);
+  free(tsk->stats.funcalls);
+  free(tsk->stats.framecompletions);
+  free(tsk->stats.sendcount);
+  free(tsk->stats.sendbytes);
+  free(tsk->stats.recvcount);
+  free(tsk->stats.recvbytes);
+  free(tsk->stats.fusage);
+  free(tsk->stats.usage);
+  free(tsk->stats.op_usage);
+  free(tsk->gcsent);
+  free(tsk->error);
+  free(tsk->distmarks);
+  free(tsk->pntrhash);
+  free(tsk->addrhash);
 
-  free(proc->inflight_addrs);
-  free(proc->unack_msg_acount);
+  free(tsk->inflight_addrs);
+  free(tsk->unack_msg_acount);
 
-  list_free(proc->msgqueue,(list_d_t)message_free);
-  pthread_mutex_destroy(&proc->msglock);
-  pthread_cond_destroy(&proc->msgcond);
-  free(proc);
+  list_free(tsk->msgqueue,(list_d_t)message_free);
+  pthread_mutex_destroy(&tsk->msglock);
+  pthread_cond_destroy(&tsk->msgcond);
+  free(tsk);
 }
 

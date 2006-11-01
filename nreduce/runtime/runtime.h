@@ -186,7 +186,7 @@ typedef struct message {
 } message;
 
 typedef struct group {
-  struct process **procs;
+  struct task **procs;
   int nprocs;
 } group;
 
@@ -195,7 +195,7 @@ typedef struct waitqueue {
   list *fetchers;
 } waitqueue;
 
-typedef void (*builtin_f)(struct process *proc, pntr *argstack);
+typedef void (*builtin_f)(struct task *tsk, pntr *argstack);
 
 typedef struct builtin {
   char *name;
@@ -291,19 +291,19 @@ typedef struct gaddr {
   int lid;
 } gaddr;
 
-/* For "entry items" (globally visible objects that this process owns):
-     proc = this proc id
-     id = (proc)-unique id for the object
+/* For "entry items" (globally visible objects that this task owns):
+     tsk = this task id
+     id = (tsk)-unique id for the object
      p = pointer to the actual object
 
-  For "exit items" (globally visible objects on another processor that we have a ref to):
-     proc = the processor (not us) that owns the object
-     id = (proc)-unique id for the object      -- may be -1
+  For "exit items" (globally visible objects on another task that we have a ref to):
+     tsk = the task (not us) that owns the object
+     id = (tsk)-unique id for the object      -- may be -1
      p = pointer to a REMOTE_REF object
 
-  For "replicas" (local copies we've made of objects that other processors own):
-     proc = the processor (not us) that owns the object
-     id = (proc)-unique id for the object
+  For "replicas" (local copies we've made of objects that other tasks own):
+     tsk = the task (not us) that owns the object
+     id = (tsk)-unique id for the object
      p = pointer to our copy of the object
 */
 typedef struct global {
@@ -317,19 +317,19 @@ typedef struct global {
   struct global *addrnext;
 } global;
 
-/* process */
+/* task */
 
 typedef struct block {
   struct block *next;
   cell values[BLOCK_SIZE];
 } block;
 
-struct process;
-typedef void (*send_fun)(struct process *proc, int dest, int tag, char *data, int size);
-typedef int (*recv_fun)(struct process *proc, int *tag, char **data, int *size, int block,
+struct task;
+typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int size);
+typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
                         int delayms);
 
-typedef struct process {
+typedef struct task {
   int memdebug;
 
   /* bytecode */
@@ -374,11 +374,11 @@ typedef struct process {
   int *infalloc;
 
   /* Each element of inflight_addrs is an array containing the addresses that have been sent
-     to a particular process but not yet acknowledged. */
+     to a particular task but not yet acknowledged. */
   array **inflight_addrs;
 
   /* Each element of unack_msg_acount is an array containing the number of addresses in each
-     outstanding message to a particular process. An outstanding message is a message containing
+     outstanding message to a particular task. An outstanding message is a message containing
      addresses that has been sent but not yet acknowledged. */
   array **unack_msg_acount;
 
@@ -405,41 +405,41 @@ typedef struct process {
   send_fun sendf;
   recv_fun recvf;
   void *commdata;
-} process;
+} task;
 
-process *process_new(void);
-void process_init(process *proc);
-void process_free(process *proc);
+task *task_new(void);
+void task_init(task *tsk);
+void task_free(task *tsk);
 
-global *pntrhash_lookup(process *proc, pntr p);
-global *addrhash_lookup(process *proc, gaddr addr);
-void pntrhash_add(process *proc, global *glo);
-void addrhash_add(process *proc, global *glo);
-void pntrhash_remove(process *proc, global *glo);
-void addrhash_remove(process *proc, global *glo);
+global *pntrhash_lookup(task *tsk, pntr p);
+global *addrhash_lookup(task *tsk, gaddr addr);
+void pntrhash_add(task *tsk, global *glo);
+void addrhash_add(task *tsk, global *glo);
+void pntrhash_remove(task *tsk, global *glo);
+void addrhash_remove(task *tsk, global *glo);
 
-global *add_global(process *proc, gaddr addr, pntr p);
-pntr global_lookup_existing(process *proc, gaddr addr);
-pntr global_lookup(process *proc, gaddr addr, pntr val);
-global *make_global(process *proc, pntr p);
-gaddr global_addressof(process *proc, pntr p);
+global *add_global(task *tsk, gaddr addr, pntr p);
+pntr global_lookup_existing(task *tsk, gaddr addr);
+pntr global_lookup(task *tsk, gaddr addr, pntr val);
+global *make_global(task *tsk, pntr p);
+gaddr global_addressof(task *tsk, pntr p);
 
 void add_gaddr(list **l, gaddr addr);
-void remove_gaddr(process *proc, list **l, gaddr addr);
+void remove_gaddr(task *tsk, list **l, gaddr addr);
 
 void add_frame_queue(frameq *q, frame *f);
 void add_frame_queue_end(frameq *q, frame *f);
 void remove_frame_queue(frameq *q, frame *f);
 void transfer_waiters(waitqueue *from, waitqueue *to);
 
-void spark_frame(process *proc, frame *f);
-void unspark_frame(process *proc, frame *f);
-void run_frame(process *proc, frame *f);
-void block_frame(process *proc, frame *f);
-void unblock_frame(process *proc, frame *f);
-void done_frame(process *proc, frame *f);
+void spark_frame(task *tsk, frame *f);
+void unspark_frame(task *tsk, frame *f);
+void run_frame(task *tsk, frame *f);
+void block_frame(task *tsk, frame *f);
+void unblock_frame(task *tsk, frame *f);
+void done_frame(task *tsk, frame *f);
 
-void set_error(process *proc, const char *format, ...);
+void set_error(task *tsk, const char *format, ...);
 
 /* data */
 
@@ -497,12 +497,12 @@ int read_int(reader *rd, int *i);
 int read_double(reader *rd, double *d);
 int read_string(reader *rd, char **s);
 int read_gaddr_noack(reader *rd, gaddr *a);
-int read_gaddr(reader *rd, process *proc, gaddr *a);
-int read_pntr(reader *rd, process *proc, pntr *pout, int observe);
-int read_vformat(reader *rd, process *proc, int observe, const char *fmt, va_list ap);
-int read_format(reader *rd, process *proc, int observe, const char *fmt, ...);
+int read_gaddr(reader *rd, task *tsk, gaddr *a);
+int read_pntr(reader *rd, task *tsk, pntr *pout, int observe);
+int read_vformat(reader *rd, task *tsk, int observe, const char *fmt, va_list ap);
+int read_format(reader *rd, task *tsk, int observe, const char *fmt, ...);
 int read_end(reader *rd);
-int print_data(process *proc, const char *data, int size);
+int print_data(task *tsk, const char *data, int size);
 
 array *write_start(void);
 void write_tag(array *wr, int tag);
@@ -511,36 +511,36 @@ void write_int(array *wr, int i);
 void write_double(array *wr, double d);
 void write_string(array *wr, char *s);
 void write_gaddr_noack(array *wr, gaddr a);
-void write_gaddr(array *wr, process *proc, gaddr a);
-void write_ref(array *arr, process *proc, pntr p);
-void write_pntr(array *arr, process *proc, pntr p);
-void write_vformat(array *wr, process *proc, const char *fmt, va_list ap);
-void write_format(array *wr, process *proc, const char *fmt, ...);
+void write_gaddr(array *wr, task *tsk, gaddr a);
+void write_ref(array *arr, task *tsk, pntr p);
+void write_pntr(array *arr, task *tsk, pntr p);
+void write_vformat(array *wr, task *tsk, const char *fmt, va_list ap);
+void write_format(array *wr, task *tsk, const char *fmt, ...);
 void write_end(array *wr);
 
-void msg_send(process *proc, int dest, int tag, char *data, int size);
-void msg_fsend(process *proc, int dest, int tag, const char *fmt, ...);
-int msg_recv(process *proc, int *tag, char **data, int *size);
-int msg_recvb(process *proc, int *tag, char **data, int *size);
-int msg_recvbt(process *proc, int *tag, char **data, int *size, int delayms);
+void msg_send(task *tsk, int dest, int tag, char *data, int size);
+void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...);
+int msg_recv(task *tsk, int *tag, char **data, int *size);
+int msg_recvb(task *tsk, int *tag, char **data, int *size);
+int msg_recvbt(task *tsk, int *tag, char **data, int *size, int delayms);
 
-void msg_print(process *proc, int dest, int tag, const char *data, int size);
-void mem_send(process *proc, int dest, int tag, char *data, int size);
-int mem_recv2(process *proc, int *tag, char **data, int *size, int block, int delayms);
+void msg_print(task *tsk, int dest, int tag, const char *data, int size);
+void mem_send(task *tsk, int dest, int tag, char *data, int size);
+int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms);
 
 /* reduction */
 
-void reduce(process *h, pntrstack *s);
+void reduce(task *h, pntrstack *s);
 void run_reduction(source *src, FILE *stats);
 
 /* console */
 
-void console(process *proc);
+void console(task *tsk);
 
 /* builtin */
 
 int get_builtin(const char *name);
-pntr string_to_array(process *proc, const char *str);
+pntr string_to_array(task *tsk, const char *str);
 char *array_to_string(pntr refpntr);
 
 /* master */
@@ -553,35 +553,35 @@ int worker(const char *hostsfile, const char *masteraddr);
 
 /* cell */
 
-cell *alloc_cell(process *proc);
-void free_cell_fields(process *proc, cell *v);
+cell *alloc_cell(task *tsk);
+void free_cell_fields(task *tsk, cell *v);
 
-int count_alive(process *proc);
-void clear_marks(process *proc, short bit);
-void mark_roots(process *proc, short bit);
-void print_cells(process *proc);
-void sweep(process *proc);
-void mark_global(process *proc, global *glo, short bit);
-void local_collect(process *proc);
+int count_alive(task *tsk);
+void clear_marks(task *tsk, short bit);
+void mark_roots(task *tsk, short bit);
+void print_cells(task *tsk);
+void sweep(task *tsk);
+void mark_global(task *tsk, global *glo, short bit);
+void local_collect(task *tsk);
 
-frame *frame_alloc(process *proc);
-void frame_dealloc(process *proc, frame *f);
+frame *frame_alloc(task *tsk);
+void frame_dealloc(task *tsk, frame *f);
 
 cap *cap_alloc(int arity, int address, int fno);
 void cap_dealloc(cap *c);
 
 void print_pntr(FILE *f, pntr p);
 
-void statistics(process *proc, FILE *f);
-void dump_info(process *proc);
-void dump_globals(process *proc);
+void statistics(task *tsk, FILE *f);
+void dump_info(task *tsk);
+void dump_globals(task *tsk);
 
 /* interpreter */
 
 void print_stack(FILE *f, pntr *stk, int size, int dir);
-void add_pending_mark(process *proc, gaddr addr);
-void spark(process *proc, frame *f);
-void execute(process *proc);
+void add_pending_mark(task *tsk, gaddr addr);
+void spark(task *tsk, frame *f);
+void execute(task *tsk);
 void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage);
 
 /* memory */

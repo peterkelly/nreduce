@@ -38,7 +38,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-static int send_around(process *proc, char tag)
+static int send_around(task *tsk, char tag)
 {
   array *wr;
   int from;
@@ -48,10 +48,10 @@ static int send_around(process *proc, char tag)
   reader rd;
 
   wr = write_start();
-  msg_send(proc,0,tag,wr->data,wr->nbytes);
+  msg_send(tsk,0,tag,wr->data,wr->nbytes);
   write_end(wr);
 
-  from = msg_recvb(proc,&rtag,&data,&size);
+  from = msg_recvb(tsk,&rtag,&data,&size);
   assert(0 <= from);
 
   rd = read_start(data,size);
@@ -64,10 +64,10 @@ static int send_around(process *proc, char tag)
   return 0;
 }
 
-static int homegc(process *proc)
+static int homegc(task *tsk)
 {
   int i;
-  int *count = (int*)calloc(proc->grp->nprocs,sizeof(int));
+  int *count = (int*)calloc(tsk->grp->nprocs,sizeof(int));
   int sweeps;
   char *data;
   int size;
@@ -76,25 +76,25 @@ static int homegc(process *proc)
   int r;
   reader rd;
 
-  r = send_around(proc,MSG_STARTDISTGC);
+  r = send_around(tsk,MSG_STARTDISTGC);
   assert(READER_OK == r);
-  fprintf(proc->output,"All processes started distributed garbage collection\n");
+  fprintf(tsk->output,"All tasks started distributed garbage collection\n");
 
-  for (i = 0; i < proc->grp->nprocs-1; i++) {
-    msg_fsend(proc,i,MSG_MARKROOTS,"");
+  for (i = 0; i < tsk->grp->nprocs-1; i++) {
+    msg_fsend(tsk,i,MSG_MARKROOTS,"");
     count[i]++;
   }
   while (1) {
     int done = 0;
 
-    from = msg_recvb(proc,&tag,&data,&size);
+    from = msg_recvb(tsk,&tag,&data,&size);
     assert(0 <= from);
     rd = read_start(data,size);
     assert(READER_OK == r);
     assert(MSG_UPDATE == tag);
 
 /*     count[from]--; */
-    for (i = 0; i < proc->grp->nprocs-1; i++) {
+    for (i = 0; i < tsk->grp->nprocs-1; i++) {
       int c;
       r = read_int(&rd,&c);
       assert(READER_OK == r);
@@ -103,13 +103,13 @@ static int homegc(process *proc)
 
     #ifdef DISTGC_DEBUG
     printf("after update from %d:",from);
-    for (i = 0; i < proc->grp->nprocs-1; i++)
+    for (i = 0; i < tsk->grp->nprocs-1; i++)
       printf(" %d",count[i]);
     printf("\n");
     #endif
 
     done = 1;
-    for (i = 0; i < proc->grp->nprocs-1; i++)
+    for (i = 0; i < tsk->grp->nprocs-1; i++)
       if (count[i])
         done = 0;
 
@@ -140,49 +140,49 @@ static int homegc(process *proc)
 
 
 
-  for (sweeps = 0; sweeps < proc->grp->nprocs-1; sweeps++)
-    msg_fsend(proc,sweeps,MSG_SWEEP,"");
+  for (sweeps = 0; sweeps < tsk->grp->nprocs-1; sweeps++)
+    msg_fsend(tsk,sweeps,MSG_SWEEP,"");
 
   while (0 < sweeps) {
-    from = msg_recvb(proc,&tag,&data,&size);
+    from = msg_recvb(tsk,&tag,&data,&size);
     assert(0 <= from);
     rd = read_start(data,size);
     assert(READER_OK == r);
     assert(MSG_SWEEPACK == tag);
     sweeps--;
   }
-  fprintf(proc->output,"All processes completed distributed garbage collection\n");
+  fprintf(tsk->output,"All tasks completed distributed garbage collection\n");
 
   free(count);
   return READER_OK;
 }
 
-static int handle_command(process *proc, const char *line, int *done)
+static int handle_command(task *tsk, const char *line, int *done)
 {
   int r = READER_OK;
   if (!strcmp(line,"gc")) {
-    r = homegc(proc);
+    r = homegc(tsk);
     assert(READER_OK == r);
   }
   else if (!strcmp(line,"dump")) {
-    r = send_around(proc,MSG_DUMP_INFO);
+    r = send_around(tsk,MSG_DUMP_INFO);
     if (READER_OK == r)
-      printf("All processes dumped info\n");
+      printf("All tasks dumped info\n");
   }
   else if (!strcmp(line,"test")) {
-    r = send_around(proc,MSG_TEST);
+    r = send_around(tsk,MSG_TEST);
     if (READER_OK == r)
-      printf("All processes handled test message\n");
+      printf("All tasks handled test message\n");
   }
   else if (!strcmp(line,"pause")) {
-    r = send_around(proc,MSG_PAUSE);
+    r = send_around(tsk,MSG_PAUSE);
     if (READER_OK == r)
-      printf("All processes paused\n");
+      printf("All tasks paused\n");
   }
   else if (!strcmp(line,"resume")) {
-    r = send_around(proc,MSG_RESUME);
+    r = send_around(tsk,MSG_RESUME);
     if (READER_OK == r)
-      printf("All processes resumed\n");
+      printf("All tasks resumed\n");
   }
   else if (!strcmp(line,"allstats")) {
     int op;
@@ -198,10 +198,10 @@ static int handle_command(process *proc, const char *line, int *done)
     write_int(wr,0);
     for (op = 0; op < OP_COUNT; op++)
       write_int(wr,0);
-    msg_send(proc,0,MSG_ALLSTATS,wr->data,wr->nbytes);
+    msg_send(tsk,0,MSG_ALLSTATS,wr->data,wr->nbytes);
     write_end(wr);
 
-    from = msg_recvb(proc,&tag,&data,&size);
+    from = msg_recvb(tsk,&tag,&data,&size);
     printf("received %d bytes from %d\n",size,from);
 
     rd = read_start(data,size);
@@ -221,7 +221,7 @@ static int handle_command(process *proc, const char *line, int *done)
   }
   else if (!strcmp(line,"stats")) {
     int i;
-    int count = proc->grp->nprocs-1;
+    int count = tsk->grp->nprocs-1;
     int op;
 
     int *totalallocs = (int*)calloc(count,sizeof(int));
@@ -237,7 +237,7 @@ static int handle_command(process *proc, const char *line, int *done)
 
     for (i = 0; i < count; i++) {
       array *wr = write_start();
-      msg_send(proc,i,MSG_ISTATS,wr->data,wr->nbytes);
+      msg_send(tsk,i,MSG_ISTATS,wr->data,wr->nbytes);
       write_end(wr);
     }
 
@@ -247,7 +247,7 @@ static int handle_command(process *proc, const char *line, int *done)
       reader rd;
       int tmp;
 
-      from = msg_recvb(proc,&tag,&data,&size);
+      from = msg_recvb(tsk,&tag,&data,&size);
       printf("received %d bytes from %d\n",size,from);
 
       rd = read_start(data,size);
@@ -286,7 +286,7 @@ static int handle_command(process *proc, const char *line, int *done)
 
     printf("                  ");
     for (from = 0; from < count; from++)
-      printf("  Process %-2d      ",from);
+      printf("  Task    %-2d      ",from);
     printf("\n");
 
     printf("                  ");
@@ -379,7 +379,7 @@ static int handle_command(process *proc, const char *line, int *done)
   return r;
 }
 
-void console(process *proc)
+void console(task *tsk)
 {
   printf("Console started\n");
   array *input = array_new(sizeof(char));
@@ -398,7 +398,7 @@ void console(process *proc)
 /*     time.tv_nsec = 100*1000*1000; */
 /*     time.tv_nsec =  10*1000*1000; */
     nanosleep(&time,NULL);
-    homegc(proc);
+    homegc(tsk);
   }
   #endif
 
@@ -415,7 +415,7 @@ void console(process *proc)
     array_append(input,&c2,1);
     line = (char*)input->data;
 
-    if (READER_OK != handle_command(proc,line,&done)) {
+    if (READER_OK != handle_command(tsk,line,&done)) {
       printf("Error reading data\n");
     }
   }
@@ -424,9 +424,9 @@ void console(process *proc)
   printf("\nConsole done\n");
   array_free(input);
 
-  for (i = 0; i < proc->grp->nprocs-1; i++) {
+  for (i = 0; i < tsk->grp->nprocs-1; i++) {
     wr = write_start();
-    msg_send(proc,i,MSG_DONE,wr->data,wr->nbytes);
+    msg_send(tsk,i,MSG_DONE,wr->data,wr->nbytes);
     write_end(wr);
   }
 }

@@ -4,7 +4,7 @@ noinst_HEADERS = network.h runtime.h
 libruntime_la_SOURCES = 	master.c \
 	worker.c \
 	network.c \
-	process.c \
+	task.c \
 	builtins.c \
 	memory.c \
 	data.c \
