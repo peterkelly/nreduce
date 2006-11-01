@@ -54,19 +54,31 @@
 #include <signal.h>
 #include <execinfo.h>
 
+typedef struct taskid {
+  int nodeip;
+  short nodeport;
+  short id;
+} taskid;
+
 #define CHUNKSIZE 1024
-#define MSG_HEADER_SIZE (2*sizeof(int))
+#define MSG_HEADER_SIZE sizeof(msgheader)
 //#define SOCKET_DEBUG
 
 extern int *ioreadyptr;
+
+typedef struct msgheader {
+  taskid stid;
+  taskid dtid;
+  int rsize;
+  int rtag;
+} msgheader;
 
 typedef struct socketmsg {
   char *rawdata;
   int rawsize;
   int sent;
 
-  int rsize;
-  int rtag;
+  msgheader hdr;
 
   struct socketmsg *next;
   struct socketmsg *prev;
@@ -77,11 +89,28 @@ typedef struct socketmsglist {
   socketmsg *last;
 } socketmsglist;
 
+typedef struct connection {
+  int sock;
+  char *hostname;
+  struct in_addr ip;
+  int port;
+  array *sendbuf;
+  array *recvbuf;
+  struct connection *prev;
+  struct connection *next;
+} connection;
+
+typedef struct connectionlist {
+  connection *first;
+  connection *last;
+} connectionlist;
+
 typedef struct socketcomm {
   nodeinfo *ni;
-  socketmsglist *outgoing;
-  socketmsglist *incoming;
+  socketmsglist incoming;
+  connectionlist connections;
   array **recvbuf;
+  array **sendbuf;
 } socketcomm;
 
 static socketcomm *socketcomm_new(nodeinfo *ni)
@@ -89,11 +118,12 @@ static socketcomm *socketcomm_new(nodeinfo *ni)
   socketcomm *sc = (socketcomm*)calloc(1,sizeof(socketcomm));
   int i;
   sc->ni = ni;
-  sc->outgoing = (socketmsglist*)calloc(ni->nworkers,sizeof(socketmsglist));
-  sc->incoming = (socketmsglist*)calloc(ni->nworkers,sizeof(socketmsglist));
   sc->recvbuf = (array**)calloc(ni->nworkers,sizeof(array*));
-  for (i = 0; i < ni->nworkers; i++)
+  sc->sendbuf = (array**)calloc(ni->nworkers,sizeof(array*));
+  for (i = 0; i < ni->nworkers; i++) {
     sc->recvbuf[i] = array_new(1);
+    sc->sendbuf[i] = array_new(1);
+  }
   return sc;
 }
 
@@ -103,46 +133,13 @@ static void socketcomm_free(socketcomm *sc)
   free(sc);
 }
 
-static int send_outstanding(socketcomm *sc, int dest)
-{
-  while (1) {
-    socketmsg *sm = sc->outgoing[dest].first;
-    int w;
-    int tosend;
-    if (NULL == sm)
-      return 0;
-    tosend = sm->rawsize - sm->sent;
-    if (tosend > CHUNKSIZE)
-      tosend = CHUNKSIZE;
-    w = TEMP_FAILURE_RETRY(write(sc->ni->workers[dest].sock,&sm->rawdata[sm->sent],tosend));
-    if (0 > w) {
-      if (EAGAIN == errno) {
-        #ifdef SOCKET_DEBUG
-        fprintf(stderr,"send() to %s: try again\n",sc->ni->workers[dest].hostname);
-        #endif
-        return 0;
-      }
-      fprintf(stderr,"Error sending to %s: %s\n",sc->ni->workers[dest].hostname,strerror(errno));
-      return -1;
-    }
-    #ifdef SOCKET_DEBUG
-    printf("Sent %d bytes to worker %d\n",w,dest);
-    #endif
-    sm->sent += w;
-    assert(sm->sent <= sm->rawsize);
-    if (sm->sent == sm->rawsize) {
-      llist_remove(&sc->outgoing[dest],sm);
-      free(sm->rawdata);
-      free(sm);
-    }
-  }
-  abort(); /* should never get here */
-}
+static void doio(task *tsk, int block, int delayms);
 
 static void socket_send(task *tsk, int dest, int tag, char *data, int size)
 {
   socketcomm *sc;
-  socketmsg *newmsg;
+/*   socketmsg *newmsg; */
+  msgheader hdr;
   sc = (socketcomm*)tsk->commdata;
 
   #ifdef MSG_DEBUG
@@ -160,80 +157,75 @@ static void socket_send(task *tsk, int dest, int tag, char *data, int size)
     abort();
   }
 
-  newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
-  newmsg->rawsize = MSG_HEADER_SIZE+size;
-  newmsg->rawdata = (char*)malloc(newmsg->rawsize);
-  memcpy(&newmsg->rawdata[0],&size,sizeof(int));
-  memcpy(&newmsg->rawdata[sizeof(int)],&tag,sizeof(int));
-  memcpy(&newmsg->rawdata[MSG_HEADER_SIZE],data,size);
-
   assert(0 <= dest);
   assert(dest < sc->ni->nworkers);
 
-  llist_append(&sc->outgoing[dest],newmsg);
+  memset(&hdr,0,sizeof(msgheader));
+  hdr.stid.id = tsk->pid;
+  hdr.dtid.id = dest;
+  hdr.rsize = size;
+  hdr.rtag = tag;
 
-  if (0 != send_outstanding(sc,dest))
-    abort();
+  array_append(sc->sendbuf[dest],&hdr,sizeof(msgheader));
+  array_append(sc->sendbuf[dest],data,size);
+
+  doio(tsk,0,0);
 }
 
-static void task_received(task *tsk, int worker)
+static void process_received(task *tsk, int worker)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int start = 0;
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
   while (MSG_HEADER_SIZE <= sc->recvbuf[worker]->nbytes-start) {
-    int rsize = *(int*)&sc->recvbuf[worker]->data[start];
-    int rtag = *(int*)&sc->recvbuf[worker]->data[start+sizeof(int)];
+    msgheader hdr = *(msgheader*)&sc->recvbuf[worker]->data[start];
     socketmsg *newmsg;
 
     /* verify header */
-    assert(0 <= rsize);
-    assert(0 <= rtag);
-    assert(MSG_COUNT > rtag);
 
-    if (MSG_HEADER_SIZE+rsize > sc->recvbuf[worker]->nbytes-start)
+    assert(0 <= hdr.rsize);
+    assert(0 <= hdr.rtag);
+    assert(MSG_COUNT > hdr.rtag);
+    assert(worker == hdr.stid.id);
+    assert(tsk->pid == hdr.dtid.id);
+
+    if (MSG_HEADER_SIZE+hdr.rsize > sc->recvbuf[worker]->nbytes-start)
       break; /* incomplete message */
 
     /* complete message present; add it to the mailbox */
     newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
-    newmsg->rsize = rsize;
-    newmsg->rtag = rtag;
-    newmsg->rawsize = rsize;
-    newmsg->rawdata = (char*)malloc(rsize);
-    memcpy(newmsg->rawdata,&sc->recvbuf[worker]->data[start+MSG_HEADER_SIZE],rsize);
-    llist_append(&sc->incoming[worker],newmsg);
+    newmsg->hdr = hdr;
+    newmsg->rawsize = hdr.rsize;
+    newmsg->rawdata = (char*)malloc(hdr.rsize);
+    memcpy(newmsg->rawdata,&sc->recvbuf[worker]->data[start+MSG_HEADER_SIZE],hdr.rsize);
+    llist_append(&sc->incoming,newmsg);
 
-    start += MSG_HEADER_SIZE+rsize;
+    start += MSG_HEADER_SIZE+hdr.rsize;
   }
 
   /* remove the data we've consumed from the receive buffer */
   array_remove_data(sc->recvbuf[worker],start);
 }
 
-static int receive_incoming(task *tsk, int i, int *tag, char **data, int *size)
+static int receive_incoming(task *tsk, int *tag, char **data, int *size)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
-  socketmsg *msg = sc->incoming[i].first;
-  if ((NULL != msg) && (msg->rsize == msg->rawsize)) {
-    #ifdef SOCKET_DEBUG
-    printf("have completed message from %s, rtag = %s, rsize = %d\n",
-           sc->ni->workers[i].hostname,msg_names[msg->rtag],msg->rsize);
-    #endif
-    *tag = msg->rtag;
-    *data = msg->rawdata;
-    *size = msg->rsize;
-    llist_remove(&sc->incoming[i],msg);
-    free(msg);
-    return i;
-  }
-  else if (NULL != msg) {
-    #ifdef SOCKET_DEBUG
-    printf("%s: msg->rsize = %d, msg->rawsize = %d\n",
-           sc->ni->workers[i].hostname,msg->rsize,msg->rawsize);
-    #endif
-  }
-  return -1;
+  socketmsg *msg = sc->incoming.first;
+  if (NULL == msg)
+    return -1;
+
+  assert(msg->hdr.rsize == msg->rawsize);
+  #ifdef SOCKET_DEBUG
+  printf("have completed message from %s, rtag = %s, rsize = %d\n",
+         sc->ni->workers[msg->hdr.stid.id].hostname,msg_names[msg->hdr.rtag],msg->hdr.rsize);
+  #endif
+  *tag = msg->hdr.rtag;
+  *data = msg->rawdata;
+  *size = msg->hdr.rsize;
+  llist_remove(&sc->incoming,msg);
+  free(msg);
+  return msg->hdr.stid.id;
 }
 
 int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds,  struct timeval *timeout)
@@ -245,47 +237,89 @@ int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds,  struc
   }
 }
 
-static int wait_for_data(task *tsk, int block, int delayms, fd_set *rfds)
+static void doio(task *tsk, int block, int delayms)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int i;
   int highest = -1;
   int s;
+  fd_set readfds;
+  fd_set writefds;
+  int want2write = 0;
 
-  FD_ZERO(rfds);
+  FD_ZERO(&readfds);
+  FD_ZERO(&writefds);
 
   for (i = 0; i < sc->ni->nworkers; i++) {
     if (0 > sc->ni->workers[i].sock)
       continue;
     if (highest < sc->ni->workers[i].sock)
       highest = sc->ni->workers[i].sock;
-    FD_SET(sc->ni->workers[i].sock,rfds);
+    FD_SET(sc->ni->workers[i].sock,&readfds);
+    if (0 < sc->sendbuf[i]->nbytes) {
+      FD_SET(sc->ni->workers[i].sock,&writefds);
+      want2write = 1;
+    }
   }
 
   if (block) {
     printf("Blocking select()...");
-    s = rselect(highest+1,rfds,NULL,NULL,NULL);
+    s = rselect(highest+1,&readfds,&writefds,NULL,NULL);
     printf("done\n");
   }
   else {
     struct timeval timeout;
     timeout.tv_sec = delayms/1000;
     timeout.tv_usec = (delayms%1000)*1000;
-    s = rselect(highest+1,rfds,NULL,NULL,&timeout);
+    s = rselect(highest+1,&readfds,&writefds,NULL,&timeout);
   }
 
-  return s;
-}
+  if (0 > s)
+    fatal("select: %s",strerror(errno));
 
-static int receive_data(task *tsk, fd_set *rfds, int *tag, char **data, int *size)
-{
-  socketcomm *sc = (socketcomm*)tsk->commdata;
-  int i;
+  #ifdef SOCKET_DEBUG
+  printf("select() returned %d\n",s);
+  #endif
+
+  if (want2write)
+    *tsk->ioreadyptr = 1;
+
+  if (0 == s)
+    return; /* timed out; no sockets are ready for reading or writing */
+
+  /* Set the I/O ready flag again, because there may be more after what we read here */
+  *tsk->ioreadyptr = 1;
+
+  /* Do all the writing we can */
   for (i = 0; i < sc->ni->nworkers; i++) {
     char *hostname = sc->ni->workers[i].hostname;
-    int from;
 
-    if ((0 > sc->ni->workers[i].sock) || !FD_ISSET(sc->ni->workers[i].sock,rfds))
+    if ((0 > sc->ni->workers[i].sock) || !FD_ISSET(sc->ni->workers[i].sock,&writefds))
+      continue;
+
+    while (0 < sc->sendbuf[i]->nbytes) {
+      int w = TEMP_FAILURE_RETRY(write(sc->ni->workers[i].sock,
+                                       sc->sendbuf[i]->data,
+                                       sc->sendbuf[i]->nbytes));
+      if ((0 > w) && (EAGAIN == errno))
+        break;
+
+      if (0 > w)
+        fatal("write() to %s failed: %s\n",hostname,strerror(errno));
+
+      if (0 == w)
+        fatal("write() to %s failed: channel closed (maybe it crashed?)\n",hostname);
+
+      array_remove_data(sc->sendbuf[i],w);
+    }
+  }
+
+  /* Read data, but only enough for us to get the next message. This is so that we won't
+     be flooded with messages we don't need yet. */
+  for (i = 0; i < sc->ni->nworkers; i++) {
+    char *hostname = sc->ni->workers[i].hostname;
+
+    if ((0 > sc->ni->workers[i].sock) || !FD_ISSET(sc->ni->workers[i].sock,&readfds))
       continue;
 
     while (1) {
@@ -310,21 +344,15 @@ static int receive_data(task *tsk, fd_set *rfds, int *tag, char **data, int *siz
       #endif
 
       sc->recvbuf[i]->nbytes += r;
-      task_received(tsk,i);
-
-      if (0 <= (from = receive_incoming(tsk,i,tag,data,size)))
-        return from;
+      process_received(tsk,i);
     }
   }
-  return -1;
 }
 
 static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int i;
-  fd_set rfds;
-  int nready;
 
   #ifdef SOCKET_DEBUG
   printf("socket_recv: block = %d, delayms = %d\n",block,delayms);
@@ -333,7 +361,7 @@ static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, 
   /* first see if there's any complete messages in the queue */
   for (i = 0; i < sc->ni->nworkers; i++) {
     int from;
-    if (0 <= (from = receive_incoming(tsk,i,tag,data,size)))
+    if (0 <= (from = receive_incoming(tsk,tag,data,size)))
       return from;
   }
 
@@ -342,26 +370,9 @@ static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, 
      the flag it will just be set again. */
   *tsk->ioreadyptr = 0;
 
-  /* now try to read some more messages from the network */
-  nready = wait_for_data(tsk,block,delayms,&rfds);
+  doio(tsk,block,delayms);
 
-  if (0 > nready) {
-    perror("select");
-    abort();
-  }
-
-  #ifdef SOCKET_DEBUG
-  printf("select() returned %d\n",nready);
-  #endif
-
-  if (0 == nready)
-    return -1;
-
-  /* Set the I/O ready flag again, because receive_data() may not consume all of the data that is
-     available to be read - it only reads the minimum necessary to get the next message */
-  *tsk->ioreadyptr = 1;
-
-  return receive_data(tsk,&rfds,tag,data,size);
+  return receive_incoming(tsk,tag,data,size);
 }
 
 static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
@@ -519,6 +530,8 @@ int connect_workers(nodeinfo *ni, int myindex)
         return -1;
       }
 
+      if (0 > fdsetblocking(clientfd,0))
+        return -1;
       if (0 > fdsetasync(clientfd,1))
         return -1;
 
