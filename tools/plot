@@ -6,8 +6,8 @@ set xlabel "Time (s)"
 set ylabel "Utilization (%)"
 set yr [0:105]
 
-plot "< grep green1 clustermon.log" using 2:3 title 'green1' with lines, \
-     "< grep green2 clustermon.log" using 2:3 title 'green2' with lines, \
-     "< grep green3 clustermon.log" using 2:3 title 'green3' with lines, \
-     "< grep green4 clustermon.log" using 2:3 title 'green4' with lines, \
-     "< grep green5 clustermon.log" using 2:3 title 'green5' with lines
+plot "< grep green1 showload.log" using 2:3 title 'green1' with lines, \
+     "< grep green2 showload.log" using 2:3 title 'green2' with lines, \
+     "< grep green3 showload.log" using 2:3 title 'green3' with lines, \
+     "< grep green4 showload.log" using 2:3 title 'green4' with lines, \
+     "< grep green5 showload.log" using 2:3 title 'green5' with lines

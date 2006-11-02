@@ -17,7 +17,7 @@
 #include <signal.h>
 
 #define CHUNKSIZE 4
-#define LOGFILENAME "clustermon.log"
+#define LOGFILENAME "showload.log"
 #define DELAYMS 1000
 #define HOSTWIDTH 12
 
@@ -343,7 +343,7 @@ int main(int argc, char **argv)
   setbuf(stdout,NULL);
 
   if (2 > argc) {
-    fprintf(stderr,"Usage: clustermon <hosts>\n");
+    fprintf(stderr,"Usage: showload <hosts>\n");
     return -1;
   }
 

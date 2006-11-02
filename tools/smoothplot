@@ -5,8 +5,8 @@ set out "usage.ps"
 set xlabel "Time (s)"
 set ylabel "Utilization (%)"
 
-plot "< grep green1 clustermon.log" using 2:3 title 'green1' with lines smooth csplines, \
-     "< grep green2 clustermon.log" using 2:3 title 'green2' with lines smooth csplines, \
-     "< grep green3 clustermon.log" using 2:3 title 'green3' with lines smooth csplines, \
-     "< grep green4 clustermon.log" using 2:3 title 'green4' with lines smooth csplines, \
-     "< grep green5 clustermon.log" using 2:3 title 'green5' with lines smooth csplines
+plot "< grep green1 showload.log" using 2:3 title 'green1' with lines smooth csplines, \
+     "< grep green2 showload.log" using 2:3 title 'green2' with lines smooth csplines, \
+     "< grep green3 showload.log" using 2:3 title 'green3' with lines smooth csplines, \
+     "< grep green4 showload.log" using 2:3 title 'green4' with lines smooth csplines, \
+     "< grep green5 showload.log" using 2:3 title 'green5' with lines smooth csplines

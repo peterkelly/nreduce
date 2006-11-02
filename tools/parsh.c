@@ -34,7 +34,6 @@ int nhosts = 0;
 
 struct arguments {
   char *hosts;
-  char *username;
   char *shell;
   int oneline;
   char *cmd;
