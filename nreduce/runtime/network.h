@@ -24,6 +24,7 @@
 #define _NETWORK_H
 
 #include "src/nreduce.h"
+#include "compiler/util.h"
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -39,6 +40,13 @@ typedef struct workerinfo {
   int connected;
   pid_t pid;
   int readfd;
+  array *recvbuf;
+  array *sendbuf;
+
+  int id;
+
+  struct workerinfo *prev;
+  struct workerinfo *next;
 } workerinfo;
 
 typedef struct nodeinfo {
@@ -52,6 +60,7 @@ int start_listening(struct in_addr ip, int port);
 int start_listening_host(const char *host, int port);
 int accept_connection(int sockfd);
 int parse_address(const char *address, char **host, int *port);
+array *read_hostnames(const char *hostsfile);
 nodeinfo *nodeinfo_init(const char *hostsfile);
 void nodeinfo_free(nodeinfo *ni);
 int wait_for_connections(nodeinfo *ni);
