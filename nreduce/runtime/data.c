@@ -37,6 +37,8 @@
 #include <math.h>
 #include <errno.h>
 
+extern int ioready;
+
 reader read_start(const char *data, int size)
 {
   reader rd;
@@ -611,7 +613,7 @@ void mem_send(task *tsk, int dest, int tag, char *data, int size)
   msg_print(tsk,dest,tag,data,size);
   #endif
 
-  message *msg = (message*)calloc(1,sizeof(message));
+  memmsg *msg = (memmsg*)calloc(1,sizeof(memmsg));
   task *desttsk;
   msg->from = tsk->pid;
   msg->to = dest;
@@ -634,8 +636,7 @@ void mem_send(task *tsk, int dest, int tag, char *data, int size)
   pthread_cond_signal(&desttsk->msgcond);
   pthread_mutex_unlock(&desttsk->msglock);
 
-  if (desttsk->ioreadyptr)
-    *desttsk->ioreadyptr = 1;
+  ioready = 1;
 }
 
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
@@ -660,7 +661,7 @@ int msg_recv2(task *tsk, int *tag, char **data, int *size, int block, int delaym
 int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
   list *l = NULL;
-  message *msg;
+  memmsg *msg;
   int from;
 
   pthread_mutex_lock(&tsk->msglock);
@@ -696,7 +697,7 @@ int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delaym
   if (NULL == l)
     return -1;
 
-  msg = (message*)l->data;
+  msg = (memmsg*)l->data;
 /*   fprintf(tsk->output,"msg_recv %d -> %d : data %p, size %d\n", */
 /*           msg->from,tsk->pid,msg->data,msg->size); */
 

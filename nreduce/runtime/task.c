@@ -537,7 +537,7 @@ void task_init(task *tsk)
   }
 }
 
-static void message_free(message *msg)
+static void memmsg_free(memmsg *msg)
 {
   free(msg->data);
   free(msg);
@@ -597,7 +597,7 @@ void task_free(task *tsk)
   free(tsk->inflight_addrs);
   free(tsk->unack_msg_acount);
 
-  list_free(tsk->msgqueue,(list_d_t)message_free);
+  list_free(tsk->msgqueue,(list_d_t)memmsg_free);
   pthread_mutex_destroy(&tsk->msglock);
   pthread_cond_destroy(&tsk->msgcond);
   free(tsk);

@@ -46,7 +46,7 @@
 
 #define FISH_DELAY_MS 5000
 
-int *ioreadyptr = NULL;
+int ioready = 0;
 
 void print_stack(FILE *f, pntr *stk, int size, int dir)
 {
@@ -859,12 +859,8 @@ void execute(task *tsk)
   const instruction *instr;
   int mycount = 0;
   static int oldused = 0;
-  int ioready = 0;
 
   tsk->newfish = 1;
-
-  ioreadyptr = &ioready;
-  tsk->ioreadyptr = &ioready; /* race condition? */
 
   lastfish.tv_sec = 0;
   lastfish.tv_usec = 0;

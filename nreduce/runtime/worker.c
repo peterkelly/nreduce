@@ -54,40 +54,12 @@
 #include <signal.h>
 #include <execinfo.h>
 
-typedef struct taskid {
-  int nodeip;
-  short nodeport;
-  short id;
-} taskid;
-
-#define CHUNKSIZE 1024
+//#define CHUNKSIZE 1024
+#define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
 //#define SOCKET_DEBUG
 
-extern int *ioreadyptr;
-
-typedef struct msgheader {
-  taskid stid;
-  taskid dtid;
-  int rsize;
-  int rtag;
-} msgheader;
-
-typedef struct socketmsg {
-  char *rawdata;
-  int rawsize;
-  int sent;
-
-  msgheader hdr;
-
-  struct socketmsg *next;
-  struct socketmsg *prev;
-} socketmsg;
-
-typedef struct socketmsglist {
-  socketmsg *first;
-  socketmsg *last;
-} socketmsglist;
+extern int ioready;
 
 typedef struct connection {
   int sock;
@@ -111,7 +83,7 @@ typedef struct workerlist {
 } workerlist;
 
 typedef struct socketcomm {
-  socketmsglist incoming;
+  tasklist tasks;
   connectionlist connections;
   workerlist wlist;
   int listenfd;
@@ -129,7 +101,7 @@ static void socketcomm_free(socketcomm *sc)
   free(sc);
 }
 
-static void doio(task *tsk, int block, int delayms);
+static void doio(task *tsk, int delayms);
 
 static workerinfo *find_worker(task *tsk, int id)
 {
@@ -139,6 +111,15 @@ static workerinfo *find_worker(task *tsk, int id)
   for (wrk = sc->wlist.first; wrk; wrk = wrk->next)
     if (wrk->id == id)
       return wrk;
+  return NULL;
+}
+
+static task *find_task(socketcomm *sc, int pid)
+{
+  task *tsk;
+  for (tsk = sc->tasks.first; tsk; tsk = tsk->next)
+    if (tsk->pid == pid)
+      return tsk;
   return NULL;
 }
 
@@ -174,12 +155,11 @@ static void socket_send(task *tsk, int destid, int tag, char *data, int size)
   array_append(wrk->sendbuf,&hdr,sizeof(msgheader));
   array_append(wrk->sendbuf,data,size);
 
-  doio(tsk,0,0);
+  doio(tsk,0);
 }
 
-static void process_received(task *tsk, workerinfo *wkr)
+static void process_received(socketcomm *sc, workerinfo *wkr)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
   int start = 0;
 
   if (0 > wkr->id) {
@@ -193,7 +173,8 @@ static void process_received(task *tsk, workerinfo *wkr)
   /* inspect the next section of the input buffer to see if it contains a complete message */
   while (MSG_HEADER_SIZE <= wkr->recvbuf->nbytes-start) {
     msgheader hdr = *(msgheader*)&wkr->recvbuf->data[start];
-    socketmsg *newmsg;
+    message *newmsg;
+    task *tsk;
 
     /* verify header */
 
@@ -201,18 +182,20 @@ static void process_received(task *tsk, workerinfo *wkr)
     assert(0 <= hdr.rtag);
     assert(MSG_COUNT > hdr.rtag);
     assert(wkr->id == hdr.stid.id);
-    assert(tsk->pid == hdr.dtid.id);
 
     if (MSG_HEADER_SIZE+hdr.rsize > wkr->recvbuf->nbytes-start)
       break; /* incomplete message */
 
+    if (NULL == (tsk = find_task(sc,hdr.dtid.id)))
+      fatal("Message received for unknown task %d\n",hdr.dtid.id);
+
     /* complete message present; add it to the mailbox */
-    newmsg = (socketmsg*)calloc(1,sizeof(socketmsg));
+    newmsg = (message*)calloc(1,sizeof(message));
     newmsg->hdr = hdr;
     newmsg->rawsize = hdr.rsize;
     newmsg->rawdata = (char*)malloc(hdr.rsize);
     memcpy(newmsg->rawdata,&wkr->recvbuf->data[start+MSG_HEADER_SIZE],hdr.rsize);
-    llist_append(&sc->incoming,newmsg);
+    llist_append(&tsk->mailbox,newmsg);
 
     start += MSG_HEADER_SIZE+hdr.rsize;
   }
@@ -223,8 +206,7 @@ static void process_received(task *tsk, workerinfo *wkr)
 
 static int receive_incoming(task *tsk, int *tag, char **data, int *size)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
-  socketmsg *msg = sc->incoming.first;
+  message *msg = tsk->mailbox.first;
   int from;
   if (NULL == msg)
     return -1;
@@ -239,7 +221,7 @@ static int receive_incoming(task *tsk, int *tag, char **data, int *size)
   *size = msg->hdr.rsize;
   from = msg->hdr.stid.id;
   assert(tsk->pid == msg->hdr.dtid.id);
-  llist_remove(&sc->incoming,msg);
+  llist_remove(&tsk->mailbox,msg);
   free(msg);
   return from;
 }
@@ -266,6 +248,8 @@ static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
   struct hostent *he;
   int sock;
   int connected = 0;
+  workerinfo *wkr;
+
   if (NULL == (he = gethostbyname(hostname))) {
     fprintf(stderr,"%s: %s\n",hostname,hstrerror(h_errno));
     return NULL;
@@ -300,24 +284,35 @@ static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
     return NULL;
   }
 
-  workerinfo *wkr = add_worker(sc,hostname,sock);
+  wkr = add_worker(sc,hostname,sock);
   wkr->connected = connected;
   wkr->ip = *((struct in_addr*)he->h_addr_list[0]);
 
   return wkr;
 }
 
-static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds, 
-                   struct timeval *timeout)
+static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds, int delayms)
 {
-  while (1) {
-    int s = select(n,readfds,writefds,exceptfds,timeout);
-    if ((0 <= s) || (EINTR != errno))
-      return s;
+  if (0 > delayms) {
+    while (1) {
+      int s = select(n,readfds,writefds,exceptfds,NULL);
+      if ((0 <= s) || (EINTR != errno))
+        return s;
+    }
+  }
+  else {
+    struct timeval timeout;
+    timeout.tv_sec = delayms/1000;
+    timeout.tv_usec = (delayms%1000)*1000;
+    while (1) {
+      int s = select(n,readfds,writefds,exceptfds,&timeout);
+      if ((0 <= s) || (EINTR != errno))
+        return s;
+    }
   }
 }
 
-static int handle_connected(task *tsk, workerinfo *wkr)
+static int handle_connected(workerinfo *wkr)
 {
   int err;
   int optlen = sizeof(int);
@@ -345,7 +340,94 @@ static int handle_connected(task *tsk, workerinfo *wkr)
   return 0;
 }
 
-static void doio(task *tsk, int block, int delayms)
+static void handle_write(workerinfo *wkr)
+{
+  while (0 < wkr->sendbuf->nbytes) {
+    int w = TEMP_FAILURE_RETRY(write(wkr->sock,wkr->sendbuf->data,wkr->sendbuf->nbytes));
+    if ((0 > w) && (EAGAIN == errno))
+      break;
+
+    if (0 > w)
+      fatal("write() to %s failed: %s\n",wkr->hostname,strerror(errno));
+
+    if (0 == w)
+      fatal("write() to %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+
+    array_remove_data(wkr->sendbuf,w);
+  }
+}
+
+static void handle_read(socketcomm *sc, workerinfo *wkr)
+{
+  /* Just do one read; there may still be more data pending after this, but we want to also
+     give a fair chance for other connections to be read from. We also want to process messages
+     as they arrive rather than waiting until can't ready an more, to avoid buffering up large
+     numbers of messages */
+  int r;
+  array *buf = wkr->recvbuf;
+
+  array_mkroom(wkr->recvbuf,CHUNKSIZE);
+  r = TEMP_FAILURE_RETRY(read(wkr->sock,
+                              &buf->data[buf->nbytes],
+                              CHUNKSIZE));
+
+  if ((0 > r) && (EAGAIN == errno))
+    return;
+
+  if (0 > r)
+    fatal("read() from %s failed: %s\n",wkr->hostname,strerror(errno));
+
+  if (0 == r)
+    fatal("read() from %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+
+  #ifdef SOCKET_DEBUG
+  printf("Received %d bytes from %s\n",r,wkr->hostname);
+  #endif
+
+  wkr->recvbuf->nbytes += r;
+  process_received(sc,wkr);
+}
+
+static void handle_new_connection(socketcomm *sc)
+{
+  struct sockaddr_in remote_addr;
+  struct hostent *he;
+  int sin_size = sizeof(struct sockaddr_in);
+  int clientfd;
+  workerinfo *wkr;
+  int yes = 1;
+  if (0 > (clientfd = accept(sc->listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
+    perror("accept");
+    return;
+  }
+
+  if ((0 > fdsetblocking(clientfd,0)) || (0 > fdsetasync(clientfd,1))) {
+    close(clientfd);
+    return;
+  }
+
+  if (0 > setsockopt(clientfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+    perror("setsockopt TCP_NODELAY");
+    return;
+  }
+
+  he = gethostbyaddr(&remote_addr.sin_addr,sizeof(struct in_addr),AF_INET);
+  if (NULL == he) {
+    unsigned char *addrbytes = (unsigned char*)&remote_addr.sin_addr;
+    char hostname[100];
+    sprintf(hostname,"%u.%u.%u.%u",
+            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
+    printf("Got connection from %s\n",hostname);
+    wkr = add_worker(sc,hostname,clientfd);
+  }
+  else {
+    printf("Got connection from %s\n",he->h_name);
+    wkr = add_worker(sc,he->h_name,clientfd);
+  }
+  wkr->connected = 1;
+}
+
+static void doio(task *tsk, int delayms)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int highest = -1;
@@ -354,6 +436,7 @@ static void doio(task *tsk, int block, int delayms)
   fd_set writefds;
   int want2write = 0;
   workerinfo *wkr;
+  workerinfo *next;
 
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
@@ -368,23 +451,13 @@ static void doio(task *tsk, int block, int delayms)
       highest = wkr->sock;
     FD_SET(wkr->sock,&readfds);
 
-
     if ((0 < wkr->sendbuf->nbytes) || !wkr->connected) {
       FD_SET(wkr->sock,&writefds);
       want2write = 1;
     }
-
   }
 
-  if (block) {
-    s = rselect(highest+1,&readfds,&writefds,NULL,NULL);
-  }
-  else {
-    struct timeval timeout;
-    timeout.tv_sec = delayms/1000;
-    timeout.tv_usec = (delayms%1000)*1000;
-    s = rselect(highest+1,&readfds,&writefds,NULL,&timeout);
-  }
+  s = rselect(highest+1,&readfds,&writefds,NULL,delayms);
 
   if (0 > s)
     fatal("select: %s",strerror(errno));
@@ -393,113 +466,40 @@ static void doio(task *tsk, int block, int delayms)
   printf("select() returned %d\n",s);
   #endif
 
-  if (want2write && tsk->ioreadyptr)
-    *tsk->ioreadyptr = 1;
+  if (want2write)
+    ioready = 1;
 
   if (0 == s)
     return; /* timed out; no sockets are ready for reading or writing */
 
   /* Set the I/O ready flag again, because there may be more after what we read here */
-  if (tsk->ioreadyptr)
-    *tsk->ioreadyptr = 1;
+  ioready = 1;
 
   /* Do all the writing we can */
-  for (wkr = sc->wlist.first; wkr; wkr = wkr->next) {
-
-    if (!FD_ISSET(wkr->sock,&writefds))
-      continue;
-
-    if (!wkr->connected) {
-      handle_connected(tsk,wkr);
-    }
-    else {
-      while (0 < wkr->sendbuf->nbytes) {
-        int w = TEMP_FAILURE_RETRY(write(wkr->sock,
-                                         wkr->sendbuf->data,
-                                         wkr->sendbuf->nbytes));
-        if ((0 > w) && (EAGAIN == errno))
-          break;
-
-        if (0 > w)
-          fatal("write() to %s failed: %s\n",wkr->hostname,strerror(errno));
-
-        if (0 == w)
-          fatal("write() to %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
-
-        array_remove_data(wkr->sendbuf,w);
-      }
+  for (wkr = sc->wlist.first; wkr; wkr = next) {
+    next = wkr->next;
+    if (FD_ISSET(wkr->sock,&writefds)) {
+      if (wkr->connected)
+        handle_write(wkr);
+      else
+        handle_connected(wkr);
     }
   }
 
   /* Read data */
-  for (wkr = sc->wlist.first; wkr; wkr = wkr->next) {
-
-    if (!FD_ISSET(wkr->sock,&readfds))
-      continue;
-
-    while (1) {
-      int r;
-      array *buf = wkr->recvbuf;
-
-      array_mkroom(wkr->recvbuf,CHUNKSIZE);
-      r = TEMP_FAILURE_RETRY(read(wkr->sock,
-                                  &buf->data[buf->nbytes],
-                                  CHUNKSIZE));
-
-      if ((0 > r) && (EAGAIN == errno))
-        break;
-
-      if (0 > r)
-        fatal("read() from %s failed: %s\n",wkr->hostname,strerror(errno));
-
-      if (0 == r)
-        fatal("read() from %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
-
-      #ifdef SOCKET_DEBUG
-      printf("Received %d bytes from %s\n",r,wkr->hostname);
-      #endif
-
-      wkr->recvbuf->nbytes += r;
-      process_received(tsk,wkr);
-    }
+  for (wkr = sc->wlist.first; wkr; wkr = next) {
+    next = wkr->next;
+    if (FD_ISSET(wkr->sock,&readfds))
+      handle_read(sc,wkr);
   }
 
   /* accept new connections */
-  if (FD_ISSET(sc->listenfd,&readfds)) {
-    struct sockaddr_in remote_addr;
-    struct hostent *he;
-    int sin_size = sizeof(struct sockaddr_in);
-    int clientfd;
-    workerinfo *wkr;
-    if (0 > (clientfd = accept(sc->listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
-      perror("accept");
-      return;
-    }
-
-    if ((0 > fdsetblocking(clientfd,0)) || (0 > fdsetasync(clientfd,1))) {
-      close(clientfd);
-      return;
-    }
-
-    he = gethostbyaddr(&remote_addr.sin_addr,sizeof(struct in_addr),AF_INET);
-    if (NULL == he) {
-      unsigned char *addrbytes = (unsigned char*)&remote_addr.sin_addr;
-      char hostname[100];
-      sprintf(hostname,"%u.%u.%u.%u",
-              addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
-      printf("Got connection from %s\n",hostname);
-      wkr = add_worker(sc,hostname,clientfd);
-    }
-    else {
-      printf("Got connection from %s\n",he->h_name);
-      wkr = add_worker(sc,he->h_name,clientfd);
-    }
-    wkr->connected = 1;
-  }
+  if (FD_ISSET(sc->listenfd,&readfds))
+    handle_new_connection(sc);
 
 }
 
-static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
+static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
   int from;
 
@@ -513,17 +513,17 @@ static int socket_recv2(task *tsk, int *tag, char **data, int *size, int block, 
   /* Clear the I/O ready flag. If we got a SIGIO flag just before this it doesn't matter,
      because we're about to do a select() anyway. If a SIGIO comes in after we've cleared
      the flag it will just be set again. */
-  if (tsk->ioreadyptr)
-    *tsk->ioreadyptr = 0;
+  ioready = 0;
 
-  doio(tsk,block,delayms);
+  if (block)
+    doio(tsk,-1);
+  else
+    doio(tsk,delayms);
+
+  /* FIXME: there may be outstanding data! shouldn't return just yet if we've been asked to
+     block and we don't have a completed message (for this particular task) yet. */
 
   return receive_incoming(tsk,tag,data,size);
-}
-
-static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
-{
-  return socket_recv2(tsk,tag,data,size,block,delayms);
 }
 
 static void sigabrt(int sig)
@@ -549,10 +549,7 @@ static void sigsegv(int sig)
 
 static void sigio(int sig)
 {
-/*   char *str = "SIGIO\n"; */
-/*   write(STDOUT_FILENO,str,strlen(str)); */
-  if (ioreadyptr)
-    *ioreadyptr = 1;
+  ioready = 1;
 }
 
 static void exited()
@@ -614,7 +611,7 @@ static int connect_workers(task *tsk, int want, int listenfd, int myindex)
   workerinfo *wkr;
   do {
     have = 0;
-    doio(tsk,1,0);
+    doio(tsk,-1);
     for (wkr = sc->wlist.first; wkr; wkr = wkr->next)
       if (wkr->connected && (0 <= wkr->id))
         have++;
@@ -624,7 +621,6 @@ static int connect_workers(task *tsk, int want, int listenfd, int myindex)
   return 0;
 }
 
-#define CHUNKSIZE 1024
 static array *read_data(int fd)
 {
   int size;
@@ -745,6 +741,8 @@ int worker(const char *hostsfile, const char *masteraddr)
   tsk->recvf = socket_recv;
   task_init(tsk);
   tsk->output = stdout;
+
+  llist_append(&sc->tasks,tsk);
 
   if (0 > connect_workers(tsk,remaining,listenfd,myindex))
     return -1;

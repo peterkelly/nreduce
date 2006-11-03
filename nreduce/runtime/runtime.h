@@ -177,13 +177,42 @@ pntr resolve_pntr(pntr p);
 
 
 
+typedef struct taskid {
+  int nodeip;
+  short nodeport;
+  short id;
+} taskid;
+
+typedef struct msgheader {
+  taskid stid;
+  taskid dtid;
+  int rsize;
+  int rtag;
+} msgheader;
+
 typedef struct message {
+  char *rawdata;
+  int rawsize;
+  int sent;
+
+  msgheader hdr;
+
+  struct message *next;
+  struct message *prev;
+} message;
+
+typedef struct messagelist {
+  message *first;
+  message *last;
+} messagelist;
+
+typedef struct memmsg {
   int from;
   int to;
   int tag;
   int size;
   char *data;
-} message;
+} memmsg;
 
 typedef struct group {
   struct task **procs;
@@ -343,7 +372,6 @@ typedef struct task {
   int groupsize;
   pthread_mutex_t msglock;
   pthread_cond_t msgcond;
-  int *ioreadyptr;
   int ackmsgsize;
   int naddrsread;
   array *ackmsg;
@@ -405,7 +433,17 @@ typedef struct task {
   send_fun sendf;
   recv_fun recvf;
   void *commdata;
+
+  struct task *prev;
+  struct task *next;
+
+  messagelist mailbox;
 } task;
+
+typedef struct tasklist {
+  task *first;
+  task *last;
+} tasklist;
 
 task *task_new(void);
 void task_init(task *tsk);
