@@ -166,17 +166,6 @@ pntr resolve_pntr(pntr p);
 
 #define check_global(_g) (assert(!(_g)->freed))
 
-
-
-
-
-
-
-
-
-
-
-
 typedef struct taskid {
   int nodeip;
   short nodeport;
@@ -433,6 +422,7 @@ typedef struct task {
   send_fun sendf;
   recv_fun recvf;
   void *commdata;
+  taskid *idmap;
 
   struct task *prev;
   struct task *next;
@@ -481,27 +471,21 @@ void set_error(task *tsk, const char *format, ...);
 
 /* data */
 
-#define MSG_ISTATS       0
-#define MSG_ALLSTATS     1
-#define MSG_DUMP_INFO    2
-#define MSG_DONE         3
-#define MSG_PAUSE        4
-#define MSG_RESUME       5
-#define MSG_FISH         6
-#define MSG_FETCH        7
-#define MSG_TRANSFER     8
-#define MSG_ACK          9
-#define MSG_MARKROOTS    10
-#define MSG_MARKENTRY    11
-#define MSG_SWEEP        12
-#define MSG_SWEEPACK     13
-#define MSG_UPDATE       14
-#define MSG_RESPOND      15
-#define MSG_SCHEDULE     16
-#define MSG_UPDATEREF    17
-#define MSG_TEST         18
-#define MSG_STARTDISTGC  19
-#define MSG_COUNT        20
+#define MSG_DONE         0
+#define MSG_FISH         1
+#define MSG_FETCH        2
+#define MSG_TRANSFER     3
+#define MSG_ACK          4
+#define MSG_MARKROOTS    5
+#define MSG_MARKENTRY    6
+#define MSG_SWEEP        7
+#define MSG_SWEEPACK     8
+#define MSG_UPDATE       9
+#define MSG_RESPOND      10
+#define MSG_SCHEDULE     11
+#define MSG_UPDATEREF    12
+#define MSG_STARTDISTGC  13
+#define MSG_COUNT        14
 
 typedef struct reader {
   const char *data;

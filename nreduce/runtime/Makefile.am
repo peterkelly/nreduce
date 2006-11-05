@@ -9,6 +9,7 @@ libruntime_la_SOURCES = 	master.c \
 	memory.c \
 	data.c \
 	console.c \
+	console2.c \
 	interpreter.c \
 	reduction.c
 

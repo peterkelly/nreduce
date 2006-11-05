@@ -57,12 +57,7 @@ const char *cell_types[CELL_COUNT] = {
 };
 
 const char *msg_names[MSG_COUNT] = {
-  "ISTATS",
-  "ALLSTATS",
-  "DUMP_INFO",
   "DONE",
-  "PAUSE",
-  "RESUME",
   "FISH",
   "FETCH",
   "TRANSFER",
@@ -75,7 +70,6 @@ const char *msg_names[MSG_COUNT] = {
   "RESPOND",
   "SCHEDULE",
   "UPDATEREF",
-  "TEST",
   "STARTDISTGC",
 };
 

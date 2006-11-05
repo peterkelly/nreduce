@@ -59,36 +59,9 @@
 #define MSG_HEADER_SIZE sizeof(msgheader)
 //#define SOCKET_DEBUG
 
+#define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
+
 extern int ioready;
-
-typedef struct connection {
-  int sock;
-  char *hostname;
-  struct in_addr ip;
-  int port;
-  array *sendbuf;
-  array *recvbuf;
-  struct connection *prev;
-  struct connection *next;
-} connection;
-
-typedef struct connectionlist {
-  connection *first;
-  connection *last;
-} connectionlist;
-
-typedef struct workerlist {
-  workerinfo *first;
-  workerinfo *last;
-} workerlist;
-
-typedef struct socketcomm {
-  tasklist tasks;
-  connectionlist connections;
-  workerlist wlist;
-  int listenfd;
-  int myindex;
-} socketcomm;
 
 static socketcomm *socketcomm_new()
 {
@@ -162,12 +135,47 @@ static void process_received(socketcomm *sc, workerinfo *wkr)
 {
   int start = 0;
 
+  if (wkr->isconsole) {
+    console_process_received(sc,wkr);
+    return;
+  }
+
+  if (!wkr->donewelcome) {
+    if (wkr->recvbuf->nbytes < strlen(WELCOME_MESSAGE)) {
+      if (strncmp(wkr->recvbuf->data,WELCOME_MESSAGE,wkr->recvbuf->nbytes)) {
+        /* Data sent so far is not part of the welcome message; must be a console client */
+        wkr->isconsole = 1;
+        console_process_received(sc,wkr);
+        return;
+      }
+      else {
+        /* What we've received so far matches the welcome message but it isn't complete yet;
+           wait for more data */
+      }
+    }
+    else { /* wkr->recvbuf->nbytes <= strlen(WELCOME_MESSAGE */
+      if (strncmp(wkr->recvbuf->data,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE))) {
+        /* Have enough bytes but it's not the welcome message; must be a console client */
+        wkr->isconsole = 1;
+        console_process_received(sc,wkr);
+        return;
+      }
+      else {
+        /* We have the welcome message; it's a peer and we want to exchange ids next */
+        wkr->donewelcome = 1;
+        start += strlen(WELCOME_MESSAGE);
+        array_append(wkr->sendbuf,&sc->myindex,sizeof(int));
+      }
+    }
+  }
+
   if (0 > wkr->id) {
-    if (sizeof(int) > wkr->recvbuf->nbytes)
+    if (sizeof(int) > wkr->recvbuf->nbytes-start) {
+      array_remove_data(wkr->recvbuf,start);
       return;
-    wkr->id = *(int*)wkr->recvbuf->data;
-    start = sizeof(int);
-    printf("%s sent id: %d\n",wkr->hostname,wkr->id);
+    }
+    wkr->id = *(int*)&wkr->recvbuf->data[start];
+    start += sizeof(int);
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -177,7 +185,6 @@ static void process_received(socketcomm *sc, workerinfo *wkr)
     task *tsk;
 
     /* verify header */
-
     assert(0 <= hdr.rsize);
     assert(0 <= hdr.rtag);
     assert(MSG_COUNT > hdr.rtag);
@@ -237,9 +244,21 @@ workerinfo *add_worker(socketcomm *sc, const char *hostname, int sock)
   wkr->id = -1;
   wkr->recvbuf = array_new(1);
   wkr->sendbuf = array_new(1);
-  array_append(wkr->sendbuf,&sc->myindex,sizeof(int));
+/*   array_append(wkr->sendbuf,&sc->myindex,sizeof(int)); */
+  array_append(wkr->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&sc->wlist,wkr);
   return wkr;
+}
+
+static void remove_worker(socketcomm *sc, workerinfo *wkr)
+{
+  printf("Removing worker %s\n",wkr->hostname);
+  close(wkr->sock);
+  llist_remove(&sc->wlist,wkr);
+  free(wkr->hostname);
+  array_free(wkr->recvbuf);
+  array_free(wkr->sendbuf);
+  free(wkr);
 }
 
 static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
@@ -312,7 +331,7 @@ static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds,
   }
 }
 
-static int handle_connected(workerinfo *wkr)
+static int handle_connected(socketcomm *sc, workerinfo *wkr)
 {
   int err;
   int optlen = sizeof(int);
@@ -340,21 +359,36 @@ static int handle_connected(workerinfo *wkr)
   return 0;
 }
 
-static void handle_write(workerinfo *wkr)
+static void handle_write(socketcomm *sc, workerinfo *wkr)
 {
   while (0 < wkr->sendbuf->nbytes) {
     int w = TEMP_FAILURE_RETRY(write(wkr->sock,wkr->sendbuf->data,wkr->sendbuf->nbytes));
     if ((0 > w) && (EAGAIN == errno))
       break;
 
-    if (0 > w)
-      fatal("write() to %s failed: %s\n",wkr->hostname,strerror(errno));
+    if (0 > w) {
+      fprintf(stderr,"write() to %s failed: %s\n",wkr->hostname,strerror(errno));
+      if (wkr->isconsole)
+        remove_worker(sc,wkr);
+      else
+        abort();
+      return;
+    }
 
-    if (0 == w)
-      fatal("write() to %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+    if (0 == w) {
+      fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+      if (wkr->isconsole)
+        remove_worker(sc,wkr);
+      else
+        abort();
+      return;
+    }
 
     array_remove_data(wkr->sendbuf,w);
   }
+
+  if ((0 == wkr->sendbuf->nbytes) && wkr->toclose)
+    remove_worker(sc,wkr);
 }
 
 static void handle_read(socketcomm *sc, workerinfo *wkr)
@@ -374,11 +408,26 @@ static void handle_read(socketcomm *sc, workerinfo *wkr)
   if ((0 > r) && (EAGAIN == errno))
     return;
 
-  if (0 > r)
-    fatal("read() from %s failed: %s\n",wkr->hostname,strerror(errno));
+  if (0 > r) {
+    fprintf(stderr,"read() from %s failed: %s\n",wkr->hostname,strerror(errno));
+    if (wkr->isconsole)
+      remove_worker(sc,wkr);
+    else
+      abort();
+    return;
+  }
 
-  if (0 == r)
-    fatal("read() from %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+  if (0 == r) {
+    if (wkr->isconsole) {
+      printf("Client %s closed connection\n",wkr->hostname);
+      remove_worker(sc,wkr);
+    }
+    else {
+      fprintf(stderr,"read() from %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+      abort();
+    }
+    return;
+  }
 
   #ifdef SOCKET_DEBUG
   printf("Received %d bytes from %s\n",r,wkr->hostname);
@@ -480,9 +529,9 @@ static void doio(task *tsk, int delayms)
     next = wkr->next;
     if (FD_ISSET(wkr->sock,&writefds)) {
       if (wkr->connected)
-        handle_write(wkr);
+        handle_write(sc,wkr);
       else
-        handle_connected(wkr);
+        handle_connected(sc,wkr);
     }
   }
 

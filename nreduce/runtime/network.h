@@ -25,6 +25,7 @@
 
 #include "src/nreduce.h"
 #include "compiler/util.h"
+#include "runtime.h"
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -44,6 +45,9 @@ typedef struct workerinfo {
   array *sendbuf;
 
   int id;
+  int donewelcome;
+  int isconsole;
+  int toclose;
 
   struct workerinfo *prev;
   struct workerinfo *next;
@@ -54,6 +58,18 @@ typedef struct nodeinfo {
   int nworkers;
   int listenfd;
 } nodeinfo;
+
+typedef struct workerlist {
+  workerinfo *first;
+  workerinfo *last;
+} workerlist;
+
+typedef struct socketcomm {
+  tasklist tasks;
+  workerlist wlist;
+  int listenfd;
+  int myindex;
+} socketcomm;
 
 int connect_host(const char *hostname, int port);
 int start_listening(struct in_addr ip, int port);
@@ -67,5 +83,9 @@ int wait_for_connections(nodeinfo *ni);
 int fdsetflag(int fd, int flag, int on);
 int fdsetblocking(int fd, int blocking);
 int fdsetasync(int fd, int async);
+
+/* console2 */
+
+void console_process_received(socketcomm *sc, workerinfo *wkr);
 
 #endif

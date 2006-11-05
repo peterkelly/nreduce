@@ -72,6 +72,36 @@ void array_append(array *arr, const void *data, int size)
   arr->nbytes += size;
 }
 
+void array_vprintf(array *arr, const char *format, va_list ap)
+{
+  assert(1 == arr->elemsize);
+  while (1) {
+    va_list tmp;
+    int r;
+
+    va_copy(tmp,ap);
+    r = vsnprintf(&arr->data[arr->nbytes],arr->alloc-arr->nbytes,format,ap);
+    va_end(tmp);
+
+    if ((0 > r) || (r > arr->alloc-arr->nbytes)) {
+      arr->alloc *= 2;
+      arr->data = realloc(arr->data,arr->alloc);
+    }
+    else {
+      arr->nbytes += r;
+      return;
+    }
+  }
+}
+
+void array_printf(array *arr, const char *format, ...)
+{
+  va_list ap;
+  va_start(ap,format);
+  array_vprintf(arr,format,ap);
+  va_end(ap);
+}
+
 void array_remove_data(array *arr, int nbytes)
 {
   assert(nbytes <= arr->nbytes);

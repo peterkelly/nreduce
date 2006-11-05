@@ -305,80 +305,9 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
   #endif
 
   switch (tag) {
-  case MSG_ISTATS: {
-    array *wr = write_start();
-    int i;
-    int h;
-    global *glo;
-    int globals = 0;
-
-    write_int(wr,tsk->stats.totalallocs);
-
-    for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
-        globals++;
-    write_int(wr,globals);
-
-    for (i = 0; i < OP_COUNT; i++)
-      write_int(wr,tsk->stats.op_usage[i]);
-    for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,tsk->stats.sendcount[i]);
-    for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,tsk->stats.sendbytes[i]);
-    for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,tsk->stats.recvcount[i]);
-    for (i = 0; i < MSG_COUNT; i++)
-      write_int(wr,tsk->stats.recvbytes[i]);
-    msg_send(tsk,from,MSG_ISTATS,wr->data,wr->nbytes);
-    write_end(wr);
-    break;
-  }
-  case MSG_ALLSTATS: {
-    int totalallocs;
-    int *usage;
-    int op;
-    array *wr;
-
-    if (READER_OK != (r = read_int(&rd,&totalallocs)))
-      return r;
-
-    usage = (int*)calloc(OP_COUNT,sizeof(int));
-    for (op = 0; op < OP_COUNT; op++) {
-      if (READER_OK != (r = read_int(&rd,&usage[op])))
-        return r;
-    }
-
-    if (READER_OK != r) {
-      free(usage);
-      return r;
-    }
-
-    totalallocs += tsk->stats.totalallocs;
-    for (op = 0; op < OP_COUNT; op++)
-      usage[op] += tsk->stats.op_usage[op];
-
-    wr = write_start();
-    write_int(wr,totalallocs);
-    for (op = 0; op < OP_COUNT; op++)
-      write_int(wr,usage[op]);
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_ALLSTATS,wr->data,wr->nbytes);
-    write_end(wr);
-    break;
-  }
   case MSG_DONE:
     tsk->done = 1;
     fprintf(tsk->output,"%d: done\n",tsk->pid);
-    break;
-  case MSG_PAUSE: {
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_PAUSE,data,size);
-    tsk->paused++;
-    fprintf(tsk->output,"%d: paused\n",tsk->pid);
-    break;
-  }
-  case MSG_RESUME:
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_RESUME,data,size);
-    fprintf(tsk->output,"%d: resumed\n",tsk->pid);
-    tsk->paused--;
     break;
   case MSG_FISH: {
     int reqtsk, age, nframes;
@@ -765,53 +694,6 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     #endif
     break;
   }
-  case MSG_TEST: {
-    int remoterefs = 0;
-    int resolved = 0;
-    int entries = 0;
-    int globals = 0;
-    int h;
-    int pid;
-    global *glo;
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_TEST,data,size);
-    local_collect(tsk);
-    fprintf(tsk->output,"In-flight addresses: %d\n",list_count(tsk->inflight));
-
-    for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext) {
-        globals++;
-        if (glo->addr.pid == tsk->pid) {
-          entries++;
-        }
-        else if ((CELL_REMOTEREF == pntrtype(glo->p)) &&
-                 ((global*)get_pntr(get_pntr(glo->p)->field1) == glo)) {
-          remoterefs++;
-        }
-        else {
-          resolved++;
-        }
-      }
-    }
-
-    fprintf(tsk->output,"Globals: %d\n",globals);
-    fprintf(tsk->output,"Remote references: %d\n",remoterefs);
-    fprintf(tsk->output,"Resolved references: %d\n",resolved);
-    fprintf(tsk->output,"Entry items: %d\n",entries);
-
-    for (pid = 0; pid < tsk->groupsize; pid++) {
-      fprintf(tsk->output,"inflight_addrs[%d] = %-6d     unack_msg_acount[%d] = %-6d\n",
-              pid,array_count(tsk->inflight_addrs[pid]),
-              pid,array_count(tsk->unack_msg_acount[pid]));
-    }
-
-    dump_globals(tsk);
-    break;
-  }
-  case MSG_DUMP_INFO:
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_DUMP_INFO,data,size);
-    dump_info(tsk);
-    print_cells(tsk);
-    break;
   default:
     fatal("unknown message");
     break;
@@ -1326,7 +1208,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   pthread_t *threads;
   frame *initial;
 
-  grp.nprocs = 1;
+  grp.nprocs = 5;
   grp.procs = (task**)calloc(grp.nprocs,sizeof(task*));
 
 /*   printf("Initializing tasks\n"); */

@@ -23,6 +23,8 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
+#include <stdarg.h>
+
 typedef struct list list;
 struct list {
   void *data;
@@ -46,6 +48,8 @@ array *array_new(int elemsize);
 int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);
 void array_append(array *arr, const void *data, int size);
+void array_vprintf(array *arr, const char *format, va_list ap);
+void array_printf(array *arr, const char *format, ...);
 void array_remove_data(array *arr, int nbytes);
 void array_remove_items(array *arr, int count);
 #define array_item(_arr,_index,_type) (*(_type*)array_at(_arr,_index))
