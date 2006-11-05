@@ -77,32 +77,30 @@ static void socketcomm_free(socketcomm *sc)
 
 static void doio(task *tsk, int delayms);
 
-static connection *find_connection(task *tsk, int id)
+static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short nodeport)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
   connection *conn;
-  assert(0 <= id);
-  for (conn = sc->wlist.first; conn; conn = conn->next) {
-    if ((conn->ip.s_addr == tsk->idmap[id].nodeip.s_addr) &&
-        (conn->port == tsk->idmap[id].nodeport))
+  for (conn = sc->wlist.first; conn; conn = conn->next)
+    if ((conn->ip.s_addr == nodeip.s_addr) && (conn->port == nodeport))
       return conn;
-  }
   return NULL;
 }
 
-static task *find_task(socketcomm *sc, int pid)
+static task *find_task(socketcomm *sc, int localid)
 {
   task *tsk;
   for (tsk = sc->tasks.first; tsk; tsk = tsk->next)
-    if (tsk->pid == pid)
+    if (tsk->localid == localid)
       return tsk;
   return NULL;
 }
 
 static void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
+  taskid desttaskid = tsk->idmap[destid];
+  socketcomm *sc = (socketcomm*)tsk->commdata;
+  connection *conn = find_connection(sc,desttaskid.nodeip,desttaskid.nodeport);
   msgheader hdr;
-  connection *conn = find_connection(tsk,destid);
 
   if (NULL == conn)
     fatal("Could not find destination connection %d\n",destid);
@@ -123,8 +121,10 @@ static void socket_send(task *tsk, int destid, int tag, char *data, int size)
   }
 
   memset(&hdr,0,sizeof(msgheader));
-  hdr.stid.id = tsk->pid;
-  hdr.dtid.id = destid;
+/*   hdr.stid.id = tsk->pid; */
+/*   hdr.dtid.id = desttaskid.id; */
+  hdr.sourceindex = tsk->pid;
+  hdr.destlocalid = desttaskid.localid;
   hdr.rsize = size;
   hdr.rtag = tag;
 
@@ -195,8 +195,8 @@ static void process_received(socketcomm *sc, connection *conn)
     if (MSG_HEADER_SIZE+hdr.rsize > conn->recvbuf->nbytes-start)
       break; /* incomplete message */
 
-    if (NULL == (tsk = find_task(sc,hdr.dtid.id)))
-      fatal("Message received for unknown task %d\n",hdr.dtid.id);
+    if (NULL == (tsk = find_task(sc,hdr.destlocalid)))
+      fatal("Message received for unknown task %d\n",hdr.destlocalid);
 
     /* complete message present; add it to the mailbox */
     newmsg = (message*)calloc(1,sizeof(message));
@@ -223,13 +223,24 @@ static int receive_incoming(task *tsk, int *tag, char **data, int *size)
   assert(msg->hdr.rsize == msg->rawsize);
   #ifdef SOCKET_DEBUG
   printf("have completed message from worker %d, rtag = %s, rsize = %d\n",
-         msg->hdr.stid.id,msg_names[msg->hdr.rtag],msg->hdr.rsize);
+         msg->hdr.sourceindex,msg_names[msg->hdr.rtag],msg->hdr.rsize);
   #endif
   *tag = msg->hdr.rtag;
   *data = msg->rawdata;
   *size = msg->hdr.rsize;
-  from = msg->hdr.stid.id;
-  assert(tsk->pid == msg->hdr.dtid.id);
+/*   from = msg->hdr.stid.id; */
+  from = msg->hdr.sourceindex;
+/*   assert(tsk->pid == msg->hdr.dtid.id); */
+
+
+  if (tsk->localid != msg->hdr.destlocalid) {
+    printf("tsk->localid = %d, msg->hdr.destlocalid = %d\n",
+           tsk->localid,msg->hdr.destlocalid);
+  }
+  assert(tsk->localid == msg->hdr.destlocalid);
+
+
+
   llist_remove(&tsk->mailbox,msg);
   free(msg);
   return from;
@@ -719,7 +730,8 @@ static void init_idmap(task *tsk, array *hostnames)
 
     tsk->idmap[i].nodeip = *((struct in_addr*)he->h_addr);
     tsk->idmap[i].nodeport = WORKER_PORT;
-    tsk->idmap[i].id = i; /* FIXME: this won't be the case in general */
+//    tsk->idmap[i].localid = 100-i; /* FIXME: this won't be the case in general */
+    tsk->idmap[i].localid = 44; /* FIXME: this won't be the case in general */
   }
 }
 
@@ -804,6 +816,8 @@ int worker(const char *hostsfile, const char *masteraddr)
 
   tsk = task_new();
   tsk->pid = myindex;
+/*   tsk->localid = 100-myindex; */
+  tsk->localid = 44;
   tsk->groupsize = nworkers;
   tsk->bcdata = bcarr->data;
   tsk->bcsize = bcarr->nbytes;

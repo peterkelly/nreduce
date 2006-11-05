@@ -170,12 +170,17 @@ pntr resolve_pntr(pntr p);
 typedef struct taskid {
   struct in_addr nodeip;
   short nodeport;
-  short id;
+  short localid;
 } taskid;
 
 typedef struct msgheader {
-  taskid stid;
-  taskid dtid;
+  int sourceindex;
+  int destlocalid;
+
+
+/*   taskid stid; */
+/*   taskid dtid; */
+
   int rsize;
   int rtag;
 } msgheader;
@@ -424,6 +429,7 @@ typedef struct task {
   recv_fun recvf;
   void *commdata;
   taskid *idmap;
+  int localid;
 
   struct task *prev;
   struct task *next;
