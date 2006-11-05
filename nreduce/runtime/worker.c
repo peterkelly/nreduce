@@ -49,6 +49,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
@@ -76,14 +77,16 @@ static void socketcomm_free(socketcomm *sc)
 
 static void doio(task *tsk, int delayms);
 
-static workerinfo *find_worker(task *tsk, int id)
+static connection *find_connection(task *tsk, int id)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
-  workerinfo *wrk;
+  connection *conn;
   assert(0 <= id);
-  for (wrk = sc->wlist.first; wrk; wrk = wrk->next)
-    if (wrk->id == id)
-      return wrk;
+  for (conn = sc->wlist.first; conn; conn = conn->next) {
+    if ((conn->ip.s_addr == tsk->idmap[id].nodeip.s_addr) &&
+        (conn->port == tsk->idmap[id].nodeport))
+      return conn;
+  }
   return NULL;
 }
 
@@ -99,53 +102,53 @@ static task *find_task(socketcomm *sc, int pid)
 static void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
   msgheader hdr;
-  workerinfo *wrk = find_worker(tsk,destid);
+  connection *conn = find_connection(tsk,destid);
 
-  if (NULL == wrk)
-    fatal("Could not find destination worker %d\n",destid);
+  if (NULL == conn)
+    fatal("Could not find destination connection %d\n",destid);
 
   #ifdef MSG_DEBUG
-  msg_print(tsk,wrk->id,tag,data,size);
+  msg_print(tsk,destid,tag,data,size);
   #endif
 
   #ifdef SOCKET_DEBUG
   printf("socket_send: tag = %s, dest = %d, size = %d, my pid = %d\n",
-         msg_names[tag],wrk->id,size,tsk->pid);
+         msg_names[tag],destid,size,tsk->pid);
   #endif
 
-  if (wrk->id == tsk->pid) {
+  if (destid == tsk->pid) {
     printf("%s sending to %s (that's me!): FIXME: support this case\n",
-           wrk->hostname,wrk->hostname);
+           conn->hostname,conn->hostname);
     abort();
   }
 
   memset(&hdr,0,sizeof(msgheader));
   hdr.stid.id = tsk->pid;
-  hdr.dtid.id = wrk->id;
+  hdr.dtid.id = destid;
   hdr.rsize = size;
   hdr.rtag = tag;
 
-  array_append(wrk->sendbuf,&hdr,sizeof(msgheader));
-  array_append(wrk->sendbuf,data,size);
+  array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+  array_append(conn->sendbuf,data,size);
 
   doio(tsk,0);
 }
 
-static void process_received(socketcomm *sc, workerinfo *wkr)
+static void process_received(socketcomm *sc, connection *conn)
 {
   int start = 0;
 
-  if (wkr->isconsole) {
-    console_process_received(sc,wkr);
+  if (conn->isconsole) {
+    console_process_received(sc,conn);
     return;
   }
 
-  if (!wkr->donewelcome) {
-    if (wkr->recvbuf->nbytes < strlen(WELCOME_MESSAGE)) {
-      if (strncmp(wkr->recvbuf->data,WELCOME_MESSAGE,wkr->recvbuf->nbytes)) {
+  if (!conn->donewelcome) {
+    if (conn->recvbuf->nbytes < strlen(WELCOME_MESSAGE)) {
+      if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,conn->recvbuf->nbytes)) {
         /* Data sent so far is not part of the welcome message; must be a console client */
-        wkr->isconsole = 1;
-        console_process_received(sc,wkr);
+        conn->isconsole = 1;
+        console_process_received(sc,conn);
         return;
       }
       else {
@@ -153,34 +156,34 @@ static void process_received(socketcomm *sc, workerinfo *wkr)
            wait for more data */
       }
     }
-    else { /* wkr->recvbuf->nbytes <= strlen(WELCOME_MESSAGE */
-      if (strncmp(wkr->recvbuf->data,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE))) {
+    else { /* conn->recvbuf->nbytes <= strlen(WELCOME_MESSAGE */
+      if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE))) {
         /* Have enough bytes but it's not the welcome message; must be a console client */
-        wkr->isconsole = 1;
-        console_process_received(sc,wkr);
+        conn->isconsole = 1;
+        console_process_received(sc,conn);
         return;
       }
       else {
         /* We have the welcome message; it's a peer and we want to exchange ids next */
-        wkr->donewelcome = 1;
+        conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
-        array_append(wkr->sendbuf,&sc->myindex,sizeof(int));
+        array_append(conn->sendbuf,&sc->listenport,sizeof(int));
       }
     }
   }
 
-  if (0 > wkr->id) {
-    if (sizeof(int) > wkr->recvbuf->nbytes-start) {
-      array_remove_data(wkr->recvbuf,start);
+  if (0 > conn->port) {
+    if (sizeof(int) > conn->recvbuf->nbytes-start) {
+      array_remove_data(conn->recvbuf,start);
       return;
     }
-    wkr->id = *(int*)&wkr->recvbuf->data[start];
+    conn->port = *(int*)&conn->recvbuf->data[start];
     start += sizeof(int);
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
-  while (MSG_HEADER_SIZE <= wkr->recvbuf->nbytes-start) {
-    msgheader hdr = *(msgheader*)&wkr->recvbuf->data[start];
+  while (MSG_HEADER_SIZE <= conn->recvbuf->nbytes-start) {
+    msgheader hdr = *(msgheader*)&conn->recvbuf->data[start];
     message *newmsg;
     task *tsk;
 
@@ -188,9 +191,8 @@ static void process_received(socketcomm *sc, workerinfo *wkr)
     assert(0 <= hdr.rsize);
     assert(0 <= hdr.rtag);
     assert(MSG_COUNT > hdr.rtag);
-    assert(wkr->id == hdr.stid.id);
 
-    if (MSG_HEADER_SIZE+hdr.rsize > wkr->recvbuf->nbytes-start)
+    if (MSG_HEADER_SIZE+hdr.rsize > conn->recvbuf->nbytes-start)
       break; /* incomplete message */
 
     if (NULL == (tsk = find_task(sc,hdr.dtid.id)))
@@ -201,14 +203,14 @@ static void process_received(socketcomm *sc, workerinfo *wkr)
     newmsg->hdr = hdr;
     newmsg->rawsize = hdr.rsize;
     newmsg->rawdata = (char*)malloc(hdr.rsize);
-    memcpy(newmsg->rawdata,&wkr->recvbuf->data[start+MSG_HEADER_SIZE],hdr.rsize);
+    memcpy(newmsg->rawdata,&conn->recvbuf->data[start+MSG_HEADER_SIZE],hdr.rsize);
     llist_append(&tsk->mailbox,newmsg);
 
     start += MSG_HEADER_SIZE+hdr.rsize;
   }
 
   /* remove the data we've consumed from the receive buffer */
-  array_remove_data(wkr->recvbuf,start);
+  array_remove_data(conn->recvbuf,start);
 }
 
 static int receive_incoming(task *tsk, int *tag, char **data, int *size)
@@ -233,41 +235,39 @@ static int receive_incoming(task *tsk, int *tag, char **data, int *size)
   return from;
 }
 
-workerinfo *add_worker(socketcomm *sc, const char *hostname, int sock)
+static connection *add_connection(socketcomm *sc, const char *hostname, int sock)
 {
-  workerinfo *wkr = (workerinfo*)calloc(1,sizeof(workerinfo));
-  wkr->hostname = strdup(hostname);
-  wkr->ip.s_addr = 0;
-  wkr->sock = sock;
-  wkr->pid = -1;
-  wkr->readfd = -1;
-  wkr->id = -1;
-  wkr->recvbuf = array_new(1);
-  wkr->sendbuf = array_new(1);
-/*   array_append(wkr->sendbuf,&sc->myindex,sizeof(int)); */
-  array_append(wkr->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
-  llist_append(&sc->wlist,wkr);
-  return wkr;
+  connection *conn = (connection*)calloc(1,sizeof(connection));
+  conn->hostname = strdup(hostname);
+  conn->ip.s_addr = 0;
+  conn->sock = sock;
+  conn->readfd = -1;
+  conn->port = -1;
+  conn->recvbuf = array_new(1);
+  conn->sendbuf = array_new(1);
+  array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
+  llist_append(&sc->wlist,conn);
+  return conn;
 }
 
-static void remove_worker(socketcomm *sc, workerinfo *wkr)
+static void remove_connection(socketcomm *sc, connection *conn)
 {
-  printf("Removing worker %s\n",wkr->hostname);
-  close(wkr->sock);
-  llist_remove(&sc->wlist,wkr);
-  free(wkr->hostname);
-  array_free(wkr->recvbuf);
-  array_free(wkr->sendbuf);
-  free(wkr);
+  printf("Removing connection %s\n",conn->hostname);
+  close(conn->sock);
+  llist_remove(&sc->wlist,conn);
+  free(conn->hostname);
+  array_free(conn->recvbuf);
+  array_free(conn->sendbuf);
+  free(conn);
 }
 
-static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
+static connection *initiate_connection(socketcomm *sc, const char *hostname)
 {
   struct sockaddr_in addr;
   struct hostent *he;
   int sock;
   int connected = 0;
-  workerinfo *wkr;
+  connection *conn;
 
   if (NULL == (he = gethostbyname(hostname))) {
     fprintf(stderr,"%s: %s\n",hostname,hstrerror(h_errno));
@@ -275,7 +275,7 @@ static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
   }
 
   if (4 != he->h_length) {
-    fprintf(stderr,"%s: %s\n",hostname,hstrerror(h_errno));
+    fprintf(stderr,"%s: invalid address type\n",hostname);
     return NULL;
   }
 
@@ -291,7 +291,7 @@ static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(WORKER_PORT);
-  addr.sin_addr = *((struct in_addr*)he->h_addr_list[0]);
+  addr.sin_addr = *((struct in_addr*)he->h_addr);
   memset(&addr.sin_zero,0,8);
 
   if (0 == connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))) {
@@ -303,11 +303,11 @@ static workerinfo *initiate_connection(socketcomm *sc, const char *hostname)
     return NULL;
   }
 
-  wkr = add_worker(sc,hostname,sock);
-  wkr->connected = connected;
-  wkr->ip = *((struct in_addr*)he->h_addr_list[0]);
+  conn = add_connection(sc,hostname,sock);
+  conn->connected = connected;
+  conn->ip = *((struct in_addr*)he->h_addr);
 
-  return wkr;
+  return conn;
 }
 
 static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds, int delayms)
@@ -331,77 +331,77 @@ static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds,
   }
 }
 
-static int handle_connected(socketcomm *sc, workerinfo *wkr)
+static int handle_connected(socketcomm *sc, connection *conn)
 {
   int err;
   int optlen = sizeof(int);
 
-  if (0 > getsockopt(wkr->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
+  if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
     perror("getsockopt");
     return -1;
   }
 
   if (0 == err) {
     int yes = 1;
-    wkr->connected = 1;
-    printf("Connected to %s\n",wkr->hostname);
+    conn->connected = 1;
+    printf("Connected to %s\n",conn->hostname);
 
-    if (0 > setsockopt(wkr->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+    if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
       return -1;
     }
   }
   else {
-    printf("Connection to %s failed: %s\n",wkr->hostname,strerror(err));
+    printf("Connection to %s failed: %s\n",conn->hostname,strerror(err));
     return -1;
   }
 
   return 0;
 }
 
-static void handle_write(socketcomm *sc, workerinfo *wkr)
+static void handle_write(socketcomm *sc, connection *conn)
 {
-  while (0 < wkr->sendbuf->nbytes) {
-    int w = TEMP_FAILURE_RETRY(write(wkr->sock,wkr->sendbuf->data,wkr->sendbuf->nbytes));
+  while (0 < conn->sendbuf->nbytes) {
+    int w = TEMP_FAILURE_RETRY(write(conn->sock,conn->sendbuf->data,conn->sendbuf->nbytes));
     if ((0 > w) && (EAGAIN == errno))
       break;
 
     if (0 > w) {
-      fprintf(stderr,"write() to %s failed: %s\n",wkr->hostname,strerror(errno));
-      if (wkr->isconsole)
-        remove_worker(sc,wkr);
+      fprintf(stderr,"write() to %s failed: %s\n",conn->hostname,strerror(errno));
+      if (conn->isconsole)
+        remove_connection(sc,conn);
       else
         abort();
       return;
     }
 
     if (0 == w) {
-      fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
-      if (wkr->isconsole)
-        remove_worker(sc,wkr);
+      fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
+      if (conn->isconsole)
+        remove_connection(sc,conn);
       else
         abort();
       return;
     }
 
-    array_remove_data(wkr->sendbuf,w);
+    array_remove_data(conn->sendbuf,w);
   }
 
-  if ((0 == wkr->sendbuf->nbytes) && wkr->toclose)
-    remove_worker(sc,wkr);
+  if ((0 == conn->sendbuf->nbytes) && conn->toclose)
+    remove_connection(sc,conn);
 }
 
-static void handle_read(socketcomm *sc, workerinfo *wkr)
+static void handle_read(socketcomm *sc, connection *conn)
 {
   /* Just do one read; there may still be more data pending after this, but we want to also
      give a fair chance for other connections to be read from. We also want to process messages
      as they arrive rather than waiting until can't ready an more, to avoid buffering up large
      numbers of messages */
   int r;
-  array *buf = wkr->recvbuf;
+  array *buf = conn->recvbuf;
 
-  array_mkroom(wkr->recvbuf,CHUNKSIZE);
-  r = TEMP_FAILURE_RETRY(read(wkr->sock,
+  array_mkroom(conn->recvbuf,CHUNKSIZE);
+  r = TEMP_FAILURE_RETRY(read(conn->sock,
                               &buf->data[buf->nbytes],
                               CHUNKSIZE));
 
@@ -409,32 +409,32 @@ static void handle_read(socketcomm *sc, workerinfo *wkr)
     return;
 
   if (0 > r) {
-    fprintf(stderr,"read() from %s failed: %s\n",wkr->hostname,strerror(errno));
-    if (wkr->isconsole)
-      remove_worker(sc,wkr);
+    fprintf(stderr,"read() from %s failed: %s\n",conn->hostname,strerror(errno));
+    if (conn->isconsole)
+      remove_connection(sc,conn);
     else
       abort();
     return;
   }
 
   if (0 == r) {
-    if (wkr->isconsole) {
-      printf("Client %s closed connection\n",wkr->hostname);
-      remove_worker(sc,wkr);
+    if (conn->isconsole) {
+      printf("Client %s closed connection\n",conn->hostname);
+      remove_connection(sc,conn);
     }
     else {
-      fprintf(stderr,"read() from %s failed: channel closed (maybe it crashed?)\n",wkr->hostname);
+      fprintf(stderr,"read() from %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
       abort();
     }
     return;
   }
 
   #ifdef SOCKET_DEBUG
-  printf("Received %d bytes from %s\n",r,wkr->hostname);
+  printf("Received %d bytes from %s\n",r,conn->hostname);
   #endif
 
-  wkr->recvbuf->nbytes += r;
-  process_received(sc,wkr);
+  conn->recvbuf->nbytes += r;
+  process_received(sc,conn);
 }
 
 static void handle_new_connection(socketcomm *sc)
@@ -443,7 +443,7 @@ static void handle_new_connection(socketcomm *sc)
   struct hostent *he;
   int sin_size = sizeof(struct sockaddr_in);
   int clientfd;
-  workerinfo *wkr;
+  connection *conn;
   int yes = 1;
   if (0 > (clientfd = accept(sc->listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
     perror("accept");
@@ -467,13 +467,14 @@ static void handle_new_connection(socketcomm *sc)
     sprintf(hostname,"%u.%u.%u.%u",
             addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
     printf("Got connection from %s\n",hostname);
-    wkr = add_worker(sc,hostname,clientfd);
+    conn = add_connection(sc,hostname,clientfd);
   }
   else {
     printf("Got connection from %s\n",he->h_name);
-    wkr = add_worker(sc,he->h_name,clientfd);
+    conn = add_connection(sc,he->h_name,clientfd);
   }
-  wkr->connected = 1;
+  conn->connected = 1;
+  conn->ip = remote_addr.sin_addr;
 }
 
 static void doio(task *tsk, int delayms)
@@ -484,8 +485,8 @@ static void doio(task *tsk, int delayms)
   fd_set readfds;
   fd_set writefds;
   int want2write = 0;
-  workerinfo *wkr;
-  workerinfo *next;
+  connection *conn;
+  connection *next;
 
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
@@ -494,14 +495,14 @@ static void doio(task *tsk, int delayms)
   if (highest < sc->listenfd)
     highest = sc->listenfd;
 
-  for (wkr = sc->wlist.first; wkr; wkr = wkr->next) {
-    assert(0 <= wkr->sock);
-    if (highest < wkr->sock)
-      highest = wkr->sock;
-    FD_SET(wkr->sock,&readfds);
+  for (conn = sc->wlist.first; conn; conn = conn->next) {
+    assert(0 <= conn->sock);
+    if (highest < conn->sock)
+      highest = conn->sock;
+    FD_SET(conn->sock,&readfds);
 
-    if ((0 < wkr->sendbuf->nbytes) || !wkr->connected) {
-      FD_SET(wkr->sock,&writefds);
+    if ((0 < conn->sendbuf->nbytes) || !conn->connected) {
+      FD_SET(conn->sock,&writefds);
       want2write = 1;
     }
   }
@@ -525,21 +526,21 @@ static void doio(task *tsk, int delayms)
   ioready = 1;
 
   /* Do all the writing we can */
-  for (wkr = sc->wlist.first; wkr; wkr = next) {
-    next = wkr->next;
-    if (FD_ISSET(wkr->sock,&writefds)) {
-      if (wkr->connected)
-        handle_write(sc,wkr);
+  for (conn = sc->wlist.first; conn; conn = next) {
+    next = conn->next;
+    if (FD_ISSET(conn->sock,&writefds)) {
+      if (conn->connected)
+        handle_write(sc,conn);
       else
-        handle_connected(sc,wkr);
+        handle_connected(sc,conn);
     }
   }
 
   /* Read data */
-  for (wkr = sc->wlist.first; wkr; wkr = next) {
-    next = wkr->next;
-    if (FD_ISSET(wkr->sock,&readfds))
-      handle_read(sc,wkr);
+  for (conn = sc->wlist.first; conn; conn = next) {
+    next = conn->next;
+    if (FD_ISSET(conn->sock,&readfds))
+      handle_read(sc,conn);
   }
 
   /* accept new connections */
@@ -657,12 +658,12 @@ static int connect_workers(task *tsk, int want, int listenfd, int myindex)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int have;
-  workerinfo *wkr;
+  connection *conn;
   do {
     have = 0;
     doio(tsk,-1);
-    for (wkr = sc->wlist.first; wkr; wkr = wkr->next)
-      if (wkr->connected && (0 <= wkr->id))
+    for (conn = sc->wlist.first; conn; conn = conn->next)
+      if (conn->connected && (0 <= conn->port))
         have++;
   } while (have < want);
 
@@ -701,6 +702,27 @@ static array *read_data(int fd)
   return arr;
 }
 
+static void init_idmap(task *tsk, array *hostnames)
+{
+  int i;
+  assert(tsk->groupsize == array_count(hostnames));
+  tsk->idmap = (taskid*)calloc(tsk->groupsize,sizeof(taskid));
+  for (i = 0; i < tsk->groupsize; i++) {
+    struct hostent *he;
+    char *hostname = array_item(hostnames,i,char*);
+
+    if (NULL == (he = gethostbyname(hostname)))
+      fatal("%s: %s\n",hostname,hstrerror(h_errno));
+
+    if (4 != he->h_length)
+      fatal("%s: invalid address type\n",hostname);
+
+    tsk->idmap[i].nodeip = *((struct in_addr*)he->h_addr);
+    tsk->idmap[i].nodeport = WORKER_PORT;
+    tsk->idmap[i].id = i; /* FIXME: this won't be the case in general */
+  }
+}
+
 int worker(const char *hostsfile, const char *masteraddr)
 {
   char *mhost;
@@ -714,7 +736,7 @@ int worker(const char *hostsfile, const char *masteraddr)
   socketcomm *sc;
   int logfd;
   char notify = '1';
-  workerinfo *wkr;
+  connection *conn;
   array *hostnames;
   int nworkers;
   int listenfd;
@@ -768,15 +790,15 @@ int worker(const char *hostsfile, const char *masteraddr)
 
   sc = socketcomm_new();
   sc->listenfd = listenfd;
-  sc->myindex = myindex;
+  sc->listenport = WORKER_PORT;
   nworkers = array_count(hostnames);
   remaining = nworkers-1;
 
   /* connect to workers > myindex, accept connections from those < myindex */
   for (i = myindex+1; i < nworkers; i++) {
-    if (NULL == (wkr = initiate_connection(sc,array_item(hostnames,i,char*))))
+    if (NULL == (conn = initiate_connection(sc,array_item(hostnames,i,char*))))
       return -1;
-    if (wkr->connected)
+    if (conn->connected)
       remaining--;
   }
 
@@ -791,14 +813,16 @@ int worker(const char *hostsfile, const char *masteraddr)
   task_init(tsk);
   tsk->output = stdout;
 
+  init_idmap(tsk,hostnames);
+
   llist_append(&sc->tasks,tsk);
 
   if (0 > connect_workers(tsk,remaining,listenfd,myindex))
     return -1;
 
   printf("Hosts:\n");
-  for (wkr = sc->wlist.first; wkr; wkr = wkr->next)
-    printf("%s, sock %d\n",wkr->hostname,wkr->sock);
+  for (conn = sc->wlist.first; conn; conn = conn->next)
+    printf("%s, sock %d\n",conn->hostname,conn->sock);
 
   if (0 == myindex) {
     frame *initial = frame_alloc(tsk);

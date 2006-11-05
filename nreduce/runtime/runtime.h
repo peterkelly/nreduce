@@ -28,6 +28,7 @@
 #include "compiler/bytecode.h"
 #include <stdio.h>
 #include <sys/time.h>
+#include <netdb.h>
 
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
@@ -167,7 +168,7 @@ pntr resolve_pntr(pntr p);
 #define check_global(_g) (assert(!(_g)->freed))
 
 typedef struct taskid {
-  int nodeip;
+  struct in_addr nodeip;
   short nodeport;
   short id;
 } taskid;

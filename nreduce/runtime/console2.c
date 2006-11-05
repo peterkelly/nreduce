@@ -37,63 +37,63 @@
 #include <math.h>
 #include <errno.h>
 
-static void wprintf(workerinfo *wkr, const char *format, ...)
+static void cprintf(connection *conn, const char *format, ...)
 {
   va_list ap;
   va_start(ap,format);
-  array_vprintf(wkr->sendbuf,format,ap);
+  array_vprintf(conn->sendbuf,format,ap);
   va_end(ap);
 }
 
-static void worker_disconnect(workerinfo *wkr)
+static void conn_disconnect(connection *conn)
 {
-  wkr->toclose = 1;
-  wprintf(wkr,"Disconnecting\n");
+  conn->toclose = 1;
+  cprintf(conn,"Disconnecting\n");
 }
 
-static void process_line(socketcomm *sc, workerinfo *wkr, const char *line)
+static void process_line(socketcomm *sc, connection *conn, const char *line)
 {
-  if (!strcmp(line,"workers")) {
-    workerinfo *w2;
-    wprintf(wkr,"%-30s %-6s %-6s %-6s %-8s\n","Hostname","Port","Socket","ID","Console?");
-    wprintf(wkr,"%-30s %-6s %-6s %-6s %-8s\n","--------","----","------","--","--------");
-    for (w2 = sc->wlist.first; w2; w2 = w2->next)
-      wprintf(wkr,"%-30s %-6d %-6d %-6d %-8s\n",
-              w2->hostname,-1,w2->sock,w2->id,
-              w2->isconsole ? "Yes" : "No");
+  if (!strcmp(line,"connections")) {
+    connection *c2;
+    cprintf(conn,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Console?");
+    cprintf(conn,"%-30s %-6s %-6s %-8s\n","--------","----","------","--------");
+    for (c2 = sc->wlist.first; c2; c2 = c2->next)
+      cprintf(conn,"%-30s %-6d %-6d %-8s\n",
+              c2->hostname,c2->port,c2->sock,
+              c2->isconsole ? "Yes" : "No");
   }
   else if (!strcmp(line,"exit") || !strcmp(line,"q") || !strcmp(line,"quit")) {
-    worker_disconnect(wkr);
+    conn_disconnect(conn);
     return;
   }
   else if (!strcmp(line,"help")) {
-    wprintf(wkr,"workers     - List all connected workers\n");
-    wprintf(wkr,"help        - Print this message\n");
+    cprintf(conn,"connections   - List all open connections\n");
+    cprintf(conn,"help          - Print this message\n");
   }
   else {
-    wprintf(wkr,"Unknown command. Type \"help\" to list available commands.\n");
+    cprintf(conn,"Unknown command. Type \"help\" to list available commands.\n");
   }
 
-  wprintf(wkr,"\n> ");
+  cprintf(conn,"\n> ");
 }
 
-void console_process_received(socketcomm *sc, workerinfo *wkr)
+void console_process_received(socketcomm *sc, connection *conn)
 {
   int start = 0;
   int c = 0;
 
-  while (c < wkr->recvbuf->nbytes) {
+  while (c < conn->recvbuf->nbytes) {
 
-    if (4 == wkr->recvbuf->data[c]) { /* CTRL-D */
-      worker_disconnect(wkr);
+    if (4 == conn->recvbuf->data[c]) { /* CTRL-D */
+      conn_disconnect(conn);
       break;
     }
 
-    if ('\n' == wkr->recvbuf->data[c]) {
-      wkr->recvbuf->data[c] = '\0';
-      if ((c > start) && ('\r' == wkr->recvbuf->data[c-1]))
-        wkr->recvbuf->data[c-1] = '\0';
-      process_line(sc,wkr,&wkr->recvbuf->data[start]);
+    if ('\n' == conn->recvbuf->data[c]) {
+      conn->recvbuf->data[c] = '\0';
+      if ((c > start) && ('\r' == conn->recvbuf->data[c-1]))
+        conn->recvbuf->data[c-1] = '\0';
+      process_line(sc,conn,&conn->recvbuf->data[start]);
       c++;
       start = c;
     }
@@ -102,5 +102,5 @@ void console_process_received(socketcomm *sc, workerinfo *wkr)
     }
   }
 
-  array_remove_data(wkr->recvbuf,start);
+  array_remove_data(conn->recvbuf,start);
 }

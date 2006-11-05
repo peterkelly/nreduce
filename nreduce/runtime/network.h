@@ -33,42 +33,35 @@
 #define LISTEN_BACKLOG 10
 #define WORKER_PORT 2000
 
-typedef struct workerinfo {
+typedef struct connection {
   char *hostname;
   struct in_addr ip;
+  int port;
   int sock;
 
   int connected;
-  pid_t pid;
   int readfd;
   array *recvbuf;
   array *sendbuf;
 
-  int id;
   int donewelcome;
   int isconsole;
   int toclose;
 
-  struct workerinfo *prev;
-  struct workerinfo *next;
-} workerinfo;
+  struct connection *prev;
+  struct connection *next;
+} connection;
 
-typedef struct nodeinfo {
-  workerinfo *workers;
-  int nworkers;
-  int listenfd;
-} nodeinfo;
-
-typedef struct workerlist {
-  workerinfo *first;
-  workerinfo *last;
-} workerlist;
+typedef struct connectionlist {
+  connection *first;
+  connection *last;
+} connectionlist;
 
 typedef struct socketcomm {
   tasklist tasks;
-  workerlist wlist;
+  connectionlist wlist;
   int listenfd;
-  int myindex;
+  int listenport;
 } socketcomm;
 
 int connect_host(const char *hostname, int port);
@@ -77,15 +70,12 @@ int start_listening_host(const char *host, int port);
 int accept_connection(int sockfd);
 int parse_address(const char *address, char **host, int *port);
 array *read_hostnames(const char *hostsfile);
-nodeinfo *nodeinfo_init(const char *hostsfile);
-void nodeinfo_free(nodeinfo *ni);
-int wait_for_connections(nodeinfo *ni);
 int fdsetflag(int fd, int flag, int on);
 int fdsetblocking(int fd, int blocking);
 int fdsetasync(int fd, int async);
 
 /* console2 */
 
-void console_process_received(socketcomm *sc, workerinfo *wkr);
+void console_process_received(socketcomm *sc, connection *conn);
 
 #endif
