@@ -37,7 +37,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
-#include <pthread.h>
 
 const char *cell_types[CELL_COUNT] = {
   "EMPTY",

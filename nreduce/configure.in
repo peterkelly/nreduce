@@ -28,7 +28,7 @@ else
 fi
 rm -f conftest.l lex.yy.c
 
-ALL_LIBS="-lm -lpthread"
+ALL_LIBS="-lm"
 ALL_INCLUDES=""
 AC_SUBST(ALL_LIBS)
 CFLAGS="-ggdb3 -Wall -O0 -fno-strict-aliasing"

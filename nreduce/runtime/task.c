@@ -482,9 +482,6 @@ task *task_new(void)
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
 
-  pthread_mutex_init(&tsk->msglock,NULL);
-  pthread_cond_init(&tsk->msgcond,NULL);
-
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
   globnilvalue = alloc_cell(tsk);
@@ -599,8 +596,6 @@ void task_free(task *tsk)
 
   list_free(tsk->msgqueue,(list_d_t)memmsg_free);
   free(tsk->bcdata);
-  pthread_mutex_destroy(&tsk->msglock);
-  pthread_cond_destroy(&tsk->msgcond);
   free(tsk);
 }
 

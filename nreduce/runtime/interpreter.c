@@ -1187,100 +1187,43 @@ void execute(task *tsk)
 
 }
 
-static void *execthread(void *param)
-{
-  task *tsk = (task*)param;
-
-  if ((1 < tsk->groupsize) && (tsk->pid == tsk->groupsize-1)) {
-    console(tsk);
-  }
-  else {
-    execute(tsk);
-/*     fprintf(tsk->output,"\n"); */
-  }
-  return NULL;
-}
-
 void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
 {
-  group grp;
-  int i;
-  pthread_t *threads;
   frame *initial;
+  task *tsk;
 
-  grp.nprocs = 5;
-  grp.procs = (task**)calloc(grp.nprocs,sizeof(task*));
+  tsk = task_new();
+  tsk->pid = 0;
+  tsk->groupsize = 1;
+  tsk->bcdata = (char*)malloc(bcsize);
+  memcpy(tsk->bcdata,bcdata,bcsize);
+  tsk->bcsize = bcsize;
 
-/*   printf("Initializing tasks\n"); */
-  for (i = 0; i < grp.nprocs; i++) {
-    char filename[100];
+  task_init(tsk);
 
-    grp.procs[i] = task_new();
-    grp.procs[i]->pid = i;
-    grp.procs[i]->groupsize = grp.nprocs;
-    grp.procs[i]->grp = &grp;
-    grp.procs[i]->bcdata = (char*)malloc(bcsize);
-    memcpy(grp.procs[i]->bcdata,bcdata,bcsize);
-    grp.procs[i]->bcsize = bcsize;
-    grp.procs[i]->sendf = mem_send;
-    grp.procs[i]->recvf = mem_recv2;
+  tsk->output = stdout;
 
-    task_init(grp.procs[i]);
-
-    if (1 == grp.nprocs) {
-      grp.procs[i]->output = stdout;
-    }
-    else {
-      sprintf(filename,"output.%d",i);
-      grp.procs[i]->output = fopen(filename,"w");
-      if (NULL == grp.procs[i]->output) {
-        perror(filename);
-        exit(1);
-      }
-      setbuf(grp.procs[i]->output,NULL);
-    }
-  }
-
-  initial = frame_alloc(grp.procs[0]);
+  initial = frame_alloc(tsk);
   initial->address = 0;
   initial->fno = -1;
   initial->data = (pntr*)malloc(sizeof(pntr));
   initial->alloc = 1;
-  initial->c = alloc_cell(grp.procs[0]);
+  initial->c = alloc_cell(tsk);
   initial->c->type = CELL_FRAME;
   make_pntr(initial->c->field1,initial);
-  run_frame(grp.procs[0],initial);
+  run_frame(tsk,initial);
 
-/*   printf("Creating threads\n"); */
-  threads = (pthread_t*)malloc(grp.nprocs*sizeof(pthread_t));
-  for (i = 0; i < grp.nprocs; i++) {
-    if (0 != pthread_create(&threads[i],NULL,execthread,grp.procs[i])) {
-      perror("pthread_create");
-      exit(1);
-    }
-  }
+  execute(tsk);
 
-/*   printf("Executing program\n"); */
-  for (i = 0; i < grp.nprocs; i++)
-    pthread_join(threads[i],NULL);
-  free(threads);
+  if (NULL != statsfile)
+    statistics(tsk,statsfile);
 
-  if ((1 == grp.nprocs) && (NULL != statsfile))
-    statistics(grp.procs[0],statsfile);
-
-  if ((1 == grp.nprocs) && (NULL != usage)) {
+  if (NULL != usage) {
     const bcheader *bch = (const bcheader*)bcdata;
-    memcpy(usage,grp.procs[0]->stats.usage,bch->nops*sizeof(int));
+    memcpy(usage,tsk->stats.usage,bch->nops*sizeof(int));
   }
 
-/*   printf("Cleaning up\n"); */
-  for (i = 0; i < grp.nprocs; i++) {
-    if (1 < grp.nprocs)
-      fclose(grp.procs[i]->output);
-    task_free(grp.procs[i]);
-  }
-  free(grp.procs);
-
+  task_free(tsk);
 /*   printf("Done!\n"); */
 }
 

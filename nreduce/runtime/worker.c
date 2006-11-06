@@ -95,7 +95,7 @@ static task *find_task(socketcomm *sc, int localid)
   return NULL;
 }
 
-static void socket_send(task *tsk, int destid, int tag, char *data, int size)
+void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
   taskid desttaskid = tsk->idmap[destid];
   socketcomm *sc = (socketcomm*)tsk->commdata;
@@ -546,7 +546,7 @@ static void doio(socketcomm *sc, int delayms)
 
 }
 
-static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
+int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int from;
@@ -734,8 +734,6 @@ static task *add_task(socketcomm *sc, char *bcdata, int bcsize, int pid, int gro
   tsk->bcsize = bcsize;
 
   tsk->commdata = sc;
-  tsk->sendf = socket_send;
-  tsk->recvf = socket_recv;
   task_init(tsk);
   tsk->output = stdout;
   llist_append(&sc->tasks,tsk);

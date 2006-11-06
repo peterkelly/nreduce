@@ -201,6 +201,7 @@ typedef struct memmsg {
   char *data;
 } memmsg;
 
+/* FIXME: remove */
 typedef struct group {
   struct task **procs;
   int nprocs;
@@ -357,8 +358,6 @@ typedef struct task {
   list *msgqueue;
   int pid;
   int groupsize;
-  pthread_mutex_t msglock;
-  pthread_cond_t msgcond;
   int ackmsgsize;
   int naddrsread;
   array *ackmsg;
@@ -417,8 +416,6 @@ typedef struct task {
   FILE *output;
   procstats stats;
 
-  send_fun sendf;
-  recv_fun recvf;
   void *commdata;
   taskid *idmap;
   int localid;
@@ -546,8 +543,6 @@ int msg_recvb(task *tsk, int *tag, char **data, int *size);
 int msg_recvbt(task *tsk, int *tag, char **data, int *size, int delayms);
 
 void msg_print(task *tsk, int dest, int tag, const char *data, int size);
-void mem_send(task *tsk, int dest, int tag, char *data, int size);
-int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms);
 
 /* reduction */
 

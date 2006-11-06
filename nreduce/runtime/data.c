@@ -28,6 +28,7 @@
 #include "compiler/bytecode.h"
 #include "compiler/source.h"
 #include "runtime.h"
+#include "network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -581,14 +582,6 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size)
   fprintf(tsk->output,"\n");
 }
 
-static void msg_send_addcount(task *tsk, int tag, const char *data, int size)
-{
-  assert(0 <= tag);
-  assert(MSG_COUNT > tag);
-  tsk->stats.sendcount[tag]++;
-  tsk->stats.sendbytes[tag] += size;
-}
-
 void msg_send(task *tsk, int dest, int tag, char *data, int size)
 {
   if (NULL != tsk->inflight) {
@@ -604,39 +597,7 @@ void msg_send(task *tsk, int dest, int tag, char *data, int size)
     tsk->inflight = NULL;
   }
 
-  tsk->sendf(tsk,dest,tag,data,size);
-}
-
-void mem_send(task *tsk, int dest, int tag, char *data, int size)
-{
-  #ifdef MSG_DEBUG
-  msg_print(tsk,dest,tag,data,size);
-  #endif
-
-  memmsg *msg = (memmsg*)calloc(1,sizeof(memmsg));
-  task *desttsk;
-  msg->from = tsk->pid;
-  msg->to = dest;
-  msg->tag = tag;
-  msg->size = size;
-  msg->data = (char*)malloc(size);
-  memcpy(msg->data,data,size);
-
-  msg_send_addcount(tsk,tag,data,size);
-
-  assert(0 <= dest);
-  assert(dest < tsk->grp->nprocs);
-  desttsk = tsk->grp->procs[dest];
-
-/*   fprintf(tsk->output,"msg_send %d -> %d : data %p, size %d\n", */
-/*           tsk->pid,dest,msg->data,msg->size); */
-
-  pthread_mutex_lock(&desttsk->msglock);
-  list_append(&desttsk->msgqueue,msg);
-  pthread_cond_signal(&desttsk->msgcond);
-  pthread_mutex_unlock(&desttsk->msglock);
-
-  ioready = 1;
+  socket_send(tsk,dest,tag,data,size);
 }
 
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
@@ -655,60 +616,7 @@ void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
 
 int msg_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
-  return tsk->recvf(tsk,tag,data,size,block,delayms);
-}
-
-int mem_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
-{
-  list *l = NULL;
-  memmsg *msg;
-  int from;
-
-  pthread_mutex_lock(&tsk->msglock);
-  if (NULL == tsk->msgqueue) {
-    if (0 < delayms) {
-      struct timeval now;
-      struct timespec abstime;
-      int r;
-      gettimeofday(&now,NULL);
-
-      now.tv_sec += delayms/1000;
-      now.tv_usec += (delayms%1000)*1000;
-      if (now.tv_usec >= 1000000) {
-        now.tv_usec -= 1000000;
-        now.tv_sec++;
-      }
-      abstime.tv_sec = now.tv_sec;
-      abstime.tv_nsec = now.tv_usec * 1000;
-/*       fprintf(tsk->output,"timedwait %d...",delayms); */
-/*       errno = 0; */
-      r = pthread_cond_timedwait(&tsk->msgcond,&tsk->msglock,&abstime);
-/*       fprintf(tsk->output,"%s\n",strerror(r)); */
-    }
-    else if (block) {
-      pthread_cond_wait(&tsk->msgcond,&tsk->msglock);
-      assert(tsk->msgqueue);
-    }
-  }
-  if (NULL != (l = tsk->msgqueue))
-    tsk->msgqueue = l->next;
-  pthread_mutex_unlock(&tsk->msglock);
-
-  if (NULL == l)
-    return -1;
-
-  msg = (memmsg*)l->data;
-/*   fprintf(tsk->output,"msg_recv %d -> %d : data %p, size %d\n", */
-/*           msg->from,tsk->pid,msg->data,msg->size); */
-
-  *tag = msg->tag;
-  *data = msg->data;
-  *size = msg->size;
-  from = msg->from;
-  free(msg);
-  free(l);
-
-  return from;
+  return socket_recv(tsk,tag,data,size,block,delayms);
 }
 
 int msg_recv(task *tsk, int *tag, char **data, int *size)

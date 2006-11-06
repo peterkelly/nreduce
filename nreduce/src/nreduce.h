@@ -24,7 +24,6 @@
 #define _NREDUCE_H
 
 #include <stdio.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <sys/time.h>
 #include <time.h>
