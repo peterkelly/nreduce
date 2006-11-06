@@ -598,6 +598,7 @@ void task_free(task *tsk)
   free(tsk->unack_msg_acount);
 
   list_free(tsk->msgqueue,(list_d_t)memmsg_free);
+  free(tsk->bcdata);
   pthread_mutex_destroy(&tsk->msglock);
   pthread_cond_destroy(&tsk->msgcond);
   free(tsk);

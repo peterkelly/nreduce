@@ -1219,7 +1219,8 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
     grp.procs[i]->pid = i;
     grp.procs[i]->groupsize = grp.nprocs;
     grp.procs[i]->grp = &grp;
-    grp.procs[i]->bcdata = bcdata;
+    grp.procs[i]->bcdata = (char*)malloc(bcsize);
+    memcpy(grp.procs[i]->bcdata,bcdata,bcsize);
     grp.procs[i]->bcsize = bcsize;
     grp.procs[i]->sendf = mem_send;
     grp.procs[i]->recvf = mem_recv2;

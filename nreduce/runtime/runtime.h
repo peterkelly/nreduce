@@ -176,11 +176,6 @@ typedef struct taskid {
 typedef struct msgheader {
   int sourceindex;
   int destlocalid;
-
-
-/*   taskid stid; */
-/*   taskid dtid; */
-
   int rsize;
   int rtag;
 } msgheader;
@@ -188,10 +183,7 @@ typedef struct msgheader {
 typedef struct message {
   char *rawdata;
   int rawsize;
-  int sent;
-
   msgheader hdr;
-
   struct message *next;
   struct message *prev;
 } message;
@@ -357,7 +349,7 @@ typedef struct task {
   int memdebug;
 
   /* bytecode */
-  const char *bcdata;
+  char *bcdata;
   int bcsize;
 
   /* communication */

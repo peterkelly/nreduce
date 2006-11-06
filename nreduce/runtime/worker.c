@@ -75,7 +75,7 @@ static void socketcomm_free(socketcomm *sc)
   free(sc);
 }
 
-static void doio(task *tsk, int delayms);
+static void doio(socketcomm *sc, int delayms);
 
 static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short nodeport)
 {
@@ -121,8 +121,6 @@ static void socket_send(task *tsk, int destid, int tag, char *data, int size)
   }
 
   memset(&hdr,0,sizeof(msgheader));
-/*   hdr.stid.id = tsk->pid; */
-/*   hdr.dtid.id = desttaskid.id; */
   hdr.sourceindex = tsk->pid;
   hdr.destlocalid = desttaskid.localid;
   hdr.rsize = size;
@@ -131,7 +129,7 @@ static void socket_send(task *tsk, int destid, int tag, char *data, int size)
   array_append(conn->sendbuf,&hdr,sizeof(msgheader));
   array_append(conn->sendbuf,data,size);
 
-  doio(tsk,0);
+  doio(sc,0);
 }
 
 static void process_received(socketcomm *sc, connection *conn)
@@ -228,19 +226,8 @@ static int receive_incoming(task *tsk, int *tag, char **data, int *size)
   *tag = msg->hdr.rtag;
   *data = msg->rawdata;
   *size = msg->hdr.rsize;
-/*   from = msg->hdr.stid.id; */
   from = msg->hdr.sourceindex;
-/*   assert(tsk->pid == msg->hdr.dtid.id); */
-
-
-  if (tsk->localid != msg->hdr.destlocalid) {
-    printf("tsk->localid = %d, msg->hdr.destlocalid = %d\n",
-           tsk->localid,msg->hdr.destlocalid);
-  }
   assert(tsk->localid == msg->hdr.destlocalid);
-
-
-
   llist_remove(&tsk->mailbox,msg);
   free(msg);
   return from;
@@ -488,9 +475,8 @@ static void handle_new_connection(socketcomm *sc)
   conn->ip = remote_addr.sin_addr;
 }
 
-static void doio(task *tsk, int delayms)
+static void doio(socketcomm *sc, int delayms)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
   int highest = -1;
   int s;
   fd_set readfds;
@@ -562,6 +548,7 @@ static void doio(task *tsk, int delayms)
 
 static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
 {
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   int from;
 
   #ifdef SOCKET_DEBUG
@@ -577,9 +564,9 @@ static int socket_recv(task *tsk, int *tag, char **data, int *size, int block, i
   ioready = 0;
 
   if (block)
-    doio(tsk,-1);
+    doio(sc,-1);
   else
-    doio(tsk,delayms);
+    doio(sc,delayms);
 
   /* FIXME: there may be outstanding data! shouldn't return just yet if we've been asked to
      block and we don't have a completed message (for this particular task) yet. */
@@ -665,14 +652,13 @@ static int wait_for_startup_notification(int msock)
   return c;
 }
 
-static int connect_workers(task *tsk, int want, int listenfd, int myindex)
+static int connect_workers(socketcomm *sc, int want, int listenfd, int myindex)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
   int have;
   connection *conn;
   do {
     have = 0;
-    doio(tsk,-1);
+    doio(sc,-1);
     for (conn = sc->wlist.first; conn; conn = conn->next)
       if (conn->connected && (0 <= conn->port))
         have++;
@@ -733,6 +719,40 @@ static void init_idmap(task *tsk, array *hostnames)
 //    tsk->idmap[i].localid = 100-i; /* FIXME: this won't be the case in general */
     tsk->idmap[i].localid = 44; /* FIXME: this won't be the case in general */
   }
+}
+
+static task *add_task(socketcomm *sc, char *bcdata, int bcsize, int pid, int groupsize)
+{
+  task *tsk = task_new();
+  tsk->pid = pid;
+  //  tsk->localid = sc->nextlocalid++; /* FIXME: use this; need to setup idmap correctly */
+  tsk->localid = 44;
+  tsk->groupsize = groupsize;
+
+  tsk->bcdata = (char*)malloc(bcsize);
+  memcpy(tsk->bcdata,bcdata,bcsize);
+  tsk->bcsize = bcsize;
+
+  tsk->commdata = sc;
+  tsk->sendf = socket_send;
+  tsk->recvf = socket_recv;
+  task_init(tsk);
+  tsk->output = stdout;
+  llist_append(&sc->tasks,tsk);
+
+  if (0 == pid) {
+    frame *initial = frame_alloc(tsk);
+    initial->address = 0;
+    initial->fno = -1;
+    initial->data = (pntr*)malloc(sizeof(pntr));
+    initial->alloc = 1;
+    initial->c = alloc_cell(tsk);
+    initial->c->type = CELL_FRAME;
+    make_pntr(initial->c->field1,initial);
+    run_frame(tsk,initial);
+  }
+
+  return tsk;
 }
 
 int worker(const char *hostsfile, const char *masteraddr)
@@ -803,6 +823,7 @@ int worker(const char *hostsfile, const char *masteraddr)
   sc = socketcomm_new();
   sc->listenfd = listenfd;
   sc->listenport = WORKER_PORT;
+  sc->nextlocalid = 1;
   nworkers = array_count(hostnames);
   remaining = nworkers-1;
 
@@ -814,41 +835,16 @@ int worker(const char *hostsfile, const char *masteraddr)
       remaining--;
   }
 
-  tsk = task_new();
-  tsk->pid = myindex;
-/*   tsk->localid = 100-myindex; */
-  tsk->localid = 44;
-  tsk->groupsize = nworkers;
-  tsk->bcdata = bcarr->data;
-  tsk->bcsize = bcarr->nbytes;
-  tsk->commdata = sc;
-  tsk->sendf = socket_send;
-  tsk->recvf = socket_recv;
-  task_init(tsk);
-  tsk->output = stdout;
+  if (0 > connect_workers(sc,remaining,listenfd,myindex))
+    return -1;
 
+  tsk = add_task(sc,bcarr->data,bcarr->nbytes,myindex,nworkers);
   init_idmap(tsk,hostnames);
 
-  llist_append(&sc->tasks,tsk);
-
-  if (0 > connect_workers(tsk,remaining,listenfd,myindex))
-    return -1;
 
   printf("Hosts:\n");
   for (conn = sc->wlist.first; conn; conn = conn->next)
     printf("%s, sock %d\n",conn->hostname,conn->sock);
-
-  if (0 == myindex) {
-    frame *initial = frame_alloc(tsk);
-    initial->address = 0;
-    initial->fno = -1;
-    initial->data = (pntr*)malloc(sizeof(pntr));
-    initial->alloc = 1;
-    initial->c = alloc_cell(tsk);
-    initial->c->type = CELL_FRAME;
-    make_pntr(initial->c->field1,initial);
-    run_frame(tsk,initial);
-  }
 
   printf("before execute()\n");
   execute(tsk);

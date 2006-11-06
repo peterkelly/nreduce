@@ -62,6 +62,7 @@ typedef struct socketcomm {
   connectionlist wlist;
   int listenfd;
   int listenport;
+  int nextlocalid;
 } socketcomm;
 
 int connect_host(const char *hostname, int port);
