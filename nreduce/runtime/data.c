@@ -614,22 +614,7 @@ void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
   write_end(wr);
 }
 
-int msg_recv2(task *tsk, int *tag, char **data, int *size, int block, int delayms)
+int msg_recv(task *tsk, int *tag, char **data, int *size, int delayms)
 {
-  return socket_recv(tsk,tag,data,size,block,delayms);
-}
-
-int msg_recv(task *tsk, int *tag, char **data, int *size)
-{
-  return msg_recv2(tsk,tag,data,size,0,0);
-}
-
-int msg_recvb(task *tsk, int *tag, char **data, int *size)
-{
-  return msg_recv2(tsk,tag,data,size,1,0);
-}
-
-int msg_recvbt(task *tsk, int *tag, char **data, int *size, int delayms)
-{
-  return msg_recv2(tsk,tag,data,size,0,delayms);
+  return socket_recv(tsk,tag,data,size,delayms);
 }

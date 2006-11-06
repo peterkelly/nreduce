@@ -26,7 +26,8 @@
 
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
-#include "runtime/runtime.h"
+#include "runtime.h"
+#include "network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -51,7 +52,7 @@ static int send_around(task *tsk, char tag)
   msg_send(tsk,0,tag,wr->data,wr->nbytes);
   write_end(wr);
 
-  from = msg_recvb(tsk,&rtag,&data,&size);
+  from = msg_recv(tsk,&rtag,&data,&size,-1);
   assert(0 <= from);
 
   rd = read_start(data,size);
@@ -87,7 +88,7 @@ static int homegc(task *tsk)
   while (1) {
     int done = 0;
 
-    from = msg_recvb(tsk,&tag,&data,&size);
+    from = msg_recv(tsk,&tag,&data,&size,-1);
     assert(0 <= from);
     rd = read_start(data,size);
     assert(READER_OK == r);
@@ -144,7 +145,7 @@ static int homegc(task *tsk)
     msg_fsend(tsk,sweeps,MSG_SWEEP,"");
 
   while (0 < sweeps) {
-    from = msg_recvb(tsk,&tag,&data,&size);
+    from = msg_recv(tsk,&tag,&data,&size,-1);
     assert(0 <= from);
     rd = read_start(data,size);
     assert(READER_OK == r);

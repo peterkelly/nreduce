@@ -546,7 +546,7 @@ static void doio(socketcomm *sc, int delayms)
 
 }
 
-int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms)
+int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
 {
   socketcomm *sc = (socketcomm*)tsk->commdata;
   int from;
@@ -563,10 +563,7 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int dela
      the flag it will just be set again. */
   ioready = 0;
 
-  if (block)
-    doio(sc,-1);
-  else
-    doio(sc,delayms);
+  doio(sc,delayms);
 
   /* FIXME: there may be outstanding data! shouldn't return just yet if we've been asked to
      block and we don't have a completed message (for this particular task) yet. */

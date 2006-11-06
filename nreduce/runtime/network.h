@@ -76,7 +76,7 @@ int fdsetblocking(int fd, int blocking);
 int fdsetasync(int fd, int async);
 
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
-int socket_recv(task *tsk, int *tag, char **data, int *size, int block, int delayms);
+int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 
 /* console2 */
 

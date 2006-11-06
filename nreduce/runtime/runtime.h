@@ -538,9 +538,7 @@ void write_end(array *wr);
 
 void msg_send(task *tsk, int dest, int tag, char *data, int size);
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...);
-int msg_recv(task *tsk, int *tag, char **data, int *size);
-int msg_recvb(task *tsk, int *tag, char **data, int *size);
-int msg_recvbt(task *tsk, int *tag, char **data, int *size, int delayms);
+int msg_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 
 void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 

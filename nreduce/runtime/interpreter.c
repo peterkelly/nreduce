@@ -29,7 +29,8 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "compiler/source.h"
-#include "runtime/runtime.h"
+#include "runtime.h"
+#include "network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -794,7 +795,7 @@ void execute(task *tsk)
           tsk->newfish = 0;
         }
 
-        from = msg_recvbt(tsk,&tag,&msgdata,&msgsize,FISH_DELAY_MS);
+        from = msg_recv(tsk,&tag,&msgdata,&msgsize,FISH_DELAY_MS);
 
         #ifdef PARALLELISM_DEBUG
         /* DEBUG */
@@ -808,7 +809,7 @@ void execute(task *tsk)
         #endif
       }
       else {
-        from = msg_recvb(tsk,&tag,&msgdata,&msgsize);
+        from = msg_recv(tsk,&tag,&msgdata,&msgsize,-1);
         assert(0 <= from);
       }
       if (0 <= from)
@@ -816,7 +817,7 @@ void execute(task *tsk)
       continue;
     }
     else if (ioready) {
-      if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize)))
+      if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,0)))
         handle_message(tsk,from,tag,msgdata,msgsize);
     }
     assert(tsk->runnable.first);
@@ -1180,7 +1181,7 @@ void execute(task *tsk)
   if (1 < tsk->groupsize) {
     fprintf(tsk->output,"%d: finished execution, waiting for shutdown\n",tsk->pid);
     while (!tsk->done) {
-      if (0 <= (from = msg_recvb(tsk,&tag,&msgdata,&msgsize)))
+      if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,-1)))
         handle_message(tsk,from,tag,msgdata,msgsize);
     }
   }
