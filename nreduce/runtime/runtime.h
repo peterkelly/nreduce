@@ -553,6 +553,7 @@ void console(task *tsk);
 
 /* builtin */
 
+void printp(FILE *f, pntr p);
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
 char *array_to_string(pntr refpntr);

@@ -367,7 +367,6 @@ void set_error(task *tsk, const char *format, ...)
 {
   va_list ap;
   int len;
-  frame *f = *tsk->curfptr;
   const instruction *instr;
   va_start(ap,format);
   len = vsnprintf(NULL,0,format,ap);
@@ -379,15 +378,22 @@ void set_error(task *tsk, const char *format, ...)
   len = vsnprintf(tsk->error,len+1,format,ap);
   va_end(ap);
 
-  instr = &bc_instructions(tsk->bcdata)[f->address];
-  tsk->errorsl.fileno = instr->fileno;
-  tsk->errorsl.lineno = instr->lineno;
+  if (NULL == tsk->curfptr) {
+    /* reduction engine */
+  }
+  else {
+    /* bytecode interpreter */
+    frame *f = *tsk->curfptr;
+    instr = &bc_instructions(tsk->bcdata)[f->address];
+    tsk->errorsl.fileno = instr->fileno;
+    tsk->errorsl.lineno = instr->lineno;
 
-  (*tsk->curfptr)->fno = -1;
-  (*tsk->curfptr)->address = ((bcheader*)tsk->bcdata)->erroraddr-1;
-  /* ensure it's at the front */
-  remove_frame_queue(&tsk->runnable,f);
-  add_frame_queue(&tsk->runnable,f);
+    (*tsk->curfptr)->fno = -1;
+    (*tsk->curfptr)->address = ((bcheader*)tsk->bcdata)->erroraddr-1;
+    /* ensure it's at the front */
+    remove_frame_queue(&tsk->runnable,f);
+    add_frame_queue(&tsk->runnable,f);
+  }
 }
 
 void statistics(task *tsk, FILE *f)

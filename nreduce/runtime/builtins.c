@@ -273,7 +273,7 @@ static void b_echo(task *tsk, pntr *argstack)
   argstack[0] = tsk->globnilpntr;
 }
 
-static void printp(FILE *f, pntr p)
+void printp(FILE *f, pntr p)
 {
   if (CELL_NUMBER == pntrtype(p)) {
     double d = p;

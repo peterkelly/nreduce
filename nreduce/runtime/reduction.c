@@ -106,12 +106,7 @@ static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstac
   case SNODE_NUMBER:
     return source->num;
   case SNODE_STRING:
-    /* FIXME: this needs to be an array reference */
-/*     dest = alloc_cell(tsk); */
-/*     dest->type = CELL_STRING; */
-/*     make_pntr(dest->field1,strdup(source->value)); */
-/*     make_pntr(p,dest); */
-    return p;
+    return string_to_array(tsk,source->value);
   default:
     abort();
     break;
@@ -269,9 +264,8 @@ void reduce(task *tsk, pntrstack *s)
         assert(CELL_IND != pntrtype(s->data[s->count-1-i]));
 
       builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
-      if (tsk->error) {
-        abort();
-      }
+      if (tsk->error)
+        fatal("%s",tsk->error);
       s->count -= (reqargs-1);
 
       /* UPDATE */
@@ -310,7 +304,7 @@ static void stream(task *tsk, pntr lst)
       /* nothing */
     }
     else if (CELL_NUMBER == pntrtype(p)) {
-      printf("%f",p);
+      printp(stdout,p);
     }
     else if (CELL_CONS == pntrtype(p)) {
       pntrstack_push(tsk->streamstack,get_pntr(p)->field2);
@@ -319,6 +313,26 @@ static void stream(task *tsk, pntr lst)
     else if (CELL_APPLICATION == pntrtype(p)) {
       fprintf(stderr,"Too many arguments applied to function\n");
       exit(1);
+    }
+    else if (CELL_AREF == pntrtype(p)) {
+      carray *arr = aref_array(p);
+      int index = aref_index(p);
+      pntrstack_push(tsk->streamstack,arr->tail);
+      if (1 == arr->elemsize) {
+        char *str = (char*)malloc(arr->size-index+1);
+        memcpy(str,&((char*)arr->elements)[index],arr->size-index);
+        str[arr->size-index] = '\0';
+        printf("%s",str);
+        free(str);
+      }
+      else if (sizeof(pntr) == arr->elemsize) {
+        int i;
+        for (i = arr->size-1; i >= index; i--)
+          pntrstack_push(tsk->streamstack,((pntr*)arr->elements)[i]);
+      }
+      else {
+        fatal("invalid array size");
+      }
     }
     else {
       fprintf(stderr,"Bad cell type returned to printing mechanism: %s\n",cell_types[pntrtype(p)]);

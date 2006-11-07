@@ -596,6 +596,7 @@ void pntrstack_grow(int *alloc, pntr **data, int size)
 
 void print_pntr(FILE *f, pntr p)
 {
+  p = resolve_pntr(p);
   switch (pntrtype(p)) {
   case CELL_NUMBER:
     print_double(f,p);
@@ -603,6 +604,11 @@ void print_pntr(FILE *f, pntr p)
   case CELL_NIL:
     fprintf(f,"nil");
     break;
+  case CELL_SCREF: {
+    scomb *sc = (scomb*)get_pntr(get_pntr(p)->field1);
+    fprintf(f,"%s",sc->name);
+    break;
+  }
   case CELL_FRAME: {
     frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
     fprintf(f,"frame(%d)",fr->fno);
@@ -617,6 +623,17 @@ void print_pntr(FILE *f, pntr p)
     fprintf(f,"(%s ",cell_types[pntrtype(p)]);
     print_pntr(f,get_pntr(p)->field1);
     fprintf(f,")");
+    break;
+  }
+  case CELL_APPLICATION: {
+    print_pntr(f,get_pntr(p)->field1);
+    fprintf(f," ");
+    print_pntr(f,get_pntr(p)->field2);
+    break;
+  }
+  case CELL_BUILTIN: {
+    int bif = (int)get_pntr(get_pntr(p)->field1);
+    fprintf(f,"%s",builtin_info[bif].name);
     break;
   }
   default:
