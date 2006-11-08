@@ -720,18 +720,11 @@ static void init_idmap(task *tsk, array *hostnames)
 
 static task *add_task(socketcomm *sc, char *bcdata, int bcsize, int pid, int groupsize)
 {
-  task *tsk = task_new();
-  tsk->pid = pid;
+  task *tsk = task_new(pid,groupsize,bcdata,bcsize);
   //  tsk->localid = sc->nextlocalid++; /* FIXME: use this; need to setup idmap correctly */
   tsk->localid = 44;
-  tsk->groupsize = groupsize;
-
-  tsk->bcdata = (char*)malloc(bcsize);
-  memcpy(tsk->bcdata,bcdata,bcsize);
-  tsk->bcsize = bcsize;
 
   tsk->commdata = sc;
-  task_init(tsk);
   tsk->output = stdout;
   llist_append(&sc->tasks,tsk);
 

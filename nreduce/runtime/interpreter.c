@@ -1193,15 +1193,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   frame *initial;
   task *tsk;
 
-  tsk = task_new();
-  tsk->pid = 0;
-  tsk->groupsize = 1;
-  tsk->bcdata = (char*)malloc(bcsize);
-  memcpy(tsk->bcdata,bcdata,bcsize);
-  tsk->bcsize = bcsize;
-
-  task_init(tsk);
-
+  tsk = task_new(0,1,bcdata,bcsize);
   tsk->output = stdout;
 
   initial = frame_alloc(tsk);

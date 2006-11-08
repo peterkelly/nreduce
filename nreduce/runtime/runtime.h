@@ -431,8 +431,7 @@ typedef struct tasklist {
   task *last;
 } tasklist;
 
-task *task_new(void);
-void task_init(task *tsk);
+task *task_new(int pid, int groupsize, const char *bcdata, int bcsize);
 void task_free(task *tsk);
 
 global *pntrhash_lookup(task *tsk, pntr p);

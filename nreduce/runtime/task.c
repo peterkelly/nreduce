@@ -483,10 +483,12 @@ void dump_globals(task *tsk)
   }
 }
 
-task *task_new(void)
+task *task_new(int pid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
+  int i;
+  bcheader *bch;
 
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
@@ -503,18 +505,20 @@ task *task_new(void)
   tsk->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
 
-  return tsk;
-}
+  tsk->pid = pid;
+  tsk->groupsize = groupsize;
+  if (NULL == bcdata)
+    return tsk; /* no bytecode; we must be using the reduction engine */
 
-void task_init(task *tsk)
-{
-  int i;
-  bcheader *bch = (bcheader*)tsk->bcdata;
+  tsk->bcdata = (char*)malloc(bcsize);
+  memcpy(tsk->bcdata,bcdata,bcsize);
+  tsk->bcsize = bcsize;
+
+  bch = (bcheader*)tsk->bcdata;
 
   assert(NULL == tsk->strings);
   assert(0 == tsk->nstrings);
   assert(0 < tsk->groupsize);
-
 
   tsk->nstrings = bch->nstrings;
   tsk->strings = (pntr*)malloc(bch->nstrings*sizeof(pntr));
@@ -538,6 +542,8 @@ void task_init(task *tsk)
     tsk->unack_msg_acount[i] = array_new(sizeof(int));
     tsk->distmarks[i] = array_new(sizeof(gaddr));
   }
+
+  return tsk;
 }
 
 static void memmsg_free(memmsg *msg)

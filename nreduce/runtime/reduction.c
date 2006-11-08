@@ -348,7 +348,7 @@ void run_reduction(source *src, FILE *stats)
   scomb *mainsc;
   cell *root;
   pntr rootp;
-  task *tsk = task_new();
+  task *tsk = task_new(0,0,NULL,0);
 #ifdef TIMING
   struct timeval start;
   struct timeval end;
