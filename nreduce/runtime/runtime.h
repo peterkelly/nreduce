@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <netdb.h>
+#include <pthread.h>
 
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
@@ -190,16 +191,10 @@ typedef struct message {
 
 typedef struct messagelist {
   message *first;
-  message *last;
+  message *last; 
+  pthread_mutex_t lock;
+  pthread_cond_t cond;
 } messagelist;
-
-typedef struct memmsg {
-  int from;
-  int to;
-  int tag;
-  int size;
-  char *data;
-} memmsg;
 
 /* FIXME: remove */
 typedef struct group {
@@ -355,7 +350,6 @@ typedef struct task {
 
   /* communication */
   group *grp;
-  list *msgqueue;
   int pid;
   int groupsize;
   int ackmsgsize;
@@ -424,6 +418,7 @@ typedef struct task {
   struct task *next;
 
   messagelist mailbox;
+  int checkmsg;
 } task;
 
 typedef struct tasklist {
@@ -433,6 +428,8 @@ typedef struct tasklist {
 
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize);
 void task_free(task *tsk);
+void task_add_message(task *tsk, message *msg);
+message *task_next_message(task *tsk, int delayms);
 
 global *pntrhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);

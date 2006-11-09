@@ -62,8 +62,6 @@
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
-extern int ioready;
-
 static socketcomm *socketcomm_new()
 {
   return (socketcomm*)calloc(1,sizeof(socketcomm));
@@ -74,8 +72,6 @@ static void socketcomm_free(socketcomm *sc)
   /* FIXME: free message data */
   free(sc);
 }
-
-static void doio(socketcomm *sc, int delayms);
 
 static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short nodeport)
 {
@@ -97,10 +93,12 @@ static task *find_task(socketcomm *sc, int localid)
 
 void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
+  /* FIXME: need locking in case a connection comes or goes while we doing this */
   taskid desttaskid = tsk->idmap[destid];
   socketcomm *sc = (socketcomm*)tsk->commdata;
   connection *conn = find_connection(sc,desttaskid.nodeip,desttaskid.nodeport);
   msgheader hdr;
+  int c = 0;
 
   if (NULL == conn)
     fatal("Could not find destination connection %d\n",destid);
@@ -126,10 +124,14 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   hdr.rsize = size;
   hdr.rtag = tag;
 
+  pthread_mutex_lock(&conn->sendbuflock);
   array_append(conn->sendbuf,&hdr,sizeof(msgheader));
   array_append(conn->sendbuf,data,size);
+  pthread_mutex_unlock(&conn->sendbuflock);
 
-  doio(sc,0);
+  pthread_mutex_lock(&sc->ioready_lock);
+  write(sc->ioready_writefd,&c,1);
+  pthread_mutex_unlock(&sc->ioready_lock);
 }
 
 static void process_received(socketcomm *sc, connection *conn)
@@ -165,7 +167,9 @@ static void process_received(socketcomm *sc, connection *conn)
         /* We have the welcome message; it's a peer and we want to exchange ids next */
         conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
+        pthread_mutex_lock(&conn->sendbuflock);
         array_append(conn->sendbuf,&sc->listenport,sizeof(int));
+        pthread_mutex_unlock(&conn->sendbuflock);
       }
     }
   }
@@ -202,35 +206,13 @@ static void process_received(socketcomm *sc, connection *conn)
     newmsg->rawsize = hdr.rsize;
     newmsg->rawdata = (char*)malloc(hdr.rsize);
     memcpy(newmsg->rawdata,&conn->recvbuf->data[start+MSG_HEADER_SIZE],hdr.rsize);
-    llist_append(&tsk->mailbox,newmsg);
+    task_add_message(tsk,newmsg);
 
     start += MSG_HEADER_SIZE+hdr.rsize;
   }
 
   /* remove the data we've consumed from the receive buffer */
   array_remove_data(conn->recvbuf,start);
-}
-
-static int receive_incoming(task *tsk, int *tag, char **data, int *size)
-{
-  message *msg = tsk->mailbox.first;
-  int from;
-  if (NULL == msg)
-    return -1;
-
-  assert(msg->hdr.rsize == msg->rawsize);
-  #ifdef SOCKET_DEBUG
-  printf("have completed message from worker %d, rtag = %s, rsize = %d\n",
-         msg->hdr.sourceindex,msg_names[msg->hdr.rtag],msg->hdr.rsize);
-  #endif
-  *tag = msg->hdr.rtag;
-  *data = msg->rawdata;
-  *size = msg->hdr.rsize;
-  from = msg->hdr.sourceindex;
-  assert(tsk->localid == msg->hdr.destlocalid);
-  llist_remove(&tsk->mailbox,msg);
-  free(msg);
-  return from;
 }
 
 static connection *add_connection(socketcomm *sc, const char *hostname, int sock)
@@ -243,6 +225,7 @@ static connection *add_connection(socketcomm *sc, const char *hostname, int sock
   conn->port = -1;
   conn->recvbuf = array_new(1);
   conn->sendbuf = array_new(1);
+  pthread_mutex_init(&conn->sendbuflock,NULL);
   array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&sc->wlist,conn);
   return conn;
@@ -256,6 +239,7 @@ static void remove_connection(socketcomm *sc, connection *conn)
   free(conn->hostname);
   array_free(conn->recvbuf);
   array_free(conn->sendbuf);
+  pthread_mutex_destroy(&conn->sendbuflock);
   free(conn);
 }
 
@@ -284,8 +268,6 @@ static connection *initiate_connection(socketcomm *sc, const char *hostname)
 
   if (0 > fdsetblocking(sock,0))
     return NULL;
-  if (0 > fdsetasync(sock,1))
-    return NULL;
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(WORKER_PORT);
@@ -306,27 +288,6 @@ static connection *initiate_connection(socketcomm *sc, const char *hostname)
   conn->ip = *((struct in_addr*)he->h_addr);
 
   return conn;
-}
-
-static int rselect(int n, fd_set *readfds, fd_set *writefds, fd_set  *exceptfds, int delayms)
-{
-  if (0 > delayms) {
-    while (1) {
-      int s = select(n,readfds,writefds,exceptfds,NULL);
-      if ((0 <= s) || (EINTR != errno))
-        return s;
-    }
-  }
-  else {
-    struct timeval timeout;
-    timeout.tv_sec = delayms/1000;
-    timeout.tv_usec = (delayms%1000)*1000;
-    while (1) {
-      int s = select(n,readfds,writefds,exceptfds,&timeout);
-      if ((0 <= s) || (EINTR != errno))
-        return s;
-    }
-  }
 }
 
 static int handle_connected(socketcomm *sc, connection *conn)
@@ -359,12 +320,14 @@ static int handle_connected(socketcomm *sc, connection *conn)
 
 static void handle_write(socketcomm *sc, connection *conn)
 {
+  pthread_mutex_lock(&conn->sendbuflock);
   while (0 < conn->sendbuf->nbytes) {
     int w = TEMP_FAILURE_RETRY(write(conn->sock,conn->sendbuf->data,conn->sendbuf->nbytes));
     if ((0 > w) && (EAGAIN == errno))
       break;
 
     if (0 > w) {
+      pthread_mutex_lock(&conn->sendbuflock);
       fprintf(stderr,"write() to %s failed: %s\n",conn->hostname,strerror(errno));
       if (conn->isconsole)
         remove_connection(sc,conn);
@@ -374,6 +337,7 @@ static void handle_write(socketcomm *sc, connection *conn)
     }
 
     if (0 == w) {
+      pthread_mutex_lock(&conn->sendbuflock);
       fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
       if (conn->isconsole)
         remove_connection(sc,conn);
@@ -387,6 +351,9 @@ static void handle_write(socketcomm *sc, connection *conn)
 
   if ((0 == conn->sendbuf->nbytes) && conn->toclose)
     remove_connection(sc,conn);
+
+  /* FIXME: not safe, because the connection could be deleted by now! */
+  pthread_mutex_unlock(&conn->sendbuflock);
 }
 
 static void handle_read(socketcomm *sc, connection *conn)
@@ -448,7 +415,7 @@ static void handle_new_connection(socketcomm *sc)
     return;
   }
 
-  if ((0 > fdsetblocking(clientfd,0)) || (0 > fdsetasync(clientfd,1))) {
+  if (0 > fdsetblocking(clientfd,0)) {
     close(clientfd);
     return;
   }
@@ -475,15 +442,15 @@ static void handle_new_connection(socketcomm *sc)
   conn->ip = remote_addr.sin_addr;
 }
 
-static void doio(socketcomm *sc, int delayms)
+static void doio(socketcomm *sc)
 {
   int highest = -1;
   int s;
   fd_set readfds;
   fd_set writefds;
-  int want2write = 0;
   connection *conn;
   connection *next;
+  int havewrite = 0;
 
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
@@ -492,19 +459,30 @@ static void doio(socketcomm *sc, int delayms)
   if (highest < sc->listenfd)
     highest = sc->listenfd;
 
+  FD_SET(sc->ioready_readfd,&readfds);
+  if (highest < sc->ioready_readfd)
+    highest = sc->ioready_readfd;
+
   for (conn = sc->wlist.first; conn; conn = conn->next) {
     assert(0 <= conn->sock);
     if (highest < conn->sock)
       highest = conn->sock;
     FD_SET(conn->sock,&readfds);
 
+    pthread_mutex_lock(&conn->sendbuflock);
     if ((0 < conn->sendbuf->nbytes) || !conn->connected) {
       FD_SET(conn->sock,&writefds);
-      want2write = 1;
+      havewrite = 1;
     }
+    pthread_mutex_unlock(&conn->sendbuflock);
+
+    /* Note: it is possible that we did not find any data waiting to be written at this point,
+       but some will become avaliable either just after we release the lock, or while the select
+       is actually blocked. socket_send() writes a single byte of data to the sc's ioready pipe,
+       which will cause the select to be woken, and we will look around again to write the data. */
   }
 
-  s = rselect(highest+1,&readfds,&writefds,NULL,delayms);
+  s = select(highest+1,&readfds,&writefds,NULL,NULL);
 
   if (0 > s)
     fatal("select: %s",strerror(errno));
@@ -513,14 +491,14 @@ static void doio(socketcomm *sc, int delayms)
   printf("select() returned %d\n",s);
   #endif
 
-  if (want2write)
-    ioready = 1;
+  if (FD_ISSET(sc->ioready_readfd,&readfds)) {
+    int c;
+    if (0 > read(sc->ioready_readfd,&c,1))
+      fatal("Cann't read from ioready_readfd: %s\n",strerror(errno));
+  }
 
   if (0 == s)
     return; /* timed out; no sockets are ready for reading or writing */
-
-  /* Set the I/O ready flag again, because there may be more after what we read here */
-  ioready = 1;
 
   /* Do all the writing we can */
   for (conn = sc->wlist.first; conn; conn = next) {
@@ -546,29 +524,32 @@ static void doio(socketcomm *sc, int delayms)
 
 }
 
+static void *ioloop(void *arg)
+{
+  socketcomm *sc = (socketcomm*)arg;
+  while (1)
+    doio(sc);
+}
+
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
+  message *msg = task_next_message(tsk,delayms);
   int from;
+  if (NULL == msg)
+    return -1;
 
+  assert(msg->hdr.rsize == msg->rawsize);
   #ifdef SOCKET_DEBUG
-  printf("socket_recv: block = %d, delayms = %d\n",block,delayms);
+  printf("have completed message from worker %d, rtag = %s, rsize = %d\n",
+         msg->hdr.sourceindex,msg_names[msg->hdr.rtag],msg->hdr.rsize);
   #endif
-
-  if (0 <= (from = receive_incoming(tsk,tag,data,size)))
-    return from;
-
-  /* Clear the I/O ready flag. If we got a SIGIO flag just before this it doesn't matter,
-     because we're about to do a select() anyway. If a SIGIO comes in after we've cleared
-     the flag it will just be set again. */
-  ioready = 0;
-
-  doio(sc,delayms);
-
-  /* FIXME: there may be outstanding data! shouldn't return just yet if we've been asked to
-     block and we don't have a completed message (for this particular task) yet. */
-
-  return receive_incoming(tsk,tag,data,size);
+  *tag = msg->hdr.rtag;
+  *data = msg->rawdata;
+  *size = msg->hdr.rsize;
+  from = msg->hdr.sourceindex;
+  assert(tsk->localid == msg->hdr.destlocalid);
+  free(msg);
+  return from;
 }
 
 static void sigabrt(int sig)
@@ -592,11 +573,6 @@ static void sigsegv(int sig)
   kill(getpid(),sig);
 }
 
-static void sigio(int sig)
-{
-  ioready = 1;
-}
-
 static void exited()
 {
   char *str = "exited\n";
@@ -606,7 +582,6 @@ static void exited()
 static void startlog(int logfd)
 {
   int i;
-  struct sigaction action;
 
   setbuf(stdout,NULL);
   setbuf(stderr,NULL);
@@ -619,14 +594,6 @@ static void startlog(int logfd)
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
-
-
-/*   signal(SIGIO,sigio); */
-  sigaction(SIGIO,NULL,&action);
-  action.sa_handler = sigio;
-  action.sa_flags = SA_RESTART;
-  sigaction(SIGIO,&action,NULL);
-
 
   atexit(exited);
 
@@ -655,7 +622,7 @@ static int connect_workers(socketcomm *sc, int want, int listenfd, int myindex)
   connection *conn;
   do {
     have = 0;
-    doio(sc,-1);
+    doio(sc);
     for (conn = sc->wlist.first; conn; conn = conn->next)
       if (conn->connected && (0 <= conn->port))
         have++;
@@ -761,6 +728,7 @@ int worker(const char *hostsfile, const char *masteraddr)
   int nworkers;
   int listenfd;
   int remaining;
+  int pipefds[2];
 
   if (0 > (logfd = open("/tmp/nreduce.log",O_WRONLY|O_APPEND|O_CREAT,0666))) {
     perror("/tmp/nreduce.log");
@@ -815,6 +783,11 @@ int worker(const char *hostsfile, const char *masteraddr)
   nworkers = array_count(hostnames);
   remaining = nworkers-1;
 
+  pipe(pipefds);
+  sc->ioready_readfd = pipefds[0];
+  sc->ioready_writefd = pipefds[1];
+  pthread_mutex_init(&sc->ioready_lock,NULL);
+
   /* connect to workers > myindex, accept connections from those < myindex */
   for (i = myindex+1; i < nworkers; i++) {
     if (NULL == (conn = initiate_connection(sc,array_item(hostnames,i,char*))))
@@ -833,6 +806,11 @@ int worker(const char *hostsfile, const char *masteraddr)
   printf("Hosts:\n");
   for (conn = sc->wlist.first; conn; conn = conn->next)
     printf("%s, sock %d\n",conn->hostname,conn->sock);
+
+  if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc)) {
+    perror("pthread_create");
+    return -1;
+  }
 
   printf("before execute()\n");
   execute(tsk);

@@ -38,8 +38,6 @@
 #include <math.h>
 #include <errno.h>
 
-extern int ioready;
-
 reader read_start(const char *data, int size)
 {
   reader rd;

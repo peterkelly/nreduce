@@ -47,8 +47,6 @@
 
 #define FISH_DELAY_MS 5000
 
-int ioready = 0;
-
 void print_stack(FILE *f, pntr *stk, int size, int dir)
 {
   int i;
@@ -816,7 +814,7 @@ void execute(task *tsk)
         handle_message(tsk,from,tag,msgdata,msgsize);
       continue;
     }
-    else if (ioready) {
+    else if (tsk->checkmsg) {
       if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,0)))
         handle_message(tsk,from,tag,msgdata,msgsize);
     }

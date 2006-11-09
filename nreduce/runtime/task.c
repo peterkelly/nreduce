@@ -490,6 +490,9 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize)
   int i;
   bcheader *bch;
 
+  pthread_mutex_init(&tsk->mailbox.lock,NULL);
+  pthread_cond_init(&tsk->mailbox.cond,NULL);
+
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
   globnilvalue = alloc_cell(tsk);
@@ -546,12 +549,6 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize)
   return tsk;
 }
 
-static void memmsg_free(memmsg *msg)
-{
-  free(msg->data);
-  free(msg);
-}
-
 void task_free(task *tsk)
 {
   int i;
@@ -606,8 +603,52 @@ void task_free(task *tsk)
   free(tsk->inflight_addrs);
   free(tsk->unack_msg_acount);
 
-  list_free(tsk->msgqueue,(list_d_t)memmsg_free);
   free(tsk->bcdata);
   free(tsk);
+
+  pthread_mutex_destroy(&tsk->mailbox.lock);
+  pthread_cond_destroy(&tsk->mailbox.cond);
 }
 
+void task_add_message(task *tsk, message *msg)
+{
+  pthread_mutex_lock(&tsk->mailbox.lock);
+  llist_append(&tsk->mailbox,msg);
+  tsk->checkmsg = 1;
+  pthread_cond_broadcast(&tsk->mailbox.cond);
+  pthread_mutex_unlock(&tsk->mailbox.lock);
+}
+
+message *task_next_message(task *tsk, int delayms)
+{
+  message *msg;
+  pthread_mutex_lock(&tsk->mailbox.lock);
+
+  if ((NULL == tsk->mailbox.first) && (0 != delayms)) {
+    if (0 > delayms) {
+      pthread_cond_wait(&tsk->mailbox.cond,&tsk->mailbox.lock);
+    }
+    else {
+      struct timeval now;
+      struct timespec abstime;
+      gettimeofday(&now,NULL);
+
+      now.tv_sec += delayms/1000;
+      now.tv_usec += (delayms%1000)*1000;
+      if (now.tv_usec >= 1000000) {
+        now.tv_usec -= 1000000;
+        now.tv_sec++;
+      }
+      abstime.tv_sec = now.tv_sec;
+      abstime.tv_nsec = now.tv_usec * 1000;
+      pthread_cond_timedwait(&tsk->mailbox.cond,&tsk->mailbox.lock,&abstime);
+    }
+  }
+
+  msg = tsk->mailbox.first;
+  if (NULL != msg)
+    llist_remove(&tsk->mailbox,msg);
+  tsk->checkmsg = (NULL != tsk->mailbox.first);
+  pthread_mutex_unlock(&tsk->mailbox.lock);
+  return msg;
+}

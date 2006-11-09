@@ -220,14 +220,3 @@ int fdsetblocking(int fd, int blocking)
 {
   return fdsetflag(fd,O_NONBLOCK,!blocking);
 }
-
-int fdsetasync(int fd, int async)
-{
-  if (0 > fdsetflag(fd,O_ASYNC,async))
-    return -1;
-
-  if (async && (0 > fcntl(fd,F_SETOWN,getpid())))
-    return -1;
-
-  return 0;
-}

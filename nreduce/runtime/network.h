@@ -43,6 +43,7 @@ typedef struct connection {
   int readfd;
   array *recvbuf;
   array *sendbuf;
+  pthread_mutex_t sendbuflock;
 
   int donewelcome;
   int isconsole;
@@ -63,6 +64,10 @@ typedef struct socketcomm {
   int listenfd;
   int listenport;
   int nextlocalid;
+  pthread_t iothread;
+  int ioready_writefd;
+  int ioready_readfd;
+  pthread_mutex_t ioready_lock;
 } socketcomm;
 
 int connect_host(const char *hostname, int port);
@@ -73,7 +78,6 @@ int parse_address(const char *address, char **host, int *port);
 array *read_hostnames(const char *hostsfile);
 int fdsetflag(int fd, int flag, int on);
 int fdsetblocking(int fd, int blocking);
-int fdsetasync(int fd, int async);
 
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
