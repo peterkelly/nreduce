@@ -43,7 +43,6 @@ typedef struct connection {
   int readfd;
   array *recvbuf;
   array *sendbuf;
-  pthread_mutex_t sendbuflock;
 
   int donewelcome;
   int isconsole;
@@ -67,7 +66,8 @@ typedef struct socketcomm {
   pthread_t iothread;
   int ioready_writefd;
   int ioready_readfd;
-  pthread_mutex_t ioready_lock;
+  pthread_mutex_t lock;
+  pthread_cond_t cond;
 } socketcomm;
 
 int connect_host(const char *hostname, int port);

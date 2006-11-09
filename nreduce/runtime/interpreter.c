@@ -720,7 +720,7 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
-void execute(task *tsk)
+void *execute(task *tsk)
 {
   char *msgdata;
   int msgsize;
@@ -771,7 +771,7 @@ void execute(task *tsk)
         }
 
         if (1 == tsk->groupsize)
-          return;
+          return NULL;
 
         gettimeofday(&now,NULL);
         diffms = timeval_diffms(lastfish,now);
@@ -1184,6 +1184,7 @@ void execute(task *tsk)
     }
   }
 
+  return NULL;
 }
 
 void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)

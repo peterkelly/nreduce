@@ -70,6 +70,8 @@ static socketcomm *socketcomm_new()
 static void socketcomm_free(socketcomm *sc)
 {
   /* FIXME: free message data */
+  pthread_mutex_destroy(&sc->lock);
+  pthread_cond_destroy(&sc->cond);
   free(sc);
 }
 
@@ -124,14 +126,11 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   hdr.rsize = size;
   hdr.rtag = tag;
 
-  pthread_mutex_lock(&conn->sendbuflock);
+  pthread_mutex_lock(&sc->lock);
   array_append(conn->sendbuf,&hdr,sizeof(msgheader));
   array_append(conn->sendbuf,data,size);
-  pthread_mutex_unlock(&conn->sendbuflock);
-
-  pthread_mutex_lock(&sc->ioready_lock);
   write(sc->ioready_writefd,&c,1);
-  pthread_mutex_unlock(&sc->ioready_lock);
+  pthread_mutex_unlock(&sc->lock);
 }
 
 static void process_received(socketcomm *sc, connection *conn)
@@ -167,9 +166,7 @@ static void process_received(socketcomm *sc, connection *conn)
         /* We have the welcome message; it's a peer and we want to exchange ids next */
         conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
-        pthread_mutex_lock(&conn->sendbuflock);
         array_append(conn->sendbuf,&sc->listenport,sizeof(int));
-        pthread_mutex_unlock(&conn->sendbuflock);
       }
     }
   }
@@ -225,7 +222,6 @@ static connection *add_connection(socketcomm *sc, const char *hostname, int sock
   conn->port = -1;
   conn->recvbuf = array_new(1);
   conn->sendbuf = array_new(1);
-  pthread_mutex_init(&conn->sendbuflock,NULL);
   array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&sc->wlist,conn);
   return conn;
@@ -239,7 +235,6 @@ static void remove_connection(socketcomm *sc, connection *conn)
   free(conn->hostname);
   array_free(conn->recvbuf);
   array_free(conn->sendbuf);
-  pthread_mutex_destroy(&conn->sendbuflock);
   free(conn);
 }
 
@@ -320,14 +315,12 @@ static int handle_connected(socketcomm *sc, connection *conn)
 
 static void handle_write(socketcomm *sc, connection *conn)
 {
-  pthread_mutex_lock(&conn->sendbuflock);
   while (0 < conn->sendbuf->nbytes) {
     int w = TEMP_FAILURE_RETRY(write(conn->sock,conn->sendbuf->data,conn->sendbuf->nbytes));
     if ((0 > w) && (EAGAIN == errno))
       break;
 
     if (0 > w) {
-      pthread_mutex_lock(&conn->sendbuflock);
       fprintf(stderr,"write() to %s failed: %s\n",conn->hostname,strerror(errno));
       if (conn->isconsole)
         remove_connection(sc,conn);
@@ -337,7 +330,6 @@ static void handle_write(socketcomm *sc, connection *conn)
     }
 
     if (0 == w) {
-      pthread_mutex_lock(&conn->sendbuflock);
       fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
       if (conn->isconsole)
         remove_connection(sc,conn);
@@ -351,9 +343,6 @@ static void handle_write(socketcomm *sc, connection *conn)
 
   if ((0 == conn->sendbuf->nbytes) && conn->toclose)
     remove_connection(sc,conn);
-
-  /* FIXME: not safe, because the connection could be deleted by now! */
-  pthread_mutex_unlock(&conn->sendbuflock);
 }
 
 static void handle_read(socketcomm *sc, connection *conn)
@@ -442,93 +431,94 @@ static void handle_new_connection(socketcomm *sc)
   conn->ip = remote_addr.sin_addr;
 }
 
-static void doio(socketcomm *sc)
-{
-  int highest = -1;
-  int s;
-  fd_set readfds;
-  fd_set writefds;
-  connection *conn;
-  connection *next;
-  int havewrite = 0;
-
-  FD_ZERO(&readfds);
-  FD_ZERO(&writefds);
-
-  FD_SET(sc->listenfd,&readfds);
-  if (highest < sc->listenfd)
-    highest = sc->listenfd;
-
-  FD_SET(sc->ioready_readfd,&readfds);
-  if (highest < sc->ioready_readfd)
-    highest = sc->ioready_readfd;
-
-  for (conn = sc->wlist.first; conn; conn = conn->next) {
-    assert(0 <= conn->sock);
-    if (highest < conn->sock)
-      highest = conn->sock;
-    FD_SET(conn->sock,&readfds);
-
-    pthread_mutex_lock(&conn->sendbuflock);
-    if ((0 < conn->sendbuf->nbytes) || !conn->connected) {
-      FD_SET(conn->sock,&writefds);
-      havewrite = 1;
-    }
-    pthread_mutex_unlock(&conn->sendbuflock);
-
-    /* Note: it is possible that we did not find any data waiting to be written at this point,
-       but some will become avaliable either just after we release the lock, or while the select
-       is actually blocked. socket_send() writes a single byte of data to the sc's ioready pipe,
-       which will cause the select to be woken, and we will look around again to write the data. */
-  }
-
-  s = select(highest+1,&readfds,&writefds,NULL,NULL);
-
-  if (0 > s)
-    fatal("select: %s",strerror(errno));
-
-  #ifdef SOCKET_DEBUG
-  printf("select() returned %d\n",s);
-  #endif
-
-  if (FD_ISSET(sc->ioready_readfd,&readfds)) {
-    int c;
-    if (0 > read(sc->ioready_readfd,&c,1))
-      fatal("Cann't read from ioready_readfd: %s\n",strerror(errno));
-  }
-
-  if (0 == s)
-    return; /* timed out; no sockets are ready for reading or writing */
-
-  /* Do all the writing we can */
-  for (conn = sc->wlist.first; conn; conn = next) {
-    next = conn->next;
-    if (FD_ISSET(conn->sock,&writefds)) {
-      if (conn->connected)
-        handle_write(sc,conn);
-      else
-        handle_connected(sc,conn);
-    }
-  }
-
-  /* Read data */
-  for (conn = sc->wlist.first; conn; conn = next) {
-    next = conn->next;
-    if (FD_ISSET(conn->sock,&readfds))
-      handle_read(sc,conn);
-  }
-
-  /* accept new connections */
-  if (FD_ISSET(sc->listenfd,&readfds))
-    handle_new_connection(sc);
-
-}
-
 static void *ioloop(void *arg)
 {
   socketcomm *sc = (socketcomm*)arg;
-  while (1)
-    doio(sc);
+
+  pthread_mutex_lock(&sc->lock);
+  while (1) {
+    int highest = -1;
+    int s;
+    fd_set readfds;
+    fd_set writefds;
+    connection *conn;
+    connection *next;
+    int havewrite = 0;
+
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+
+    FD_SET(sc->listenfd,&readfds);
+    if (highest < sc->listenfd)
+      highest = sc->listenfd;
+
+    FD_SET(sc->ioready_readfd,&readfds);
+    if (highest < sc->ioready_readfd)
+      highest = sc->ioready_readfd;
+
+    for (conn = sc->wlist.first; conn; conn = conn->next) {
+      assert(0 <= conn->sock);
+      if (highest < conn->sock)
+        highest = conn->sock;
+      FD_SET(conn->sock,&readfds);
+
+      if ((0 < conn->sendbuf->nbytes) || !conn->connected) {
+        FD_SET(conn->sock,&writefds);
+        havewrite = 1;
+      }
+
+      /* Note: it is possible that we did not find any data waiting to be written at this point,
+         but some will become avaliable either just after we release the lock, or while the select
+         is actually blocked. socket_send() writes a single byte of data to the sc's ioready pipe,
+         which will cause the select to be woken, and we will look around again to write the
+         data. */
+    }
+
+    pthread_mutex_unlock(&sc->lock);
+    s = select(highest+1,&readfds,&writefds,NULL,NULL);
+    pthread_mutex_lock(&sc->lock);
+
+    if (0 > s)
+      fatal("select: %s",strerror(errno));
+
+    pthread_cond_broadcast(&sc->cond);
+
+    #ifdef SOCKET_DEBUG
+    printf("select() returned %d\n",s);
+    #endif
+
+    if (FD_ISSET(sc->ioready_readfd,&readfds)) {
+      int c;
+      if (0 > read(sc->ioready_readfd,&c,1))
+        fatal("Cann't read from ioready_readfd: %s\n",strerror(errno));
+    }
+
+    if (0 == s)
+      continue; /* timed out; no sockets are ready for reading or writing */
+
+    /* Do all the writing we can */
+    for (conn = sc->wlist.first; conn; conn = next) {
+      next = conn->next;
+      if (FD_ISSET(conn->sock,&writefds)) {
+        if (conn->connected)
+          handle_write(sc,conn);
+        else
+          handle_connected(sc,conn);
+      }
+    }
+
+    /* Read data */
+    for (conn = sc->wlist.first; conn; conn = next) {
+      next = conn->next;
+      if (FD_ISSET(conn->sock,&readfds))
+        handle_read(sc,conn);
+    }
+
+    /* accept new connections */
+    if (FD_ISSET(sc->listenfd,&readfds))
+      handle_new_connection(sc);
+  }
+  pthread_mutex_unlock(&sc->lock);
 }
 
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
@@ -622,7 +612,11 @@ static int connect_workers(socketcomm *sc, int want, int listenfd, int myindex)
   connection *conn;
   do {
     have = 0;
-    doio(sc);
+
+    pthread_mutex_lock(&sc->lock);
+    pthread_cond_wait(&sc->cond,&sc->lock);
+    pthread_mutex_unlock(&sc->lock);
+
     for (conn = sc->wlist.first; conn; conn = conn->next)
       if (conn->connected && (0 <= conn->port))
         have++;
@@ -693,7 +687,10 @@ static task *add_task(socketcomm *sc, char *bcdata, int bcsize, int pid, int gro
 
   tsk->commdata = sc;
   tsk->output = stdout;
+
+  pthread_mutex_lock(&sc->lock);
   llist_append(&sc->tasks,tsk);
+  pthread_mutex_unlock(&sc->lock);
 
   if (0 == pid) {
     frame *initial = frame_alloc(tsk);
@@ -786,7 +783,8 @@ int worker(const char *hostsfile, const char *masteraddr)
   pipe(pipefds);
   sc->ioready_readfd = pipefds[0];
   sc->ioready_writefd = pipefds[1];
-  pthread_mutex_init(&sc->ioready_lock,NULL);
+  pthread_mutex_init(&sc->lock,NULL);
+  pthread_cond_init(&sc->cond,NULL);
 
   /* connect to workers > myindex, accept connections from those < myindex */
   for (i = myindex+1; i < nworkers; i++) {
@@ -796,27 +794,32 @@ int worker(const char *hostsfile, const char *masteraddr)
       remaining--;
   }
 
-  if (0 > connect_workers(sc,remaining,listenfd,myindex))
-    return -1;
-
   tsk = add_task(sc,bcarr->data,bcarr->nbytes,myindex,nworkers);
   init_idmap(tsk,hostnames);
-
-
-  printf("Hosts:\n");
-  for (conn = sc->wlist.first; conn; conn = conn->next)
-    printf("%s, sock %d\n",conn->hostname,conn->sock);
 
   if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc)) {
     perror("pthread_create");
     return -1;
   }
 
-  printf("before execute()\n");
-  execute(tsk);
+  if (0 > connect_workers(sc,remaining,listenfd,myindex))
+    return -1;
 
-  printf("execute() returned; sleeping for 60 seconds\n");
-  sleep(60);
+  printf("Hosts:\n");
+  for (conn = sc->wlist.first; conn; conn = conn->next)
+    printf("%s, sock %d\n",conn->hostname,conn->sock);
+
+  printf("before execute()\n");
+
+  if (0 > pthread_create(&tsk->thread,NULL,(void*)execute,tsk)) {
+    perror("pthread_create");
+    return -1;
+  }
+
+  if (0 > pthread_join(sc->iothread,NULL)) {
+    perror("pthread_join");
+    return -1;
+  }
 
   task_free(tsk);
   socketcomm_free(sc);

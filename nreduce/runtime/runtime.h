@@ -419,6 +419,7 @@ typedef struct task {
 
   messagelist mailbox;
   int checkmsg;
+  pthread_t thread;
 } task;
 
 typedef struct tasklist {
@@ -592,7 +593,7 @@ void dump_globals(task *tsk);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
-void execute(task *tsk);
+void *execute(task *tsk);
 void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage);
 
 /* memory */
