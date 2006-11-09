@@ -70,6 +70,12 @@ const char *msg_names[MSG_COUNT] = {
   "SCHEDULE",
   "UPDATEREF",
   "STARTDISTGC",
+  "NEWTASK",
+  "NEWTASKRESP",
+  "INITTASK",
+  "INITTASKRESP",
+  "STARTTASK",
+  "STARTTASKRESP",
 };
 
 const char *frame_states[5] = {

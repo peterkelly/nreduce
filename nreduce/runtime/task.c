@@ -507,6 +507,7 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize)
 
   tsk->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  tsk->idmap = (taskid*)calloc(groupsize,sizeof(taskid));
 
   tsk->pid = pid;
   tsk->groupsize = groupsize;
@@ -577,6 +578,8 @@ void task_free(task *tsk)
       glo = next;
     }
   }
+
+  free(tsk->idmap);
 
   for (i = 0; i < tsk->groupsize; i++) {
     array_free(tsk->inflight_addrs[i]);

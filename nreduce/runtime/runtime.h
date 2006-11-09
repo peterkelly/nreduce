@@ -175,16 +175,16 @@ typedef struct taskid {
 } taskid;
 
 typedef struct msgheader {
+  taskid source;
   int sourceindex;
   int destlocalid;
-  int rsize;
-  int rtag;
+  int size;
+  int tag;
 } msgheader;
 
 typedef struct message {
-  char *rawdata;
-  int rawsize;
   msgheader hdr;
+  char *data;
   struct message *next;
   struct message *prev;
 } message;
@@ -420,6 +420,8 @@ typedef struct task {
   messagelist mailbox;
   int checkmsg;
   pthread_t thread;
+  int haveidmap;
+  int started;
 } task;
 
 typedef struct tasklist {
@@ -478,7 +480,15 @@ void set_error(task *tsk, const char *format, ...);
 #define MSG_SCHEDULE     11
 #define MSG_UPDATEREF    12
 #define MSG_STARTDISTGC  13
-#define MSG_COUNT        14
+
+#define MSG_NEWTASK       14
+#define MSG_NEWTASKRESP   15
+#define MSG_INITTASK      16
+#define MSG_INITTASKRESP  17
+#define MSG_STARTTASK     18
+#define MSG_STARTTASKRESP 19
+
+#define MSG_COUNT        20
 
 typedef struct reader {
   const char *data;

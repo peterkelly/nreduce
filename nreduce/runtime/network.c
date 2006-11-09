@@ -220,3 +220,15 @@ int fdsetblocking(int fd, int blocking)
 {
   return fdsetflag(fd,O_NONBLOCK,!blocking);
 }
+
+void print_ip(FILE *f, struct in_addr ip)
+{
+  unsigned char *addrbytes = (unsigned char*)&ip.s_addr;
+  fprintf(f,"%u.%u.%u.%u",addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
+}
+
+void print_taskid(FILE *f, taskid id)
+{
+  print_ip(f,id.nodeip);
+  fprintf(f,":%d %d",id.nodeport,id.localid);
+}

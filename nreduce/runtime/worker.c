@@ -58,7 +58,6 @@
 //#define CHUNKSIZE 1024
 #define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
-//#define SOCKET_DEBUG
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
@@ -84,53 +83,28 @@ static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short 
   return NULL;
 }
 
-static task *find_task(socketcomm *sc, int localid)
+task *find_task(socketcomm *sc, int localid)
 {
   task *tsk;
   for (tsk = sc->tasks.first; tsk; tsk = tsk->next)
     if (tsk->localid == localid)
-      return tsk;
-  return NULL;
+      break;
+  return tsk;
 }
 
-void socket_send(task *tsk, int destid, int tag, char *data, int size)
+static void got_message(socketcomm *sc, const msgheader *hdr, const void *data)
 {
-  /* FIXME: need locking in case a connection comes or goes while we doing this */
-  taskid desttaskid = tsk->idmap[destid];
-  socketcomm *sc = (socketcomm*)tsk->commdata;
-  connection *conn = find_connection(sc,desttaskid.nodeip,desttaskid.nodeport);
-  msgheader hdr;
-  int c = 0;
+  task *tsk;
+  message *newmsg;
 
-  if (NULL == conn)
-    fatal("Could not find destination connection %d\n",destid);
+  if (NULL == (tsk = find_task(sc,hdr->destlocalid)))
+    fatal("Message received for unknown task %d\n",hdr->destlocalid);
 
-  #ifdef MSG_DEBUG
-  msg_print(tsk,destid,tag,data,size);
-  #endif
-
-  #ifdef SOCKET_DEBUG
-  printf("socket_send: tag = %s, dest = %d, size = %d, my pid = %d\n",
-         msg_names[tag],destid,size,tsk->pid);
-  #endif
-
-  if (destid == tsk->pid) {
-    printf("%s sending to %s (that's me!): FIXME: support this case\n",
-           conn->hostname,conn->hostname);
-    abort();
-  }
-
-  memset(&hdr,0,sizeof(msgheader));
-  hdr.sourceindex = tsk->pid;
-  hdr.destlocalid = desttaskid.localid;
-  hdr.rsize = size;
-  hdr.rtag = tag;
-
-  pthread_mutex_lock(&sc->lock);
-  array_append(conn->sendbuf,&hdr,sizeof(msgheader));
-  array_append(conn->sendbuf,data,size);
-  write(sc->ioready_writefd,&c,1);
-  pthread_mutex_unlock(&sc->lock);
+  newmsg = (message*)calloc(1,sizeof(message));
+  newmsg->hdr = *hdr;
+  newmsg->data = (char*)malloc(hdr->size);
+  memcpy(newmsg->data,data,hdr->size);
+  task_add_message(tsk,newmsg);
 }
 
 static void process_received(socketcomm *sc, connection *conn)
@@ -182,34 +156,74 @@ static void process_received(socketcomm *sc, connection *conn)
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
   while (MSG_HEADER_SIZE <= conn->recvbuf->nbytes-start) {
-    msgheader hdr = *(msgheader*)&conn->recvbuf->data[start];
-    message *newmsg;
-    task *tsk;
+    msgheader *hdr = (msgheader*)&conn->recvbuf->data[start];
 
     /* verify header */
-    assert(0 <= hdr.rsize);
-    assert(0 <= hdr.rtag);
-    assert(MSG_COUNT > hdr.rtag);
+    assert(0 <= hdr->size);
+    assert(0 <= hdr->tag);
+    assert(MSG_COUNT > hdr->tag);
 
-    if (MSG_HEADER_SIZE+hdr.rsize > conn->recvbuf->nbytes-start)
+    hdr->source.nodeip = conn->ip;
+    hdr->source.nodeport = conn->port;
+
+    if (MSG_HEADER_SIZE+hdr->size > conn->recvbuf->nbytes-start)
       break; /* incomplete message */
 
-    if (NULL == (tsk = find_task(sc,hdr.destlocalid)))
-      fatal("Message received for unknown task %d\n",hdr.destlocalid);
-
     /* complete message present; add it to the mailbox */
-    newmsg = (message*)calloc(1,sizeof(message));
-    newmsg->hdr = hdr;
-    newmsg->rawsize = hdr.rsize;
-    newmsg->rawdata = (char*)malloc(hdr.rsize);
-    memcpy(newmsg->rawdata,&conn->recvbuf->data[start+MSG_HEADER_SIZE],hdr.rsize);
-    task_add_message(tsk,newmsg);
-
-    start += MSG_HEADER_SIZE+hdr.rsize;
+    got_message(sc,hdr,&conn->recvbuf->data[start+MSG_HEADER_SIZE]);
+    start += MSG_HEADER_SIZE+hdr->size;
   }
 
   /* remove the data we've consumed from the receive buffer */
   array_remove_data(conn->recvbuf,start);
+}
+
+void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, int size)
+{
+  socketcomm *sc = (socketcomm*)tsk->commdata;
+  connection *conn;
+  msgheader hdr;
+  int c = 0;
+
+  pthread_mutex_lock(&sc->lock);
+
+  memset(&hdr,0,sizeof(msgheader));
+  hdr.source.localid = tsk->localid;
+  hdr.sourceindex = tsk->pid;
+  hdr.destlocalid = desttaskid.localid;
+  hdr.size = size;
+  hdr.tag = tag;
+
+  if ((desttaskid.nodeip.s_addr == sc->listenip.s_addr) &&
+      (desttaskid.nodeport == sc->listenport)) {
+    hdr.source.nodeip = sc->listenip;
+    hdr.source.nodeport = sc->listenport;
+    got_message(sc,&hdr,data);
+  }
+  else {
+    if (NULL == (conn = find_connection(sc,desttaskid.nodeip,desttaskid.nodeport))) {
+      unsigned char *addrbytes = (unsigned char*)&desttaskid.nodeip.s_addr;
+      fatal("Could not find destination connection to %u.%u.%u.%u:%d",
+            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],desttaskid.nodeport);
+    }
+
+    array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+    array_append(conn->sendbuf,data,size);
+    write(sc->ioready_writefd,&c,1);
+  }
+  pthread_mutex_unlock(&sc->lock);
+}
+
+void socket_send(task *tsk, int destid, int tag, char *data, int size)
+{
+  #ifdef MSG_DEBUG
+  msg_print(tsk,destid,tag,data,size);
+  #endif
+
+  if (destid == tsk->pid)
+    fatal("Attempt to send message (with tag %d) to task on same host\n",msg_names[tag]);
+
+  socket_send_raw(tsk,tsk->idmap[destid],tag,data,size);
 }
 
 static connection *add_connection(socketcomm *sc, const char *hostname, int sock)
@@ -383,10 +397,6 @@ static void handle_read(socketcomm *sc, connection *conn)
     return;
   }
 
-  #ifdef SOCKET_DEBUG
-  printf("Received %d bytes from %s\n",r,conn->hostname);
-  #endif
-
   conn->recvbuf->nbytes += r;
   process_received(sc,conn);
 }
@@ -483,10 +493,6 @@ static void *ioloop(void *arg)
 
     pthread_cond_broadcast(&sc->cond);
 
-    #ifdef SOCKET_DEBUG
-    printf("select() returned %d\n",s);
-    #endif
-
     if (FD_ISSET(sc->ioready_readfd,&readfds)) {
       int c;
       if (0 > read(sc->ioready_readfd,&c,1))
@@ -528,14 +534,9 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   if (NULL == msg)
     return -1;
 
-  assert(msg->hdr.rsize == msg->rawsize);
-  #ifdef SOCKET_DEBUG
-  printf("have completed message from worker %d, rtag = %s, rsize = %d\n",
-         msg->hdr.sourceindex,msg_names[msg->hdr.rtag],msg->hdr.rsize);
-  #endif
-  *tag = msg->hdr.rtag;
-  *data = msg->rawdata;
-  *size = msg->hdr.rsize;
+  *tag = msg->hdr.tag;
+  *data = msg->data;
+  *size = msg->hdr.size;
   from = msg->hdr.sourceindex;
   assert(tsk->localid == msg->hdr.destlocalid);
   free(msg);
@@ -626,6 +627,178 @@ static int connect_workers(socketcomm *sc, int want, int listenfd, int myindex)
   return 0;
 }
 
+task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int bcsize, int localid)
+{
+  task *tsk = task_new(pid,groupsize,bcdata,bcsize);
+  tsk->localid = localid;
+
+  tsk->commdata = sc;
+  tsk->output = stdout;
+
+  pthread_mutex_lock(&sc->lock);
+  llist_append(&sc->tasks,tsk);
+  pthread_mutex_unlock(&sc->lock);
+
+  if ((0 == pid) && (NULL != bcdata)) {
+    frame *initial = frame_alloc(tsk);
+    initial->address = 0;
+    initial->fno = -1;
+    initial->data = (pntr*)malloc(sizeof(pntr));
+    initial->alloc = 1;
+    initial->c = alloc_cell(tsk);
+    initial->c->type = CELL_FRAME;
+    make_pntr(initial->c->field1,initial);
+    run_frame(tsk,initial);
+  }
+
+  return tsk;
+}
+
+static void get_responses(socketcomm *sc, task *tsk, int tag,
+                          int count, taskid *managerids, int *responses)
+{
+  int *gotresponse = (int*)calloc(count,sizeof(int));
+  int allresponses;
+  int i;
+  do {
+    message *msg = task_next_message(tsk,-1);
+    int sender = -1;
+    assert(msg);
+
+    if (tag != msg->hdr.tag)
+      fatal("%s: Got invalid response tag: %d\n",msg_names[tag],msg->hdr.tag);
+
+    for (i = 0; i < count; i++)
+      if (!memcmp(&msg->hdr.source,&managerids[i],sizeof(taskid)))
+        sender = i;
+
+    if (0 > sender) {
+      fprintf(stderr,"%s: Got response from unknown source ",msg_names[tag]);
+      print_taskid(stderr,msg->hdr.source);
+      fprintf(stderr,"\n");
+      abort();
+    }
+
+    if (sizeof(int) != msg->hdr.size)
+      fatal("%s: incorrect message size (%d)\n",msg->hdr.size,msg_names[tag]);
+
+    if (gotresponse[sender])
+      fatal("%s: Already have response for this source\n",msg_names[tag]);
+
+    gotresponse[sender] = 1;
+    if (responses)
+      responses[sender] = *(int*)msg->data;
+
+    allresponses = 1;
+    for (i = 0; i < count; i++)
+      if (!gotresponse[i])
+        allresponses = 0;
+  } while (!allresponses);
+
+  free(gotresponse);
+}
+
+typedef struct {
+  socketcomm *sc;
+  array *bcarr;
+  array *hostnames;
+} startarg;
+
+static void *start_task(void *arg)
+{
+  startarg *sa = (startarg*)arg;
+  socketcomm *sc = sa->sc;
+  task *tsk = add_task(sc,0,0,NULL,0,1234); /* FIXME: use variable task id */
+  int count = array_count(sa->hostnames);
+  taskid *managerids = (taskid*)calloc(count,sizeof(taskid));
+  taskid *taskids = (taskid*)calloc(count,sizeof(taskid));
+  int *localids = (int*)calloc(count,sizeof(int));
+  char *bcdata = sa->bcarr->data;
+  int bcsize = sa->bcarr->nbytes;
+  int ntsize = sizeof(newtask_msg)+bcsize;
+  newtask_msg *ntmsg = (newtask_msg*)calloc(1,ntsize);
+  int initsize = sizeof(inittask_msg)+count*sizeof(taskid);
+  inittask_msg *initmsg = (inittask_msg*)calloc(1,initsize);
+  int i;
+
+  ntmsg->groupsize = count;
+  ntmsg->bcsize = bcsize;
+  memcpy(&ntmsg->bcdata,bcdata,bcsize);
+
+  /* FIXME: should probably do this resolution outside of the task starting routine */
+  for (i = 0; i < count; i++) {
+    struct hostent *he;
+    char *hostname = array_item(sa->hostnames,i,char*);
+
+    if (NULL == (he = gethostbyname(hostname)))
+      fatal("%s: %s\n",hostname,hstrerror(h_errno));
+
+    if (4 != he->h_length)
+      fatal("%s: invalid address type\n",hostname);
+
+    managerids[i].nodeip = *((struct in_addr*)he->h_addr);
+    managerids[i].nodeport = WORKER_PORT;
+    managerids[i].localid = MANAGER_ID;
+
+    taskids[i].nodeip = *((struct in_addr*)he->h_addr);
+    taskids[i].nodeport = WORKER_PORT;
+  }
+
+  /* Send NEWTASK messages, containing the pid, groupsize, and bytecode */
+  for (i = 0; i < count; i++) {
+    ntmsg->pid = i;
+    socket_send_raw(tsk,managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
+  }
+
+  /* Get NEWTASK responses, containing the local id of each task on the remote node */
+  get_responses(sc,tsk,MSG_NEWTASKRESP,count,managerids,localids);
+  for (i = 0; i < count; i++)
+    taskids[i].localid = localids[i];
+  printf("All tasks created\n");
+
+  /* Send INITTASK messages, giving each task a copy of the idmap */
+  initmsg->count = count;
+  memcpy(initmsg->idmap,taskids,count*sizeof(taskid));
+  for (i = 0; i < count; i++) {
+    initmsg->localid = taskids[i].localid;
+    socket_send_raw(tsk,managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+  }
+
+  /* Wait for all INITTASK messages to be processed */
+  get_responses(sc,tsk,MSG_INITTASKRESP,count,managerids,NULL);
+  printf("All tasks initialised\n");
+
+  /* Start all tasks */
+  for (i = 0; i < count; i++)
+    socket_send_raw(tsk,managerids[i],MSG_STARTTASK,&localids[i],sizeof(int));
+
+  /* Wait for notification of all tasks starting */
+  get_responses(sc,tsk,MSG_STARTTASKRESP,count,managerids,NULL);
+  printf("All tasks started\n");
+
+  free(ntmsg);
+  free(managerids);
+  free(taskids);
+  free(localids);
+
+  return NULL;
+}
+
+static void start_task_using_manager(socketcomm *sc, array *bcarr, array *hostnames)
+{
+  startarg arg;
+  pthread_t startthread;
+  arg.sc = sc;
+  arg.bcarr = bcarr;
+  arg.hostnames = hostnames;
+  printf("Distributed process creation starting\n");
+  if (0 > pthread_create(&startthread,NULL,start_task,&arg))
+    fatal("pthread_create: %s",strerror(errno));
+  if (0 > pthread_join(startthread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  printf("Distributed process creation done\n");
+}
+
 static array *read_data(int fd)
 {
   int size;
@@ -657,56 +830,6 @@ static array *read_data(int fd)
   return arr;
 }
 
-static void init_idmap(task *tsk, array *hostnames)
-{
-  int i;
-  assert(tsk->groupsize == array_count(hostnames));
-  tsk->idmap = (taskid*)calloc(tsk->groupsize,sizeof(taskid));
-  for (i = 0; i < tsk->groupsize; i++) {
-    struct hostent *he;
-    char *hostname = array_item(hostnames,i,char*);
-
-    if (NULL == (he = gethostbyname(hostname)))
-      fatal("%s: %s\n",hostname,hstrerror(h_errno));
-
-    if (4 != he->h_length)
-      fatal("%s: invalid address type\n",hostname);
-
-    tsk->idmap[i].nodeip = *((struct in_addr*)he->h_addr);
-    tsk->idmap[i].nodeport = WORKER_PORT;
-//    tsk->idmap[i].localid = 100-i; /* FIXME: this won't be the case in general */
-    tsk->idmap[i].localid = 44; /* FIXME: this won't be the case in general */
-  }
-}
-
-static task *add_task(socketcomm *sc, char *bcdata, int bcsize, int pid, int groupsize)
-{
-  task *tsk = task_new(pid,groupsize,bcdata,bcsize);
-  //  tsk->localid = sc->nextlocalid++; /* FIXME: use this; need to setup idmap correctly */
-  tsk->localid = 44;
-
-  tsk->commdata = sc;
-  tsk->output = stdout;
-
-  pthread_mutex_lock(&sc->lock);
-  llist_append(&sc->tasks,tsk);
-  pthread_mutex_unlock(&sc->lock);
-
-  if (0 == pid) {
-    frame *initial = frame_alloc(tsk);
-    initial->address = 0;
-    initial->fno = -1;
-    initial->data = (pntr*)malloc(sizeof(pntr));
-    initial->alloc = 1;
-    initial->c = alloc_cell(tsk);
-    initial->c->type = CELL_FRAME;
-    make_pntr(initial->c->field1,initial);
-    run_frame(tsk,initial);
-  }
-
-  return tsk;
-}
-
 int worker(const char *hostsfile, const char *masteraddr)
 {
   char *mhost;
@@ -715,7 +838,6 @@ int worker(const char *hostsfile, const char *masteraddr)
   struct in_addr addr;
   int i;
   int myindex;
-  task *tsk;
   array *bcarr = NULL;
   socketcomm *sc;
   int logfd;
@@ -726,6 +848,8 @@ int worker(const char *hostsfile, const char *masteraddr)
   int listenfd;
   int remaining;
   int pipefds[2];
+  struct hostent *he;
+  char *hostname;
 
   if (0 > (logfd = open("/tmp/nreduce.log",O_WRONLY|O_APPEND|O_CREAT,0666))) {
     perror("/tmp/nreduce.log");
@@ -776,6 +900,21 @@ int worker(const char *hostsfile, const char *masteraddr)
   sc = socketcomm_new();
   sc->listenfd = listenfd;
   sc->listenport = WORKER_PORT;
+
+  hostname = array_item(hostnames,myindex,char*);
+  if (NULL == (he = gethostbyname(hostname)))
+    fatal("%s: %s\n",hostname,hstrerror(h_errno));
+
+  if (4 != he->h_length)
+    fatal("%s: invalid address type\n",hostname);
+
+  sc->listenip = *((struct in_addr*)he->h_addr);
+  printf("my ip is %u.%u.%u.%u\n",
+         ((unsigned char*)&sc->listenip.s_addr)[0],
+         ((unsigned char*)&sc->listenip.s_addr)[1],
+         ((unsigned char*)&sc->listenip.s_addr)[2],
+         ((unsigned char*)&sc->listenip.s_addr)[3]);
+
   sc->nextlocalid = 1;
   nworkers = array_count(hostnames);
   remaining = nworkers-1;
@@ -794,13 +933,10 @@ int worker(const char *hostsfile, const char *masteraddr)
       remaining--;
   }
 
-  tsk = add_task(sc,bcarr->data,bcarr->nbytes,myindex,nworkers);
-  init_idmap(tsk,hostnames);
+  start_manager(sc);
 
-  if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc)) {
-    perror("pthread_create");
-    return -1;
-  }
+  if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc))
+    fatal("pthread_create: %s",strerror(errno));
 
   if (0 > connect_workers(sc,remaining,listenfd,myindex))
     return -1;
@@ -809,19 +945,13 @@ int worker(const char *hostsfile, const char *masteraddr)
   for (conn = sc->wlist.first; conn; conn = conn->next)
     printf("%s, sock %d\n",conn->hostname,conn->sock);
 
-  printf("before execute()\n");
+  if (0 == myindex)
+    start_task_using_manager(sc,bcarr,hostnames);
 
-  if (0 > pthread_create(&tsk->thread,NULL,(void*)execute,tsk)) {
-    perror("pthread_create");
-    return -1;
-  }
+  printf("suspending main thread\n");
+  if (0 > pthread_join(sc->iothread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
 
-  if (0 > pthread_join(sc->iothread,NULL)) {
-    perror("pthread_join");
-    return -1;
-  }
-
-  task_free(tsk);
   socketcomm_free(sc);
 
   if (bcarr)
