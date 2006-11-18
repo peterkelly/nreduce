@@ -168,15 +168,14 @@ pntr resolve_pntr(pntr p);
 
 #define check_global(_g) (assert(!(_g)->freed))
 
-typedef struct taskid {
+typedef struct endpointid {
   struct in_addr nodeip;
   short nodeport;
   short localid;
-} taskid;
+} endpointid;
 
 typedef struct msgheader {
-  taskid source;
-  int sourceindex;
+  endpointid source;
   int destlocalid;
   int size;
   int tag;
@@ -341,6 +340,25 @@ typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int si
 typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
                         int delayms);
 
+#define TASK_ENDPOINT 1
+#define MANAGER_ENDPOINT 2
+#define LAUNCHER_ENDPOINT 3
+
+typedef struct endpoint {
+  int localid;
+  messagelist mailbox;
+  int checkmsg;
+  struct endpoint *prev;
+  struct endpoint *next;
+  int type;
+  void *data;
+} endpoint;
+
+typedef struct endpointlist {
+  endpoint *first;
+  endpoint *last;
+} endpointlist;
+
 typedef struct task {
   int memdebug;
 
@@ -411,28 +429,21 @@ typedef struct task {
   procstats stats;
 
   void *commdata;
-  taskid *idmap;
-  int localid;
+  endpointid *idmap;
 
-  struct task *prev;
-  struct task *next;
-
-  messagelist mailbox;
-  int checkmsg;
+  endpoint *endpt;
   pthread_t thread;
   int haveidmap;
   int started;
 } task;
 
-typedef struct tasklist {
-  task *first;
-  task *last;
-} tasklist;
-
-task *task_new(int pid, int groupsize, const char *bcdata, int bcsize);
+task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid);
 void task_free(task *tsk);
-void task_add_message(task *tsk, message *msg);
-message *task_next_message(task *tsk, int delayms);
+
+endpoint *endpoint_new(int localid, int type, void *data);
+void endpoint_free(endpoint *endpt);
+void endpoint_add_message(endpoint *endpt, message *msg);
+message *endpoint_next_message(endpoint *endpt, int delayms);
 
 global *pntrhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);

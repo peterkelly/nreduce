@@ -53,7 +53,7 @@ static void conn_disconnect(connection *conn)
   cprintf(conn,"Disconnecting\n");
 }
 
-static int get_managerids(socketcomm *sc, taskid **managerids)
+static int get_managerids(socketcomm *sc, endpointid **managerids)
 {
   int count = 1;
   int i = 0;
@@ -66,7 +66,7 @@ static int get_managerids(socketcomm *sc, taskid **managerids)
     if (0 <= conn->port)
       count++;
 
-  *managerids = (taskid*)calloc(count,sizeof(taskid));
+  *managerids = (endpointid*)calloc(count,sizeof(endpointid));
 
   (*managerids)[i].nodeip = sc->listenip;
   (*managerids)[i].nodeport = sc->listenport;
@@ -92,7 +92,7 @@ static int run_program(socketcomm *sc, const char *filename)
   char *bcdata;
   source *src;
   int count;
-  taskid *managerids;
+  endpointid *managerids;
 
   src = source_new();
   if (0 != source_parse_string(src,prelude,"prelude.l"))

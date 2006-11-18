@@ -814,7 +814,7 @@ void *execute(task *tsk)
         handle_message(tsk,from,tag,msgdata,msgsize);
       continue;
     }
-    else if (tsk->checkmsg) {
+    else if (tsk->endpt->checkmsg) {
       if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,0)))
         handle_message(tsk,from,tag,msgdata,msgsize);
     }
@@ -1192,7 +1192,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   frame *initial;
   task *tsk;
 
-  tsk = task_new(0,1,bcdata,bcsize);
+  tsk = task_new(0,1,bcdata,bcsize,0);
   tsk->output = stdout;
 
   initial = frame_alloc(tsk);

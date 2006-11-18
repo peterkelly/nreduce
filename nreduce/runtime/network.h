@@ -59,7 +59,7 @@ typedef struct connectionlist {
 } connectionlist;
 
 typedef struct socketcomm {
-  tasklist tasks;
+  endpointlist endpoints;
   connectionlist connections;
   int listenfd;
   int listenport;
@@ -85,19 +85,23 @@ array *read_hostnames(const char *hostsfile);
 int fdsetflag(int fd, int flag, int on);
 int fdsetblocking(int fd, int blocking);
 void print_ip(FILE *f, struct in_addr ip);
-void print_taskid(FILE *f, taskid id);
+void print_endpointid(FILE *f, endpointid id);
 
 /* worker */
 
 connection *initiate_connection(socketcomm *sc, const char *hostname, int port);
 void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
-                              taskid *managerids, int count);
+                              endpointid *managerids, int count);
+endpoint *find_endpoint(socketcomm *sc, int localid);
 task *find_task(socketcomm *sc, int localid);
-void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, int size);
+void socket_send_raw(socketcomm *sc, endpoint *endpt,
+                     endpointid destendpointid, int tag, const void *data, int size);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 
 task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int bcsize, int localid);
+void add_endpoint(socketcomm *sc, endpoint *endpt);
+void remove_endpoint(socketcomm *sc, endpoint *endpt);
 
 /* console2 */
 
@@ -115,7 +119,7 @@ typedef struct newtask_msg {
 typedef struct inittask_msg {
   int localid;
   int count;
-  taskid idmap[0];
+  endpointid idmap[0];
 } inittask_msg;
 
 void start_manager(socketcomm *sc);

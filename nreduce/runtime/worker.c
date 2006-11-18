@@ -86,28 +86,38 @@ static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short 
   return NULL;
 }
 
+endpoint *find_endpoint(socketcomm *sc, int localid)
+{
+  endpoint *endpt;
+  for (endpt = sc->endpoints.first; endpt; endpt = endpt->next)
+    if (endpt->localid == localid)
+      break;
+  return endpt;
+}
+
 task *find_task(socketcomm *sc, int localid)
 {
-  task *tsk;
-  for (tsk = sc->tasks.first; tsk; tsk = tsk->next)
-    if (tsk->localid == localid)
-      break;
-  return tsk;
+  endpoint *endpt = find_endpoint(sc,localid);
+  if (NULL == endpt)
+    return NULL;
+  if (TASK_ENDPOINT != endpt->type)
+    fatal("Request for endpoint %d that is not a task\n",localid);
+  return (task*)endpt->data;
 }
 
 static void got_message(socketcomm *sc, const msgheader *hdr, const void *data)
 {
-  task *tsk;
+  endpoint *endpt;
   message *newmsg;
 
-  if (NULL == (tsk = find_task(sc,hdr->destlocalid)))
-    fatal("Message received for unknown task %d\n",hdr->destlocalid);
+  if (NULL == (endpt = find_endpoint(sc,hdr->destlocalid)))
+    fatal("Message received for unknown endpoint %d\n",hdr->destlocalid);
 
   newmsg = (message*)calloc(1,sizeof(message));
   newmsg->hdr = *hdr;
   newmsg->data = (char*)malloc(hdr->size);
   memcpy(newmsg->data,data,hdr->size);
-  task_add_message(tsk,newmsg);
+  endpoint_add_message(endpt,newmsg);
 }
 
 static void process_received(socketcomm *sc, connection *conn)
@@ -197,9 +207,9 @@ static void process_received(socketcomm *sc, connection *conn)
   array_remove_data(conn->recvbuf,start);
 }
 
-void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, int size)
+void socket_send_raw(socketcomm *sc, endpoint *endpt,
+                     endpointid destendpointid, int tag, const void *data, int size)
 {
-  socketcomm *sc = (socketcomm*)tsk->commdata;
   connection *conn;
   msgheader hdr;
   int c = 0;
@@ -207,23 +217,22 @@ void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, in
   pthread_mutex_lock(&sc->lock);
 
   memset(&hdr,0,sizeof(msgheader));
-  hdr.source.localid = tsk->localid;
-  hdr.sourceindex = tsk->pid;
-  hdr.destlocalid = desttaskid.localid;
+  hdr.source.localid = endpt->localid;
+  hdr.destlocalid = destendpointid.localid;
   hdr.size = size;
   hdr.tag = tag;
 
-  if ((desttaskid.nodeip.s_addr == sc->listenip.s_addr) &&
-      (desttaskid.nodeport == sc->listenport)) {
+  if ((destendpointid.nodeip.s_addr == sc->listenip.s_addr) &&
+      (destendpointid.nodeport == sc->listenport)) {
     hdr.source.nodeip = sc->listenip;
     hdr.source.nodeport = sc->listenport;
     got_message(sc,&hdr,data);
   }
   else {
-    if (NULL == (conn = find_connection(sc,desttaskid.nodeip,desttaskid.nodeport))) {
-      unsigned char *addrbytes = (unsigned char*)&desttaskid.nodeip.s_addr;
+    if (NULL == (conn = find_connection(sc,destendpointid.nodeip,destendpointid.nodeport))) {
+      unsigned char *addrbytes = (unsigned char*)&destendpointid.nodeip.s_addr;
       fatal("Could not find destination connection to %u.%u.%u.%u:%d",
-            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],desttaskid.nodeport);
+            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
     }
 
     array_append(conn->sendbuf,&hdr,sizeof(msgheader));
@@ -235,6 +244,7 @@ void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, in
 
 void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
+  socketcomm *sc = (socketcomm*)tsk->commdata;
   #ifdef MSG_DEBUG
   msg_print(tsk,destid,tag,data,size);
   #endif
@@ -242,7 +252,7 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   if (destid == tsk->pid)
     fatal("Attempt to send message (with tag %d) to task on same host\n",msg_names[tag]);
 
-  socket_send_raw(tsk,tsk->idmap[destid],tag,data,size);
+  socket_send_raw(sc,tsk->endpt,tsk->idmap[destid],tag,data,size);
 }
 
 static connection *add_connection(socketcomm *sc, const char *hostname, int sock)
@@ -549,9 +559,18 @@ static void *ioloop(void *arg)
   pthread_mutex_unlock(&sc->lock);
 }
 
+static int get_idmap_index(task *tsk, endpointid tid)
+{
+  int i;
+  for (i = 0; i < tsk->groupsize; i++)
+    if (!memcmp(&tsk->idmap[i],&tid,sizeof(endpointid)))
+      return i;
+  return -1;
+}
+
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
 {
-  message *msg = task_next_message(tsk,delayms);
+  message *msg = endpoint_next_message(tsk->endpt,delayms);
   int from;
   if (NULL == msg)
     return -1;
@@ -559,8 +578,9 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   *tag = msg->hdr.tag;
   *data = msg->data;
   *size = msg->hdr.size;
-  from = msg->hdr.sourceindex;
-  assert(tsk->localid == msg->hdr.destlocalid);
+  from = get_idmap_index(tsk,msg->hdr.source);
+  assert(0 <= from);
+  assert(tsk->endpt->localid == msg->hdr.destlocalid);
   free(msg);
   return from;
 }
@@ -592,17 +612,28 @@ static void exited()
   write(STDOUT_FILENO,str,strlen(str));
 }
 
+void add_endpoint(socketcomm *sc, endpoint *endpt)
+{
+  pthread_mutex_lock(&sc->lock);
+  llist_append(&sc->endpoints,endpt);
+  pthread_mutex_unlock(&sc->lock);
+}
+
+void remove_endpoint(socketcomm *sc, endpoint *endpt)
+{
+  pthread_mutex_lock(&sc->lock);
+  llist_remove(&sc->endpoints,endpt);
+  pthread_mutex_unlock(&sc->lock);
+}
+
 task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int bcsize, int localid)
 {
-  task *tsk = task_new(pid,groupsize,bcdata,bcsize);
-  tsk->localid = localid;
+  task *tsk = task_new(pid,groupsize,bcdata,bcsize,localid);
 
   tsk->commdata = sc;
   tsk->output = stdout;
 
-  pthread_mutex_lock(&sc->lock);
-  llist_append(&sc->tasks,tsk);
-  pthread_mutex_unlock(&sc->lock);
+  add_endpoint(sc,tsk->endpt);
 
   if ((0 == pid) && (NULL != bcdata)) {
     frame *initial = frame_alloc(tsk);
@@ -619,14 +650,14 @@ task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int b
   return tsk;
 }
 
-static void get_responses(socketcomm *sc, task *tsk, int tag,
-                          int count, taskid *managerids, int *responses)
+static void get_responses(socketcomm *sc, endpoint *endpt, int tag,
+                          int count, endpointid *managerids, int *responses)
 {
   int *gotresponse = (int*)calloc(count,sizeof(int));
   int allresponses;
   int i;
   do {
-    message *msg = task_next_message(tsk,-1);
+    message *msg = endpoint_next_message(endpt,-1);
     int sender = -1;
     assert(msg);
 
@@ -634,12 +665,12 @@ static void get_responses(socketcomm *sc, task *tsk, int tag,
       fatal("%s: Got invalid response tag: %d\n",msg_names[tag],msg->hdr.tag);
 
     for (i = 0; i < count; i++)
-      if (!memcmp(&msg->hdr.source,&managerids[i],sizeof(taskid)))
+      if (!memcmp(&msg->hdr.source,&managerids[i],sizeof(endpointid)))
         sender = i;
 
     if (0 > sender) {
       fprintf(stderr,"%s: Got response from unknown source ",msg_names[tag]);
-      print_taskid(stderr,msg->hdr.source);
+      print_endpointid(stderr,msg->hdr.source);
       fprintf(stderr,"\n");
       abort();
     }
@@ -668,25 +699,27 @@ typedef struct {
   char *bcdata;
   int bcsize;
   int count;
-  taskid *managerids;
+  endpointid *managerids;
 } startarg;
 
 static void *start_task(void *arg)
 {
   startarg *sa = (startarg*)arg;
   socketcomm *sc = sa->sc;
-  task *tsk = add_task(sc,0,0,NULL,0,1234); /* FIXME: use variable task id */
+  endpoint *endpt = endpoint_new(1234,LAUNCHER_ENDPOINT,NULL); /* FIXME: use variable task id */
   int count = sa->count;
-  taskid *managerids = sa->managerids;
-  taskid *taskids = (taskid*)calloc(count,sizeof(taskid));
+  endpointid *managerids = sa->managerids;
+  endpointid *endpointids = (endpointid*)calloc(count,sizeof(endpointid));
   int *localids = (int*)calloc(count,sizeof(int));
   char *bcdata = sa->bcdata;
   int bcsize = sa->bcsize;
   int ntsize = sizeof(newtask_msg)+bcsize;
   newtask_msg *ntmsg = (newtask_msg*)calloc(1,ntsize);
-  int initsize = sizeof(inittask_msg)+count*sizeof(taskid);
+  int initsize = sizeof(inittask_msg)+count*sizeof(endpointid);
   inittask_msg *initmsg = (inittask_msg*)calloc(1,initsize);
   int i;
+
+  add_endpoint(sc,endpt);
 
   ntmsg->groupsize = count;
   ntmsg->bcsize = bcsize;
@@ -698,54 +731,56 @@ static void *start_task(void *arg)
            ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],managerids[i].nodeport,
            managerids[i].localid);
 
-    taskids[i].nodeip = managerids[i].nodeip;
-    taskids[i].nodeport = managerids[i].nodeport;
+    endpointids[i].nodeip = managerids[i].nodeip;
+    endpointids[i].nodeport = managerids[i].nodeport;
   }
 
   /* Send NEWTASK messages, containing the pid, groupsize, and bytecode */
   for (i = 0; i < count; i++) {
     ntmsg->pid = i;
-    socket_send_raw(tsk,managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
+    socket_send_raw(sc,endpt,managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
   }
 
   /* Get NEWTASK responses, containing the local id of each task on the remote node */
-  get_responses(sc,tsk,MSG_NEWTASKRESP,count,managerids,localids);
+  get_responses(sc,endpt,MSG_NEWTASKRESP,count,managerids,localids);
   for (i = 0; i < count; i++)
-    taskids[i].localid = localids[i];
+    endpointids[i].localid = localids[i];
   printf("All tasks created\n");
 
   /* Send INITTASK messages, giving each task a copy of the idmap */
   initmsg->count = count;
-  memcpy(initmsg->idmap,taskids,count*sizeof(taskid));
+  memcpy(initmsg->idmap,endpointids,count*sizeof(endpointid));
   for (i = 0; i < count; i++) {
-    initmsg->localid = taskids[i].localid;
-    socket_send_raw(tsk,managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+    initmsg->localid = endpointids[i].localid;
+    socket_send_raw(sc,endpt,managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
   }
 
   /* Wait for all INITTASK messages to be processed */
-  get_responses(sc,tsk,MSG_INITTASKRESP,count,managerids,NULL);
+  get_responses(sc,endpt,MSG_INITTASKRESP,count,managerids,NULL);
   printf("All tasks initialised\n");
 
   /* Start all tasks */
   for (i = 0; i < count; i++)
-    socket_send_raw(tsk,managerids[i],MSG_STARTTASK,&localids[i],sizeof(int));
+    socket_send_raw(sc,endpt,managerids[i],MSG_STARTTASK,&localids[i],sizeof(int));
 
   /* Wait for notification of all tasks starting */
-  get_responses(sc,tsk,MSG_STARTTASKRESP,count,managerids,NULL);
+  get_responses(sc,endpt,MSG_STARTTASKRESP,count,managerids,NULL);
   printf("All tasks started\n");
 
   free(bcdata);
   free(ntmsg);
   free(managerids);
-  free(taskids);
+  free(endpointids);
   free(localids);
+  remove_endpoint(sc,endpt);
+  endpoint_free(endpt);
   printf("Distributed process creation done\n");
 
   return NULL;
 }
 
 void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
-                              taskid *managerids, int count)
+                              endpointid *managerids, int count)
 {
   startarg *arg = (startarg*)calloc(1,sizeof(startarg));
   pthread_t startthread;
@@ -753,8 +788,8 @@ void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
   arg->bcsize = bcsize;
   arg->bcdata = malloc(bcsize);
   arg->count = count;
-  arg->managerids = malloc(count*sizeof(taskid));
-  memcpy(arg->managerids,managerids,count*sizeof(taskid));
+  arg->managerids = malloc(count*sizeof(endpointid));
+  memcpy(arg->managerids,managerids,count*sizeof(endpointid));
   memcpy(arg->bcdata,bcdata,bcsize);
   printf("Distributed process creation starting\n");
   if (0 > pthread_create(&startthread,NULL,start_task,arg))

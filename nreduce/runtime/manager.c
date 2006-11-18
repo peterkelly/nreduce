@@ -37,7 +37,7 @@
 #include <math.h>
 #include <errno.h>
 
-static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
+static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
 {
 /*   printf("Manager got %s (%d bytes)\n",msg_names[msg->hdr.tag],msg->hdr.size); */
   switch (msg->hdr.tag) {
@@ -60,7 +60,7 @@ static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
 
     newtsk = add_task(sc,ntmsg->pid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,localid);
 
-    socket_send_raw(mgrtsk,msg->hdr.source,MSG_NEWTASKRESP,&localid,sizeof(int));
+    socket_send_raw(sc,endpt,msg->hdr.source,MSG_NEWTASKRESP,&localid,sizeof(int));
     break;
   }
   case MSG_INITTASK: {
@@ -71,7 +71,7 @@ static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
     if (sizeof(inittask_msg) > msg->hdr.size)
       fatal("INITTASK: invalid message size\n");
     initmsg = (inittask_msg*)msg->data;
-    if (sizeof(initmsg)+initmsg->count*sizeof(taskid) > msg->hdr.size)
+    if (sizeof(initmsg)+initmsg->count*sizeof(endpointid) > msg->hdr.size)
       fatal("INITTASK: invalid idmap size\n");
 
     printf("INITTASK: localid = %d, count = %d\n",initmsg->localid,initmsg->count);
@@ -91,12 +91,12 @@ static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
 
     for (i = 0; i < newtsk->groupsize; i++) {
       printf("INITTASK: idmap[%d] = ",i);
-      print_taskid(stdout,initmsg->idmap[i]);
+      print_endpointid(stdout,initmsg->idmap[i]);
       printf("\n");
     }
 
-    memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(taskid));
-    socket_send_raw(mgrtsk,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+    memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
+    socket_send_raw(sc,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
     newtsk->haveidmap = 1;
     break;
   }
@@ -126,7 +126,7 @@ static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
     if (0 > pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
       fatal("pthread_create: %s",strerror(errno));
 
-    socket_send_raw(mgrtsk,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+    socket_send_raw(sc,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
     break;
   }
@@ -140,20 +140,25 @@ static int manager_handle_message(socketcomm *sc, task *mgrtsk, message *msg)
 static void *manager(void *arg)
 {
   socketcomm *sc = (socketcomm*)arg;
-  task *tsk = add_task(sc,0,0,NULL,0,MANAGER_ID);
+  endpoint *endpt = endpoint_new(MANAGER_ID,MANAGER_ENDPOINT,NULL);
+
+  add_endpoint(sc,endpt);
 
   printf("Manager started\n");
   while (1) {
-    message *msg = task_next_message(tsk,-1);
+    message *msg = endpoint_next_message(endpt,-1);
     int r;
     assert(msg);
 
-    r = manager_handle_message(sc,tsk,msg);
+    r = manager_handle_message(sc,endpt,msg);
     assert(0 == r);
 
     free(msg->data);
     free(msg);
   }
+
+  remove_endpoint(sc,endpt);
+  endpoint_free(endpt);
 
   return NULL;
 }
