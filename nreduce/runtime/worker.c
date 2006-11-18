@@ -592,29 +592,6 @@ static void exited()
   write(STDOUT_FILENO,str,strlen(str));
 }
 
-static void startlog(int logfd)
-{
-  int i;
-
-  setbuf(stdout,NULL);
-  setbuf(stderr,NULL);
-
-  close(STDOUT_FILENO);
-  close(STDERR_FILENO);
-
-  dup2(logfd,STDOUT_FILENO);
-  dup2(logfd,STDERR_FILENO);
-
-  signal(SIGABRT,sigabrt);
-  signal(SIGSEGV,sigsegv);
-
-  atexit(exited);
-
-  for (i = 0; i < 20; i++)
-    printf("\n");
-  printf("==================================================\n");
-}
-
 task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int bcsize, int localid)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize);
@@ -796,20 +773,17 @@ int worker()
 {
   struct in_addr addr;
   socketcomm *sc;
-  int logfd;
-  char notify = '1';
   int listenfd;
   int pipefds[2];
+  int i;
 
-  if (0 > (logfd = open("/tmp/nreduce.log",O_WRONLY|O_APPEND|O_CREAT,0666))) {
-    perror("/tmp/nreduce.log");
-    exit(1);
-  }
+  signal(SIGABRT,sigabrt);
+  signal(SIGSEGV,sigsegv);
+  atexit(exited);
 
-  write(STDOUT_FILENO,&notify,1);
-
-  startlog(logfd);
-
+  for (i = 0; i < 20; i++)
+    printf("\n");
+  printf("==================================================\n");
   printf("Running as worker, pid = %d\n",getpid());
 
   addr.s_addr = INADDR_ANY;

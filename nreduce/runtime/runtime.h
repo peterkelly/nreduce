@@ -565,10 +565,6 @@ int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
 char *array_to_string(pntr refpntr);
 
-/* master */
-
-int master(const char *hostsfile, const char *myaddr, const char *filename, const char *cmd);
-
 /* worker */
 
 int worker();
