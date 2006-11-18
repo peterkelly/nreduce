@@ -459,3 +459,46 @@ char *getcwd_alloc()
   return cwd;
 }
 
+void parse_cmdline(const char *line, int *argc, char ***argv)
+{
+  const char *c;
+  const char *start;
+  int argno = 0;
+  *argc = 0;
+
+  c = line;
+  while (1) {
+    if ((('\0' == *c) || isspace(*c)) && ((c > line) && !isspace(*(c-1))))
+      (*argc)++;
+    if ('\0' == *c)
+      break;
+    c++;
+  }
+
+  *argv = (char**)malloc((*argc)*sizeof(char*));
+
+  start = line;
+  c = line;
+  while (1) {
+    if ((('\0' == *c) || isspace(*c)) && ((c > line) && !isspace(*(c-1)))) {
+      (*argv)[argno] = (char*)malloc(c-start+1);
+      memcpy((*argv)[argno],start,c-start);
+      (*argv)[argno][c-start] = '\0';
+      argno++;
+    }
+    if ('\0' == *c)
+      break;
+    if (isspace(*c))
+      start = c+1;
+    c++;
+  }
+}
+
+void free_args(int argc, char **argv)
+{
+  int i;
+  for (i = 0; i < argc; i++)
+    free(argv[i]);
+  free(argv);
+}
+

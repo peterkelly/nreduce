@@ -60,10 +60,11 @@ typedef struct connectionlist {
 
 typedef struct socketcomm {
   tasklist tasks;
-  connectionlist wlist;
+  connectionlist wlist; /* FIXME: rename to connections */
   int listenfd;
   int listenport;
   struct in_addr listenip;
+  int havelistenip;
   int nextlocalid;
   pthread_t iothread;
   pthread_t managerthread;
@@ -88,6 +89,8 @@ void print_taskid(FILE *f, taskid id);
 
 /* worker */
 
+connection *initiate_connection(socketcomm *sc, const char *hostname, int port);
+void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize, array *hostnames);
 task *find_task(socketcomm *sc, int localid);
 void socket_send_raw(task *tsk, taskid desttaskid, int tag, const void *data, int size);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);

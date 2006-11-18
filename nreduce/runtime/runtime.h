@@ -571,7 +571,7 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
 
 /* worker */
 
-int worker(const char *hostsfile, const char *masteraddr);
+int worker();
 
 /* cell */
 

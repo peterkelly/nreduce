@@ -37,6 +37,8 @@
 #include <math.h>
 #include <errno.h>
 
+extern const char *prelude;
+
 static void cprintf(connection *conn, const char *format, ...)
 {
   va_list ap;
@@ -51,9 +53,59 @@ static void conn_disconnect(connection *conn)
   cprintf(conn,"Disconnecting\n");
 }
 
-static void process_line(socketcomm *sc, connection *conn, const char *line)
+static int run_program(socketcomm *sc, const char *filename)
 {
-  if (!strcmp(line,"connections")) {
+  int bcsize;
+  char *bcdata;
+  source *src;
+  array *hostnames = array_new(sizeof(char*));
+  connection *conn;
+  char *hostname;
+  unsigned char *ipbytes;
+
+  src = source_new();
+  if (0 != source_parse_string(src,prelude,"prelude.l"))
+    return -1;
+  if (0 != source_parse_file(src,filename,""))
+    return -1;
+  if (0 != source_process(src))
+    return -1;
+  if (0 != source_compile(src,&bcdata,&bcsize))
+    return -1;
+  source_free(src);
+
+  /* FIXME: this hostnames array is not freed. Should actually just be passing the
+     IPs/ports instead I think */
+
+  if (!sc->havelistenip)
+    fatal("Attempt to run a program before I have my listening IP");
+
+  ipbytes = (unsigned char*)&sc->listenip.s_addr;
+  hostname = malloc(30);
+  sprintf(hostname,"%u.%u.%u.%u",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
+  array_append(hostnames,&hostname,sizeof(char*));
+
+  for (conn = sc->wlist.first; conn; conn = conn->next) {
+    if (0 <= conn->port) {
+      hostname = strdup(conn->hostname);
+      printf("run_program(): including host %s\n",conn->hostname);
+      array_append(hostnames,&hostname,sizeof(char*));
+    }
+    else {
+      printf("run_program(): excluding host %s\n",conn->hostname);
+    }
+  }
+
+  printf("Compiled\n");
+  start_task_using_manager(sc,bcdata,bcsize,hostnames);
+  return 0;
+}
+
+static void process_cmd(socketcomm *sc, connection *conn, int argc, char **argv)
+{
+  if (0 == argc)
+    return;
+  if (!strcmp(argv[0],"connections") || !strcmp(argv[0],"c")) {
     connection *c2;
     cprintf(conn,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Console?");
     cprintf(conn,"%-30s %-6s %-6s %-8s\n","--------","----","------","--------");
@@ -62,17 +114,50 @@ static void process_line(socketcomm *sc, connection *conn, const char *line)
               c2->hostname,c2->port,c2->sock,
               c2->isconsole ? "Yes" : "No");
   }
-  else if (!strcmp(line,"exit") || !strcmp(line,"q") || !strcmp(line,"quit")) {
+  else if (!strcmp(argv[0],"open") || !strcmp(argv[0],"o")) {
+    char *colon;
+    if ((2 > argc) || (NULL == (colon = strchr(argv[1],':')))) {
+      cprintf(conn,"Usage: open hostname:port\n");
+      return;
+    }
+    *colon = '\0';
+    initiate_connection(sc,argv[1],atoi(colon+1));
+  }
+  else if (!strcmp(argv[0],"run") || !strcmp(argv[0],"r")) {
+
+    if (2 > argc) {
+      cprintf(conn,"Usage: run filename\n");
+      return;
+    }
+
+    if (0 != run_program(sc,argv[1])) {
+      cprintf(conn,"Could not run program\n");
+    }
+
+  }
+  else if (!strcmp(argv[0],"exit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"quit")) {
     conn_disconnect(conn);
     return;
   }
-  else if (!strcmp(line,"help")) {
-    cprintf(conn,"connections   - List all open connections\n");
-    cprintf(conn,"help          - Print this message\n");
+  else if (!strcmp(argv[0],"help")) {
+    cprintf(conn,"connections   [c] - List all open connections\n");
+    cprintf(conn,"open          [o] - Open new connection\n");
+    cprintf(conn,"run           [r] - Run program\n");
+    cprintf(conn,"help          [h] - Print this message\n");
   }
   else {
     cprintf(conn,"Unknown command. Type \"help\" to list available commands.\n");
   }
+}
+
+static void process_line(socketcomm *sc, connection *conn, const char *line)
+{
+  int argc;
+  char **argv;
+
+  parse_cmdline(line,&argc,&argv);
+  process_cmd(sc,conn,argc,argv);
+  free_args(argc,argv);
 
   cprintf(conn,"\n> ");
 }
@@ -85,6 +170,7 @@ void console_process_received(socketcomm *sc, connection *conn)
   while (c < conn->recvbuf->nbytes) {
 
     if (4 == conn->recvbuf->data[c]) { /* CTRL-D */
+      printf("Got CTRL-D from %s\n",conn->hostname);
       conn_disconnect(conn);
       break;
     }

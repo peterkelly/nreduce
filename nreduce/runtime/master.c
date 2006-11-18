@@ -48,7 +48,6 @@ extern const char *prelude;
 typedef struct workerinfo {
   char *hostname;
   struct in_addr ip;
-  int sock;
   int readfd;
 } workerinfo;
 
@@ -65,56 +64,6 @@ static void lookup_hostnames(int nworkers, workerinfo *workers)
 
     workers[i].ip = *((struct in_addr*)he->h_addr_list[0]);
   }
-}
-
-static int wait_for_connections(int listenfd, int nworkers, workerinfo *workers)
-{
-  int remaining = nworkers;
-  while (0 < remaining) {
-    struct sockaddr_in remote_addr;
-    int sin_size = sizeof(struct sockaddr_in);
-    int clientfd;
-    int yes = 1;
-    int i;
-    int found = 0;
-
-    if (0 > (clientfd = accept(listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
-      perror("accept");
-      return -1;
-    }
-    if (0 > setsockopt(clientfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
-      perror("setsockopt");
-      return -1;
-    }
-    if (0 > fdsetblocking(clientfd,0))
-      return -1;
-
-    for (i = 0; i < nworkers; i++) {
-      if (!memcmp(&workers[i].ip,&remote_addr.sin_addr,sizeof(struct in_addr))) {
-
-        if (0 <= workers[i].sock) {
-          fprintf(stderr,"Got connection from %s but it's already connected!\n",
-                  workers[i].hostname);
-          return -1;
-        }
-        else {
-          workers[i].sock = clientfd;
-          printf("Got connection from %s\n",workers[i].hostname);
-          found = 1;
-          remaining--;
-        }
-      }
-    }
-
-    if (!found) {
-      unsigned char *ip = (unsigned char*)&remote_addr.sin_addr;
-      fprintf(stderr,"Got connection from unknown host %d.%d.%d.%d\n",
-              ip[0],ip[1],ip[2],ip[3]);
-      return -1;
-    }
-  }
-  printf("all connected!\n");
-  return 0;
 }
 
 static pid_t launch_worker(struct in_addr ip, const char *dir, const char *cmd,
@@ -150,7 +99,7 @@ static pid_t launch_worker(struct in_addr ip, const char *dir, const char *cmd,
     asprintf(&ipstr,"%d.%d.%d.%d",ipaddr[0],ipaddr[1],ipaddr[2],ipaddr[3]);
     printf("ipstr = %s\n",ipstr);
 
-    asprintf(&rshcmd,"cd %s && %s -w %s %s:%d",dir,cmd,hostsfile,mhost,mport);
+    asprintf(&rshcmd,"cd %s && %s -w",dir,cmd);
     printf("rshcmd = %s\n",rshcmd);
 
     args[0] = "rsh";
@@ -237,54 +186,6 @@ static int wait_for_startup(int nworkers, workerinfo *workers)
   return 0;
 }
 
-static int notify_startup(int nworkers, workerinfo *workers)
-{
-  int i;
-  for (i = 0; i < nworkers; i++) {
-    unsigned char c = i;
-    int r;
-    do {
-      r = write(workers[i].sock,&c,1);
-    } while ((0 > r) && (EAGAIN == errno));
-    if (0 > r) {
-      fprintf(stderr,"write() to %s: %s\n",workers[i].hostname,strerror(errno));
-      return -1;
-    }
-  }
-  return 0;
-}
-
-static int send_bytecode(int nworkers, workerinfo *workers, const char *bcdata, int bcsize)
-{
-  int i;
-  int chunksize = 1024;
-  int fullsize = sizeof(int)+bcsize;
-  char *fulldata = (char*)malloc(fullsize);
-  memcpy(fulldata,&bcsize,sizeof(int));
-  memcpy(&fulldata[sizeof(int)],bcdata,bcsize);
-  for (i = 0; i < nworkers; i++) {
-    int done = 0;
-    printf("Sending bytecode to %s (%d bytes)...",workers[i].hostname,bcsize);
-    if (0 > fdsetblocking(workers[i].sock,1))
-      return -1;
-    while (done < fullsize) {
-      int size = (chunksize < fullsize-done) ? chunksize : fullsize-done;
-      int w = write(workers[i].sock,&fulldata[done],size);
-      if (0 > w) {
-        fprintf(stderr,"Error sending bytecode to %s: %s\n",
-                workers[i].hostname,strerror(errno));
-        return -1;
-      }
-      done += w;
-    }
-/*     if (0 > fdsetblocking(workers[i].sock,0)) */
-/*       return -1; */
-    printf("done\n");
-  }
-  free(fulldata);
-  return 0;
-}
-
 int master(const char *hostsfile, const char *myaddr, const char *filename, const char *cmd)
 {
   char *host;
@@ -333,7 +234,6 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
   for (i = 0; (i < nworkers) && (0 == r); i++) {
     workers[i].hostname = strdup(array_item(hostnames,i,char*));
     workers[i].ip.s_addr = 0;
-    workers[i].sock = -1;
     workers[i].readfd = -1;
   }
 
@@ -352,22 +252,8 @@ int master(const char *hostsfile, const char *myaddr, const char *filename, cons
   if (0 != wait_for_startup(nworkers,workers))
     exit(-1);
 
-  printf("Waiting for connections...\n");
-  if (0 != wait_for_connections(listenfd,nworkers,workers))
-    exit(-1);
-
-  printf("All workers connected; sending notifications...\n");
-  if (0 != notify_startup(nworkers,workers))
-    exit(-1);
-
-  printf("Notifications sent\n");
-
-  if (0 != send_bytecode(nworkers,workers,bcdata,bcsize))
-    exit(-1);
-
   printf("Closing connections\n");
   for (i = 0; i < nworkers; i++) {
-    close(workers[i].sock);
     close(workers[i].readfd);
   }
 

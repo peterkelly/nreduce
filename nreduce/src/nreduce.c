@@ -66,6 +66,7 @@ struct arguments {
   char *hostsfile;
   char *myaddr;
   char *masteraddr;
+  int worker;
 };
 
 struct arguments args;
@@ -154,12 +155,7 @@ void parse_args(int argc, char **argv)
       args.myaddr = argv[i];
     }
     else if (!strcmp(argv[i],"-w") || !strcmp(argv[i],"--worker")) {
-      if (++i >= argc)
-        usage();
-      args.hostsfile = argv[i];
-      if (++i >= argc)
-        usage();
-      args.masteraddr = argv[i];
+      args.worker = 1;
     }
     else {
       args.filename = argv[i];
@@ -168,7 +164,7 @@ void parse_args(int argc, char **argv)
     }
   }
 
-  if ((NULL == args.filename) && (NULL == args.masteraddr))
+  if ((NULL == args.filename) && (NULL == args.masteraddr) && !args.worker)
     usage();
 }
 
@@ -196,17 +192,16 @@ int main(int argc, char **argv)
 
   trace = args.trace;
 
+  if (args.worker)
+    return worker();
+
   if (args.myaddr)
     return master(args.hostsfile,args.myaddr,args.filename,argv[0]);
-
-  if (args.masteraddr)
-    return worker(args.hostsfile,args.masteraddr);
 
   if (args.statistics && (NULL == (statsfile = fopen(args.statistics,"w")))) {
     perror(args.statistics);
     exit(1);
   }
-
 
   src = source_new();
 

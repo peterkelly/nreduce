@@ -130,4 +130,7 @@ int timeval_diffms(struct timeval from, struct timeval to);
 int hash(void *mem, int size);
 char *getcwd_alloc();
 
+void parse_cmdline(const char *line, int *argc, char ***argv);
+void free_args(int argc, char **argv);
+
 #endif

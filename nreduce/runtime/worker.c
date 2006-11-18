@@ -24,6 +24,9 @@
 #include "config.h"
 #endif
 
+/* FIXME: the sin_addr structure is supposed to be in network byte order; we are treating
+   it as host by order here (which appears to be ok on x86) */
+
 #ifndef TEMP_FAILURE_RETRY
 # define TEMP_FAILURE_RETRY(expression) \
   (__extension__                                                              \
@@ -140,18 +143,34 @@ static void process_received(socketcomm *sc, connection *conn)
         /* We have the welcome message; it's a peer and we want to exchange ids next */
         conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
+        array_append(conn->sendbuf,&conn->ip,sizeof(struct in_addr));
         array_append(conn->sendbuf,&sc->listenport,sizeof(int));
       }
     }
   }
 
   if (0 > conn->port) {
-    if (sizeof(int) > conn->recvbuf->nbytes-start) {
+    struct in_addr localip;
+
+    if (sizeof(struct in_addr)+sizeof(int) > conn->recvbuf->nbytes-start) {
       array_remove_data(conn->recvbuf,start);
       return;
     }
+    memcpy(&localip.s_addr,&conn->recvbuf->data[start],sizeof(struct in_addr));
+    start += sizeof(struct in_addr);
     conn->port = *(int*)&conn->recvbuf->data[start];
     start += sizeof(int);
+
+    if (sc->havelistenip) {
+      if (memcmp(&sc->listenip.s_addr,&localip.s_addr,sizeof(struct in_addr)))
+        fatal("Client is using a different IP to connect to me than what I expect\n");
+    }
+    else {
+      unsigned char *ipbytes = (unsigned char*)&localip.s_addr;
+      memcpy(&sc->listenip.s_addr,&localip.s_addr,sizeof(struct in_addr));
+      sc->havelistenip = 1;
+      printf("Got my listenip: %u.%u.%u.%u\n",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
+    }
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -252,7 +271,7 @@ static void remove_connection(socketcomm *sc, connection *conn)
   free(conn);
 }
 
-static connection *initiate_connection(socketcomm *sc, const char *hostname)
+connection *initiate_connection(socketcomm *sc, const char *hostname, int port)
 {
   struct sockaddr_in addr;
   struct hostent *he;
@@ -279,7 +298,7 @@ static connection *initiate_connection(socketcomm *sc, const char *hostname)
     return NULL;
 
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(WORKER_PORT);
+  addr.sin_port = htons(port);
   addr.sin_addr = *((struct in_addr*)he->h_addr);
   memset(&addr.sin_zero,0,8);
 
@@ -306,6 +325,7 @@ static int handle_connected(socketcomm *sc, connection *conn)
 
   if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
     perror("getsockopt");
+    remove_connection(sc,conn);
     return -1;
   }
 
@@ -316,11 +336,13 @@ static int handle_connected(socketcomm *sc, connection *conn)
 
     if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
+      remove_connection(sc,conn);
       return -1;
     }
   }
   else {
     printf("Connection to %s failed: %s\n",conn->hostname,strerror(err));
+    remove_connection(sc,conn);
     return -1;
   }
 
@@ -593,40 +615,6 @@ static void startlog(int logfd)
   printf("==================================================\n");
 }
 
-static int wait_for_startup_notification(int msock)
-{
-  int r;
-  unsigned char c;
-  do {
-    r = TEMP_FAILURE_RETRY(read(msock,&c,1));
-  } while ((0 > r) && (EAGAIN == errno));
-  if (0 > r) {
-    fprintf(stderr,"read() from master: %s\n",strerror(errno));
-    return -1;
-  }
-  return c;
-}
-
-static int connect_workers(socketcomm *sc, int want, int listenfd, int myindex)
-{
-  int have;
-  connection *conn;
-  do {
-    have = 0;
-
-    pthread_mutex_lock(&sc->lock);
-    pthread_cond_wait(&sc->cond,&sc->lock);
-    pthread_mutex_unlock(&sc->lock);
-
-    for (conn = sc->wlist.first; conn; conn = conn->next)
-      if (conn->connected && (0 <= conn->port))
-        have++;
-  } while (have < want);
-
-  printf("All connections now established\n");
-  return 0;
-}
-
 task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int bcsize, int localid)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize);
@@ -700,7 +688,8 @@ static void get_responses(socketcomm *sc, task *tsk, int tag,
 
 typedef struct {
   socketcomm *sc;
-  array *bcarr;
+  char *bcdata;
+  int bcsize;
   array *hostnames;
 } startarg;
 
@@ -713,8 +702,8 @@ static void *start_task(void *arg)
   taskid *managerids = (taskid*)calloc(count,sizeof(taskid));
   taskid *taskids = (taskid*)calloc(count,sizeof(taskid));
   int *localids = (int*)calloc(count,sizeof(int));
-  char *bcdata = sa->bcarr->data;
-  int bcsize = sa->bcarr->nbytes;
+  char *bcdata = sa->bcdata;
+  int bcsize = sa->bcsize;
   int ntsize = sizeof(newtask_msg)+bcsize;
   newtask_msg *ntmsg = (newtask_msg*)calloc(1,ntsize);
   int initsize = sizeof(inittask_msg)+count*sizeof(taskid);
@@ -729,6 +718,7 @@ static void *start_task(void *arg)
   for (i = 0; i < count; i++) {
     struct hostent *he;
     char *hostname = array_item(sa->hostnames,i,char*);
+    printf("start_task(): hostname %s\n",hostname);
 
     if (NULL == (he = gethostbyname(hostname)))
       fatal("%s: %s\n",hostname,hstrerror(h_errno));
@@ -776,80 +766,47 @@ static void *start_task(void *arg)
   get_responses(sc,tsk,MSG_STARTTASKRESP,count,managerids,NULL);
   printf("All tasks started\n");
 
+  free(bcdata);
   free(ntmsg);
   free(managerids);
   free(taskids);
   free(localids);
+  printf("Distributed process creation done\n");
 
   return NULL;
 }
 
-static void start_task_using_manager(socketcomm *sc, array *bcarr, array *hostnames)
+void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize, array *hostnames)
 {
-  startarg arg;
+  startarg *arg = (startarg*)calloc(1,sizeof(startarg));
   pthread_t startthread;
-  arg.sc = sc;
-  arg.bcarr = bcarr;
-  arg.hostnames = hostnames;
+  arg->sc = sc;
+  arg->bcsize = bcsize;
+  arg->bcdata = malloc(bcsize);
+  memcpy(arg->bcdata,bcdata,bcsize);
+  /* FIXME: we should take a copy of the hostnames array */
+  arg->hostnames = hostnames;
   printf("Distributed process creation starting\n");
-  if (0 > pthread_create(&startthread,NULL,start_task,&arg))
+  if (0 > pthread_create(&startthread,NULL,start_task,arg))
     fatal("pthread_create: %s",strerror(errno));
-  if (0 > pthread_join(startthread,NULL))
+
+/*   if (0 > pthread_join(startthread,NULL)) */
+/*     fatal("pthread_join: %s",strerror(errno)); */
+/*   printf("Distributed process creation done\n"); */
+
+  if (0 > pthread_detach(startthread))
     fatal("pthread_join: %s",strerror(errno));
-  printf("Distributed process creation done\n");
+  printf("Distributed process creation started\n");
 }
 
-static array *read_data(int fd)
+int worker()
 {
-  int size;
-  int got = 0;
-  array *arr;
-  int r = TEMP_FAILURE_RETRY(read(fd,&size,sizeof(int)));
-  if (0 > r) {
-    perror("read");
-    return NULL;
-  }
-  if (sizeof(int) != r) {
-    fprintf(stderr,"Error reading size, only got %d bytes\n",r);
-    return NULL;
-  }
-  arr = array_new(1);
-  printf("size = %d\n",size);
-  while (got < size) {
-    char buf[CHUNKSIZE];
-    int want = (CHUNKSIZE < size-got) ? CHUNKSIZE : size-got;
-    if (0 > (r = TEMP_FAILURE_RETRY(read(fd,buf,want)))) {
-      perror("read");
-      array_free(arr);
-      return NULL;
-    }
-    array_append(arr,buf,r);
-    got += r;
-  }
-  printf("total got: %d\n",got);
-  return arr;
-}
-
-int worker(const char *hostsfile, const char *masteraddr)
-{
-  char *mhost;
-  int mport;
-  int msock;
   struct in_addr addr;
-  int i;
-  int myindex;
-  array *bcarr = NULL;
   socketcomm *sc;
   int logfd;
   char notify = '1';
-  connection *conn;
-  array *hostnames;
-  int nworkers;
   int listenfd;
-  int remaining;
   int pipefds[2];
-  struct hostent *he;
-  char *hostname;
 
   if (0 > (logfd = open("/tmp/nreduce.log",O_WRONLY|O_APPEND|O_CREAT,0666))) {
     perror("/tmp/nreduce.log");
@@ -860,64 +817,17 @@ int worker(const char *hostsfile, const char *masteraddr)
 
   startlog(logfd);
 
-  printf("Running as worker, hostsfile = %s, master = %s, pid = %d\n",
-         hostsfile,masteraddr,getpid());
-
-  if (NULL == (hostnames = read_hostnames(hostsfile)))
-    return -1;
-
-  if (0 > parse_address(masteraddr,&mhost,&mport)) {
-    fprintf(stderr,"Invalid address: %s\n",masteraddr);
-    return -1;
-  }
+  printf("Running as worker, pid = %d\n",getpid());
 
   addr.s_addr = INADDR_ANY;
-  if (0 > (listenfd = start_listening(addr,WORKER_PORT))) {
-    free(mhost);
+  if (0 > (listenfd = start_listening(addr,WORKER_PORT)))
     return -1;
-  }
-
-  if (0 > (msock = connect_host(mhost,mport))) {
-    free(mhost);
-    close(listenfd);
-    fprintf(stderr,"Can't connect to %s: %s\n",masteraddr,strerror(errno));
-    return -1;
-  }
-
-  if (0 > (myindex = wait_for_startup_notification(msock)))
-    return -1;
-
-  printf("Got startup notification; i am worker %d\n",myindex);
-
-  if (0 > fdsetblocking(msock,1))
-    return -1;
-
-  if (NULL == (bcarr = read_data(msock)))
-    return -1;
-
-  printf("Got bytecode, size = %d bytes\n",bcarr->nbytes);
 
   sc = socketcomm_new();
   sc->listenfd = listenfd;
   sc->listenport = WORKER_PORT;
 
-  hostname = array_item(hostnames,myindex,char*);
-  if (NULL == (he = gethostbyname(hostname)))
-    fatal("%s: %s\n",hostname,hstrerror(h_errno));
-
-  if (4 != he->h_length)
-    fatal("%s: invalid address type\n",hostname);
-
-  sc->listenip = *((struct in_addr*)he->h_addr);
-  printf("my ip is %u.%u.%u.%u\n",
-         ((unsigned char*)&sc->listenip.s_addr)[0],
-         ((unsigned char*)&sc->listenip.s_addr)[1],
-         ((unsigned char*)&sc->listenip.s_addr)[2],
-         ((unsigned char*)&sc->listenip.s_addr)[3]);
-
   sc->nextlocalid = 1;
-  nworkers = array_count(hostnames);
-  remaining = nworkers-1;
 
   pipe(pipefds);
   sc->ioready_readfd = pipefds[0];
@@ -925,28 +835,10 @@ int worker(const char *hostsfile, const char *masteraddr)
   pthread_mutex_init(&sc->lock,NULL);
   pthread_cond_init(&sc->cond,NULL);
 
-  /* connect to workers > myindex, accept connections from those < myindex */
-  for (i = myindex+1; i < nworkers; i++) {
-    if (NULL == (conn = initiate_connection(sc,array_item(hostnames,i,char*))))
-      return -1;
-    if (conn->connected)
-      remaining--;
-  }
-
   start_manager(sc);
 
   if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc))
     fatal("pthread_create: %s",strerror(errno));
-
-  if (0 > connect_workers(sc,remaining,listenfd,myindex))
-    return -1;
-
-  printf("Hosts:\n");
-  for (conn = sc->wlist.first; conn; conn = conn->next)
-    printf("%s, sock %d\n",conn->hostname,conn->sock);
-
-  if (0 == myindex)
-    start_task_using_manager(sc,bcarr,hostnames);
 
   printf("suspending main thread\n");
   if (0 > pthread_join(sc->iothread,NULL))
@@ -954,10 +846,6 @@ int worker(const char *hostsfile, const char *masteraddr)
 
   socketcomm_free(sc);
 
-  if (bcarr)
-    array_free(bcarr);
-
-  free(mhost);
   close(listenfd);
   return 0;
 }
