@@ -53,15 +53,46 @@ static void conn_disconnect(connection *conn)
   cprintf(conn,"Disconnecting\n");
 }
 
+static int get_managerids(socketcomm *sc, taskid **managerids)
+{
+  int count = 1;
+  int i = 0;
+  connection *conn;
+
+  if (!sc->havelistenip)
+    fatal("I don't have my listen IP yet!");
+
+  for (conn = sc->connections.first; conn; conn = conn->next)
+    if (0 <= conn->port)
+      count++;
+
+  *managerids = (taskid*)calloc(count,sizeof(taskid));
+
+  (*managerids)[i].nodeip = sc->listenip;
+  (*managerids)[i].nodeport = sc->listenport;
+  (*managerids)[i].localid = MANAGER_ID;
+  i++;
+
+  for (conn = sc->connections.first; conn; conn = conn->next) {
+    if (0 <= conn->port) {
+      (*managerids)[i].nodeip = conn->ip;
+      (*managerids)[i].nodeport = conn->port;
+      (*managerids)[i].localid = MANAGER_ID;
+      i++;
+    }
+  }
+
+  return count;
+}
+
+
 static int run_program(socketcomm *sc, const char *filename)
 {
   int bcsize;
   char *bcdata;
   source *src;
-  array *hostnames = array_new(sizeof(char*));
-  connection *conn;
-  char *hostname;
-  unsigned char *ipbytes;
+  int count;
+  taskid *managerids;
 
   src = source_new();
   if (0 != source_parse_string(src,prelude,"prelude.l"))
@@ -74,30 +105,11 @@ static int run_program(socketcomm *sc, const char *filename)
     return -1;
   source_free(src);
 
-  /* FIXME: this hostnames array is not freed. Should actually just be passing the
-     IPs/ports instead I think */
-
-  if (!sc->havelistenip)
-    fatal("Attempt to run a program before I have my listening IP");
-
-  ipbytes = (unsigned char*)&sc->listenip.s_addr;
-  hostname = malloc(30);
-  sprintf(hostname,"%u.%u.%u.%u",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
-  array_append(hostnames,&hostname,sizeof(char*));
-
-  for (conn = sc->wlist.first; conn; conn = conn->next) {
-    if (0 <= conn->port) {
-      hostname = strdup(conn->hostname);
-      printf("run_program(): including host %s\n",conn->hostname);
-      array_append(hostnames,&hostname,sizeof(char*));
-    }
-    else {
-      printf("run_program(): excluding host %s\n",conn->hostname);
-    }
-  }
+  count = get_managerids(sc,&managerids);
 
   printf("Compiled\n");
-  start_task_using_manager(sc,bcdata,bcsize,hostnames);
+  start_task_using_manager(sc,bcdata,bcsize,managerids,count);
+  free(managerids);
   return 0;
 }
 
@@ -109,7 +121,7 @@ static void process_cmd(socketcomm *sc, connection *conn, int argc, char **argv)
     connection *c2;
     cprintf(conn,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Console?");
     cprintf(conn,"%-30s %-6s %-6s %-8s\n","--------","----","------","--------");
-    for (c2 = sc->wlist.first; c2; c2 = c2->next)
+    for (c2 = sc->connections.first; c2; c2 = c2->next)
       cprintf(conn,"%-30s %-6d %-6d %-8s\n",
               c2->hostname,c2->port,c2->sock,
               c2->isconsole ? "Yes" : "No");

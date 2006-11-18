@@ -80,7 +80,7 @@ static void socketcomm_free(socketcomm *sc)
 static connection *find_connection(socketcomm *sc, struct in_addr nodeip, short nodeport)
 {
   connection *conn;
-  for (conn = sc->wlist.first; conn; conn = conn->next)
+  for (conn = sc->connections.first; conn; conn = conn->next)
     if ((conn->ip.s_addr == nodeip.s_addr) && (conn->port == nodeport))
       return conn;
   return NULL;
@@ -256,7 +256,7 @@ static connection *add_connection(socketcomm *sc, const char *hostname, int sock
   conn->recvbuf = array_new(1);
   conn->sendbuf = array_new(1);
   array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
-  llist_append(&sc->wlist,conn);
+  llist_append(&sc->connections,conn);
   return conn;
 }
 
@@ -264,7 +264,7 @@ static void remove_connection(socketcomm *sc, connection *conn)
 {
   printf("Removing connection %s\n",conn->hostname);
   close(conn->sock);
-  llist_remove(&sc->wlist,conn);
+  llist_remove(&sc->connections,conn);
   free(conn->hostname);
   array_free(conn->recvbuf);
   array_free(conn->sendbuf);
@@ -488,7 +488,7 @@ static void *ioloop(void *arg)
     if (highest < sc->ioready_readfd)
       highest = sc->ioready_readfd;
 
-    for (conn = sc->wlist.first; conn; conn = conn->next) {
+    for (conn = sc->connections.first; conn; conn = conn->next) {
       assert(0 <= conn->sock);
       if (highest < conn->sock)
         highest = conn->sock;
@@ -525,7 +525,7 @@ static void *ioloop(void *arg)
       continue; /* timed out; no sockets are ready for reading or writing */
 
     /* Do all the writing we can */
-    for (conn = sc->wlist.first; conn; conn = next) {
+    for (conn = sc->connections.first; conn; conn = next) {
       next = conn->next;
       if (FD_ISSET(conn->sock,&writefds)) {
         if (conn->connected)
@@ -536,7 +536,7 @@ static void *ioloop(void *arg)
     }
 
     /* Read data */
-    for (conn = sc->wlist.first; conn; conn = next) {
+    for (conn = sc->connections.first; conn; conn = next) {
       next = conn->next;
       if (FD_ISSET(conn->sock,&readfds))
         handle_read(sc,conn);
@@ -690,7 +690,8 @@ typedef struct {
   socketcomm *sc;
   char *bcdata;
   int bcsize;
-  array *hostnames;
+  int count;
+  taskid *managerids;
 } startarg;
 
 static void *start_task(void *arg)
@@ -698,8 +699,8 @@ static void *start_task(void *arg)
   startarg *sa = (startarg*)arg;
   socketcomm *sc = sa->sc;
   task *tsk = add_task(sc,0,0,NULL,0,1234); /* FIXME: use variable task id */
-  int count = array_count(sa->hostnames);
-  taskid *managerids = (taskid*)calloc(count,sizeof(taskid));
+  int count = sa->count;
+  taskid *managerids = sa->managerids;
   taskid *taskids = (taskid*)calloc(count,sizeof(taskid));
   int *localids = (int*)calloc(count,sizeof(int));
   char *bcdata = sa->bcdata;
@@ -714,24 +715,14 @@ static void *start_task(void *arg)
   ntmsg->bcsize = bcsize;
   memcpy(&ntmsg->bcdata,bcdata,bcsize);
 
-  /* FIXME: should probably do this resolution outside of the task starting routine */
   for (i = 0; i < count; i++) {
-    struct hostent *he;
-    char *hostname = array_item(sa->hostnames,i,char*);
-    printf("start_task(): hostname %s\n",hostname);
+    unsigned char *ipbytes = (unsigned char*)&managerids[i].nodeip.s_addr;
+    printf("start_task(): manager %u.%u.%u.%u:%d %d\n",
+           ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],managerids[i].nodeport,
+           managerids[i].localid);
 
-    if (NULL == (he = gethostbyname(hostname)))
-      fatal("%s: %s\n",hostname,hstrerror(h_errno));
-
-    if (4 != he->h_length)
-      fatal("%s: invalid address type\n",hostname);
-
-    managerids[i].nodeip = *((struct in_addr*)he->h_addr);
-    managerids[i].nodeport = WORKER_PORT;
-    managerids[i].localid = MANAGER_ID;
-
-    taskids[i].nodeip = *((struct in_addr*)he->h_addr);
-    taskids[i].nodeport = WORKER_PORT;
+    taskids[i].nodeip = managerids[i].nodeip;
+    taskids[i].nodeport = managerids[i].nodeport;
   }
 
   /* Send NEWTASK messages, containing the pid, groupsize, and bytecode */
@@ -776,16 +767,18 @@ static void *start_task(void *arg)
   return NULL;
 }
 
-void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize, array *hostnames)
+void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
+                              taskid *managerids, int count)
 {
   startarg *arg = (startarg*)calloc(1,sizeof(startarg));
   pthread_t startthread;
   arg->sc = sc;
   arg->bcsize = bcsize;
   arg->bcdata = malloc(bcsize);
+  arg->count = count;
+  arg->managerids = malloc(count*sizeof(taskid));
+  memcpy(arg->managerids,managerids,count*sizeof(taskid));
   memcpy(arg->bcdata,bcdata,bcsize);
-  /* FIXME: we should take a copy of the hostnames array */
-  arg->hostnames = hostnames;
   printf("Distributed process creation starting\n");
   if (0 > pthread_create(&startthread,NULL,start_task,arg))
     fatal("pthread_create: %s",strerror(errno));
