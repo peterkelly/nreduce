@@ -122,7 +122,7 @@ static void handle_error(task *tsk)
 {
   print_task_sourceloc(tsk,stderr,tsk->errorsl);
   fprintf(stderr,"%s\n",tsk->error);
-  abort();
+  exit(1);
 }
 
 static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)

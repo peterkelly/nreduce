@@ -42,6 +42,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <dirent.h>
 
 static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
@@ -763,7 +764,7 @@ void b_numtostring(task *tsk, pntr *argstack)
   pntr p = argstack[0];
   char str[100];
 
-  assert(CELL_NUMBER == pntrtype(p));
+  CHECK_ARG(0,CELL_NUMBER,B_NUMTOSTRING);
   format_double(str,100,p);
   argstack[0] = string_to_array(tsk,str);
 }
@@ -782,13 +783,14 @@ void b_openfd(task *tsk, pntr *argstack)
   filename = array_to_string(filenamepntr);
 
   if (0 > (fd = open(filename,O_RDONLY))) {
-    fprintf(stderr,"Can't open %s: %s\n",filename,strerror(errno));
-    argstack[0] = tsk->globnilpntr;
+    set_error(tsk,"%s: %s",filename,strerror(errno));
+    free(filename);
     return;
   }
 
 /*   fprintf(tsk->output,"Opened %s for reading\n",filename); */
   argstack[0] = fd;
+  free(filename);
 }
 
 void b_readchunk(task *tsk, pntr *argstack)
@@ -817,6 +819,76 @@ void b_readchunk(task *tsk, pntr *argstack)
 
   carray_append(tsk,&arr,buf,r,1);
   arr->tail = nextpntr;
+}
+
+void b_readdir(task *tsk, pntr *argstack)
+{
+  DIR *dir;
+  char *path;
+  pntr filenamepntr = argstack[0];
+  struct dirent tmp;
+  struct dirent *entry;
+  carray *arr;
+
+  CHECK_ARG(0,CELL_AREF,B_OPENFD);
+  path = array_to_string(filenamepntr);
+
+  if (NULL == (dir = opendir(path))) {
+    set_error(tsk,"%s: %s",path,strerror(errno));
+    free(path);
+    return;
+  }
+
+  arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+  make_aref_pntr(argstack[0],arr->wrapper,0);
+
+  while ((0 == readdir_r(dir,&tmp,&entry)) && (NULL != entry)) {
+    char *fullpath = (char*)malloc(strlen(path)+1+strlen(entry->d_name)+1);
+    pntr namep;
+    pntr typep;
+    pntr sizep;
+    pntr entryp;
+    carray *entryarr;
+    struct stat statbuf;
+    char *type;
+
+    if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))
+      continue;
+
+    sprintf(fullpath,"%s/%s",path,entry->d_name);
+    if (0 != stat(fullpath,&statbuf)) {
+      set_error(tsk,"%s: %s",path,strerror(errno));
+      closedir(dir);
+      free(fullpath);
+      free(path);
+      return;
+    }
+
+    if (S_ISREG(statbuf.st_mode))
+      type = "file";
+    else if (S_ISDIR(statbuf.st_mode))
+      type = "directory";
+    else
+      type = "other";
+
+    namep = string_to_array(tsk,entry->d_name);
+    typep = string_to_array(tsk,type);
+    sizep = statbuf.st_size;
+
+    entryarr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+    carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
+    carray_append(tsk,&entryarr,&typep,1,sizeof(pntr));
+    carray_append(tsk,&entryarr,&sizep,1,sizeof(pntr));
+    make_aref_pntr(entryp,entryarr->wrapper,0);
+
+    carray_append(tsk,&arr,&entryp,1,sizeof(pntr));
+
+    free(fullpath);
+  }
+  closedir(dir);
+
+  free(path);
+
 }
 
 int get_builtin(const char *name)
@@ -879,6 +951,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "numtostring",    1, 1, 0, b_numtostring    },
 { "openfd",         1, 1, 0, b_openfd         },
 { "readchunk",      2, 1, 0, b_readchunk      },
+{ "readdir",        1, 1, 0, b_readdir        },
 
 };
 

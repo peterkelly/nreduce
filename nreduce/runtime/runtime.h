@@ -84,8 +84,9 @@
 #define B_NUMTOSTRING    37
 #define B_OPENFD         38
 #define B_READCHUNK      39
+#define B_READDIR        40
 
-#define NUM_BUILTINS     40
+#define NUM_BUILTINS     41
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
