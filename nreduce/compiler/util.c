@@ -502,3 +502,14 @@ void free_args(int argc, char **argv)
   free(argv);
 }
 
+/* So we can supress valgrind errors */
+int wrap_pthread_create(pthread_t *thread, pthread_attr_t *attr,
+                        void *(*start_routine)(void *), void *arg)
+{
+  return pthread_create(thread,attr,start_routine,arg);
+}
+
+int wrap_pthread_join(pthread_t th, void **thread_return)
+{
+  return pthread_join(th,thread_return);
+}

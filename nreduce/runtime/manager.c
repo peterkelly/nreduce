@@ -123,7 +123,7 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
     if (newtsk->started)
       fatal("STARTTASK: task with localid %d has already been started\n",localid);
 
-    if (0 > pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
+    if (0 > wrap_pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
       fatal("pthread_create: %s",strerror(errno));
 
     socket_send_raw(sc,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
@@ -140,31 +140,28 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
 static void *manager(void *arg)
 {
   socketcomm *sc = (socketcomm*)arg;
-  endpoint *endpt = endpoint_new(MANAGER_ID,MANAGER_ENDPOINT,NULL);
+  message *msg;
+  sc->managerendpt = endpoint_new(MANAGER_ID,MANAGER_ENDPOINT,NULL);
 
-  add_endpoint(sc,endpt);
+  add_endpoint(sc,sc->managerendpt);
 
   printf("Manager started\n");
-  while (1) {
-    message *msg = endpoint_next_message(endpt,-1);
-    int r;
-    assert(msg);
-
-    r = manager_handle_message(sc,endpt,msg);
+  while (NULL != (msg = endpoint_next_message(sc->managerendpt,-1))) {
+    int r = manager_handle_message(sc,sc->managerendpt,msg);
     assert(0 == r);
-
     free(msg->data);
     free(msg);
   }
 
-  remove_endpoint(sc,endpt);
-  endpoint_free(endpt);
+  remove_endpoint(sc,sc->managerendpt);
+  endpoint_free(sc->managerendpt);
+  sc->managerendpt = NULL;
 
   return NULL;
 }
 
 void start_manager(socketcomm *sc)
 {
-  if (0 > pthread_create(&sc->managerthread,NULL,manager,sc))
+  if (0 > wrap_pthread_create(&sc->managerthread,NULL,manager,sc))
     fatal("pthread_create: %s",strerror(errno));
 }

@@ -110,6 +110,7 @@ static int run_program(socketcomm *sc, const char *filename)
   printf("Compiled\n");
   start_task_using_manager(sc,bcdata,bcsize,managerids,count);
   free(managerids);
+  free(bcdata);
   return 0;
 }
 
@@ -151,10 +152,32 @@ static void process_cmd(socketcomm *sc, connection *conn, int argc, char **argv)
     conn_disconnect(conn);
     return;
   }
+  else if (!strcmp(argv[0],"tasks") || !strcmp(argv[0],"t")) {
+    endpoint *endpt;
+    cprintf(conn,"%-3s %-9s %-6s\n","pid","groupsize","bcsize");
+    cprintf(conn,"%-3s %-9s %-6s\n","---","---------","------");
+    for (endpt = sc->endpoints.first; endpt; endpt = endpt->next) {
+      if (TASK_ENDPOINT == endpt->type) {
+        task *tsk = (task*)endpt->data;
+        cprintf(conn,"%-3d %-9d %-6d\n",tsk->pid,tsk->groupsize,tsk->bcsize);
+      }
+    }
+    return;
+  }
+  else if (!strcmp(argv[0],"shutdown") || !strcmp(argv[0],"s")) {
+    endpoint *endpt;
+    for (endpt = sc->endpoints.first; endpt; endpt = endpt->next)
+      if (TASK_ENDPOINT == endpt->type)
+        ((task*)endpt->data)->done = 1;
+    sc->shutdown = 1;
+    return;
+  }
   else if (!strcmp(argv[0],"help")) {
     cprintf(conn,"connections   [c] - List all open connections\n");
     cprintf(conn,"open          [o] - Open new connection\n");
     cprintf(conn,"run           [r] - Run program\n");
+    cprintf(conn,"tasks         [t] - List tasks\n");
+    cprintf(conn,"shutdown      [s] - Shut down VM\n");
     cprintf(conn,"help          [h] - Print this message\n");
   }
   else {

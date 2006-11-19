@@ -120,7 +120,7 @@ typedef struct cell {
   pntr field1;
   pntr field2;
   int indsource;
-  char *msg;
+  char *msg; /* FIXME: remove this */
 } cell;
 
 #define PNTR_VALUE 0xFFF80000
@@ -443,6 +443,7 @@ void task_free(task *tsk);
 
 endpoint *endpoint_new(int localid, int type, void *data);
 void endpoint_free(endpoint *endpt);
+void endpoint_forceclose(endpoint *endpt);
 void endpoint_add_message(endpoint *endpt, message *msg);
 message *endpoint_next_message(endpoint *endpt, int delayms);
 
@@ -584,6 +585,7 @@ int worker();
 /* cell */
 
 cell *alloc_cell(task *tsk);
+void free_global(task *tsk, global *glo);
 void free_cell_fields(task *tsk, cell *v);
 
 int count_alive(task *tsk);

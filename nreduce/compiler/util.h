@@ -24,6 +24,7 @@
 #define _UTIL_H
 
 #include <stdarg.h>
+#include <pthread.h>
 
 typedef struct list list;
 struct list {
@@ -132,5 +133,9 @@ char *getcwd_alloc();
 
 void parse_cmdline(const char *line, int *argc, char ***argv);
 void free_args(int argc, char **argv);
+
+int wrap_pthread_create(pthread_t *thread, pthread_attr_t *attr,
+                        void *(*start_routine)(void *), void *arg);
+int wrap_pthread_join(pthread_t th, void **thread_return);
 
 #endif

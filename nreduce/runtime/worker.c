@@ -478,7 +478,7 @@ static void *ioloop(void *arg)
   socketcomm *sc = (socketcomm*)arg;
 
   pthread_mutex_lock(&sc->lock);
-  while (1) {
+  while (!sc->shutdown) {
     int highest = -1;
     int s;
     fd_set readfds;
@@ -557,6 +557,7 @@ static void *ioloop(void *arg)
       handle_new_connection(sc);
   }
   pthread_mutex_unlock(&sc->lock);
+  return NULL;
 }
 
 static int get_idmap_index(task *tsk, endpointid tid)
@@ -689,6 +690,9 @@ static void get_responses(socketcomm *sc, endpoint *endpt, int tag,
     for (i = 0; i < count; i++)
       if (!gotresponse[i])
         allresponses = 0;
+
+    free(msg->data);
+    free(msg);
   } while (!allresponses);
 
   free(gotresponse);
@@ -702,6 +706,7 @@ typedef struct {
   endpointid *managerids;
 } startarg;
 
+/* FIXME: handle the case where a shutdown request occurs while this is running */
 static void *start_task(void *arg)
 {
   startarg *sa = (startarg*)arg;
@@ -767,15 +772,17 @@ static void *start_task(void *arg)
   get_responses(sc,endpt,MSG_STARTTASKRESP,count,managerids,NULL);
   printf("All tasks started\n");
 
+  printf("Distributed process creation done\n");
+
   free(bcdata);
   free(ntmsg);
+  free(initmsg);
   free(managerids);
   free(endpointids);
   free(localids);
   remove_endpoint(sc,endpt);
   endpoint_free(endpt);
-  printf("Distributed process creation done\n");
-
+  free(arg);
   return NULL;
 }
 
@@ -792,10 +799,10 @@ void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
   memcpy(arg->managerids,managerids,count*sizeof(endpointid));
   memcpy(arg->bcdata,bcdata,bcsize);
   printf("Distributed process creation starting\n");
-  if (0 > pthread_create(&startthread,NULL,start_task,arg))
+  if (0 > wrap_pthread_create(&startthread,NULL,start_task,arg))
     fatal("pthread_create: %s",strerror(errno));
 
-/*   if (0 > pthread_join(startthread,NULL)) */
+/*   if (0 > wrap_pthread_join(startthread,NULL)) */
 /*     fatal("pthread_join: %s",strerror(errno)); */
 /*   printf("Distributed process creation done\n"); */
 
@@ -811,6 +818,7 @@ int worker()
   int listenfd;
   int pipefds[2];
   int i;
+  endpoint *endpt;
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
@@ -839,12 +847,36 @@ int worker()
 
   start_manager(sc);
 
-  if (0 > pthread_create(&sc->iothread,NULL,ioloop,sc))
+  if (0 > wrap_pthread_create(&sc->iothread,NULL,ioloop,sc))
     fatal("pthread_create: %s",strerror(errno));
 
   printf("suspending main thread\n");
-  if (0 > pthread_join(sc->iothread,NULL))
+  if (0 > wrap_pthread_join(sc->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
+
+  endpoint_forceclose(sc->managerendpt);
+  if (0 > wrap_pthread_join(sc->managerthread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+
+  while (NULL != (endpt = sc->endpoints.first)) {
+    if (TASK_ENDPOINT == endpt->type) {
+      task *tsk = (task*)endpt->data;
+      remove_endpoint(sc,endpt);
+      tsk->done = 1;
+      if (0 > wrap_pthread_join(tsk->thread,NULL))
+        fatal("pthread_join: %s",strerror(errno));
+      endpoint_forceclose(endpt);
+      task_free(tsk);
+    }
+    else {
+      /* FIXME: handle other endpoint types here... e.g. part-way through distributed
+         process creation */
+      fatal("Other endpoint type (%d) still active",endpt->type);
+    }
+  }
+
+  while (sc->connections.first)
+    remove_connection(sc,sc->connections.first);
 
   socketcomm_free(sc);
 

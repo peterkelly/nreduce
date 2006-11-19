@@ -166,8 +166,6 @@ void get_progname(const char *cmd)
 extern int arefs;
 int main(int argc, char **argv)
 {
-  int bufsize = 1024*1024;
-  void *buf = malloc(bufsize);
   source *src;
   int bcsize;
   char *bcdata;
@@ -263,6 +261,5 @@ int main(int argc, char **argv)
   }
 
   source_free(src);
-  free(buf);
   return 0;
 }

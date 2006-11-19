@@ -252,8 +252,11 @@ cell *alloc_cell(task *tsk)
   return v;
 }
 
-static void free_global(task *tsk, global *glo)
+void free_global(task *tsk, global *glo)
 {
+  list_free(glo->wq.frames,NULL); /* FIXME: free frame too? */
+  list_free(glo->wq.fetchers,free);
+
   if (CELL_REMOTEREF == pntrtype(glo->p)) {
     cell *refcell = get_pntr(glo->p);
     global *target = (global*)get_pntr(refcell->field1);
@@ -291,6 +294,8 @@ void free_cell_fields(task *tsk, cell *v)
   case CELL_REMOTEREF:
     break;
   }
+  free(v->msg);
+  v->msg = NULL;
 }
 
 int count_alive(task *tsk)

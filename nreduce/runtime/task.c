@@ -559,23 +559,22 @@ void task_free(task *tsk)
     for (i = 0; i < BLOCK_SIZE; i++)
       bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
 
-/*   local_collect(tsk); */
   sweep(tsk);
+
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    global *glo = tsk->pntrhash[h];
+    while (glo) {
+      global *next = glo->pntrnext;
+      free_global(tsk,glo);
+      glo = next;
+    }
+  }
 
   bl = tsk->blocks;
   while (bl) {
     block *next = bl->next;
     free(bl);
     bl = next;
-  }
-
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    global *glo = tsk->pntrhash[h];
-    while (glo) {
-      global *next = glo->pntrnext;
-      free(glo);
-      glo = next;
-    }
   }
 
   free(tsk->idmap);
@@ -606,9 +605,10 @@ void task_free(task *tsk)
   free(tsk->unack_msg_acount);
 
   free(tsk->bcdata);
-  free(tsk);
 
   endpoint_free(tsk->endpt);
+
+  free(tsk);
 }
 
 endpoint *endpoint_new(int localid, int type, void *data)
@@ -627,6 +627,19 @@ void endpoint_free(endpoint *endpt)
   pthread_mutex_destroy(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
+}
+
+void endpoint_forceclose(endpoint *endpt)
+{
+  pthread_mutex_lock(&endpt->mailbox.lock);
+  while (endpt->mailbox.first) {
+    message *msg = endpt->mailbox.first;
+    llist_remove(&endpt->mailbox,msg);
+    free(msg->data);
+    free(msg);
+  }
+  pthread_cond_broadcast(&endpt->mailbox.cond);
+  pthread_mutex_unlock(&endpt->mailbox.lock);
 }
 
 void endpoint_add_message(endpoint *endpt, message *msg)

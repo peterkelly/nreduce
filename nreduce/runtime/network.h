@@ -68,10 +68,12 @@ typedef struct socketcomm {
   int nextlocalid;
   pthread_t iothread;
   pthread_t managerthread;
+  endpoint *managerendpt;
   int ioready_writefd;
   int ioready_readfd;
   pthread_mutex_t lock;
   pthread_cond_t cond;
+  int shutdown;
 } socketcomm;
 
 /* network */
