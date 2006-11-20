@@ -2,6 +2,8 @@ STATE_MAIN = 0
 STATE_NAMESTART = 1
 STATE_NAME = 2
 STATE_ENDNAME = 3
+STATE_ATTRSEARCH = 4
+STATE_ATTRNAME = 5
 
 TOKEN_STARTELEM = 0
 TOKEN_ENDELEM = 1
@@ -28,37 +30,42 @@ print-tokens !tokens =
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//parse1 !count !start = (letrec !a = (prefix count start) in (cons TOKEN_TEXT a))
-parse1 !rest !start !count = (parse rest STATE_NAMESTART start (+ count 1))
+parse1 !rest !start !count = (parse_namestart rest start (+ count 1))
 
-parse !stream !state !start !count =
-{
-  if (not stream) nil
-  (letrec
-     !c = (head stream)
-     !rest = (tail stream)
-   in
-     (if (= state STATE_MAIN)
-         (if (= c '<')
-             (cons (cons TOKEN_TEXT (prefix count start))
-                   (parse1 rest start count))
-             (parse rest state start (+ count 1)))
-     (if (= state STATE_NAMESTART)
-         (if (= c '/')
-             (parse rest STATE_ENDNAME rest 0)
-             (parse stream STATE_NAME stream 0))
-     (if (= state STATE_NAME)
-         (if (= c '>')
-             (cons (cons TOKEN_STARTELEM (prefix count start))
-                   (parse rest STATE_MAIN rest 0))
-             (parse rest state start (+ count 1)))
-     (if (= state STATE_ENDNAME)
-         (if (= c '>')
-             (cons (cons TOKEN_ENDELEM (prefix count start))
-                   (parse rest STATE_MAIN rest 0))
-             (parse rest state start (+ count 1)))
-     nil)))))
-}
+parse_main !stream !start !count =
+(if stream
+    (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '<')
+        (cons (cons TOKEN_TEXT (prefix count start))
+              (parse1 rest start count))
+              (parse_main rest start (+ count 1))))
+    nil)
+
+parse_namestart !stream !start !count =
+(if stream
+    (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '/')
+        (parse_endname rest rest 0)
+        (parse_name stream stream 0)))
+    nil)
+
+parse_name !stream !start !count =
+(if stream
+    (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+        (cons (cons TOKEN_STARTELEM (prefix count start))
+              (parse_main rest rest 0))
+        (parse_name rest start (+ count 1))))
+    nil)
+
+parse_endname !stream !start !count =
+(if stream
+    (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+        (cons (cons TOKEN_ENDELEM (prefix count start))
+              (parse_main rest rest 0))
+        (parse_endname rest start (+ count 1))))
+    nil)
 
 ////////////////////////////////////////////////////////////////////////////////
 last !lst =
@@ -152,11 +159,12 @@ printxml !indent !tree !next =
           in
            (append "<"
            (append name
+           (append ":"
            (append ">"
            (printxml nextindent children
            (append "</"
            (append name
-           (append ">" (printxml indent rest next)))))))))
+           (append ">" (printxml indent rest next))))))))))
      (if (= tag TYPE_TEXT)
          (letrec !a = (head (tail cur)) in
          (append a (printxml indent rest next)))
@@ -170,5 +178,5 @@ main =
     stream = (readb "samples/test.xml")
   in
 //    (print-tokens (parse stream STATE_MAIN stream 0))
-    (printxml 0 (construct1 (parse stream STATE_MAIN stream 0)) nil)
+    (printxml 0 (construct1 (parse_main stream stream 0)) nil)
 }
