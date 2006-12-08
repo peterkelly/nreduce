@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<!DOCTYPE web-app 
+    PUBLIC "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN" 
+    "http://java.sun.com/dtd/web-app_2_3.dtd">
+
+<web-app>
+
+
+    <!-- General description of your web application -->
+
+    <display-name>XSLT web services engine</display-name>
+    <description>XSLT web services engine</description>
+
+    <servlet>
+      <servlet-name>Process</servlet-name>
+      <servlet-class>xslt.Process</servlet-class>
+      <load-on-startup>5</load-on-startup>
+    </servlet>
+
+    <servlet-mapping>
+      <servlet-name>Process</servlet-name>
+      <url-pattern>*.xsl</url-pattern>
+    </servlet-mapping>
+
+
+    <session-config>
+      <session-timeout>30</session-timeout>    <!-- 30 minutes -->
+    </session-config>
+
+</web-app>

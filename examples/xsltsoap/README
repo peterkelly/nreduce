@@ -1,0 +1,26 @@
+To run this example:
+
+Run "make" to compile both the servlet and client program. You must have the Axis libraries
+in your classpath in order for this to work, since it relies on WSDL2Java.
+
+Copy the whole xsltsoap directory to your tomcat/webapps directory
+
+Start up tomcat
+
+Run the client to test the calculator service (note this assumes the servlet is on localhost):
+
+java client.Client
+
+
+
+If you encounter problems:
+
+Specify the URL as an argument to the client (by default it uses localhost):
+
+java client.Client http://full.hostname:8080/xsltsoap/calculator.xsl
+
+If this still doesn't work, there may be errors produced on the server. Since these are not
+returned as proper SOAP faults, the best way to find out what has happened is to inspect the
+response message from the server. This can be done using Axis's TCPMonitor:
+
+java org.apache.axis.utils.tcpmon
