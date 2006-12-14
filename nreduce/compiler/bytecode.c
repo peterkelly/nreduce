@@ -534,6 +534,8 @@ static void domkframe(source *src, compilation *comp, sourceloc sl, int fno, int
 
 static void C(source *src, compilation *comp, snode *c, pmap *p, int n);
 static void E(source *src, compilation *comp, snode *c, pmap *p, int n);
+
+/* FIXME: Separate the relevant stuff out into Xr, for consistency with the compilation rules? */
 static void Cletrec(source *src, compilation *comp, snode *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
@@ -657,7 +659,9 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       }
       else {
         MKCAP(app->sl,fno,m);
-        EVAL(app->sl,0);
+        EVAL(app->sl,0); /* FIXME: is this necessary? Won't it just do nothing, since the cell
+                            will be a CAP node? Clarify this also in the bytecode compilation
+                            section in thesis. */
       }
     }
     break;
@@ -677,7 +681,8 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
     break;
   default:
     C(src,comp,c,p,n);
-    EVAL(c->sl,0);
+    EVAL(c->sl,0); /* FIXME: this shouldn't be necessary. Check if it's really ok to remove it,
+                      and ensure it's consistent with what you've got in the compilation schemes. */
     break;
   }
   comp->cdepth--;
@@ -869,7 +874,7 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
   }
   case SNODE_BUILTIN:
   case SNODE_SCREF:   if (0 == function_nargs(src,snode_fno(c)))
-                       MKFRAME(c->sl,snode_fno(c),0);
+                       MKFRAME(c->sl,snode_fno(c),0); /* FIXME: it's a constant; just call C? */
                      else
                        MKCAP(c->sl,snode_fno(c),0);
                      break;

@@ -239,22 +239,25 @@ static void make_app(snode **k, list *args)
   }
 }
 
-static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
+/* Iterate through a syntax tree, replacing any instance of the symbol fun with an application
+of that function to the list of arguments. The args list should be a list of strings; symbols
+will be created for each of these. */
+static void replace_usage(snode **k, const char *fun, list *args)
 {
   switch ((*k)->type) {
   case SNODE_APPLICATION:
-    replace_usage(&((*k)->left),fun,extra,args);
-    replace_usage(&((*k)->right),fun,extra,args);
+    replace_usage(&((*k)->left),fun,args);
+    replace_usage(&((*k)->right),fun,args);
     break;
   case SNODE_LETREC: {
     letrec *rec;
     for (rec = (*k)->bindings; rec; rec = rec->next)
-      replace_usage(&rec->value,fun,extra,args);
-    replace_usage(&((*k)->body),fun,extra,args);
+      replace_usage(&rec->value,fun,args);
+    replace_usage(&((*k)->body),fun,args);
     break;
   }
   case SNODE_LAMBDA:
-    replace_usage(&((*k)->body),fun,extra,args);
+    replace_usage(&((*k)->body),fun,args);
     break;
   case SNODE_SYMBOL: {
     char *sym = (*k)->name;
@@ -274,13 +277,13 @@ static void replace_usage(snode **k, const char *fun, snode *extra, list *args)
   }
 }
 
-static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
-                   int *changed, letrec *inletrec)
+static void capture(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
+                    int *changed, letrec *inletrec)
 {
   switch ((*k)->type) {
   case SNODE_APPLICATION:
-    lift_r(boundvars,&((*k)->left),noabsvars,lambda,changed,NULL);
-    lift_r(boundvars,&((*k)->right),noabsvars,lambda,changed,NULL);
+    capture(boundvars,&((*k)->left),noabsvars,lambda,changed,NULL);
+    capture(boundvars,&((*k)->right),noabsvars,lambda,changed,NULL);
     break;
   case SNODE_LETREC: {
     int oldcount = boundvars->count;
@@ -298,7 +301,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
       int islambda = (SNODE_LAMBDA == rec->value->type);
       snode *oldval = rec->value;
 
-      lift_r(boundvars,&rec->value,newnoabs,lambda,changed,rec);
+      capture(boundvars,&rec->value,newnoabs,lambda,changed,rec);
 
       if (islambda && (oldval != rec->value)) {
         list *vars = NULL;
@@ -307,11 +310,11 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
           assert(SNODE_LAMBDA == tmp->type);
           list_append(&vars,tmp->name);
         }
-        replace_usage(k,rec->name,rec->value,vars);
+        replace_usage(k,rec->name,vars);
         list_free(vars,NULL);
       }
     }
-    lift_r(boundvars,&((*k)->body),newnoabs,lambda,changed,NULL);
+    capture(boundvars,&((*k)->body),newnoabs,lambda,changed,NULL);
 
     bindings_setcount(boundvars,oldcount);
     list_free(newnoabs,free);
@@ -328,7 +331,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
     }
 
     oldlambda = *k;
-    lift_r(boundvars,tmp,lambdavars,k,changed,NULL);
+    capture(boundvars,tmp,lambdavars,k,changed,NULL);
     if (!inletrec && (oldlambda != *k)) {
       list *args = NULL;
       for (tmp = k; *tmp != oldlambda; tmp = &(*tmp)->body)
@@ -340,7 +343,7 @@ static void lift_r(stack *boundvars, snode **k, list *noabsvars, snode **lambda,
     bindings_setcount(boundvars,oldcount);
 
     for (tmp = k; SNODE_APPLICATION == (*tmp)->type; tmp = &(*tmp)->left)
-      lift_r(boundvars,&(*tmp)->right,noabsvars,lambda,changed,NULL);
+      capture(boundvars,&(*tmp)->right,noabsvars,lambda,changed,NULL);
     list_free(lambdavars,free);
     break;
   }
@@ -369,17 +372,22 @@ void lift(source *src, scomb *sc)
 {
   stack *boundvars = stack_new();
   int changed;
+
+  /* Phase 1: Variable capture */
+
   do {
     int i;
     changed = 0;
     for (i = 0; i < sc->nargs; i++)
       stack_push(boundvars,binding_new(sc->argnames[i],NULL));
-    lift_r(boundvars,&sc->body,NULL,NULL,&changed,NULL);
+    capture(boundvars,&sc->body,NULL,NULL,&changed,NULL);
     bindings_setcount(boundvars,0);
 
     if (!changed)
       break;
   } while (changed);
+
+  /* Phase 2: Supercombinator creation */
 
   create_scombs(src,boundvars,&sc->body,NULL,sc->name);
   stack_free(boundvars);
