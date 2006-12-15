@@ -897,7 +897,9 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
 }
 
 
-
+/* FIXME: could probably remove the GLOBSTART instruction, since the information it contains can
+   now be obtained from the function table. */
+/* FIXME: instead of EVAL, we should use SPARK */
 static void F(source *src, compilation *comp, int fno, scomb *sc)
 {
   int i;

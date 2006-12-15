@@ -503,7 +503,7 @@ void local_collect(task *tsk)
   /* mark */
   mark_roots(tsk,FLAG_MARKED);
 
-  /* treat any objects referenced from other tskesses as roots */
+  /* treat any objects referenced from other tasks as roots */
   for (h = 0; h < GLOBAL_HASH_SIZE; h++)
     for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
       if (tsk->pid == glo->addr.pid)

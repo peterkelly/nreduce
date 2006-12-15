@@ -105,13 +105,13 @@ typedef double pntr;
 #define CELL_REMOTEREF   0x04  /*                                                  */
 #define CELL_IND         0x05  /* left: tgt (cell*)                                */
 #define CELL_SCREF       0x06  /* left: scomb (scomb*)                             */
-#define CELL_AREF        0x07  /* left: array (cell*)      right: index            */
+#define CELL_AREF        0x07  /* left: array (cell*)                              */
 #define CELL_HOLE        0x08  /*                                                  */
 #define CELL_FRAME       0x09  /* left: frame (frame*)                             */
 #define CELL_CAP         0x0A  /* left: cap (cap*)                                 */
 #define CELL_NIL         0x0B  /*                                                  */
 #define CELL_NUMBER      0x0C  /*                                                  */
-#define CELL_ARRAY       0x0D  /* left: array (carray*)                            */
+#define CELL_ARRAY       0x0D  /* FIXME: this is no longer needed */
 #define CELL_COUNT       0x0E
 
 typedef struct cell {
@@ -299,7 +299,7 @@ typedef struct procstats {
 } procstats;
 
 typedef struct gaddr {
-  int pid;
+  int pid; /* FIXME: rename to tid */
   int lid;
 } gaddr;
 
