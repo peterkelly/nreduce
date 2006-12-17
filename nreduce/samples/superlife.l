@@ -62,14 +62,15 @@ sumnb g row col =
              (+ (if (< row maxrow)                  (gcell g (+ row 1) col)       0)
              (if (and (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0))))))))))
 
-start =
-            (cons (cons 0 (cons 1 (cons 1 nil)))
-            (cons (cons 1 (cons 1 (cons 0 nil)))
-            (cons (cons 0 (cons 1 (cons 0 nil))) nil)))
+start =     (listn 3 (listn 3 0 1 1)
+                     (listn 3 1 1 0)
+                     (listn 3 0 1 0))
 
 loop iter grid =
             (if (> iter 0)
-                (append (printgrid grid) (append "\n" (loop (- iter 1) (dolife grid))))
+                (appendn 3 (printgrid grid)
+                           "\n"
+                           (loop (- iter 1) (dolife grid)))
                 nil)
 
 main = (loop 50 (makegrid start 40 40))

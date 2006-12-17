@@ -70,3 +70,11 @@ listn n a = (if (= n 1)
 consn n a b = (if (= n 2)
                   (append1 a b)
                   (consn (- n 1) (append1 a b)))
+
+streq a b = (if (and a b)
+                (if (= (head a) (head b))
+                    (streq (tail a) (tail b))
+                    nil)
+            (if (and (not a) (not b))
+                1
+                nil))

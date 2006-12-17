@@ -1,86 +1,13 @@
-<profiledb>
-  <profile>
-    <mailbox_dir>/var/mail</mailbox_dir>
-    <pwd_maxdays>0</pwd_maxdays>
-    <gmin>100</gmin>
-    <group>$user</group>
-    <groups>
-    </groups>
-    <shell>/bin/bash</shell>
-    <home_prefix>/home/$user</home_prefix>
-    <pwd_warndays>0</pwd_warndays>
-    <gmax>6000</gmax>
-    <pwd_mindays>0</pwd_mindays>
-    <name>Default</name>
-    <umax>6000</umax>
-    <umin>1000</umin>
-    <comment>Unprivileged</comment>
-    <skel_dir>/etc/skel/</skel_dir>
-    <login_defs>1</login_defs>
-  </profile>
-  <profile>
-    <mailbox_dir>/var/mail</mailbox_dir>
-    <pwd_maxdays>0</pwd_maxdays>
-    <gmin>100</gmin>
-    <group>$user</group>
-    <groups>
-	<group>cdrom</group>
-	<group>floppy</group>
-	<group>dialout</group>
-	<group>tape</group>
-	<group>dip</group>
-	<group>adm</group>
-	<group>plugdev</group>
-	<group>fax</group>
-	<group>audio</group>
-	<group>scanner</group>
-	<group>lpadmin</group>
-	<group>video</group>
-    </groups>
-    <shell>/bin/bash</shell>
-    <home_prefix>/home/$user</home_prefix>
-    <pwd_warndays>0</pwd_warndays>
-    <gmax>6000</gmax>
-    <pwd_mindays>0</pwd_mindays>
-    <name>Desktop</name>
-    <default>1</default>
-    <umax>6000</umax>
-    <umin>1000</umin>
-    <comment>Desktop User</comment>
-    <skel_dir>/etc/skel/</skel_dir>
-    <login_defs>1</login_defs>
-  </profile>
-  <profile>
-    <mailbox_dir>/var/mail</mailbox_dir>
-    <pwd_maxdays>0</pwd_maxdays>
-    <gmin>100</gmin>
-    <group>$user</group>
-    <groups>
-        <group>cdrom</group>
-        <group>floppy</group>
-        <group>dialout</group>
-        <group>tape</group>
-        <group>dip</group>
-        <group>adm</group>
-        <group>plugdev</group>
-        <group>fax</group>
-        <group>audio</group>
-        <group>scanner</group>
-	<group>admin</group>
-	<group>lpadmin</group>
-	<group>video</group>
-    </groups>
-    <shell>/bin/bash</shell>
-    <home_prefix>/home/$user</home_prefix>
-    <pwd_warndays>0</pwd_warndays>
-    <gmax>6000</gmax>
-    <pwd_mindays>0</pwd_mindays>
-    <name>Administrator</name>
-    <umax>6000</umax>
-    <umin>1000</umin>
-    <comment>User with system administrative rights</comment>
-    <skel_dir>/etc/skel/</skel_dir>
-    <login_defs>1</login_defs>
-  </profile>
-</profiledb>
-
+<?xml version="1.0" encoding="UTF-8"?>
+<people>
+  <existing>
+    <person name="Fred" age="20" occupation="Plumber"/>
+    <person name="Joe" age="33" occupation="Marketing executive"/>
+    <person name="Bob" age="38" occupation="Builder"/>
+  </existing>
+  <new>
+    Some text here!
+    <person name="Peter" age="27" occupation="Student"/>
+    <person name="William" age="31" occupation="Painter"/>
+  </new>
+</people>
