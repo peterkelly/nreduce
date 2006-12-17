@@ -56,3 +56,17 @@ append a b = (if a
                  (letrec partlen = (arraysize a) in
                           (arrayprefix partlen a (append2 a partlen b)))
                  b)
+
+appendn n a b = (if (= n 2)
+                    (append a b)
+                    (appendn (- n 1) (append a b)))
+
+append1 a b = (append a (cons b nil))
+
+listn n a = (if (= n 1)
+                (cons a nil)
+                (consn n (cons a nil)))
+
+consn n a b = (if (= n 2)
+                  (append1 a b)
+                  (consn (- n 1) (append1 a b)))

@@ -891,6 +891,12 @@ void b_readdir(task *tsk, pntr *argstack)
 
 }
 
+void b_iscons(task *tsk, pntr *argstack)
+{
+  setbool(tsk,&argstack[0],
+          (CELL_CONS == pntrtype(argstack[0])) || (CELL_AREF == pntrtype(argstack[0])));
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -952,6 +958,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "openfd",         1, 1, 0, b_openfd         },
 { "readchunk",      2, 1, 0, b_readchunk      },
 { "readdir",        1, 1, 0, b_readdir        },
+
+{ "cons?",          1, 1, 1, b_iscons         },
 
 };
 

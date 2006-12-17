@@ -86,7 +86,9 @@
 #define B_READCHUNK      39
 #define B_READDIR        40
 
-#define NUM_BUILTINS     41
+#define B_ISCONS         41
+
+#define NUM_BUILTINS     42
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

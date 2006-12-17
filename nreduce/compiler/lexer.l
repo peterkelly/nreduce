@@ -116,6 +116,8 @@ CHAR                     \'.\'
 "|"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "^"                      { yylval.s = strdup(yytext); return SYMBOL; }
 "~"                      { yylval.s = strdup(yytext); return SYMBOL; }
+"'\\\"'"                  { yylval.d = (double)'\"'; return DOUBLE; }
+"'\\\''"                  { yylval.d = (double)'\''; return DOUBLE; }
 "'\\n'"                  { yylval.d = (double)'\n'; return DOUBLE; }
 "'\\t'"                  { yylval.d = (double)'\t'; return DOUBLE; }
 "'\\r'"                  { yylval.d = (double)'\r'; return DOUBLE; }
