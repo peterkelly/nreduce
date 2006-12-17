@@ -192,6 +192,9 @@ mkelem name attributes children =
 mkattr name value =
 (cons TYPE_ATTRIBUTE (cons name (cons value nil)))
 
+mktext value =
+(cons TYPE_TEXT (cons value nil))
+
 getchildren lst =
 (if lst
     (if (= (head (head lst)) TYPE_ATTRIBUTE)
@@ -238,7 +241,7 @@ in
       (letrec
          !text = (tail cur)
        in
-         (cons (cons TYPE_TEXT (cons text nil)) (construct rest)))
+         (cons (mktext text) (construct rest)))
   (construct rest)))))))
 
 construct1 !tokens = (allbutlast (construct tokens))

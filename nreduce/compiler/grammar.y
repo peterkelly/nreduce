@@ -219,6 +219,8 @@ Definition:
                                     sc->nargs = list_count($1->next);
                                     sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
                                     sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+                                    if (0 < strlen(parse_modname))
+                                      sc->modname = strdup(parse_modname);
                                     for (l = $1->next; l; l = l->next) {
                                       char *argname = (char*)l->data;
                                       if ('!' == argname[0]) {

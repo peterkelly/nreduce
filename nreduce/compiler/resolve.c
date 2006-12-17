@@ -56,19 +56,21 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
       if (!strcmp((char*)bound->data[i],sym))
         found = 1;
     if (!found) {
-      scomb *sc;
+      scomb *sc = NULL;
       int bif;
       char *scname;
 
-      if (modname && (NULL == strchr(sym,'.'))) {
+      if (modname && (NULL == strchr(sym,':'))) {
         scname = (char*)malloc(strlen(modname)+1+strlen(sym)+1);
         sprintf(scname,"%s:%s",modname,sym);
-      }
-      else {
-        scname = strdup(sym);
+        sc = get_scomb(src,scname);
+        free(scname);
       }
 
-      if (NULL != (sc = get_scomb(src,scname))) {
+      if (NULL == sc)
+        sc = get_scomb(src,sym);
+
+      if (NULL != sc) {
         free(c->name);
         c->name = NULL;
         c->type = SNODE_SCREF;
@@ -86,8 +88,6 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
         ubv->name = strdup(sym);
         list_append(unbound,ubv);
       }
-
-      free(scname);
     }
     break;
   }

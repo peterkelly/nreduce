@@ -257,15 +257,18 @@ void compile_stage(source *src, const char *name)
 int handle_unbound(source *src, list *unbound)
 {
   list *l;
+  int count = 0;
+
   for (l = unbound; l; l = l->next) {
     unboundvar *ubv = (unboundvar*)l->data;
     print_sourceloc(src,stderr,ubv->sl);
     fprintf(stderr,"Unbound variable: %s\n",ubv->name);
     free(ubv->name);
+    count++;
   }
   list_free(unbound,free);
 
-  if (0 == list_count(unbound))
+  if (0 == count)
     return 0;
   else
     return -1;
