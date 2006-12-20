@@ -1,15 +1,6 @@
-map f lst = (if lst (cons (f (head lst)) (map f (tail lst))) nil)
-
-foreach lst f = (map f lst)
-
-reduce f init lst = (if lst (f (head lst) (reduce f init (tail lst))) init)
-
 for min max f = (map f (range min max))
 
 range min max = (if (= min max) (cons min nil) (cons min (range (+ min 1) max)))
-
-sum lst = (reduce + 0 lst)
-product lst = (reduce * 1 lst)
 
 creategrid rows cols = (map (!n.map (!n.0) (range 1 rows)) (range 1 cols))
 

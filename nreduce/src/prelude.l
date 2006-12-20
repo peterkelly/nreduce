@@ -78,3 +78,16 @@ streq a b = (if (and a b)
             (if (and (not a) (not b))
                 1
                 nil))
+
+map f lst =
+(if lst
+    (cons (f (head lst))
+          (map f (tail lst)))
+    nil)
+
+filter f lst =
+(if lst
+    (if (f (head lst))
+        (cons (head lst) (filter f (tail lst)))
+        (filter f (tail lst)))
+    nil)
