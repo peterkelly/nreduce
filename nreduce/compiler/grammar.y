@@ -99,7 +99,9 @@ SingleExpr:
                                     $$->value = strdup($1); }
 | SYMBOL                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_SYMBOL;
-                                    $$->name = strdup($1); }
+                                    $$->name = make_varname($1);
+                                    free($1);
+                                  }
 | EQUALS                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_SYMBOL;
                                     $$->name = strdup("="); }
@@ -129,7 +131,8 @@ ListExpr:
 SingleLambda:
   LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_LAMBDA;
-                                    $$->name = (void*)strdup($2);
+                                    $$->name = make_varname($2);
+                                    free($2);
                                     $$->body = NULL; }
 ;
 
@@ -148,10 +151,12 @@ AppliedExpr:
 
 Letrec:
   SYMBOL EQUALS ListExpr          { $$ = (letrec*)calloc(1,sizeof(letrec));
-                                    $$->name = $1;
+                                    $$->name = make_varname($1);
+                                    free($1);
                                     $$->value = $3; }
 | LAMBDA SYMBOL EQUALS ListExpr   { $$ = (letrec*)calloc(1,sizeof(letrec));
-                                    $$->name = $2;
+                                    $$->name = make_varname($2);
+                                    free($2);
                                     $$->value = $4;
                                     $$->strict = 1; }
 ;
@@ -175,9 +180,12 @@ Expr:
 ;
 
 Argument:
-  SYMBOL                          { $$ = $1; }
-| LAMBDA SYMBOL                   { $$ = (char*)malloc(strlen($2)+2);
-                                    sprintf($$,"!%s",$2);
+  SYMBOL                          { $$ = make_varname($1);
+                                    free($1); }
+| LAMBDA SYMBOL                   { char *name = make_varname($2);
+                                    $$ = (char*)malloc(strlen(name)+2);
+                                    sprintf($$,"!%s",name);
+                                    free(name);
                                     free($2); }
 ;
 

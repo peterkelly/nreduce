@@ -113,7 +113,7 @@ static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstac
   }
 }
 
-static pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc)
+pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc)
 {
   stack *names = stack_new();
   pntrstack *values = pntrstack_new();
@@ -148,8 +148,8 @@ void reduce(task *tsk, pntrstack *s)
 
     tsk->stats.nreductions++;
 
-
-    /* FIXME: if we call collect() here then sometimes the redex gets collected */
+    /* FIXME: if we call collect() here then sometimes the redex gets collected
+       (? may have been fixed) */
     if (tsk->stats.nallocs > COLLECT_THRESHOLD)
       local_collect(tsk);
 
@@ -158,11 +158,14 @@ void reduce(task *tsk, pntrstack *s)
 
     target = resolve_pntr(redex);
 
+    trace_step(tsk,target,"Performing reduction",0);
+
     /* 1. Unwind the spine until something other than an application node is encountered. */
     pntrstack_push(s,target);
 
     while (CELL_APPLICATION == pntrtype(target)) {
       target = resolve_pntr(get_pntr(target)->field1);
+      trace_step(tsk,target,"Unwound spine",0);
       pntrstack_push(s,target);
     }
 
@@ -198,11 +201,26 @@ void reduce(task *tsk, pntrstack *s)
         s->data[i] = get_pntr(arg)->field2;
       }
 
+      int dont = 0;
+      if ((0 == sc->sl.fileno) && strcmp(sc->name,"map"))
+        dont = 1;
+
+      /* FIXME: could we reduce infinitely with a 0-arg supercombinator? */
+      if (tsk->partial && (1 <= sc->used) && (0 < sc->nargs) && !dont && strcmp(sc->name,"map")) {
+        trace_step(tsk,redex,"Not instantiating supercombinator more than once",1);
+        s->count = oldtop;
+        if (apply_rules(tsk,s->data[s->count-1]))
+          continue;
+        else
+          return;
+      }
+
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
       res = instantiate_scomb(tsk,s,sc->body,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
+      sc->used++;
 
       s->count = oldtop;
       continue;
@@ -223,6 +241,9 @@ void reduce(task *tsk, pntrstack *s)
 
       s->count = oldtop;
       return;
+    case CELL_SYMBOL:
+      s->count = oldtop;
+      return;
       /* b. A built-in function. Check the number of arguments available. If there are too few
          arguments the expression is in WHNF so STOP. Otherwise evaluate any arguments required,
          execute the built-in function and overwrite the root of the redex with the result. */
@@ -232,6 +253,7 @@ void reduce(task *tsk, pntrstack *s)
       int reqargs;
       int strictargs;
       int i;
+      int strictok = 0;
       assert(0 <= bif);
       assert(NUM_BUILTINS > bif);
 
@@ -263,20 +285,45 @@ void reduce(task *tsk, pntrstack *s)
       for (i = 0; i < strictargs; i++)
         assert(CELL_IND != pntrtype(s->data[s->count-1-i]));
 
-      builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
-      if (tsk->error)
-        fatal("%s",tsk->error);
-      s->count -= (reqargs-1);
 
-      /* UPDATE */
 
-      s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
+      /* Are any strict arguments a SYMBOL? */
+      for (i = 0; i < strictargs; i++) {
+        pntr argval = resolve_pntr(s->data[s->count-1-i]);
+        if ((CELL_SYMBOL != pntrtype(argval)) && (CELL_APPLICATION != pntrtype(argval))) {
+          strictok++;
+        }
+        else {
+          trace_step(tsk,argval,"Found argument to be irreducible",0);
+          break;
+        }
+      }
 
-      free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
-      get_pntr(s->data[s->count-2])->type = CELL_IND;
-      get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
+      if (strictok < strictargs) {
+        trace_step(tsk,redex,"Found application of built-in to be irreducible",1);
+        s->count = oldtop;
+        if (apply_rules(tsk,s->data[s->count-1]))
+          continue;
+        else
+          return;
+      }
+      else {
+        trace_step(tsk,redex,"Executing built-in",1);
+        builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
+        if (tsk->error)
+          fatal("%s",tsk->error);
+        s->count -= (reqargs-1);
 
-      s->count--;
+        /* UPDATE */
+
+        s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
+
+        free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
+        get_pntr(s->data[s->count-2])->type = CELL_IND;
+        get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
+
+        s->count--;
+      }
       break;
     }
     default:
@@ -343,17 +390,12 @@ static void stream(task *tsk, pntr lst)
   tsk->streamstack = NULL;
 }
 
-void run_reduction(source *src, FILE *stats)
+void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
 {
   scomb *mainsc;
   cell *root;
   pntr rootp;
   task *tsk = task_new(0,0,NULL,0,0);
-#ifdef TIMING
-  struct timeval start;
-  struct timeval end;
-  int ms;
-#endif
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
@@ -363,17 +405,18 @@ void run_reduction(source *src, FILE *stats)
   make_pntr(root->field1,mainsc);
   make_pntr(rootp,root);
 
-#ifdef TIMING
-  gettimeofday(&start,NULL);
-#endif
+  if (trace_dir) {
+    tsk->tracing = 1;
+    tsk->trace_src = src;
+    tsk->trace_root = rootp;
+    tsk->trace_dir = trace_dir;
+    tsk->trace_type = trace_type;
+  }
+
   stream(tsk,rootp);
-#ifdef TIMING
-  gettimeofday(&end,NULL);
-  ms = (end.tv_sec - start.tv_sec)*1000 +
-       (end.tv_usec - start.tv_usec)/1000;
-  if (stats)
-    fprintf(stats,"Execution time: %.3fs\n",((double)ms)/1000.0);
-#endif
+
+  if (trace_dir)
+    trace_step(tsk,rootp,"Done",0);
 
   printf("\n");
 

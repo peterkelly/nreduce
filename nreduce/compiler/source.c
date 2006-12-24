@@ -30,6 +30,7 @@
 #include "bytecode.h"
 #include "src/nreduce.h"
 #include "grammar.tab.h"
+#include "runtime/runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -49,6 +50,7 @@ const char *snode_types[SNODE_COUNT] = {
   "NIL",
   "NUMBER",
   "STRING",
+  "WRAP",
 };
 
 extern int yyparse(void);
@@ -127,7 +129,6 @@ source *source_new()
 {
   source *src = (source*)calloc(1,sizeof(source));
   src->scombs = array_new(sizeof(scomb*));
-  src->genvar = 0;
   return src;
 }
 
@@ -249,7 +250,7 @@ void add_import(source *src, const char *name)
 void compile_stage(source *src, const char *name)
 {
   static int stageno = 0;
-  if ((0 < stageno++) && trace)
+  if ((0 < stageno++) && compileinfo)
     print_scombs1(src);
   debug_stage(name);
 }
@@ -274,7 +275,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src)
+int source_process(source *src, const char *partialsc)
 {
   int sccount = array_count(src->scombs);
   int scno;
@@ -308,6 +309,31 @@ int source_process(source *src)
 /*     exit(0); */
 /*   } */
 
+  /* Run with -a; don't go any further */
+  if (partialsc)
+    return 0;
+
+  compile_stage(src,"Partial evaluation");
+  for (scno = 0; scno < sccount; scno++) {
+    scomb *sc = array_item(src->scombs,scno,scomb*);
+    char *filename;
+    snode *s;
+
+    assert(0 <= sc->sl.fileno);
+    assert(array_count(src->parsedfiles) > sc->sl.fileno);
+    filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
+
+    if (strcmp(filename,"prelude.l") && strcmp(sc->name,"main")) {
+      s = run_partial(src,sc,NULL,0);
+      snode_free(sc->body);
+      sc->body = s;
+    }
+  }
+
+  compile_stage(src,"Letrec sinking"); /* sinking.c */
+  for (scno = 0; scno < sccount; scno++)
+    sink_letrecs(src,array_item(src->scombs,scno,scomb*)->body);
+
   compile_stage(src,"Application lifting"); /* lifting.c */
   for (scno = 0; scno < sccount; scno++)
     applift(src,array_item(src->scombs,scno,scomb*));
@@ -330,7 +356,7 @@ int source_compile(source *src, char **bcdata, int *bcsize)
   compile_stage(src,"Bytecode compilation");
   compile(src,bcdata,bcsize);
 
-  if (trace)
+  if (compileinfo)
     bc_print(*bcdata,stdout,src,1,NULL);
 
   return 0;
@@ -382,3 +408,15 @@ void print_sourceloc(source *src, FILE *f, sourceloc sl)
     fprintf(f,"%s:%d: ",lookup_parsedfile(src,sl.fileno),sl.lineno);
 }
 
+char *make_varname(const char *want)
+{
+  char *name;
+  if (!strncmp(want,GENVAR_PREFIX,strlen(GENVAR_PREFIX))) {
+    name = (char*)malloc(strlen(want)+2);
+    sprintf(name,"%s_",want);
+  }
+  else {
+    name = strdup(want);
+  }
+  return name;
+}

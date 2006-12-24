@@ -386,8 +386,7 @@ void strictness_analysis(source *src)
   int scno;
   int changed;
 
-  if (trace)
-    debug_stage("Strictness analysis (new version)");
+  compile_stage(src,"Strictness analysis");
 
   for (scno = 0; scno < array_count(src->scombs); scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
@@ -414,6 +413,6 @@ void strictness_analysis(source *src)
   } while (changed);
 #endif
 
-  if (trace)
+  if (compileinfo)
     print_scombs1(src);
 }

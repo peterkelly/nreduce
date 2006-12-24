@@ -1,0 +1,17 @@
+=================================== PROGRAM ====================================
+nreduce -a test runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+double x = (* x 2)
+triple x = (* x 3)
+quadruple x = (* x 4)
+
+test x = (map quadruple (map triple (map double x)))
+
+main = nil
+==================================== OUTPUT ====================================
+test x = (if x 
+             (cons (quadruple (triple (double (head x)))) (test (tail x))) 
+             nil)
+================================== RETURN CODE =================================
+0

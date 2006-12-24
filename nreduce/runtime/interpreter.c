@@ -830,7 +830,7 @@ void *execute(task *tsk)
     mycount++;
 
     #ifdef EXECUTION_TRACE
-    if (trace) {
+    if (compileinfo) {
 /*       print_ginstr(tsk->output,gp,curf->address,instr); */
       fprintf(tsk->output,"%-6d %s\n",curf->address,opcodes[instr->opcode]);
 /*       print_stack(tsk->output,curf->data,instr->expcount,0); */

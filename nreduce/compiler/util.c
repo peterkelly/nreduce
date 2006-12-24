@@ -330,10 +330,9 @@ void print_double(FILE *f, double d)
   fprintf(f,"%s",str);
 }
 
-void print_quoted_string(FILE *f, const char *str)
+void print_escaped(FILE *f, const char *str)
 {
   const char *c;
-  fprintf(f,"\"");
   for (c = str; *c; c++) {
     switch (*c) {
     case '\n':
@@ -353,7 +352,30 @@ void print_quoted_string(FILE *f, const char *str)
       break;
     }
   }
-  fprintf(f,"\"");
+}
+
+void print_double_escaped(FILE *f, const char *str)
+{
+  const char *c;
+  for (c = str; *c; c++) {
+    switch (*c) {
+    case '\n':
+      fprintf(f,"\\\\n");
+      break;
+    case '\r':
+      fprintf(f,"\\\\r");
+      break;
+    case '\t':
+      fprintf(f,"\\\\t");
+      break;
+    case '"':
+      fprintf(f,"\\\\\\\"");
+      break;
+    default:
+      fprintf(f,"%c",*c);
+      break;
+    }
+  }
 }
 
 void print_hex(FILE *f, int c)

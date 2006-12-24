@@ -441,15 +441,23 @@ static void applift_r(source *src, snode **k, scomb *sc)
 {
   switch ((*k)->type) {
   case SNODE_APPLICATION: {
-    snode *fun = *k;
+    snode *app = *k;
+    snode **ptr = &app;
     int nargs = 0;
-    while (SNODE_APPLICATION == fun->type) {
-      fun = fun->left;
+    while (SNODE_APPLICATION == (*ptr)->type) {
+      ptr = &((*ptr)->left);
       nargs++;
     }
-    if ((SNODE_SYMBOL == fun->type) ||
-        ((SNODE_SCREF == fun->type) && (nargs > fun->sc->nargs)) ||
-        ((SNODE_BUILTIN == fun->type) && (nargs > builtin_info[fun->bif].nargs))) {
+    if (SNODE_LETREC == (*ptr)->type) {
+      snode *letrec = *ptr;
+      *k = letrec;
+      *ptr = letrec->body;
+      letrec->body = app;
+      applift_r(src,k,sc);
+    }
+    else if ((SNODE_SYMBOL == (*ptr)->type) ||
+             ((SNODE_SCREF == (*ptr)->type) && (nargs > (*ptr)->sc->nargs)) ||
+             ((SNODE_BUILTIN == (*ptr)->type) && (nargs > builtin_info[(*ptr)->bif].nargs))) {
       scomb *newsc;
       int i;
       list *vars = NULL;

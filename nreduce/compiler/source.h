@@ -35,10 +35,13 @@
 #define SNODE_NIL         0x07
 #define SNODE_NUMBER      0x08
 #define SNODE_STRING      0x09
-#define SNODE_COUNT       0x0A
+#define SNODE_WRAP        0x0A
+#define SNODE_COUNT       0x0B
 
 #define MODULE_EXTENSION ".l"
 #define MODULE_REF '.'
+
+#define GENVAR_PREFIX "_v"
 
 typedef struct sourceloc {
   int fileno;
@@ -61,6 +64,7 @@ typedef struct snode {
   double num;
   int strict;
   sourceloc sl;
+  struct snode *target;
 } snode;
 
 typedef struct letrec {
@@ -80,10 +84,10 @@ typedef struct scomb {
   int *strictin;
   sourceloc sl;
   char *modname;
+  int used;
 } scomb;
 
 typedef struct source {
-  int genvar;
   int varno;
   array *scombs;
   array *oldnames;
@@ -102,17 +106,20 @@ snode *snode_new(int fileno, int lineno);
 void snode_free(snode *c);
 void free_letrec(letrec *rec);
 
+void compile_stage(source *src, const char *name);
 source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename);
 int source_parse_file(source *src, const char *filename, const char *modname);
 void add_import(source *src, const char *name);
-int source_process(source *src);
+int source_process(source *src, const char *partialsc);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
 
 const char *lookup_parsedfile(source *src, int fileno);
 int add_parsedfile(source *src, const char *filename);
 void print_sourceloc(source *src, FILE *f, sourceloc sl);
+
+char *make_varname(const char *want);
 
 /* resolve */
 
@@ -121,6 +128,11 @@ void resolve_refs(source *src, scomb *sc, list **unbound);
 /* reorder */
 
 void reorder_letrecs(snode *c);
+
+/* sinking */
+
+void remove_wrappers(snode *s);
+void sink_letrecs(source *src, snode *s);
 
 /* super */
 
@@ -135,10 +147,6 @@ void scomb_free(scomb *sc);
 void lift(source *src, scomb *sc);
 void applift(source *src, scomb *sc);
 
-/* graph */
-
-void cleargraph(snode *root, int flag);
-
 /* new */
 
 void rename_variables(source *src, scomb *sc);
@@ -152,7 +160,7 @@ int count_args(snode *c);
 snode *get_arg(snode *c, int argno);
 void print(snode *c);
 void print_codef2(source *src, FILE *f, snode *c, int pos);
-void print_codef(source *src, FILE *f, snode *c);
+void print_codef(source *src, FILE *f, snode *c, int needbr);
 void print_code(source *src, snode *c);
 void print_scomb_code(source *src, FILE *f, scomb *sc);
 void print_scombs1(source *src);
@@ -166,7 +174,7 @@ void dump_strictinfo(source *src);
 void strictness_analysis(source *src);
 
 #ifndef DEBUG_C
-extern int trace;
+extern int compileinfo;
 #endif
 
 #ifndef SOURCE_C

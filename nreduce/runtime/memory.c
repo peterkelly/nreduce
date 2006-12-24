@@ -52,7 +52,7 @@ const char *cell_types[CELL_COUNT] = {
   "CAP",
   "NIL",
   "NUMBER",
-  "ARRAY",
+  "SYMBOL",
 };
 
 const char *msg_names[MSG_COUNT] = {
@@ -220,6 +220,7 @@ static void mark(task *tsk, pntr p, short bit)
   case CELL_NIL:
   case CELL_NUMBER:
   case CELL_HOLE:
+  case CELL_SYMBOL:
     break;
   default:
     abort();
@@ -293,6 +294,9 @@ void free_cell_fields(task *tsk, cell *v)
   }
   case CELL_REMOTEREF:
     break;
+  case CELL_SYMBOL:
+    free((char*)get_pntr(v->field1));
+    break;
   }
   free(v->msg);
   v->msg = NULL;
@@ -344,6 +348,9 @@ void mark_roots(task *tsk, short bit)
     for (i = 0; i < tsk->streamstack->count; i++)
       mark(tsk,tsk->streamstack->data[i],bit);
   }
+
+  if (tsk->tracing)
+    mark(tsk,tsk->trace_root,bit);
 
   for (f = tsk->sparked.first; f; f = f->next) {
     mark_frame(tsk,f,bit);
@@ -589,6 +596,12 @@ pntr pntrstack_pop(pntrstack *s)
 {
   assert(0 < s->count);
   return resolve_pntr(s->data[--s->count]);
+}
+
+pntr pntrstack_top(pntrstack *s)
+{
+  assert(0 < s->count);
+  return resolve_pntr(s->data[s->count]);
 }
 
 void pntrstack_free(pntrstack *s)

@@ -1,0 +1,68 @@
+#!/bin/bash
+
+DOTDIR=$1
+OUTFILE=$2
+
+if [ -z "$DOTDIR" -o -z "$OUTFILE" ]; then
+  echo "Usage: tracetopdf <dotdir> <outfile>"
+  echo "Where <dotdir> is the directory containing some dot files"
+  echo "  and <outfile> is the name of the pdf file to write"
+  exit 1
+fi
+
+if [ ! -d "$DOTDIR" ]; then
+  echo $DOTDIR: no such directory
+  exit 1
+fi
+
+if [ -z "`ls $DOTDIR | grep -F '.dot'`" ]; then
+  echo $DOTDIR does not contain any dot files!
+  exit 1
+#else
+#  echo "Ok, I have some dot files here: " $DOTDIR/*.dot
+fi
+
+DOTFILES=`ls -X $DOTDIR/*.dot | sort`
+SCALE=0.5
+
+FIRST=`echo $DOTFILES | sed -e 's/ .*$//'`
+
+FIRSTLINE=`head -1 $FIRST`
+if [ "$FIRSTLINE" = "//landscape" ]; then
+  MODE=landscape
+else
+  MODE=portrait
+fi
+
+
+#cat prefix.tex > dottemp.tex
+cat <<PREFIXEND > dottemp.tex
+\documentclass[british]{article}
+\usepackage{times}
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+\usepackage{geometry}
+\geometry{verbose,$MODE,letterpaper,tmargin=0.5in,bmargin=0.5in,lmargin=0.5in,rmargin=0.5in}
+\pagestyle{empty}
+\setlength\parskip{\medskipamount}
+\setlength\parindent{0pt}
+\usepackage{graphicx}
+
+\makeatletter
+\usepackage{babel}
+\makeatother
+\begin{document}
+PREFIXEND
+
+for i in $DOTFILES; do
+  name=`echo $i | sed -e 's/\.dot//'`
+  echo $name
+  dot -Tfig $i > $name.fig
+  fig2dev -L pdf -f Helvetica $name.fig $name.pdf
+  echo "\begin{center}\includegraphics[scale=$SCALE]{$name}\par\end{center}" >> dottemp.tex
+  echo "\newpage{}" >> dottemp.tex
+done
+echo "\end{document}" >> dottemp.tex
+pdflatex dottemp >/dev/null
+rm -f dottemp.aux dottemp.log dottemp.tex
+mv dottemp.pdf $OUTFILE

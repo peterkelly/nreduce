@@ -328,8 +328,8 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     popstatus(comp->si,arg0);
     break;
   case OP_UPDATE:
-    assert(0 <= comp->si->count-1-arg0);
-    setstatusat(comp->si,comp->si->count-1-arg0,statusat(comp->si,comp->si->count-1));
+    assert(0 <= arg0);
+    setstatusat(comp->si,arg0,statusat(comp->si,comp->si->count-1));
     popstatus(comp->si,1);
     break;
   case OP_ALLOC: {
@@ -1275,8 +1275,9 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
   fprintf(f,"\n");
   for (i = 0; i < bch->nstrings; i++) {
     fprintf(f,"%4d: ",i);
-    print_quoted_string(f,bc_string(bcdata,i));
-    fprintf(f,"\n");
+    fprintf(f,"\"");
+    print_escaped(f,bc_string(bcdata,i));
+    fprintf(f,"\"\n");
   }
 }
 

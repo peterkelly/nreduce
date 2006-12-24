@@ -7,10 +7,10 @@ libcompiler_la_SOURCES = util.c \
 	strictness.c \
 	super.c \
 	lifting.c \
-	graph.c \
 	renaming.c \
 	resolve.c \
 	reorder.c \
+	sinking.c \
 	source.c \
 	bytecode.c \
 	debug.c \

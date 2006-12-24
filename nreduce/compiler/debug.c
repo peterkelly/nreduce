@@ -40,7 +40,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-int trace = 0;
+int compileinfo = 0;
 
 void fatal(const char *format, ...)
 {
@@ -69,7 +69,7 @@ void debug_stage(const char *name)
 {
   int npad = 80-2-strlen(name);
   int i;
-  if (!trace)
+  if (!compileinfo)
     return;
   for (i = 0; i < npad/2; i++)
     printf("=");
@@ -109,81 +109,74 @@ static void print1(char *prefix, snode *c, int indent)
   for (i = 0; i < indent; i++)
     printf("  ");
 
-  if (c->flags & FLAG_TMP) {
-    printf("%p\n",c);
-  }
-  else {
-    c->flags |= FLAG_TMP;
-    switch (c->type) {
-    case SNODE_EMPTY:
-      printf("empty\n");
-      break;
-    case SNODE_APPLICATION:
-      if (c->strict)
-        printf("@S\n");
+  switch (c->type) {
+  case SNODE_EMPTY:
+    printf("empty\n");
+    break;
+  case SNODE_APPLICATION:
+    if (c->strict)
+      printf("@S\n");
+    else
+      printf("@\n");
+    print1(prefix,c->left,indent+1);
+    print1(prefix,c->right,indent+1);
+    break;
+  case SNODE_LAMBDA:
+    printf("lambda %s\n",c->name);
+    print1(prefix,c->body,indent+1);
+    break;
+  case SNODE_BUILTIN:
+    printf("%s\n",builtin_info[c->bif].name);
+    break;
+  case SNODE_SYMBOL:
+    printf("%s\n",c->name);
+    break;
+  case SNODE_SCREF:
+    printf("%s\n",c->sc->name);
+    break;
+  case SNODE_LETREC: {
+    letrec *rec;
+    printf("LETREC\n");
+    for (rec = c->bindings; rec; rec = rec->next) {
+      printf("%s             %11s ",prefix,"def");
+      for (i = 0; i < indent+1; i++)
+        printf("  ");
+      if (rec->strict)
+        printf("!%s\n",rec->name);
       else
-        printf("@\n");
-      print1(prefix,c->left,indent+1);
-      print1(prefix,c->right,indent+1);
-      break;
-    case SNODE_LAMBDA:
-      printf("lambda %s\n",c->name);
-      print1(prefix,c->body,indent+1);
-      break;
-    case SNODE_BUILTIN:
-      printf("%s\n",builtin_info[c->bif].name);
-      break;
-    case SNODE_SYMBOL:
-      printf("%s\n",c->name);
-      break;
-    case SNODE_SCREF:
-      printf("%s\n",c->sc->name);
-      break;
-    case SNODE_LETREC: {
-      letrec *rec;
-      printf("LETREC\n");
-      for (rec = c->bindings; rec; rec = rec->next) {
-        printf("%s             %11s ",prefix,"def");
-        for (i = 0; i < indent+1; i++)
-          printf("  ");
-        if (rec->strict)
-          printf("!%s\n",rec->name);
-        else
-          printf(" %s\n",rec->name);
-        print1(prefix,rec->value,indent+2);
-      }
-      print1(prefix,c->body,indent+1);
-      break;
+        printf(" %s\n",rec->name);
+      print1(prefix,rec->value,indent+2);
     }
-    case SNODE_NIL:
-      printf("nil\n"); break;
-    case SNODE_NUMBER:
-      print_double(stdout,c->num);
-      printf("\n");
-      break;
-    case SNODE_STRING:
-      printf("%s\n",c->value);
-      break;
-    default:
-      printf("**** INVALID\n");
-      abort();
-      break;
-    }
+    print1(prefix,c->body,indent+1);
+    break;
+  }
+  case SNODE_NIL:
+    printf("nil\n"); break;
+  case SNODE_NUMBER:
+    print_double(stdout,c->num);
+    printf("\n");
+    break;
+  case SNODE_STRING:
+    printf("%s\n",c->value);
+    break;
+  default:
+    printf("**** INVALID\n");
+    abort();
+    break;
   }
 }
 
 void print(snode *c)
 {
-  cleargraph(c,FLAG_TMP);
   print1("",c,0);
 }
 
-static void down_line(FILE *f, int *line, int *col)
+static void down_line(FILE *f, int *line, int col)
 {
   int i;
   (*line)++;
   fprintf(f,"\n");
-  for (i = 0; i < *col; i++)
+  for (i = 0; i < col; i++)
     fprintf(f," ");
 }
 
@@ -192,7 +185,7 @@ const char *real_varname(source *src, const char *sym)
 #ifdef SHOW_SUBSTITUTED_NAMES
   return sym;
 #else
-  if (!strncmp(sym,"_v",2)) {
+  if (!strncmp(sym,GENVAR_PREFIX,strlen(GENVAR_PREFIX))) {
     int varno = atoi(sym+2);
     assert(src->oldnames);
     assert(varno < array_count(src->oldnames));
@@ -209,7 +202,7 @@ char *real_scname(source *src, const char *sym)
 #ifdef SHOW_SUBSTITUTED_NAMES
   return strdup(sym);
 #else
-  if (!strncmp(sym,"_v",2)) {
+  if (!strncmp(sym,GENVAR_PREFIX,strlen(GENVAR_PREFIX))) {
     char *end = NULL;
     int varno = strtol(sym+2,&end,10);
     char *old;
@@ -266,7 +259,7 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
 
       if (!addedline && (0 < argno) && (isif || (SNODE_LAMBDA == arg->type))) {
         *col = argscol;
-        down_line(f,line,col);
+        down_line(f,line,*col);
       }
       addedline = 0;
 
@@ -278,7 +271,7 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
       if (l->next) {
         if (1 && (oldline != *line)) {
           *col = oldcol;
-          down_line(f,line,col);
+          down_line(f,line,*col);
           addedline = 1;
         }
         else {
@@ -290,7 +283,7 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
 
     list_free(apps,NULL);
     if (needbr)
-      fprintf(f,")");
+      (*col) += fprintf(f,")");
     break;
   }
   case SNODE_LAMBDA:
@@ -328,27 +321,29 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
   case SNODE_LETREC: {
     int count = 0;
     letrec *rec = c->bindings;
-    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
+    if (needbr || (parent && (SNODE_LAMBDA != parent->type)))
       *col += fprintf(f,"(");
-    *col += fprintf(f,"let (");
+    fprintf(f,"letrec ");
+    (*col) += 2;
+    down_line(f,line,*col);
     while (rec) {
       int col2 = *col;
       if (0 < count++)
-        down_line(f,line,&col2);
+        down_line(f,line,col2);
       if (rec->strict)
-        col2 += fprintf(f,"(%s! ",real_varname(src,rec->name));
+        col2 += fprintf(f,"!%s = ",real_varname(src,rec->name));
       else
-        col2 += fprintf(f,"(%s ",real_varname(src,rec->name));
+        col2 += fprintf(f,"%s = ",real_varname(src,rec->name));
       print_code1(src,f,rec->value,1,c,line,&col2);
       rec = rec->next;
-      fprintf(f,")");
     }
-    fprintf(f,")");
-    (*col)--;
-    down_line(f,line,col);
+    down_line(f,line,(*col)-2);
+    fprintf(f,"in");
+    down_line(f,line,*col);
     print_code1(src,f,c->body,1,c,line,col);
-    if (parent && (SNODE_LAMBDA != parent->type) && (SNODE_LETREC != parent->type))
+    if (needbr || (parent && (SNODE_LAMBDA != parent->type)))
       *col += fprintf(f,")");
+/*     (*col) -= 3; */
     break;
   }
   case SNODE_NIL:
@@ -371,6 +366,9 @@ static void print_code1(source *src, FILE *f, snode *c, int needbr, snode *paren
     fprintf(f,"\"");
     break;
   }
+  case SNODE_WRAP:
+    print_code1(src,f,c->target,needbr,parent,line,col);
+    break;
   default:
     abort();
     break;
@@ -381,20 +379,18 @@ void print_codef2(source *src, FILE *f, snode *c, int pos)
 {
   int line = 0;
   int col = pos;
-  cleargraph(c,FLAG_TMP);
-  print_code1(src,f,c,0,NULL,&line,&col);
+  print_code1(src,f,c,1,NULL,&line,&col);
 }
 
-void print_codef(source *src, FILE *f, snode *c)
+void print_codef(source *src, FILE *f, snode *c, int needbr)
 {
   int line = 0;
   int col = 0;
-  cleargraph(c,FLAG_TMP);
-  print_code1(src,f,c,0,NULL,&line,&col);
+  print_code1(src,f,c,needbr,NULL,&line,&col);
 }
 void print_code(source *src, snode *c)
 {
-  print_codef(src,stdout,c);
+  print_codef(src,stdout,c,1);
 }
 
 void print_scomb_code(source *src, FILE *f, scomb *sc)
@@ -420,10 +416,10 @@ void print_scombs1(source *src)
   int scno;
   for (scno = 0; scno < array_count(src->scombs); scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
-    if (strncmp(sc->name,"__",2)) {
+/*     if (strncmp(sc->name,"__",2)) { */
       print_scomb_code(src,stdout,sc);
       debug(0,"\n");
-    }
+/*     } */
   }
 }
 

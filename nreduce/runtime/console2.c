@@ -99,7 +99,7 @@ static int run_program(socketcomm *sc, const char *filename)
     return -1;
   if (0 != source_parse_file(src,filename,""))
     return -1;
-  if (0 != source_process(src))
+  if (0 != source_process(src,NULL))
     return -1;
   if (0 != source_compile(src,&bcdata,&bcsize))
     return -1;

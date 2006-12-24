@@ -119,7 +119,8 @@ void stack_push(stack *s, void *c);
 
 void format_double(char *str, int size, double d);
 void print_double(FILE *f, double d);
-void print_quoted_string(FILE *f, const char *str);
+void print_escaped(FILE *f, const char *str);
+void print_double_escaped(FILE *f, const char *str);
 void print_hex(FILE *f, int c);
 void print_hexbyte(FILE *f, unsigned char val);
 void print_bin(FILE *f, void *ptr, int nbytes);

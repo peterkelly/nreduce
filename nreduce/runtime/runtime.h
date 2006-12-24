@@ -113,7 +113,7 @@ typedef double pntr;
 #define CELL_CAP         0x0A  /* left: cap (cap*)                                 */
 #define CELL_NIL         0x0B  /*                                                  */
 #define CELL_NUMBER      0x0C  /*                                                  */
-#define CELL_ARRAY       0x0D  /* FIXME: this is no longer needed */
+#define CELL_SYMBOL      0x0D  /*                                                  */
 #define CELL_COUNT       0x0E
 
 typedef struct cell {
@@ -121,7 +121,7 @@ typedef struct cell {
   short type;
   pntr field1;
   pntr field2;
-  int indsource;
+  int indsource; /* FIXME: remove this */
   char *msg; /* FIXME: remove this */
 } cell;
 
@@ -211,11 +211,18 @@ typedef struct waitqueue {
 
 typedef void (*builtin_f)(struct task *tsk, pntr *argstack);
 
+#define ALWAYS_VALUE 1
+#define MAYBE_UNEVAL 0
+
+#define ALWAYS_TRUE 1
+#define MAYBE_FALSE 0
+
 typedef struct builtin {
   char *name;
   int nargs;
   int nstrict;
   int reswhnf;
+  int restrue;
   builtin_f f;
 } builtin;
 
@@ -438,6 +445,15 @@ typedef struct task {
   pthread_t thread;
   int haveidmap;
   int started;
+  int partial;
+
+  pntr trace_root;
+  source *trace_src;
+  int trace_steps;
+  char *trace_dir;
+  int trace_type;
+  int tracing;
+  scomb *partial_sc;
 } task;
 
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid);
@@ -566,8 +582,15 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 /* reduction */
 
+pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc);
 void reduce(task *h, pntrstack *s);
-void run_reduction(source *src, FILE *stats);
+void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type);
+
+/* partial evaluation */
+
+int apply_rules(task *tsk, pntr p);
+snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type);
+void debug_partial(source *src, const char *name, char *trace_dir, int trace_type);
 
 /* console */
 
@@ -628,10 +651,31 @@ pntrstack *pntrstack_new(void);
 void pntrstack_push(pntrstack *s, pntr p);
 pntr pntrstack_at(pntrstack *s, int pos);
 pntr pntrstack_pop(pntrstack *s);
+pntr pntrstack_top(pntrstack *s);
 void pntrstack_free(pntrstack *s);
 
 void pntrstack_grow(int *alloc, pntr **data, int size);
 
+/* graph */
+
+void clear_graph(pntr root, int flag);
+/* int graph_contains(pntr haystack, pntr needle); */
+pntr graph_replace(task *tsk, pntr root, pntr old, pntr new);
+
+/* tosyntax */
+
+snode *graph_to_syntax(source *src, pntr p);
+void print_graph(source *src, pntr p);
+
+/* trace */
+
+#define TRACE_NORMAL    0
+#define TRACE_LANDSCAPE 1
+
+typedef void (*dotfun)(FILE *f, pntr p, pntr arg);
+void dot_graph(const char *prefix, int number, pntr root, int doind,
+               dotfun fun, pntr arg, const char *msg, int landscape);
+void trace_step(task *tsk, pntr target, const char *msg, int allapps);
 
 #ifndef BUILTINS_C
 extern const builtin builtin_info[NUM_BUILTINS];

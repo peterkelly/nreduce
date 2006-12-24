@@ -64,9 +64,9 @@ static void mappings_set_count(stack *mappings, int count)
 
 static char *next_var(source *src, const char *oldname)
 {
-  char *name = (char*)malloc(20);
+  char *name = (char*)malloc(strlen(GENVAR_PREFIX)+20);
   char *copy;
-  sprintf(name,"_v%d",src->varno++);
+  sprintf(name,"%s%d",GENVAR_PREFIX,src->varno++);
 
   copy = strdup(oldname);
   array_append(src->oldnames,&copy,sizeof(char*));

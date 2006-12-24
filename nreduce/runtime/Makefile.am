@@ -11,7 +11,11 @@ libruntime_la_SOURCES = worker.c \
 	console2.c \
 	interpreter.c \
 	reduction.c \
-	manager.c
+	manager.c \
+	graph.c \
+	partial.c \
+	tosyntax.c \
+	trace.c
 
 INCLUDES = -I@top_srcdir@
 CLEANFILES = *.da *.bb *.bbg *.gcov

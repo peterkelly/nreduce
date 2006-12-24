@@ -1,0 +1,21 @@
+=================================== PROGRAM ====================================
+nreduce -a addnumbers runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+T_NUMBER = 1
+T_ERROR = 2
+
+add x y =
+(if (and (= (head x) T_NUMBER) (= (head y) T_NUMBER))
+    (cons T_NUMBER (+ (tail x) (tail y)))
+    (cons T_ERROR nil))
+
+addnumbers a bnum = (add (cons T_NUMBER a) bnum)
+
+main = nil
+==================================== OUTPUT ====================================
+addnumbers a bnum = (if (= (head bnum) 1) 
+                        (cons T_NUMBER (+ a (tail bnum))) 
+                        (cons T_ERROR nil))
+================================== RETURN CODE =================================
+0

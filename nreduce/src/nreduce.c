@@ -53,17 +53,19 @@ extern const char *prelude;
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
 struct arguments {
-  int trace;
+  int compileinfo;
   char *statistics;
   int profiling;
-  int juststrict;
   int bytecode;
   int engine;
   char *filename;
   int strictdebug;
   int lambdadebug;
   int reorderdebug;
+  char *partial;
   int worker;
+  char *trace;
+  int trace_type;
 };
 
 struct arguments args;
@@ -75,22 +77,26 @@ static void usage()
 "\n"
 "where OPTIONS includes zero or more of the following:\n"
 "\n"
-"  -h, --help              Help (this message)\n"
-"  -t, --trace             Enable tracing\n"
-"  -s, --statistics FILE   Write statistics to FILE\n"
-"  -p, --profiling         Show profiling information\n"
-"  -j, --just-strictness   Just display strictness information\n"
-"  -g, --just-bytecode     Just print compiled bytecode and exit\n"
-"  -e, --engine ENGINE     Use execution engine:\n"
-"                          (r)educer|(i)nterpreter|(n)ative\n"
-"                          (default: interpreter)\n"
-"  -r, --strictness-debug  Do not run program; show strictness information for\n"
-"                          all supercombinators\n"
-"  -l, --lambdadebug       Do not run program; just show results of lambda\n"
-"                          lifting\n"
-"  -o, --reorder-debug     Do not run program; just show results of letrec\n"
-"                          reordering\n"
-"  -w, --worker            Run as worker\n");
+"  -h, --help               Help (this message)\n"
+"  -c, --compile-stages     Print debug info about each compilation stage\n"
+"  -s, --statistics FILE    Write statistics to FILE\n"
+"  -p, --profiling          Show profiling information\n"
+"  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
+"  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
+"  -e, --engine ENGINE      Use execution engine:\n"
+"                           (r)educer|(i)nterpreter|(n)ative\n"
+"                           (default: interpreter)\n"
+"  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
+"  -w, --worker             Run as worker\n"
+"\n"
+"Options for printing output of compilation stages:\n"
+"(these do not actually run the program)\n"
+"\n"
+"  -j, --just-strictness    Print strictness information\n"
+"  -g, --just-bytecode      Print compiled bytecode and exit\n"
+"  -l, --lambdadebug        Print results of lambda lifting\n"
+"  -o, --reorder-debug      Print results of letrec reordering\n"
+"  -r, --strictness-debug   Print supercombinators strictness information\n");
   exit(1);
 }
 
@@ -104,8 +110,8 @@ void parse_args(int argc, char **argv)
     if (!strcmp(argv[i],"-h") || !strcmp(argv[i],"--help")) {
       usage();
     }
-    else if (!strcmp(argv[i],"-t") || !strcmp(argv[i],"--trace")) {
-      args.trace = 1;
+    else if (!strcmp(argv[i],"-c") || !strcmp(argv[i],"--compile-stages")) {
+      args.compileinfo = 1;
     }
     else if (!strcmp(argv[i],"-s") || !strcmp(argv[i],"--statistics")) {
       if (++i >= argc)
@@ -114,9 +120,6 @@ void parse_args(int argc, char **argv)
     }
     else if (!strcmp(argv[i],"-p") || !strcmp(argv[i],"--profiling")) {
       args.profiling = 1;
-    }
-    else if (!strcmp(argv[i],"-j") || !strcmp(argv[i],"--just-strictness")) {
-      args.juststrict = 1;
     }
     else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-gcode")) {
       args.bytecode = 1;
@@ -142,8 +145,25 @@ void parse_args(int argc, char **argv)
     else if (!strcmp(argv[i],"-o") || !strcmp(argv[i],"--reorder-debug")) {
       args.reorderdebug = 1;
     }
+    else if (!strcmp(argv[i],"-a") || !strcmp(argv[i],"--partial-eval")) {
+      if (++i >= argc)
+        usage();
+      args.partial = argv[i];
+    }
     else if (!strcmp(argv[i],"-w") || !strcmp(argv[i],"--worker")) {
       args.worker = 1;
+    }
+    else if (!strcmp(argv[i],"-t") || !strcmp(argv[i],"--trace")) {
+      if (++i >= argc)
+        usage();
+      args.trace = argv[i];
+      args.trace_type = TRACE_NORMAL;
+    }
+    else if (!strcmp(argv[i],"-T") || !strcmp(argv[i],"--Trace")) {
+      if (++i >= argc)
+        usage();
+      args.trace = argv[i];
+      args.trace_type = TRACE_LANDSCAPE;
     }
     else {
       args.filename = argv[i];
@@ -176,7 +196,7 @@ int main(int argc, char **argv)
   memset(&args,0,sizeof(args));
   parse_args(argc,argv);
 
-  trace = args.trace;
+  compileinfo = args.compileinfo;
 
   if (args.worker)
     return worker();
@@ -195,15 +215,11 @@ int main(int argc, char **argv)
   if (0 != source_parse_file(src,args.filename,""))
     return -1;
 
-/*   if (trace) */
+/*   if (compileinfo) */
 /*     print_scombs1(src); */
 
-  if (0 != source_process(src))
+  if (0 != source_process(src,args.partial))
     return -1;
-
-
-
-
 
   if (args.reorderdebug) {
     print_scombs1(src);
@@ -211,8 +227,11 @@ int main(int argc, char **argv)
     exit(0);
   }
 
-  if (ENGINE_REDUCER == args.engine) {
-    run_reduction(src,statsfile);
+  if (NULL != args.partial) {
+    debug_partial(src,args.partial,args.trace,args.trace_type);
+  }
+  else if (ENGINE_REDUCER == args.engine) {
+    run_reduction(src,statsfile,args.trace,args.trace_type);
 
     if (args.statistics)
       fclose(statsfile);

@@ -58,7 +58,6 @@
 /* #define PRINT_DEBUG */
 /* #define ARRAY_DEBUG2 */
 
-
 // Misc
 
 #define BLOCK_SIZE 1024
@@ -69,11 +68,15 @@
 #define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
 
-#define FLAG_MARKED      0x100
-#define FLAG_NEW         0x200
-#define FLAG_TMP         0x400
-#define FLAG_DMB         0x800
-#define FLAG_PINNED     0x1000
-#define FLAG_NEEDCLEAR  0x4000
+#define FLAG_MARKED         0x1
+#define FLAG_NEW            0x2
+#define FLAG_TMP            0x4
+#define FLAG_DMB            0x8
+#define FLAG_PINNED        0x10
+#define FLAG_NEEDCLEAR     0x40
+#define FLAG_PROCESSED    0x100
+#define FLAG_SELECTED     0x200
+#define FLAG_APPLIED      0x400
+#define FLAG_MATCHED      0x800
 
 #endif /* _NREDUCE_H */

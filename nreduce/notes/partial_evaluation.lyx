@@ -1,0 +1,1071 @@
+#LyX 1.4.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 245
+\begin_document
+\begin_header
+\textclass article
+\language british
+\inputencoding auto
+\fontscheme times
+\graphics default
+\paperfontsize default
+\spacing single
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\end_header
+
+\begin_body
+
+\begin_layout Section
+Changes to the reduction process
+\end_layout
+
+\begin_layout Standard
+The graph reduction algorithm normally expects all expressions within the
+ program to evaluate to a value.
+ When the program is executed, the value of the top-level expression is
+ recursively computed and then printed to output.
+ In partial evaluation, however, not all expressions are reducible.
+ Any application of a built-in function, which has a symbol passed as one
+ of the arguments in which the function is strict, is irreducible.
+ Likewise, any function application which has an irreducible expression
+ passed in to one of the strict arguments is also irreducible.
+\end_layout
+
+\begin_layout Standard
+The result of a partial reduction is a cell graph which has reductions performed
+ wherver possible, but may contain some unreduced expressions.
+ Since this has the same semantic meaning as the original, unreduced graph,
+ it is safe to replace the body of the supercombinator with the partially
+ reduced version.
+ This reduces the amount of work that needs to be done at runtime, since
+ any part of the expression that does not depend on the inputs will have
+ been replaced by its result.
+\end_layout
+
+\begin_layout Standard
+Because different data structures are used for the evaluation of expressions
+ and their representation in the source tree, it is necessary to perform
+ conversion of the graph resulting from partial evaluation back into the
+ source tree form.
+ The difference between the two is that the runtime representation is a
+ graph, whereas the source representation is a tree.
+ This requires a traversal of the graph which transforms all instances of
+ cell sharing into letrec bindings.
+\end_layout
+
+\begin_layout Section
+Handling recursion
+\end_layout
+
+\begin_layout Section
+Equivalence rules
+\end_layout
+
+\begin_layout Standard
+There are some cases where an expression that cannot be reduced due to the
+ appearance of symbols where strict arguments are expected can still be
+ optimised.
+ These optimisations depend on a number of logical equivalence rules, which
+ are applied when an expression is found to be irreducible.
+ This may pave the way for futher reductions to become possible.
+\end_layout
+
+\begin_layout Subsection
+And/or functions
+\end_layout
+
+\begin_layout Standard
+We can use some simple logical equivalences to remove unnecessary boolean
+ operations.
+ Any expression which consists of a call to 
+\emph on
+and
+\emph default
+ in which one of the arguments is true can be replaced with the other argument.
+ Similarly, any call to 
+\emph on
+or
+\emph default
+ in which the one argument is false can be replaced with the other argument.
+ These rules can be applied even if the other argument is an irreducible
+ expression, since the transformation is valid regardless of what it evaluates
+ to at runtime.
+ Note that the term 
+\emph on
+true
+\emph default
+ in the left-hand side of the rules below matches any value that is not
+ 
+\emph on
+nil
+\emph default
+.
+ The use of P on the right-hand side indicates that the transformation rules
+ may be recursively applied to 
+\emph on
+x
+\emph default
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula \begin{eqnarray*}
+\mathrm{P}\left[\!\left[\mathrm{and}\; x\; true\right]\!\right]\theta & = & \mathrm{P}\left[\!\left[x\right]\!\right]\theta\\
+\mathrm{P}\left[\!\left[\mathrm{and}\; true\; x\right]\!\right]\theta & = & \mathrm{P}\left[\!\left[x\right]\!\right]\theta\\
+\mathrm{P}\left[\!\left[\mathrm{or}\; x\; nil\right]\!\right]\theta & = & \mathrm{P}\left[\!\left[x\right]\!\right]\theta\\
+\mathrm{P}\left[\!\left[\mathrm{or}\; nil\; x\right]\!\right]\theta & = & \mathrm{P}\left[\!\left[x\right]\!\right]\theta\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+An even more useful transformation, which relies on similar properties of
+ the boolean functions, is possible in certain other cases.
+ Any call to 
+\emph on
+and
+\emph default
+ in which one of its arguments is false can be replaced with false, without
+ needing to evaluate the other argument.
+ Likewise, a call to 
+\emph on
+or
+\emph default
+ where one argument is true can be replaced with true.
+ The rules below express this transformation; we use the value 
+\emph on
+nil
+\emph default
+ to represent false, and on the right-hand side we arbitrarily pick 1 to
+ use as a non-
+\emph on
+nil
+\emph default
+ truth value.
+ In both the 
+\emph on
+and
+\emph default
+ and 
+\emph on
+or
+\emph default
+ cases, the irreducible expression does not need to be evaluated at all.
+ Since the result of the expression is a constant, it is possible to perform
+ further reduction on the graph after the rule is applied.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula \begin{eqnarray*}
+\mathrm{P}\left[\!\left[\mathrm{and}\; x\; nil\right]\!\right]\theta & = & nil\\
+\mathrm{P}\left[\!\left[\mathrm{and}\; nil\; x\right]\!\right]\theta & = & nil\\
+\mathrm{P}\left[\!\left[\mathrm{or}\; x\; true\right]\!\right]\theta & = & 1\\
+\mathrm{P}\left[\!\left[\mathrm{or}\; true\; x\right]\!\right]\theta & = & 1\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Functions that never return nil
+\end_layout
+
+\begin_layout Standard
+Many of the built-in functions are guaranteed to return a value other than
+ 
+\emph on
+nil
+\emph default
+, regardless of what arguments they are applied to.
+ This includes all of the arithmetic and bitwise operators such as +, *,
+ and <<, as well as the 
+\emph on
+cons
+\emph default
+ function.
+ Any occurrance of an 
+\emph on
+if
+\emph default
+ expression where the conditional is a call to one of these functions can
+ simply be replaced with the true branch of the 
+\emph on
+if
+\emph default
+ expression.
+ While it is unlikely that such a case would appear directly in the source
+ code, it may occur if a variable is used as a conditional, and a supercombinato
+r that has been instantiated had one of its arguments given as an irreducible
+ expression involving one of these functions.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula \begin{eqnarray*}
+\mathrm{P}\left[\!\left[\mathrm{if}\;\left(f\;\ldots\right)\; a\; b\right]\!\right]\theta & = & \mathrm{P}\left[\!\left[a\right]\!\right]\theta\\
+ &  & \mathrm{where}\, f\,\mathrm{never\, returns}\, nil\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+If statements within a conditional
+\end_layout
+
+\begin_layout Standard
+Consider the following case: An an expression 
+\emph on
+x
+\emph default
+ is an application of the 
+\emph on
+if
+\emph default
+ built-in function to three arguments.
+ It is used within another 
+\emph on
+if
+\emph default
+ expression as the conditional, and possibly within one or both of the true
+ and false branches.
+ Assuming that 
+\begin_inset Formula $x=\left(\mathrm{if}\; a\; b\; c\right)$
+\end_inset
+
+, and the second 
+\emph on
+if
+\emph default
+ expression is 
+\begin_inset Formula $\left(\mathrm{if}\; x\; d\; e\right)$
+\end_inset
+
+, we want to transform the latter into an equivalent form that allows 
+\emph on
+d
+\emph default
+ and 
+\emph on
+e
+\emph default
+ to be evaluated by only considering the branch of 
+\emph on
+x
+\emph default
+ that was actually taken.
+\end_layout
+
+\begin_layout Standard
+If 
+\emph on
+a
+\emph default
+ evaluates to true, then any reference to 
+\emph on
+x 
+\emph default
+within 
+\emph on
+d
+\emph default
+ or 
+\emph on
+e
+\emph default
+ will be equivalent to 
+\emph on
+b
+\emph default
+.
+ If 
+\emph on
+a
+\emph default
+ evaluates to false, then any such reference will be equivalent to 
+\emph on
+c
+\emph default
+.
+ It would be convenient to handle these two cases using an 
+\emph on
+if
+\emph default
+ statement; however, the structure of the expression described above does
+ not permit this.
+ Rather than testing the entire 
+\emph on
+x
+\emph default
+ expression within the conditional of the outer 
+\emph on
+if
+\emph default
+ statement, it is possible to transform the whole expression into one that
+ uses 
+\emph on
+a
+\emph default
+ as the conditional, and then handles the two cases within separate branches.
+\end_layout
+
+\begin_layout Standard
+The rule for performing this transformation is shown below.
+ The left-hand side uses a letrec notation to show that the expression may
+ be a graph, in which both 
+\emph on
+d
+\emph default
+ and 
+\emph on
+e
+\emph default
+ may contain references to 
+\emph on
+x
+\emph default
+, in addition to its use as the conditional of the outer 
+\emph on
+if
+\emph default
+.
+ The right-hand side, when evaluated, first computes the value of 
+\emph on
+a
+\emph default
+ and then takes one of the two branches.
+ The nested calls to P compile a modified version of the expression using
+ an updated version of the variable mapping 
+\begin_inset Formula $\theta$
+\end_inset
+
+.
+ The true branch is evaluated with all references to 
+\emph on
+x
+\emph default
+ replaced with 
+\emph on
+b
+\emph default
+, and the false branch with all references to 
+\emph on
+x
+\emph default
+ replaced with 
+\emph on
+c
+\emph default
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula \begin{eqnarray*}
+\mathrm{P}\left[\!\left[\mathrm{letrec}\; x=\left(\mathrm{if}\; a\; b\; c\right)\;\mathrm{in}\;\left(\mathrm{if}\; x\; d\; e\right)\right]\!\right]\theta & = & \left(\mathrm{if}\; a\;\mathrm{P}\left[\!\left[\mathrm{if}\; b\; d\; e\right]\!\right]\theta_{1}\;\mathrm{P}\left[\!\left[\mathrm{if}\; c\; d\; e\right]\!\right]\theta_{2}\right)\\
+ &  & \begin{array}{ll}
+\mathrm{where} & \theta_{1}=\theta\left[b/x\right]\\
+ & \theta_{2}=\theta\left[c/x\right]\end{array}\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+If with a nil argument
+\end_layout
+
+\begin_layout Subsection
+head and tail with a cons argument
+\end_layout
+
+\begin_layout Subsection
+Expressions that match the supercombinator body
+\end_layout
+
+\begin_layout Section
+Examples
+\end_layout
+
+\begin_layout Subsection
+Temporary list construction
+\end_layout
+
+\begin_layout Standard
+Suppose we are compiling a higher-level language into ELC, and we want to
+ represent all values within that language as a pair 
+\begin_inset Formula $\left(type,value\right)$
+\end_inset
+
+, so that the relevant functions and operators within that language can
+ handle values of different types, or detect invalid argument types.
+ An addition operator, for example, might first check if both of its arguments
+ were numbers, and then either perform the addition, or return a special
+ 
+\begin_inset Quotes eld
+\end_inset
+
+error
+\begin_inset Quotes erd
+\end_inset
+
+ value.
+ If it does add the two arguments together, it must first extract their
+ values, call the built-in function +, and then construct a new pair consisting
+ of the 
+\begin_inset Quotes eld
+\end_inset
+
+number
+\begin_inset Quotes erd
+\end_inset
+
+ type identifier and the value.
+ An implementation of this function would look like the following:
+\end_layout
+
+\begin_layout LyX-Code
+add x y =
+\end_layout
+
+\begin_layout LyX-Code
+(if (and (= (head x) T_NUMBER) (= (head y) T_NUMBER))
+\end_layout
+
+\begin_layout LyX-Code
+    (cons T_NUMBER (+ (tail x) (tail y)))
+\end_layout
+
+\begin_layout LyX-Code
+    (cons T_ERROR nil))
+\end_layout
+
+\begin_layout Standard
+If a program used this 
+\family typewriter
+add
+\family default
+ function in a context where the types of the arguments were not known,
+ the tests would be necessary to ensure that the case of non-numbers being
+ passed in could be handled appropriately.
+ But if an expression applied 
+\family typewriter
+add
+\family default
+ to arguments that were definitely numbers, the appropriate tests could
+ be made at compile time using partial evaluation.
+\end_layout
+
+\begin_layout Standard
+Consider the following expression:
+\end_layout
+
+\begin_layout LyX-Code
+addnumbers a b = (add (cons T_NUMBER a) (cons T_NUMBER b))
+\end_layout
+
+\begin_layout Standard
+We can expand the 
+\family typewriter
+add
+\family default
+ supercombinator to replace the expression with its body, yielding the following
+ graph.
+ Although the values are always treated as a graph at runtime, we will use
+ the letrec syntax to express the sharing here:
+\end_layout
+
+\begin_layout LyX-Code
+addnumbers a b =
+\end_layout
+
+\begin_layout LyX-Code
+letrec
+\end_layout
+
+\begin_layout LyX-Code
+  x = (cons T_NUMBER a)
+\end_layout
+
+\begin_layout LyX-Code
+  y = (cons T_NUMBER b)
+\end_layout
+
+\begin_layout LyX-Code
+in
+\end_layout
+
+\begin_layout LyX-Code
+  (if (and (= (head x) T_NUMBER) (= (head y) T_NUMBER))
+\end_layout
+
+\begin_layout LyX-Code
+      (cons T_NUMBER (+ (tail x) (tail y)))
+\end_layout
+
+\begin_layout LyX-Code
+      (cons T_ERROR nil))
+\end_layout
+
+\begin_layout Standard
+The first thing the reduction algorithm will do is encounter the if statement,
+ and then start evaluating the conditional.
+ When 
+\family typewriter
+(head x)
+\family default
+ is called, it will obtain the value 
+\family typewriter
+T_NUMBER
+\family default
+, which it will then compare (successfully) with the 
+\family typewriter
+T_NUMBER
+\family default
+ constant within the 
+\family typewriter
+=
+\family default
+ expression.
+ The same thing will happen with 
+\family typewriter
+(head y)
+\family default
+, leading the 
+\family typewriter
+and
+\family default
+ call to return true, and the 
+\family typewriter
+if
+\family default
+ expression to be replaced with the true branch.
+ The graph at this point will look like the following, which we can express
+ without using letrec now since there is only one reference to each of 
+\family typewriter
+x
+\family default
+ and 
+\family typewriter
+y
+\family default
+:
+\end_layout
+
+\begin_layout LyX-Code
+addnumbers a b =
+\end_layout
+
+\begin_layout LyX-Code
+(cons T_NUMBER (+ (tail (cons T_NUMBER a)) (tail (cons T_NUMBER b))))
+\end_layout
+
+\begin_layout Standard
+The partial evaluator can not try to reduce the tail of this expression,
+ since it does not know that it will definitely be needed; although in this
+ case it would be ok, doing this in other situations could lead to an infiite
+ loop.
+ However, we can still apply the transformation rules to all parts of the
+ expression.
+ Both calls to tail are passed an argument which is an application of the
+ 
+\emph on
+cons
+\emph default
+ function to the correct number of arguments.
+ The tail expressions are equivalent to just using the expressions 
+\family typewriter
+a
+\family default
+ and 
+\family typewriter
+b
+\family default
+ directly, skipping the cons and the 
+\family typewriter
+T_NUMBER
+\family default
+.
+ Applying the tail/cons rule, we get the following:
+\end_layout
+
+\begin_layout LyX-Code
+addnumbers a b = (cons T_NUMBER (+ a b))
+\end_layout
+
+\begin_layout Standard
+The modified version of 
+\family typewriter
+addnumbers
+\family default
+ computes exactly the same result as the original version, but avoids the
+ unnecessary checks and list construction.
+\end_layout
+
+\begin_layout Subsection
+Map
+\end_layout
+
+\begin_layout Standard
+A common type of function in many functional programs is one which takes
+ a list as an argument, and returns a new list containing the same number
+ of elements as the original, with the contents obtained by applying a certain
+ function to each element in the original list.
+ This is normally achieved through the use of the built-in 
+\emph on
+map
+\emph default
+ function.
+ To simplify our discussion here, we will use a function which does the
+ same thing but handles the list manipulation directly, instead of delegating
+ it to 
+\emph on
+map
+\emph default
+.
+\end_layout
+
+\begin_layout Standard
+Suppose we have three functions: 
+\emph on
+producer
+\emph default
+, which generates a finite list of numbers, 
+\emph on
+doubler
+\emph default
+, which takes a list as an argument and returns a new list containing each
+ number multiplied by two, and 
+\emph on
+combine
+\emph default
+, which takes a starting number and combines the doubler and producer functions.
+ These functions are as follows:
+\end_layout
+
+\begin_layout LyX-Code
+producer x =
+\end_layout
+
+\begin_layout LyX-Code
+(if (< x 20)
+\end_layout
+
+\begin_layout LyX-Code
+    (cons x (producer (+ x 1)))
+\end_layout
+
+\begin_layout LyX-Code
+    nil)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+doubler lst =
+\end_layout
+
+\begin_layout LyX-Code
+(if lst
+\end_layout
+
+\begin_layout LyX-Code
+    (cons (* (head lst) 2)
+\end_layout
+
+\begin_layout LyX-Code
+          (doubler (tail lst)))
+\end_layout
+
+\begin_layout LyX-Code
+    nil)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+combine x = (doubler (producer x))
+\end_layout
+
+\begin_layout Standard
+Running the partial evaluator with 
+\family typewriter
+combine
+\family default
+, the first thing that will happen is that the call to 
+\family typewriter
+doubler
+\family default
+ will be expanded.
+ This will find the if expression and begin evaluating the conditional,
+ which is the call to 
+\family typewriter
+(producer x)
+\family default
+ that was passed in as the 
+\family typewriter
+lst
+\family default
+ argument.
+ 
+\family typewriter
+producer
+\family default
+ will be instantiated, giving the following graph:
+\end_layout
+
+\begin_layout LyX-Code
+combine x =
+\end_layout
+
+\begin_layout LyX-Code
+letrec
+\end_layout
+
+\begin_layout LyX-Code
+  lst = (if (< x 20)
+\end_layout
+
+\begin_layout LyX-Code
+            (cons x (producer (+ x 1)))
+\end_layout
+
+\begin_layout LyX-Code
+            nil)
+\end_layout
+
+\begin_layout LyX-Code
+in
+\end_layout
+
+\begin_layout LyX-Code
+  (if lst
+\end_layout
+
+\begin_layout LyX-Code
+      (cons (* (head lst) 2)
+\end_layout
+
+\begin_layout LyX-Code
+            (doubler (tail lst)))
+\end_layout
+
+\begin_layout LyX-Code
+      nil)
+\end_layout
+
+\begin_layout Standard
+This is where the 
+\emph on
+if
+\emph default
+ rule becomes useful.
+ The reason for the 
+\family typewriter
+(if lst ...)
+\family default
+ test in this case is so that 
+\family typewriter
+double
+\family default
+ can determine whether or not it is dealing with the end of a list.
+ If it is not the end, then 
+\family typewriter
+lst
+\family default
+ will be a cons cell, and it can extract the item at that point in the list
+ and perform the multiplication.
+ If, however, 
+\family typewriter
+double
+\family default
+ has reached the end of the list, then 
+\family typewriter
+lst
+\family default
+ will be nil.
+ Since 
+\family typewriter
+double
+\family default
+ has been passed an argument which is a call to 
+\family typewriter
+producer
+\family default
+, the actual expression which determines whether its the end of the list
+ is 
+\family typewriter
+(< x 20)
+\family default
+, which we can now 
+\begin_inset Quotes eld
+\end_inset
+
+float out
+\begin_inset Quotes erd
+\end_inset
+
+ using the 
+\emph on
+if
+\emph default
+ rule.
+ The result of applying this rule is shown below.
+\end_layout
+
+\begin_layout LyX-Code
+combine x =
+\end_layout
+
+\begin_layout LyX-Code
+(if (< x 20) 
+\end_layout
+
+\begin_layout LyX-Code
+    (letrec 
+\end_layout
+
+\begin_layout LyX-Code
+       tmp = (cons x (producer (+ x 1)))
+\end_layout
+
+\begin_layout LyX-Code
+     in
+\end_layout
+
+\begin_layout LyX-Code
+       (if tmp 
+\end_layout
+
+\begin_layout LyX-Code
+           (cons (* (head tmp) 2) (doubler (tail tmp))) 
+\end_layout
+
+\begin_layout LyX-Code
+           nil))
+\end_layout
+
+\begin_layout LyX-Code
+    (if nil 
+\end_layout
+
+\begin_layout LyX-Code
+        (cons (* (head nil) 2) (doubler (tail nil))) 
+\end_layout
+
+\begin_layout LyX-Code
+        nil))
+\end_layout
+
+\begin_layout Standard
+In the case where x is less than 20, 
+\family typewriter
+lst
+\family default
+ will be equal to the result of the expression 
+\family typewriter
+(cons x (producer (+ x 1)))
+\family default
+, so all references to 
+\family typewriter
+lst
+\family default
+ within the true branch can be replaced with that.
+ Since there are multiple references to the expression, the above code binds
+ these to the name 
+\family typewriter
+tmp
+\family default
+, although in reality the references are still stored in a graph in memory.
+ In the case where x is greater than or equal to 20, the value of 
+\family typewriter
+lst
+\family default
+ will be 
+\family typewriter
+nil
+\family default
+, so all references to 
+\family typewriter
+lst
+\family default
+ within the false branch are replaced with 
+\family typewriter
+nil
+\family default
+.
+\end_layout
+
+\begin_layout Standard
+Additional rules can now be applied to the graph.
+ Within the true branch, the expression bound to 
+\family typewriter
+tmp
+\family default
+ is passed as the conditional argument of 
+\emph on
+if
+\emph default
+.
+ Since 
+\emph on
+cons
+\emph default
+ always returns a cons cell, the inner 
+\family typewriter
+if
+\family default
+ statement will always choose the true branch.
+ Thus, the inner 
+\emph on
+if
+\emph default
+ expression can be replaced with this branch.
+ Next, the calls to 
+\emph on
+head
+\emph default
+ and 
+\emph on
+tail
+\emph default
+ can be replaced with the expressions 
+\family typewriter
+x
+\family default
+ and 
+\family typewriter
+(producer (+ x 1))
+\family default
+, respectively.
+ Within the false branch, the conditional in the if statement is 
+\emph on
+nil
+\emph default
+, so the whole thing can be replaced with the inner false branch, which
+ is also 
+\emph on
+nil
+\emph default
+.
+ The graph resulting from the application of these rules is as follows:
+\end_layout
+
+\begin_layout LyX-Code
+combine x =
+\end_layout
+
+\begin_layout LyX-Code
+(if (< x 20) 
+\end_layout
+
+\begin_layout LyX-Code
+    (cons (* x 2) (doubler (producer (+ x 1))))
+\end_layout
+
+\begin_layout LyX-Code
+    nil)
+\end_layout
+
+\begin_layout Standard
+Finally, we can apply the supercombinator matching rule to replace the second
+ argument to 
+\emph on
+cons
+\emph default
+ with a call to 
+\family typewriter
+combine
+\family default
+.
+ The expression 
+\family typewriter
+(doubler (producer (+ x 1)))
+\family default
+ matches the pattern of 
+\family typewriter
+(doubler (producer x))
+\family default
+ from the supercombinator body, where the expression 
+\family typewriter
+(+ x 1)
+\family default
+ is passed in as 
+\family typewriter
+combine
+\family default
+'s x argument.
+ This gives:
+\end_layout
+
+\begin_layout LyX-Code
+combine x =
+\end_layout
+
+\begin_layout LyX-Code
+(if (< x 20) 
+\end_layout
+
+\begin_layout LyX-Code
+    (cons (* x 2) (combine (+ x 1))) 
+\end_layout
+
+\begin_layout LyX-Code
+    nil)
+\end_layout
+
+\begin_layout Standard
+In performing partial evaluation and applying the transformation rules as
+ described above, we have produced a more efficient version of the function
+ which produces the same result but in less steps than the original.
+ For each list item, we save the cost of one supercombinator instantiation,
+ one temporary cons cell construction, and two accesses to that cons cell.
+ The result is effectively a 
+\begin_inset Quotes eld
+\end_inset
+
+flattening
+\begin_inset Quotes erd
+\end_inset
+
+ of the pipeline that map created; the numbers go directly from generation
+ to multiplication, without needing to construct a temporary list.
+ Applying this same technique to 
+\begin_inset Quotes eld
+\end_inset
+
+longer
+\begin_inset Quotes erd
+\end_inset
+
+ pipelines created by multiple nested calls to map gives increased savings
+ proportional to the number of calls.
+\end_layout
+
+\end_body
+\end_document
