@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: console.c 358 2006-11-01 03:52:33Z pmkelly $
+ * $Id$
  *
  */
 

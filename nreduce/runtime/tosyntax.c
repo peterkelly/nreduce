@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: reduction.c 378 2006-11-18 12:04:08Z pmkelly $
+ * $Id$
  *
  */
 
