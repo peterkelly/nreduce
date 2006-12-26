@@ -56,6 +56,7 @@ struct arguments {
   int compileinfo;
   char *statistics;
   int profiling;
+  int nopartialsink;
   int bytecode;
   int engine;
   char *filename;
@@ -81,6 +82,7 @@ static void usage()
 "  -c, --compile-stages     Print debug info about each compilation stage\n"
 "  -s, --statistics FILE    Write statistics to FILE\n"
 "  -p, --profiling          Show profiling information\n"
+"  -n, --no-partial         Disable partial evaluation/letrec sinking\n"
 "  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
 "  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
 "  -e, --engine ENGINE      Use execution engine:\n"
@@ -120,6 +122,9 @@ void parse_args(int argc, char **argv)
     }
     else if (!strcmp(argv[i],"-p") || !strcmp(argv[i],"--profiling")) {
       args.profiling = 1;
+    }
+    else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--no-partial")) {
+      args.nopartialsink = 1;
     }
     else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-gcode")) {
       args.bytecode = 1;
@@ -218,10 +223,10 @@ int main(int argc, char **argv)
 /*   if (compileinfo) */
 /*     print_scombs1(src); */
 
-  if (0 != source_process(src,args.partial))
+  if (0 != source_process(src,args.partial || args.lambdadebug,args.nopartialsink))
     return -1;
 
-  if (args.reorderdebug) {
+  if (args.reorderdebug || args.lambdadebug) {
     print_scombs1(src);
     source_free(src);
     exit(0);

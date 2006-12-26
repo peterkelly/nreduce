@@ -2,24 +2,28 @@
 nreduce -l runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-(main () ((!a.!b.!c.
+main = ((!a.!b.!c.
             (!d.!e.!f.
               (!g.!h.!i.
                 (!j.!k.!l.
-                  (!m.let ((total (+ e (+ m (+ h (+ b k))))))
-                          (* total total))
+                  (!m.(letrec
+                         total = (+ e (+ m (+ h (+ b k))))
+                       in
+                         (* total total)))
                   13)
                 10 11 12)
               7 8 9)
             4 5 6)
-          1 2 3))
+          1 2 3)
 ==================================== OUTPUT ====================================
-main = main#1 1 2 3
-main#1 a b c = main#2 b 4 5 6
-main#2 b d e f = main#3 b e 7 8 9
-main#3 b e g h i = main#4 b e h 10 11 12
-main#4 b e h j k l = main#5 b e h k 13
-main#5 b e h k m = let ((total (+ e (+ m (+ h (+ b k))))))
-                       (* total total)
+main = (main#1 1 2 3)
+main#1 a b c = (main#2 b 4 5 6)
+main#2 b d e f = (main#3 b e 7 8 9)
+main#3 b e g h i = (main#4 b e h 10 11 12)
+main#4 b e h j k l = (main#5 b e h k 13)
+main#5 b e h k m = (letrec 
+                      total = (+ e (+ m (+ h (+ b k))))
+                    in
+                      (* total total))
 ================================== RETURN CODE =================================
 0

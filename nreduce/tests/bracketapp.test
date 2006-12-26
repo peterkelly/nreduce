@@ -5,10 +5,11 @@ binding).
 nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-(main () (let ((x (echo "side effect\n")))
-              (if (x) nil x)))
+main = (letrec
+          x = (echo "side effect\n")
+        in
+          (if (x) nil x))
 ==================================== OUTPUT ====================================
 side effect
-
 ================================== RETURN CODE =================================
 0

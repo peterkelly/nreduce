@@ -266,11 +266,12 @@ static void b_parhead(task *tsk, pntr *argstack)
 
 static void b_echo(task *tsk, pntr *argstack)
 {
-  /* FIXME: remove */
-/*   if (CELL_STRING == pntrtype(argstack[0])) */
-/*     fprintf(tsk->output,"%s",(char*)get_pntr(get_pntr(argstack[0])->field1)); */
-/*   else */
-/*     print_pntr(tsk->output,argstack[0]); */
+  char *str;
+  CHECK_ARG(0,CELL_AREF,B_OPENFD);
+
+  str = array_to_string(argstack[0]);
+  fprintf(tsk->output,"%s",str);
+  free(str);
   argstack[0] = tsk->globnilpntr;
 }
 

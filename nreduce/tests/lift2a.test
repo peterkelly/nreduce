@@ -2,18 +2,20 @@
 nreduce -l runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-(foo (a b c) (let ((f (!y.if (= y 0) (* a (* b c)) (g (- y 1))))
-                   (g (!z.if (= z 0) (* a (* b c)) (f (- z 1)))))
-              (f 200)))
-(main () (foo 7 8 9))
+foo a b c = (letrec
+               f = (!y.if (= y 0) (* a (* b c)) (g (- y 1)))
+               g = (!z.if (= z 0) (* a (* b c)) (f (- z 1)))
+             in
+               (f 200))
+main = (foo 7 8 9)
 ==================================== OUTPUT ====================================
-foo a b c = f a b c 200
-main = foo 7 8 9
-f a b c y = if (= y 0) 
-               (* a (* b c)) 
-               (g a b c (- y 1))
-g a b c z = if (= z 0) 
-               (* a (* b c)) 
-               (f a b c (- z 1))
+foo a b c = (f a b c 200)
+main = (foo 7 8 9)
+f a b c y = (if (= y 0) 
+                (* a (* b c)) 
+                (g a b c (- y 1)))
+g a b c z = (if (= z 0) 
+                (* a (* b c)) 
+                (f a b c (- z 1)))
 ================================== RETURN CODE =================================
 0

@@ -104,7 +104,7 @@ static void cap_error(task *tsk, pntr cappntr, const instruction *op)
 
   print_task_sourceloc(tsk,stderr,c->sl);
   fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
-  abort();
+  exit(1);
 }
 
 static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)

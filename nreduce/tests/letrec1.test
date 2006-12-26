@@ -11,10 +11,12 @@ argument that is supplied to the function, i.e. 2.
 nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-(main () (let ((foo (+ x 1))
-               (x 4)
-               (bar (!x.- foo x)))
-              (bar 2)))
+main = (letrec 
+          foo = (+ x 1)
+          x = 4
+          bar = (!x.- foo x)
+        in
+          (numtostring (bar 2)))
 ==================================== OUTPUT ====================================
 3
 ================================== RETURN CODE =================================

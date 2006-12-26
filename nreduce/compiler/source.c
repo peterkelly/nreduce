@@ -247,6 +247,12 @@ void add_import(source *src, const char *name)
   list_push(&src->newimports,strdup(name));
 }
 
+int is_from_prelude(source *src, scomb *sc)
+{
+  return ((0 <= sc->sl.fileno) &&
+          !strcmp(array_item(src->parsedfiles,sc->sl.fileno,char*),"prelude.l"));
+}
+
 void compile_stage(source *src, const char *name)
 {
   static int stageno = 0;
@@ -275,7 +281,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, const char *partialsc)
+int source_process(source *src, int stopafterlambda, int dispartialsink)
 {
   int sccount = array_count(src->scombs);
   int scno;
@@ -309,30 +315,32 @@ int source_process(source *src, const char *partialsc)
 /*     exit(0); */
 /*   } */
 
-  /* Run with -a; don't go any further */
-  if (partialsc)
+  /* Run with -a or -l; don't go any further */
+  if (stopafterlambda)
     return 0;
 
-  compile_stage(src,"Partial evaluation");
-  for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    char *filename;
-    snode *s;
+  if (!dispartialsink) {
+    compile_stage(src,"Partial evaluation"); /* partial.c */
+    for (scno = 0; scno < sccount; scno++) {
+      scomb *sc = array_item(src->scombs,scno,scomb*);
+      char *filename;
+      snode *s;
 
-    assert(0 <= sc->sl.fileno);
-    assert(array_count(src->parsedfiles) > sc->sl.fileno);
-    filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
+      assert(0 <= sc->sl.fileno);
+      assert(array_count(src->parsedfiles) > sc->sl.fileno);
+      filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
 
-    if (strcmp(filename,"prelude.l") && strcmp(sc->name,"main")) {
-      s = run_partial(src,sc,NULL,0);
-      snode_free(sc->body);
-      sc->body = s;
+      if (strcmp(filename,"prelude.l") && strcmp(sc->name,"main")) {
+        s = run_partial(src,sc,NULL,0);
+        snode_free(sc->body);
+        sc->body = s;
+      }
     }
-  }
 
-  compile_stage(src,"Letrec sinking"); /* sinking.c */
-  for (scno = 0; scno < sccount; scno++)
-    sink_letrecs(src,array_item(src->scombs,scno,scomb*)->body);
+    compile_stage(src,"Letrec sinking"); /* sinking.c */
+    for (scno = 0; scno < sccount; scno++)
+      sink_letrecs(src,array_item(src->scombs,scno,scomb*)->body);
+  }
 
   compile_stage(src,"Application lifting"); /* lifting.c */
   for (scno = 0; scno < sccount; scno++)

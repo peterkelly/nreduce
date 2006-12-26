@@ -20,33 +20,45 @@ a, b, i, j, and l are not strict as they do not appear in the supercombinator
 body at all
 
 =================================== PROGRAM ====================================
-nreduce -r runtests.tmp/test.l
+nreduce -n -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-(foo (a b c d e f g h i j k l)
-  (if (let ((x (+ c d))
-            (y (+ d e)))
-           (if y x d))
-      (let ((x (+ f g))
-            (y (+ x k)))
-            (* y 2))
-      (let ((x (+ f h))
-            (y (+ x k)))
-            (* y 2))))
+foo a b c d e f g h i j k l =
+  (if (letrec
+         x = (+ c d)
+         y = (+ d e)
+       in
+         (if y x d))
+      (letrec
+         x = (+ f g)
+         y = (+ x k)
+       in
+         (* y 2))
+      (letrec
+         x = (+ f h)
+         y = (+ x k)
+       in
+         (* y 2)))
 
-(main () nil)
+main = nil
 ==================================== OUTPUT ====================================
-foo a b c !d !e !f g h i j !k l = if (let ((x (+ c d))
-                                           (y! (+ d e)))
-                                          (if y 
-                                              x 
-                                              d))
-                                     (let ((x! (+ f g))
-                                           (y! (+ x k)))
-                                          (* y 2))
-                                     (let ((x! (+ f h))
-                                           (y! (+ x k)))
-                                          (* y 2))
+foo a b c !d !e !f g h i j !k l = (if (letrec 
+                                         x = (+ c d)
+                                         !y = (+ d e)
+                                       in
+                                         (if y 
+                                             x 
+                                             d))
+                                      (letrec 
+                                         !x = (+ f g)
+                                         !y = (+ x k)
+                                       in
+                                         (* y 2))
+                                      (letrec 
+                                         !x = (+ f h)
+                                         !y = (+ x k)
+                                       in
+                                         (* y 2)))
 main = nil
 ================================== RETURN CODE =================================
 0

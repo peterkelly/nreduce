@@ -261,9 +261,19 @@ void reduce(task *tsk, pntrstack *s)
       strictargs = builtin_info[bif].nstrict;
 
       if (s->count-1 < reqargs + oldtop) {
-        fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
-                builtin_info[bif].name,reqargs,s->count-1-oldtop);
-        exit(1);
+        if (tsk->partial) {
+          trace_step(tsk,redex,"Built-in has insufficient arguments; irreducible",1);
+          s->count = oldtop;
+          if (apply_rules(tsk,s->data[s->count-1]))
+            continue;
+          else
+            return;
+        }
+        else {
+          fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
+                  builtin_info[bif].name,reqargs,s->count-1-oldtop);
+          exit(1);
+        }
       }
 
       for (i = s->count-1; i >= s->count-reqargs; i--) {

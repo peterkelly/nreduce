@@ -416,10 +416,10 @@ void print_scombs1(source *src)
   int scno;
   for (scno = 0; scno < array_count(src->scombs); scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
-/*     if (strncmp(sc->name,"__",2)) { */
-      print_scomb_code(src,stdout,sc);
-      debug(0,"\n");
-/*     } */
+    if (is_from_prelude(src,sc))
+      continue;
+    print_scomb_code(src,stdout,sc);
+    debug(0,"\n");
   }
 }
 
