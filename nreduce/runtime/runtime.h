@@ -121,8 +121,6 @@ typedef struct cell {
   short type;
   pntr field1;
   pntr field2;
-  int indsource; /* FIXME: remove this */
-  char *msg; /* FIXME: remove this */
 } cell;
 
 #define PNTR_VALUE 0xFFF80000

@@ -245,8 +245,6 @@ cell *alloc_cell(task *tsk)
   }
   v = tsk->freeptr;
   v->flags = tsk->indistgc ? FLAG_NEW : 0;
-  v->indsource = 0;
-  v->msg = NULL;
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
   tsk->stats.nallocs++;
   tsk->stats.totalallocs++;
@@ -298,8 +296,6 @@ void free_cell_fields(task *tsk, cell *v)
     free((char*)get_pntr(v->field1));
     break;
   }
-  free(v->msg);
-  v->msg = NULL;
 }
 
 int count_alive(task *tsk)

@@ -167,9 +167,6 @@ static void frame_return(task *tsk, frame *curf, pntr val)
   assert(!is_nullpntr(val));
   assert(NULL != curf->c);
   assert(CELL_FRAME == celltype(curf->c));
-  asprintf(&curf->c->msg,"frame_return: wq frames = %d, wq fetchers = %d",
-           list_count(curf->wq.frames),list_count(curf->wq.fetchers));
-  curf->c->indsource = 1;
   curf->c->type = CELL_IND;
   curf->c->field1 = val;
   curf->c = NULL;
@@ -461,7 +458,6 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     CHECK_EXPR(pntrequal(objglo->p,ref));
 
     refcell = get_pntr(ref);
-    refcell->indsource = 2;
     refcell->type = CELL_IND;
     refcell->field1 = obj;
 
@@ -895,10 +891,6 @@ void *execute(task *tsk)
           tsk->stats.fetches++;
           target->fetching = 1;
         }
-        else if (!target->fetching) {
-          cell *c = get_pntr(p);
-          asprintf(&c->msg,"EVAL called on me but lid unknown\n");
-        }
         curf->waitglo = target;
         list_push(&target->wq.frames,curf);
         block_frame(tsk,curf);
@@ -1063,7 +1055,6 @@ void *execute(task *tsk)
         fprintf(stderr,"Attempt to update cell with itself\n");
         exit(1);
       }
-      target->indsource = 3;
       target->type = CELL_IND;
       target->field1 = res;
       curf->data[instr->arg0] = res;
