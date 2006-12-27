@@ -58,8 +58,9 @@ void p2s_add(p2sdata *d, pntr p, snode *s)
 p2smapping *p2s_lookup(p2sdata *d, pntr p)
 {
   int i;
-  for (i = 0; i < array_count(d->map); i++) {
-    p2smapping *entry = (p2smapping*)array_at(d->map,i);
+  int count = array_count(d->map);
+  for (i = 0; i < count; i++) {
+    p2smapping *entry = &array_item(d->map,i,p2smapping);
     if (pntrequal(p,entry->p))
       return entry;
   }
@@ -243,6 +244,8 @@ snode *graph_to_syntax(source *src, pntr p)
 {
   p2sdata data;
   snode *s;
+  int i;
+  int count;
   memset(&data,0,sizeof(p2sdata));
   data.map = array_new(sizeof(p2smapping));
   s = graph_to_syntax_r(src,&data,p);
@@ -254,6 +257,10 @@ snode *graph_to_syntax(source *src, pntr p)
     letrec->body = s;
     s = letrec;
   }
+
+  count = array_count(data.map);
+  for (i = 0; i < count; i++)
+    free(array_item(data.map,i,p2smapping).var);
 
   array_free(data.map);
   remove_wrappers(s);

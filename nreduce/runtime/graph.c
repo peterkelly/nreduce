@@ -54,15 +54,6 @@ static int clear_flag(cell *c, void *arg)
   return 0;
 }
 
-static int set_flag(cell *c, void *arg)
-{
-  int flag = (int)arg;
-  if (c->flags & flag)
-    return 1;
-  c->flags |= flag;
-  return 0;
-}
-
 static void traverse(pntr p, graphfun fun, void *arg)
 {
   cell *c;
@@ -176,19 +167,6 @@ static void graph_setcontains(pntr haystack, pntr needle)
 
   if (graph_setcontains_r(haystack,needle))
     get_pntr(haystack)->flags |= FLAG_SELECTED;
-}
-
-/* FIXME: remove */
-int graph_contains(pntr haystack, pntr needle)
-{
-  cell *c;
-  if (CELL_NUMBER == pntrtype(needle))
-    return 0;
-  c = get_pntr(needle);
-  c->flags &= ~FLAG_TMP;
-  clear_graph(haystack,FLAG_TMP);
-  traverse(haystack,set_flag,(void*)FLAG_TMP);
-  return (c->flags & FLAG_TMP);
 }
 
 typedef struct pmentry {
@@ -349,4 +327,52 @@ pntr graph_replace(task *tsk, pntr root, pntr old, pntr new)
   res = graph_replace_r(tsk,pm,root,old,new);
   pntrmap_free(pm);
   return res;
+}
+
+pntrset *pntrset_new()
+{
+  pntrset *ps = (pntrset*)calloc(1,sizeof(pntrset));
+  ps->count = 1;
+  ps->alloc = 1024;
+  ps->data = (psentry*)malloc(ps->alloc*sizeof(psentry));
+  make_pntr(ps->data[0].p,NULL);
+  ps->data[0].next = 0;
+  return ps;
+}
+
+void pntrset_free(pntrset *ps)
+{
+  free(ps->data);
+  free(ps);
+}
+
+#define phash2(_p) ((unsigned char)(_p[0] + _p[1] + _p[2] + _p[3] + _p[4] + _p[5] + _p[6] + _p[7]))
+#define phash(_p) phash2(((unsigned char*)&(_p)))
+
+void pntrset_add(pntrset *ps, pntr p)
+{
+  unsigned char h = phash(p);
+  if (ps->count == ps->alloc) {
+    ps->alloc *= 2;
+    ps->data = (psentry*)realloc(ps->data,ps->alloc*sizeof(psentry));
+  }
+  ps->data[ps->count].p = p;
+  ps->data[ps->count].next = ps->map[h];
+  ps->map[h] = ps->count;
+  ps->count++;
+}
+
+int pntrset_contains(pntrset *ps, pntr p)
+{
+  unsigned char h = phash(p);
+  int n = ps->map[h];
+  while (n && !pntrequal(ps->data[n].p,p))
+    n = ps->data[n].next;
+  return (n != 0);
+}
+
+void pntrset_clear(pntrset *ps)
+{
+  memset(&ps->map,0,sizeof(int)*256);
+  ps->count = 1;
 }

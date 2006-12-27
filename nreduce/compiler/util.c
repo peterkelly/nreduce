@@ -114,11 +114,6 @@ void array_remove_items(array *arr, int count)
   array_remove_data(arr,count*arr->elemsize);
 }
 
-void *array_at(array *arr, int index)
-{
-  return &((char*)arr->data)[index*arr->elemsize];
-}
-
 int array_count(array *arr)
 {
   return arr->nbytes/arr->elemsize;
@@ -450,7 +445,7 @@ int timeval_diffms(struct timeval from, struct timeval to)
   return diff.tv_sec*1000 + diff.tv_usec/1000;
 }
 
-int hash(void *mem, int size)
+int hash(const void *mem, int size)
 {
   int h = 0;
   int i;

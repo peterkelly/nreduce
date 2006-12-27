@@ -76,7 +76,5 @@
 #define FLAG_NEEDCLEAR     0x40
 #define FLAG_PROCESSED    0x100
 #define FLAG_SELECTED     0x200
-#define FLAG_APPLIED      0x400
-#define FLAG_MATCHED      0x800
 
 #endif /* _NREDUCE_H */

@@ -180,17 +180,17 @@ void reduce(task *tsk, pntrstack *s)
       pntr dest;
       pntr res;
 
-      destno = s->count-1-sc->nargs;
-      dest = pntrstack_at(s,destno);
-
-      tsk->stats.nscombappls++;
-
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
       if (s->count-1-oldtop < sc->nargs) {
         s->count = oldtop;
         return;
       }
+
+      destno = s->count-1-sc->nargs;
+      dest = pntrstack_at(s,destno);
+
+      tsk->stats.nscombappls++;
 
       /* We have enough arguments present to instantiate the supercombinator */
       for (i = s->count-1; i >= s->count-sc->nargs; i--) {
@@ -220,7 +220,8 @@ void reduce(task *tsk, pntrstack *s)
       res = instantiate_scomb(tsk,s,sc->body,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
-      sc->used++;
+      if (!sc->nonrecursive)
+        sc->used++;
 
       s->count = oldtop;
       continue;

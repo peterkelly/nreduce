@@ -115,7 +115,8 @@ pntr makeif(task *tsk, pntr cond, pntr truebranch, pntr falsebranch)
   return ret;
 }
 
-int matches_r(scomb *sc, pntr s, pntr p, pntr *args)
+int matches_r(scomb *sc, pntr s, pntr p, pntr *args,
+              pntrset *tmp1, pntrset *tmp2, pntrset *sel)
 {
   cell *c;
   cell *pc;
@@ -145,31 +146,33 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args)
   c = get_pntr(s);
   pc = get_pntr(p);
 
-  if ((c->flags & FLAG_TMP) != (pc->flags & FLAG_TMP))
+  if (pntrset_contains(tmp1,s) != pntrset_contains(tmp2,p))
     return 0;
-  if (c->flags & FLAG_TMP)
-    return (c->flags & FLAG_SELECTED);
-  c->flags |= FLAG_TMP;
-  pc->flags |= FLAG_TMP;
+
+  if (pntrset_contains(tmp1,s))
+    return pntrset_contains(sel,s);
+
+  pntrset_add(tmp1,s);
+  pntrset_add(tmp2,p);
 
   switch (c->type) {
   case CELL_APPLICATION:
   case CELL_CONS:
-    if (matches_r(sc,c->field1,pc->field1,args) &&
-        matches_r(sc,c->field2,pc->field2,args)) {
-      c->flags |= FLAG_SELECTED;
+    if (matches_r(sc,c->field1,pc->field1,args,tmp1,tmp2,sel) &&
+        matches_r(sc,c->field2,pc->field2,args,tmp1,tmp2,sel)) {
+      pntrset_add(sel,s);
       return 1;
     }
     break;
   case CELL_BUILTIN:
     if ((int)get_pntr(c->field1) == (int)get_pntr(pc->field1)) {
-      c->flags |= FLAG_SELECTED;
+      pntrset_add(sel,s);
       return 1;
     }
     break;
   case CELL_SCREF:
     if (get_pntr(c->field1) == get_pntr(pc->field1)) {
-      c->flags |= FLAG_SELECTED;
+      pntrset_add(sel,s);
       return 1;
     }
     break;
@@ -186,8 +189,8 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args)
         !memcmp(&((char*)sarr->elements)[sindex],
                 &((char*)parr->elements)[pindex],
                 sarr->size-sindex)) {
-      if (matches_r(sc,sarr->tail,parr->tail,args)) {
-        c->flags |= FLAG_SELECTED;
+      if (matches_r(sc,sarr->tail,parr->tail,args,tmp1,tmp2,sel)) {
+        pntrset_add(sel,s);
         return 1;
       }
     }
@@ -197,7 +200,7 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args)
     break;
   }
   case CELL_NIL:
-    c->flags |= FLAG_SELECTED;
+    pntrset_add(sel,s);
     return 1;
   default:
     abort();
@@ -206,10 +209,10 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args)
   return 0;
 }
 
-int matches(task *tsk, scomb *sc, pntr p, pntr *args)
+static pntr instantiate_abstract(task *tsk, scomb *sc)
 {
-  pntrstack *stk = pntrstack_new();
   int i;
+  pntrstack *stk = pntrstack_new();
   pntr ins;
   for (i = sc->nargs-1; 0 <= i; i--) {
     pntr argp;
@@ -222,11 +225,16 @@ int matches(task *tsk, scomb *sc, pntr p, pntr *args)
   }
   ins = instantiate_scomb(tsk,stk,sc->body,sc);
   pntrstack_free(stk);
-  clear_graph(ins,FLAG_TMP);
-  clear_graph(ins,FLAG_SELECTED);
-  clear_graph(p,FLAG_TMP);
-  clear_graph(p,FLAG_SELECTED);
-  return matches_r(sc,ins,p,args);
+  return ins;
+}
+
+int matches(task *tsk, scomb *sc, pntr p, pntr *args)
+{
+  pntrset_clear(tsk->partial_tmp1);
+  pntrset_clear(tsk->partial_tmp2);
+  pntrset_clear(tsk->partial_sel);
+  return matches_r(sc,tsk->partial_scp,p,args,
+                   tsk->partial_tmp1,tsk->partial_tmp2,tsk->partial_sel);
 }
 
 int match_repl(task *tsk, scomb *sc, pntr p)
@@ -290,7 +298,8 @@ static int apply_one(task *tsk, pntr p)
   if (CELL_NUMBER == pntrtype(p))
     return 0;
 
-  if (match_repl(tsk,tsk->partial_sc,p))
+  if ((pntrtype(tsk->partial_scp) == pntrtype(p)) &&
+      match_repl(tsk,tsk->partial_sc,p))
     return 1;
 
   if (0 > (bif = get_funargs(p,args,&nargs)))
@@ -377,7 +386,7 @@ static int apply_one(task *tsk, pntr p)
   return 0;
 }
 
-static int apply_rules_r(task *tsk, pntr p)
+static int apply_rules_r(task *tsk, pntr p, pntrset *done)
 {
   cell *c;
   int applied = 0;
@@ -388,22 +397,26 @@ static int apply_rules_r(task *tsk, pntr p)
     return 0;
 
   c = get_pntr(p);
-  if (c->flags & FLAG_APPLIED)
+
+
+  if (pntrset_contains(done,p))
     return 0;
-  c->flags |= FLAG_APPLIED;
+
+  pntrset_add(done,p);
 
   // Apply rules to this node
-  while (apply_one(tsk,p))
+  if (apply_one(tsk,p))
     applied = 1;
+
 
   // Apply to arguments
   p = resolve_pntr(p);
   while ((CELL_APPLICATION == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
-    if (apply_rules_r(tsk,get_pntr(p)->field2))
+    if (apply_rules_r(tsk,get_pntr(p)->field2,done))
       applied = 1;
     p = resolve_pntr(get_pntr(p)->field1);
   }
-  if (apply_rules_r(tsk,p))
+  if (apply_rules_r(tsk,p,done))
     applied = 1;
 
   return applied;
@@ -411,8 +424,8 @@ static int apply_rules_r(task *tsk, pntr p)
 
 int apply_rules(task *tsk, pntr p)
 {
-  clear_graph(p,FLAG_APPLIED);
-  return apply_rules_r(tsk,p);
+  pntrset_clear(tsk->partial_applied);
+  return apply_rules_r(tsk,p,tsk->partial_applied);
 }
 
 void reduce_args(source *src, task *tsk, pntr p)
@@ -429,7 +442,8 @@ void reduce_args(source *src, task *tsk, pntr p)
 void reset_scused(source *src)
 {
   int i;
-  for (i = 0; i < array_count(src->scombs); i++)
+  int count = array_count(src->scombs);
+  for (i = 0; i < count; i++)
     array_item(src->scombs,i,scomb*)->used = 0;
 }
 
@@ -444,6 +458,12 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
 
   tsk->partial = 1;
   tsk->partial_sc = sc;
+  tsk->partial_scp = instantiate_abstract(tsk,sc);
+
+  tsk->partial_tmp1 = pntrset_new();
+  tsk->partial_tmp2 = pntrset_new();
+  tsk->partial_sel = pntrset_new();
+  tsk->partial_applied = pntrset_new();
 
   debug_stage("Partial evaluation");
 
@@ -507,6 +527,11 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
     trace_step(tsk,p,"Done",0);
 
   s = graph_to_syntax(src,p);
+
+  pntrset_free(tsk->partial_tmp1);
+  pntrset_free(tsk->partial_tmp2);
+  pntrset_free(tsk->partial_sel);
+  pntrset_free(tsk->partial_applied);
 
   task_free(tsk);
 

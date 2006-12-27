@@ -271,7 +271,8 @@ static void send_mark_messages(task *tsk)
     if (0 < array_count(tsk->distmarks[pid])) {
       int a;
       array *msg = write_start();
-      for (a = 0; a < array_count(tsk->distmarks[pid]); a++) {
+      int count = array_count(tsk->distmarks[pid]);
+      for (a = 0; a < count; a++) {
         gaddr addr = array_item(tsk->distmarks[pid],a,gaddr);
         write_gaddr(msg,tsk,addr);
         tsk->gcsent[addr.pid]++;
@@ -621,7 +622,8 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     }
 
     for (pid = 0; pid < tsk->groupsize; pid++) {
-      for (i = 0; i < array_count(tsk->inflight_addrs[pid]); i++) {
+      int count = array_count(tsk->inflight_addrs[pid]);
+      for (i = 0; i < count; i++) {
         gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
         if ((0 <= addr.lid) && (tsk->pid != addr.pid))
           add_pending_mark(tsk,addr);
@@ -682,7 +684,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     clear_marks(tsk,FLAG_MARKED);
     mark_roots(tsk,FLAG_MARKED);
 
-    sweep(tsk);
+    sweep(tsk,0);
     clear_marks(tsk,FLAG_NEW);
 
     tsk->memdebug = 0;

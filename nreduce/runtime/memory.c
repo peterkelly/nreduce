@@ -352,6 +352,9 @@ void mark_roots(task *tsk, short bit)
   if (tsk->tracing)
     mark(tsk,tsk->trace_root,bit);
 
+  if (tsk->partial)
+    mark(tsk,tsk->partial_scp,bit);
+
   for (f = tsk->sparked.first; f; f = f->next) {
     mark_frame(tsk,f,bit);
     assert(NULL == f->wq.frames);
@@ -381,7 +384,8 @@ void mark_roots(task *tsk, short bit)
   }
 
   for (pid = 0; pid < tsk->groupsize; pid++) {
-    for (i = 0; i < array_count(tsk->inflight_addrs[pid]); i++) {
+    int count = array_count(tsk->inflight_addrs[pid]);
+    for (i = 0; i < count; i++) {
       gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
       if ((0 <= addr.lid) && (addr.pid == tsk->pid)) {
         glo = addrhash_lookup(tsk,addr);
@@ -420,7 +424,7 @@ void print_cells(task *tsk)
   }
 }
 
-void sweep(task *tsk)
+void sweep(task *tsk, int all)
 {
   block *bl;
   int i;
@@ -480,18 +484,26 @@ void sweep(task *tsk)
     }
   }
 
-  for (bl = tsk->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      if (!(bl->values[i].flags & FLAG_MARKED) &&
-          !(bl->values[i].flags & FLAG_DMB) &&
-          !(bl->values[i].flags & FLAG_PINNED) &&
-          (CELL_EMPTY != bl->values[i].type)) {
-        free_cell_fields(tsk,&bl->values[i]);
-        bl->values[i].type = CELL_EMPTY;
+  if (all) {
+    for (bl = tsk->blocks; bl; bl = bl->next)
+      for (i = 0; i < BLOCK_SIZE; i++)
+        if (CELL_EMPTY != bl->values[i].type)
+          free_cell_fields(tsk,&bl->values[i]);
+  }
+  else {
+    for (bl = tsk->blocks; bl; bl = bl->next) {
+      for (i = 0; i < BLOCK_SIZE; i++) {
+        if (!(bl->values[i].flags & FLAG_MARKED) &&
+            !(bl->values[i].flags & FLAG_DMB) &&
+            !(bl->values[i].flags & FLAG_PINNED) &&
+            (CELL_EMPTY != bl->values[i].type)) {
+          free_cell_fields(tsk,&bl->values[i]);
+          bl->values[i].type = CELL_EMPTY;
 
-        /* comment out these two lines to avoid reallocating cells, to check invalid accesses */
-        make_pntr(bl->values[i].field1,tsk->freeptr);
-        tsk->freeptr = &bl->values[i];
+          /* comment out these two lines to avoid reallocating cells, to check invalid accesses */
+          make_pntr(bl->values[i].field1,tsk->freeptr);
+          tsk->freeptr = &bl->values[i];
+        }
       }
     }
   }
@@ -517,7 +529,7 @@ void local_collect(task *tsk)
         mark_global(tsk,glo,FLAG_MARKED);
 
   /* sweep */
-  sweep(tsk);
+  sweep(tsk,0);
 
   #ifdef COLLECTION_DEBUG
   fprintf(tsk->output,"local_collect() finished: %d cells remaining\n",count_alive(tsk));

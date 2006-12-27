@@ -27,6 +27,7 @@
 #define SUPER_C
 
 #include "src/nreduce.h"
+#include "runtime/runtime.h"
 #include "source.h"
 #include <stdio.h>
 #include <string.h>
@@ -43,13 +44,11 @@ scomb *get_scomb_index(source *src, int index)
 
 scomb *get_scomb(source *src, const char *name)
 {
-  int scno;
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    if (!strcmp(sc->name,name))
-      return sc;
-  }
-  return NULL;
+  int h = hash(name,strlen(name));
+  scomb *sc = src->schash[h];
+  while (sc && strcmp(sc->name,name))
+    sc = sc->hashnext;
+  return sc;
 }
 
 int get_scomb_var(scomb *sc, const char *name)
@@ -67,6 +66,7 @@ scomb *add_scomb(source *src, const char *name1)
   char *hashpos = strchr(name,'#');
   scomb *sc;
   int num;
+  int h;
 
   if (hashpos)
     *hashpos = '\0';
@@ -91,6 +91,10 @@ scomb *add_scomb(source *src, const char *name1)
   sc->sl.fileno = -1;
   sc->sl.lineno = -1;
 
+  h = hash(sc->name,strlen(sc->name));
+  sc->hashnext = src->schash[h];
+  src->schash[h] = sc;
+
   free(name);
   return sc;
 }
@@ -100,6 +104,7 @@ void scomb_free(scomb *sc)
   int i;
   snode_free(sc->body);
   free(sc->name);
+  free(sc->modname);
   for (i = 0; i < sc->nargs; i++)
     free(sc->argnames[i]);
   free(sc->argnames);
@@ -108,3 +113,67 @@ void scomb_free(scomb *sc)
   free(sc);
 }
 
+/* Detects whether the the specified supercombinator could potentially be applied to some
+   arguments - either through direct usage, or via a variable */
+static int sc_maybe_applied(snode *s, scomb *sc, int *examined)
+{
+  switch (s->type) {
+  case SNODE_APPLICATION: {
+    snode *app = s;
+    int nargs = 0;
+    while (SNODE_APPLICATION == app->type) {
+      nargs++;
+      app = app->left;
+      while (SNODE_WRAP == app->type)
+        app = app->target;
+    }
+    if (((SNODE_BUILTIN == app->type) &&
+         (nargs <= builtin_info[app->bif].nargs)) ||
+        ((SNODE_SCREF == app->type) &&
+         (nargs <= app->sc->nargs))) {
+      /* Application of a built-in function or supercombinator to the right number or fewer
+         args - this is safe */
+      return (sc_maybe_applied(s->left,sc,examined) ||
+              sc_maybe_applied(s->right,sc,examined));
+    }
+    /* Application of a variable to some args, or application of the result of another
+       fucntion call to some args; this could potentially be recursive */
+    return 1;
+  }
+  case SNODE_LAMBDA:
+    return sc_maybe_applied(s->body,sc,examined);
+  case SNODE_LETREC: {
+    letrec *rec;
+    for (rec = s->bindings; rec; rec = rec->next)
+      if (sc_maybe_applied(rec->value,sc,examined))
+        return 1;
+    return sc_maybe_applied(s->body,sc,examined);
+  }
+  case SNODE_SCREF:
+    if (s->sc == sc)
+      return 1;
+    if (examined[s->sc->index])
+      return 0;
+    examined[s->sc->index] = 1;
+    return sc_maybe_applied(s->sc->body,sc,examined);
+  case SNODE_WRAP:
+    return sc_maybe_applied(s->target,sc,examined);
+  default:
+    break;
+  }
+  return 0;
+}
+
+void detect_nonrecursion(source *src)
+{
+  int i;
+  int count = array_count(src->scombs);
+  int *examined = (int*)malloc(count*sizeof(int));
+
+  for (i = 0; i < count; i++) {
+    scomb *sc = array_item(src->scombs,i,scomb*);
+    memset(examined,0,count*sizeof(int));
+    sc->nonrecursive = !sc_maybe_applied(sc->body,sc,examined);
+  }
+  free(examined);
+}

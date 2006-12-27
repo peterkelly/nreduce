@@ -555,11 +555,7 @@ void task_free(task *tsk)
   block *bl;
   int h;
 
-  for (bl = tsk->blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].flags &= ~(FLAG_PINNED | FLAG_MARKED | FLAG_DMB);
-
-  sweep(tsk);
+  sweep(tsk,1);
 
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
     global *glo = tsk->pntrhash[h];

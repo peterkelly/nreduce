@@ -53,8 +53,7 @@ void array_vprintf(array *arr, const char *format, va_list ap);
 void array_printf(array *arr, const char *format, ...);
 void array_remove_data(array *arr, int nbytes);
 void array_remove_items(array *arr, int count);
-#define array_item(_arr,_index,_type) (*(_type*)array_at(_arr,_index))
-void *array_at(array *arr, int index);
+#define array_item(_arr,_index,_type) (((_type*)(_arr)->data)[(_index)])
 int array_count(array *arr);
 void array_free(array *arr);
 
@@ -129,7 +128,7 @@ void print_bin_rev(FILE *f, void *ptr, int nbytes);
 struct timeval timeval_diff(struct timeval from, struct timeval to);
 int timeval_diffms(struct timeval from, struct timeval to);
 
-int hash(void *mem, int size);
+int hash(const void *mem, int size);
 char *getcwd_alloc();
 
 void parse_cmdline(const char *line, int *argc, char ***argv);

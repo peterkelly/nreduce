@@ -136,8 +136,9 @@ static int check_for_main(source *src)
 {
   int gotmain = 0;
   int scno;
+  int count = array_count(src->scombs);
 
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  for (scno = 0; scno < count; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (!strcmp(sc->name,"main")) {
       gotmain = 1;
@@ -315,6 +316,16 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
 /*     exit(0); */
 /*   } */
 
+  detect_nonrecursion(src);
+/*   printf("\n"); */
+/*   printf("Non-recursive supercombinators:\n"); */
+/*   for (scno = 0; scno < sccount; scno++) { */
+/*     scomb *sc = array_item(src->scombs,scno,scomb*); */
+/*     if (sc->nonrecursive) */
+/*       printf("%s\n",sc->name); */
+/*   } */
+/*   printf("\n"); */
+
   /* Run with -a or -l; don't go any further */
   if (stopafterlambda)
     return 0;
@@ -348,7 +359,7 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
   sccount = array_count(src->scombs); /* applift() may have added some */
 
   compile_stage(src,"Letrec reordering"); /* reorder.c */
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     reorder_letrecs(sc->body);
   }
@@ -374,17 +385,20 @@ void source_free(source *src)
 {
   int i;
   if (src->scombs) {
-    for (i = 0; i < array_count(src->scombs); i++)
+    int count = array_count(src->scombs);
+    for (i = 0; i < count; i++)
       scomb_free(array_item(src->scombs,i,scomb*));
     array_free(src->scombs);
   }
   if (src->oldnames) {
-    for (i = 0; i < array_count(src->oldnames); i++)
+    int count = array_count(src->oldnames);
+    for (i = 0; i < count; i++)
       free(array_item(src->oldnames,i,char*));
     array_free(src->oldnames);
   }
   if (src->parsedfiles) {
-    for (i = 0; i < array_count(src->parsedfiles); i++)
+    int count = array_count(src->parsedfiles);
+    for (i = 0; i < count; i++)
       free(array_item(src->parsedfiles,i,char*));
     array_free(src->parsedfiles);
   }

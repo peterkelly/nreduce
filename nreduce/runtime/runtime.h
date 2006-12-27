@@ -242,6 +242,18 @@ typedef struct pntrstack {
   pntr *data;
 } pntrstack;
 
+typedef struct psentry {
+  pntr p;
+  int next;
+} psentry;
+
+typedef struct pntrset {
+  int map[256];
+  psentry *data;
+  int alloc;
+  int count;
+} pntrset;
+
 typedef struct cap {
   int arity;
   int address;
@@ -454,6 +466,11 @@ typedef struct task {
   int trace_type;
   int tracing;
   scomb *partial_sc;
+  pntr partial_scp;
+  pntrset *partial_tmp1;
+  pntrset *partial_tmp2;
+  pntrset *partial_sel;
+  pntrset *partial_applied;
 } task;
 
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid);
@@ -617,7 +634,7 @@ int count_alive(task *tsk);
 void clear_marks(task *tsk, short bit);
 void mark_roots(task *tsk, short bit);
 void print_cells(task *tsk);
-void sweep(task *tsk);
+void sweep(task *tsk, int all);
 void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
 
@@ -659,8 +676,13 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 /* graph */
 
 void clear_graph(pntr root, int flag);
-/* int graph_contains(pntr haystack, pntr needle); */
 pntr graph_replace(task *tsk, pntr root, pntr old, pntr new);
+
+pntrset *pntrset_new();
+void pntrset_free(pntrset *ps);
+void pntrset_add(pntrset *ps, pntr p);
+int pntrset_contains(pntrset *ps, pntr p);
+void pntrset_clear(pntrset *ps);
 
 /* tosyntax */
 

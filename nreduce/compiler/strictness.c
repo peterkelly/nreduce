@@ -359,7 +359,8 @@ static void check_strictness(scomb *sc, int *changed)
 void dump_strictinfo(source *src)
 {
   int scno;
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  int count = array_count(src->scombs);
+  for (scno = 0; scno < count; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (is_from_prelude(src,sc))
       continue;
@@ -385,10 +386,11 @@ void strictness_analysis(source *src)
 {
   int scno;
   int changed;
+  int sccount = array_count(src->scombs);
 
   compile_stage(src,"Strictness analysis");
 
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (NULL == sc->strictin)
       sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
@@ -399,7 +401,7 @@ void strictness_analysis(source *src)
      known to be strict. This will change as we perform the analysis. */
   do {
     changed = 0;
-    for (scno = 0; scno < array_count(src->scombs); scno++) {
+    for (scno = 0; scno < sccount; scno++) {
       scomb *sc = array_item(src->scombs,scno,scomb*);
       check_strictness(sc,&changed);
     }

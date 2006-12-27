@@ -85,9 +85,12 @@ typedef struct scomb {
   sourceloc sl;
   char *modname;
   int used;
+  int nonrecursive;
+  struct scomb *hashnext;
 } scomb;
 
 typedef struct source {
+  scomb *schash[GLOBAL_HASH_SIZE];
   int varno;
   array *scombs;
   array *oldnames;
@@ -142,6 +145,7 @@ scomb *get_scomb(source *src, const char *name);
 int get_scomb_var(scomb *sc, const char *name);
 scomb *add_scomb(source *src, const char *name1);
 void scomb_free(scomb *sc);
+void detect_nonrecursion(source *src);
 
 /* lifting */
 

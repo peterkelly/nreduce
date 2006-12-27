@@ -1082,7 +1082,8 @@ static void compile_evaldo(compilation *comp, source *src)
 static void compile_scombs(compilation *comp, source *src)
 {
   int scno;
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  int count = array_count(src->scombs);
+  for (scno = 0; scno < count; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     F(src,comp,NUM_BUILTINS+sc->index,sc);
   }
@@ -1151,6 +1152,8 @@ void compile(source *src, char **bcdata, int *bcsize)
 {
   int i;
   compilation *comp = (compilation*)calloc(1,sizeof(compilation));
+  int count = array_count(src->parsedfiles);
+  int strcount;
 
 
   comp->instructions = array_new(sizeof(instruction));
@@ -1159,7 +1162,7 @@ void compile(source *src, char **bcdata, int *bcsize)
   comp->cdepth = -1;
 
   assert(0 == array_count(comp->stringmap));
-  for (i = 0; i < array_count(src->parsedfiles); i++) {
+  for (i = 0; i < count; i++) {
     char *filename = array_item(src->parsedfiles,i,char*);
     add_string(comp,filename);
   }
@@ -1176,7 +1179,8 @@ void compile(source *src, char **bcdata, int *bcsize)
 
   gen_bytecode(comp,bcdata,bcsize);
 
-  for (i = 0; i < array_count(comp->stringmap); i++)
+  strcount = array_count(comp->stringmap);
+  for (i = 0; i < strcount; i++)
     free(array_item(comp->stringmap,i,char*));
   array_free(comp->stringmap);
 

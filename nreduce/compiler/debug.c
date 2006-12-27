@@ -414,7 +414,8 @@ void print_scomb_code(source *src, FILE *f, scomb *sc)
 void print_scombs1(source *src)
 {
   int scno;
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  int count = array_count(src->scombs);
+  for (scno = 0; scno < count; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (is_from_prelude(src,sc))
       continue;
@@ -426,8 +427,9 @@ void print_scombs1(source *src)
 void print_scombs2(source *src)
 {
   int scno;
+  int count = array_count(src->scombs);
   debug(0,"\n--------------------\n\n");
-  for (scno = 0; scno < array_count(src->scombs); scno++) {
+  for (scno = 0; scno < count; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     int i;
     debug(0,"%s ",sc->name);
