@@ -158,14 +158,14 @@ void reduce(task *tsk, pntrstack *s)
 
     target = resolve_pntr(redex);
 
-    trace_step(tsk,target,"Performing reduction",0);
+    trace_step(tsk,target,0,"Performing reduction");
 
     /* 1. Unwind the spine until something other than an application node is encountered. */
     pntrstack_push(s,target);
 
     while (CELL_APPLICATION == pntrtype(target)) {
       target = resolve_pntr(get_pntr(target)->field1);
-      trace_step(tsk,target,"Unwound spine",0);
+      trace_step(tsk,target,0,"Unwound spine");
       pntrstack_push(s,target);
     }
 
@@ -207,7 +207,7 @@ void reduce(task *tsk, pntrstack *s)
 
       /* FIXME: could we reduce infinitely with a 0-arg supercombinator? */
       if (tsk->partial && (1 <= sc->used) && (0 < sc->nargs) && !dont && strcmp(sc->name,"map")) {
-        trace_step(tsk,redex,"Not instantiating supercombinator more than once",1);
+        trace_step(tsk,redex,1,"Not instantiating supercombinator %s more than once",sc->name);
         s->count = oldtop;
         if (apply_rules(tsk,s->data[s->count-1]))
           continue;
@@ -217,6 +217,7 @@ void reduce(task *tsk, pntrstack *s)
 
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
+      trace_step(tsk,redex,1,"Instantiating supercombinator %s",sc->name);
       res = instantiate_scomb(tsk,s,sc->body,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
@@ -263,7 +264,8 @@ void reduce(task *tsk, pntrstack *s)
 
       if (s->count-1 < reqargs + oldtop) {
         if (tsk->partial) {
-          trace_step(tsk,redex,"Built-in has insufficient arguments; irreducible",1);
+          trace_step(tsk,redex,1,"Built-in %s has insufficient arguments; irreducible",
+                     builtin_info[bif].name);
           s->count = oldtop;
           if (apply_rules(tsk,s->data[s->count-1]))
             continue;
@@ -305,13 +307,13 @@ void reduce(task *tsk, pntrstack *s)
           strictok++;
         }
         else {
-          trace_step(tsk,argval,"Found argument to be irreducible",0);
+          trace_step(tsk,argval,0,"Found argument to be irreducible");
           break;
         }
       }
 
       if (strictok < strictargs) {
-        trace_step(tsk,redex,"Found application of built-in to be irreducible",1);
+        trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
         s->count = oldtop;
         if (apply_rules(tsk,s->data[s->count-1]))
           continue;
@@ -319,7 +321,7 @@ void reduce(task *tsk, pntrstack *s)
           return;
       }
       else {
-        trace_step(tsk,redex,"Executing built-in",1);
+        trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
         builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
         if (tsk->error)
           fatal("%s",tsk->error);
@@ -427,7 +429,7 @@ void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
   stream(tsk,rootp);
 
   if (trace_dir)
-    trace_step(tsk,rootp,"Done",0);
+    trace_step(tsk,rootp,0,"Done");
 
   printf("\n");
 

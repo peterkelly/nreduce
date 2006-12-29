@@ -58,7 +58,7 @@ static int makeind(task *tsk, pntr p, pntr dest, const char *msg)
   c = get_pntr(p);
   c->type = CELL_IND;
   c->field1 = dest;
-  trace_step(tsk,p,msg,0);
+  trace_step(tsk,p,0,"%s",msg);
   return 1;
 }
 
@@ -524,7 +524,7 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
   pntrstack_free(tsk->streamstack);
 
   if (trace_dir)
-    trace_step(tsk,p,"Done",0);
+    trace_step(tsk,p,0,"Done");
 
   s = graph_to_syntax(src,p);
 

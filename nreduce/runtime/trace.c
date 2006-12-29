@@ -270,14 +270,35 @@ static void trace_hilight(FILE *f, pntr p, pntr arg1)
   }
 }
 
-void trace_step(task *tsk, pntr target, const char *msg, int allapps)
+char *fmtstring(const char *format, va_list ap)
+{
+  va_list tmp;
+  int len;
+  char *str;
+  va_copy(tmp,ap);
+  len = vsnprintf(NULL,0,format,tmp);
+  va_end(tmp);
+  str = (char*)malloc(len+1);
+  va_copy(tmp,ap);
+  vsprintf(str,format,tmp);
+  va_end(tmp);
+  return str;
+}
+
+void trace_step(task *tsk, pntr target, int allapps, const char *format, ...)
 {
   if (tsk->tracing) {
     tharg arg;
     pntr rhp;
     int landscape = (TRACE_LANDSCAPE == tsk->trace_type);
     char *prefix = (char*)malloc(strlen(tsk->trace_dir)+1+strlen(TRACE_PREFIX)+1);
+    va_list ap;
+    char *str;
     sprintf(prefix,"%s/%s",tsk->trace_dir,TRACE_PREFIX);
+
+    va_start(ap,format);
+    str = fmtstring(format,ap);
+    va_end(ap);
 
     tsk->trace_steps++;
 
@@ -285,14 +306,12 @@ void trace_step(task *tsk, pntr target, const char *msg, int allapps)
     arg.allapps = allapps;
     make_pntr(rhp,&arg);
     printf("-------------------------------------------------\n");
-    if (msg)
-      printf("Step %d: %s\n\n",tsk->trace_steps,msg);
-    else
-      printf("Step %d:\n\n",tsk->trace_steps);
+    printf("Step %d: %s\n\n",tsk->trace_steps,str);
     print_graph(tsk->trace_src,tsk->trace_root);
     printf("\n");
 
-    dot_graph(prefix,tsk->trace_steps,tsk->trace_root,0,trace_hilight,rhp,msg,landscape);
+    dot_graph(prefix,tsk->trace_steps,tsk->trace_root,0,trace_hilight,rhp,str,landscape);
     free(prefix);
+    free(str);
   }
 }

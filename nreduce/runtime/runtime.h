@@ -695,7 +695,7 @@ void print_graph(source *src, pntr p);
 typedef void (*dotfun)(FILE *f, pntr p, pntr arg);
 void dot_graph(const char *prefix, int number, pntr root, int doind,
                dotfun fun, pntr arg, const char *msg, int landscape);
-void trace_step(task *tsk, pntr target, const char *msg, int allapps);
+void trace_step(task *tsk, pntr target, int allapps, const char *format, ...);
 
 #ifndef BUILTINS_C
 extern const builtin builtin_info[NUM_BUILTINS];
