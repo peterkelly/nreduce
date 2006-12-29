@@ -73,9 +73,10 @@ static void traverse(pntr p, graphfun fun, void *arg)
     break;
   case CELL_AREF: {
     carray *arr = aref_array(p);
+    int index = aref_index(p);
     int i;
     if (sizeof(pntr) == arr->elemsize)
-      for (i = 0; i < arr->size; i++)
+      for (i = index; i < arr->size; i++)
         traverse(((pntr*)arr->elements)[i],fun,arg);
     traverse(arr->tail,fun,arg);
     break;
@@ -121,16 +122,17 @@ static int graph_setcontains_r(pntr p, pntr needle)
     break;
   }
   case CELL_AREF: {
+    /* FIXME: this needs testing */
     carray *arr = aref_array(p);
+    int index = aref_index(p);
     int i;
     if (sizeof(pntr) == arr->elemsize) {
-      for (i = 0; i < arr->size; i++) {
+      for (i = index; i < arr->size; i++)
         if (graph_setcontains_r(((pntr*)arr->elements)[i],needle))
           contains = 1;
-      }
-      if (graph_setcontains_r(arr->tail,needle))
-        contains = 1;
     }
+    if (graph_setcontains_r(arr->tail,needle))
+      contains = 1;
     break;
   }
   case CELL_IND:
@@ -258,7 +260,23 @@ static pntr graph_replace_r(task *tsk, pntrmap *pm, pntr p, pntr old, pntr new)
     break;
   }
   case CELL_AREF: {
-    assert(!"FIXME: implement");
+    /* FIXME: this needs testing */
+    carray *arr = aref_array(p);
+    int index = aref_index(p);
+    int i;
+    carray *newarr = carray_new(tsk,arr->elemsize,NULL,NULL);
+    make_aref_pntr(repl,newarr->wrapper,0);
+    if (sizeof(pntr) == arr->elemsize) {
+      for (i = index; i < arr->size; i++) {
+        pntr elem = ((pntr*)arr->elements)[i];
+        pntr newelem = graph_replace_r(tsk,pm,elem,old,new);
+        carray_append(tsk,&newarr,&newelem,1,sizeof(pntr));
+      }
+    }
+    else {
+      carray_append(tsk,&newarr,&((char*)arr->elements)[index],arr->size-index,1);
+    }
+    newarr->tail = graph_replace_r(tsk,pm,arr->tail,old,new);
     break;
   }
   case CELL_IND: {

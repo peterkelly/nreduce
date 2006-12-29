@@ -223,7 +223,7 @@ static pntr instantiate_abstract(task *tsk, scomb *sc)
     make_pntr(argp,sym);
     pntrstack_push(stk,argp);
   }
-  ins = instantiate_scomb(tsk,stk,sc->body,sc);
+  ins = instantiate_scomb(tsk,stk,sc);
   pntrstack_free(stk);
   return ins;
 }

@@ -597,7 +597,7 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 /* reduction */
 
-pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc);
+pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
 void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type);
 
@@ -612,6 +612,9 @@ void debug_partial(source *src, const char *name, char *trace_dir, int trace_typ
 void console(task *tsk);
 
 /* builtin */
+
+carray *carray_new(task *tsk, int dsize, carray *oldarr, cell *usewrapper);
+void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 
 void printp(FILE *f, pntr p);
 int get_builtin(const char *name);

@@ -35,7 +35,8 @@
 #include <stdarg.h>
 #include <math.h>
 
-static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstack *values)
+static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
+                                stack *names, pntrstack *values)
 {
   cell *dest;
   pntr p;
@@ -43,8 +44,8 @@ static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstac
   case SNODE_APPLICATION: {
     dest = alloc_cell(tsk);
     dest->type = CELL_APPLICATION;
-    dest->field1 = instantiate_scomb_r(tsk,source->left,names,values);
-    dest->field2 = instantiate_scomb_r(tsk,source->right,names,values);
+    dest->field1 = instantiate_scomb_r(tsk,sc,source->left,names,values);
+    dest->field2 = instantiate_scomb_r(tsk,sc,source->right,names,values);
     make_pntr(p,dest);
     return p;
   }
@@ -78,13 +79,13 @@ static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstac
     }
     i = 0;
     for (rec = source->bindings; rec; rec = rec->next) {
-      res = instantiate_scomb_r(tsk,rec->value,names,values);
+      res = instantiate_scomb_r(tsk,sc,rec->value,names,values);
       assert(CELL_HOLE == get_pntr(values->data[oldcount+i])->type);
       get_pntr(values->data[oldcount+i])->type = CELL_IND;
       get_pntr(values->data[oldcount+i])->field1 = res;
       i++;
     }
-    res = instantiate_scomb_r(tsk,source->body,names,values);
+    res = instantiate_scomb_r(tsk,sc,source->body,names,values);
     names->count = oldcount;
     values->count = oldcount;
     return res;
@@ -113,7 +114,7 @@ static pntr instantiate_scomb_r(task *tsk, snode *source, stack *names, pntrstac
   }
 }
 
-pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc)
+pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc)
 {
   stack *names = stack_new();
   pntrstack *values = pntrstack_new();
@@ -127,7 +128,7 @@ pntr instantiate_scomb(task *tsk, pntrstack *s, snode *source, scomb *sc)
     pntrstack_push(values,pntrstack_at(s,pos));
   }
 
-  res = instantiate_scomb_r(tsk,source,names,values);
+  res = instantiate_scomb_r(tsk,sc,sc->body,names,values);
 
   stack_free(names);
   pntrstack_free(values);
@@ -201,12 +202,8 @@ void reduce(task *tsk, pntrstack *s)
         s->data[i] = get_pntr(arg)->field2;
       }
 
-      int dont = 0;
-      if ((0 == sc->sl.fileno) && strcmp(sc->name,"map"))
-        dont = 1;
-
       /* FIXME: could we reduce infinitely with a 0-arg supercombinator? */
-      if (tsk->partial && (1 <= sc->used) && (0 < sc->nargs) && !dont && strcmp(sc->name,"map")) {
+      if (tsk->partial && (1 <= sc->used) && (0 < sc->nargs) && !sc->nonrecursive) {
         trace_step(tsk,redex,1,"Not instantiating supercombinator %s more than once",sc->name);
         s->count = oldtop;
         if (apply_rules(tsk,s->data[s->count-1]))
@@ -218,11 +215,10 @@ void reduce(task *tsk, pntrstack *s)
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
       trace_step(tsk,redex,1,"Instantiating supercombinator %s",sc->name);
-      res = instantiate_scomb(tsk,s,sc->body,sc);
+      res = instantiate_scomb(tsk,s,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
-      if (!sc->nonrecursive)
-        sc->used++;
+      sc->used++;
 
       s->count = oldtop;
       continue;
