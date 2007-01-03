@@ -285,8 +285,22 @@ void reduce(task *tsk, pntrstack *s)
         }
         else if (CELL_AREF == pntrtype(target)) {
           carray *arr = aref_array(target);
-          /* FIXME: evaluate the array items */
-          reduce_single(tsk,s,arr->tail);
+          int index = aref_index(target);
+          pntr tail = arr->tail;
+
+          if (sizeof(pntr) == arr->elemsize) {
+            /* Note that we take a copy of the contents of the array in case it's modified
+               during the reduction (e.g. converted to a string) */
+            pntr *elements = (pntr*)malloc((arr->size-index)*sizeof(pntr));
+            int count = arr->size-index;
+            int i;
+            memcpy(elements,&((pntr*)arr->elements)[index],(arr->size-index)*sizeof(pntr));
+            for (i = 0; i < count; i++)
+              reduce_single(tsk,s,elements[i]);
+            free(elements);
+          }
+
+          reduce_single(tsk,s,tail);
         }
       }
 
