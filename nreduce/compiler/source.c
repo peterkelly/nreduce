@@ -316,17 +316,6 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
 /*     exit(0); */
 /*   } */
 
-  detect_nonrecursion(src);
-  get_scomb(src,"map")->nonrecursive = 1;
-/*   printf("\n"); */
-/*   printf("Non-recursive supercombinators:\n"); */
-/*   for (scno = 0; scno < sccount; scno++) { */
-/*     scomb *sc = array_item(src->scombs,scno,scomb*); */
-/*     if (sc->nonrecursive) */
-/*       printf("%s\n",sc->name); */
-/*   } */
-/*   printf("\n"); */
-
   /* Run with -a or -l; don't go any further */
   if (stopafterlambda)
     return 0;
