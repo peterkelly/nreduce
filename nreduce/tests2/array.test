@@ -1,0 +1,21 @@
+=================================== PROGRAM ====================================
+nreduce -a genarr runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+tail6 lst = (tail (tail (tail (tail (tail (tail lst))))))
+
+genarr x =
+(letrec
+   f = (if x 369 (* 400 2))
+   lst = (cons 365 (cons 366 (cons 367 (cons 368 (cons f (cons 370 nil))))))
+in
+  (seq (tail6 lst) lst))
+
+main = nil
+==================================== OUTPUT ====================================
+genarr x = (cons2 365 (cons2 366 (cons2 367 (cons2 368 (cons2 (if x 
+                                                      369 
+                                                      800)
+                                                  (cons2 370 nil))))))
+================================== RETURN CODE =================================
+0
