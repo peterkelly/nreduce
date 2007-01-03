@@ -597,6 +597,7 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 /* reduction */
 
+pntr makescref(task *tsk, scomb *sc, int skip);
 pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
 void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type);

@@ -15,7 +15,7 @@ addnumbers a bnum = (add (cons T_NUMBER a) bnum)
 main = nil
 ==================================== OUTPUT ====================================
 addnumbers a bnum = (if (= (head bnum) 1) 
-                        (cons T_NUMBER (+ a (tail bnum))) 
-                        (cons T_ERROR nil))
+                        (cons 1 (+ a (tail bnum))) 
+                        (cons 2 nil))
 ================================== RETURN CODE =================================
 0

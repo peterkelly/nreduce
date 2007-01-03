@@ -35,6 +35,42 @@
 #include <stdarg.h>
 #include <math.h>
 
+static void reset_ucount_r(snode *s)
+{
+  switch (s->type) {
+  case SNODE_APPLICATION:
+    reset_ucount_r(s->left);
+    reset_ucount_r(s->right);
+    break;
+  case SNODE_LAMBDA:
+    reset_ucount_r(s->body);
+    break;
+  case SNODE_LETREC: {
+    letrec *rec;
+    for (rec = s->bindings; rec; rec = rec->next)
+      reset_ucount_r(rec->value);
+    reset_ucount_r(s->body);
+    break;
+  }
+  case SNODE_SCREF:
+    s->ucount = 0;
+    break;
+  case SNODE_WRAP:
+    reset_ucount_r(s->target);
+    break;
+  }
+}
+
+static void reset_ucounts(source *src)
+{
+  int count = array_count(src->scombs);
+  int i;
+  for (i = 0; i < count; i++) {
+    scomb *sc = array_item(src->scombs,i,scomb*);
+    reset_ucount_r(sc->body);
+  }
+}
+
 static int isevaluated(pntr p)
 {
   return ((CELL_APPLICATION != pntrtype(p)) && (CELL_SYMBOL != pntrtype(p)));
@@ -57,6 +93,7 @@ static int makeind(task *tsk, pntr p, pntr dest, const char *msg)
   assert(CELL_APPLICATION == pntrtype(p));
   c = get_pntr(p);
   c->type = CELL_IND;
+  c->flags &= ~FLAG_REDUCED;
   c->field1 = dest;
   trace_step(tsk,p,0,"%s",msg);
   return 1;
@@ -260,14 +297,7 @@ int match_repl(task *tsk, scomb *sc, pntr p)
       }
     }
     if (all && (same != sc->nargs)) {
-      cell *funcell;
-      pntr fun;
-
-      funcell = alloc_cell(tsk);
-      funcell->type = CELL_SCREF;
-      make_pntr(funcell->field1,sc);
-      make_pntr(fun,funcell);
-
+      pntr fun = makescref(tsk,sc,1);
       for (i = 0; i < sc->nargs; i++) {
         cell *app = alloc_cell(tsk);
         app->type = CELL_APPLICATION;
@@ -449,16 +479,17 @@ void reset_scused(source *src)
 
 snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
 {
-  cell *root;
   pntr rootp;
   task *tsk = task_new(0,0,NULL,0,0);
   pntr p;
   int i;
   snode *s;
 
-  tsk->partial = 1;
-  tsk->partial_sc = sc;
+  reset_ucounts(src);
+
   tsk->partial_scp = instantiate_abstract(tsk,sc);
+  tsk->partial_sc = sc;
+  tsk->partial = 1;
 
   tsk->partial_tmp1 = pntrset_new();
   tsk->partial_tmp2 = pntrset_new();
@@ -467,10 +498,7 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
 
   debug_stage("Partial evaluation");
 
-  root = alloc_cell(tsk);
-  root->type = CELL_SCREF;
-  make_pntr(root->field1,sc);
-  make_pntr(rootp,root);
+  rootp = makescref(tsk,sc,0);
 
   for (i = 0; i < sc->nargs; i++) {
     cell *arg = alloc_cell(tsk);

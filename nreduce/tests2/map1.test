@@ -9,7 +9,7 @@ test x = (map double x)
 main = nil
 ==================================== OUTPUT ====================================
 test x = (if x 
-             (cons (double (head x)) (test (tail x))) 
+             (cons (* (head x) 2) (test (tail x))) 
              nil)
 ================================== RETURN CODE =================================
 0

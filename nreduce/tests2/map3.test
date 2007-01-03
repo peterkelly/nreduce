@@ -11,7 +11,7 @@ test x = (map quadruple (map triple (map double x)))
 main = nil
 ==================================== OUTPUT ====================================
 test x = (if x 
-             (cons (quadruple (triple (double (head x)))) (test (tail x))) 
+             (cons (* (* (* (head x) 2) 3) 4) (test (tail x))) 
              nil)
 ================================== RETURN CODE =================================
 0

@@ -13,7 +13,7 @@ test x = (map double (producer x))
 main = nil
 ==================================== OUTPUT ====================================
 test x = (if (< x 20) 
-             (cons (double x) (test (+ x 1))) 
+             (cons (* x 2) (test (+ x 1))) 
              nil)
 ================================== RETURN CODE =================================
 0

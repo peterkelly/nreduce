@@ -35,6 +35,17 @@
 #include <stdarg.h>
 #include <math.h>
 
+pntr makescref(task *tsk, scomb *sc, int skip)
+{
+  cell *c = alloc_cell(tsk);
+  pntr p;
+  c->type = CELL_SCREF;
+  make_pntr(c->field1,sc);
+  c->field2 = skip;
+  make_pntr(p,c);
+  return p;
+}
+
 static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
                                 stack *names, pntrstack *values)
 {
@@ -96,12 +107,20 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
     make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
-  case SNODE_SCREF:
-    dest = alloc_cell(tsk);
-    dest->type = CELL_SCREF;
-    make_pntr(dest->field1,source->sc);
-    make_pntr(p,dest);
-    return p;
+  case SNODE_SCREF: {
+    int skip = 0;
+    if (tsk->partial) {
+      if ((0 < source->sc->nargs) && (0 < source->ucount))
+        skip = 1;
+      if (sc == source->sc)
+        skip = 1;
+      if (!strcmp(source->sc->name,"append"))
+        skip = 1;
+      source->ucount++;
+    }
+
+    return makescref(tsk,source->sc,skip);
+  }
   case SNODE_NIL:
     return tsk->globnilpntr;
   case SNODE_NUMBER:
@@ -135,9 +154,22 @@ pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc)
   return res;
 }
 
+static void reduce_single(task *tsk, pntrstack *s, pntr p)
+{
+  pntrstack_push(s,p);
+  reduce(tsk,s);
+  pntrstack_pop(s);
+}
+
 void reduce(task *tsk, pntrstack *s)
 {
   int reductions = 0;
+  pntr redex = s->data[s->count-1];
+  if (CELL_NUMBER != pntrtype(redex)) {
+    if (get_pntr(redex)->flags & FLAG_REDUCED)
+      return;
+    get_pntr(redex)->flags |= FLAG_REDUCED;
+  }
 
   assert(tsk);
 
@@ -145,7 +177,6 @@ void reduce(task *tsk, pntrstack *s)
   while (1) {
     int oldtop = s->count;
     pntr target;
-    pntr redex;
 
     tsk->stats.nreductions++;
 
@@ -175,6 +206,7 @@ void reduce(task *tsk, pntrstack *s)
 
     case CELL_SCREF: {
       scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
+      int skip = (int)get_pntr(target)->field2;
 
       int i;
       int destno;
@@ -184,6 +216,7 @@ void reduce(task *tsk, pntrstack *s)
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
       if (s->count-1-oldtop < sc->nargs) {
+        /* TODO: maybe reduce the args that we do have? */
         s->count = oldtop;
         return;
       }
@@ -203,8 +236,13 @@ void reduce(task *tsk, pntrstack *s)
       }
 
       /* FIXME: could we reduce infinitely with a 0-arg supercombinator? */
-      if (tsk->partial && (1 <= sc->used) && (0 < sc->nargs) && !sc->nonrecursive) {
+      if (tsk->partial && skip) {
         trace_step(tsk,redex,1,"Not instantiating supercombinator %s more than once",sc->name);
+
+        /* reduce the args */
+        for (i = 0; i < sc->nargs; i++)
+          reduce_single(tsk,s,s->data[s->count-1-i]);
+
         s->count = oldtop;
         if (apply_rules(tsk,s->data[s->count-1]))
           continue;
@@ -237,6 +275,21 @@ void reduce(task *tsk, pntrstack *s)
         exit(1);
       }
 
+      if (tsk->partial) {
+        if (CELL_CONS == pntrtype(target)) {
+          cell *c = get_pntr(target);
+          pntr tail = c->field2; /* must grab these now in case it becomes an array */
+          pntr head = c->field1;
+          reduce_single(tsk,s,tail); /* reduce first; array optimization more likely */
+          reduce_single(tsk,s,head);
+        }
+        else if (CELL_AREF == pntrtype(target)) {
+          carray *arr = aref_array(target);
+          /* FIXME: evaluate the array items */
+          reduce_single(tsk,s,arr->tail);
+        }
+      }
+
       s->count = oldtop;
       return;
     case CELL_SYMBOL:
@@ -262,6 +315,7 @@ void reduce(task *tsk, pntrstack *s)
         if (tsk->partial) {
           trace_step(tsk,redex,1,"Built-in %s has insufficient arguments; irreducible",
                      builtin_info[bif].name);
+          /* TODO: maybe reduce the args that we do have? */
           s->count = oldtop;
           if (apply_rules(tsk,s->data[s->count-1]))
             continue;
@@ -275,6 +329,7 @@ void reduce(task *tsk, pntrstack *s)
         }
       }
 
+      /* Replace application cells on stack with the corresponding arguments */
       for (i = s->count-1; i >= s->count-reqargs; i--) {
         pntr arg = pntrstack_at(s,i-1);
         assert(i > oldtop);
@@ -282,19 +337,13 @@ void reduce(task *tsk, pntrstack *s)
         s->data[i] = get_pntr(arg)->field2;
       }
 
-      assert(strictargs <= reqargs);
-      for (i = 0; i < strictargs; i++) {
-        pntr val;
-        pntrstack_push(s,s->data[s->count-1-i]);
-        reduce(tsk,s);
-        val = pntrstack_pop(s);
-        s->data[s->count-1-i] = val;
-      }
-
+      /* Reduce arguments */
       for (i = 0; i < strictargs; i++)
-        assert(CELL_IND != pntrtype(s->data[s->count-1-i]));
+        reduce_single(tsk,s,s->data[s->count-1-i]);
 
-
+      /* Ensure all stack items are values (not indirection cells) */
+      for (i = 0; i < strictargs; i++)
+        s->data[s->count-1-i] = resolve_pntr(s->data[s->count-1-i]);
 
       /* Are any strict arguments a SYMBOL? */
       for (i = 0; i < strictargs; i++) {
@@ -310,6 +359,10 @@ void reduce(task *tsk, pntrstack *s)
 
       if (strictok < strictargs) {
         trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
+
+        for (i = strictargs; i < reqargs; i++)
+          reduce_single(tsk,s,s->data[s->count-1-i]);
+
         s->count = oldtop;
         if (apply_rules(tsk,s->data[s->count-1]))
           continue;
@@ -319,8 +372,21 @@ void reduce(task *tsk, pntrstack *s)
       else {
         trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
         builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
-        if (tsk->error)
-          fatal("%s",tsk->error);
+        if (tsk->error) {
+          if (tsk->partial) {
+            trace_step(tsk,redex,1,"%s gave error; leaving unreduced",builtin_info[bif].name);
+            free(tsk->error);
+            tsk->error = NULL;
+            s->count = oldtop;
+            if (apply_rules(tsk,s->data[s->count-1]))
+              continue;
+            else
+              return;
+          }
+          else {
+            fatal("%s",tsk->error);
+          }
+        }
         s->count -= (reqargs-1);
 
         /* UPDATE */
@@ -402,17 +468,13 @@ static void stream(task *tsk, pntr lst)
 void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
 {
   scomb *mainsc;
-  cell *root;
   pntr rootp;
   task *tsk = task_new(0,0,NULL,0,0);
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
 
-  root = alloc_cell(tsk);
-  root->type = CELL_SCREF;
-  make_pntr(root->field1,mainsc);
-  make_pntr(rootp,root);
+  rootp = makescref(tsk,mainsc,0);
 
   if (trace_dir) {
     tsk->tracing = 1;
