@@ -1,0 +1,15 @@
+=================================== PROGRAM ====================================
+nreduce -n -e r runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+tail6 x = (tail (tail (tail (tail (tail (tail x))))))
+
+main =
+(letrec
+   lst = (append "foo" (cons 65 (cons 66 (cons 67 (cons 68 (cons 69 (cons 70 nil)))))))
+in
+   (seq (tail6 lst) (seq (tail6 lst)) (tail6 lst)))
+==================================== OUTPUT ====================================
+DEF
+================================== RETURN CODE =================================
+0

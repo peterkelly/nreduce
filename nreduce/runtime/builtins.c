@@ -453,7 +453,7 @@ void maybe_expand_array(task *tsk, pntr p)
     }
   }
 
-  if (CELL_AREF == pntrtype(p)) {
+  if ((CELL_AREF == pntrtype(p)) && (sizeof(pntr) == aref_array(p)->elemsize)) {
     carray *arr = aref_array(p);
     int count = 0;
     arr->tail = resolve_pntr(arr->tail);
