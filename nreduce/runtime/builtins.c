@@ -267,7 +267,7 @@ static void b_parhead(task *tsk, pntr *argstack)
 static void b_echo(task *tsk, pntr *argstack)
 {
   char *str;
-  CHECK_ARG(0,CELL_AREF,B_OPENFD);
+  CHECK_ARG(0,CELL_AREF,B_ECHO);
 
   str = array_to_string(argstack[0]);
   fprintf(tsk->output,"%s",str);
@@ -597,7 +597,7 @@ static void b_tail(task *tsk, pntr *argstack)
   }
 }
 
-void b_arraysize(task *tsk, pntr *argstack)
+static void b_arraysize(task *tsk, pntr *argstack)
 {
   pntr refpntr = argstack[0];
   maybe_expand_array(tsk,refpntr);
@@ -615,13 +615,13 @@ void b_arraysize(task *tsk, pntr *argstack)
   }
 }
 
-void b_arrayskip(task *tsk, pntr *argstack)
+static void b_arrayskip(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[1];
   pntr refpntr = argstack[0];
   int n;
 
-  CHECK_ARG(1,CELL_NUMBER,B_ARRAYSIZE);
+  CHECK_ARG(1,CELL_NUMBER,B_ARRAYSKIP);
 
   maybe_expand_array(tsk,refpntr);
 
@@ -659,7 +659,7 @@ void b_arrayskip(task *tsk, pntr *argstack)
   }
 }
 
-void b_arrayprefix(task *tsk, pntr *argstack)
+static void b_arrayprefix(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[2];
   pntr refpntr = argstack[1];
@@ -705,7 +705,7 @@ void b_arrayprefix(task *tsk, pntr *argstack)
   }
 }
 
-void b_isvalarray(task *tsk, pntr *argstack)
+static void b_isvalarray(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
 
@@ -717,7 +717,7 @@ void b_isvalarray(task *tsk, pntr *argstack)
     argstack[0] = tsk->globnilpntr;
 }
 
-void b_printarray(task *tsk, pntr *argstack)
+static void b_printarray(task *tsk, pntr *argstack)
 {
   carray *arr;
   int index;
@@ -760,7 +760,7 @@ void b_printarray(task *tsk, pntr *argstack)
   argstack[0] = tsk->globnilpntr;
 }
 
-void b_numtostring(task *tsk, pntr *argstack)
+static void b_numtostring(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
   char str[100];
@@ -770,7 +770,7 @@ void b_numtostring(task *tsk, pntr *argstack)
   argstack[0] = string_to_array(tsk,str);
 }
 
-void b_openfd(task *tsk, pntr *argstack)
+static void b_openfd(task *tsk, pntr *argstack)
 {
   pntr filenamepntr = argstack[0];
   char *filename;
@@ -794,7 +794,7 @@ void b_openfd(task *tsk, pntr *argstack)
   free(filename);
 }
 
-void b_readchunk(task *tsk, pntr *argstack)
+static void b_readchunk(task *tsk, pntr *argstack)
 {
   pntr fdpntr = argstack[1];
   pntr nextpntr = argstack[0];
@@ -822,7 +822,7 @@ void b_readchunk(task *tsk, pntr *argstack)
   arr->tail = nextpntr;
 }
 
-void b_readdir(task *tsk, pntr *argstack)
+static void b_readdir(task *tsk, pntr *argstack)
 {
   DIR *dir;
   char *path;
@@ -831,7 +831,7 @@ void b_readdir(task *tsk, pntr *argstack)
   struct dirent *entry;
   carray *arr;
 
-  CHECK_ARG(0,CELL_AREF,B_OPENFD);
+  CHECK_ARG(0,CELL_AREF,B_READDIR);
   path = array_to_string(filenamepntr);
 
   if (NULL == (dir = opendir(path))) {
@@ -892,7 +892,7 @@ void b_readdir(task *tsk, pntr *argstack)
 
 }
 
-void b_iscons(task *tsk, pntr *argstack)
+static void b_iscons(task *tsk, pntr *argstack)
 {
   setbool(tsk,&argstack[0],
           (CELL_CONS == pntrtype(argstack[0])) || (CELL_AREF == pntrtype(argstack[0])));
