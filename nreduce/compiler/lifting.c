@@ -146,8 +146,12 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
     }
 
     /* If we have no definitions left, simply replace the letrec with its body */
-    if (NULL == (*k)->bindings)
+    if (NULL == (*k)->bindings) {
+      snode *old = *k;
       *k = (*k)->body;
+      old->body = NULL;
+      snode_free(old);
+    }
 
     bindings_setcount(boundvars,oldcount);
     break;

@@ -247,6 +247,7 @@ int main(int argc, char **argv)
 
     if (args.strictdebug) {
       dump_strictinfo(src);
+      free(bcdata);
       source_free(src);
       exit(0);
     }

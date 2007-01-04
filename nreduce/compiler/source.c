@@ -83,6 +83,7 @@ snode *snode_new(int fileno, int lineno)
 
 void free_letrec(letrec *rec)
 {
+  snode_free(rec->value);
   free(rec->name);
   free(rec);
 }
@@ -103,7 +104,6 @@ void snode_free(snode *c)
     letrec *rec = c->bindings;
     while (rec) {
       letrec *next = rec->next;
-      snode_free(rec->value);
       free_letrec(rec);
       rec = next;
     }
