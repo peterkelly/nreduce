@@ -110,13 +110,13 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
   case SNODE_SCREF: {
     int skip = 0;
     if (tsk->partial) {
-      if ((0 < source->sc->nargs) && (0 < source->ucount))
+      if ((0 < source->sc->nargs) && (0 < source->sc->used) && strcmp(source->sc->name,"map"))
         skip = 1;
       if (sc == source->sc)
         skip = 1;
       if (!strcmp(source->sc->name,"append"))
         skip = 1;
-      source->ucount++;
+      source->sc->used++;
     }
 
     return makescref(tsk,source->sc,skip);
@@ -205,13 +205,12 @@ void reduce(task *tsk, pntrstack *s)
     switch (pntrtype(target)) {
 
     case CELL_SCREF: {
-      scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
-      int skip = (int)get_pntr(target)->field2;
-
       int i;
       int destno;
       pntr dest;
       pntr res;
+      scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
+      int skip = (int)get_pntr(target)->field2;
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
@@ -244,14 +243,12 @@ void reduce(task *tsk, pntrstack *s)
           reduce_single(tsk,s,s->data[s->count-1-i]);
 
         s->count = oldtop;
-        if (apply_rules(tsk,s->data[s->count-1]))
-          continue;
-        else
-          return;
+        return;
       }
 
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
+
       trace_step(tsk,redex,1,"Instantiating supercombinator %s",sc->name);
       res = instantiate_scomb(tsk,s,sc);
       get_pntr(dest)->type = CELL_IND;
@@ -331,10 +328,7 @@ void reduce(task *tsk, pntrstack *s)
                      builtin_info[bif].name);
           /* TODO: maybe reduce the args that we do have? */
           s->count = oldtop;
-          if (apply_rules(tsk,s->data[s->count-1]))
-            continue;
-          else
-            return;
+          return;
         }
         else {
           fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
@@ -374,14 +368,12 @@ void reduce(task *tsk, pntrstack *s)
       if (strictok < strictargs) {
         trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
 
-        for (i = strictargs; i < reqargs; i++)
+        for (i = strictargs; i < reqargs; i++) {
           reduce_single(tsk,s,s->data[s->count-1-i]);
+        }
 
         s->count = oldtop;
-        if (apply_rules(tsk,s->data[s->count-1]))
-          continue;
-        else
-          return;
+        return;
       }
       else {
         trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
@@ -392,10 +384,7 @@ void reduce(task *tsk, pntrstack *s)
             free(tsk->error);
             tsk->error = NULL;
             s->count = oldtop;
-            if (apply_rules(tsk,s->data[s->count-1]))
-              continue;
-            else
-              return;
+            return;
           }
           else {
             fatal("%s",tsk->error);

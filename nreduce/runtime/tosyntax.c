@@ -35,43 +35,16 @@
 #include <stdarg.h>
 #include <math.h>
 
-typedef struct p2smapping {
-  pntr p;
-  snode *s;
-  char *var;
-} p2smapping;
-
 typedef struct p2sdata {
-  array *map;
   letrec *rec;
+  pntrmap *pm;
 } p2sdata;
-
-void p2s_add(p2sdata *d, pntr p, snode *s)
-{
-  p2smapping entry;
-  memset(&entry,0,sizeof(p2smapping));
-  entry.p = p;
-  entry.s = s;
-  array_append(d->map,&entry,sizeof(p2smapping));
-}
-
-p2smapping *p2s_lookup(p2sdata *d, pntr p)
-{
-  int i;
-  int count = array_count(d->map);
-  for (i = 0; i < count; i++) {
-    p2smapping *entry = &array_item(d->map,i,p2smapping);
-    if (pntrequal(p,entry->p))
-      return entry;
-  }
-  return NULL;
-}
 
 snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
 {
   snode *s = NULL;
   cell *c;
-  p2smapping *entry;
+  int eno;
 
   p = resolve_pntr(p);
 
@@ -107,20 +80,21 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
     break;
   }
 
-  if (NULL != (entry = p2s_lookup(d,p))) {
-    assert((NULL == entry->var) || (SNODE_SYMBOL == entry->s->type));
-    if (NULL == entry->var) {
+  if (0 < (eno = pntrmap_lookup(d->pm,p))) {
+    pmentry *entry = &d->pm->data[eno];
+    assert((NULL == entry->name) || (SNODE_SYMBOL == entry->s->type));
+    if (NULL == entry->name) {
       letrec *rec;
       char *copy;
 
-      entry->var = (char*)malloc(20);
-      sprintf(entry->var,"_v%d",src->varno++);
+      entry->name = (char*)malloc(20);
+      sprintf(entry->name,"_v%d",src->varno++);
 
-      copy = strdup(entry->var);
+      copy = strdup(entry->name);
       array_append(src->oldnames,&copy,sizeof(char*));
 
       rec = (letrec*)calloc(1,sizeof(letrec));
-      rec->name = strdup(entry->var);
+      rec->name = strdup(entry->name);
       rec->value = snode_new(-1,-1);
       rec->next = d->rec;
       d->rec = rec;
@@ -128,18 +102,18 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
       memcpy(rec->value,entry->s,sizeof(snode));
       memset(entry->s,0,sizeof(snode));
       entry->s->type = SNODE_SYMBOL;
-      entry->s->name = strdup(entry->var);
+      entry->s->name = strdup(entry->name);
     }
 
     s = snode_new(-1,-1);
     s->type = SNODE_SYMBOL;
-    s->name = strdup(entry->var);
+    s->name = strdup(entry->name);
     return s;
   }
 
   c = get_pntr(p);
   s = snode_new(-1,-1);
-  p2s_add(d,p,s);
+  pntrmap_add(d->pm,p,s,NULL,0);
 
   switch (celltype(c)) {
   case CELL_APPLICATION: {
@@ -175,6 +149,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
   }
   case CELL_AREF: {
     carray *arr = aref_array(p);
+    int index = aref_index(p);
     if (1 == arr->elemsize) {
       pntr tail = resolve_pntr(arr->tail);
       snode *str = s;
@@ -200,15 +175,15 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
       }
 
       str->type = SNODE_STRING;
-      str->value = (char*)malloc(arr->size+1);
-      memcpy(str->value,(char*)arr->elements,arr->size);
-      str->value[arr->size] = '\0';
+      str->value = (char*)malloc(arr->size-index+1);
+      memcpy(str->value,&((char*)arr->elements)[index],arr->size-index);
+      str->value[arr->size-index] = '\0';
     }
     else {
       snode *app = s;
       int i;
-      assert(0 < arr->size);
-      for (i = 0; i < arr->size; i++) {
+      assert(index < arr->size);
+      for (i = index; i < arr->size; i++) {
         snode *fun = snode_new(-1,-1);
         snode *a1 = snode_new(-1,-1);
         snode *newapp = snode_new(-1,-1);
@@ -245,9 +220,8 @@ snode *graph_to_syntax(source *src, pntr p)
   p2sdata data;
   snode *s;
   int i;
-  int count;
   memset(&data,0,sizeof(p2sdata));
-  data.map = array_new(sizeof(p2smapping));
+  data.pm = pntrmap_new();
   s = graph_to_syntax_r(src,&data,p);
 
   if (NULL != data.rec) {
@@ -258,11 +232,10 @@ snode *graph_to_syntax(source *src, pntr p)
     s = letrec;
   }
 
-  count = array_count(data.map);
-  for (i = 0; i < count; i++)
-    free(array_item(data.map,i,p2smapping).var);
+  for (i = 0; i < data.pm->count; i++)
+    free(data.pm->data[i].name);
+  pntrmap_free(data.pm);
 
-  array_free(data.map);
   remove_wrappers(s);
   return s;
 }

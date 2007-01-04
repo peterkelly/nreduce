@@ -35,42 +35,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-static void reset_ucount_r(snode *s)
-{
-  switch (s->type) {
-  case SNODE_APPLICATION:
-    reset_ucount_r(s->left);
-    reset_ucount_r(s->right);
-    break;
-  case SNODE_LAMBDA:
-    reset_ucount_r(s->body);
-    break;
-  case SNODE_LETREC: {
-    letrec *rec;
-    for (rec = s->bindings; rec; rec = rec->next)
-      reset_ucount_r(rec->value);
-    reset_ucount_r(s->body);
-    break;
-  }
-  case SNODE_SCREF:
-    s->ucount = 0;
-    break;
-  case SNODE_WRAP:
-    reset_ucount_r(s->target);
-    break;
-  }
-}
-
-static void reset_ucounts(source *src)
-{
-  int count = array_count(src->scombs);
-  int i;
-  for (i = 0; i < count; i++) {
-    scomb *sc = array_item(src->scombs,i,scomb*);
-    reset_ucount_r(sc->body);
-  }
-}
-
 static int isevaluated(pntr p)
 {
   return ((CELL_APPLICATION != pntrtype(p)) && (CELL_SYMBOL != pntrtype(p)));
@@ -485,8 +449,6 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
   int i;
   snode *s;
 
-  reset_ucounts(src);
-
   tsk->partial_scp = instantiate_abstract(tsk,sc);
   tsk->partial_sc = sc;
   tsk->partial = 1;
@@ -495,8 +457,6 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
   tsk->partial_tmp2 = pntrset_new();
   tsk->partial_sel = pntrset_new();
   tsk->partial_applied = pntrset_new();
-
-  debug_stage("Partial evaluation");
 
   rootp = makescref(tsk,sc,0);
 
@@ -526,27 +486,12 @@ snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
   }
 
   pntrstack_push(tsk->streamstack,rootp);
-  reduce(tsk,tsk->streamstack);
-  p = resolve_pntr(pntrstack_top(tsk->streamstack));
-  /* Note: we leave the values on the stack so they will be garbage collected */
 
-  if (trace_dir)
-    tsk->trace_root = p;
-
-  if (CELL_CONS == pntrtype(p)) {
-    cell *c = get_pntr(p);
-    pntr head = c->field1;
-    pntr tail = c->field2;
-
-    pntrstack_push(tsk->streamstack,head);
+  while (1) {
     reduce(tsk,tsk->streamstack);
-    head = resolve_pntr(pntrstack_top(tsk->streamstack));
-
-    reduce_args(src,tsk,tail);
-    tail = resolve_pntr(tail);
-  }
-  while (apply_rules(tsk,p)) {
-    /* apply again */
+    p = resolve_pntr(pntrstack_top(tsk->streamstack));
+    if (!apply_rules(tsk,p))
+      break;
   }
 
   pntrstack_free(tsk->streamstack);
@@ -590,6 +535,7 @@ void debug_partial(source *src, const char *name, char *trace_dir, int trace_typ
   }
 
   s = run_partial(src,sc,trace_dir,trace_type);
+  sink_letrecs(src,s);
   snode_free(sc->body);
   sc->body = s;
   rename_oldnames(src);

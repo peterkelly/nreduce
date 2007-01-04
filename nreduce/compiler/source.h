@@ -65,7 +65,9 @@ typedef struct snode {
   int strict;
   sourceloc sl;
   struct snode *target;
-  int ucount;
+
+  struct snode *parent;
+  struct snode *nextuser;
 } snode;
 
 typedef struct letrec {
@@ -74,6 +76,7 @@ typedef struct letrec {
   int strict;
   struct scomb *sc;
   struct letrec *next;
+  snode *users;
 } letrec;
 
 typedef struct scomb {

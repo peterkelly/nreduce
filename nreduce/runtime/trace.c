@@ -62,7 +62,7 @@ static void dot_edge(FILE *f, pntr from, pntr to, int doind, const char *attrs)
     fprintf(f,"%s -> %s;\n",fromstr,tostr);
 }
 
-static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
+static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, pntr arg,
                         pntr parent, int landscape)
 {
   cell *c;
@@ -91,9 +91,9 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
 
   c = get_pntr(p);
 
-  if (c->flags & FLAG_TMP)
+  if (pntrset_contains(done,p))
     return;
-  c->flags |= FLAG_TMP;
+  pntrset_add(done,p);
 
   if (landscape && (CELL_APPLICATION == pntrtype(p))) {
     pntr app = resolve_pntr(p);
@@ -110,7 +110,7 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
       par = app;
       app = resolve_pntr(appc->field1);
     }
-    dot_graph_r(f,app,doind,fun,arg,par,landscape);
+    dot_graph_r(f,app,done,doind,fun,arg,par,landscape);
     fprintf(f,"}\n");
 
     app = resolve_pntr(p);
@@ -119,7 +119,7 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
       cell *appc = get_pntr(app);
       dot_edge(f,resolve_pntr(appc->field1),app,doind,"dir=back");
       dot_edge(f,app,resolve_pntr(appc->field2),doind,NULL);
-      dot_graph_r(f,resolve_pntr(appc->field2),doind,fun,arg,app,landscape);
+      dot_graph_r(f,resolve_pntr(appc->field2),done,doind,fun,arg,app,landscape);
       app = resolve_pntr(appc->field1);
     }
     return;
@@ -135,21 +135,21 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
   switch (pntrtype(p)) {
   case CELL_APPLICATION:
     fprintf(f,"@\"];\n");
-    dot_graph_r(f,c->field1,doind,fun,arg,p,landscape);
-    dot_graph_r(f,c->field2,doind,fun,arg,p,landscape);
+    dot_graph_r(f,c->field1,done,doind,fun,arg,p,landscape);
+    dot_graph_r(f,c->field2,done,doind,fun,arg,p,landscape);
     dot_edge(f,p,c->field1,doind,NULL);
     dot_edge(f,p,c->field2,doind,NULL);
     break;
   case CELL_CONS:
     fprintf(f,"CONS\"];\n");
-    dot_graph_r(f,c->field1,doind,fun,arg,p,landscape);
-    dot_graph_r(f,c->field2,doind,fun,arg,p,landscape);
+    dot_graph_r(f,c->field1,done,doind,fun,arg,p,landscape);
+    dot_graph_r(f,c->field2,done,doind,fun,arg,p,landscape);
     dot_edge(f,p,c->field1,doind,NULL);
     dot_edge(f,p,c->field2,doind,NULL);
     break;
   case CELL_IND:
     fprintf(f,"IND\"];\n");
-    dot_graph_r(f,c->field1,doind,fun,arg,p,landscape);
+    dot_graph_r(f,c->field1,done,doind,fun,arg,p,landscape);
     dot_edge(f,p,c->field1,doind,NULL);
     break;
   case CELL_BUILTIN:
@@ -174,7 +174,7 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
       free(val);
 
       if (CELL_NIL != pntrtype(tail)) {
-        dot_graph_r(f,arr->tail,doind,fun,arg,p,landscape);
+        dot_graph_r(f,arr->tail,done,doind,fun,arg,p,landscape);
         dot_edge(f,p,arr->tail,doind,"color=red");
       }
     }
@@ -183,10 +183,10 @@ static void dot_graph_r(FILE *f, pntr p, int doind, dotfun fun, pntr arg,
       fprintf(f,"[ARRAY]\"];\n");
       for (i = 0; i < arr->size; i++) {
         pntr elem = ((pntr*)arr->elements)[i];
-        dot_graph_r(f,elem,doind,fun,arg,p,landscape);
+        dot_graph_r(f,elem,done,doind,fun,arg,p,landscape);
         dot_edge(f,p,elem,doind,"color=red");
       }
-      dot_graph_r(f,arr->tail,doind,fun,arg,p,landscape);
+      dot_graph_r(f,arr->tail,done,doind,fun,arg,p,landscape);
       dot_edge(f,p,arr->tail,doind,"color=red");
     }
     break;
@@ -206,6 +206,7 @@ void dot_graph(const char *prefix, int number, pntr root, int doind,
 {
   FILE *f;
   char *filename = (char*)malloc(strlen(prefix)+50);
+  pntrset *done = pntrset_new();
   pntr nullpntr;
 
   make_pntr(nullpntr,NULL);
@@ -232,12 +233,12 @@ void dot_graph(const char *prefix, int number, pntr root, int doind,
   }
 
   fprintf(f,"node [fontsize=24,color=white];\n");
-  clear_graph(root,FLAG_TMP);
-  dot_graph_r(f,root,doind,fun,arg,nullpntr,landscape);
+  dot_graph_r(f,root,done,doind,fun,arg,nullpntr,landscape);
   fprintf(f,"}\n");
   fprintf(f,"}\n");
 
   fclose(f);
+  pntrset_free(done);
 }
 
 typedef struct tharg {

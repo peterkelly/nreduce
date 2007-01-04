@@ -87,8 +87,10 @@
 #define B_READDIR        40
 
 #define B_ISCONS         41
+#define B_TESTSTRING     42
+#define B_TESTARRAY      43
 
-#define NUM_BUILTINS     42
+#define NUM_BUILTINS     44
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -245,12 +247,30 @@ typedef struct psentry {
   int next;
 } psentry;
 
+#define phash2(_p) ((unsigned char)(_p[0] + _p[1] + _p[2] + _p[3] + _p[4] + _p[5] + _p[6] + _p[7]))
+#define phash(_p) phash2(((unsigned char*)&(_p)))
+
 typedef struct pntrset {
   int map[256];
   psentry *data;
   int alloc;
   int count;
 } pntrset;
+
+typedef struct pmentry {
+  pntr p;
+  snode *s;
+  char *name;
+  pntr val;
+  int next;
+} pmentry;
+
+typedef struct pntrmap {
+  int map[256];
+  pmentry *data;
+  int alloc;
+  int count;
+} pntrmap;
 
 typedef struct cap {
   int arity;
@@ -677,7 +697,6 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 
 /* graph */
 
-void clear_graph(pntr root, int flag);
 pntr graph_replace(task *tsk, pntr root, pntr old, pntr new);
 
 pntrset *pntrset_new();
@@ -685,6 +704,11 @@ void pntrset_free(pntrset *ps);
 void pntrset_add(pntrset *ps, pntr p);
 int pntrset_contains(pntrset *ps, pntr p);
 void pntrset_clear(pntrset *ps);
+
+pntrmap *pntrmap_new();
+void pntrmap_free(pntrmap *pm);
+int pntrmap_add(pntrmap *pm, pntr p, snode *s, char *name, pntr val);
+int pntrmap_lookup(pntrmap *pm, pntr p);
 
 /* tosyntax */
 

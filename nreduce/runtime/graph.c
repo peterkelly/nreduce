@@ -34,316 +34,154 @@
 #include <stdarg.h>
 #include <math.h>
 
-typedef int (*graphfun)(cell *c, void *arg);
+typedef struct replace_data {
+  task *tsk;
+  pntr old;
+  pntr new;
+  pntrmap *map;
+} replace_data;
 
-static int set_needclear(cell *c, void *arg)
+static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
 {
-  if (c->flags & FLAG_NEEDCLEAR)
-    return 1;
-  c->flags |= FLAG_NEEDCLEAR;
-  return 0;
-}
+  int n;
+  pntr nullp;
 
-static int clear_flag(cell *c, void *arg)
-{
-  int flag = (int)arg;
-  if (!(c->flags & FLAG_NEEDCLEAR))
-    return 1;
-  c->flags &= ~FLAG_NEEDCLEAR;
-  c->flags &= ~flag;
-  return 0;
-}
+  *repl = p;
 
-static void traverse(pntr p, graphfun fun, void *arg)
-{
-  cell *c;
-
-  if (CELL_NUMBER == pntrtype(p))
+  if (pntrequal(p,rd->old) || pntrequal(p,rd->new)) {
+    *repl = rd->new;
     return;
-
-  c = get_pntr(p);
-  if (fun(c,arg))
-    return;
+  }
 
   switch (pntrtype(p)) {
-  case CELL_APPLICATION:
-  case CELL_CONS:
-    traverse(c->field1,fun,arg);
-    traverse(c->field2,fun,arg);
-    break;
-  case CELL_AREF: {
-    carray *arr = aref_array(p);
-    int index = aref_index(p);
-    int i;
-    if (sizeof(pntr) == arr->elemsize)
-      for (i = index; i < arr->size; i++)
-        traverse(((pntr*)arr->elements)[i],fun,arg);
-    traverse(arr->tail,fun,arg);
-    break;
-  }
-  case CELL_IND:
-    traverse(c->field1,fun,arg);
-    break;
-  case CELL_FRAME:
-  case CELL_CAP:
-    abort(); /* don't need to handle this case */
-    break;
-  default:
-    break;
-  }
-}
-
-void clear_graph(pntr root, int flag)
-{
-  traverse(root,set_needclear,0);
-  traverse(root,clear_flag,(void*)flag);
-}
-
-static int graph_setcontains_r(pntr p, pntr needle)
-{
-  cell *c;
-  int contains = 0;
-
-  if (CELL_NUMBER == pntrtype(p))
-    return 0;
-
-  c = get_pntr(p);
-
-  if (c->flags & FLAG_TMP)
-    return (c->flags & FLAG_SELECTED);
-  c->flags |= FLAG_TMP;
-
-  switch (pntrtype(p)) {
-  case CELL_APPLICATION:
-  case CELL_CONS: {
-    int c1 = graph_setcontains_r(c->field1,needle);
-    int c2 = graph_setcontains_r(c->field2,needle);
-    contains = (c1 || c2);
-    break;
-  }
-  case CELL_AREF: {
-    /* FIXME: this needs testing */
-    carray *arr = aref_array(p);
-    int index = aref_index(p);
-    int i;
-    if (sizeof(pntr) == arr->elemsize) {
-      for (i = index; i < arr->size; i++)
-        if (graph_setcontains_r(((pntr*)arr->elements)[i],needle))
-          contains = 1;
-    }
-    if (graph_setcontains_r(arr->tail,needle))
-      contains = 1;
-    break;
-  }
-  case CELL_IND:
-    contains = graph_setcontains_r(c->field1,needle);
-    break;
-  case CELL_FRAME:
-  case CELL_CAP:
-    abort(); /* don't need to handle this case */
-    break;
+  case CELL_BUILTIN:
+  case CELL_SCREF:
+  case CELL_NIL:
+  case CELL_SYMBOL:
+  case CELL_NUMBER:
+    *repl = p;
+    return;
   default:
     break;
   }
 
-  if (contains)
-    c->flags |= FLAG_SELECTED;
-  return contains;
-}
-
-/* Traverses the graph haystack, marking all cells that contain the cell needle with the
-   flag FLAG_SELECTED. Uses FLAG_TMP. */
-static void graph_setcontains(pntr haystack, pntr needle)
-{
-  clear_graph(haystack,FLAG_SELECTED);
-  clear_graph(haystack,FLAG_TMP);
-
-  if ((CELL_NUMBER == pntrtype(haystack)) || (CELL_NUMBER == pntrtype(needle)))
-    return;
-
-  if (CELL_NUMBER != pntrtype(needle)) {
-    cell *c = get_pntr(needle);
-    c->flags |= FLAG_SELECTED;
-    c->flags |= FLAG_TMP;
-  }
-
-  if (graph_setcontains_r(haystack,needle))
-    get_pntr(haystack)->flags |= FLAG_SELECTED;
-}
-
-typedef struct pmentry {
-  pntr key;
-  pntr value;
-  struct pmentry *next;
-} pmentry;
-
-typedef struct pntrmap {
-  pmentry *entries[GLOBAL_HASH_SIZE];
-} pntrmap;
-
-pntrmap *pntrmap_new()
-{
-  pntrmap *pm = (pntrmap*)calloc(1,sizeof(pntrmap));
-  return pm;
-}
-
-void pntrmap_free(pntrmap *pm)
-{
-  int h;
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    pmentry *e = pm->entries[h];
-    while (e) {
-      pmentry *next = e->next;
-      free(e);
-      e = next;
-    }
-  }
-  free(pm);
-}
-
-int pntrmap_lookup(pntrmap *pm, pntr key, pntr *value)
-{
-  int h = hash(&key,sizeof(pntr));
-  pmentry *e;
-  for (e = pm->entries[h]; e; e = e->next) {
-    if (pntrequal(key,e->key)) {
-      *value = e->value;
-      return 1;
-    }
-  }
-  return 0;
-}
-
-void pntrmap_add(pntrmap *pm, pntr key, pntr value)
-{
-  int h = hash(&key,sizeof(pntr));
-  pmentry *e = (pmentry*)calloc(1,sizeof(pmentry));
-  e->key = key;
-  e->value = value;
-  e->next = pm->entries[h];
-  pm->entries[h] = e;
-}
-
-static pntr graph_replace_r(task *tsk, pntrmap *pm, pntr p, pntr old, pntr new)
-{
-  cell *c;
-  pntr repl = p;
-
-  if (CELL_NUMBER == pntrtype(p))
-    return p;
-
-  if (!(get_pntr(p)->flags & FLAG_SELECTED))
-    return p;
-
-  if (pntrequal(p,old))
-    return new;
-
-  if (pntrequal(p,new))
-    return new;
-
-  c = get_pntr(p);
-  if (c->flags & FLAG_PROCESSED) {
-    int have = pntrmap_lookup(pm,p,&repl);
-    assert(have);
-    return repl;
-  }
-  c->flags |= FLAG_PROCESSED;
-
-  switch (pntrtype(p)) {
-  case CELL_APPLICATION:
-  case CELL_CONS: {
-    cell *r = alloc_cell(tsk);
-    r->type = pntrtype(p);
-    r->field1 = graph_replace_r(tsk,pm,c->field1,old,new);
-    r->field2 = graph_replace_r(tsk,pm,c->field2,old,new);
-    make_pntr(repl,r);
-    break;
-  }
-  case CELL_AREF: {
-    /* FIXME: this needs testing */
-    carray *arr = aref_array(p);
-    int index = aref_index(p);
-    int i;
-    carray *newarr = carray_new(tsk,arr->elemsize,NULL,NULL);
-    make_aref_pntr(repl,newarr->wrapper,0);
-    if (sizeof(pntr) == arr->elemsize) {
-      for (i = index; i < arr->size; i++) {
-        pntr elem = ((pntr*)arr->elements)[i];
-        pntr newelem = graph_replace_r(tsk,pm,elem,old,new);
-        carray_append(tsk,&newarr,&newelem,1,sizeof(pntr));
-      }
+  if (0 < (n = pntrmap_lookup(rd->map,p))) {
+    if (!is_nullpntr(rd->map->data[n].val)) {
+      *repl = rd->map->data[n].val;
+      return;
     }
     else {
-      carray_append(tsk,&newarr,&((char*)arr->elements)[index],arr->size-index,1);
+      cell *newc = alloc_cell(rd->tsk);
+      newc->type = CELL_IND;
+      newc->field1 = 999;
+      make_pntr(*repl,newc);
+      rd->map->data[n].s = (snode*)1;
+      rd->map->data[n].val = *repl;
+      return;
     }
-    newarr->tail = graph_replace_r(tsk,pm,arr->tail,old,new);
+  }
+
+  make_pntr(nullp,NULL);
+  n = pntrmap_add(rd->map,p,NULL,NULL,nullp);
+
+  switch (pntrtype(p)) {
+  case CELL_APPLICATION:
+  case CELL_CONS: {
+    cell *c = get_pntr(p);
+    pntr r1;
+    pntr r2;
+    graph_replace_r(rd,c->field1,&r1);
+    graph_replace_r(rd,c->field2,&r2);
+    if (!pntrequal(r1,c->field1) || !pntrequal(r2,c->field2)) {
+      cell *newc = alloc_cell(rd->tsk);
+      newc->type = pntrtype(p);
+      newc->field1 = r1;
+      newc->field2 = r2;
+      make_pntr(*repl,newc);
+    }
     break;
   }
   case CELL_IND: {
-    cell *r = alloc_cell(tsk);
-    r->type = pntrtype(p);
-    r->field1 = graph_replace_r(tsk,pm,c->field1,old,new);
-    make_pntr(repl,r);
+    cell *c = get_pntr(p);
+    pntr r1;
+    graph_replace_r(rd,c->field1,&r1);
+    if (!pntrequal(r1,c->field1)) {
+      cell *newc = alloc_cell(rd->tsk);
+      newc->type = CELL_IND;
+      newc->field1 = r1;
+      make_pntr(*repl,newc);
+    }
     break;
   }
-  case CELL_FRAME:
-  case CELL_CAP:
-    abort(); /* don't need to handle this case */
-    break;
-  case CELL_BUILTIN:
-  case CELL_SCREF:
-  case CELL_NIL: {
-    cell *r = alloc_cell(tsk);
-    r->type = pntrtype(p);
-    r->field1 = c->field1;
-    make_pntr(repl,r);
-    break;
-  }
-  case CELL_SYMBOL: {
-    cell *r = alloc_cell(tsk);
-    char *name = strdup((char*)get_pntr(c->field1));
-    r->type = CELL_SYMBOL;
-    make_pntr(r->field1,name);
-    make_pntr(repl,r);
+  case CELL_AREF: {
+    carray *arr = aref_array(p);
+    int index = aref_index(p);
+    pntr rtail;
+    if (sizeof(pntr) == arr->elemsize) {
+      int different = 0;
+      pntr *relems = (pntr*)malloc((arr->size-index)*sizeof(pntr));
+      int i;
+      for (i = index; i < arr->size; i++) {
+        graph_replace_r(rd,((pntr*)arr->elements)[i],&relems[i-index]);
+        if (!pntrequal(((pntr*)arr->elements)[i],relems[i-index]))
+          different = 1;
+      }
+      graph_replace_r(rd,arr->tail,&rtail);
+      if (!pntrequal(rtail,arr->tail))
+        different = 1;
+      if (different) {
+        carray *newarr = carray_new(rd->tsk,sizeof(pntr),NULL,NULL);
+        pntr refp;
+        make_aref_pntr(refp,newarr->wrapper,0);
+        carray_append(rd->tsk,&newarr,relems,arr->size-index,sizeof(pntr));
+        newarr->tail = rtail;
+        *repl = refp;
+      }
+      free(relems);
+    }
+    else {
+      graph_replace_r(rd,arr->tail,&rtail);
+      if (!pntrequal(rtail,arr->tail)) {
+        carray *newarr = carray_new(rd->tsk,1,NULL,NULL);
+        pntr refp;
+        make_aref_pntr(refp,newarr->wrapper,0);
+        carray_append(rd->tsk,&newarr,&((char*)arr->elements)[index],arr->size-index,1);
+        newarr->tail = rtail;
+        *repl = refp;
+      }
+    }
     break;
   }
   default:
+    abort();
     break;
   }
 
-  pntrmap_add(pm,p,repl);
+  if (rd->map->data[n].s) {
+    pmentry *entry = &rd->map->data[n];
+    assert(CELL_IND == pntrtype(entry->val));
+    assert(999 == get_pntr(entry->val)->field1);
+    get_pntr(entry->val)->field1 = *repl;
+  }
+  else {
+    rd->map->data[n].val = *repl;
+  }
 
-  return repl;
-}
-
-static void replace_hilight(FILE *f, pntr p, pntr arg)
-{
-  cell *c;
-  if (CELL_NUMBER == pntrtype(p))
-    return;
-  c = get_pntr(p);
-  if (pntrequal(p,arg))
-    fprintf(f,"style=filled,fillcolor=blue,fontcolor=white,");
-  else if (c->flags & FLAG_SELECTED)
-    fprintf(f,"style=filled,fillcolor=green,");
-}
-
-void dot_replace(pntr root, pntr old)
-{
-  static int count = 0;
-  graph_setcontains(root,old);
-  dot_graph("replace",count++,root,1,replace_hilight,old,NULL,0);
+  return;
 }
 
 pntr graph_replace(task *tsk, pntr root, pntr old, pntr new)
 {
-  pntrmap *pm = pntrmap_new();
+  replace_data rd;
   pntr res;
+  rd.tsk = tsk;
+  rd.old = old;
+  rd.new = new;
+  rd.map = pntrmap_new();
 
-  graph_setcontains(root,old);
-  clear_graph(root,FLAG_PROCESSED);
-  res = graph_replace_r(tsk,pm,root,old,new);
-  pntrmap_free(pm);
+  graph_replace_r(&rd,root,&res);
+
+  pntrmap_free(rd.map);
   return res;
 }
 
@@ -363,9 +201,6 @@ void pntrset_free(pntrset *ps)
   free(ps->data);
   free(ps);
 }
-
-#define phash2(_p) ((unsigned char)(_p[0] + _p[1] + _p[2] + _p[3] + _p[4] + _p[5] + _p[6] + _p[7]))
-#define phash(_p) phash2(((unsigned char*)&(_p)))
 
 void pntrset_add(pntrset *ps, pntr p)
 {
@@ -393,4 +228,48 @@ void pntrset_clear(pntrset *ps)
 {
   memset(&ps->map,0,sizeof(int)*256);
   ps->count = 1;
+}
+
+pntrmap *pntrmap_new()
+{
+  pntrmap *pm = (pntrmap*)calloc(1,sizeof(pntrmap));
+  pm->count = 1;
+  pm->alloc = 1024;
+  pm->data = (pmentry*)calloc(pm->alloc,sizeof(pmentry));
+  make_pntr(pm->data[0].p,NULL);
+  pm->data[0].next = 0;
+  return pm;
+}
+
+void pntrmap_free(pntrmap *pm)
+{
+  free(pm->data);
+  free(pm);
+}
+
+int pntrmap_add(pntrmap *pm, pntr p, snode *s, char *name, pntr val)
+{
+  unsigned char h = phash(p);
+  int r = pm->count;
+  if (pm->count == pm->alloc) {
+    pm->alloc *= 2;
+    pm->data = (pmentry*)realloc(pm->data,pm->alloc*sizeof(pmentry));
+  }
+  pm->data[pm->count].p = p;
+  pm->data[pm->count].next = pm->map[h];
+  pm->data[pm->count].s = s;
+  pm->data[pm->count].name = name;
+  pm->data[pm->count].val = val;
+  pm->map[h] = pm->count;
+  pm->count++;
+  return r;
+}
+
+int pntrmap_lookup(pntrmap *pm, pntr p)
+{
+  unsigned char h = phash(p);
+  int n = pm->map[h];
+  while (n && !pntrequal(pm->data[n].p,p))
+    n = pm->data[n].next;
+  return n;
 }

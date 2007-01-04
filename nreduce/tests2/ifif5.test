@@ -1,0 +1,28 @@
+Tests that the graph replacement algorithm handles strings correctly
+=================================== PROGRAM ====================================
+nreduce -a test runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b c d e = (letrec
+                    x = (if a b c)
+                    y = (+ a 2)
+                  in
+                    (if x
+                        (teststring (cons x y))
+                        (teststring 32)))
+
+main = nil
+==================================== OUTPUT ====================================
+test a b c d e = (letrec 
+                    _v0 = (append "test" 32)
+                    _v1 = (+ a 2)
+                  in
+                    (if a 
+                        (if b 
+                            (append "test" (cons b _v1)) 
+                            _v0)
+                        (if c 
+                            (append "test" (cons c _v1)) 
+                            _v0)))
+================================== RETURN CODE =================================
+0

@@ -898,6 +898,29 @@ void b_iscons(task *tsk, pntr *argstack)
           (CELL_CONS == pntrtype(argstack[0])) || (CELL_AREF == pntrtype(argstack[0])));
 }
 
+static void b_teststring(task *tsk, pntr *argstack)
+{
+  pntr tail = argstack[0];
+  pntr p = string_to_array(tsk,"this part shouldn't be here! test");
+  carray *arr = aref_array(p);
+  arr->tail = tail;
+  make_aref_pntr(argstack[0],arr->wrapper,29);
+}
+
+static void b_testarray(task *tsk, pntr *argstack)
+{
+  pntr content = argstack[1];
+  pntr tail = argstack[0];
+  carray *arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+  pntr p;
+  int i;
+  make_aref_pntr(p,arr->wrapper,2);
+  for (i = 0; i < 5; i++)
+    carray_append(tsk,&arr,&content,1,sizeof(pntr));
+  arr->tail = tail;
+  argstack[0] = p;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -961,6 +984,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "readdir",        1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readdir        },
 
 { "cons?",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_iscons         },
+{ "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_teststring     },
+{ "testarray",      2, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_testarray      },
 
 };
 

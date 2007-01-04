@@ -70,12 +70,8 @@
 
 #define FLAG_MARKED         0x1
 #define FLAG_NEW            0x2
-#define FLAG_TMP            0x4
-#define FLAG_DMB            0x8
-#define FLAG_PINNED        0x10
-#define FLAG_NEEDCLEAR     0x40
-#define FLAG_PROCESSED    0x100
-#define FLAG_SELECTED     0x200
-#define FLAG_REDUCED      0x400
+#define FLAG_DMB            0x4
+#define FLAG_PINNED         0x8
+#define FLAG_REDUCED       0x10
 
 #endif /* _NREDUCE_H */
