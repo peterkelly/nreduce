@@ -253,7 +253,6 @@ void reduce(task *tsk, pntrstack *s)
       res = instantiate_scomb(tsk,s,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
-      sc->used++;
 
       s->count = oldtop;
       continue;

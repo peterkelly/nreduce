@@ -485,6 +485,8 @@ typedef struct task {
   int tracing;
   scomb *partial_sc;
   pntr partial_scp;
+  pntr partial_root;
+  int partial_size;
   pntrset *partial_tmp1;
   pntrset *partial_tmp2;
   pntrset *partial_sel;
@@ -698,6 +700,7 @@ void pntrstack_grow(int *alloc, pntr **data, int size);
 /* graph */
 
 pntr graph_replace(task *tsk, pntr root, pntr old, pntr new);
+int graph_size(pntr root);
 
 pntrset *pntrset_new();
 void pntrset_free(pntrset *ps);

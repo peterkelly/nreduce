@@ -35,6 +35,8 @@
 #include <stdarg.h>
 #include <math.h>
 
+#define MAX_PARTIAL_GROWTH 10
+
 static int isevaluated(pntr p)
 {
   return ((CELL_APPLICATION != pntrtype(p)) && (CELL_SYMBOL != pntrtype(p)));
@@ -129,7 +131,7 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args,
     char *name = (char*)get_pntr(get_pntr(s)->field1);
     int argno = get_scomb_var(sc,name);
     assert(0 <= argno);
-    if (NULL == get_pntr(args[argno])) {
+    if (is_nullpntr(args[argno])) {
       args[argno] = p;
       return 1;
     }
@@ -249,7 +251,7 @@ int match_repl(task *tsk, scomb *sc, pntr p)
     int all = 1;
     int same = 0;
     for (i = 0; i < sc->nargs; i++) {
-      if (NULL == get_pntr(args[i])) {
+      if (is_nullpntr(args[i])) {
         all = 0;
       }
       else {
@@ -363,18 +365,21 @@ static int apply_one(task *tsk, pntr p)
 
   // Rule 16: (if (if a b c) d e) -> (if a (if b d e) (if c d e))
   if ((B_IF == bif) && (B_IF == innerbif)) {
-    pntr x = args[0];
-    pntr a = innerargs[0];
-    pntr b = innerargs[1];
-    pntr c = innerargs[2];
-    pntr d = args[1];
-    pntr e = args[2];
-    pntr trueif = makeif(tsk,b,d,e);
-    pntr falseif = makeif(tsk,c,d,e);
-    pntr trueifrepl = graph_replace(tsk,trueif,x,b);
-    pntr falseifrepl = graph_replace(tsk,falseif,x,c);
-    pntr res = makeif(tsk,a,trueifrepl,falseifrepl);
-    return makeind(tsk,p,res,"Applied (if (if a b c) d e) -> (if a (if b d e) (if c d e))");
+    int size = graph_size(tsk->partial_root);
+    if (size < tsk->partial_size*MAX_PARTIAL_GROWTH) {
+      pntr x = args[0];
+      pntr a = innerargs[0];
+      pntr b = innerargs[1];
+      pntr c = innerargs[2];
+      pntr d = args[1];
+      pntr e = args[2];
+      pntr trueif = makeif(tsk,b,d,e);
+      pntr falseif = makeif(tsk,c,d,e);
+      pntr trueifrepl = graph_replace(tsk,trueif,x,b);
+      pntr falseifrepl = graph_replace(tsk,falseif,x,c);
+      pntr res = makeif(tsk,a,trueifrepl,falseifrepl);
+      return makeind(tsk,p,res,"Applied (if (if a b c) d e) -> (if a (if b d e) (if c d e))");
+    }
   }
 
   return 0;
@@ -443,49 +448,34 @@ void reset_scused(source *src)
 
 snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
 {
-  pntr rootp;
   task *tsk = task_new(0,0,NULL,0,0);
   pntr p;
-  int i;
   snode *s;
 
-  tsk->partial_scp = instantiate_abstract(tsk,sc);
-  tsk->partial_sc = sc;
   tsk->partial = 1;
+  tsk->partial_scp = instantiate_abstract(tsk,sc);
+  reset_scused(src);
+  tsk->partial_root = instantiate_abstract(tsk,sc);
+  sc->used = 1;
+  tsk->partial_size = graph_size(tsk->partial_scp);
+  tsk->partial_sc = sc;
 
   tsk->partial_tmp1 = pntrset_new();
   tsk->partial_tmp2 = pntrset_new();
   tsk->partial_sel = pntrset_new();
   tsk->partial_applied = pntrset_new();
 
-  rootp = makescref(tsk,sc,0);
-
-  for (i = 0; i < sc->nargs; i++) {
-    cell *arg = alloc_cell(tsk);
-    cell *app = alloc_cell(tsk);
-    char *s = strdup(sc->argnames[i]);
-
-    arg->type = CELL_SYMBOL;
-    make_pntr(arg->field1,s);
-
-    app->type = CELL_APPLICATION;
-    app->field1 = rootp;
-    make_pntr(app->field2,arg);
-    make_pntr(rootp,app);
-  }
-
   tsk->streamstack = pntrstack_new();
-  reset_scused(src);
 
   if (trace_dir) {
     tsk->tracing = 1;
     tsk->trace_src = src;
-    tsk->trace_root = rootp;
+    tsk->trace_root = tsk->partial_root;
     tsk->trace_dir = trace_dir;
     tsk->trace_type = trace_type;
   }
 
-  pntrstack_push(tsk->streamstack,rootp);
+  pntrstack_push(tsk->streamstack,tsk->partial_root);
 
   while (1) {
     reduce(tsk,tsk->streamstack);

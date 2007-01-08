@@ -85,7 +85,45 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
   n = pntrmap_add(rd->map,p,NULL,NULL,nullp);
 
   switch (pntrtype(p)) {
-  case CELL_APPLICATION:
+  case CELL_APPLICATION: {
+    pntr app = p;
+    int nargs = 0;
+    pntr *newargs;
+    pntr newapp;
+    int argno = 0;
+    int different = 0;
+
+    for (app = p; CELL_APPLICATION == pntrtype(app); app = resolve_pntr(get_pntr(app)->field1))
+      nargs++;
+
+    newargs = malloc(nargs*sizeof(pntr));
+
+    for (app = p; CELL_APPLICATION == pntrtype(app); app = resolve_pntr(get_pntr(app)->field1)) {
+      pntr arg = resolve_pntr(get_pntr(app)->field2);
+      graph_replace_r(rd,arg,&newargs[argno]);
+      if (!pntrequal(arg,newargs[argno]))
+        different = 1;
+      argno++;
+    }
+
+    graph_replace_r(rd,app,&newapp);
+    if (!pntrequal(app,newapp))
+      different = 1;
+
+    if (different) {
+      *repl = newapp;
+      for (argno = nargs-1; argno >= 0; argno--) {
+        cell *c = alloc_cell(rd->tsk);
+        c->type = CELL_APPLICATION;
+        c->field1 = *repl;
+        c->field2 = newargs[argno];
+        make_pntr(*repl,c);
+      }
+    }
+
+    free(newargs);
+    break;
+  }
   case CELL_CONS: {
     cell *c = get_pntr(p);
     pntr r1;
@@ -183,6 +221,52 @@ pntr graph_replace(task *tsk, pntr root, pntr old, pntr new)
 
   pntrmap_free(rd.map);
   return res;
+}
+
+void graph_size_r(pntr p, pntrset *visited, int *size)
+{
+  cell *c;
+
+  p = resolve_pntr(p);
+
+  if (CELL_NUMBER == pntrtype(p)) {
+    (*size)++;
+    return;
+  }
+
+  if (pntrset_contains(visited,p))
+    return;
+  pntrset_add(visited,p);
+  c = get_pntr(p);
+
+  (*size)++;
+
+  switch (pntrtype(p)) {
+  case CELL_APPLICATION:
+  case CELL_CONS:
+    graph_size_r(c->field1,visited,size);
+    graph_size_r(c->field2,visited,size);
+    break;
+  case CELL_AREF: {
+    carray *arr = aref_array(p);
+    int index = aref_index(p);
+    int i;
+    if (sizeof(pntr) == arr->elemsize)
+      for (i = index; i < arr->size; i++)
+        graph_size_r(((pntr*)arr->elements)[i],visited,size);
+    graph_size_r(arr->tail,visited,size);
+    break;
+  }
+  }
+}
+
+int graph_size(pntr root)
+{
+  int size = 0;
+  pntrset *visited = pntrset_new();
+  graph_size_r(root,visited,&size);
+  pntrset_free(visited);
+  return size;
 }
 
 pntrset *pntrset_new()
