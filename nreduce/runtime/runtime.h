@@ -30,6 +30,7 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <assert.h>
 
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
@@ -205,7 +206,7 @@ typedef struct group {
 } group;
 
 typedef struct waitqueue {
-  list *frames;
+  struct frame *frames;
   list *fetchers;
 } waitqueue;
 
@@ -290,7 +291,8 @@ typedef struct cap {
 #define STATE_DONE      4
 
 typedef struct frame {
-  int address;
+/*   int address; */
+  const instruction *instr;
   waitqueue wq;
 /*   int id; */
 
@@ -303,6 +305,9 @@ typedef struct frame {
   int state;
 
   struct frame *freelnk;
+  struct frame *waitlnk;
+  struct frame *rnext;
+
   struct frame *next;
   struct frame *prev;
 
@@ -388,6 +393,7 @@ typedef struct endpoint {
   int localid;
   messagelist mailbox;
   int checkmsg;
+  int *interruptptr;
   struct endpoint *prev;
   struct endpoint *next;
   int type;
@@ -421,10 +427,11 @@ typedef struct task {
 
   /* runtime info */
   int done;
-  int paused;
   frameq sparked;
-  frameq runnable;
-  frameq blocked;
+  frameq active;
+  frame **runptr;
+  frame *rtemp;
+  int interrupted;
   int nextentryid;
   int nextblackholeid;
   int nextlid;
@@ -432,7 +439,7 @@ typedef struct task {
   list *inflight;
   char *error;
   sourceloc errorsl;
-  frame **curfptr;
+  frame *freeframe;
   int newfish;
 
   gaddr **infaddrs;
@@ -495,6 +502,7 @@ typedef struct task {
 
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid);
 void task_free(task *tsk);
+void task_kill(task *tsk);
 
 endpoint *endpoint_new(int localid, int type, void *data);
 void endpoint_free(endpoint *endpt);
@@ -518,17 +526,32 @@ gaddr global_addressof(task *tsk, pntr p);
 void add_gaddr(list **l, gaddr addr);
 void remove_gaddr(task *tsk, list **l, gaddr addr);
 
-void add_frame_queue(frameq *q, frame *f);
-void add_frame_queue_end(frameq *q, frame *f);
-void remove_frame_queue(frameq *q, frame *f);
+#define add_frame_queue llist_prepend
+#define add_frame_queue_end llist_append
+#define remove_frame_queue llist_remove
+/* void add_frame_queue(frameq *q, frame *f); */
+/* void add_frame_queue_end(frameq *q, frame *f); */
+/* void remove_frame_queue(frameq *q, frame *f); */
 void transfer_waiters(waitqueue *from, waitqueue *to);
 
 void spark_frame(task *tsk, frame *f);
 void unspark_frame(task *tsk, frame *f);
 void run_frame(task *tsk, frame *f);
+
+void check_runnable(task *tsk);
 void block_frame(task *tsk, frame *f);
 void unblock_frame(task *tsk, frame *f);
-void done_frame(task *tsk, frame *f);
+#define done_frame(tsk,_f) \
+{ \
+  assert(STATE_RUNNING == (_f)->state); \
+  assert((_f) == *tsk->runptr); \
+ \
+  *tsk->runptr = (_f)->rnext; \
+  (_f)->rnext = NULL; \
+ \
+  remove_frame_queue(&tsk->active,(_f)); \
+  (_f)->state = STATE_DONE; \
+}
 
 void set_error(task *tsk, const char *format, ...);
 
@@ -662,8 +685,19 @@ void sweep(task *tsk, int all);
 void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
 
-frame *frame_alloc(task *tsk);
-void frame_dealloc(task *tsk, frame *f);
+frame *frame_new(task *tsk);
+#define frame_free(tsk,_f) \
+{ \
+  assert(tsk->done || (NULL == _f->c)); \
+  assert(tsk->done || (STATE_DONE == _f->state) || (STATE_NEW == _f->state)); \
+  assert(tsk->done || (NULL == _f->wq.frames)); \
+  assert(tsk->done || (NULL == _f->wq.fetchers)); \
+  if (_f->wq.fetchers) \
+    list_free(_f->wq.fetchers,free); \
+ \
+  _f->freelnk = tsk->freeframe; \
+  tsk->freeframe = _f; \
+}
 
 cap *cap_alloc(int arity, int address, int fno);
 void cap_dealloc(cap *c);

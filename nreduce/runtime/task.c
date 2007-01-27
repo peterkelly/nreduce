@@ -214,86 +214,19 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
   fatal("gaddr not found");
 }
 
-#ifdef QUEUE_CHECKS
-static int queue_size(frameq *q)
-{
-  int count = 0;
-  frame *f;
-  for (f = q->first; f; f = f->next)
-    count++;
-  return count;
-}
-
-static int queue_contains_frame(frameq *q, frame *f)
-{
-  frame *c;
-  for (c = q->first; c; c = c->next)
-    if (c == f)
-      return 1;
-  return 0;
-}
-
-static int check_queue(frameq *q)
-{
-  frame *f;
-  assert((!q->first && !q->last) || (q->first && q->last));
-  assert(!q->last || !q->last->next);
-  assert(!q->first || !q->first->prev);
-  assert(q->size == queue_size(q));
-  for (f = q->first; f; f = f->next) {
-    assert((q->last == f) || (f->next->prev == f));
-    assert((q->first == f) || (f->prev->next == f));
-  }
-  return 1;
-}
-#endif
-
-void add_frame_queue(frameq *q, frame *f)
-{
-  #ifdef QUEUE_CHECKS
-  assert(check_queue(q));
-  assert(!queue_contains_frame(q,f));
-  #endif
-
-  llist_prepend(q,f);
-}
-
-void add_frame_queue_end(frameq *q, frame *f)
-{
-  #ifdef QUEUE_CHECKS
-  assert(check_queue(q));
-  assert(!queue_contains_frame(q,f));
-  #endif
-
-  llist_append(q,f);
-}
-
-void remove_frame_queue(frameq *q, frame *f)
-{
-  #ifdef QUEUE_CHECKS
-  assert(check_queue(q));
-  assert(queue_contains_frame(q,f));
-  #endif
-
-  llist_remove(q,f);
-
-  #ifdef QUEUE_CHECKS
-  assert(!queue_contains_frame(q,f));
-  #endif
-}
-
 void transfer_waiters(waitqueue *from, waitqueue *to)
 {
-  list **ptr = &to->frames;
+  frame **ptr = &to->frames;
+  list **lptr;
   while (*ptr)
-    ptr = &(*ptr)->next;
+    ptr = &(*ptr)->waitlnk;
   *ptr = from->frames;
   from->frames = NULL;
 
-  ptr = &to->fetchers;
-  while (*ptr)
-    ptr = &(*ptr)->next;
-  *ptr = from->fetchers;
+  lptr = &to->fetchers;
+  while (*lptr)
+    lptr = &(*lptr)->next;
+  *lptr = from->fetchers;
   from->fetchers = NULL;
 }
 
@@ -328,9 +261,11 @@ void run_frame(task *tsk, frame *f)
   }
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
-    assert((0 == f->address) ||
-           (OP_GLOBSTART == bc_instructions(tsk->bcdata)[f->address].opcode));
-    add_frame_queue(&tsk->runnable,f);
+    assert((bc_instructions(tsk->bcdata) == f->instr) ||
+           (OP_GLOBSTART == f->instr->opcode));
+    add_frame_queue(&tsk->active,f);
+    f->rnext = *tsk->runptr;
+    *tsk->runptr = f;
     f->state = STATE_RUNNING;
 
     #ifdef PROFILING
@@ -340,27 +275,30 @@ void run_frame(task *tsk, frame *f)
   }
 }
 
+void check_runnable(task *tsk)
+{
+  if (NULL == *tsk->runptr)
+    *tsk->endpt->interruptptr = 1;
+}
+
 void block_frame(task *tsk, frame *f)
 {
   assert(STATE_RUNNING == f->state);
-  remove_frame_queue(&tsk->runnable,f);
-  add_frame_queue(&tsk->blocked,f);
+  assert(f == *tsk->runptr);
+
+  *tsk->runptr = f->rnext;
+  f->rnext = NULL;
+
   f->state = STATE_BLOCKED;
 }
 
 void unblock_frame(task *tsk, frame *f)
 {
   assert(STATE_BLOCKED == f->state);
-  remove_frame_queue(&tsk->blocked,f);
-  add_frame_queue(&tsk->runnable,f);
+  assert(NULL == f->rnext);
+  f->rnext = *tsk->runptr;
+  *tsk->runptr = f;
   f->state = STATE_RUNNING;
-}
-
-void done_frame(task *tsk, frame *f)
-{
-  assert(STATE_RUNNING == f->state);
-  remove_frame_queue(&tsk->runnable,f);
-  f->state = STATE_DONE;
 }
 
 void set_error(task *tsk, const char *format, ...)
@@ -378,21 +316,18 @@ void set_error(task *tsk, const char *format, ...)
   len = vsnprintf(tsk->error,len+1,format,ap);
   va_end(ap);
 
-  if (NULL == tsk->curfptr) {
+  if (NULL == *tsk->runptr) {
     /* reduction engine */
   }
   else {
     /* bytecode interpreter */
-    frame *f = *tsk->curfptr;
-    instr = &bc_instructions(tsk->bcdata)[f->address];
+    frame *f = *tsk->runptr;
+    instr = f->instr-1;
     tsk->errorsl.fileno = instr->fileno;
     tsk->errorsl.lineno = instr->lineno;
 
-    (*tsk->curfptr)->fno = -1;
-    (*tsk->curfptr)->address = ((bcheader*)tsk->bcdata)->erroraddr-1;
-    /* ensure it's at the front */
-    remove_frame_queue(&tsk->runnable,f);
-    add_frame_queue(&tsk->runnable,f);
+    (*tsk->runptr)->fno = -1;
+    (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
   }
 }
 
@@ -441,8 +376,13 @@ void dump_info(task *tsk)
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
           const char *fname = bc_function_name(tsk->bcdata,f->fno);
-          int nframes = list_count(f->wq.frames);
           int nfetchers = list_count(f->wq.fetchers);
+          int nframes = 0;
+          frame *f2;
+
+          for (f2 = f->wq.frames; f2; f2 = f2->waitlnk)
+            nframes++;
+
           fprintf(tsk->output,"%-12p %-20s %-12d %-12d\n",
                   f,fname,nframes,nfetchers);
         }
@@ -456,10 +396,15 @@ void dump_info(task *tsk)
           "frame*","function","frames","fetchers","state");
   fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
-  for (f = tsk->runnable.first; f; f = f->next) {
+  for (f = *tsk->runptr; f; f = f->rnext) {
     const char *fname = bc_function_name(tsk->bcdata,f->fno);
-    int nframes = list_count(f->wq.frames);
     int nfetchers = list_count(f->wq.fetchers);
+    int nframes = 0;
+    frame *f2;
+
+    for (f2 = f->wq.frames; f2; f2 = f2->waitlnk)
+      nframes++;
+
     fprintf(tsk->output,"%-12p %-20s %-12d %-12d %-16s\n",
             f,fname,nframes,nfetchers,frame_states[f->state]);
   }
@@ -491,6 +436,7 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int local
   bcheader *bch;
 
   tsk->endpt = endpoint_new(localid,TASK_ENDPOINT,tsk);
+  tsk->runptr = &tsk->rtemp;
 
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
@@ -581,6 +527,13 @@ void task_free(task *tsk)
     array_free(tsk->distmarks[i]);
   }
 
+  while (tsk->freeframe) {
+    frame *next = tsk->freeframe->freelnk;
+    free(tsk->freeframe->data);
+    free(tsk->freeframe);
+    tsk->freeframe = next;
+  }
+
   free(tsk->strings);
   free(tsk->stats.funcalls);
   free(tsk->stats.framecompletions);
@@ -605,6 +558,12 @@ void task_free(task *tsk)
   endpoint_free(tsk->endpt);
 
   free(tsk);
+}
+
+void task_kill(task *tsk)
+{
+  /* FIXME: make this work */
+  tsk->done = 1;
 }
 
 endpoint *endpoint_new(int localid, int type, void *data)
@@ -643,6 +602,8 @@ void endpoint_add_message(endpoint *endpt, message *msg)
   pthread_mutex_lock(&endpt->mailbox.lock);
   llist_append(&endpt->mailbox,msg);
   endpt->checkmsg = 1;
+  if (endpt->interruptptr)
+    *endpt->interruptptr = 1;
   pthread_cond_broadcast(&endpt->mailbox.cond);
   pthread_mutex_unlock(&endpt->mailbox.lock);
 }

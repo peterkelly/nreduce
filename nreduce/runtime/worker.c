@@ -637,8 +637,8 @@ task *add_task(socketcomm *sc, int pid, int groupsize, const char *bcdata, int b
   add_endpoint(sc,tsk->endpt);
 
   if ((0 == pid) && (NULL != bcdata)) {
-    frame *initial = frame_alloc(tsk);
-    initial->address = 0;
+    frame *initial = frame_new(tsk);
+    initial->instr = bc_instructions(tsk->bcdata);
     initial->fno = -1;
     initial->data = (pntr*)malloc(sizeof(pntr));
     initial->alloc = 1;

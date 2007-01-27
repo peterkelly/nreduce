@@ -201,6 +201,9 @@ int main(int argc, char **argv)
   memset(&args,0,sizeof(args));
   parse_args(argc,argv);
 
+  if (NULL != getenv("DISABLE_PARTIAL_EVAL"))
+    args.nopartialsink = 1;
+
   compileinfo = args.compileinfo;
 
   if (args.worker)

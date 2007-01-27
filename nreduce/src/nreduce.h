@@ -45,14 +45,12 @@
 /* #define SHOW_SUBSTITUTED_NAMES */
 /* #define EXECUTION_TRACE */
 /* #define PROFILING */
-/* #define QUEUE_CHECKS */
 /* #define PAREXEC_DEBUG */
 /* #define MSG_DEBUG */
 /* #define CONTINUOUS_DISTGC */
 /* #define DISTGC_DEBUG */
 /* #define SHOW_FRAME_COMPLETION */
 /* #define COLLECTION_DEBUG */
-#define PARALLELISM
 
 /* #define ARRAY_DEBUG */
 /* #define PRINT_DEBUG */
@@ -63,8 +61,6 @@
 #define BLOCK_SIZE 1024
 #define COLLECT_THRESHOLD 102400
 //#define COLLECT_THRESHOLD 1024
-#define COLLECT_INTERVAL 100000
-//#define COLLECT_INTERVAL 1000
 #define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
 

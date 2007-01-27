@@ -130,7 +130,7 @@ void mark_global(task *tsk, global *glo, short bit)
 static void mark_frame(task *tsk, frame *f, short bit)
 {
   int i;
-  int count = bc_instructions(tsk->bcdata)[f->address].expcount;
+  int count = f->instr->expcount;
   if (f->c) {
     pntr p;
     make_pntr(p,f->c);
@@ -248,12 +248,13 @@ cell *alloc_cell(task *tsk)
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
   tsk->stats.nallocs++;
   tsk->stats.totalallocs++;
+  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt->interruptptr)
+    *tsk->endpt->interruptptr = 1;
   return v;
 }
 
 void free_global(task *tsk, global *glo)
 {
-  list_free(glo->wq.frames,NULL); /* FIXME: free frame too? */
   list_free(glo->wq.fetchers,free);
 
   if (CELL_REMOTEREF == pntrtype(glo->p)) {
@@ -282,7 +283,7 @@ void free_cell_fields(task *tsk, cell *v)
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
     assert(tsk->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
-    frame_dealloc(tsk,f);
+    frame_free(tsk,f);
     break;
   }
   case CELL_CAP: {
@@ -357,13 +358,8 @@ void mark_roots(task *tsk, short bit)
     assert(NULL == f->wq.fetchers);
   }
 
-  for (f = tsk->runnable.first; f; f = f->next) {
+  for (f = tsk->active.first; f; f = f->next)
     mark_frame(tsk,f,bit);
-  }
-
-  for (f = tsk->blocked.first; f; f = f->next) {
-    mark_frame(tsk,f,bit);
-  }
 
   /* mark any in-flight gaddrs that refer to objects in this task */
   for (l = tsk->inflight; l; l = l->next) {
@@ -532,27 +528,27 @@ void local_collect(task *tsk)
   #endif
 }
 
-frame *frame_alloc(task *tsk)
+frame *frame_new(task *tsk)
 {
-  frame *f = (frame*)calloc(1,sizeof(frame));
+  frame *f;
+  if (tsk->freeframe) {
+    int alloc;
+    pntr *data;
+    f = tsk->freeframe;
+    tsk->freeframe = f->freelnk;
+
+    alloc = f->alloc;
+    data = f->data;
+    memset(f,0,sizeof(frame));
+    f->alloc = alloc;
+    f->data = data;
+  }
+  else {
+    f = (frame*)calloc(1,sizeof(frame));
+  }
+
   f->fno = -1;
-
   return f;
-}
-
-void frame_dealloc(task *tsk, frame *f)
-{
-  assert(tsk->done || (NULL == f->c));
-/*   assert((NULL == f->c) || CELL_FRAME != celltype(f->c)); */
-  assert(tsk->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
-  assert(tsk->done || (NULL == f->wq.frames));
-  assert(tsk->done || (NULL == f->wq.fetchers));
-  list_free(f->wq.fetchers,free);
-  list_free(f->wq.frames,NULL);
-  if (f->data)
-    free(f->data);
-  f->data = NULL;
-  free(f);
 }
 
 cap *cap_alloc(int arity, int address, int fno)

@@ -33,7 +33,7 @@ ALL_INCLUDES=""
 AC_SUBST(ALL_LIBS)
 LDFLAGS="-rdynamic"
 CFLAGS="-ggdb3 -Wall -O0 -fno-strict-aliasing"
-#CFLAGS="-Wall -O3 -fno-strict-aliasing -DNDEBUG"
+#CFLAGS="-ggdb3 -Wall -O3 -fno-strict-aliasing -DNDEBUG"
 #CFLAGS="-ggdb3 -Wall -O0 -pg"
 
 # Hide some warnings that icc gives

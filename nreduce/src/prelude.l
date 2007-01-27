@@ -50,16 +50,6 @@ prefix n lst = (if (<= n 0)
 
 sub !start !count lst = (prefix count (skip start lst))
 
-/*
-append2 a partlen b = (append (arrayskip partlen a) b)
-
-append a b = (if a
-                 (letrec partlen = (arraysize a) in
-                          (arrayprefix partlen a (append2 a partlen b)))
-                 b)
-*/
-
-
 append a b = (if a
                  (letrec partlen = (arraysize a) in
                           (arrayprefix partlen a (append (arrayskip partlen a) b)))
