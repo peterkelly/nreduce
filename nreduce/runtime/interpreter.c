@@ -846,6 +846,7 @@ void *execute(task *tsk)
       if (CELL_FRAME == pntrtype(p)) {
         frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
         frame *f2 = runnable;
+        f2->instr--;
         block_frame(tsk,f2);
         run_frame(tsk,newf);
         check_runnable(tsk);
@@ -873,6 +874,7 @@ void *execute(task *tsk)
         }
         f2->waitglo = target;
         add_waiter_frame(&target->wq,f2);
+        f2->instr--;
         block_frame(tsk,f2);
         check_runnable(tsk);
         continue;
