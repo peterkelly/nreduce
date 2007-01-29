@@ -1,0 +1,2 @@
+#!/bin/bash
+echo -e 'tasks\nexit\n' | ~/nc localhost 2000 | head -5 | tail -1

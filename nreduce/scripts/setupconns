@@ -1,0 +1,33 @@
+#!/bin/bash
+if [ -z "$PARSH_HOSTS" ]; then
+  echo \$PARSH_HOSTS is not set
+  exit 1
+fi
+
+if [ ! -e "$PARSH_HOSTS" ]; then
+  echo $PARSH_HOSTS does not exist
+  exit 1
+fi
+
+max=`wc -l $PARSH_HOSTS | awk '{print $1}'`
+hostno=1
+
+while ((hostno<max)); do
+  commands=''
+  target=`cat $PARSH_HOSTS | awk "NR==$hostno"`
+  echo setting up connections for $target
+  cur=$((hostno+1))
+  while ((cur<=max)); do
+    host=`cat $PARSH_HOSTS | awk "NR==$cur"`
+    commands="${commands}open $host:2000\n"
+    ((cur++))
+  done
+  commands="${commands}exit\n"
+
+  echo -e Running: echo -e $commands \| ~/nc $target 2000
+  echo -e $commands | ~/nc $target 2000
+  echo ''
+  ((hostno++))
+done
+
+echo Done setting up connections

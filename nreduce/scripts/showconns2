@@ -1,0 +1,2 @@
+#!/bin/bash
+echo -e 'connections\nexit\n' | ~/nc localhost 2000 | awk '(NR > 4) && $2'

@@ -1,0 +1,2 @@
+#!/bin/bash
+parsh 'echo "" > /tmp/nreduce.log'

@@ -1,0 +1,2 @@
+#!/bin/bash
+~/nreduce/src/nreduce -w >>/tmp/nreduce.log 2>&1 &

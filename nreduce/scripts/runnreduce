@@ -1,0 +1,36 @@
+#!/bin/bash
+PROG=$1
+
+if [ -z "$PROG" ]; then
+  echo No program specified
+  exit 1
+fi
+
+if [ ! -e "$PROG" ]; then
+  echo Program \"$PROG\" does not exist
+  exit 1
+fi
+
+if [ -z "$PARSH_HOSTS" ]; then
+  echo \$PARSH_HOSTS is not set
+  exit 1
+fi
+
+if [ ! -e "$PARSH_HOSTS" ]; then
+  echo $PARSH_HOSTS does not exist
+  exit 1
+fi
+
+FIRSTNODE=`head -1 "$PARSH_HOSTS"`
+
+parsh -h ~/hosts 'killall -9 nreduce'
+echo starting nreduce
+parsh '~/nreduce/scripts/nreducelog'
+sleep 1
+echo setting up connections
+nreduce/scripts/setupconns
+sleep 1
+echo Showing connections
+nreduce/scripts/showconns
+echo -e "run $PROG\nexit\n" | ~/nc $FIRSTNODE 2000
+echo Done with initialisation
