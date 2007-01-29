@@ -48,18 +48,25 @@
                                   add_instruction(comp,_s,OP_JFUN,(_a),1); }
 #define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,comp->si->count-1-(_a),0)
 #define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0);
-
-#define EVAL(_s,_a)           { int arg0 = (_a);                \
+#define SPARK(_s,_a)          { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
                                 if (!comp->si || !statusat(comp->si,pos)) { \
-                                   add_instruction(comp,_s,OP_EVAL,pos,0); \
-                                   add_instruction(comp,_s,OP_RESOLVE,pos,0); \
-                                }}
+                                   add_instruction(comp,_s,OP_SPARK,pos,0); \
+                              }}
+#define EVAL(_s,_a)           { int arg0 = (_a);                \
+                                int pos = comp->si->count-1-arg0; \
+                                add_instruction(comp,_s,OP_EVAL,pos,0); \
+                                add_instruction(comp,_s,OP_RESOLVE,pos,0); \
+                              }
 #define RESOLVE(_s,_a)        add_instruction(comp,_s,OP_RESOLVE,comp->si->count-1-(_a),0)
 #define RETURN(_s)            add_instruction(comp,_s,OP_RETURN,0,0)
 #define PUSH(_s,_a)           add_instruction(comp,_s,OP_PUSH,comp->si->count-1-(_a),0)
 #define POP(_s,_a)            add_instruction(comp,_s,OP_POP,(_a),0)
-#define BIF(_s,_a)            add_instruction(comp,_s,OP_BIF,(_a),0)
+#define BIF(_s,_a)            { int _v; \
+                                for (_v = 0; _v < builtin_info[(_a)].nstrict; _v++) \
+                                  EVAL(_s,_v); \
+                                add_instruction(comp,_s,OP_BIF,(_a),0); \
+                              }
 #define JUMPrel(_s,_a)        add_instruction(comp,_s,OP_JUMP,(_a),0)
 #define GLOBSTART(_s,_a,_b)   add_instruction(comp,_s,OP_GLOBSTART,(_a),(_b))
 #define END(_s)               add_instruction(comp,_s,OP_END,0,0)
@@ -72,7 +79,8 @@
 #define SQUEEZE(_s,_a,_b)     add_instruction(comp,_s,OP_SQUEEZE,(_a),(_b))
 #define ERROR(_s)             add_instruction(comp,_s,OP_ERROR,0,0)
 
-#define JFALSE(_s,addr)       { addr = array_count(comp->instructions); \
+#define JFALSE(_s,addr)       { EVAL(_s,0); \
+                                addr = array_count(comp->instructions); \
                                 add_instruction(comp,_s,OP_JFALSE,0,0); }
 #define JUMP(_s,addr)         { addr = array_count(comp->instructions); \
                                 add_instruction(comp,_s,OP_JUMP,0,0); }
@@ -99,7 +107,7 @@ const char *opcodes[OP_COUNT] = {
 "BEGIN",
 "END",
 "GLOBSTART",
-"EVAL",
+"SPARK",
 "RETURN",
 "DO",
 "JFUN",
@@ -118,6 +126,7 @@ const char *opcodes[OP_COUNT] = {
 "RESOLVE",
 "POP",
 "ERROR",
+"EVAL",
 };
 
 static stackinfo *stackinfo_new(stackinfo *source)
@@ -298,7 +307,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_GLOBSTART:
     break;
-  case OP_EVAL:
+  case OP_SPARK:
     assert(0 <= arg0);
     setstatusat(comp->si,arg0,1);
     break;
@@ -372,6 +381,8 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_ERROR:
     comp->si->invalid = 1;
+    break;
+  case OP_EVAL:
     break;
   default:
     abort();
@@ -650,16 +661,16 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
         if (SNODE_BUILTIN == app->type) {
           BIF(app->sl,fno);
           if (!builtin_info[fno].reswhnf)
-            EVAL(app->sl,0);
+            SPARK(app->sl,0);
         }
         else {
           MKFRAME(app->sl,fno,k);
-          EVAL(app->sl,0);
+          SPARK(app->sl,0);
         }
       }
       else {
         MKCAP(app->sl,fno,m);
-        EVAL(app->sl,0); /* FIXME: is this necessary? Won't it just do nothing, since the cell
+        SPARK(app->sl,0); /* FIXME: is this necessary? Won't it just do nothing, since the cell
                             will be a CAP node? Clarify this also in the bytecode compilation
                             section in thesis. */
       }
@@ -676,12 +687,12 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
     break;
   }
   case SNODE_SYMBOL:
-    EVAL(c->sl,n-presolve(src,p,c->name));
+    SPARK(c->sl,n-presolve(src,p,c->name));
     PUSH(c->sl,n-presolve(src,p,c->name));
     break;
   default:
     C(src,comp,c,p,n);
-    EVAL(c->sl,0); /* FIXME: this shouldn't be necessary. Check if it's really ok to remove it,
+    SPARK(c->sl,0); /* FIXME: this shouldn't be necessary. Check if it's really ok to remove it,
                       and ensure it's consistent with what you've got in the compilation schemes. */
     break;
   }
@@ -721,6 +732,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
       stack_push(args,app);
       stack_push(argstrict,0);
       S(src,comp,app,args,argstrict,p,n);
+      SPARK(app->sl,0);
       EVAL(app->sl,0);
       DO(app->sl,0);
     }
@@ -731,6 +743,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
       if (m > k) {
         S(src,comp,app,args,argstrict,p,n);
         MKFRAME(app->sl,fno,k);
+        SPARK(app->sl,0);
         EVAL(app->sl,0);
         DO(app->sl,0);
       }
@@ -778,6 +791,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
 
             if (!bi->reswhnf) {
               RESOLVE(app->sl,0);
+              EVAL(app->sl,0);
               DO(app->sl,1);
             }
             else {
@@ -809,7 +823,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
   case SNODE_SYMBOL:
     C(src,comp,c,p,n);
     SQUEEZE(c->sl,1,n);
-    EVAL(c->sl,0);
+    SPARK(c->sl,0);
     RETURN(c->sl);
     break;
   case SNODE_BUILTIN:
@@ -899,7 +913,6 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
 
 /* FIXME: could probably remove the GLOBSTART instruction, since the information it contains can
    now be obtained from the function table. */
-/* FIXME: instead of EVAL, we should use SPARK */
 static void F(source *src, compilation *comp, int fno, scomb *sc)
 {
   int i;
@@ -924,7 +937,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
   GLOBSTART(sc->sl,fno,sc->nargs);
   for (i = 0; i < sc->nargs; i++)
     if (sc->strictin && sc->strictin[i])
-      EVAL(sc->sl,i);
+      SPARK(sc->sl,i);
 
   comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
   GLOBSTART(sc->sl,fno,sc->nargs);
@@ -1039,6 +1052,7 @@ static void compile_prologue(compilation *comp, source *src)
   comp->si = stackinfo_new(NULL);
   BEGIN(startsc->sl);
   MKFRAME(startsc->sl,startsc->index+NUM_BUILTINS,0);
+  SPARK(startsc->sl,0);
   EVAL(startsc->sl,0);
   END(startsc->sl);
   stackinfo_free(comp->si);
@@ -1075,6 +1089,7 @@ static void compile_evaldo(compilation *comp, source *src)
     EVAL(nosl,0);
     DO(nosl,0);
     stackinfo_free(comp->si);
+    assert(array_count(comp->instructions) == comp->bch.evaldoaddr+i*EVALDO_SEQUENCE_SIZE);
   }
   comp->si = NULL;
 }
@@ -1115,7 +1130,7 @@ static void compile_builtins(compilation *comp)
       stackinfo *oldsi;
       int label2;
       PUSH(nosl,0);
-      EVAL(nosl,0);
+      SPARK(nosl,0);
       JFALSE(nosl,label1);
 
       oldsi = comp->si;
@@ -1131,15 +1146,15 @@ static void compile_builtins(compilation *comp)
 
       /* label l2 */
       LABEL(label2);
-      EVAL(nosl,0);
+      SPARK(nosl,0);
       RETURN(nosl);
     }
     else {
       for (argno = 0; argno < bi->nstrict; argno++)
-        EVAL(nosl,argno);
+        SPARK(nosl,argno);
       BIF(nosl,i);
       if (!bi->reswhnf)
-        EVAL(nosl,0);
+        SPARK(nosl,0);
       RETURN(nosl);
     }
 
@@ -1309,5 +1324,8 @@ const char *bc_string(const char *bcdata, int sno)
 const char *bc_function_name(const char *bcdata, int fno)
 {
   const funinfo *finfo = bc_funinfo(bcdata);
-  return bc_string(bcdata,finfo[fno].name);
+  if (0 > fno)
+    return "(unknown)";
+  else
+    return bc_string(bcdata,finfo[fno].name);
 }

@@ -127,6 +127,7 @@ void print_bin_rev(FILE *f, void *ptr, int nbytes);
 
 struct timeval timeval_diff(struct timeval from, struct timeval to);
 int timeval_diffms(struct timeval from, struct timeval to);
+struct timeval timeval_addms(struct timeval t, int ms);
 
 int hash(const void *mem, int size);
 char *getcwd_alloc();

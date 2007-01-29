@@ -154,12 +154,16 @@ static void process_cmd(socketcomm *sc, connection *conn, int argc, char **argv)
   }
   else if (!strcmp(argv[0],"tasks") || !strcmp(argv[0],"t")) {
     endpoint *endpt;
-    cprintf(conn,"%-3s %-9s %-6s\n","pid","groupsize","bcsize");
-    cprintf(conn,"%-3s %-9s %-6s\n","---","---------","------");
+    cprintf(conn,"%-3s %-9s %-6s %-10s\n","pid","groupsize","bcsize","instructions");
+    cprintf(conn,"%-3s %-9s %-6s %-10s\n","---","---------","------","------------");
     for (endpt = sc->endpoints.first; endpt; endpt = endpt->next) {
       if (TASK_ENDPOINT == endpt->type) {
         task *tsk = (task*)endpt->data;
-        cprintf(conn,"%-3d %-9d %-6d\n",tsk->pid,tsk->groupsize,tsk->bcsize);
+        int ninstrs = 0;
+        int i;
+        for (i = 0; i < OP_COUNT; i++)
+          ninstrs += tsk->stats.op_usage[i];
+        cprintf(conn,"%-3d %-9d %-6d %-12d\n",tsk->pid,tsk->groupsize,tsk->bcsize,ninstrs);
       }
     }
     return;

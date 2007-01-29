@@ -29,7 +29,7 @@
 #define OP_BEGIN         0
 #define OP_END           1
 #define OP_GLOBSTART     2
-#define OP_EVAL          3
+#define OP_SPARK         3
 #define OP_RETURN        4
 #define OP_DO            5
 #define OP_JFUN          6
@@ -48,7 +48,8 @@
 #define OP_RESOLVE       19
 #define OP_POP           20
 #define OP_ERROR         21
-#define OP_COUNT         22
+#define OP_EVAL          22
+#define OP_COUNT         23
 
 #define CONSTANT_APP_MSG "constant cannot be applied to arguments"
 #define EVALDO_SEQUENCE_SIZE 3

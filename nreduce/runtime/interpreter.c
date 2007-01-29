@@ -41,11 +41,14 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/time.h>
+#include <time.h>
 
 /* #define PARALLELISM_DEBUG */
 /* #define FETCH_DEBUG */
 
-#define FISH_DELAY_MS 5000
+#define FISH_DELAY_MS 250
+#define NSPARKS_REQUESTED 50
 
 void print_stack(FILE *f, pntr *stk, int size, int dir)
 {
@@ -219,6 +222,7 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
   frame_free(tsk,f);
 }
 
+/* FIXME: need to send this to a GC endpoint, it's not part of the task group! */
 static void send_update(task *tsk)
 {
   int homesite = tsk->groupsize-1;
@@ -261,7 +265,7 @@ static void finish_address_reading(task *tsk, int from, int msgtype)
 void add_pending_mark(task *tsk, gaddr addr)
 {
   assert(0 <= addr.pid);
-  assert(tsk->groupsize-1 >= addr.pid);
+  assert(tsk->groupsize >= addr.pid);
   assert(tsk->inmark);
   array_append(tsk->distmarks[addr.pid],&addr,sizeof(gaddr));
 }
@@ -337,8 +341,16 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 /*     fprintf(tsk->output,"received FISH from task %d; scheduled %d\n",reqtsk,scheduled); */
     #endif
 
-    if (!scheduled && (0 < (age)--))
-      msg_fsend(tsk,(tsk->pid+1) % (tsk->groupsize-1),MSG_FISH,"iii",reqtsk,age,nframes);
+    if (!scheduled && (0 < (age)--)) {
+      int dest;
+
+/*       dest = (tsk->pid+1) % tsk->groupsize; */
+      do {
+        dest = rand() % tsk->groupsize;
+      } while (dest == tsk->pid);
+
+      msg_fsend(tsk,dest,MSG_FISH,"iii",reqtsk,age,nframes);
+    }
     break;
   }
   case MSG_FETCH: {
@@ -502,7 +514,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
     write_end(urmsg);
 
-    fprintf(tsk->output,"Got %d new frames\n",count);
+/*     fprintf(tsk->output,"Got %d new frames\n",count); */
     tsk->newfish = 1;
 
     #ifdef PARALLELISM_DEBUG
@@ -713,7 +725,7 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
-static int handle_interrupt(task *tsk, struct timeval *lastfish)
+static int handle_interrupt(task *tsk, struct timeval *nextfish)
 {
   int from;
   char *msgdata;
@@ -741,9 +753,10 @@ static int handle_interrupt(task *tsk, struct timeval *lastfish)
     }
 
     gettimeofday(&now,NULL);
-    diffms = timeval_diffms(*lastfish,now);
+    diffms = timeval_diffms(now,*nextfish);
 
-    if (tsk->newfish || ((double)diffms)/((double)FISH_DELAY_MS) > 0.9) {
+    if (tsk->newfish || (0 >= diffms)) {
+      int dest;
       #ifdef PARALLELISM_DEBUG
       fprintf(tsk->output,
               "sending FISH; outstanding fetches = %d, sparks = %d, "
@@ -751,9 +764,19 @@ static int handle_interrupt(task *tsk, struct timeval *lastfish)
               tsk->stats.fetches,tsk->stats.sparks,tsk->stats.sparksused,
               frameq_count(&tsk->active));
       #endif
-      *lastfish = now; /* avoid sending another until after the sleep period */
-      msg_fsend(tsk,(tsk->pid+1) % (tsk->groupsize-1),MSG_FISH,
-                "iii",tsk->pid,10,50);
+
+      /* avoid sending another until after the sleep period */
+
+      int delay = FISH_DELAY_MS + ((rand() % 1000) * FISH_DELAY_MS / 1000);
+      *nextfish = timeval_addms(*nextfish,delay);
+
+/*       dest = (tsk->pid+1) % tsk->groupsize; */
+      do {
+        dest = rand() % tsk->groupsize;
+      } while (dest == tsk->pid);
+
+      msg_fsend(tsk,dest,MSG_FISH,
+                "iii",tsk->pid,tsk->groupsize,NSPARKS_REQUESTED);
       tsk->newfish = 0;
     }
 
@@ -776,7 +799,7 @@ static int handle_interrupt(task *tsk, struct timeval *lastfish)
 
 void *execute(task *tsk)
 {
-  struct timeval lastfish;
+  struct timeval nextfish;
   int evaldoaddr = ((bcheader*)tsk->bcdata)->evaldoaddr;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
@@ -787,8 +810,7 @@ void *execute(task *tsk)
   tsk->newfish = 1;
   tsk->endpt->interruptptr = &interrupt;
 
-  lastfish.tv_sec = 0;
-  lastfish.tv_usec = 0;
+  gettimeofday(&nextfish,NULL);
 
   runnable = tsk->rtemp;
   tsk->rtemp = NULL;
@@ -798,7 +820,7 @@ void *execute(task *tsk)
 
     if (interrupt) {
       interrupt = 0;
-      if (handle_interrupt(tsk,&lastfish)) {
+      if (handle_interrupt(tsk,&nextfish)) {
         tsk->endpt->interruptptr = NULL;
         return NULL;
       }
@@ -837,6 +859,12 @@ void *execute(task *tsk)
     }
     case OP_GLOBSTART:
       break;
+    case OP_SPARK: {
+      pntr p = resolve_pntr(runnable->data[instr->arg0]);
+      if (CELL_FRAME == pntrtype(p))
+        spark_frame(tsk,pframe(p));
+      break;
+    }
     case OP_EVAL: {
       pntr p;
       runnable->data[instr->arg0] =
@@ -974,7 +1002,7 @@ void *execute(task *tsk)
         int extra = arity-have;
         int nfc = 0;
         newf->alloc = program_finfo[cp->fno].stacksize;
-        newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr));
+        newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr)); /* FIXME: memory leak */
         newf->instr = program_ops+cp->address;
         newf->fno = cp->fno;
         for (i = newcount-extra; i < newcount; i++)
@@ -988,7 +1016,6 @@ void *execute(task *tsk)
 
         make_pntr(f2->data[newcount-extra],newf->c);
         newcount += 1-extra;
-
 
         f2->instr = program_ops+evaldoaddr;
         f2->fno = -1;
@@ -1118,6 +1145,7 @@ void *execute(task *tsk)
       for (i = 0; i < builtin_info[bif].nstrict; i++) {
         assert(CELL_APPLICATION != pntrtype(runnable->data[instr->expcount-1-i]));
         assert(CELL_FRAME != pntrtype(runnable->data[instr->expcount-1-i]));
+        assert(CELL_REMOTEREF != pntrtype(runnable->data[instr->expcount-1-i]));
 
         if (CELL_CAP == pntrtype(runnable->data[instr->expcount-1-i]))
           cap_error(tsk,runnable->data[instr->expcount-1-i],instr);

@@ -529,9 +529,6 @@ void remove_gaddr(task *tsk, list **l, gaddr addr);
 #define add_frame_queue llist_prepend
 #define add_frame_queue_end llist_append
 #define remove_frame_queue llist_remove
-/* void add_frame_queue(frameq *q, frame *f); */
-/* void add_frame_queue_end(frameq *q, frame *f); */
-/* void remove_frame_queue(frameq *q, frame *f); */
 void transfer_waiters(waitqueue *from, waitqueue *to);
 
 void spark_frame(task *tsk, frame *f);

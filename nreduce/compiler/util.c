@@ -445,6 +445,17 @@ int timeval_diffms(struct timeval from, struct timeval to)
   return diff.tv_sec*1000 + diff.tv_usec/1000;
 }
 
+struct timeval timeval_addms(struct timeval t, int ms)
+{
+  t.tv_sec += ms/1000;
+  t.tv_usec += (ms%1000)*1000;
+  if (t.tv_usec >= 1000000) {
+    t.tv_usec -= 1000000;
+    t.tv_sec++;
+  }
+  return t;
+}
+
 int hash(const void *mem, int size)
 {
   int h = 0;

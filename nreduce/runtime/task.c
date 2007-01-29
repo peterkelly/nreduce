@@ -621,13 +621,7 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
       struct timeval now;
       struct timespec abstime;
       gettimeofday(&now,NULL);
-
-      now.tv_sec += delayms/1000;
-      now.tv_usec += (delayms%1000)*1000;
-      if (now.tv_usec >= 1000000) {
-        now.tv_usec -= 1000000;
-        now.tv_sec++;
-      }
+      now = timeval_addms(now,delayms);
       abstime.tv_sec = now.tv_sec;
       abstime.tv_nsec = now.tv_usec * 1000;
       pthread_cond_timedwait(&endpt->mailbox.cond,&endpt->mailbox.lock,&abstime);

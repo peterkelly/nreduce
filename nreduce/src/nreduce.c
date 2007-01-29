@@ -37,10 +37,8 @@
 #include <math.h>
 #include <unistd.h>
 #include <errno.h>
-#ifdef TIMING
 #include <sys/time.h>
 #include <time.h>
-#endif
 
 #define NREDUCE_C
 
@@ -195,8 +193,12 @@ int main(int argc, char **argv)
   int bcsize;
   char *bcdata;
   FILE *statsfile = NULL;
+  struct timeval time;
 
   setbuf(stdout,NULL);
+
+  gettimeofday(&time,NULL);
+  srand(time.tv_usec);
 
   memset(&args,0,sizeof(args));
   parse_args(argc,argv);
