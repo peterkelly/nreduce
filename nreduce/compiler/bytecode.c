@@ -643,6 +643,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       snode *expr2 = c->right;
       snode *expr1 = c->left->right;
       E(src,comp,expr1,p,n);
+      EVAL(expr1->sl,0);
       POP(expr1->sl,1);
       E(src,comp,expr2,p,n);
     }
@@ -772,6 +773,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             snode *expr2 = args->data[0];
             snode *expr1 = args->data[1];
             E(src,comp,expr1,p,n);
+            EVAL(expr1->sl,0);
             POP(expr1->sl,1);
             R(src,comp,expr2,p,n);
           }
