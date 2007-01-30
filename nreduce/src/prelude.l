@@ -16,7 +16,9 @@ __start = (__printer main)
 
 streamfd fd =  (readchunk fd (streamfd fd))
 
-readb filename = (streamfd (openfd filename))
+readb filename = (streamfd (openfd (forcelist filename)))
+
+readdir filename = (readdir1 (forcelist filename))
 
 stdin = (streamfd 0)
 
@@ -62,6 +64,10 @@ appendn n a b = (if (= n 2)
                     (appendn (- n 1) (append a b)))
 
 append1 a b = (append a (cons b nil))
+
+forcelist1 lst = (if lst (seq (head lst) (forcelist1 (tail lst))) nil)
+
+forcelist lst = (seq (forcelist1 lst) lst)
 
 listn n a = (if (= n 1)
                 (cons a nil)

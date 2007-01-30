@@ -85,7 +85,7 @@
 #define B_NUMTOSTRING    37
 #define B_OPENFD         38
 #define B_READCHUNK      39
-#define B_READDIR        40
+#define B_READDIR1       40
 
 #define B_ISCONS         41
 #define B_TESTSTRING     42

@@ -881,7 +881,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
   arr->tail = nextpntr;
 }
 
-static void b_readdir(task *tsk, pntr *argstack)
+static void b_readdir1(task *tsk, pntr *argstack)
 {
   DIR *dir;
   char *path;
@@ -1043,7 +1043,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "numtostring",    1, 1, MAYBE_UNEVAL, ALWAYS_TRUE, b_numtostring    },
 { "openfd",         1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_openfd         },
 { "readchunk",      2, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readchunk      },
-{ "readdir",        1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readdir        },
+{ "readdir1",       1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readdir1       },
 
 { "cons?",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_iscons         },
 { "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_teststring     },
