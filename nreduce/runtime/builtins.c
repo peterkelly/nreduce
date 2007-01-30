@@ -267,9 +267,13 @@ static void b_parhead(task *tsk, pntr *argstack)
 static void b_echo(task *tsk, pntr *argstack)
 {
   char *str;
-  CHECK_ARG(0,CELL_AREF,B_ECHO);
+  int badtype;
 
-  str = array_to_string(argstack[0]);
+  if (0 <= (badtype = array_to_string(argstack[0],&str))) {
+    set_error(tsk,"echo: argument is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
   fprintf(tsk->output,"%s",str);
   free(str);
   argstack[0] = tsk->globnilpntr;
@@ -370,13 +374,19 @@ void convert_to_string(task *tsk, carray *arr)
 int check_array_convert(task *tsk, carray *arr, const char *from)
 {
   int printed = 0;
+  arr->tail = resolve_pntr(arr->tail);
   if ((sizeof(pntr) == arr->elemsize) &&
-      ((MAX_ARRAY_SIZE == arr->size) || (CELL_NIL == pntrtype(arr->tail)))) {
+      ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(arr->tail)))) {
     int oldchars = arr->nchars;
+    pntr *pelements = (pntr*)arr->elements;
 
-    while ((arr->nchars < arr->size) &&
-           pntr_is_char(((pntr*)arr->elements)[arr->nchars]))
-      arr->nchars++;
+    while (arr->nchars < arr->size) {
+      pelements[arr->nchars] = resolve_pntr(pelements[arr->nchars]);
+      if (pntr_is_char(pelements[arr->nchars]))
+        arr->nchars++;
+      else
+        break;
+    }
 
     if (arr->nchars != oldchars) {
       arrdebug(tsk,"%s: now arr->nchars = %d, was %d; array size = %d\n",
@@ -505,32 +515,75 @@ pntr string_to_array(task *tsk, const char *str)
   }
 }
 
-char *array_to_string(pntr refpntr)
+int array_to_string(pntr refpntr, char **str)
 {
-  /* FIXME: handle the case of index > 0 */
-  /* FIXME: test in both dsize=1 and dsize=8 cases */
-  /* FIXME: handle chained arrays */
-  carray *arr = aref_array(refpntr);
-  char *str = malloc(arr->size+1);
+  pntr p = refpntr;
+  array *buf = array_new(1);
+  char zero = '\0';
+  int badtype = -1;
 
-  if (1 == arr->elemsize) {
-    memcpy(str,arr->elements,arr->size);
-    str[arr->size] = '\0';
-  }
-  else if (sizeof(pntr) == arr->elemsize) {
-    int i;
-    int pos = 0;
-    for (i = 0; i < arr->size; i++) {
-      pntr val = resolve_pntr(((pntr*)arr->elements)[i]);
-      if (CELL_NUMBER == pntrtype(val))
-        str[pos++] = ((int)val) & 0xff;
+  *str = NULL;
+
+  while (0 > badtype) {
+
+    if (CELL_CONS == pntrtype(p)) {
+      cell *c = get_pntr(p);
+      pntr head = resolve_pntr(c->field1);
+      pntr tail = resolve_pntr(c->field2);
+      if (pntr_is_char(head)) {
+        char cc = (char)head;
+        array_append(buf,&cc,1);
+      }
+      else {
+        badtype = pntrtype(head);
+        break;
+      }
+      p = tail;
     }
-    str[pos++] = '\0';
-  }
-  else
-    fatal("array_to_string: invalid array size");
+    else if (CELL_AREF == pntrtype(p)) {
+      carray *arr = aref_array(p);
+      int index = aref_index(p);
 
-  return str;
+      if (1 == arr->elemsize) {
+        array_append(buf,&((char*)arr->elements)[index],arr->size-index);
+      }
+      else {
+        pntr *pelements = (pntr*)arr->elements;
+        int i;
+        for (i = index; i < arr->size; i++) {
+          pntr elem = resolve_pntr(pelements[i]);
+          if (pntr_is_char(elem)) {
+            char cc = (char)elem;
+            array_append(buf,&cc,1);
+          }
+          else {
+            badtype = pntrtype(elem);
+            break;
+          }
+        }
+      }
+      p = resolve_pntr(arr->tail);
+    }
+    else if (CELL_NIL == pntrtype(p)) {
+      break;
+    }
+    else {
+      badtype = pntrtype(p);
+      break;
+    }
+  }
+
+  if (0 <= badtype) {
+    *str = NULL;
+    free(buf->data);
+  }
+  else {
+    array_append(buf,&zero,1);
+    *str = buf->data;
+  }
+
+  free(buf);
+  return badtype;
 }
 
 static void b_cons(task *tsk, pntr *argstack)
@@ -775,13 +828,15 @@ static void b_openfd(task *tsk, pntr *argstack)
   pntr filenamepntr = argstack[0];
   char *filename;
   int fd;
+  int badtype;
 
   /* FIXME: need to associate the fd with a garbage collectable wrapper so if the whole
      file isn't read it still gets closed */
 
-  CHECK_ARG(0,CELL_AREF,B_OPENFD);
-
-  filename = array_to_string(filenamepntr);
+  if (0 <= (badtype = array_to_string(filenamepntr,&filename))) {
+    set_error(tsk,"openfd: filename is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
 
   if (0 > (fd = open(filename,O_RDONLY))) {
     set_error(tsk,"%s: %s",filename,strerror(errno));
@@ -813,6 +868,10 @@ static void b_readchunk(task *tsk, pntr *argstack)
     argstack[0] = tsk->globnilpntr;
     return;
   }
+  if (0 > r) {
+    set_error(tsk,"Error reading file: %s",strerror(errno));
+    return;
+  }
 
 /*   fprintf(tsk->output,"Read %d bytes\n",r); */
   arr = carray_new(tsk,1,NULL,NULL);
@@ -830,9 +889,12 @@ static void b_readdir(task *tsk, pntr *argstack)
   struct dirent tmp;
   struct dirent *entry;
   carray *arr;
+  int badtype;
 
-  CHECK_ARG(0,CELL_AREF,B_READDIR);
-  path = array_to_string(filenamepntr);
+  if (0 <= (badtype = array_to_string(filenamepntr,&path))) {
+    set_error(tsk,"readdir: path is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
 
   if (NULL == (dir = opendir(path))) {
     set_error(tsk,"%s: %s",path,strerror(errno));

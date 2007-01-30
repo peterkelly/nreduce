@@ -662,7 +662,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 void printp(FILE *f, pntr p);
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
-char *array_to_string(pntr refpntr);
+int array_to_string(pntr refpntr, char **str);
 
 /* worker */
 
