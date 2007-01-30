@@ -157,75 +157,100 @@ static void mark(task *tsk, pntr p, short bit)
   cell *c;
   assert(CELL_EMPTY != pntrtype(p));
 
-  /* handle CONS and AREF specially - process the "spine" iteratively */
-  while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
+  if (tsk->markstack) {
+    if (is_pntr(p) && !(get_pntr(p)->flags & bit))
+      pntrstack_push(tsk->markstack,p);
+    return;
+  }
+
+  tsk->markstack = pntrstack_new();
+  tsk->markstack->limit = -1;
+  pntrstack_push(tsk->markstack,p);
+
+  while (0 < tsk->markstack->count) {
+    int cont = 0;
+
+    p = pntrstack_pop(tsk->markstack);
+
+    /* handle CONS and AREF specially - process the "spine" iteratively */
+    while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
+      c = get_pntr(p);
+      if (c->flags & bit) {
+        cont = 1;
+        break;
+      }
+      c->flags |= bit;
+
+      if (CELL_AREF == pntrtype(p)) {
+        carray *arr = (carray*)get_pntr(c->field1);
+        int i;
+        assert(MAX_ARRAY_SIZE >= arr->size);
+        if (sizeof(pntr) == arr->elemsize) {
+          for (i = 0; i < arr->size; i++) {
+            ((pntr*)arr->elements)[i] = resolve_pntr(((pntr*)arr->elements)[i]);
+            mark(tsk,((pntr*)arr->elements)[i],bit);
+          }
+        }
+        arr->tail = resolve_pntr(arr->tail);
+        p = arr->tail;
+      }
+      else {
+        c->field1 = resolve_pntr(c->field1);
+        c->field2 = resolve_pntr(c->field2);
+        mark(tsk,c->field1,bit);
+        p = c->field2;
+      }
+    }
+
+    if (cont)
+      continue;
+
+    /* handle other types */
+    if (!is_pntr(p))
+      continue;
+
     c = get_pntr(p);
     if (c->flags & bit)
-      return;
-    c->flags |= bit;
+      continue;
 
-    if (CELL_AREF == pntrtype(p)) {
-      carray *arr = (carray*)get_pntr(c->field1);
-      int i;
-      assert(MAX_ARRAY_SIZE >= arr->size);
-      if (sizeof(pntr) == arr->elemsize) {
-        for (i = 0; i < arr->size; i++) {
-          ((pntr*)arr->elements)[i] = resolve_pntr(((pntr*)arr->elements)[i]);
-          mark(tsk,((pntr*)arr->elements)[i],bit);
-        }
-      }
-      arr->tail = resolve_pntr(arr->tail);
-      p = arr->tail;
-    }
-    else {
+    c->flags |= bit;
+    switch (pntrtype(p)) {
+    case CELL_IND:
+      mark(tsk,c->field1,bit);
+      break;
+    case CELL_APPLICATION:
       c->field1 = resolve_pntr(c->field1);
       c->field2 = resolve_pntr(c->field2);
       mark(tsk,c->field1,bit);
-      p = c->field2;
+      mark(tsk,c->field2,bit);
+      break;
+    case CELL_FRAME:
+      mark_frame(tsk,(frame*)get_pntr(c->field1),bit);
+      break;
+    case CELL_CAP:
+      mark_cap(tsk,(cap*)get_pntr(c->field1),bit);
+      break;
+    case CELL_REMOTEREF: {
+      global *glo = (global*)get_pntr(c->field1);
+      mark_global(tsk,glo,bit);
+      break;
+    }
+    case CELL_BUILTIN:
+    case CELL_SCREF:
+    case CELL_NIL:
+    case CELL_NUMBER:
+    case CELL_HOLE:
+    case CELL_SYMBOL:
+      break;
+    default:
+      abort();
+      break;
     }
   }
 
-  /* handle other types */
-  if (!is_pntr(p))
-    return;
-
-  c = get_pntr(p);
-  if (c->flags & bit)
-    return;
-
-  c->flags |= bit;
-  switch (pntrtype(p)) {
-  case CELL_IND:
-    mark(tsk,c->field1,bit);
-    break;
-  case CELL_APPLICATION:
-    c->field1 = resolve_pntr(c->field1);
-    c->field2 = resolve_pntr(c->field2);
-    mark(tsk,c->field1,bit);
-    mark(tsk,c->field2,bit);
-    break;
-  case CELL_FRAME:
-    mark_frame(tsk,(frame*)get_pntr(c->field1),bit);
-    break;
-  case CELL_CAP:
-    mark_cap(tsk,(cap*)get_pntr(c->field1),bit);
-    break;
-  case CELL_REMOTEREF: {
-    global *glo = (global*)get_pntr(c->field1);
-    mark_global(tsk,glo,bit);
-    break;
-  }
-  case CELL_BUILTIN:
-  case CELL_SCREF:
-  case CELL_NIL:
-  case CELL_NUMBER:
-  case CELL_HOLE:
-  case CELL_SYMBOL:
-    break;
-  default:
-    abort();
-    break;
-  }
+  assert(tsk->markstack);
+  pntrstack_free(tsk->markstack);
+  tsk->markstack = NULL;
 }
 
 cell *alloc_cell(task *tsk)
@@ -574,13 +599,14 @@ pntrstack *pntrstack_new(void)
   s->alloc = 1;
   s->count = 0;
   s->data = (pntr*)malloc(sizeof(pntr));
+  s->limit = STACK_LIMIT;
   return s;
 }
 
 void pntrstack_push(pntrstack *s, pntr p)
 {
   if (s->count == s->alloc) {
-    if (s->count >= STACK_LIMIT) {
+    if ((0 <= s->limit) && (s->count >= s->limit)) {
       fprintf(stderr,"Out of stack space\n");
       exit(1);
     }

@@ -241,6 +241,7 @@ typedef struct pntrstack {
   int alloc;
   int count;
   pntr *data;
+  int limit;
 } pntrstack;
 
 typedef struct psentry {
@@ -470,6 +471,7 @@ typedef struct task {
   pntrstack *streamstack;
   int indistgc;
   int inmark;
+  pntrstack *markstack;
 
   /* general */
   FILE *output;
