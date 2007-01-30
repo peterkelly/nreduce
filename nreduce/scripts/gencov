@@ -1,0 +1,9 @@
+#!/bin/bash
+BASEDIR=`pwd`
+for FILENAME in `find . -name '*.c'`; do
+  FILEDIR=`echo $FILENAME | perl -pe 's/\/[^\/]*\.c//'`
+  FILE=`echo $FILENAME | perl -pe 's/^.*\/([^\/]*)\.c/$1/'`
+  cd $BASEDIR/$FILEDIR
+  echo $FILENAME
+  gcov -o .libs/${FILE}.da ${FILE}.c
+done

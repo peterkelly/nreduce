@@ -1,0 +1,10 @@
+#!/bin/bash
+printf "%-40s %-6s %-6s\n" "Filename" "Total" "Unused"
+printf "%-40s %-6s %-6s\n" "--------" "-----" "------"
+for i in `find . -name '*.c' | sort`; do
+  if [ -f $i.gcov ]; then
+    total=`cat $i | wc -l`
+    unused=`grep -F '#####' $i.gcov | wc -l`
+    printf "%-40s %-6d %-6d\n" $i $total $unused
+  fi
+done

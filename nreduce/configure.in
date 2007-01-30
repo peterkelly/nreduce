@@ -32,9 +32,20 @@ ALL_LIBS="-lm -lpthread"
 ALL_INCLUDES=""
 AC_SUBST(ALL_LIBS)
 LDFLAGS="-rdynamic"
-CFLAGS="-ggdb3 -Wall -O0 -fno-strict-aliasing"
+
+######################### COMPILE OPTIONS ##########################
+
+# Normal compilation mode to use during development; include debug info but no optimization
+CFLAGS="-ggdb3 -Wall -O0"
+
+# Max. optimizations, for performance testings
 #CFLAGS="-ggdb3 -Wall -O3 -fno-strict-aliasing -DNDEBUG"
+
+# For gprof
 #CFLAGS="-ggdb3 -Wall -O0 -pg"
+
+# For gcov
+#CFLAGS="-ggdb3 -Wall -O0 -fprofile-arcs -ftest-coverage"
 
 # Hide some warnings that icc gives
 if $CC --version | grep '^icc '; then
