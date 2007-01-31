@@ -145,7 +145,6 @@ static void *manager(void *arg)
 
   add_endpoint(sc,sc->managerendpt);
 
-  printf("Manager started\n");
   while (NULL != (msg = endpoint_next_message(sc->managerendpt,-1))) {
     int r = manager_handle_message(sc,sc->managerendpt,msg);
     assert(0 == r);

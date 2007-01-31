@@ -668,7 +668,7 @@ int array_to_string(pntr refpntr, char **str);
 
 /* worker */
 
-int worker();
+int worker(const char *host, int port);
 
 /* cell */
 

@@ -27,6 +27,8 @@
 /* FIXME: the sin_addr structure is supposed to be in network byte order; we are treating
    it as host by order here (which appears to be ok on x86) */
 
+/* FIXME: must use re-entrant versions of all relevant socket functions, e.g. gethostbyname_r() */
+
 #ifndef TEMP_FAILURE_RETRY
 # define TEMP_FAILURE_RETRY(expression) \
   (__extension__                                                              \
@@ -66,12 +68,18 @@
 
 static socketcomm *socketcomm_new()
 {
-  return (socketcomm*)calloc(1,sizeof(socketcomm));
+  socketcomm *sc = (socketcomm*)calloc(1,sizeof(socketcomm));
+  pthread_mutex_init(&sc->lock,NULL);
+  pthread_cond_init(&sc->cond,NULL);
+  sc->listenfd = -1;
+  return sc;
 }
 
 static void socketcomm_free(socketcomm *sc)
 {
   /* FIXME: free message data */
+  if (0 <= sc->listenfd)
+    close(sc->listenfd);
   pthread_mutex_destroy(&sc->lock);
   pthread_cond_destroy(&sc->cond);
   free(sc);
@@ -811,46 +819,59 @@ void start_task_using_manager(socketcomm *sc, const char *bcdata, int bcsize,
   printf("Distributed process creation started\n");
 }
 
-int worker()
+int worker(const char *host, int port)
 {
   struct in_addr addr;
   socketcomm *sc;
   int listenfd;
   int pipefds[2];
-  int i;
   endpoint *endpt;
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
   atexit(exited);
 
-  for (i = 0; i < 20; i++)
-    printf("\n");
-  printf("==================================================\n");
-  printf("Running as worker, pid = %d\n",getpid());
+  sc = socketcomm_new();
 
   addr.s_addr = INADDR_ANY;
-  if (0 > (listenfd = start_listening(addr,WORKER_PORT)))
+  if (NULL != host) {
+    struct hostent *he;
+    if (NULL == (he = gethostbyname(host))) {
+      fprintf(stderr,"%s: %s\n",host,hstrerror(h_errno));
+      return -1;
+    }
+
+    if (4 != he->h_length) {
+      fprintf(stderr,"%s: invalid address type\n",host);
+      return -1;
+    }
+
+    sc->listenip = *((struct in_addr*)he->h_addr);
+    sc->havelistenip = 1;
+    addr = *((struct in_addr*)he->h_addr);
+  }
+
+  if (0 > (listenfd = start_listening(addr,port))) {
+    socketcomm_free(sc);
     return -1;
+  }
 
-  sc = socketcomm_new();
   sc->listenfd = listenfd;
-  sc->listenport = WORKER_PORT;
-
+  sc->listenport = port;
   sc->nextlocalid = 1;
 
   pipe(pipefds);
   sc->ioready_readfd = pipefds[0];
   sc->ioready_writefd = pipefds[1];
-  pthread_mutex_init(&sc->lock,NULL);
-  pthread_cond_init(&sc->cond,NULL);
 
   start_manager(sc);
 
   if (0 > wrap_pthread_create(&sc->iothread,NULL,ioloop,sc))
     fatal("pthread_create: %s",strerror(errno));
 
-  printf("suspending main thread\n");
+  printf("Worker started, pid = %d, listening addr = %s:%d\n",
+         getpid(),host ? host : "0.0.0.0",port);
+
   if (0 > wrap_pthread_join(sc->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 

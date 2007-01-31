@@ -28,6 +28,7 @@
 #include "compiler/bytecode.h"
 #include "nreduce.h"
 #include "runtime/runtime.h"
+#include "runtime/network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -65,6 +66,7 @@ struct arguments {
   int worker;
   char *trace;
   int trace_type;
+  char *address;
 };
 
 struct arguments args;
@@ -88,6 +90,7 @@ static void usage()
 "                           (default: interpreter)\n"
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
+"  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
 "\n"
 "Options for printing output of compilation stages:\n"
 "(these do not actually run the program)\n"
@@ -168,6 +171,11 @@ void parse_args(int argc, char **argv)
       args.trace = argv[i];
       args.trace_type = TRACE_LANDSCAPE;
     }
+    else if (!strcmp(argv[i],"-d") || !strcmp(argv[i],"--address")) {
+      if (++i >= argc)
+        usage();
+      args.address = argv[i];
+    }
     else {
       args.filename = argv[i];
       if (++i < argc)
@@ -208,8 +216,20 @@ int main(int argc, char **argv)
 
   compileinfo = args.compileinfo;
 
-  if (args.worker)
-    return worker();
+  if (args.worker) {
+    int r;
+    char *host = NULL;
+    int port = WORKER_PORT;
+
+    if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
+      fprintf(stderr,"Invalid listening address: %s\n",args.address);
+      exit(1);
+    }
+
+    r = worker(host,port);
+    free(host);
+    return r;
+  }
 
   if (args.statistics && (NULL == (statsfile = fopen(args.statistics,"w")))) {
     perror(args.statistics);

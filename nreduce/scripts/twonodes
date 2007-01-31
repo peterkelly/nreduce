@@ -1,0 +1,11 @@
+#!/bin/bash
+XTERMCMD="xterm -sb -fg black -bg white -font 6x10"
+$XTERMCMD -geometry 90x32+25+0 -e src/nreduce -w -d localhost:2000 &
+XTERM1=$!
+$XTERMCMD -geometry 90x32+25+370 -e src/nreduce -w -d localhost:2001 &
+XTERM2=$!
+sleep 1
+echo -e "open localhost:2001\nexit\n" | nc localhost 2000 > /dev/null
+echo "Started nreduce nodes; hit return to kill"
+read -s
+kill $XTERM1 $XTERM2
