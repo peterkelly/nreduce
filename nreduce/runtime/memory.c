@@ -170,7 +170,7 @@ static void mark(task *tsk, pntr p, short bit)
   while (0 < tsk->markstack->count) {
     int cont = 0;
 
-    p = pntrstack_pop(tsk->markstack);
+    p = tsk->markstack->data[--tsk->markstack->count];
 
     /* handle CONS and AREF specially - process the "spine" iteratively */
     while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
