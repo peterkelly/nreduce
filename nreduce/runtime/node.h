@@ -32,6 +32,7 @@
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
 struct node;
+struct listener;
 
 typedef struct endpointid {
   struct in_addr nodeip;
@@ -86,6 +87,7 @@ typedef struct connection {
   struct in_addr ip;
   int port;
   int sock;
+  struct listener *l;
   struct node *n;
 
   int connected;
@@ -95,6 +97,7 @@ typedef struct connection {
 
   int donewelcome;
   int isconsole;
+  int isreg;
   int toclose;
   void *data;
 
@@ -107,10 +110,40 @@ typedef struct connectionlist {
   connection *last;
 } connectionlist;
 
+typedef void (*node_callbackfun)(struct node *n, void *data, int event, connection *conn);
+
+typedef struct node_callback {
+  node_callbackfun fun;
+  void *data;
+  struct node_callback *prev;
+  struct node_callback *next;
+} node_callback;
+
+typedef struct node_callbacklist {
+  node_callback *first;
+  node_callback *last;
+} node_callbacklist;
+
+typedef struct listener {
+  int port;
+  int fd;
+  node_callbackfun callback;
+  void *data;
+  struct listener *prev;
+  struct listener *next;
+} listener;
+
+typedef struct listenerlist {
+  listener *first;
+  listener *last;
+} listenerlist;
+
 typedef struct node {
   endpointlist endpoints;
   connectionlist connections;
-  int listenfd;
+  listenerlist listeners;
+  listener *mainl;
+  node_callbacklist callbacks;
   int listenport;
   struct in_addr listenip;
   int havelistenip;
@@ -137,7 +170,11 @@ typedef struct node {
 
 node *node_new();
 void node_free(node *n);
-int node_listen(node *n, const char *host, int port);
+listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data);
+void node_add_callback(node *n, node_callbackfun fun, void *data);
+void node_remove_callback(node *n, node_callbackfun fun, void *data);
+listener *node_add_listener(node *n, int port, int fd, node_callbackfun callback, void *data);
+void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);

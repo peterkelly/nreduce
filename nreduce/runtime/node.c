@@ -68,6 +68,15 @@
 /** @name Private functions
  * @{ */
 
+static void dispatch_event(node *n, int event, connection *conn)
+{
+  node_callback *cb;
+  for (cb = n->callbacks.first; cb; cb = cb->next)
+    cb->fun(n,cb->data,event,conn);
+  if (conn && conn->l && conn->l->callback)
+    conn->l->callback(n,conn->l->data,event,conn);
+}
+
 static void got_message(node *n, const msgheader *hdr, const void *data)
 {
   endpoint *endpt;
@@ -86,6 +95,13 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
 static void process_received(node *n, connection *conn)
 {
   int start = 0;
+
+  if (conn->isreg) {
+    assert(conn->l);
+    assert(conn->l->callback);
+    conn->l->callback(n,conn->l->data,EVENT_DATA,conn);
+    return;
+  }
 
   if (conn->isconsole) {
     console_process_received(n,conn);
@@ -179,12 +195,13 @@ static connection *find_connection(node *n, struct in_addr nodeip, short nodepor
   return NULL;
 }
 
-static connection *add_connection(node *n, const char *hostname, int sock)
+static connection *add_connection(node *n, const char *hostname, int sock, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
   conn->hostname = strdup(hostname);
   conn->ip.s_addr = 0;
   conn->sock = sock;
+  conn->l = l;
   conn->n = n;
   conn->readfd = -1;
   conn->port = -1;
@@ -224,12 +241,16 @@ static int handle_connected(node *n, connection *conn)
 
     if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
+      dispatch_event(n,EVENT_CONN_FAILED,conn);
       remove_connection(n,conn);
       return -1;
     }
+
+    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn);
   }
   else {
     printf("Connection to %s failed: %s\n",conn->hostname,strerror(err));
+    dispatch_event(n,EVENT_CONN_FAILED,conn);
     remove_connection(n,conn);
     return -1;
   }
@@ -246,7 +267,8 @@ static void handle_write(node *n, connection *conn)
 
     if (0 > w) {
       fprintf(stderr,"write() to %s failed: %s\n",conn->hostname,strerror(errno));
-      if (conn->isconsole) {
+      if (conn->isconsole || conn->isreg) {
+        dispatch_event(n,EVENT_CONN_IOERROR,conn);
         remove_connection(n,conn);
       }
       else {
@@ -257,7 +279,8 @@ static void handle_write(node *n, connection *conn)
 
     if (0 == w) {
       fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
-      if (conn->isconsole) {
+      if (conn->isconsole || conn->isreg) {
+        dispatch_event(n,EVENT_CONN_IOERROR,conn);
         remove_connection(n,conn);
       }
       else {
@@ -270,6 +293,7 @@ static void handle_write(node *n, connection *conn)
   }
 
   if ((0 == conn->sendbuf->nbytes) && conn->toclose) {
+    dispatch_event(n,EVENT_CONN_CLOSED,conn);
     remove_connection(n,conn);
   }
 }
@@ -293,7 +317,8 @@ static void handle_read(node *n, connection *conn)
 
   if (0 > r) {
     fprintf(stderr,"read() from %s failed: %s\n",conn->hostname,strerror(errno));
-    if (conn->isconsole) {
+    if (conn->isconsole || conn->isreg) {
+      dispatch_event(n,EVENT_CONN_IOERROR,conn);
       remove_connection(n,conn);
     }
     else {
@@ -303,7 +328,8 @@ static void handle_read(node *n, connection *conn)
   }
 
   if (0 == r) {
-    if (conn->isconsole) {
+    if (conn->isconsole || conn->isreg) {
+      dispatch_event(n,EVENT_CONN_CLOSED,conn);
       printf("Client %s closed connection\n",conn->hostname);
       remove_connection(n,conn);
     }
@@ -318,7 +344,7 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
-static void handle_new_connection(node *n)
+static void handle_new_connection(node *n, listener *l)
 {
   struct sockaddr_in remote_addr;
   struct hostent *he;
@@ -326,7 +352,7 @@ static void handle_new_connection(node *n)
   int clientfd;
   connection *conn;
   int yes = 1;
-  if (0 > (clientfd = accept(n->listenfd,(struct sockaddr*)&remote_addr,&sin_size))) {
+  if (0 > (clientfd = accept(l->fd,(struct sockaddr*)&remote_addr,&sin_size))) {
     perror("accept");
     return;
   }
@@ -348,14 +374,16 @@ static void handle_new_connection(node *n)
     sprintf(hostname,"%u.%u.%u.%u",
             addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
     printf("Got connection from %s\n",hostname);
-    conn = add_connection(n,hostname,clientfd);
+    conn = add_connection(n,hostname,clientfd,l);
   }
   else {
     printf("Got connection from %s\n",he->h_name);
-    conn = add_connection(n,he->h_name,clientfd);
+    conn = add_connection(n,he->h_name,clientfd,l);
   }
   conn->connected = 1;
   conn->ip = remote_addr.sin_addr;
+
+  dispatch_event(n,EVENT_CONN_ACCEPTED,conn);
 }
 
 static void *ioloop(void *arg)
@@ -371,13 +399,16 @@ static void *ioloop(void *arg)
     connection *conn;
     connection *next;
     int havewrite = 0;
+    listener *l;
 
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
 
-    FD_SET(n->listenfd,&readfds);
-    if (highest < n->listenfd)
-      highest = n->listenfd;
+    for (l = n->listeners.first; l; l = l->next) {
+      FD_SET(l->fd,&readfds);
+      if (highest < l->fd)
+        highest = l->fd;
+    }
 
     FD_SET(n->ioready_readfd,&readfds);
     if (highest < n->ioready_readfd)
@@ -438,10 +469,13 @@ static void *ioloop(void *arg)
     }
 
     /* accept new connections */
-    if (FD_ISSET(n->listenfd,&readfds))
-      handle_new_connection(n);
+    for (l = n->listeners.first; l; l = l->next) {
+      if (FD_ISSET(l->fd,&readfds))
+        handle_new_connection(n,l);
+    }
   }
   printf("Picked up shutdown\n");
+  dispatch_event(n,EVENT_SHUTDOWN,NULL);
   pthread_mutex_unlock(&n->lock);
   return NULL;
 }
@@ -473,7 +507,11 @@ node *node_new()
 
 void node_free(node *n)
 {
+  if (n->mainl)
+    node_remove_listener(n,n->mainl);
   /* FIXME: free message data */
+  assert(NULL == n->callbacks.first);
+  assert(NULL == n->listeners.first);
   pthread_mutex_destroy(&n->lock);
   pthread_cond_destroy(&n->cond);
   close(n->ioready_readfd);
@@ -481,7 +519,7 @@ void node_free(node *n)
   free(n);
 }
 
-int node_listen(node *n, const char *host, int port)
+listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data)
 {
   struct in_addr addr;
   int fd;
@@ -491,12 +529,12 @@ int node_listen(node *n, const char *host, int port)
     struct hostent *he;
     if (NULL == (he = gethostbyname(host))) {
       fprintf(stderr,"%s: %s\n",host,hstrerror(h_errno));
-      return -1;
+      return NULL;
     }
 
     if (4 != he->h_length) {
       fprintf(stderr,"%s: invalid address type\n",host);
-      return -1;
+      return NULL;
     }
 
     n->listenip = *((struct in_addr*)he->h_addr);
@@ -506,12 +544,72 @@ int node_listen(node *n, const char *host, int port)
 
   if (0 > (fd = start_listening(addr,port))) {
     node_free(n);
-    return -1;
+    return NULL;
   }
 
-  n->listenfd = fd;
-  n->listenport = port;
-  return 0;
+  return node_add_listener(n,port,fd,callback,data);
+}
+
+void node_add_callback(node *n, node_callbackfun fun, void *data)
+{
+  node_callback *cb = (node_callback*)calloc(1,sizeof(node_callback));
+  cb->fun = fun;
+  cb->data = data;
+
+  pthread_mutex_lock(&n->lock);
+  llist_append(&n->callbacks,cb);
+  pthread_mutex_unlock(&n->lock);
+}
+
+void node_remove_callback(node *n, node_callbackfun fun, void *data)
+{
+  node_callback *cb;
+
+  pthread_mutex_lock(&n->lock);
+  cb = n->callbacks.first;
+  while (cb && ((cb->fun != fun) || (cb->data != data)))
+    cb = cb->next;
+  assert(cb);
+  llist_remove(&n->callbacks,cb);
+  pthread_mutex_unlock(&n->lock);
+
+  free(cb);
+}
+
+listener *node_add_listener(node *n, int port, int fd, node_callbackfun callback, void *data)
+{
+  listener *l = (listener*)calloc(1,sizeof(listener));
+  l->port = port;
+  l->fd = fd;
+  l->callback = callback;
+  l->data = data;
+
+  pthread_mutex_lock(&n->lock);
+  llist_append(&n->listeners,l);
+  pthread_mutex_unlock(&n->lock);
+  return l;
+}
+
+void node_remove_listener(node *n, listener *l)
+{
+  connection *conn;
+
+  pthread_mutex_lock(&n->lock);
+
+  conn = n->connections.first;
+  while (conn) {
+    connection *next = conn->next;
+    if (conn->l == l)
+      remove_connection(n,conn);
+    conn = next;
+  }
+
+  llist_remove(&n->listeners,l);
+
+  pthread_mutex_unlock(&n->lock);
+
+  close(l->fd);
+  free(l);
 }
 
 void node_start_iothread(node *n)
@@ -590,9 +688,12 @@ connection *node_connect(node *n, const char *hostname, int port)
     return NULL;
   }
 
-  conn = add_connection(n,hostname,sock);
+  conn = add_connection(n,hostname,sock,NULL);
   conn->connected = connected;
   conn->ip = *((struct in_addr*)he->h_addr);
+
+  if (conn->connected)
+    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn);
 
   return conn;
 }
