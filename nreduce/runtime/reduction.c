@@ -471,7 +471,7 @@ void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
 {
   scomb *mainsc;
   pntr rootp;
-  task *tsk = task_new(0,0,NULL,0,0);
+  task *tsk = task_new(0,0,NULL,0,NULL);
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");

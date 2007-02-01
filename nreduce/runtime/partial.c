@@ -448,7 +448,7 @@ void reset_scused(source *src)
 
 snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type)
 {
-  task *tsk = task_new(0,0,NULL,0,0);
+  task *tsk = task_new(0,0,NULL,0,NULL);
   pntr p;
   snode *s;
 

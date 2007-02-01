@@ -1,6 +1,6 @@
 noinst_LTLIBRARIES = libruntime.la
 noinst_PROGRAMS = 
-noinst_HEADERS = network.h runtime.h
+noinst_HEADERS = network.h runtime.h node.h
 libruntime_la_SOURCES = worker.c \
 	network.c \
 	task.c \
@@ -12,10 +12,12 @@ libruntime_la_SOURCES = worker.c \
 	interpreter.c \
 	reduction.c \
 	manager.c \
+	client.c \
 	graph.c \
 	partial.c \
 	tosyntax.c \
-	trace.c
+	trace.c \
+	node.c
 
 INCLUDES = -I@top_srcdir@
 CLEANFILES = *.da *.bb *.bbg *.gcov

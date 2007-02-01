@@ -27,6 +27,7 @@
 #include "src/nreduce.h"
 #include "compiler/bytecode.h"
 #include "network.h"
+#include "node.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -109,24 +110,6 @@ int start_listening(struct in_addr ip, int port)
   }
 
   return listenfd;
-}
-
-int start_listening_host(const char *host, int port)
-{
-  struct hostent *he = gethostbyname(host);
-  struct in_addr ip;
-  if (NULL == he) {
-    fprintf(stderr,"%s: %s\n",host,hstrerror(h_errno));
-    return -1;
-  }
-
-  if (4 != he->h_length) {
-    fprintf(stderr,"%s: unknown address type (length %d)\n",host,he->h_length);
-    return -1;
-  }
-
-  ip = *((struct in_addr*)he->h_addr_list[0]);
-  return start_listening(ip,port);
 }
 
 int accept_connection(int sockfd)

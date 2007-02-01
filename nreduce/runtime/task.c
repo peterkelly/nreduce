@@ -428,14 +428,16 @@ void dump_globals(task *tsk)
   }
 }
 
-task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid)
+task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
   int i;
   bcheader *bch;
 
-  tsk->endpt = endpoint_new(localid,TASK_ENDPOINT,tsk);
+  tsk->n = n;
+  if (NULL != n)
+    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk);
   tsk->runptr = &tsk->rtemp;
 
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
@@ -555,83 +557,18 @@ void task_free(task *tsk)
 
   free(tsk->bcdata);
 
-  endpoint_free(tsk->endpt);
+  if (NULL != tsk->n)
+    node_remove_endpoint(tsk->n,tsk->endpt);
 
   free(tsk);
 }
 
 void task_kill(task *tsk)
 {
-  /* FIXME: make this work */
   tsk->done = 1;
-}
-
-endpoint *endpoint_new(int localid, int type, void *data)
-{
-  endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
-  pthread_mutex_init(&endpt->mailbox.lock,NULL);
-  pthread_cond_init(&endpt->mailbox.cond,NULL);
-  endpt->localid = localid;
-  endpt->type = type;
-  endpt->data = data;
-  return endpt;
-}
-
-void endpoint_free(endpoint *endpt)
-{
-  pthread_mutex_destroy(&endpt->mailbox.lock);
-  pthread_cond_destroy(&endpt->mailbox.cond);
-  free(endpt);
-}
-
-void endpoint_forceclose(endpoint *endpt)
-{
-  pthread_mutex_lock(&endpt->mailbox.lock);
-  while (endpt->mailbox.first) {
-    message *msg = endpt->mailbox.first;
-    llist_remove(&endpt->mailbox,msg);
-    free(msg->data);
-    free(msg);
-  }
-  pthread_cond_broadcast(&endpt->mailbox.cond);
-  pthread_mutex_unlock(&endpt->mailbox.lock);
-}
-
-void endpoint_add_message(endpoint *endpt, message *msg)
-{
-  pthread_mutex_lock(&endpt->mailbox.lock);
-  llist_append(&endpt->mailbox,msg);
-  endpt->checkmsg = 1;
-  if (endpt->interruptptr)
-    *endpt->interruptptr = 1;
-  pthread_cond_broadcast(&endpt->mailbox.cond);
-  pthread_mutex_unlock(&endpt->mailbox.lock);
-}
-
-message *endpoint_next_message(endpoint *endpt, int delayms)
-{
-  message *msg;
-  pthread_mutex_lock(&endpt->mailbox.lock);
-
-  if ((NULL == endpt->mailbox.first) && (0 != delayms)) {
-    if (0 > delayms) {
-      pthread_cond_wait(&endpt->mailbox.cond,&endpt->mailbox.lock);
-    }
-    else {
-      struct timeval now;
-      struct timespec abstime;
-      gettimeofday(&now,NULL);
-      now = timeval_addms(now,delayms);
-      abstime.tv_sec = now.tv_sec;
-      abstime.tv_nsec = now.tv_usec * 1000;
-      pthread_cond_timedwait(&endpt->mailbox.cond,&endpt->mailbox.lock,&abstime);
-    }
-  }
-
-  msg = endpt->mailbox.first;
-  if (NULL != msg)
-    llist_remove(&endpt->mailbox,msg);
-  endpt->checkmsg = (NULL != endpt->mailbox.first);
-  pthread_mutex_unlock(&endpt->mailbox.lock);
-  return msg;
+  *tsk->endpt->interruptptr = 1;
+  if (0 > wrap_pthread_join(tsk->thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  endpoint_forceclose(tsk->endpt);
+  task_free(tsk);
 }

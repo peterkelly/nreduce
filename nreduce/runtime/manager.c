@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network.h"
+#include "node.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -37,14 +38,13 @@
 #include <math.h>
 #include <errno.h>
 
-static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
+static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 {
 /*   printf("Manager got %s (%d bytes)\n",msg_names[msg->hdr.tag],msg->hdr.size); */
   switch (msg->hdr.tag) {
   case MSG_NEWTASK: {
     newtask_msg *ntmsg;
     task *newtsk;
-    int localid;
     if (sizeof(newtask_msg) > msg->hdr.size)
       fatal("NEWTASK: invalid message size\n");
     ntmsg = (newtask_msg*)msg->data;
@@ -54,13 +54,9 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
     printf("NEWTASK pid = %d, groupsize = %d, bcsize = %d\n",
            ntmsg->pid,ntmsg->groupsize,ntmsg->bcsize);
 
-    pthread_mutex_lock(&sc->lock);
-    localid = sc->nextlocalid++;
-    pthread_mutex_unlock(&sc->lock);
+    newtsk = add_task(n,ntmsg->pid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
 
-    newtsk = add_task(sc,ntmsg->pid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,localid);
-
-    socket_send_raw(sc,endpt,msg->hdr.source,MSG_NEWTASKRESP,&localid,sizeof(int));
+    node_send(n,endpt,msg->hdr.source,MSG_NEWTASKRESP,&newtsk->endpt->localid,sizeof(int));
     break;
   }
   case MSG_INITTASK: {
@@ -76,9 +72,9 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
 
     printf("INITTASK: localid = %d, count = %d\n",initmsg->localid,initmsg->count);
 
-    pthread_mutex_lock(&sc->lock);
-    newtsk = find_task(sc,initmsg->localid);
-    pthread_mutex_unlock(&sc->lock);
+    pthread_mutex_lock(&n->lock);
+    newtsk = find_task(n,initmsg->localid);
+    pthread_mutex_unlock(&n->lock);
 
     if (NULL == newtsk)
       fatal("INITTASK: task with localid %d does not exist\n",initmsg->localid);
@@ -96,7 +92,7 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
     }
 
     memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
-    socket_send_raw(sc,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+    node_send(n,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
     newtsk->haveidmap = 1;
     break;
   }
@@ -110,9 +106,9 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
 
     printf("STARTTASK: localid = %d\n",localid);
 
-    pthread_mutex_lock(&sc->lock);
-    newtsk = find_task(sc,localid);
-    pthread_mutex_unlock(&sc->lock);
+    pthread_mutex_lock(&n->lock);
+    newtsk = find_task(n,localid);
+    pthread_mutex_unlock(&n->lock);
 
     if (NULL == newtsk)
       fatal("STARTTASK: task with localid %d does not exist\n",localid);
@@ -126,7 +122,7 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
     if (0 > wrap_pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
       fatal("pthread_create: %s",strerror(errno));
 
-    socket_send_raw(sc,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+    node_send(n,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
     break;
   }
@@ -139,28 +135,26 @@ static int manager_handle_message(socketcomm *sc, endpoint *endpt, message *msg)
 
 static void *manager(void *arg)
 {
-  socketcomm *sc = (socketcomm*)arg;
+  node *n = (node*)arg;
   message *msg;
-  sc->managerendpt = endpoint_new(MANAGER_ID,MANAGER_ENDPOINT,NULL);
 
-  add_endpoint(sc,sc->managerendpt);
+  n->managerendpt = node_add_endpoint(n,MANAGER_ID,MANAGER_ENDPOINT,NULL);
 
-  while (NULL != (msg = endpoint_next_message(sc->managerendpt,-1))) {
-    int r = manager_handle_message(sc,sc->managerendpt,msg);
+  while (NULL != (msg = endpoint_next_message(n->managerendpt,-1))) {
+    int r = manager_handle_message(n,n->managerendpt,msg);
     assert(0 == r);
     free(msg->data);
     free(msg);
   }
 
-  remove_endpoint(sc,sc->managerendpt);
-  endpoint_free(sc->managerendpt);
-  sc->managerendpt = NULL;
+  node_remove_endpoint(n,n->managerendpt);
+  n->managerendpt = NULL;
 
   return NULL;
 }
 
-void start_manager(socketcomm *sc)
+void start_manager(node *n)
 {
-  if (0 > wrap_pthread_create(&sc->managerthread,NULL,manager,sc))
+  if (0 > wrap_pthread_create(&n->managerthread,NULL,manager,n))
     fatal("pthread_create: %s",strerror(errno));
 }

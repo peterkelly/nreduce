@@ -732,6 +732,9 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish)
   int msgsize;
   int tag;
 
+  if (tsk->done)
+    return 1;
+
   if (tsk->stats.nallocs >= COLLECT_THRESHOLD)
     local_collect(tsk);
 
@@ -806,6 +809,11 @@ void *execute(task *tsk)
   frame *runnable;
   const instruction *instr;
   int interrupt = 1;
+  endpoint tempendpt;
+
+  memset(&tempendpt,0,sizeof(endpoint));
+  if (NULL == tsk->endpt)
+    tsk->endpt = &tempendpt; /* FIXME: temp solution until we always have an endpoint */
 
   tsk->newfish = 1;
   tsk->endpt->interruptptr = &interrupt;
@@ -1208,7 +1216,7 @@ void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
   frame *initial;
   task *tsk;
 
-  tsk = task_new(0,1,bcdata,bcsize,0);
+  tsk = task_new(0,1,bcdata,bcsize,NULL);
   tsk->output = stdout;
 
   initial = frame_new(tsk);

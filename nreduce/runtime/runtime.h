@@ -26,6 +26,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "compiler/bytecode.h"
+#include "node.h"
 #include <stdio.h>
 #include <sys/time.h>
 #include <netdb.h>
@@ -171,33 +172,6 @@ pntr resolve_pntr(pntr p);
 
 
 #define check_global(_g) (assert(!(_g)->freed))
-
-typedef struct endpointid {
-  struct in_addr nodeip;
-  short nodeport;
-  short localid;
-} endpointid;
-
-typedef struct msgheader {
-  endpointid source;
-  int destlocalid;
-  int size;
-  int tag;
-} msgheader;
-
-typedef struct message {
-  msgheader hdr;
-  char *data;
-  struct message *next;
-  struct message *prev;
-} message;
-
-typedef struct messagelist {
-  message *first;
-  message *last; 
-  pthread_mutex_t lock;
-  pthread_cond_t cond;
-} messagelist;
 
 /* FIXME: remove */
 typedef struct group {
@@ -382,29 +356,11 @@ typedef struct block {
 } block;
 
 struct task;
+
+/* FIXME: shouldn't need to use function pointers for send/recv anymore */
 typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int size);
 typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
                         int delayms);
-
-#define TASK_ENDPOINT 1
-#define MANAGER_ENDPOINT 2
-#define LAUNCHER_ENDPOINT 3
-
-typedef struct endpoint {
-  int localid;
-  messagelist mailbox;
-  int checkmsg;
-  int *interruptptr;
-  struct endpoint *prev;
-  struct endpoint *next;
-  int type;
-  void *data;
-} endpoint;
-
-typedef struct endpointlist {
-  endpoint *first;
-  endpoint *last;
-} endpointlist;
 
 typedef struct task {
   int memdebug;
@@ -421,6 +377,7 @@ typedef struct task {
   int naddrsread;
   array *ackmsg;
   array **distmarks;
+  node *n;
 
   /* globals */
   global **pntrhash;
@@ -502,15 +459,9 @@ typedef struct task {
   pntrset *partial_applied;
 } task;
 
-task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, int localid);
+task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n);
 void task_free(task *tsk);
 void task_kill(task *tsk);
-
-endpoint *endpoint_new(int localid, int type, void *data);
-void endpoint_free(endpoint *endpt);
-void endpoint_forceclose(endpoint *endpt);
-void endpoint_add_message(endpoint *endpt, message *msg);
-message *endpoint_next_message(endpoint *endpt, int delayms);
 
 global *pntrhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);
@@ -553,6 +504,14 @@ void unblock_frame(task *tsk, frame *f);
 }
 
 void set_error(task *tsk, const char *format, ...);
+
+/* client */
+
+int run_program(node *n, const char *filename);
+
+/* nodetest */
+
+int nodetest(const char *host, int port);
 
 /* data */
 
@@ -654,6 +613,7 @@ void debug_partial(source *src, const char *name, char *trace_dir, int trace_typ
 
 /* console */
 
+void cprintf(connection *conn, const char *format, ...);
 void console(task *tsk);
 
 /* builtin */
@@ -668,7 +628,12 @@ int array_to_string(pntr refpntr, char **str);
 
 /* worker */
 
+endpoint *find_endpoint(node *n, int localid);
 int worker(const char *host, int port);
+task *find_task(node *n, int localid);
+void socket_send(task *tsk, int destid, int tag, char *data, int size);
+int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
+task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize);
 
 /* cell */
 

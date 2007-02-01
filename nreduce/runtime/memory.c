@@ -273,7 +273,7 @@ cell *alloc_cell(task *tsk)
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
   tsk->stats.nallocs++;
   tsk->stats.totalallocs++;
-  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt->interruptptr)
+  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     *tsk->endpt->interruptptr = 1;
   return v;
 }
@@ -286,8 +286,8 @@ void free_global(task *tsk, global *glo)
     cell *refcell = get_pntr(glo->p);
     global *target = (global*)get_pntr(refcell->field1);
     if (target == glo) {
-      assert(!(refcell->flags & FLAG_MARKED));
-      assert(!(refcell->flags & FLAG_DMB));
+      assert(tsk->done || !(refcell->flags & FLAG_MARKED));
+      assert(tsk->done || !(refcell->flags & FLAG_DMB));
     }
   }
 
