@@ -124,10 +124,6 @@ static void *start_task(void *arg)
 
   endpoint *endpt = node_add_endpoint(n,0,LAUNCHER_ENDPOINT,arg);
 
-  printf("start_task: before sleep\n");
-  sleep(3);
-  printf("start_task: after sleep\n");
-
   ntmsg->groupsize = count;
   ntmsg->bcsize = bcsize;
   memcpy(&ntmsg->bcdata,bcdata,bcsize);
