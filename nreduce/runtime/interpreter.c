@@ -420,6 +420,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 
       /* Check that we don't already have a reference to the remote addr
          (FIXME: is this safe?) */
+      /* FIXME: there is a crash here... only happens rarely */
       ref = global_lookup_existing(tsk,storeaddr);
       CHECK_EXPR(is_nullpntr(ref));
 

@@ -166,7 +166,6 @@ int worker(const char *host, int port)
 
   if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
     return -1;
-  n->listenport = port;
 
   start_manager(n);
 

@@ -78,11 +78,13 @@ int connect_host(const char *hostname, int port)
   return sockfd;
 }
 
-int start_listening(struct in_addr ip, int port)
+int start_listening(struct in_addr ip, int port, int *outport)
 {
   int yes = 1;
   struct sockaddr_in local_addr;
   int listenfd;
+  struct sockaddr_in new_addr;
+  int new_size = sizeof(struct sockaddr_in);
 
   if (-1 == (listenfd = socket(AF_INET,SOCK_STREAM,0))) {
     perror("socket");
@@ -103,6 +105,12 @@ int start_listening(struct in_addr ip, int port)
     perror("bind");
     return -1;
   }
+
+  if (0 > getsockname(listenfd,(struct sockaddr*)&new_addr,&new_size)) {
+    perror("getsockname");
+    return -1;
+  }
+  *outport = ntohs(new_addr.sin_port);
 
   if (-1 == listen(listenfd,LISTEN_BACKLOG)) {
     perror("listen");

@@ -256,7 +256,7 @@ int get_managerids(node *n, endpointid **managerids)
   *managerids = (endpointid*)calloc(count,sizeof(endpointid));
 
   (*managerids)[i].nodeip = n->listenip;
-  (*managerids)[i].nodeport = n->listenport;
+  (*managerids)[i].nodeport = n->mainl->port;
   (*managerids)[i].localid = MANAGER_ID;
   i++;
 

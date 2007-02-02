@@ -36,8 +36,8 @@ struct listener;
 
 typedef struct endpointid {
   struct in_addr nodeip;
-  short nodeport;
-  short localid;
+  unsigned short nodeport;
+  unsigned short localid;
 } endpointid;
 
 typedef struct msgheader {
@@ -90,6 +90,7 @@ typedef struct connection {
   int sock;
   struct listener *l;
   struct node *n;
+  struct in_addr localip;
 
   int connected;
   int readfd;
@@ -145,7 +146,6 @@ typedef struct node {
   listenerlist listeners;
   listener *mainl;
   node_callbacklist callbacks;
-  int listenport;
   struct in_addr listenip;
   int havelistenip;
   int nextlocalid;
@@ -181,7 +181,7 @@ void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
-connection *node_connect(node *n, const char *hostname, int port);
+connection *node_connect(node *n, const char *dest, int port);
 void node_send(node *n, endpoint *endpt, endpointid destendpointid,
                int tag, const void *data, int size);
 

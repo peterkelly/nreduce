@@ -27,6 +27,8 @@
 /* FIXME: the sin_addr structure is supposed to be in network byte order; we are treating
    it as host by order here (which appears to be ok on x86) */
 
+/* FIXME: use inet_aton() and inet_ntoa() when converting betwen struct_inaddr and strings */
+
 /* FIXME: must use re-entrant versions of all relevant socket functions, e.g. gethostbyname_r() */
 
 #ifndef TEMP_FAILURE_RETRY
@@ -144,31 +146,36 @@ static void process_received(node *n, connection *conn)
         /* We have the welcome message; it's a peer and we want to exchange ids next */
         conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
-        array_append(conn->sendbuf,&conn->ip,sizeof(struct in_addr));
-        array_append(conn->sendbuf,&n->listenport,sizeof(int));
+        array_append(conn->sendbuf,&n->mainl->port,sizeof(int));
       }
     }
   }
 
   if (0 > conn->port) {
-    struct in_addr localip;
+    unsigned char *connip = (unsigned char*)&conn->localip.s_addr;
 
-    if (sizeof(struct in_addr)+sizeof(int) > conn->recvbuf->nbytes-start) {
+    if (sizeof(int) > conn->recvbuf->nbytes-start) {
       array_remove_data(conn->recvbuf,start);
       return;
     }
-    memcpy(&localip.s_addr,&conn->recvbuf->data[start],sizeof(struct in_addr));
-    start += sizeof(struct in_addr);
     conn->port = *(int*)&conn->recvbuf->data[start];
     start += sizeof(int);
 
+    if (0 > conn->port)
+      fatal("Client sent bad listen port: %d",conn->port);
+
     if (n->havelistenip) {
-      if (memcmp(&n->listenip.s_addr,&localip.s_addr,sizeof(struct in_addr)))
-        fatal("Client is using a different IP to connect to me than what I expect\n");
+      if (memcmp(&n->listenip.s_addr,&conn->localip.s_addr,sizeof(struct in_addr))) {
+        unsigned char *expect = (unsigned char*)&n->listenip.s_addr;
+        fatal("Client is using a different IP to connect to me than what I expect "
+              "(%u.%u.%u.%u instead of %u.%u.%u.%u)",
+              connip[0],connip[1],connip[2],connip[3],
+              expect[0],expect[1],expect[2],expect[3]);
+      }
     }
     else {
-      unsigned char *ipbytes = (unsigned char*)&localip.s_addr;
-      memcpy(&n->listenip.s_addr,&localip.s_addr,sizeof(struct in_addr));
+      unsigned char *ipbytes = (unsigned char*)&conn->localip.s_addr;
+      memcpy(&n->listenip.s_addr,&conn->localip.s_addr,sizeof(struct in_addr));
       n->havelistenip = 1;
       printf("Got my listenip: %u.%u.%u.%u\n",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
     }
@@ -219,7 +226,8 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
   conn->port = -1;
   conn->recvbuf = array_new(1);
   conn->sendbuf = array_new(1);
-  array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
+  if (l == n->mainl)
+    array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->connections,conn);
   return conn;
 }
@@ -356,18 +364,41 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
+static char *lookup_hostname(struct in_addr addr)
+{
+  struct hostent *he = gethostbyaddr(&addr,sizeof(struct in_addr),AF_INET);
+  if (NULL != he) {
+    return strdup(he->h_name);
+  }
+  else {
+    unsigned char *c = (unsigned char*)&addr;
+    char *hostname = (char*)malloc(100);
+    sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
+    return hostname;
+  }
+}
+
 static void handle_new_connection(node *n, listener *l)
 {
   struct sockaddr_in remote_addr;
-  struct hostent *he;
   int sin_size = sizeof(struct sockaddr_in);
+  struct sockaddr_in local_addr;
+  int local_size = sizeof(struct sockaddr_in);
   int clientfd;
   connection *conn;
   int yes = 1;
+  unsigned char *lip;
+  char *hostname;
   if (0 > (clientfd = accept(l->fd,(struct sockaddr*)&remote_addr,&sin_size))) {
     perror("accept");
     return;
   }
+
+  if (0 > getsockname(clientfd,(struct sockaddr*)&local_addr,&local_size)) {
+    perror("getsockname");
+    return;
+  }
+  lip = (unsigned char*)&local_addr.sin_addr;
 
   if (0 > fdsetblocking(clientfd,0)) {
     close(clientfd);
@@ -379,21 +410,14 @@ static void handle_new_connection(node *n, listener *l)
     return;
   }
 
-  he = gethostbyaddr(&remote_addr.sin_addr,sizeof(struct in_addr),AF_INET);
-  if (NULL == he) {
-    unsigned char *addrbytes = (unsigned char*)&remote_addr.sin_addr;
-    char hostname[100];
-    sprintf(hostname,"%u.%u.%u.%u",
-            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3]);
-    printf("Got connection from %s\n",hostname);
-    conn = add_connection(n,hostname,clientfd,l);
-  }
-  else {
-    printf("Got connection from %s\n",he->h_name);
-    conn = add_connection(n,he->h_name,clientfd,l);
-  }
+  hostname = lookup_hostname(remote_addr.sin_addr);
+  printf("Got connection from %s on local ip %u.%u.%u.%u\n",hostname,lip[0],lip[1],lip[2],lip[3]);
+  conn = add_connection(n,hostname,clientfd,l);
+  free(hostname);
+
   conn->connected = 1;
   conn->ip = remote_addr.sin_addr;
+  conn->localip = local_addr.sin_addr;
 
   dispatch_event(n,EVENT_CONN_ACCEPTED,conn);
 }
@@ -505,7 +529,6 @@ node *node_new()
   pthread_mutex_init(&n->lock,NULL);
   pthread_cond_init(&n->cond,NULL);
   n->nextlocalid = 1;
-  n->listenport = -1;
 
   if (0 > pipe(pipefds)) {
     perror("pipe");
@@ -547,9 +570,11 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
 {
   struct in_addr addr;
   int fd;
+  int actualport = 0;
 
   addr.s_addr = INADDR_ANY;
   if (NULL != host) {
+    struct in_addr any;
     struct hostent *he;
     if (NULL == (he = gethostbyname(host))) {
       fprintf(stderr,"%s: %s\n",host,hstrerror(h_errno));
@@ -562,16 +587,20 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
     }
 
     n->listenip = *((struct in_addr*)he->h_addr);
-    n->havelistenip = 1;
+
+    any.s_addr = INADDR_ANY;
+    if (memcmp(&n->listenip,&any,sizeof(struct in_addr)))
+      n->havelistenip = 1;
     addr = *((struct in_addr*)he->h_addr);
   }
 
-  if (0 > (fd = start_listening(addr,port))) {
+  if (0 > (fd = start_listening(addr,port,&actualport))) {
     node_free(n);
     return NULL;
   }
+  assert((0 == port) || (actualport == port));
 
-  return node_add_listener(n,port,fd,callback,data);
+  return node_add_listener(n,actualport,fd,callback,data);
 }
 
 void node_add_callback(node *n, node_callbackfun fun, void *data)
@@ -674,7 +703,7 @@ void node_close_connections(node *n)
   pthread_mutex_unlock(&n->lock);
 }
 
-connection *node_connect(node *n, const char *hostname, int port)
+connection *node_connect(node *n, const char *dest, int port)
 {
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
@@ -683,14 +712,18 @@ connection *node_connect(node *n, const char *hostname, int port)
   int sock;
   int connected = 0;
   connection *conn;
+  struct sockaddr_in local_addr;
+  int local_size = sizeof(struct sockaddr_in);
+  unsigned char *lip;
+  char *hostname;
 
-  if (NULL == (he = gethostbyname(hostname))) {
-    fprintf(stderr,"%s: %s\n",hostname,hstrerror(h_errno));
+  if (NULL == (he = gethostbyname(dest))) {
+    fprintf(stderr,"%s: %s\n",dest,hstrerror(h_errno));
     return NULL;
   }
 
   if (4 != he->h_length) {
-    fprintf(stderr,"%s: invalid address type\n",hostname);
+    fprintf(stderr,"%s: invalid address type\n",dest);
     return NULL;
   }
 
@@ -709,16 +742,27 @@ connection *node_connect(node *n, const char *hostname, int port)
 
   if (0 == connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))) {
     connected = 1;
-    printf("Connected (immediately) to %s\n",hostname);
+    printf("Connected (immediately) to %s\n",dest);
   }
   else if (EINPROGRESS != errno) {
     perror("connect");
     return NULL;
   }
 
-  conn = add_connection(n,hostname,sock,NULL);
+  if (0 > getsockname(sock,(struct sockaddr*)&local_addr,&local_size)) {
+    perror("getsockname");
+    return NULL;
+  }
+
+  lip = (unsigned char*)&local_addr.sin_addr.s_addr;
+  printf("node_connect: local ip is %u.%u.%u.%u\n",lip[0],lip[1],lip[2],lip[3]);
+
+  hostname = lookup_hostname(addr.sin_addr);
+  conn = add_connection(n,hostname,sock,n->mainl);
+  free(hostname);
   conn->connected = connected;
   conn->ip = *((struct in_addr*)he->h_addr);
+  conn->localip = local_addr.sin_addr;
 
   if (conn->connected)
     dispatch_event(n,EVENT_CONN_ESTABLISHED,conn);
@@ -742,9 +786,9 @@ void node_send(node *n, endpoint *endpt, endpointid destendpointid,
   hdr.tag = tag;
 
   if ((destendpointid.nodeip.s_addr == n->listenip.s_addr) &&
-      (destendpointid.nodeport == n->listenport)) {
+      (destendpointid.nodeport == n->mainl->port)) {
     hdr.source.nodeip = n->listenip;
-    hdr.source.nodeport = n->listenport;
+    hdr.source.nodeport = n->mainl->port;
     got_message(n,&hdr,data);
   }
   else {

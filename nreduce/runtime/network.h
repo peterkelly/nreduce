@@ -37,7 +37,7 @@
 /* network */
 
 int connect_host(const char *hostname, int port);
-int start_listening(struct in_addr ip, int port);
+int start_listening(struct in_addr ip, int port, int *outport);
 int accept_connection(int sockfd);
 int parse_address(const char *address, char **host, int *port);
 array *read_hostnames(const char *hostsfile);
