@@ -93,8 +93,7 @@ static int get_responses(endpoint *endpt, int tag,
       if (!gotresponse[i])
         allresponses = 0;
 
-    free(msg->data);
-    free(msg);
+    message_free(msg);
   } while (!allresponses);
 
   free(gotresponse);
@@ -242,12 +241,15 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
 
 int get_managerids(node *n, endpointid **managerids)
 {
-  int count = 1;
+  int count = 0;
   int i = 0;
   connection *conn;
 
-  if (!n->havelistenip)
+  if (n->isworker && !n->havelistenip)
     fatal("I don't have my listen IP yet!");
+
+  if (n->isworker)
+    count++;
 
   for (conn = n->connections.first; conn; conn = conn->next)
     if (0 <= conn->port)
@@ -255,10 +257,12 @@ int get_managerids(node *n, endpointid **managerids)
 
   *managerids = (endpointid*)calloc(count,sizeof(endpointid));
 
-  (*managerids)[i].nodeip = n->listenip;
-  (*managerids)[i].nodeport = n->mainl->port;
-  (*managerids)[i].localid = MANAGER_ID;
-  i++;
+  if (n->isworker) {
+    (*managerids)[i].nodeip = n->listenip;
+    (*managerids)[i].nodeport = n->mainl->port;
+    (*managerids)[i].localid = MANAGER_ID;
+    i++;
+  }
 
   for (conn = n->connections.first; conn; conn = conn->next) {
     if (0 <= conn->port) {
@@ -298,4 +302,87 @@ int run_program(node *n, const char *filename)
   free(managerids);
   free(bcdata);
   return 0;
+}
+
+typedef struct client_data {
+  pthread_mutex_t lock;
+  pthread_cond_t cond;
+  const char *host;
+  int port;
+  int event;
+} client_data;
+
+static void client_callback(struct node *n, void *data, int event, connection *conn)
+{
+  client_data *cd = (client_data*)data;
+  if ((EVENT_HANDSHAKE_DONE == event) || (EVENT_CONN_FAILED == event)) {
+    pthread_mutex_lock(&cd->lock);
+    cd->event = event;
+    pthread_cond_signal(&cd->cond);
+    pthread_mutex_unlock(&cd->lock);
+  }
+}
+
+int do_client(const char *host, int port, int argc, char **argv)
+{
+  node *n;
+  int r = 0;
+  client_data cd;
+
+  if (1 > argc) {
+    fprintf(stderr,"client: please specify a filename to run\n");
+    return -1;
+  }
+
+  pthread_cond_init(&cd.cond,NULL);
+  pthread_mutex_init(&cd.lock,NULL);
+  cd.host = host;
+  cd.port = port;
+  cd.event = -1;
+
+  n = node_new();
+
+  if (NULL == (n->mainl = node_listen(n,host,0,NULL,NULL)))
+    return -1;
+
+
+  node_add_callback(n,client_callback,&cd);
+  node_start_iothread(n);
+
+  if (NULL == node_connect(n,host,port)) {
+    fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
+    r = 1;
+  }
+  else {
+    int event;
+    /* find out if it's successful... */
+    pthread_mutex_lock(&cd.lock);
+    pthread_cond_wait(&cd.cond,&cd.lock);
+    event = cd.event;
+    pthread_mutex_unlock(&cd.lock);
+
+    if (EVENT_HANDSHAKE_DONE != event) {
+      fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
+      r = 1;
+    }
+    else {
+      printf("client: Connection to %s:%d ok\n",host,port);
+
+      if (0 != run_program(n,argv[0]))
+        exit(1);
+    }
+  }
+
+  if (0 > wrap_pthread_join(n->iothread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+
+  node_close_endpoints(n);
+  node_close_connections(n);
+  node_remove_callback(n,client_callback,&cd);
+  node_free(n);
+
+  pthread_mutex_destroy(&cd.lock);
+  pthread_cond_destroy(&cd.cond);
+
+  return r;
 }

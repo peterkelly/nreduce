@@ -146,8 +146,7 @@ static void *manager(void *arg)
   while (NULL != (msg = endpoint_next_message(n->managerendpt,-1))) {
     int r = manager_handle_message(n,n->managerendpt,msg);
     assert(0 == r);
-    free(msg->data);
-    free(msg);
+    message_free(msg);
   }
 
   node_remove_endpoint(n,n->managerendpt);

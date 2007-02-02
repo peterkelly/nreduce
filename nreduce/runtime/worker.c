@@ -163,6 +163,7 @@ int worker(const char *host, int port)
   atexit(exited);
 
   n = node_new();
+  n->isworker = 1;
 
   if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
     return -1;

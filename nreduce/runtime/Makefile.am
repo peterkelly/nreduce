@@ -17,7 +17,8 @@ libruntime_la_SOURCES = worker.c \
 	partial.c \
 	tosyntax.c \
 	trace.c \
-	node.c
+	node.c \
+	nodetest.c
 
 INCLUDES = -I@top_srcdir@
 CLEANFILES = *.da *.bb *.bbg *.gcov

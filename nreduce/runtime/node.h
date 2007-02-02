@@ -157,6 +157,7 @@ typedef struct node {
   pthread_mutex_t lock;
   pthread_cond_t cond;
   int shutdown;
+  int isworker; /* FIXME: shouldn't need this */
   FILE *logfile;
 } node;
 
@@ -165,8 +166,10 @@ typedef struct node {
 #define EVENT_CONN_ACCEPTED         2
 #define EVENT_CONN_CLOSED           3
 #define EVENT_CONN_IOERROR          4
-#define EVENT_DATA                  5
-#define EVENT_SHUTDOWN              6
+#define EVENT_HANDSHAKE_DONE        5
+#define EVENT_HANDSHAKE_FAILED      6
+#define EVENT_DATA                  7
+#define EVENT_SHUTDOWN              8
 
 /* node */
 
@@ -184,12 +187,16 @@ void node_close_connections(node *n);
 connection *node_connect(node *n, const char *dest, int port);
 void node_send(node *n, endpoint *endpt, endpointid destendpointid,
                int tag, const void *data, int size);
+void connection_printf(connection *conn, const char *format, ...);
+void connection_close(connection *conn);
 
 endpoint *node_add_endpoint(node *n, int localid, int type, void *data);
 void node_remove_endpoint(node *n, endpoint *endpt);
 void endpoint_forceclose(endpoint *endpt);
 void endpoint_add_message(endpoint *endpt, message *msg);
 message *endpoint_next_message(endpoint *endpt, int delayms);
+
+void message_free(message *msg);
 
 /* console2 */
 

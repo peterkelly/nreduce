@@ -29,6 +29,7 @@
 #include "nreduce.h"
 #include "runtime/runtime.h"
 #include "runtime/network.h"
+#include "runtime/node.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -67,6 +68,9 @@ struct arguments {
   char *trace;
   int trace_type;
   char *address;
+  char *client;
+  char *nodetest;
+  array *extra;
 };
 
 struct arguments args;
@@ -91,6 +95,8 @@ static void usage()
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
 "  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
+"  --client IP:PORT CMD     Connect to manager at IP:PORT and run command CMD\n"
+"  --nodetest IP:PORT       Run as test node, listening on IP:PORT\n"
 "\n"
 "Options for printing output of compilation stages:\n"
 "(these do not actually run the program)\n"
@@ -176,15 +182,23 @@ void parse_args(int argc, char **argv)
         usage();
       args.address = argv[i];
     }
-    else {
-      args.filename = argv[i];
-      if (++i < argc)
+    else if (!strcmp(argv[i],"--client")) {
+      if (++i >= argc)
         usage();
+      args.client = argv[i];
+    }
+    else if (!strcmp(argv[i],"--nodetest")) {
+      if (++i >= argc)
+        usage();
+      args.nodetest = argv[i];
+    }
+    else {
+      array_append(args.extra,&argv[i],sizeof(char*));
     }
   }
 
-  if ((NULL == args.filename) && !args.worker)
-    usage();
+/*   if ((NULL == args.filename) && !args.worker) */
+/*     usage(); */
 }
 
 void get_progname(const char *cmd)
@@ -192,6 +206,59 @@ void get_progname(const char *cmd)
   char *cwd = getcwd_alloc();
   printf("cwd = \"%s\"\n",cwd);
   printf("cmd = \"%s\"\n",cmd);
+}
+
+static int nodetest_mode()
+{
+  int r;
+  char *host = NULL;
+  int port = WORKER_PORT;
+
+  if (0 != parse_address(args.nodetest,&host,&port)) {
+    fprintf(stderr,"Invalid node address: %s\n",args.nodetest);
+    exit(1);
+  }
+
+  r = nodetest(host,port);
+
+  free(host);
+  array_free(args.extra);
+  return r;
+}
+
+static int client_mode()
+{
+  int r;
+  char *host = NULL;
+  int port = WORKER_PORT;
+
+  if (0 != parse_address(args.client,&host,&port)) {
+    fprintf(stderr,"Invalid node address: %s\n",args.client);
+    exit(1);
+  }
+
+  r = do_client(host,port,array_count(args.extra),(char**)args.extra->data);
+
+  free(host);
+  array_free(args.extra);
+  return r;
+}
+
+static int worker_mode()
+{
+  int r;
+  char *host = NULL;
+  int port = WORKER_PORT;
+
+  if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
+    fprintf(stderr,"Invalid listening address: %s\n",args.address);
+    exit(1);
+  }
+
+  r = worker(host,port);
+  free(host);
+  array_free(args.extra);
+  return r;
 }
 
 extern int arefs;
@@ -209,6 +276,7 @@ int main(int argc, char **argv)
   srand(time.tv_usec);
 
   memset(&args,0,sizeof(args));
+  args.extra = array_new(sizeof(char*));
   parse_args(argc,argv);
 
   if (NULL != getenv("DISABLE_PARTIAL_EVAL"))
@@ -216,25 +284,25 @@ int main(int argc, char **argv)
 
   compileinfo = args.compileinfo;
 
-  if (args.worker) {
-    int r;
-    char *host = NULL;
-    int port = WORKER_PORT;
+  if (args.nodetest)
+    return nodetest_mode();
 
-    if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
-      fprintf(stderr,"Invalid listening address: %s\n",args.address);
-      exit(1);
-    }
+  if (args.client)
+    return client_mode();
 
-    r = worker(host,port);
-    free(host);
-    return r;
-  }
+  if (args.worker)
+    return worker_mode();
 
   if (args.statistics && (NULL == (statsfile = fopen(args.statistics,"w")))) {
     perror(args.statistics);
     exit(1);
   }
+
+  if (1 != array_count(args.extra))
+    usage();
+
+  args.filename = array_item(args.extra,0,char*);
+  array_free(args.extra);
 
   src = source_new();
 

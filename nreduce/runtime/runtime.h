@@ -528,6 +528,7 @@ typedef struct launcher {
 void launcher_kill(launcher *sa);
 
 int run_program(node *n, const char *filename);
+int do_client(const char *host, int port, int argc, char **argv);
 
 /* nodetest */
 

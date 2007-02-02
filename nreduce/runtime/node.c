@@ -179,6 +179,8 @@ static void process_received(node *n, connection *conn)
       n->havelistenip = 1;
       printf("Got my listenip: %u.%u.%u.%u\n",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
     }
+    printf("Node %u.%u.%u.%u:%d connected\n",connip[0],connip[1],connip[2],connip[3],conn->port);
+    dispatch_event(n,EVENT_HANDSHAKE_DONE,conn);
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -205,7 +207,7 @@ static void process_received(node *n, connection *conn)
   array_remove_data(conn->recvbuf,start);
 }
 
-static connection *find_connection(node *n, struct in_addr nodeip, short nodeport)
+static connection *find_connection(node *n, struct in_addr nodeip, unsigned short nodeport)
 {
   connection *conn;
   for (conn = n->connections.first; conn; conn = conn->next)
@@ -286,7 +288,7 @@ static void handle_write(node *n, connection *conn)
       break;
 
     if (0 > w) {
-      fprintf(stderr,"write() to %s failed: %s\n",conn->hostname,strerror(errno));
+      fprintf(stderr,"write() to %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
       if (conn->isconsole || conn->isreg) {
         dispatch_event(n,EVENT_CONN_IOERROR,conn);
         remove_connection(n,conn);
@@ -298,7 +300,8 @@ static void handle_write(node *n, connection *conn)
     }
 
     if (0 == w) {
-      fprintf(stderr,"write() to %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
+      fprintf(stderr,"write() to %s:%d failed: channel closed (maybe it crashed?)\n",
+              conn->hostname,conn->port);
       if (conn->isconsole || conn->isreg) {
         dispatch_event(n,EVENT_CONN_IOERROR,conn);
         remove_connection(n,conn);
@@ -336,7 +339,7 @@ static void handle_read(node *n, connection *conn)
     return;
 
   if (0 > r) {
-    fprintf(stderr,"read() from %s failed: %s\n",conn->hostname,strerror(errno));
+    fprintf(stderr,"read() from %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
     if (conn->isconsole || conn->isreg) {
       dispatch_event(n,EVENT_CONN_IOERROR,conn);
       remove_connection(n,conn);
@@ -354,7 +357,8 @@ static void handle_read(node *n, connection *conn)
       remove_connection(n,conn);
     }
     else {
-      fprintf(stderr,"read() from %s failed: channel closed (maybe it crashed?)\n",conn->hostname);
+      fprintf(stderr,"read() from %s:%d failed: channel closed (maybe it crashed?)\n",
+              conn->hostname,conn->port);
       abort(); /* FIXME: make this non-fatal; but kill relevent tasks etc. */
     }
     return;
@@ -600,6 +604,9 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
   }
   assert((0 == port) || (actualport == port));
 
+  if (0 == port)
+    printf("Listening on port %d\n",actualport);
+
   return node_add_listener(n,actualport,fd,callback,data);
 }
 
@@ -805,6 +812,27 @@ void node_send(node *n, endpoint *endpt, endpointid destendpointid,
   pthread_mutex_unlock(&n->lock);
 }
 
+void connection_printf(connection *conn, const char *format, ...)
+{
+  char c = 0;
+  va_list ap;
+  va_start(ap,format);
+  pthread_mutex_lock(&conn->n->lock);
+  array_vprintf(conn->sendbuf,format,ap);
+  write(conn->n->ioready_writefd,&c,1);
+  pthread_mutex_unlock(&conn->n->lock);
+  va_end(ap);
+}
+
+void connection_close(connection *conn)
+{
+  char c = 0;
+  pthread_mutex_lock(&conn->n->lock);
+  conn->toclose = 1;
+  write(conn->n->ioready_writefd,&c,1);
+  pthread_mutex_unlock(&conn->n->lock);
+}
+
 /* @} */
 
 /** @name Public functions - endpoints
@@ -893,6 +921,17 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
   endpt->checkmsg = (NULL != endpt->mailbox.first);
   pthread_mutex_unlock(&endpt->mailbox.lock);
   return msg;
+}
+
+/* @} */
+
+/** @name Public functions - other
+ * @{ */
+
+void message_free(message *msg)
+{
+  free(msg->data);
+  free(msg);
 }
 
 /* @} */
