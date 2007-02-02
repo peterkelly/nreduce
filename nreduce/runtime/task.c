@@ -440,6 +440,8 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
     tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk);
   tsk->runptr = &tsk->rtemp;
 
+  pthread_mutex_init(&tsk->threadlock,NULL);
+
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
   globnilvalue = alloc_cell(tsk);
@@ -560,15 +562,30 @@ void task_free(task *tsk)
   if (NULL != tsk->n)
     node_remove_endpoint(tsk->n,tsk->endpt);
 
+  pthread_mutex_destroy(&tsk->threadlock);
+
   free(tsk);
 }
 
 void task_kill(task *tsk)
 {
+  int havethread;
   tsk->done = 1;
+  assert(tsk->endpt);
+  assert(tsk->endpt->interruptptr);
   *tsk->endpt->interruptptr = 1;
-  if (0 > wrap_pthread_join(tsk->thread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
   endpoint_forceclose(tsk->endpt);
+
+  pthread_mutex_lock(&tsk->threadlock);
+  havethread = tsk->havethread;
+  pthread_mutex_unlock(&tsk->threadlock);
+
+  /* FIXME: should start thread inside task_new(), so we always have a thread and this
+     becomes unnecessary (along with the tsk->havethread and tsk->threadlock fields) */
+  if (havethread) {
+    if (0 > wrap_pthread_join(tsk->thread,NULL))
+      fatal("pthread_join: %s",strerror(errno));
+  }
+
   task_free(tsk);
 }

@@ -829,7 +829,7 @@ void *execute(task *tsk)
     if (interrupt) {
       interrupt = 0;
       if (handle_interrupt(tsk,&nextfish)) {
-        tsk->endpt->interruptptr = NULL;
+        tsk->endpt->interruptptr = &tsk->endpt->tempinterrupt;
         return NULL;
       }
       continue;
@@ -1207,7 +1207,7 @@ void *execute(task *tsk)
     }
   }
 
-  tsk->endpt->interruptptr = NULL;
+  tsk->endpt->interruptptr = &tsk->endpt->tempinterrupt;
   return NULL;
 }
 

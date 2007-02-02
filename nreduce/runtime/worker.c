@@ -157,7 +157,6 @@ task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
 int worker(const char *host, int port)
 {
   node *n;
-  int listenfd;
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
@@ -182,13 +181,11 @@ int worker(const char *host, int port)
   endpoint_forceclose(n->managerendpt);
   if (0 > wrap_pthread_join(n->managerthread,NULL))
     fatal("pthread_join: %s",strerror(errno));
-  printf("ioloop thread done\n");
 
 
   node_close_endpoints(n);
   node_close_connections(n);
   node_free(n);
 
-  close(listenfd);
   return 0;
 }

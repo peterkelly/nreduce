@@ -77,13 +77,25 @@ static void dispatch_event(node *n, int event, connection *conn)
     conn->l->callback(n,conn->l->data,event,conn);
 }
 
+static void report_error(node *n, const char *format, ...)
+{
+  va_list ap;
+  fprintf(n->logfile,"ERROR: ");
+  va_start(ap,format);
+  vfprintf(n->logfile,format,ap);
+  va_end(ap);
+  fprintf(n->logfile,"\n");
+}
+
 static void got_message(node *n, const msgheader *hdr, const void *data)
 {
   endpoint *endpt;
   message *newmsg;
 
-  if (NULL == (endpt = find_endpoint(n,hdr->destlocalid)))
-    fatal("Message received for unknown endpoint %d\n",hdr->destlocalid);
+  if (NULL == (endpt = find_endpoint(n,hdr->destlocalid))) {
+    report_error(n,"Message received for unknown endpoint %d",hdr->destlocalid);
+    return;
+  }
 
   newmsg = (message*)calloc(1,sizeof(message));
   newmsg->hdr = *hdr;
@@ -474,7 +486,6 @@ static void *ioloop(void *arg)
         handle_new_connection(n,l);
     }
   }
-  printf("Picked up shutdown\n");
   dispatch_event(n,EVENT_SHUTDOWN,NULL);
   pthread_mutex_unlock(&n->lock);
   return NULL;
@@ -502,6 +513,7 @@ node *node_new()
   }
   n->ioready_readfd = pipefds[0];
   n->ioready_writefd = pipefds[1];
+  n->logfile = stdout;
   return n;
 }
 
@@ -517,6 +529,18 @@ void node_free(node *n)
   close(n->ioready_readfd);
   close(n->ioready_writefd);
   free(n);
+}
+
+void node_log_error(node *n, const char *format, ...)
+{
+  va_list ap;
+  pthread_mutex_lock(&n->lock);
+  fprintf(n->logfile,"ERROR: ");
+  va_start(ap,format);
+  vfprintf(n->logfile,format,ap);
+  va_end(ap);
+  fprintf(n->logfile,"\n");
+  pthread_mutex_unlock(&n->lock);
 }
 
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data)
@@ -622,11 +646,15 @@ void node_close_endpoints(node *n)
 {
   endpoint *endpt;
   pthread_mutex_lock(&n->lock);
-  printf("node_close_endpoints\n");
   while (NULL != (endpt = n->endpoints.first)) {
     if (TASK_ENDPOINT == endpt->type) {
       pthread_mutex_unlock(&n->lock);
       task_kill((task*)endpt->data);
+      pthread_mutex_lock(&n->lock);
+    }
+    else if (LAUNCHER_ENDPOINT == endpt->type) {
+      pthread_mutex_unlock(&n->lock);
+      launcher_kill((launcher*)endpt->data);
       pthread_mutex_lock(&n->lock);
     }
     else {
@@ -746,6 +774,7 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
   endpt->localid = localid;
   endpt->type = type;
   endpt->data = data;
+  endpt->interruptptr = &endpt->tempinterrupt;
 
   pthread_mutex_lock(&n->lock);
   if (0 == endpt->localid)

@@ -70,6 +70,7 @@ typedef struct endpoint {
   messagelist mailbox;
   int checkmsg;
   int *interruptptr;
+  int tempinterrupt;
   struct endpoint *prev;
   struct endpoint *next;
   int type;
@@ -156,6 +157,7 @@ typedef struct node {
   pthread_mutex_t lock;
   pthread_cond_t cond;
   int shutdown;
+  FILE *logfile;
 } node;
 
 #define EVENT_CONN_ESTABLISHED      0
@@ -170,6 +172,7 @@ typedef struct node {
 
 node *node_new();
 void node_free(node *n);
+void node_log_error(node *n, const char *format, ...);
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data);
 void node_add_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_callback(node *n, node_callbackfun fun, void *data);

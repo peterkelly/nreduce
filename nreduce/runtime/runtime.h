@@ -379,6 +379,11 @@ typedef struct task {
   array **distmarks;
   node *n;
 
+  endpoint *endpt;
+  pthread_t thread;
+  int havethread;
+  pthread_mutex_t threadlock;
+
   /* globals */
   global **pntrhash;
   global **addrhash;
@@ -437,8 +442,6 @@ typedef struct task {
   void *commdata;
   endpointid *idmap;
 
-  endpoint *endpt;
-  pthread_t thread;
   int haveidmap;
   int started;
   int partial;
@@ -506,6 +509,23 @@ void unblock_frame(task *tsk, frame *f);
 void set_error(task *tsk, const char *format, ...);
 
 /* client */
+
+typedef struct launcher {
+  node *n;
+  char *bcdata;
+  int bcsize;
+  int count;
+  endpointid *managerids;
+  int havethread;
+  pthread_t thread;
+  pthread_mutex_t threadlock;
+  int cancel;
+  endpoint *endpt;
+  endpointid *endpointids;
+  int *localids;
+} launcher;
+
+void launcher_kill(launcher *sa);
 
 int run_program(node *n, const char *filename);
 

@@ -119,8 +119,11 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (newtsk->started)
       fatal("STARTTASK: task with localid %d has already been started\n",localid);
 
+    pthread_mutex_lock(&newtsk->threadlock);
+    newtsk->havethread = 1;
     if (0 > wrap_pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
       fatal("pthread_create: %s",strerror(errno));
+    pthread_mutex_unlock(&newtsk->threadlock);
 
     node_send(n,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
