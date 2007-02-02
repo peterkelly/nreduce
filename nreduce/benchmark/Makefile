@@ -1,5 +1,7 @@
 all: nfib nfib.class
 
+%.c: %.l
+
 nfib: nfib.c
 	gcc -o nfib nfib.c
 
