@@ -47,7 +47,8 @@
 #include <signal.h>
 #include <execinfo.h>
 
-static void nodetest_callback(struct node *n, void *data, int event, connection *conn)
+static void nodetest_callback(struct node *n, void *data, int event,
+                              connection *conn, endpoint *endpt)
 {
   switch (event) {
   case EVENT_CONN_ESTABLISHED:
@@ -259,7 +260,8 @@ static void *http_thread(void *data)
   return NULL;
 }
 
-static void testserver_callback(struct node *n, void *data, int event, connection *conn)
+static void testserver_callback(struct node *n, void *data, int event,
+                                connection *conn, endpoint *endpt)
 {
   switch (event) {
   case EVENT_CONN_ACCEPTED: {

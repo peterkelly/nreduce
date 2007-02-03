@@ -112,7 +112,8 @@ typedef struct connectionlist {
   connection *last;
 } connectionlist;
 
-typedef void (*node_callbackfun)(struct node *n, void *data, int event, connection *conn);
+typedef void (*node_callbackfun)(struct node *n, void *data, int event,
+                                 connection *conn, endpoint *endpt);
 
 typedef struct node_callback {
   node_callbackfun fun;
@@ -159,6 +160,7 @@ typedef struct node {
   int shutdown;
   int isworker; /* FIXME: shouldn't need this */
   FILE *logfile;
+  pthread_cond_t closecond;
 } node;
 
 #define EVENT_CONN_ESTABLISHED      0
@@ -169,8 +171,10 @@ typedef struct node {
 #define EVENT_HANDSHAKE_DONE        5
 #define EVENT_HANDSHAKE_FAILED      6
 #define EVENT_DATA                  7
-#define EVENT_SHUTDOWN              8
-#define EVENT_COUNT                 9
+#define EVENT_ENDPOINT_ADDITION     8
+#define EVENT_ENDPOINT_REMOVAL      9
+#define EVENT_SHUTDOWN              10
+#define EVENT_COUNT                 11
 
 #ifndef NODE_C
 extern const char *event_types[EVENT_COUNT];
@@ -192,6 +196,8 @@ void node_close_connections(node *n);
 connection *node_connect(node *n, const char *dest, int port);
 void node_send(node *n, endpoint *endpt, endpointid destendpointid,
                int tag, const void *data, int size);
+void node_waitclose_locked(node *n, int localid);
+void node_shutdown_locked(node *n);
 void connection_printf(connection *conn, const char *format, ...);
 void connection_close(connection *conn);
 

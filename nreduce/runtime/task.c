@@ -36,6 +36,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include <errno.h>
+#include <unistd.h>
 
 global *pntrhash_lookup(task *tsk, pntr p)
 {
@@ -436,11 +437,11 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   bcheader *bch;
 
   tsk->n = n;
-  if (NULL != n)
+  if (n)
     tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk);
   tsk->runptr = &tsk->rtemp;
 
-  pthread_mutex_init(&tsk->threadlock,NULL);
+  sem_init(&tsk->startsem,0,0);
 
   tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
 
@@ -496,6 +497,14 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
     tsk->distmarks[i] = array_new(sizeof(gaddr));
   }
 
+  if (n) {
+    pthread_t thread;
+    if (0 > wrap_pthread_create(&thread,NULL,(void*)execute,tsk))
+      fatal("pthread_create: %s",strerror(errno));
+    if (0 > pthread_detach(thread))
+      fatal("pthread_detach: %s",strerror(errno));
+  }
+
   return tsk;
 }
 
@@ -504,6 +513,8 @@ void task_free(task *tsk)
   int i;
   block *bl;
   int h;
+  node *n = tsk->n;
+  endpoint *endpt = tsk->endpt;
 
   sweep(tsk,1);
 
@@ -559,33 +570,17 @@ void task_free(task *tsk)
 
   free(tsk->bcdata);
 
-  if (NULL != tsk->n)
-    node_remove_endpoint(tsk->n,tsk->endpt);
-
-  pthread_mutex_destroy(&tsk->threadlock);
+  sem_destroy(&tsk->startsem);
 
   free(tsk);
+
+  if (n)
+    node_remove_endpoint(n,endpt);
 }
 
-void task_kill(task *tsk)
+void task_kill_locked(task *tsk)
 {
-  int havethread;
   tsk->done = 1;
-  assert(tsk->endpt);
-  assert(tsk->endpt->interruptptr);
   *tsk->endpt->interruptptr = 1;
-  endpoint_forceclose(tsk->endpt);
-
-  pthread_mutex_lock(&tsk->threadlock);
-  havethread = tsk->havethread;
-  pthread_mutex_unlock(&tsk->threadlock);
-
-  /* FIXME: should start thread inside task_new(), so we always have a thread and this
-     becomes unnecessary (along with the tsk->havethread and tsk->threadlock fields) */
-  if (havethread) {
-    if (0 > wrap_pthread_join(tsk->thread,NULL))
-      fatal("pthread_join: %s",strerror(errno));
-  }
-
-  task_free(tsk);
+  node_waitclose_locked(tsk->n,tsk->endpt->localid);
 }

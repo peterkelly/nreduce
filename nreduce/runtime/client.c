@@ -312,7 +312,8 @@ typedef struct client_data {
   int event;
 } client_data;
 
-static void client_callback(struct node *n, void *data, int event, connection *conn)
+static void client_callback(struct node *n, void *data, int event,
+                            connection *conn, endpoint *endpt)
 {
   client_data *cd = (client_data*)data;
   if ((EVENT_HANDSHAKE_DONE == event) || (EVENT_CONN_FAILED == event)) {

@@ -313,7 +313,9 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
   switch (tag) {
   case MSG_DONE:
     fprintf(tsk->output,"%d: done\n",tsk->pid);
-    task_kill(tsk);
+    /* FIXME: check this works! */
+    /* FIXME: do we need to signal another interrupt? */
+    tsk->done = 1;
     break;
   case MSG_FISH: {
     int reqtsk, age, nframes;
@@ -810,11 +812,11 @@ void *execute(task *tsk)
   frame *runnable;
   const instruction *instr;
   int interrupt = 1;
-  endpoint tempendpt;
 
-  memset(&tempendpt,0,sizeof(endpoint));
-  if (NULL == tsk->endpt)
-    tsk->endpt = &tempendpt; /* FIXME: temp solution until we always have an endpoint */
+  assert(tsk->n);
+  assert(tsk->endpt);
+
+  sem_wait(&tsk->startsem);
 
   tsk->newfish = 1;
   tsk->endpt->interruptptr = &interrupt;
@@ -829,11 +831,10 @@ void *execute(task *tsk)
 
     if (interrupt) {
       interrupt = 0;
-      if (handle_interrupt(tsk,&nextfish)) {
-        tsk->endpt->interruptptr = &tsk->endpt->tempinterrupt;
-        return NULL;
-      }
-      continue;
+      if (handle_interrupt(tsk,&nextfish))
+        break;
+      else
+        continue;
     }
 
     assert(runnable);
@@ -1196,49 +1197,7 @@ void *execute(task *tsk)
     }
   }
 
-  if (1 < tsk->groupsize) {
-    fprintf(tsk->output,"%d: finished execution, waiting for shutdown\n",tsk->pid);
-    while (!tsk->done) {
-      int from;
-      char *msgdata;
-      int msgsize;
-      int tag;
-      if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,-1)))
-        handle_message(tsk,from,tag,msgdata,msgsize);
-    }
-  }
-
-  tsk->endpt->interruptptr = &tsk->endpt->tempinterrupt;
-  return NULL;
-}
-
-void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage)
-{
-  frame *initial;
-  task *tsk;
-
-  tsk = task_new(0,1,bcdata,bcsize,NULL);
-  tsk->output = stdout;
-
-  initial = frame_new(tsk);
-  initial->instr = bc_instructions(tsk->bcdata);
-  initial->fno = -1;
-  initial->data = (pntr*)malloc(sizeof(pntr));
-  initial->alloc = 1;
-  initial->c = alloc_cell(tsk);
-  initial->c->type = CELL_FRAME;
-  make_pntr(initial->c->field1,initial);
-  run_frame(tsk,initial);
-
-  execute(tsk);
-
-  if (NULL != statsfile)
-    statistics(tsk,statsfile);
-
-  if (NULL != usage) {
-    const bcheader *bch = (const bcheader*)bcdata;
-    memcpy(usage,tsk->stats.usage,bch->nops*sizeof(int));
-  }
-
   task_free(tsk);
+  printf("Task completed\n");
+  return NULL;
 }

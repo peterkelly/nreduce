@@ -41,6 +41,9 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -126,12 +129,6 @@ static void sigsegv(int sig)
   kill(getpid(),sig);
 }
 
-static void exited()
-{
-  char *str = "exited\n";
-  write(STDOUT_FILENO,str,strlen(str));
-}
-
 task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
@@ -154,8 +151,14 @@ task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
   return tsk;
 }
 
-static void worker_callback(struct node *n, void *data, int event, connection *conn)
+typedef struct worker_data {
+  int standalone;
+} worker_data;
+
+static void worker_callback(struct node *n, void *data, int event,
+                            connection *conn, endpoint *endpt)
 {
+  worker_data *wd = (worker_data*)data;
   if (((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) &&
       !conn->isconsole && !conn->isreg) {
     endpoint *endpt;
@@ -170,42 +173,55 @@ static void worker_callback(struct node *n, void *data, int event, connection *c
     assert(mgrendpt);
 
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      if (TASK_ENDPOINT == endpt->type) {
-        task *tsk = (task*)endpt->data;
-        int i;
-        int kill = 0;
-        if (tsk->haveidmap) {
-          for (i = 0; i < tsk->groupsize; i++)
-            if ((tsk->idmap[i].nodeport == conn->port) &&
-                !memcmp(&tsk->idmap[i].nodeip,&conn->ip,sizeof(struct in_addr)))
-              kill = 1;
-        }
+      task *tsk;
+      message *msg;
+      int kill = 0;
+      int i;
 
-        if (kill) {
-          message *msg = (message*)calloc(1,sizeof(message));
-          msg->hdr.source.nodeip = n->listenip;
-          msg->hdr.source.nodeport = n->mainl->port;
-          msg->hdr.source.localid = 0;
-          msg->hdr.destlocalid = MANAGER_ID;
-          msg->hdr.size = sizeof(int);
-          msg->hdr.tag = MSG_KILLTASK;
-          msg->data = (char*)malloc(sizeof(int));
-          memcpy(msg->data,&endpt->localid,sizeof(int));
-          endpoint_add_message(mgrendpt,msg);
-          printf("Killing task %d\n",endpt->localid);
-        }
+      if (TASK_ENDPOINT != endpt->type)
+        continue;
+
+      tsk = (task*)endpt->data;
+      if (tsk->haveidmap) {
+        for (i = 0; i < tsk->groupsize; i++)
+          if ((tsk->idmap[i].nodeport == conn->port) &&
+              !memcmp(&tsk->idmap[i].nodeip,&conn->ip,sizeof(struct in_addr)))
+            kill = 1;
       }
+      if (!kill)
+        continue;
+
+      msg = (message*)calloc(1,sizeof(message));
+      msg->hdr.source.nodeip = n->listenip;
+      msg->hdr.source.nodeport = n->mainl->port;
+      msg->hdr.source.localid = 0;
+      msg->hdr.destlocalid = MANAGER_ID;
+      msg->hdr.size = sizeof(int);
+      msg->hdr.tag = MSG_KILLTASK;
+      msg->data = (char*)malloc(sizeof(int));
+      memcpy(msg->data,&endpt->localid,sizeof(int));
+      endpoint_add_message(mgrendpt,msg);
+      printf("Killing task %d\n",endpt->localid);
+    }
+  }
+  else if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
+    if (TASK_ENDPOINT == endpt->type) {
+      node_shutdown_locked(n);
     }
   }
 }
 
-int worker(const char *host, int port)
+int worker(const char *host, int port, const char *bcdata, int bcsize)
 {
   node *n;
+  worker_data wd;
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
-  atexit(exited);
+
+  memset(&wd,0,sizeof(worker_data));
+  if (bcdata)
+    wd.standalone = 1;
 
   n = node_new();
   n->isworker = 1;
@@ -215,11 +231,19 @@ int worker(const char *host, int port)
 
   start_manager(n);
 
-  node_add_callback(n,worker_callback,NULL);
+  node_add_callback(n,worker_callback,&wd);
   node_start_iothread(n);
 
   printf("Worker started, pid = %d, listening addr = %s:%d\n",
          getpid(),host ? host : "0.0.0.0",port);
+
+  if (bcdata) {
+    endpointid managerid;
+    managerid.nodeip.s_addr = inet_addr("127.0.0.1");
+    managerid.nodeport = n->mainl->port;
+    managerid.localid = MANAGER_ID;
+    start_launcher(n,bcdata,bcsize,&managerid,1);
+  }
 
   if (0 > wrap_pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
@@ -228,10 +252,9 @@ int worker(const char *host, int port)
   if (0 > wrap_pthread_join(n->managerthread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
-
   node_close_endpoints(n);
   node_close_connections(n);
-  node_remove_callback(n,worker_callback,NULL);
+  node_remove_callback(n,worker_callback,&wd);
   node_free(n);
 
   return 0;

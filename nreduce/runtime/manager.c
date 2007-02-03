@@ -119,11 +119,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (newtsk->started)
       fatal("STARTTASK: task with localid %d has already been started\n",localid);
 
-    pthread_mutex_lock(&newtsk->threadlock);
-    newtsk->havethread = 1;
-    if (0 > wrap_pthread_create(&newtsk->thread,NULL,(void*)execute,newtsk))
-      fatal("pthread_create: %s",strerror(errno));
-    pthread_mutex_unlock(&newtsk->threadlock);
+    sem_post(&newtsk->startsem);
 
     node_send(n,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
@@ -140,12 +136,11 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,localid);
-    pthread_mutex_unlock(&n->lock);
-
     if (NULL == newtsk)
       fatal("KILLTASK: task with localid %d does not exist\n",localid);
+    task_kill_locked(newtsk);
+    pthread_mutex_unlock(&n->lock);
 
-    task_kill(newtsk);
     printf("KILLTASK %d: killed\n",localid);
     break;
   }

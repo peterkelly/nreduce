@@ -69,7 +69,7 @@
 #define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
 
-const char *event_types[CELL_COUNT] = {
+const char *event_types[EVENT_COUNT] = {
   "CONN_ESTABLISHED",
   "CONN_FAILED",
   "CONN_ACCEPTED",
@@ -78,19 +78,21 @@ const char *event_types[CELL_COUNT] = {
   "HANDSHAKE_DONE",
   "HANDSHAKE_FAILED",
   "DATA",
+  "ENDPOINT_ADDITION",
+  "ENDPOINT_REMOVAL",
   "SHUTDOWN",
 };
 
 /** @name Private functions
  * @{ */
 
-static void dispatch_event(node *n, int event, connection *conn)
+static void dispatch_event(node *n, int event, connection *conn, endpoint *endpt)
 {
   node_callback *cb;
   for (cb = n->callbacks.first; cb; cb = cb->next)
-    cb->fun(n,cb->data,event,conn);
+    cb->fun(n,cb->data,event,conn,endpt);
   if (conn && conn->l && conn->l->callback)
-    conn->l->callback(n,conn->l->data,event,conn);
+    conn->l->callback(n,conn->l->data,event,conn,endpt);
 }
 
 static void report_error(node *n, const char *format, ...)
@@ -127,7 +129,7 @@ static void process_received(node *n, connection *conn)
   if (conn->isreg) {
     assert(conn->l);
     assert(conn->l->callback);
-    conn->l->callback(n,conn->l->data,EVENT_DATA,conn);
+    conn->l->callback(n,conn->l->data,EVENT_DATA,conn,NULL);
     return;
   }
 
@@ -194,7 +196,7 @@ static void process_received(node *n, connection *conn)
       printf("Got my listenip: %u.%u.%u.%u\n",ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
     }
     printf("Node %u.%u.%u.%u:%d connected\n",connip[0],connip[1],connip[2],connip[3],conn->port);
-    dispatch_event(n,EVENT_HANDSHAKE_DONE,conn);
+    dispatch_event(n,EVENT_HANDSHAKE_DONE,conn,NULL);
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -277,16 +279,16 @@ static int handle_connected(node *n, connection *conn)
 
     if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
-      dispatch_event(n,EVENT_CONN_FAILED,conn);
+      dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
       remove_connection(n,conn);
       return -1;
     }
 
-    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn);
+    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
   }
   else {
     printf("Connection to %s failed: %s\n",conn->hostname,strerror(err));
-    dispatch_event(n,EVENT_CONN_FAILED,conn);
+    dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
     remove_connection(n,conn);
     return -1;
   }
@@ -303,7 +305,7 @@ static void handle_write(node *n, connection *conn)
 
     if (0 > w) {
       fprintf(stderr,"write() to %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
-      dispatch_event(n,EVENT_CONN_IOERROR,conn);
+      dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
       remove_connection(n,conn);
       return;
     }
@@ -311,7 +313,7 @@ static void handle_write(node *n, connection *conn)
     if (0 == w) {
       fprintf(stderr,"write() to %s:%d failed: channel closed (maybe it crashed?)\n",
               conn->hostname,conn->port);
-      dispatch_event(n,EVENT_CONN_IOERROR,conn);
+      dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
       remove_connection(n,conn);
       return;
     }
@@ -320,7 +322,7 @@ static void handle_write(node *n, connection *conn)
   }
 
   if ((0 == conn->sendbuf->nbytes) && conn->toclose) {
-    dispatch_event(n,EVENT_CONN_CLOSED,conn);
+    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
     remove_connection(n,conn);
   }
 }
@@ -344,14 +346,14 @@ static void handle_read(node *n, connection *conn)
 
   if (0 > r) {
     fprintf(stderr,"read() from %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
-    dispatch_event(n,EVENT_CONN_IOERROR,conn);
+    dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
     remove_connection(n,conn);
     return;
   }
 
   if (0 == r) {
     printf("Connection %s:%d closed by peer\n",conn->hostname,conn->port);
-    dispatch_event(n,EVENT_CONN_CLOSED,conn);
+    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
     remove_connection(n,conn);
     return;
   }
@@ -415,7 +417,7 @@ static void handle_new_connection(node *n, listener *l)
   conn->ip = remote_addr.sin_addr;
   conn->localip = local_addr.sin_addr;
 
-  dispatch_event(n,EVENT_CONN_ACCEPTED,conn);
+  dispatch_event(n,EVENT_CONN_ACCEPTED,conn,NULL);
 }
 
 static void *ioloop(void *arg)
@@ -506,7 +508,7 @@ static void *ioloop(void *arg)
         handle_new_connection(n,l);
     }
   }
-  dispatch_event(n,EVENT_SHUTDOWN,NULL);
+  dispatch_event(n,EVENT_SHUTDOWN,NULL,NULL);
   pthread_mutex_unlock(&n->lock);
   return NULL;
 }
@@ -524,6 +526,7 @@ node *node_new()
 
   pthread_mutex_init(&n->lock,NULL);
   pthread_cond_init(&n->cond,NULL);
+  pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = 1;
 
   if (0 > pipe(pipefds)) {
@@ -543,6 +546,7 @@ void node_free(node *n)
   /* FIXME: free message data */
   assert(NULL == n->callbacks.first);
   assert(NULL == n->listeners.first);
+  pthread_cond_destroy(&n->closecond);
   pthread_mutex_destroy(&n->lock);
   pthread_cond_destroy(&n->cond);
   close(n->ioready_readfd);
@@ -676,9 +680,7 @@ void node_close_endpoints(node *n)
   pthread_mutex_lock(&n->lock);
   while (NULL != (endpt = n->endpoints.first)) {
     if (TASK_ENDPOINT == endpt->type) {
-      pthread_mutex_unlock(&n->lock);
-      task_kill((task*)endpt->data);
-      pthread_mutex_lock(&n->lock);
+      task_kill_locked((task*)endpt->data);
     }
     else if (LAUNCHER_ENDPOINT == endpt->type) {
       pthread_mutex_unlock(&n->lock);
@@ -764,7 +766,7 @@ connection *node_connect(node *n, const char *dest, int port)
   conn->localip = local_addr.sin_addr;
 
   if (conn->connected)
-    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn);
+    dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
 
   return conn;
 }
@@ -793,6 +795,7 @@ void node_send(node *n, endpoint *endpt, endpointid destendpointid,
   else {
     if (NULL == (conn = find_connection(n,destendpointid.nodeip,destendpointid.nodeport))) {
       unsigned char *addrbytes = (unsigned char*)&destendpointid.nodeip.s_addr;
+      /* FIXME: handle this gracefully */
       fatal("Could not find destination connection to %u.%u.%u.%u:%d",
             addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
     }
@@ -802,6 +805,30 @@ void node_send(node *n, endpoint *endpt, endpointid destendpointid,
     write(n->ioready_writefd,&c,1);
   }
   pthread_mutex_unlock(&n->lock);
+}
+
+/* This works as long as we don't recycle localids... */
+void node_waitclose_locked(node *n, int localid)
+{
+  while (1) {
+    int alive = 0;
+    endpoint *endpt;
+    for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
+      if (endpt->localid == localid)
+        alive = 1;
+
+    if (!alive)
+      break;
+
+    pthread_cond_wait(&n->closecond,&n->lock);
+  }
+}
+
+void node_shutdown_locked(node *n)
+{
+  char c = 0;
+  n->shutdown = 1;
+  write(n->ioready_writefd,&c,1);
 }
 
 void connection_printf(connection *conn, const char *format, ...)
@@ -844,6 +871,7 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
   if (0 == endpt->localid)
     endpt->localid = n->nextlocalid++; /* FIXME: handle wrap-around - allocate an unused # */
   llist_append(&n->endpoints,endpt);
+  dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
   pthread_mutex_unlock(&n->lock);
   return endpt;
 }
@@ -851,7 +879,9 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
 void node_remove_endpoint(node *n, endpoint *endpt)
 {
   pthread_mutex_lock(&n->lock);
+  dispatch_event(n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
   llist_remove(&n->endpoints,endpt);
+  pthread_cond_broadcast(&n->closecond);
   pthread_mutex_unlock(&n->lock);
 
   pthread_mutex_destroy(&endpt->mailbox.lock);

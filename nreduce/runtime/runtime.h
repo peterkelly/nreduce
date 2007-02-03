@@ -31,6 +31,7 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <assert.h>
 
 #define MAX_FRAME_SIZE   1024
@@ -380,9 +381,7 @@ typedef struct task {
   node *n;
 
   endpoint *endpt;
-  pthread_t thread;
-  int havethread;
-  pthread_mutex_t threadlock;
+  sem_t startsem;
 
   /* globals */
   global **pntrhash;
@@ -464,7 +463,7 @@ typedef struct task {
 
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n);
 void task_free(task *tsk);
-void task_kill(task *tsk);
+void task_kill_locked(task *tsk);
 
 global *pntrhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);
@@ -518,7 +517,6 @@ typedef struct launcher {
   endpointid *managerids;
   int havethread;
   pthread_t thread;
-  pthread_mutex_t threadlock;
   int cancel;
   endpoint *endpt;
   endpointid *endpointids;
@@ -527,6 +525,7 @@ typedef struct launcher {
 
 void launcher_kill(launcher *sa);
 
+void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count);
 int run_program(node *n, const char *filename);
 int do_client(const char *host, int port, int argc, char **argv);
 
@@ -652,7 +651,7 @@ int array_to_string(pntr refpntr, char **str);
 /* worker */
 
 endpoint *find_endpoint(node *n, int localid);
-int worker(const char *host, int port);
+int worker(const char *host, int port, const char *bcdata, int bcsize);
 task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
@@ -701,7 +700,6 @@ void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
 void *execute(task *tsk);
-void run(const char *bcdata, int bcsize, FILE *statsfile, int *usage);
 
 /* memory */
 

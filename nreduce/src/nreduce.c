@@ -255,7 +255,7 @@ static int worker_mode()
     exit(1);
   }
 
-  r = worker(host,port);
+  r = worker(host,port,NULL,0);
   free(host);
   array_free(args.extra);
   return r;
@@ -269,6 +269,7 @@ int main(int argc, char **argv)
   char *bcdata;
   FILE *statsfile = NULL;
   struct timeval time;
+  int r = 0;
 
   setbuf(stdout,NULL);
 
@@ -358,7 +359,7 @@ int main(int argc, char **argv)
       if (args.profiling)
         usage = (int*)malloc(bch->nops*sizeof(int));
 
-      run(bcdata,bcsize,statsfile,usage);
+      r = worker("127.0.0.1",0,bcdata,bcsize);
 
       if (args.profiling) {
         fprintf(statsfile,"\n");
@@ -379,5 +380,5 @@ int main(int argc, char **argv)
   }
 
   source_free(src);
-  return 0;
+  return r;
 }

@@ -53,13 +53,6 @@ static void conn_disconnect(connection *conn)
   cprintf(conn,"Disconnecting\n");
 }
 
-static void node_shutdown(node *n)
-{
-  char c = 0;
-  n->shutdown = 1;
-  write(n->ioready_writefd,&c,1);
-}
-
 static void process_cmd(node *n, connection *conn, int argc, char **argv)
 {
   if (0 == argc)
@@ -125,7 +118,7 @@ static void process_cmd(node *n, connection *conn, int argc, char **argv)
 /*       if (TASK_ENDPOINT == endpt->type) */
 /*         ((task*)endpt->data)->done = 1; */
 /*     n->shutdown = 1; */
-    node_shutdown(n);
+    node_shutdown_locked(n);
     return;
   }
   else if (!strcmp(argv[0],"help")) {
