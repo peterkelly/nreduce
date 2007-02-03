@@ -76,6 +76,8 @@ const char *msg_names[MSG_COUNT] = {
   "INITTASKRESP",
   "STARTTASK",
   "STARTTASKRESP",
+  "KILLTASK",
+  "KILLTASKRESP",
 };
 
 const char *frame_states[5] = {

@@ -170,6 +170,11 @@ typedef struct node {
 #define EVENT_HANDSHAKE_FAILED      6
 #define EVENT_DATA                  7
 #define EVENT_SHUTDOWN              8
+#define EVENT_COUNT                 9
+
+#ifndef NODE_C
+extern const char *event_types[EVENT_COUNT];
+#endif
 
 /* node */
 

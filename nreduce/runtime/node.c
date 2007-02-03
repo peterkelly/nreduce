@@ -24,6 +24,8 @@
 #include "config.h"
 #endif
 
+#define NODE_C
+
 /* FIXME: the sin_addr structure is supposed to be in network byte order; we are treating
    it as host by order here (which appears to be ok on x86) */
 
@@ -66,6 +68,18 @@
 //#define CHUNKSIZE 1024
 #define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
+
+const char *event_types[CELL_COUNT] = {
+  "CONN_ESTABLISHED",
+  "CONN_FAILED",
+  "CONN_ACCEPTED",
+  "CONN_CLOSED",
+  "CONN_IOERROR",
+  "HANDSHAKE_DONE",
+  "HANDSHAKE_FAILED",
+  "DATA",
+  "SHUTDOWN",
+};
 
 /** @name Private functions
  * @{ */
@@ -289,26 +303,16 @@ static void handle_write(node *n, connection *conn)
 
     if (0 > w) {
       fprintf(stderr,"write() to %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
-      if (conn->isconsole || conn->isreg) {
-        dispatch_event(n,EVENT_CONN_IOERROR,conn);
-        remove_connection(n,conn);
-      }
-      else {
-        abort(); /* FIXME: make this non-fatal; but kill relevent tasks etc. */
-      }
+      dispatch_event(n,EVENT_CONN_IOERROR,conn);
+      remove_connection(n,conn);
       return;
     }
 
     if (0 == w) {
       fprintf(stderr,"write() to %s:%d failed: channel closed (maybe it crashed?)\n",
               conn->hostname,conn->port);
-      if (conn->isconsole || conn->isreg) {
-        dispatch_event(n,EVENT_CONN_IOERROR,conn);
-        remove_connection(n,conn);
-      }
-      else {
-        abort(); /* FIXME: make this non-fatal; but kill relevent tasks etc. */
-      }
+      dispatch_event(n,EVENT_CONN_IOERROR,conn);
+      remove_connection(n,conn);
       return;
     }
 
@@ -340,27 +344,15 @@ static void handle_read(node *n, connection *conn)
 
   if (0 > r) {
     fprintf(stderr,"read() from %s:%d failed: %s\n",conn->hostname,conn->port,strerror(errno));
-    if (conn->isconsole || conn->isreg) {
-      dispatch_event(n,EVENT_CONN_IOERROR,conn);
-      remove_connection(n,conn);
-    }
-    else {
-      abort(); /* FIXME: make this non-fatal; but kill relevent tasks etc. */
-    }
+    dispatch_event(n,EVENT_CONN_IOERROR,conn);
+    remove_connection(n,conn);
     return;
   }
 
   if (0 == r) {
-    if (conn->isconsole || conn->isreg) {
-      dispatch_event(n,EVENT_CONN_CLOSED,conn);
-      printf("Client %s closed connection\n",conn->hostname);
-      remove_connection(n,conn);
-    }
-    else {
-      fprintf(stderr,"read() from %s:%d failed: channel closed (maybe it crashed?)\n",
-              conn->hostname,conn->port);
-      abort(); /* FIXME: make this non-fatal; but kill relevent tasks etc. */
-    }
+    printf("Connection %s:%d closed by peer\n",conn->hostname,conn->port);
+    dispatch_event(n,EVENT_CONN_CLOSED,conn);
+    remove_connection(n,conn);
     return;
   }
 

@@ -154,6 +154,51 @@ task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
   return tsk;
 }
 
+static void worker_callback(struct node *n, void *data, int event, connection *conn)
+{
+  if (((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) &&
+      !conn->isconsole && !conn->isreg) {
+    endpoint *endpt;
+    endpoint *mgrendpt = NULL;
+
+    for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
+      if (MANAGER_ENDPOINT == endpt->type) {
+        assert(NULL == mgrendpt);
+        mgrendpt = endpt;
+      }
+    }
+    assert(mgrendpt);
+
+    for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
+      if (TASK_ENDPOINT == endpt->type) {
+        task *tsk = (task*)endpt->data;
+        int i;
+        int kill = 0;
+        if (tsk->haveidmap) {
+          for (i = 0; i < tsk->groupsize; i++)
+            if ((tsk->idmap[i].nodeport == conn->port) &&
+                !memcmp(&tsk->idmap[i].nodeip,&conn->ip,sizeof(struct in_addr)))
+              kill = 1;
+        }
+
+        if (kill) {
+          message *msg = (message*)calloc(1,sizeof(message));
+          msg->hdr.source.nodeip = n->listenip;
+          msg->hdr.source.nodeport = n->mainl->port;
+          msg->hdr.source.localid = 0;
+          msg->hdr.destlocalid = MANAGER_ID;
+          msg->hdr.size = sizeof(int);
+          msg->hdr.tag = MSG_KILLTASK;
+          msg->data = (char*)malloc(sizeof(int));
+          memcpy(msg->data,&endpt->localid,sizeof(int));
+          endpoint_add_message(mgrendpt,msg);
+          printf("Killing task %d\n",endpt->localid);
+        }
+      }
+    }
+  }
+}
+
 int worker(const char *host, int port)
 {
   node *n;
@@ -170,6 +215,7 @@ int worker(const char *host, int port)
 
   start_manager(n);
 
+  node_add_callback(n,worker_callback,NULL);
   node_start_iothread(n);
 
   printf("Worker started, pid = %d, listening addr = %s:%d\n",
@@ -185,6 +231,7 @@ int worker(const char *host, int port)
 
   node_close_endpoints(n);
   node_close_connections(n);
+  node_remove_callback(n,worker_callback,NULL);
   node_free(n);
 
   return 0;

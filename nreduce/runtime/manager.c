@@ -74,7 +74,6 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,initmsg->localid);
-    pthread_mutex_unlock(&n->lock);
 
     if (NULL == newtsk)
       fatal("INITTASK: task with localid %d does not exist\n",initmsg->localid);
@@ -84,6 +83,8 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     if (initmsg->count != newtsk->groupsize)
       fatal("INITTASK: idmap size does not match expected\n");
+    memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
+    pthread_mutex_unlock(&n->lock);
 
     for (i = 0; i < newtsk->groupsize; i++) {
       printf("INITTASK: idmap[%d] = ",i);
@@ -91,7 +92,6 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
       printf("\n");
     }
 
-    memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
     node_send(n,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
     newtsk->haveidmap = 1;
     break;
@@ -127,6 +127,26 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     node_send(n,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
+    break;
+  }
+  case MSG_KILLTASK: {
+    task *newtsk;
+    int localid;
+    if (sizeof(int) > msg->hdr.size)
+      fatal("KILLTASK: invalid message size\n");
+    localid = *(int*)msg->data;
+
+    printf("KILLTASK %d\n",localid);
+
+    pthread_mutex_lock(&n->lock);
+    newtsk = find_task(n,localid);
+    pthread_mutex_unlock(&n->lock);
+
+    if (NULL == newtsk)
+      fatal("KILLTASK: task with localid %d does not exist\n",localid);
+
+    task_kill(newtsk);
+    printf("KILLTASK %d: killed\n",localid);
     break;
   }
   default:

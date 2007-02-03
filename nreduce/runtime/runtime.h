@@ -536,29 +536,31 @@ int nodetest(const char *host, int port);
 
 /* data */
 
-#define MSG_DONE         0
-#define MSG_FISH         1
-#define MSG_FETCH        2
-#define MSG_TRANSFER     3
-#define MSG_ACK          4
-#define MSG_MARKROOTS    5
-#define MSG_MARKENTRY    6
-#define MSG_SWEEP        7
-#define MSG_SWEEPACK     8
-#define MSG_UPDATE       9
-#define MSG_RESPOND      10
-#define MSG_SCHEDULE     11
-#define MSG_UPDATEREF    12
-#define MSG_STARTDISTGC  13
+#define MSG_DONE                0
+#define MSG_FISH                1
+#define MSG_FETCH               2
+#define MSG_TRANSFER            3
+#define MSG_ACK                 4
+#define MSG_MARKROOTS           5
+#define MSG_MARKENTRY           6
+#define MSG_SWEEP               7
+#define MSG_SWEEPACK            8
+#define MSG_UPDATE              9
+#define MSG_RESPOND             10
+#define MSG_SCHEDULE            11
+#define MSG_UPDATEREF           12
+#define MSG_STARTDISTGC         13
 
-#define MSG_NEWTASK       14
-#define MSG_NEWTASKRESP   15
-#define MSG_INITTASK      16
-#define MSG_INITTASKRESP  17
-#define MSG_STARTTASK     18
-#define MSG_STARTTASKRESP 19
+#define MSG_NEWTASK             14
+#define MSG_NEWTASKRESP         15
+#define MSG_INITTASK            16
+#define MSG_INITTASKRESP        17
+#define MSG_STARTTASK           18
+#define MSG_STARTTASKRESP       19
+#define MSG_KILLTASK            20
+#define MSG_KILLTASKRESP        21
 
-#define MSG_COUNT        20
+#define MSG_COUNT               22
 
 typedef struct reader {
   const char *data;
