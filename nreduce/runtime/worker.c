@@ -201,7 +201,7 @@ static void worker_callback(struct node *n, void *data, int event,
       msg->data = (char*)malloc(sizeof(int));
       memcpy(msg->data,&endpt->localid,sizeof(int));
       endpoint_add_message(mgrendpt,msg);
-      printf("Killing task %d\n",endpt->localid);
+      node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->localid);
     }
   }
   else if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
@@ -220,11 +220,13 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
   signal(SIGSEGV,sigsegv);
 
   memset(&wd,0,sizeof(worker_data));
-  if (bcdata)
-    wd.standalone = 1;
 
   n = node_new();
   n->isworker = 1;
+  if (bcdata) {
+    wd.standalone = 1;
+    n->loglevel = LOG_ERROR;
+  }
 
   if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
     return -1;
@@ -234,8 +236,8 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
   node_add_callback(n,worker_callback,&wd);
   node_start_iothread(n);
 
-  printf("Worker started, pid = %d, listening addr = %s:%d\n",
-         getpid(),host ? host : "0.0.0.0",port);
+  node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %s:%d",
+           getpid(),host ? host : "0.0.0.0",port);
 
   if (bcdata) {
     endpointid managerid;

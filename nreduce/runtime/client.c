@@ -49,7 +49,7 @@
 
 extern const char *prelude;
 
-static int get_responses(endpoint *endpt, int tag,
+static int get_responses(node *n, endpoint *endpt, int tag,
                          int count, endpointid *managerids, int *responses)
 {
   int *gotresponse = (int*)calloc(count,sizeof(int));
@@ -72,9 +72,10 @@ static int get_responses(endpoint *endpt, int tag,
         sender = i;
 
     if (0 > sender) {
-      fprintf(stderr,"%s: Got response from unknown source ",msg_names[tag]);
-      print_endpointid(stderr,msg->hdr.source);
-      fprintf(stderr,"\n");
+      endpointid id = msg->hdr.source;
+      char *c = (unsigned char*)&id.nodeip;
+      node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%d/%d",
+               msg_names[tag],c[0],c[1],c[2],c[3],id.nodeport,id.localid);
       abort();
     }
 
@@ -169,9 +170,9 @@ static void *launcher_thread(void *arg)
 
   for (i = 0; i < count; i++) {
     unsigned char *ipbytes = (unsigned char*)&lr->managerids[i].nodeip.s_addr;
-    printf("Launcher: manager %u.%u.%u.%u:%d %d\n",
-           ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],lr->managerids[i].nodeport,
-           lr->managerids[i].localid);
+    node_log(n,LOG_INFO,"Launcher: manager %u.%u.%u.%u:%d %d",
+             ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],lr->managerids[i].nodeport,
+             lr->managerids[i].localid);
 
     lr->endpointids[i].nodeip = lr->managerids[i].nodeip;
     lr->endpointids[i].nodeport = lr->managerids[i].nodeport;
@@ -181,38 +182,38 @@ static void *launcher_thread(void *arg)
   send_newtask(lr);
 
   /* Get NEWTASK responses, containing the local id of each task on the remote node */
-  if (0 != get_responses(lr->endpt,MSG_NEWTASKRESP,count,lr->managerids,lr->localids)) {
+  if (0 != get_responses(n,lr->endpt,MSG_NEWTASKRESP,count,lr->managerids,lr->localids)) {
     assert(lr->cancel);
     launcher_free(n,arg);
     return NULL;
   }
   for (i = 0; i < count; i++)
     lr->endpointids[i].localid = lr->localids[i];
-  printf("All tasks created\n");
+  node_log(n,LOG_INFO,"All tasks created");
 
   /* Send INITTASK messages, giving each task a copy of the idmap */
   send_inittask(lr);
 
   /* Wait for all INITTASK messages to be processed */
-  if (0 != get_responses(lr->endpt,MSG_INITTASKRESP,count,lr->managerids,NULL)) {
+  if (0 != get_responses(n,lr->endpt,MSG_INITTASKRESP,count,lr->managerids,NULL)) {
     assert(lr->cancel);
     launcher_free(n,arg);
     return NULL;
   }
-  printf("All tasks initialised\n");
+  node_log(n,LOG_INFO,"All tasks initialised");
 
   /* Start all tasks */
   send_starttask(lr);
 
   /* Wait for notification of all tasks starting */
-  if (0 != get_responses(lr->endpt,MSG_STARTTASKRESP,count,lr->managerids,NULL)) {
+  if (0 != get_responses(n,lr->endpt,MSG_STARTTASKRESP,count,lr->managerids,NULL)) {
     assert(lr->cancel);
     launcher_free(n,arg);
     return NULL;
   }
-  printf("All tasks started\n");
+  node_log(n,LOG_INFO,"All tasks started");
 
-  printf("Distributed process creation done\n");
+  node_log(n,LOG_INFO,"Distributed process creation done");
 
   /* FIXME: thread will leak here if we're not killed during shutdown */
 
@@ -232,11 +233,11 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
   memcpy(lr->bcdata,bcdata,bcsize);
   lr->havethread = 1;
 
-  printf("Distributed process creation starting\n");
+  node_log(n,LOG_INFO,"Distributed process creation starting");
   if (0 > wrap_pthread_create(&lr->thread,NULL,launcher_thread,lr))
     fatal("pthread_create: %s",strerror(errno));
 
-  printf("Distributed process creation started\n");
+  node_log(n,LOG_INFO,"Distributed process creation started");
 }
 
 int get_managerids(node *n, endpointid **managerids)
@@ -297,7 +298,7 @@ int run_program(node *n, const char *filename)
 
   count = get_managerids(n,&managerids);
 
-  printf("Compiled\n");
+  node_log(n,LOG_INFO,"Compiled");
   start_launcher(n,bcdata,bcsize,managerids,count);
   free(managerids);
   free(bcdata);

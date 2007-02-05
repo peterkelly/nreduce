@@ -1197,7 +1197,7 @@ void *execute(task *tsk)
     }
   }
 
+  node_log(tsk->n,LOG_INFO,"Task completed");
   task_free(tsk);
-  printf("Task completed\n");
   return NULL;
 }

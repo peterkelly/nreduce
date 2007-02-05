@@ -52,28 +52,28 @@ static void nodetest_callback(struct node *n, void *data, int event,
 {
   switch (event) {
   case EVENT_CONN_ESTABLISHED:
-    printf("EVENT_CONN_ESTABLISHED\n");
+    node_log(n,LOG_INFO,"EVENT_CONN_ESTABLISHED");
     break;
   case EVENT_CONN_FAILED:
-    printf("EVENT_CONN_FAILED\n");
+    node_log(n,LOG_INFO,"EVENT_CONN_FAILED");
     break;
   case EVENT_CONN_ACCEPTED:
-    printf("EVENT_CONN_ACCEPTED\n");
+    node_log(n,LOG_INFO,"EVENT_CONN_ACCEPTED");
     break;
   case EVENT_CONN_CLOSED:
-    printf("EVENT_CONN_CLOSED\n");
+    node_log(n,LOG_INFO,"EVENT_CONN_CLOSED");
     break;
   case EVENT_CONN_IOERROR:
-    printf("EVENT_CONN_IOERROR\n");
+    node_log(n,LOG_INFO,"EVENT_CONN_IOERROR");
     break;
   case EVENT_HANDSHAKE_DONE:
-    printf("EVENT_HANDSHAKE_DONE\n");
+    node_log(n,LOG_INFO,"EVENT_HANDSHAKE_DONE");
     break;
   case EVENT_HANDSHAKE_FAILED:
-    printf("EVENT_HANDSHAKE_FAILED\n");
+    node_log(n,LOG_INFO,"EVENT_HANDSHAKE_FAILED");
     break;
   case EVENT_SHUTDOWN:
-    printf("EVENT_SHUTDOWN\n");
+    node_log(n,LOG_INFO,"EVENT_SHUTDOWN");
     break;
   }
 }
@@ -206,18 +206,18 @@ static void parse_headers(connection *conn, testconn *tc, char *data, int len, i
   }
 }
 
-static void parse_request(connection *conn, testconn *tc, char *data, int len)
+static void parse_request(node *n, connection *conn, testconn *tc, char *data, int len)
 {
   int pos = 0;
   if (!end_of_line(data,len,&pos)) {
     tc->state = TC_STATE_ERROR;
-    printf("Invalid request line\n");
+    node_log(n,LOG_WARNING,"Invalid request line");
     send_error(conn,tc,400,"Bad Request","Invalid request line");
   }
 
   if (3 != sscanf(data,"%as %as %as",&tc->method,&tc->uri,&tc->version)) {
     tc->state = TC_STATE_ERROR;
-    printf("Invalid request line\n");
+    node_log(n,LOG_WARNING,"Invalid request line");
     send_error(conn,tc,400,"Bad Request","Invalid request line");
   }
 
@@ -234,10 +234,10 @@ static void *http_thread(void *data)
 {
   connection *conn = (connection*)data;
 /*   testconn *tc = (testconn*)conn->data; */
-/*   node *n = conn->n; */
+  node *n = conn->n;
   int i;
 
-  printf("http_thread starting\n");
+  node_log(n,LOG_INFO,"http_thread starting");
 
   connection_printf(conn,"HTTP/1.1 200 OK\r\n"
                        "Connection: close\r\n"
@@ -249,14 +249,14 @@ static void *http_thread(void *data)
                        "\r\n");
 
   for (i = 0; i < 10; i++) {
-    printf("i = %02d\n",i);
+    node_log(n,LOG_INFO,"i = %02d",i);
     connection_printf(conn,"7\r\ni = %02d\n\r\n",i);
     sleep(1);
   }
   connection_printf(conn,"0\r\n\r\n");
   connection_close(conn);
 
-  printf("http_thread exiting\n");
+  node_log(n,LOG_INFO,"http_thread exiting");
   return NULL;
 }
 
@@ -266,16 +266,16 @@ static void testserver_callback(struct node *n, void *data, int event,
   switch (event) {
   case EVENT_CONN_ACCEPTED: {
     testconn *tc = (testconn*)calloc(1,sizeof(testconn));
-    printf("testserver: connection accepted\n");
+    node_log(n,LOG_INFO,"testserver: connection accepted");
     conn->isreg = 1;
     conn->data = tc;
     break;
   }
   case EVENT_CONN_CLOSED:
-    printf("testserver: connection closed\n");
+    node_log(n,LOG_INFO,"testserver: connection closed");
     break;
   case EVENT_CONN_IOERROR:
-    printf("testserver: connection error\n");
+    node_log(n,LOG_INFO,"testserver: connection error");
     break;
   case EVENT_DATA: {
     testconn *tc = (testconn*)conn->data;
@@ -301,17 +301,17 @@ static void testserver_callback(struct node *n, void *data, int event,
       assert(pos <= len);
 
       if (2 == newlines) {
-        printf("Got complete header; ends at %d\n",pos);
+        node_log(n,LOG_INFO,"Got complete header; ends at %d",pos);
         tc->state = TC_STATE_OK;
-        parse_request(conn,tc,data,pos);
+        parse_request(n,conn,tc,data,pos);
 
         if (TC_STATE_OK == tc->state) {
           header *h;
-          printf("method = \"%s\"\n",tc->method);
-          printf("uri = \"%s\"\n",tc->uri);
-          printf("version = \"%s\"\n",tc->version);
+          node_log(n,LOG_INFO,"method = \"%s\"",tc->method);
+          node_log(n,LOG_INFO,"uri = \"%s\"",tc->uri);
+          node_log(n,LOG_INFO,"version = \"%s\"",tc->version);
           for (h = tc->headers; h; h = h->next) {
-            printf("Header: %s=\"%s\"\n",h->name,h->value);
+            node_log(n,LOG_INFO,"Header: %s=\"%s\"",h->name,h->value);
           }
 
 /*           cprintf(conn,"HTTP/1.1 200 OK\r\n" */
@@ -326,7 +326,7 @@ static void testserver_callback(struct node *n, void *data, int event,
 
         }
         else {
-          printf("Request had error\n");
+          node_log(n,LOG_WARNING,"Request had error");
         }
       }
     }
@@ -367,10 +367,10 @@ int nodetest(const char *host, int port)
   node_start_iothread(n);
 
 
-  printf("Blocking main thread\n");
+  node_log(n,LOG_INFO,"Blocking main thread");
   if (0 > wrap_pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
-  printf("IO thread finished\n");
+  node_log(n,LOG_INFO,"IO thread finished");
 
   node_close_endpoints(n);
   node_close_connections(n);

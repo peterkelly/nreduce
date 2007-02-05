@@ -31,6 +31,10 @@
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
+#define LOG_INFO         0
+#define LOG_WARNING      1
+#define LOG_ERROR        2
+
 struct node;
 struct listener;
 
@@ -160,6 +164,7 @@ typedef struct node {
   int shutdown;
   int isworker; /* FIXME: shouldn't need this */
   FILE *logfile;
+  int loglevel;
   pthread_cond_t closecond;
 } node;
 
@@ -184,7 +189,7 @@ extern const char *event_types[EVENT_COUNT];
 
 node *node_new();
 void node_free(node *n);
-void node_log_error(node *n, const char *format, ...);
+void node_log(node *n, int level, const char *format, ...);
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data);
 void node_add_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_callback(node *n, node_callbackfun fun, void *data);

@@ -37,10 +37,12 @@
 #include <stdarg.h>
 #include <math.h>
 #include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 {
-/*   printf("Manager got %s (%d bytes)\n",msg_names[msg->hdr.tag],msg->hdr.size); */
   switch (msg->hdr.tag) {
   case MSG_NEWTASK: {
     newtask_msg *ntmsg;
@@ -51,8 +53,8 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (sizeof(newtask_msg)+ntmsg->bcsize > msg->hdr.size)
       fatal("NEWTASK: invalid bytecode size\n");
 
-    printf("NEWTASK pid = %d, groupsize = %d, bcsize = %d\n",
-           ntmsg->pid,ntmsg->groupsize,ntmsg->bcsize);
+    node_log(n,LOG_INFO,"NEWTASK pid = %d, groupsize = %d, bcsize = %d",
+             ntmsg->pid,ntmsg->groupsize,ntmsg->bcsize);
 
     newtsk = add_task(n,ntmsg->pid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
 
@@ -70,7 +72,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (sizeof(initmsg)+initmsg->count*sizeof(endpointid) > msg->hdr.size)
       fatal("INITTASK: invalid idmap size\n");
 
-    printf("INITTASK: localid = %d, count = %d\n",initmsg->localid,initmsg->count);
+    node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,initmsg->localid);
@@ -87,9 +89,10 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     pthread_mutex_unlock(&n->lock);
 
     for (i = 0; i < newtsk->groupsize; i++) {
-      printf("INITTASK: idmap[%d] = ",i);
-      print_endpointid(stdout,initmsg->idmap[i]);
-      printf("\n");
+      endpointid id = initmsg->idmap[i];
+      char *c = (unsigned char*)&id.nodeip;
+      node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %u.%u.%u.%u:%d/%d",
+               i,c[0],c[1],c[2],c[3],id.nodeport,id.localid);
     }
 
     node_send(n,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
@@ -104,7 +107,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
       fatal("STARTTASK: invalid message size\n");
     localid = *(int*)msg->data;
 
-    printf("STARTTASK: localid = %d\n",localid);
+    node_log(n,LOG_INFO,"STARTTASK: localid = %d",localid);
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,localid);
@@ -132,7 +135,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
       fatal("KILLTASK: invalid message size\n");
     localid = *(int*)msg->data;
 
-    printf("KILLTASK %d\n",localid);
+    node_log(n,LOG_INFO,"KILLTASK %d",localid);
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,localid);
@@ -141,11 +144,11 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     task_kill_locked(newtsk);
     pthread_mutex_unlock(&n->lock);
 
-    printf("KILLTASK %d: killed\n",localid);
+    node_log(n,LOG_INFO,"KILLTASK %d: killed",localid);
     break;
   }
   default:
-    printf("Manager received invalid message: %d\n",msg->hdr.tag);
+    node_log(n,LOG_INFO,"Manager received invalid message: %d",msg->hdr.tag);
     break;
   }
   return 0;
