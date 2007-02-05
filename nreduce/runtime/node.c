@@ -31,8 +31,6 @@
 
 /* FIXME: use inet_aton() and inet_ntoa() when converting betwen struct_inaddr and strings */
 
-/* FIXME: must use re-entrant versions of all relevant socket functions, e.g. gethostbyname_r() */
-
 #ifndef TEMP_FAILURE_RETRY
 # define TEMP_FAILURE_RETRY(expression) \
   (__extension__                                                              \
@@ -386,18 +384,44 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
-static char *lookup_hostname(struct in_addr addr)
+static char *lookup_hostname(node *n, struct in_addr addr)
 {
-  struct hostent *he = gethostbyaddr(&addr,sizeof(struct in_addr),AF_INET);
+  struct hostent *he;
+  char *res;
+
+  pthread_mutex_lock(&n->liblock);
+  he = gethostbyaddr(&addr,sizeof(struct in_addr),AF_INET);
   if (NULL != he) {
-    return strdup(he->h_name);
+    res = strdup(he->h_name);
   }
   else {
     unsigned char *c = (unsigned char*)&addr;
     char *hostname = (char*)malloc(100);
     sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
-    return hostname;
+    res = hostname;
   }
+  pthread_mutex_unlock(&n->liblock);
+  return res;
+}
+
+static int lookup_address(node *n, const char *host, struct in_addr *out)
+{
+  struct hostent *he;
+
+  pthread_mutex_lock(&n->liblock);
+  if (NULL == (he = gethostbyname(host))) {
+    node_log(n,LOG_WARNING,"node_listen(%s): %s",host,hstrerror(h_errno));
+    return -1;
+  }
+
+  if (4 != he->h_length) {
+    node_log(n,LOG_WARNING,"node_listen(%s): invalid address type",host);
+    return -1;
+  }
+
+  *out = *((struct in_addr*)he->h_addr);
+  pthread_mutex_unlock(&n->liblock);
+  return 0;
 }
 
 static void handle_new_connection(node *n, listener *l)
@@ -432,7 +456,7 @@ static void handle_new_connection(node *n, listener *l)
     return;
   }
 
-  hostname = lookup_hostname(remote_addr.sin_addr);
+  hostname = lookup_hostname(n,remote_addr.sin_addr);
   node_log(n,LOG_INFO,"Got connection from %s on local ip %u.%u.%u.%u",
            hostname,lip[0],lip[1],lip[2],lip[3]);
   conn = add_connection(n,hostname,clientfd,l);
@@ -561,6 +585,7 @@ node *node_new()
   n->ioready_readfd = pipefds[0];
   n->ioready_writefd = pipefds[1];
   n->logfile = stdout;
+  pthread_mutex_init(&n->liblock,NULL);
   return n;
 }
 
@@ -571,6 +596,7 @@ void node_free(node *n)
   /* FIXME: free message data */
   assert(NULL == n->callbacks.first);
   assert(NULL == n->listeners.first);
+  pthread_mutex_destroy(&n->liblock);
   pthread_cond_destroy(&n->closecond);
   pthread_mutex_destroy(&n->lock);
   pthread_cond_destroy(&n->cond);
@@ -618,23 +644,16 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
 
   if (NULL != host) {
     struct in_addr any;
-    struct hostent *he;
-    if (NULL == (he = gethostbyname(host))) {
-      node_log(n,LOG_WARNING,"node_listen(%s): %s",host,hstrerror(h_errno));
+
+    if (0 > lookup_address(n,host,&n->listenip)) {
+      node_free(n);
       return NULL;
     }
-
-    if (4 != he->h_length) {
-      node_log(n,LOG_WARNING,"node_listen(%s): invalid address type",host);
-      return NULL;
-    }
-
-    n->listenip = *((struct in_addr*)he->h_addr);
 
     any.s_addr = INADDR_ANY;
     if (memcmp(&n->listenip,&any,sizeof(struct in_addr)))
       n->havelistenip = 1;
-    local_addr.sin_addr = *((struct in_addr*)he->h_addr);
+    local_addr.sin_addr = n->listenip;
   }
 
   if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
@@ -779,7 +798,6 @@ connection *node_connect(node *n, const char *dest, int port)
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
   struct sockaddr_in addr;
-  struct hostent *he;
   int sock;
   int connected = 0;
   connection *conn;
@@ -788,15 +806,12 @@ connection *node_connect(node *n, const char *dest, int port)
   unsigned char *lip;
   char *hostname;
 
-  if (NULL == (he = gethostbyname(dest))) {
-    node_log(n,LOG_WARNING,"node_connect(%s): %s",dest,hstrerror(h_errno));
-    return NULL;
-  }
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  memset(&addr.sin_zero,0,8);
 
-  if (4 != he->h_length) {
-    node_log(n,LOG_WARNING,"node_connect(%s): invalid address type",dest);
+  if (0 > lookup_address(n,dest,&addr.sin_addr))
     return NULL;
-  }
 
   if (0 > (sock = socket(AF_INET,SOCK_STREAM,0))) {
     perror("socket");
@@ -805,11 +820,6 @@ connection *node_connect(node *n, const char *dest, int port)
 
   if (0 > set_non_blocking(sock))
     return NULL;
-
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  addr.sin_addr = *((struct in_addr*)he->h_addr);
-  memset(&addr.sin_zero,0,8);
 
   if (0 == connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))) {
     connected = 1;
@@ -828,11 +838,11 @@ connection *node_connect(node *n, const char *dest, int port)
   lip = (unsigned char*)&local_addr.sin_addr.s_addr;
   node_log(n,LOG_INFO,"node_connect: local ip is %u.%u.%u.%u",lip[0],lip[1],lip[2],lip[3]);
 
-  hostname = lookup_hostname(addr.sin_addr);
+  hostname = lookup_hostname(n,addr.sin_addr);
   conn = add_connection(n,hostname,sock,n->mainl);
   free(hostname);
   conn->connected = connected;
-  conn->ip = *((struct in_addr*)he->h_addr);
+  conn->ip = addr.sin_addr;
   conn->localip = local_addr.sin_addr;
 
   if (conn->connected)

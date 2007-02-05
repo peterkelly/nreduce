@@ -168,6 +168,7 @@ typedef struct node {
   FILE *logfile;
   int loglevel;
   pthread_cond_t closecond;
+  pthread_mutex_t liblock;
 } node;
 
 #define EVENT_CONN_ESTABLISHED      0
