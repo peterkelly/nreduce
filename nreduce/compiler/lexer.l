@@ -88,6 +88,11 @@ CHAR                     \'.\'
 <string>\\(.|\n)         { array_append(lexstring,&yytext[1],1); }
 <string>[^\\\n\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
 
+{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
+{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
+                           if ('\0' != *endptr)
+                             return -1;
+                           return INTEGER; }
 "letrec"                 { return LETREC; }
 "in"                     { return IN; }
 "!"                      { return LAMBDA; }
@@ -126,11 +131,6 @@ CHAR                     \'.\'
 {IDENT}                  { yylval.s = strdup(yytext); return SYMBOL; }
 {CHAR}                   { yylval.d = (double)yytext[1]; return DOUBLE; }
 {HEX}                    { yylval.i = strtol(yytext,NULL,0); return INTEGER; }
-{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
-{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
-                           if ('\0' != *endptr)
-                             return -1;
-                           return INTEGER; }
 
 (" "|\n|\t)+             { char *c;
                            for (c = yytext; *c; c++)
