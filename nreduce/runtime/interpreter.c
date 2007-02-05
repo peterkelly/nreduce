@@ -30,7 +30,6 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime.h"
-#include "network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

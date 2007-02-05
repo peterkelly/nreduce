@@ -31,9 +31,11 @@
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
-#define LOG_INFO         0
-#define LOG_WARNING      1
-#define LOG_ERROR        2
+#define LOG_INFO        0
+#define LOG_WARNING     1
+#define LOG_ERROR       2
+
+#define MANAGER_ID      9999
 
 struct node;
 struct listener;

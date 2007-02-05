@@ -27,7 +27,6 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "network.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

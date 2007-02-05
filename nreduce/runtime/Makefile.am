@@ -1,8 +1,7 @@
 noinst_LTLIBRARIES = libruntime.la
 noinst_PROGRAMS = 
-noinst_HEADERS = network.h runtime.h node.h
+noinst_HEADERS = runtime.h node.h
 libruntime_la_SOURCES = worker.c \
-	network.c \
 	task.c \
 	builtins.c \
 	memory.c \

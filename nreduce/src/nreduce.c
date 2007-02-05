@@ -28,7 +28,6 @@
 #include "compiler/bytecode.h"
 #include "nreduce.h"
 #include "runtime/runtime.h"
-#include "runtime/network.h"
 #include "runtime/node.h"
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +46,8 @@
 #define ENGINE_INTERPRETER 0
 #define ENGINE_NATIVE      1
 #define ENGINE_REDUCER     2
+
+#define WORKER_PORT 2000
 
 extern const char *prelude;
 

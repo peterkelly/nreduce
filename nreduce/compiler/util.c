@@ -530,14 +530,14 @@ void free_args(int argc, char **argv)
   free(argv);
 }
 
-/* So we can supress valgrind errors */
-int wrap_pthread_create(pthread_t *thread, pthread_attr_t *attr,
-                        void *(*start_routine)(void *), void *arg)
+int parse_address(const char *address, char **host, int *port)
 {
-  return pthread_create(thread,attr,start_routine,arg);
-}
-
-int wrap_pthread_join(pthread_t th, void **thread_return)
-{
-  return pthread_join(th,thread_return);
+  const char *colon = strchr(address,':');
+  if (NULL == colon)
+    return -1;
+  *host = (char*)malloc(colon-address+1);
+  memcpy(*host,address,colon-address);
+  (*host)[colon-address] = '\0';
+  *port = atoi(colon+1);
+  return 0;
 }

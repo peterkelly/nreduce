@@ -44,7 +44,6 @@
 
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
-#include "network.h"
 #include "runtime.h"
 #include "node.h"
 #include <stdio.h>
@@ -68,6 +67,7 @@
 //#define CHUNKSIZE 1024
 #define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
+#define LISTEN_BACKLOG 10
 
 const char *event_types[EVENT_COUNT] = {
   "CONN_ESTABLISHED",
@@ -85,6 +85,23 @@ const char *event_types[EVENT_COUNT] = {
 
 /** @name Private functions
  * @{ */
+
+static int set_non_blocking(int fd)
+{
+  int flags;
+  if (0 > (flags = fcntl(fd,F_GETFL))) {
+    perror("fcntl(F_GETFL)");
+    return -1;
+  }
+
+  flags |= O_NONBLOCK;
+
+  if (0 > fcntl(fd,F_SETFL,flags)) {
+    perror("fcntl(F_SETFL)");
+    return -1;
+  }
+  return 0;
+}
 
 static void dispatch_event(node *n, int event, connection *conn, endpoint *endpt)
 {
@@ -405,7 +422,7 @@ static void handle_new_connection(node *n, listener *l)
   }
   lip = (unsigned char*)&local_addr.sin_addr;
 
-  if (0 > fdsetblocking(clientfd,0)) {
+  if (0 > set_non_blocking(clientfd)) {
     close(clientfd);
     return;
   }
@@ -586,11 +603,19 @@ void node_log(node *n, int level, const char *format, ...)
 
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data)
 {
-  struct in_addr addr;
   int fd;
   int actualport = 0;
 
-  addr.s_addr = INADDR_ANY;
+  int yes = 1;
+  struct sockaddr_in local_addr;
+  struct sockaddr_in new_addr;
+  int new_size = sizeof(struct sockaddr_in);
+
+  local_addr.sin_family = AF_INET;
+  local_addr.sin_port = htons(port);
+  local_addr.sin_addr.s_addr = INADDR_ANY;
+  memset(&local_addr.sin_zero,0,8);
+
   if (NULL != host) {
     struct in_addr any;
     struct hostent *he;
@@ -609,13 +634,40 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
     any.s_addr = INADDR_ANY;
     if (memcmp(&n->listenip,&any,sizeof(struct in_addr)))
       n->havelistenip = 1;
-    addr = *((struct in_addr*)he->h_addr);
+    local_addr.sin_addr = *((struct in_addr*)he->h_addr);
   }
 
-  if (0 > (fd = start_listening(addr,port,&actualport))) {
+  if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
+    node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
     node_free(n);
     return NULL;
   }
+
+  if (-1 == setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
+    node_log(n,LOG_ERROR,"setsockopt: %s",strerror(errno));
+    node_free(n);
+    return NULL;
+  }
+
+  if (-1 == bind(fd,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
+    node_log(n,LOG_ERROR,"bind: %s",strerror(errno));
+    node_free(n);
+    return NULL;
+  }
+
+  if (0 > getsockname(fd,(struct sockaddr*)&new_addr,&new_size)) {
+    node_log(n,LOG_ERROR,"getsockname: %s",strerror(errno));
+    node_free(n);
+    return NULL;
+  }
+  actualport = ntohs(new_addr.sin_port);
+
+  if (-1 == listen(fd,LISTEN_BACKLOG)) {
+    node_log(n,LOG_ERROR,"listen: %s",strerror(errno));
+    node_free(n);
+    return NULL;
+  }
+
   assert((0 == port) || (actualport == port));
 
   if (0 == port)
@@ -688,7 +740,7 @@ void node_remove_listener(node *n, listener *l)
 
 void node_start_iothread(node *n)
 {
-  if (0 > wrap_pthread_create(&n->iothread,NULL,ioloop,n))
+  if (0 > pthread_create(&n->iothread,NULL,ioloop,n))
     fatal("pthread_create: %s",strerror(errno));
 }
 
@@ -751,7 +803,7 @@ connection *node_connect(node *n, const char *dest, int port)
     return NULL;
   }
 
-  if (0 > fdsetblocking(sock,0))
+  if (0 > set_non_blocking(sock))
     return NULL;
 
   addr.sin_family = AF_INET;

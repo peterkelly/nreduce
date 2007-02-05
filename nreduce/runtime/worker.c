@@ -26,7 +26,6 @@
 
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
-#include "network.h"
 #include "runtime.h"
 #include "node.h"
 #include <stdio.h>
@@ -247,11 +246,11 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
     start_launcher(n,bcdata,bcsize,&managerid,1);
   }
 
-  if (0 > wrap_pthread_join(n->iothread,NULL))
+  if (0 > pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   endpoint_forceclose(n->managerendpt);
-  if (0 > wrap_pthread_join(n->managerthread,NULL))
+  if (0 > pthread_join(n->managerthread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   node_close_endpoints(n);

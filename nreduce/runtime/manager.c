@@ -27,7 +27,6 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "network.h"
 #include "node.h"
 #include <stdio.h>
 #include <string.h>
@@ -175,6 +174,6 @@ static void *manager(void *arg)
 
 void start_manager(node *n)
 {
-  if (0 > wrap_pthread_create(&n->managerthread,NULL,manager,n))
+  if (0 > pthread_create(&n->managerthread,NULL,manager,n))
     fatal("pthread_create: %s",strerror(errno));
 }
