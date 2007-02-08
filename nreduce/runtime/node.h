@@ -31,9 +31,13 @@
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
-#define LOG_INFO        0
-#define LOG_WARNING     1
-#define LOG_ERROR       2
+#define LOG_NONE        0
+#define LOG_ERROR       1
+#define LOG_WARNING     2
+#define LOG_INFO        3
+#define LOG_DEBUG1      4
+#define LOG_DEBUG2      5
+#define LOG_COUNT       6
 
 #define MANAGER_ID      9999
 
@@ -184,13 +188,9 @@ typedef struct node {
 #define EVENT_SHUTDOWN              10
 #define EVENT_COUNT                 11
 
-#ifndef NODE_C
-extern const char *event_types[EVENT_COUNT];
-#endif
-
 /* node */
 
-node *node_new();
+node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data);
@@ -237,5 +237,10 @@ typedef struct inittask_msg {
 } inittask_msg;
 
 void start_manager(node *n);
+
+#ifndef NODE_C
+extern const char *log_levels[LOG_COUNT];
+extern const char *event_types[EVENT_COUNT];
+#endif
 
 #endif

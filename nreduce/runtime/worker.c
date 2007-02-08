@@ -220,12 +220,15 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   memset(&wd,0,sizeof(worker_data));
 
-  n = node_new();
-  n->isworker = 1;
   if (bcdata) {
     wd.standalone = 1;
-    n->loglevel = LOG_ERROR;
+    n = node_new(LOG_DEBUG2);
   }
+  else {
+    n = node_new(LOG_INFO);
+  }
+
+  n->isworker = 1;
 
   if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
     return -1;

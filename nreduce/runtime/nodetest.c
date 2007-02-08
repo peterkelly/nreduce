@@ -351,7 +351,7 @@ static void testserver_callback(struct node *n, void *data, int event,
 
 int nodetest(const char *host, int port)
 {
-  node *n = node_new();
+  node *n = node_new(LOG_INFO);
   testserver_data tsd;
 
   memset(&tsd,0,sizeof(testserver_data));

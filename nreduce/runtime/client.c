@@ -341,7 +341,7 @@ int do_client(const char *host, int port, int argc, char **argv)
   cd.port = port;
   cd.event = -1;
 
-  n = node_new();
+  n = node_new(LOG_INFO);
 
   if (NULL == (n->mainl = node_listen(n,host,0,NULL,NULL)))
     return -1;

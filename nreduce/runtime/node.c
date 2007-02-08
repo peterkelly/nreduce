@@ -67,6 +67,15 @@
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
 
+const char *log_levels[LOG_COUNT] = {
+  "NONE",
+  "ERROR",
+  "WARNING",
+  "INFO",
+  "DEBUG1",
+  "DEBUG2",
+};
+
 const char *event_types[EVENT_COUNT] = {
   "CONN_ESTABLISHED",
   "CONN_FAILED",
@@ -568,10 +577,11 @@ static void *ioloop(void *arg)
 /** @name Public functions
  * @{ */
 
-node *node_new()
+node *node_new(int loglevel)
 {
   node *n = (node*)calloc(1,sizeof(node));
   int pipefds[2];
+  char *logenv;
 
   pthread_mutex_init(&n->lock,NULL);
   pthread_cond_init(&n->cond,NULL);
@@ -585,6 +595,22 @@ node *node_new()
   n->ioready_readfd = pipefds[0];
   n->ioready_writefd = pipefds[1];
   n->logfile = stdout;
+  n->loglevel = loglevel;
+
+  if (NULL != (logenv = getenv("LOG_LEVEL"))) {
+    int i;
+    for (i = 0; i < LOG_COUNT; i++) {
+      if (!strcasecmp(logenv,log_levels[i])) {
+        n->loglevel = i;
+        break;
+      }
+    }
+    if (LOG_COUNT == i) {
+      fprintf(stderr,"Invalid log level: %s\n",logenv);
+      exit(1);
+    }
+  }
+
   pthread_mutex_init(&n->liblock,NULL);
   return n;
 }
@@ -608,23 +634,19 @@ void node_free(node *n)
 void node_log(node *n, int level, const char *format, ...)
 {
   va_list ap;
-  if (level < n->loglevel)
+  char *newfmt;
+  if (level > n->loglevel)
     return;
-  switch (level) {
-  case LOG_INFO:
-    fprintf(n->logfile,"INFO    ");
-    break;
-  case LOG_WARNING:
-    fprintf(n->logfile,"WARNING ");
-    break;
-  case LOG_ERROR:
-    fprintf(n->logfile,"ERROR   ");
-    break;
-  }
+  assert(0 <= level);
+  assert(LOG_COUNT > level);
+
+  /* Use only a single vfprintf call to avoid interleaving of messages from different threads */
+  newfmt = (char*)malloc(8+1+strlen(format)+1+1);
+  sprintf(newfmt,"%-8s %s\n",log_levels[level],format);
   va_start(ap,format);
-  vfprintf(n->logfile,format,ap);
+  vfprintf(n->logfile,newfmt,ap);
   va_end(ap);
-  fprintf(n->logfile,"\n");
+  free(newfmt);
 }
 
 listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data)
