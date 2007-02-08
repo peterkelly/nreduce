@@ -159,7 +159,7 @@ typedef struct node {
   node_callbacklist callbacks;
   struct in_addr listenip;
   int havelistenip;
-  int nextlocalid;
+  unsigned short nextlocalid;
   pthread_t iothread;
   pthread_t managerthread;
   endpoint *managerendpt;

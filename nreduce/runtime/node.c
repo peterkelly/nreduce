@@ -26,11 +26,6 @@
 
 #define NODE_C
 
-/* FIXME: the sin_addr structure is supposed to be in network byte order; we are treating
-   it as host by order here (which appears to be ok on x86) */
-
-/* FIXME: use inet_aton() and inet_ntoa() when converting betwen struct_inaddr and strings */
-
 #ifndef TEMP_FAILURE_RETRY
 # define TEMP_FAILURE_RETRY(expression) \
   (__extension__                                                              \
@@ -536,7 +531,7 @@ static void *ioloop(void *arg)
     if (FD_ISSET(n->ioready_readfd,&readfds)) {
       int c;
       if (0 > read(n->ioready_readfd,&c,1))
-        fatal("Cann't read from ioready_readfd: %s\n",strerror(errno));
+        fatal("Can't read from ioready_readfd: %s",strerror(errno));
     }
 
     if (0 == s)
@@ -619,7 +614,7 @@ void node_free(node *n)
 {
   if (n->mainl)
     node_remove_listener(n,n->mainl);
-  /* FIXME: free message data */
+  assert(NULL == n->endpoints.first);
   assert(NULL == n->callbacks.first);
   assert(NULL == n->listeners.first);
   pthread_mutex_destroy(&n->liblock);
@@ -799,8 +794,6 @@ void node_close_endpoints(node *n)
       pthread_mutex_lock(&n->lock);
     }
     else {
-      /* FIXME: handle other endpoint types here... e.g. part-way through distributed
-         process creation */
       fatal("Other endpoint type (%d) still active",endpt->type);
     }
   }
@@ -970,8 +963,11 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
   endpt->interruptptr = &endpt->tempinterrupt;
 
   pthread_mutex_lock(&n->lock);
-  if (0 == endpt->localid)
-    endpt->localid = n->nextlocalid++; /* FIXME: handle wrap-around - allocate an unused # */
+  if (0 == endpt->localid) {
+    if (0 == n->nextlocalid)
+      fatal("localid wraparound");
+    endpt->localid = n->nextlocalid++;
+  }
   llist_append(&n->endpoints,endpt);
   dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
   pthread_mutex_unlock(&n->lock);

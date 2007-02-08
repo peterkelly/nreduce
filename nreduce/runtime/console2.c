@@ -38,6 +38,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+/* FIXME: make this run in a separate thread */
+
 void cprintf(connection *conn, const char *format, ...)
 {
   va_list ap;

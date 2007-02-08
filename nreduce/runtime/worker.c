@@ -64,7 +64,7 @@ task *find_task(node *n, int localid)
   if (NULL == endpt)
     return NULL;
   if (TASK_ENDPOINT != endpt->type)
-    fatal("Request for endpoint %d that is not a task\n",localid);
+    fatal("Request for endpoint %d that is not a task",localid);
   return (task*)endpt->data;
 }
 
@@ -76,7 +76,7 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   #endif
 
   if (destid == tsk->pid)
-    fatal("Attempt to send message (with tag %d) to task on same host\n",msg_names[tag]);
+    fatal("Attempt to send message (with tag %d) to task on same host",msg_names[tag]);
 
   node_send(n,tsk->endpt,tsk->idmap[destid],tag,data,size);
 }
@@ -222,7 +222,7 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   if (bcdata) {
     wd.standalone = 1;
-    n = node_new(LOG_DEBUG2);
+    n = node_new(LOG_ERROR);
   }
   else {
     n = node_new(LOG_INFO);

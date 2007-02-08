@@ -118,7 +118,7 @@ static int end_of_line(const char *data, int len, int *pos)
 static void send_error(connection *conn, testconn *tc, int code, const char *str, const char *msg)
 {
   cprintf(conn,"HTTP/1.1 %d %s\r\n",code,str);
-  cprintf(conn,"Content-Type: text/plain\r\n");
+  cprintf(conn,"Content-Type: text/plain; charset=UTF-8\r\n");
   cprintf(conn,"Content-Length: %d\r\n",strlen(msg)+1);
   cprintf(conn,"Connection: close\r\n");
   cprintf(conn,"\r\n");
@@ -314,7 +314,7 @@ static void testserver_callback(struct node *n, void *data, int event,
           }
 
 /*           cprintf(conn,"HTTP/1.1 200 OK\r\n" */
-/*                        "Content-Type: text/plain\r\n" */
+/*                        "Content-Type: text/plain; charset=UTF-8\r\n" */
 /*                        "Connection: close\r\n" */
 /*                        "\r\n" */
 /*                        "test\n"); */

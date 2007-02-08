@@ -47,10 +47,10 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     newtask_msg *ntmsg;
     task *newtsk;
     if (sizeof(newtask_msg) > msg->hdr.size)
-      fatal("NEWTASK: invalid message size\n");
+      fatal("NEWTASK: invalid message size");
     ntmsg = (newtask_msg*)msg->data;
     if (sizeof(newtask_msg)+ntmsg->bcsize > msg->hdr.size)
-      fatal("NEWTASK: invalid bytecode size\n");
+      fatal("NEWTASK: invalid bytecode size");
 
     node_log(n,LOG_INFO,"NEWTASK pid = %d, groupsize = %d, bcsize = %d",
              ntmsg->pid,ntmsg->groupsize,ntmsg->bcsize);
@@ -66,10 +66,10 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     int i;
     int resp = 0;
     if (sizeof(inittask_msg) > msg->hdr.size)
-      fatal("INITTASK: invalid message size\n");
+      fatal("INITTASK: invalid message size");
     initmsg = (inittask_msg*)msg->data;
     if (sizeof(initmsg)+initmsg->count*sizeof(endpointid) > msg->hdr.size)
-      fatal("INITTASK: invalid idmap size\n");
+      fatal("INITTASK: invalid idmap size");
 
     node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
 
@@ -77,13 +77,13 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     newtsk = find_task(n,initmsg->localid);
 
     if (NULL == newtsk)
-      fatal("INITTASK: task with localid %d does not exist\n",initmsg->localid);
+      fatal("INITTASK: task with localid %d does not exist",initmsg->localid);
 
     if (newtsk->haveidmap)
-      fatal("INITTASK: task with localid %d already has an idmap\n",initmsg->localid);
+      fatal("INITTASK: task with localid %d already has an idmap",initmsg->localid);
 
     if (initmsg->count != newtsk->groupsize)
-      fatal("INITTASK: idmap size does not match expected\n");
+      fatal("INITTASK: idmap size does not match expected");
     memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
     pthread_mutex_unlock(&n->lock);
 
@@ -103,7 +103,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     int resp = 0;
     int localid;
     if (sizeof(int) > msg->hdr.size)
-      fatal("STARTTASK: invalid message size\n");
+      fatal("STARTTASK: invalid message size");
     localid = *(int*)msg->data;
 
     node_log(n,LOG_INFO,"STARTTASK: localid = %d",localid);
@@ -113,13 +113,13 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     pthread_mutex_unlock(&n->lock);
 
     if (NULL == newtsk)
-      fatal("STARTTASK: task with localid %d does not exist\n",localid);
+      fatal("STARTTASK: task with localid %d does not exist",localid);
 
     if (!newtsk->haveidmap)
-      fatal("STARTTASK: task with localid %d does not have an idmap\n",localid);
+      fatal("STARTTASK: task with localid %d does not have an idmap",localid);
 
     if (newtsk->started)
-      fatal("STARTTASK: task with localid %d has already been started\n",localid);
+      fatal("STARTTASK: task with localid %d has already been started",localid);
 
     sem_post(&newtsk->startsem);
 
@@ -131,7 +131,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     task *newtsk;
     int localid;
     if (sizeof(int) > msg->hdr.size)
-      fatal("KILLTASK: invalid message size\n");
+      fatal("KILLTASK: invalid message size");
     localid = *(int*)msg->data;
 
     node_log(n,LOG_INFO,"KILLTASK %d",localid);
@@ -139,7 +139,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,localid);
     if (NULL == newtsk)
-      fatal("KILLTASK: task with localid %d does not exist\n",localid);
+      fatal("KILLTASK: task with localid %d does not exist",localid);
     task_kill_locked(newtsk);
     pthread_mutex_unlock(&n->lock);
 

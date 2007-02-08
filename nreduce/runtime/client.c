@@ -64,7 +64,7 @@ static int get_responses(node *n, endpoint *endpt, int tag,
     }
 
     if (tag != msg->hdr.tag)
-      fatal("%s: Got invalid response tag: %d\n",msg_names[tag],msg->hdr.tag);
+      fatal("%s: Got invalid response tag: %d",msg_names[tag],msg->hdr.tag);
 
     for (i = 0; i < count; i++)
       if (!memcmp(&msg->hdr.source,&managerids[i],sizeof(endpointid)))
@@ -79,10 +79,10 @@ static int get_responses(node *n, endpoint *endpt, int tag,
     }
 
     if (sizeof(int) != msg->hdr.size)
-      fatal("%s: incorrect message size (%d)\n",msg->hdr.size,msg_names[tag]);
+      fatal("%s: incorrect message size (%d)",msg->hdr.size,msg_names[tag]);
 
     if (gotresponse[sender])
-      fatal("%s: Already have response for this source\n",msg_names[tag]);
+      fatal("%s: Already have response for this source",msg_names[tag]);
 
     gotresponse[sender] = 1;
     if (responses)
