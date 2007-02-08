@@ -39,6 +39,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 {
@@ -57,7 +58,8 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     newtsk = add_task(n,ntmsg->pid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
 
-    node_send(n,endpt,msg->hdr.source,MSG_NEWTASKRESP,&newtsk->endpt->localid,sizeof(int));
+    /* FIXME: is there a race condition here? what if newtsk gets deleted */
+    node_send(n,endpt->localid,msg->hdr.source,MSG_NEWTASKRESP,&newtsk->endpt->localid,sizeof(int));
     break;
   }
   case MSG_INITTASK: {
@@ -94,8 +96,8 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
                i,c[0],c[1],c[2],c[3],id.nodeport,id.localid);
     }
 
-    node_send(n,endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
-    newtsk->haveidmap = 1;
+    node_send(n,endpt->localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+    newtsk->haveidmap = 1; /* FIXME: another possible race condition */
     break;
   }
   case MSG_STARTTASK: {
@@ -110,7 +112,6 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     pthread_mutex_lock(&n->lock);
     newtsk = find_task(n,localid);
-    pthread_mutex_unlock(&n->lock);
 
     if (NULL == newtsk)
       fatal("STARTTASK: task with localid %d does not exist",localid);
@@ -122,9 +123,10 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
       fatal("STARTTASK: task with localid %d has already been started",localid);
 
     sem_post(&newtsk->startsem);
-
-    node_send(n,endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     newtsk->started = 1;
+    pthread_mutex_unlock(&n->lock);
+
+    node_send(n,endpt->localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
   }
   case MSG_KILLTASK: {

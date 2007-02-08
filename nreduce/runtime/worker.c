@@ -74,11 +74,7 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   #ifdef MSG_DEBUG
   msg_print(tsk,destid,tag,data,size);
   #endif
-
-  if (destid == tsk->pid)
-    fatal("Attempt to send message (with tag %d) to task on same host",msg_names[tag]);
-
-  node_send(n,tsk->endpt,tsk->idmap[destid],tag,data,size);
+  node_send(n,tsk->endpt->localid,tsk->idmap[destid],tag,data,size);
 }
 
 static int get_idmap_index(task *tsk, endpointid tid)
@@ -173,7 +169,7 @@ static void worker_callback(struct node *n, void *data, int event,
 
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
       task *tsk;
-      message *msg;
+      endpointid destid;
       int kill = 0;
       int i;
 
@@ -190,16 +186,11 @@ static void worker_callback(struct node *n, void *data, int event,
       if (!kill)
         continue;
 
-      msg = (message*)calloc(1,sizeof(message));
-      msg->hdr.source.nodeip = n->listenip;
-      msg->hdr.source.nodeport = n->mainl->port;
-      msg->hdr.source.localid = 0;
-      msg->hdr.destlocalid = MANAGER_ID;
-      msg->hdr.size = sizeof(int);
-      msg->hdr.tag = MSG_KILLTASK;
-      msg->data = (char*)malloc(sizeof(int));
-      memcpy(msg->data,&endpt->localid,sizeof(int));
-      endpoint_add_message(mgrendpt,msg);
+      destid.nodeip = n->listenip;
+      destid.nodeport = n->mainl->port;
+      destid.localid = MANAGER_ID;
+
+      node_send_locked(n,0,destid,MSG_KILLTASK,&endpt->localid,sizeof(int));
       node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->localid);
     }
   }

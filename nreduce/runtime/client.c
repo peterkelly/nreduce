@@ -129,7 +129,7 @@ static void send_newtask(launcher *lr)
   memcpy(&ntmsg->bcdata,lr->bcdata,lr->bcsize);
   for (i = 0; i < lr->count; i++) {
     ntmsg->pid = i;
-    node_send(lr->n,lr->endpt,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
+    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
   }
   free(ntmsg);
 }
@@ -143,7 +143,7 @@ static void send_inittask(launcher *lr)
   memcpy(initmsg->idmap,lr->endpointids,lr->count*sizeof(endpointid));
   for (i = 0; i < lr->count; i++) {
     initmsg->localid = lr->endpointids[i].localid;
-    node_send(lr->n,lr->endpt,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
   }
   free(initmsg);
 }
@@ -152,7 +152,7 @@ static void send_starttask(launcher *lr)
 {
   int i;
   for (i = 0; i < lr->count; i++)
-    node_send(lr->n,lr->endpt,lr->managerids[i],MSG_STARTTASK,
+    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_STARTTASK,
               &lr->localids[i],sizeof(int));
 }
 
@@ -329,6 +329,7 @@ int do_client(const char *host, int port, int argc, char **argv)
   node *n;
   int r = 0;
   client_data cd;
+  connection *conn;
 
   if (1 > argc) {
     fprintf(stderr,"client: please specify a filename to run\n");
@@ -350,7 +351,11 @@ int do_client(const char *host, int port, int argc, char **argv)
   node_add_callback(n,client_callback,&cd);
   node_start_iothread(n);
 
-  if (NULL == node_connect(n,host,port)) {
+  pthread_mutex_lock(&n->lock);
+  conn = node_connect_locked(n,host,port);
+  pthread_mutex_unlock(&n->lock);
+
+  if (NULL == conn) {
     fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
     r = 1;
   }

@@ -296,7 +296,7 @@ static int handle_connected(node *n, connection *conn)
   if (0 == err) {
     int yes = 1;
     conn->connected = 1;
-    node_log(n,LOG_INFO,"Connected to %s",conn->hostname);
+    node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
     if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
@@ -308,7 +308,8 @@ static int handle_connected(node *n, connection *conn)
     dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
   }
   else {
-    node_log(n,LOG_WARNING,"Connection to %s failed: %s",conn->hostname,strerror(err));
+    node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
+             conn->hostname,conn->port,strerror(err));
     dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
     remove_connection(n,conn);
     return -1;
@@ -808,7 +809,7 @@ void node_close_connections(node *n)
   pthread_mutex_unlock(&n->lock);
 }
 
-connection *node_connect(node *n, const char *dest, int port)
+connection *node_connect_locked(node *n, const char *dest, int port)
 {
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
@@ -820,6 +821,7 @@ connection *node_connect(node *n, const char *dest, int port)
   int local_size = sizeof(struct sockaddr_in);
   unsigned char *lip;
   char *hostname;
+  char c = 0;
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
@@ -863,20 +865,20 @@ connection *node_connect(node *n, const char *dest, int port)
   if (conn->connected)
     dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
 
+  write(n->ioready_writefd,&c,1);
+
   return conn;
 }
 
-void node_send(node *n, endpoint *endpt, endpointid destendpointid,
-               int tag, const void *data, int size)
+void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
+                      int tag, const void *data, int size)
 {
   connection *conn;
   msgheader hdr;
   char c = 0;
 
-  pthread_mutex_lock(&n->lock);
-
   memset(&hdr,0,sizeof(msgheader));
-  hdr.source.localid = endpt->localid;
+  hdr.source.localid = sourcelocalid;
   hdr.destlocalid = destendpointid.localid;
   hdr.size = size;
   hdr.tag = tag;
@@ -890,15 +892,22 @@ void node_send(node *n, endpoint *endpt, endpointid destendpointid,
   else {
     if (NULL == (conn = find_connection(n,destendpointid.nodeip,destendpointid.nodeport))) {
       unsigned char *addrbytes = (unsigned char*)&destendpointid.nodeip.s_addr;
-      /* FIXME: handle this gracefully */
-      fatal("Could not find destination connection to %u.%u.%u.%u:%d",
-            addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
+      node_log(n,LOG_ERROR,"Could not find destination connection to %u.%u.%u.%u:%d",
+               addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
     }
-
-    array_append(conn->sendbuf,&hdr,sizeof(msgheader));
-    array_append(conn->sendbuf,data,size);
-    write(n->ioready_writefd,&c,1);
+    else {
+      array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+      array_append(conn->sendbuf,data,size);
+      write(n->ioready_writefd,&c,1);
+    }
   }
+}
+
+void node_send(node *n, int sourcelocalid, endpointid destendpointid,
+               int tag, const void *data, int size)
+{
+  pthread_mutex_lock(&n->lock);
+  node_send_locked(n,sourcelocalid,destendpointid,tag,data,size);
   pthread_mutex_unlock(&n->lock);
 }
 

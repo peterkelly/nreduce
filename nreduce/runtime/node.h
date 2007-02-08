@@ -201,8 +201,10 @@ void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
-connection *node_connect(node *n, const char *dest, int port);
-void node_send(node *n, endpoint *endpt, endpointid destendpointid,
+connection *node_connect_locked(node *n, const char *dest, int port);
+void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
+                      int tag, const void *data, int size);
+void node_send(node *n, int sourcelocalid, endpointid destendpointid,
                int tag, const void *data, int size);
 void node_waitclose_locked(node *n, int localid);
 void node_shutdown_locked(node *n);
