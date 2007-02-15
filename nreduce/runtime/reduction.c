@@ -364,7 +364,7 @@ void reduce(task *tsk, pntrstack *s)
         }
       }
 
-      if (strictok < strictargs) {
+      if ((strictok < strictargs) || !builtin_info[bif].pure) {
         trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
 
         for (i = strictargs; i < reqargs; i++) {
@@ -428,7 +428,10 @@ static void stream(task *tsk, pntr lst)
       /* nothing */
     }
     else if (CELL_NUMBER == pntrtype(p)) {
-      printp(stdout,p);
+      if ((p == floor(p)) && (0 < p) && (128 > p))
+        printf("%c",(int)p);
+      else
+        printf("?");
     }
     else if (CELL_CONS == pntrtype(p)) {
       pntrstack_push(tsk->streamstack,get_pntr(p)->field2);

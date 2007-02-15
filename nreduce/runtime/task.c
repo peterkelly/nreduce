@@ -459,6 +459,11 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   tsk->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->idmap = (endpointid*)calloc(groupsize,sizeof(endpointid));
 
+  tsk->ioalloc = 1;
+  tsk->iocount = 1;
+  tsk->ioframes = (ioframe*)calloc(tsk->ioalloc,sizeof(ioframe));
+  tsk->iofree = 0;
+
   tsk->pid = pid;
   tsk->groupsize = groupsize;
   if (NULL == bcdata)
@@ -498,10 +503,9 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   }
 
   if (n) {
-    pthread_t thread;
-    if (0 > pthread_create(&thread,NULL,(void*)execute,tsk))
+    if (0 > pthread_create(&tsk->thread,NULL,(void*)execute,tsk))
       fatal("pthread_create: %s",strerror(errno));
-    if (0 > pthread_detach(thread))
+    if (0 > pthread_detach(tsk->thread))
       fatal("pthread_detach: %s",strerror(errno));
   }
 
@@ -535,6 +539,7 @@ void task_free(task *tsk)
   }
 
   free(tsk->idmap);
+  free(tsk->ioframes);
 
   for (i = 0; i < tsk->groupsize; i++) {
     array_free(tsk->inflight_addrs[i]);
@@ -580,6 +585,7 @@ void task_free(task *tsk)
 
 void task_kill_locked(task *tsk)
 {
+  /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
   tsk->done = 1;
   *tsk->endpt->interruptptr = 1;
   node_waitclose_locked(tsk->n,tsk->endpt->localid);

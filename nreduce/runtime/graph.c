@@ -190,6 +190,9 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
     }
     break;
   }
+  case CELL_SYSOBJECT:
+    abort();
+    break;
   default:
     abort();
     break;

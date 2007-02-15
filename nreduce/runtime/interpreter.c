@@ -47,6 +47,7 @@
 /* #define FETCH_DEBUG */
 
 #define FISH_DELAY_MS 250
+#define GC_DELAY 2500
 #define NSPARKS_REQUESTED 50
 
 void print_stack(FILE *f, pntr *stk, int size, int dir)
@@ -700,6 +701,82 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     #endif
     break;
   }
+  case MSG_IORESPONSE: {
+    int event;
+    frame *f;
+    pntr objp;
+    sysobject *so;
+    int ioid;
+
+    CHECK_READ(read_int(&rd,&ioid));
+    CHECK_READ(read_int(&rd,&event));
+
+    assert(0 <= event);
+    assert(EVENT_COUNT > event);
+    node_log(tsk->n,LOG_DEBUG2,"IORESPONSE: ioid = %d, event = %s",ioid,event_types[event]);
+
+    assert(0 < ioid);
+    assert(ioid < tsk->iocount);
+    f = tsk->ioframes[ioid].f;
+    tsk->ioframes[ioid].f = NULL;
+    tsk->ioframes[ioid].freelnk = tsk->iofree;
+    tsk->iofree = ioid;
+
+    assert(OP_BIF == f->instr->opcode);
+    assert((B_OPENCON == f->instr->arg0) ||
+           (B_READCON == f->instr->arg0) ||
+           (B_PRINT == f->instr->arg0) ||
+           (B_PRINTARRAY == f->instr->arg0) ||
+           (B_ACCEPT == f->instr->arg0));
+    assert(f->alloc >= f->instr->expcount);
+    assert(2 <= f->instr->expcount);
+    objp = f->data[f->instr->expcount-1];
+    assert(CELL_SYSOBJECT == pntrtype(objp));
+    so = (sysobject*)get_pntr(get_pntr(objp)->field1);
+    assert((SYSOBJECT_CONNECTION == so->type) || (SYSOBJECT_LISTENER == so->type));
+
+    if (B_OPENCON == f->instr->arg0) {
+      assert((EVENT_CONN_ESTABLISHED == event) ||
+             (EVENT_CONN_FAILED == event));
+      so->connected = (EVENT_CONN_ESTABLISHED == event);
+    }
+    else {
+      if (EVENT_DATA_READ == event) {
+        void *b;
+        int len;
+
+        CHECK_READ(read_binary(&rd,&b,&len));
+        assert(0 < len);
+
+        assert(NULL == so->buf);
+        assert(0 == so->len);
+
+        so->buf = (char*)b;
+        so->len = len;
+      }
+      else if (EVENT_DATA_READFINISHED == event) {
+        so->iorstatus = event;
+      }
+      else if (EVENT_DATA_WRITTEN == event) {
+      }
+      else if (EVENT_CONN_ACCEPTED == event) {
+      }
+      else if (EVENT_CONN_IOERROR == event) {
+        so->error = 1;
+        so->iorstatus = event;
+      }
+      else {
+        assert(EVENT_CONN_CLOSED == event);
+        so->closed = 1;
+        so->iorstatus = event;
+      }
+    }
+
+    tsk->netpending--;
+    unblock_frame(tsk,f);
+    check_runnable(tsk);
+    break;
+  }
   default:
     fatal("unknown message");
     break;
@@ -727,18 +804,33 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
-static int handle_interrupt(task *tsk, struct timeval *nextfish)
+static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval *nextgc)
 {
   int from;
   char *msgdata;
   int msgsize;
   int tag;
+  struct timeval now;
 
   if (tsk->done)
     return 1;
 
-  if (tsk->stats.nallocs >= COLLECT_THRESHOLD)
+  if (tsk->stats.nallocs >= COLLECT_THRESHOLD) {
     local_collect(tsk);
+
+    if (getenv("GC_STATS")) {
+      int cells;
+      int bytes;
+      int alloc;
+      int conns;
+      memusage(tsk,&cells,&bytes,&alloc,&conns);
+      printf("Collect: %d cells, %dk memory, %dk allocated, %d connections\n",
+             cells,bytes/1024,alloc/1024,conns);
+    }
+
+    gettimeofday(&now,NULL);
+    *nextgc = timeval_addms(now,GC_DELAY);
+  }
 
   if (0 <= (from = msg_recv(tsk,&tag,&msgdata,&msgsize,0))) {
     handle_message(tsk,from,tag,msgdata,msgsize);
@@ -746,10 +838,9 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish)
   }
 
   if (NULL == *tsk->runptr) {
-    struct timeval now;
     int diffms;
 
-    if (1 == tsk->groupsize)
+    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
       return 1;
 
     if (NULL != tsk->sparked.first) {
@@ -760,7 +851,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish)
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,*nextfish);
 
-    if (tsk->newfish || (0 >= diffms)) {
+    if ((tsk->newfish || (0 >= diffms)) && (1 < tsk->groupsize)) {
       int dest;
       #ifdef PARALLELISM_DEBUG
       fprintf(tsk->output,
@@ -785,6 +876,15 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish)
       tsk->newfish = 0;
     }
 
+    /* Check if we've waited for more than GC_DELAY ms since the last garbage collection cycle.
+       If so, cause another garbage collection to be done. Even though there may not have been
+       much memory allocation done during this time, there may be socket connections lying around
+       that are no longer referenced and should therefore be cleaned up. */
+    if (0 >= timeval_diffms(now,*nextgc)) {
+      tsk->stats.nallocs = COLLECT_THRESHOLD;
+      *tsk->endpt->interruptptr = 1; /* may be another one */
+    }
+
     from = msg_recv(tsk,&tag,&msgdata,&msgsize,FISH_DELAY_MS);
 
     #ifdef PARALLELISM_DEBUG
@@ -805,6 +905,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish)
 void *execute(task *tsk)
 {
   struct timeval nextfish;
+  struct timeval nextgc;
   int evaldoaddr = ((bcheader*)tsk->bcdata)->evaldoaddr;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
@@ -821,6 +922,8 @@ void *execute(task *tsk)
   tsk->endpt->interruptptr = &interrupt;
 
   gettimeofday(&nextfish,NULL);
+  gettimeofday(&nextgc,NULL);
+  nextgc = timeval_addms(nextgc,GC_DELAY);
 
   runnable = tsk->rtemp;
   tsk->rtemp = NULL;
@@ -830,7 +933,7 @@ void *execute(task *tsk)
 
     if (interrupt) {
       interrupt = 0;
-      if (handle_interrupt(tsk,&nextfish))
+      if (handle_interrupt(tsk,&nextfish,&nextgc))
         break;
       else
         continue;
@@ -844,7 +947,7 @@ void *execute(task *tsk)
     #ifdef EXECUTION_TRACE
     if (compileinfo) {
 /*       print_ginstr(tsk->output,gp,runnable->address,instr); */
-      fprintf(tsk->output,"%-6d %s\n",runnable->instr-program_ops-1,opcodes[instr->opcode]);
+      fprintf(tsk->output,"%-6d %s\n",instr-program_ops,opcodes[instr->opcode]);
 /*       print_stack(tsk->output,runnable->data,instr->expcount,0); */
     }
     #endif
@@ -1011,7 +1114,7 @@ void *execute(task *tsk)
         int extra = arity-have;
         int nfc = 0;
         newf->alloc = program_finfo[cp->fno].stacksize;
-        newf->data = (pntr*)malloc(newf->alloc*sizeof(pntr)); /* FIXME: memory leak */
+        newf->data = (pntr*)realloc(newf->data,newf->alloc*sizeof(pntr));
         newf->instr = program_ops+cp->address;
         newf->fno = cp->fno;
         for (i = newcount-extra; i < newcount; i++)
@@ -1197,6 +1300,7 @@ void *execute(task *tsk)
   }
 
   node_log(tsk->n,LOG_INFO,"Task completed");
+  tsk->done = 1;
   task_free(tsk);
   return NULL;
 }

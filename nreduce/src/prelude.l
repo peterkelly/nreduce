@@ -1,22 +1,54 @@
-__printer1 partlen lst = (__printer (arrayskip partlen lst))
+printer1 dest partlen lst = (printer dest (arrayskip partlen lst))
 
-__printer lst = (if lst
-                 (if (valarray? lst)
-                     (letrec partlen = (arraysize lst) in
-                             (seq (printarray partlen lst) (__printer1 partlen lst)))
-                     (seq (print (head lst)) (__printer (tail lst))))
-                     nil)
+printer dest lst =
+(if lst
+    (letrec
+       partlen = (nchars lst)
+     in
+       (if partlen
+           (seq (printarray dest partlen lst) (printer1 dest partlen lst))
+           (seq (print dest (head lst)) (printer dest (tail lst)))))
+    (printend dest))
 
 sparklist lst = (if lst
                      (parhead lst (sparklist (tail lst)))
                      nil)
 
+parlist lst =
+(if lst
+    (seq (par (head lst) nil)
+         (parlist (tail lst)))
+    nil)
+
 spark val = (seq (sparklist val) val)
-__start = (__printer main)
+__start = (printer nil main)
 
 streamfd fd =  (readchunk fd (streamfd fd))
 
 readb filename = (streamfd (openfd (forcelist filename)))
+
+exists path = (fexists (forcelist path))
+
+isdir path = (fisdir (forcelist path))
+
+streamcon so = (readcon so (streamcon so))
+
+connect host port out =
+(letrec
+   con = (opencon (forcelist host) port (printer con out))
+ in
+   (streamcon con))
+
+acceptloop handler so =
+(letrec
+   connso = (accept so (printer connso (handler instream)))
+   instream = (streamcon connso)
+ in
+   (seq connso
+   (cons instream (acceptloop handler so))))
+
+listen host port handler =
+(acceptloop handler (startlisten (forcelist host) port))
 
 readdir filename = (readdir1 (forcelist filename))
 

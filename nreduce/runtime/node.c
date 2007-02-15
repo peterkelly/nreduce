@@ -57,8 +57,6 @@
 #include <signal.h>
 #include <execinfo.h>
 
-//#define CHUNKSIZE 1024
-#define CHUNKSIZE 65536
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
 
@@ -72,6 +70,7 @@ const char *log_levels[LOG_COUNT] = {
 };
 
 const char *event_types[EVENT_COUNT] = {
+  "NONE",
   "CONN_ESTABLISHED",
   "CONN_FAILED",
   "CONN_ACCEPTED",
@@ -79,7 +78,9 @@ const char *event_types[EVENT_COUNT] = {
   "CONN_IOERROR",
   "HANDSHAKE_DONE",
   "HANDSHAKE_FAILED",
-  "DATA",
+  "DATA_READ",
+  "DATA_READFINISHED",
+  "DATA_WRITTEN",
   "ENDPOINT_ADDITION",
   "ENDPOINT_REMOVAL",
   "SHUTDOWN",
@@ -146,9 +147,7 @@ static void process_received(node *n, connection *conn)
   int start = 0;
 
   if (conn->isreg) {
-    assert(conn->l);
-    assert(conn->l->callback);
-    conn->l->callback(n,conn->l->data,EVENT_DATA,conn,NULL);
+    dispatch_event(n,EVENT_DATA_READ,conn,NULL);
     return;
   }
 
@@ -181,23 +180,24 @@ static void process_received(node *n, connection *conn)
         /* We have the welcome message; it's a peer and we want to exchange ids next */
         conn->donewelcome = 1;
         start += strlen(WELCOME_MESSAGE);
-        array_append(conn->sendbuf,&n->mainl->port,sizeof(int));
       }
     }
   }
 
-  if (0 > conn->port) {
+  if (conn->donewelcome && !conn->donehandshake) {
     unsigned char *connip = (unsigned char*)&conn->localip.s_addr;
 
-    if (sizeof(int) > conn->recvbuf->nbytes-start) {
-      array_remove_data(conn->recvbuf,start);
-      return;
-    }
-    conn->port = *(int*)&conn->recvbuf->data[start];
-    start += sizeof(int);
+    if (0 > conn->port) {
+      if (sizeof(int) > conn->recvbuf->nbytes-start) {
+        array_remove_data(conn->recvbuf,start);
+        return;
+      }
+      conn->port = *(int*)&conn->recvbuf->data[start];
+      start += sizeof(int);
 
-    if (0 > conn->port)
-      fatal("Client sent bad listen port: %d",conn->port);
+      if (0 > conn->port)
+        fatal("Client sent bad listen port: %d",conn->port);
+    }
 
     if (n->havelistenip) {
       if (memcmp(&n->listenip.s_addr,&conn->localip.s_addr,sizeof(struct in_addr))) {
@@ -218,6 +218,7 @@ static void process_received(node *n, connection *conn)
     node_log(n,LOG_INFO,"Node %u.%u.%u.%u:%d connected",
              connip[0],connip[1],connip[2],connip[3],conn->port);
     dispatch_event(n,EVENT_HANDSHAKE_DONE,conn,NULL);
+    conn->donehandshake = 1;
   }
 
   /* inspect the next section of the input buffer to see if it contains a complete message */
@@ -265,6 +266,8 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
   conn->port = -1;
   conn->recvbuf = array_new(1);
   conn->sendbuf = array_new(1);
+  conn->canread = 1;
+  conn->canwrite = 1;
   if (l == n->mainl)
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->connections,conn);
@@ -344,10 +347,10 @@ static void handle_write(node *n, connection *conn)
     array_remove_data(conn->sendbuf,w);
   }
 
-  if ((0 == conn->sendbuf->nbytes) && conn->toclose) {
-    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
-    remove_connection(n,conn);
-  }
+  dispatch_event(n,EVENT_DATA_WRITTEN,conn,NULL);
+
+  if ((0 == conn->sendbuf->nbytes) && conn->finwrite)
+    done_writing(n,conn);
 }
 
 static void handle_read(node *n, connection *conn)
@@ -359,13 +362,10 @@ static void handle_read(node *n, connection *conn)
   int r;
   array *buf = conn->recvbuf;
 
-  array_mkroom(conn->recvbuf,CHUNKSIZE);
+  array_mkroom(conn->recvbuf,IOSIZE);
   r = TEMP_FAILURE_RETRY(read(conn->sock,
                               &buf->data[buf->nbytes],
-                              CHUNKSIZE));
-
-  if ((0 > r) && (EAGAIN == errno))
-    return;
+                              IOSIZE));
 
   if (0 > r) {
     node_log(n,LOG_WARNING,"read() from %s:%d failed: %s",
@@ -377,15 +377,16 @@ static void handle_read(node *n, connection *conn)
 
   if (0 == r) {
     if (conn->isreg || conn->isconsole)
-      node_log(n,LOG_INFO,"Connection %s:%d closed by peer",conn->hostname,conn->port);
+      node_log(n,LOG_INFO,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
     else
-      node_log(n,LOG_WARNING,"Connection %s:%d closed by peer",conn->hostname,conn->port);
-    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
-    remove_connection(n,conn);
+      node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
+    dispatch_event(n,EVENT_DATA_READFINISHED,conn,NULL);
+    done_reading(n,conn);
     return;
   }
 
   conn->recvbuf->nbytes += r;
+  conn->totalread += r;
   process_received(n,conn);
 }
 
@@ -394,7 +395,7 @@ static char *lookup_hostname(node *n, struct in_addr addr)
   struct hostent *he;
   char *res;
 
-  pthread_mutex_lock(&n->liblock);
+  lock_mutex(&n->liblock);
   he = gethostbyaddr(&addr,sizeof(struct in_addr),AF_INET);
   if (NULL != he) {
     res = strdup(he->h_name);
@@ -405,28 +406,29 @@ static char *lookup_hostname(node *n, struct in_addr addr)
     sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
     res = hostname;
   }
-  pthread_mutex_unlock(&n->liblock);
+  unlock_mutex(&n->liblock);
   return res;
 }
 
 static int lookup_address(node *n, const char *host, struct in_addr *out)
 {
   struct hostent *he;
+  int r = 0;
 
-  pthread_mutex_lock(&n->liblock);
+  lock_mutex(&n->liblock);
   if (NULL == (he = gethostbyname(host))) {
-    node_log(n,LOG_WARNING,"node_listen(%s): %s",host,hstrerror(h_errno));
-    return -1;
+    node_log(n,LOG_WARNING,"%s: %s",host,hstrerror(h_errno));
+    r =  -1;
   }
-
-  if (4 != he->h_length) {
-    node_log(n,LOG_WARNING,"node_listen(%s): invalid address type",host);
-    return -1;
+  else if (4 != he->h_length) {
+    node_log(n,LOG_WARNING,"%s: invalid address type",host);
+    r = -1;
   }
-
-  *out = *((struct in_addr*)he->h_addr);
-  pthread_mutex_unlock(&n->liblock);
-  return 0;
+  else {
+    *out = *((struct in_addr*)he->h_addr);
+  }
+  unlock_mutex(&n->liblock);
+  return r;
 }
 
 static void handle_new_connection(node *n, listener *l)
@@ -478,7 +480,7 @@ static void *ioloop(void *arg)
 {
   node *n = (node*)arg;
 
-  pthread_mutex_lock(&n->lock);
+  lock_mutex(&n->lock);
   while (!n->shutdown) {
     int highest = -1;
     int s;
@@ -493,7 +495,8 @@ static void *ioloop(void *arg)
     FD_ZERO(&writefds);
 
     for (l = n->listeners.first; l; l = l->next) {
-      FD_SET(l->fd,&readfds);
+      if (!l->dontaccept)
+        FD_SET(l->fd,&readfds);
       if (highest < l->fd)
         highest = l->fd;
     }
@@ -506,9 +509,11 @@ static void *ioloop(void *arg)
       assert(0 <= conn->sock);
       if (highest < conn->sock)
         highest = conn->sock;
-      FD_SET(conn->sock,&readfds);
 
-      if ((0 < conn->sendbuf->nbytes) || !conn->connected || conn->toclose) {
+      if (conn->canread && !conn->dontread)
+        FD_SET(conn->sock,&readfds);
+
+      if (conn->canwrite && ((0 < conn->sendbuf->nbytes) || !conn->connected || conn->finwrite)) {
         FD_SET(conn->sock,&writefds);
         havewrite = 1;
       }
@@ -520,19 +525,22 @@ static void *ioloop(void *arg)
          data. */
     }
 
-    pthread_mutex_unlock(&n->lock);
+    unlock_mutex(&n->lock);
     s = select(highest+1,&readfds,&writefds,NULL,NULL);
-    pthread_mutex_lock(&n->lock);
+    lock_mutex(&n->lock);
 
     if (0 > s)
       fatal("select: %s",strerror(errno));
 
     pthread_cond_broadcast(&n->cond);
 
-    if (FD_ISSET(n->ioready_readfd,&readfds)) {
+    assert(!FD_ISSET(n->ioready_readfd,&readfds) || n->notified);
+
+    if (FD_ISSET(n->ioready_readfd,&readfds) || n->notified) {
       int c;
       if (0 > read(n->ioready_readfd,&c,1))
         fatal("Can't read from ioready_readfd: %s",strerror(errno));
+      n->notified = 0;
     }
 
     if (0 == s)
@@ -563,12 +571,11 @@ static void *ioloop(void *arg)
     }
   }
   dispatch_event(n,EVENT_SHUTDOWN,NULL,NULL);
-  pthread_mutex_unlock(&n->lock);
+  unlock_mutex(&n->lock);
   return NULL;
 }
 
 /* @} */
-
 
 /** @name Public functions
  * @{ */
@@ -579,7 +586,7 @@ node *node_new(int loglevel)
   int pipefds[2];
   char *logenv;
 
-  pthread_mutex_init(&n->lock,NULL);
+  init_mutex(&n->lock);
   pthread_cond_init(&n->cond,NULL);
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = 1;
@@ -607,7 +614,7 @@ node *node_new(int loglevel)
     }
   }
 
-  pthread_mutex_init(&n->liblock,NULL);
+  init_mutex(&n->liblock);
   return n;
 }
 
@@ -618,9 +625,9 @@ void node_free(node *n)
   assert(NULL == n->endpoints.first);
   assert(NULL == n->callbacks.first);
   assert(NULL == n->listeners.first);
-  pthread_mutex_destroy(&n->liblock);
+  destroy_mutex(&n->liblock);
   pthread_cond_destroy(&n->closecond);
-  pthread_mutex_destroy(&n->lock);
+  destroy_mutex(&n->lock);
   pthread_cond_destroy(&n->cond);
   close(n->ioready_readfd);
   close(n->ioready_writefd);
@@ -645,63 +652,56 @@ void node_log(node *n, int level, const char *format, ...)
   free(newfmt);
 }
 
-listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data)
+listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data,
+                      int dontaccept)
 {
   int fd;
   int actualport = 0;
-
   int yes = 1;
   struct sockaddr_in local_addr;
   struct sockaddr_in new_addr;
   int new_size = sizeof(struct sockaddr_in);
+  listener *l;
+  struct in_addr any;
+  any.s_addr = INADDR_ANY;
 
   local_addr.sin_family = AF_INET;
   local_addr.sin_port = htons(port);
   local_addr.sin_addr.s_addr = INADDR_ANY;
   memset(&local_addr.sin_zero,0,8);
 
-  if (NULL != host) {
-    struct in_addr any;
+  if ((NULL != host) && (0 > lookup_address(n,host,&local_addr.sin_addr))) {
+    return NULL;
+  }
 
-    if (0 > lookup_address(n,host,&n->listenip)) {
-      node_free(n);
-      return NULL;
-    }
-
-    any.s_addr = INADDR_ANY;
-    if (memcmp(&n->listenip,&any,sizeof(struct in_addr)))
-      n->havelistenip = 1;
-    local_addr.sin_addr = n->listenip;
+  if (!n->havelistenip && (memcmp(&local_addr.sin_addr,&any,sizeof(struct in_addr)))) {
+    n->havelistenip = 1;
+    n->listenip = local_addr.sin_addr;
   }
 
   if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
     node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
-    node_free(n);
     return NULL;
   }
 
   if (-1 == setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
     node_log(n,LOG_ERROR,"setsockopt: %s",strerror(errno));
-    node_free(n);
     return NULL;
   }
 
   if (-1 == bind(fd,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
     node_log(n,LOG_ERROR,"bind: %s",strerror(errno));
-    node_free(n);
     return NULL;
   }
 
   if (0 > getsockname(fd,(struct sockaddr*)&new_addr,&new_size)) {
     node_log(n,LOG_ERROR,"getsockname: %s",strerror(errno));
-    node_free(n);
     return NULL;
   }
   actualport = ntohs(new_addr.sin_port);
 
   if (-1 == listen(fd,LISTEN_BACKLOG)) {
     node_log(n,LOG_ERROR,"listen: %s",strerror(errno));
-    node_free(n);
     return NULL;
   }
 
@@ -710,7 +710,20 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
   if (0 == port)
     node_log(n,LOG_INFO,"Listening on port %d",actualport);
 
-  return node_add_listener(n,actualport,fd,callback,data);
+  l = (listener*)calloc(1,sizeof(listener));
+  l->hostname = host ? strdup(host) : NULL;
+  l->port = port;
+  l->fd = fd;
+  l->callback = callback;
+  l->data = data;
+  l->dontaccept = dontaccept;
+
+  lock_node(n);
+  llist_append(&n->listeners,l);
+  node_notify(n);
+  unlock_node(n);
+
+  return l;
 }
 
 void node_add_callback(node *n, node_callbackfun fun, void *data)
@@ -719,58 +732,47 @@ void node_add_callback(node *n, node_callbackfun fun, void *data)
   cb->fun = fun;
   cb->data = data;
 
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
   llist_append(&n->callbacks,cb);
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
 }
 
 void node_remove_callback(node *n, node_callbackfun fun, void *data)
 {
   node_callback *cb;
 
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
   cb = n->callbacks.first;
   while (cb && ((cb->fun != fun) || (cb->data != data)))
     cb = cb->next;
   assert(cb);
   llist_remove(&n->callbacks,cb);
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
 
   free(cb);
-}
-
-listener *node_add_listener(node *n, int port, int fd, node_callbackfun callback, void *data)
-{
-  listener *l = (listener*)calloc(1,sizeof(listener));
-  l->port = port;
-  l->fd = fd;
-  l->callback = callback;
-  l->data = data;
-
-  pthread_mutex_lock(&n->lock);
-  llist_append(&n->listeners,l);
-  pthread_mutex_unlock(&n->lock);
-  return l;
 }
 
 void node_remove_listener(node *n, listener *l)
 {
   connection *conn;
 
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
 
   conn = n->connections.first;
   while (conn) {
     connection *next = conn->next;
-    if (conn->l == l)
+    if (conn->l == l) {
+      dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
       remove_connection(n,conn);
+    }
     conn = next;
   }
 
   llist_remove(&n->listeners,l);
 
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
 
+  free(l->hostname);
   close(l->fd);
   free(l);
 }
@@ -784,32 +786,64 @@ void node_start_iothread(node *n)
 void node_close_endpoints(node *n)
 {
   endpoint *endpt;
-  pthread_mutex_lock(&n->lock);
+  lock_mutex(&n->lock);
   while (NULL != (endpt = n->endpoints.first)) {
     if (TASK_ENDPOINT == endpt->type) {
       task_kill_locked((task*)endpt->data);
     }
     else if (LAUNCHER_ENDPOINT == endpt->type) {
-      pthread_mutex_unlock(&n->lock);
+      unlock_mutex(&n->lock);
       launcher_kill((launcher*)endpt->data);
-      pthread_mutex_lock(&n->lock);
+      lock_mutex(&n->lock);
     }
     else {
       fatal("Other endpoint type (%d) still active",endpt->type);
     }
   }
-  pthread_mutex_unlock(&n->lock);
+  unlock_mutex(&n->lock);
 }
 
 void node_close_connections(node *n)
 {
-  pthread_mutex_lock(&n->lock);
-  while (n->connections.first)
+  lock_node(n);
+  while (n->connections.first) {
+    dispatch_event(n,EVENT_CONN_CLOSED,n->connections.first,NULL);
     remove_connection(n,n->connections.first);
-  pthread_mutex_unlock(&n->lock);
+  }
+  unlock_node(n);
 }
 
-connection *node_connect_locked(node *n, const char *dest, int port)
+#ifdef DEBUG_SHORT_KEEPALIVE
+static int set_keepalive(node *n, int sock, int s)
+{
+  int one = 1;
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPIDLE,&s,sizeof(int))) {
+    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPIDLE): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPINTVL,&s,sizeof(int))) {
+    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPINTVL): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPCNT,&one,sizeof(int))) {
+    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPCNT): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(int))) {
+    node_log(n,LOG_ERROR,"setsockopt(SO_KEEPALIVE): %s",strerror(errno));
+    return -1;
+  }
+
+  node_log(n,LOG_DEBUG2,"Set connection keepalive interval to %ds",s);
+
+  return 0;
+}
+#endif
+
+connection *node_connect_locked(node *n, const char *dest, int port, int othernode)
 {
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
@@ -821,7 +855,8 @@ connection *node_connect_locked(node *n, const char *dest, int port)
   int local_size = sizeof(struct sockaddr_in);
   unsigned char *lip;
   char *hostname;
-  char c = 0;
+
+  assert(NODE_ALREADY_LOCKED(n));
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
@@ -852,20 +887,36 @@ connection *node_connect_locked(node *n, const char *dest, int port)
     return NULL;
   }
 
+#ifdef DEBUG_SHORT_KEEPALIVE
+  /* Set a small keepalive interval so connection timeouts can be tested easily */
+  if (0 > set_keepalive(n,sock,2))
+    return NULL;
+#endif
+
   lip = (unsigned char*)&local_addr.sin_addr.s_addr;
   node_log(n,LOG_INFO,"node_connect: local ip is %u.%u.%u.%u",lip[0],lip[1],lip[2],lip[3]);
 
   hostname = lookup_hostname(n,addr.sin_addr);
-  conn = add_connection(n,hostname,sock,n->mainl);
+
+  if (othernode) {
+    conn = add_connection(n,hostname,sock,n->mainl);
+    array_append(conn->sendbuf,&n->mainl->port,sizeof(int));
+  }
+  else {
+    conn = add_connection(n,hostname,sock,NULL);
+    conn->isreg = 1;
+  }
+
   free(hostname);
   conn->connected = connected;
   conn->ip = addr.sin_addr;
   conn->localip = local_addr.sin_addr;
+  conn->port = port;
 
   if (conn->connected)
     dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
 
-  write(n->ioready_writefd,&c,1);
+  node_notify(n);
 
   return conn;
 }
@@ -875,7 +926,8 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
 {
   connection *conn;
   msgheader hdr;
-  char c = 0;
+
+  assert(NODE_ALREADY_LOCKED(n));
 
   memset(&hdr,0,sizeof(msgheader));
   hdr.source.localid = sourcelocalid;
@@ -898,7 +950,7 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
     else {
       array_append(conn->sendbuf,&hdr,sizeof(msgheader));
       array_append(conn->sendbuf,data,size);
-      write(n->ioready_writefd,&c,1);
+      node_notify(n);
     }
   }
 }
@@ -906,14 +958,15 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
 void node_send(node *n, int sourcelocalid, endpointid destendpointid,
                int tag, const void *data, int size)
 {
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
   node_send_locked(n,sourcelocalid,destendpointid,tag,data,size);
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
 }
 
 /* This works as long as we don't recycle localids... */
 void node_waitclose_locked(node *n, int localid)
 {
+  assert(NODE_ALREADY_LOCKED(n));
   while (1) {
     int alive = 0;
     endpoint *endpt;
@@ -930,30 +983,62 @@ void node_waitclose_locked(node *n, int localid)
 
 void node_shutdown_locked(node *n)
 {
-  char c = 0;
+  assert(NODE_ALREADY_LOCKED(n));
   n->shutdown = 1;
-  write(n->ioready_writefd,&c,1);
+  node_notify(n);
+}
+
+void node_notify(node *n)
+{
+  char c = 1;
+  assert(NODE_ALREADY_LOCKED(n));
+  if (!n->notified) {
+    write(n->ioready_writefd,&c,1);
+    n->notified = 1;
+  }
 }
 
 void connection_printf(connection *conn, const char *format, ...)
 {
-  char c = 0;
   va_list ap;
   va_start(ap,format);
-  pthread_mutex_lock(&conn->n->lock);
+  lock_node(conn->n);
   array_vprintf(conn->sendbuf,format,ap);
-  write(conn->n->ioready_writefd,&c,1);
-  pthread_mutex_unlock(&conn->n->lock);
+  node_notify(conn->n);
+  unlock_node(conn->n);
   va_end(ap);
 }
 
-void connection_close(connection *conn)
+void done_writing(node *n, connection *conn)
 {
-  char c = 0;
-  pthread_mutex_lock(&conn->n->lock);
-  conn->toclose = 1;
-  write(conn->n->ioready_writefd,&c,1);
-  pthread_mutex_unlock(&conn->n->lock);
+  if (!conn->canwrite)
+    return;
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(conn->canwrite);
+  if (0 > shutdown(conn->sock,SHUT_WR))
+    node_log(n,LOG_WARNING,"shutdown(SHUT_WR) on %s:%d failed: %s",
+             conn->hostname,conn->port,strerror(errno));
+  conn->canwrite = 0;
+  if (!conn->canread && !conn->canwrite) {
+    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
+    remove_connection(n,conn);
+  }
+}
+
+void done_reading(node *n, connection *conn)
+{
+  if (!conn->canread)
+    return;
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(conn->canread);
+  if (0 > shutdown(conn->sock,SHUT_RD))
+    node_log(n,LOG_WARNING,"shutdown(SHUT_RD) on %s:%d failed: %s",
+             conn->hostname,conn->port,strerror(errno));
+  conn->canread = 0;
+  if (!conn->canread && !conn->canwrite) {
+    dispatch_event(n,EVENT_CONN_CLOSED,conn,NULL);
+    remove_connection(n,conn);
+  }
 }
 
 /* @} */
@@ -964,14 +1049,14 @@ void connection_close(connection *conn)
 endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
 {
   endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
-  pthread_mutex_init(&endpt->mailbox.lock,NULL);
+  init_mutex(&endpt->mailbox.lock);
   pthread_cond_init(&endpt->mailbox.cond,NULL);
   endpt->localid = localid;
   endpt->type = type;
   endpt->data = data;
   endpt->interruptptr = &endpt->tempinterrupt;
 
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
   if (0 == endpt->localid) {
     if (0 == n->nextlocalid)
       fatal("localid wraparound");
@@ -979,26 +1064,26 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
   }
   llist_append(&n->endpoints,endpt);
   dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
   return endpt;
 }
 
 void node_remove_endpoint(node *n, endpoint *endpt)
 {
-  pthread_mutex_lock(&n->lock);
+  lock_node(n);
   dispatch_event(n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
   llist_remove(&n->endpoints,endpt);
   pthread_cond_broadcast(&n->closecond);
-  pthread_mutex_unlock(&n->lock);
+  unlock_node(n);
 
-  pthread_mutex_destroy(&endpt->mailbox.lock);
+  destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
 }
 
 void endpoint_forceclose(endpoint *endpt)
 {
-  pthread_mutex_lock(&endpt->mailbox.lock);
+  lock_mutex(&endpt->mailbox.lock);
   endpt->closed = 1;
   while (endpt->mailbox.first) {
     message *msg = endpt->mailbox.first;
@@ -1007,12 +1092,12 @@ void endpoint_forceclose(endpoint *endpt)
     free(msg);
   }
   pthread_cond_broadcast(&endpt->mailbox.cond);
-  pthread_mutex_unlock(&endpt->mailbox.lock);
+  unlock_mutex(&endpt->mailbox.lock);
 }
 
 void endpoint_add_message(endpoint *endpt, message *msg)
 {
-  pthread_mutex_lock(&endpt->mailbox.lock);
+  lock_mutex(&endpt->mailbox.lock);
   if (!endpt->closed) {
     llist_append(&endpt->mailbox,msg);
     endpt->checkmsg = 1;
@@ -1020,13 +1105,13 @@ void endpoint_add_message(endpoint *endpt, message *msg)
       *endpt->interruptptr = 1;
     pthread_cond_broadcast(&endpt->mailbox.cond);
   }
-  pthread_mutex_unlock(&endpt->mailbox.lock);
+  unlock_mutex(&endpt->mailbox.lock);
 }
 
 message *endpoint_next_message(endpoint *endpt, int delayms)
 {
   message *msg;
-  pthread_mutex_lock(&endpt->mailbox.lock);
+  lock_mutex(&endpt->mailbox.lock);
 
   if ((NULL == endpt->mailbox.first) && (0 != delayms) && !endpt->closed) {
     if (0 > delayms) {
@@ -1047,7 +1132,7 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
   if (NULL != msg)
     llist_remove(&endpt->mailbox,msg);
   endpt->checkmsg = (NULL != endpt->mailbox.first);
-  pthread_mutex_unlock(&endpt->mailbox.lock);
+  unlock_mutex(&endpt->mailbox.lock);
   return msg;
 }
 

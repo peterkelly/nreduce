@@ -72,7 +72,7 @@ static int get_responses(node *n, endpoint *endpt, int tag,
 
     if (0 > sender) {
       endpointid id = msg->hdr.source;
-      char *c = (unsigned char*)&id.nodeip;
+      unsigned char *c = (unsigned char*)&id.nodeip;
       node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%d/%d",
                msg_names[tag],c[0],c[1],c[2],c[3],id.nodeport,id.localid);
       abort();
@@ -317,10 +317,10 @@ static void client_callback(struct node *n, void *data, int event,
 {
   client_data *cd = (client_data*)data;
   if ((EVENT_HANDSHAKE_DONE == event) || (EVENT_CONN_FAILED == event)) {
-    pthread_mutex_lock(&cd->lock);
+    lock_mutex(&cd->lock);
     cd->event = event;
     pthread_cond_signal(&cd->cond);
-    pthread_mutex_unlock(&cd->lock);
+    unlock_mutex(&cd->lock);
   }
 }
 
@@ -344,16 +344,17 @@ int do_client(const char *host, int port, int argc, char **argv)
 
   n = node_new(LOG_INFO);
 
-  if (NULL == (n->mainl = node_listen(n,host,0,NULL,NULL)))
+  if (NULL == (n->mainl = node_listen(n,host,0,NULL,NULL,0))) {
+    node_free(n);
     return -1;
-
+  }
 
   node_add_callback(n,client_callback,&cd);
   node_start_iothread(n);
 
-  pthread_mutex_lock(&n->lock);
-  conn = node_connect_locked(n,host,port);
-  pthread_mutex_unlock(&n->lock);
+  lock_node(n);
+  conn = node_connect_locked(n,host,port,1);
+  unlock_node(n);
 
   if (NULL == conn) {
     fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
@@ -362,10 +363,10 @@ int do_client(const char *host, int port, int argc, char **argv)
   else {
     int event;
     /* find out if it's successful... */
-    pthread_mutex_lock(&cd.lock);
+    lock_mutex(&cd.lock);
     pthread_cond_wait(&cd.cond,&cd.lock);
     event = cd.event;
-    pthread_mutex_unlock(&cd.lock);
+    unlock_mutex(&cd.lock);
 
     if (EVENT_HANDSHAKE_DONE != event) {
       fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);

@@ -75,7 +75,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
 
-    pthread_mutex_lock(&n->lock);
+    lock_node(n);
     newtsk = find_task(n,initmsg->localid);
 
     if (NULL == newtsk)
@@ -87,11 +87,11 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (initmsg->count != newtsk->groupsize)
       fatal("INITTASK: idmap size does not match expected");
     memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
-    pthread_mutex_unlock(&n->lock);
+    unlock_node(n);
 
     for (i = 0; i < newtsk->groupsize; i++) {
       endpointid id = initmsg->idmap[i];
-      char *c = (unsigned char*)&id.nodeip;
+      unsigned char *c = (unsigned char*)&id.nodeip;
       node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %u.%u.%u.%u:%d/%d",
                i,c[0],c[1],c[2],c[3],id.nodeport,id.localid);
     }
@@ -110,7 +110,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     node_log(n,LOG_INFO,"STARTTASK: localid = %d",localid);
 
-    pthread_mutex_lock(&n->lock);
+    lock_node(n);
     newtsk = find_task(n,localid);
 
     if (NULL == newtsk)
@@ -124,7 +124,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     sem_post(&newtsk->startsem);
     newtsk->started = 1;
-    pthread_mutex_unlock(&n->lock);
+    unlock_node(n);
 
     node_send(n,endpt->localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
@@ -138,12 +138,12 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     node_log(n,LOG_INFO,"KILLTASK %d",localid);
 
-    pthread_mutex_lock(&n->lock);
+    lock_node(n);
     newtsk = find_task(n,localid);
     if (NULL == newtsk)
       fatal("KILLTASK: task with localid %d does not exist",localid);
     task_kill_locked(newtsk);
-    pthread_mutex_unlock(&n->lock);
+    unlock_node(n);
 
     node_log(n,LOG_INFO,"KILLTASK %d: killed",localid);
     break;

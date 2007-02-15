@@ -207,6 +207,9 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
     }
     break;
   }
+  case CELL_SYSOBJECT:
+    abort();
+    break;
   default:
     abort();
     break;

@@ -99,6 +99,18 @@ int read_string(reader *rd, char **s)
   return READER_OK;
 }
 
+int read_binary(reader *rd, void **b, int *len)
+{
+  CHECK_READ(read_check_tag(rd,BINARY_TAG));
+  CHECK_READ(read_bytes(rd,len,sizeof(int)));
+  if (rd->pos+*len > rd->size)
+    return READER_INVALID_DATA;
+  *b = malloc(*len);
+  memcpy(*b,&rd->data[rd->pos],*len);
+  rd->pos += *len;
+  return READER_OK;
+}
+
 int read_gaddr_noack(reader *rd, gaddr *a)
 {
   CHECK_READ(read_check_tag(rd,GADDR_TAG));
@@ -206,6 +218,10 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     CHECK_READ(read_double(rd,pout));
     assert(!is_pntr(*pout));
     break;
+  case CELL_SYSOBJECT:
+    /* FIXME: these should't migrate... how to handle them? */
+    abort();
+    break;
   default:
     return READER_INCORRECT_CONTENTS;
   }
@@ -237,6 +253,14 @@ int read_vformat(reader *rd, task *tsk, int observe, const char *fmt, va_list ap
       r = read_string(rd,sptr);
       if (READER_OK == r)
         allocs[done] = *sptr;
+      break;
+    }
+    case 'b': {
+      void **bptr = va_arg(ap,void**);
+      int *lenptr = va_arg(ap,int*);
+      r = read_binary(rd,bptr,lenptr);
+      if (READER_OK == r)
+        allocs[done] = *bptr;
       break;
     }
     case 'a':
@@ -396,6 +420,13 @@ void write_string(array *wr, char *s)
   array_append(wr,s,len);
 }
 
+void write_binary(array *wr, const void *b, int len)
+{
+  write_tag(wr,BINARY_TAG);
+  array_append(wr,&len,sizeof(int));
+  array_append(wr,b,len);
+}
+
 void write_gaddr_noack(array *wr, gaddr a)
 {
   write_tag(wr,GADDR_TAG);
@@ -521,6 +552,10 @@ void write_pntr(array *arr, task *tsk, pntr p)
   case CELL_NUMBER:
     write_double(arr,p);
     break;
+  case CELL_SYSOBJECT:
+    /* FIXME: these should't migrate... how to handle them? */
+    abort();
+    break;
   default:
     abort();
     break;
@@ -543,6 +578,12 @@ void write_vformat(array *wr, task *tsk, const char *fmt, va_list ap)
     case 's':
       write_string(wr,va_arg(ap,char*));
       break;
+    case 'b': {
+      const void *b = va_arg(ap,const void*);
+      int len = va_arg(ap,int);
+      write_binary(wr,b,len);
+      break;
+    }
     case 'a':
       write_gaddr(wr,tsk,va_arg(ap,gaddr));
       break;

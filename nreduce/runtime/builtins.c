@@ -28,8 +28,10 @@
 
 #include "src/nreduce.h"
 #include "compiler/source.h"
-#include "runtime/runtime.h"
 #include "compiler/bytecode.h"
+#include "compiler/util.h"
+#include "runtime.h"
+#include "node.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -48,11 +50,22 @@ static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
 #define CHECK_ARG(_argno,_type,_bif) {                                  \
     if ((_type) != pntrtype(argstack[(_argno)])) {                      \
-      set_error(tsk,"%s: %s argument must be of type %s, but got %s",  \
+      set_error(tsk,"%s: %s argument must be of type %s, but got %s",   \
                 builtin_info[(_bif)].name,                              \
                 numnames[builtin_info[(_bif)].nargs-1-(_argno)],        \
                 cell_types[(_type)],                                    \
                 cell_types[pntrtype(argstack[(_argno)])]);              \
+      return;                                                           \
+    }                                                                   \
+  }
+
+#define CHECK_SYSOBJECT_ARG(_argno,_sotype,_bif) {                      \
+    CHECK_ARG(_argno,CELL_SYSOBJECT,B_PRINTEND);                        \
+    if ((_sotype) != psysobject(argstack[(_argno)])->type) {            \
+      set_error(tsk,"%s: %s arg must be CONNECTION, got %s",            \
+                builtin_info[(_bif)].name,                              \
+                numnames[builtin_info[(_bif)].nargs-1-(_argno)],        \
+                sysobject_types[psysobject(argstack[(_argno)])->type]); \
       return;                                                           \
     }                                                                   \
   }
@@ -264,55 +277,6 @@ static void b_parhead(task *tsk, pntr *argstack)
   b_par(tsk,argstack);
 }
 
-static void b_echo(task *tsk, pntr *argstack)
-{
-  char *str;
-  int badtype;
-
-  if (0 <= (badtype = array_to_string(argstack[0],&str))) {
-    set_error(tsk,"echo: argument is not a string (contains non-char: %s)",cell_types[badtype]);
-    return;
-  }
-
-  fprintf(tsk->output,"%s",str);
-  free(str);
-  argstack[0] = tsk->globnilpntr;
-}
-
-void printp(FILE *f, pntr p)
-{
-  if (CELL_NUMBER == pntrtype(p)) {
-    double d = p;
-    if ((d == floor(d)) && (0 < d) && (128 > d)) {
-      fprintf(f,"%c",(int)d);
-    }
-    else {
-      fprintf(f,"?");
-    }
-  }
-  else if (CELL_NIL == pntrtype(p)) {
-  }
-  else if ((CELL_CONS == pntrtype(p)) || (CELL_AREF == pntrtype(p))) {
-    fprintf(f,"(list)");
-  }
-  else {
-    fprintf(f,"print: encountered %s\n",cell_types[pntrtype(p)]);
-    abort();
-  }
-}
-
-static void b_print(task *tsk, pntr *argstack)
-{
-  pntr p = argstack[0];
-#ifdef PRINT_DEBUG
-  fprintf(tsk->output,"p"); /* FIXME: temp */
-#endif
-  printp(tsk->output,p);
-  fflush(tsk->output);
-
-  argstack[0] = tsk->globnilpntr;
-}
-
 static void b_if(task *tsk, pntr *argstack)
 {
   pntr ifc = argstack[2];
@@ -407,6 +371,11 @@ int check_array_convert(task *tsk, carray *arr, const char *from)
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize)
 {
   assert(dsize == (*arr)->elemsize); /* sanity check */
+
+  tsk->stats.nallocs += totalcount*dsize;
+  tsk->stats.totalallocs += totalcount*dsize;
+  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+    *tsk->endpt->interruptptr = 1;
 
   while (1) {
     int count = totalcount;
@@ -758,61 +727,6 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   }
 }
 
-static void b_isvalarray(task *tsk, pntr *argstack)
-{
-  pntr p = argstack[0];
-
-  maybe_expand_array(tsk,p);
-
-  if ((CELL_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
-    argstack[0] = tsk->globtruepntr;
-  else
-    argstack[0] = tsk->globnilpntr;
-}
-
-static void b_printarray(task *tsk, pntr *argstack)
-{
-  carray *arr;
-  int index;
-  int i;
-  int n;
-
-  CHECK_ARG(1,CELL_NUMBER,B_PRINTARRAY);
-  CHECK_ARG(0,CELL_AREF,B_PRINTARRAY);
-
-  n = (int)argstack[1];
-  arr = aref_array(argstack[0]);
-  index = aref_index(argstack[0]);
-
-  assert(1 <= n);
-  assert(index+n <= arr->size);
-
-#ifdef PRINT_DEBUG
-  printf("\n        >>>>>>>>>>> printarray: index = %d, arr->size = %d <<<<<<<<<<<\n",
-         index,arr->size);
-#endif
-
-  if (1 == arr->elemsize) {
-    char *str = (char*)malloc(n+1);
-    memcpy(str,arr->elements+index,n);
-    str[n] = '\0';
-    fprintf(tsk->output,"%s",str);
-    free(str);
-  }
-  else if (sizeof(pntr) == arr->elemsize) {
-    for (i = 0; i < n; i++) {
-      pntr p = ((pntr*)arr->elements)[index+i];
-      printp(tsk->output,p);
-    }
-  }
-  else {
-    fatal("printarray: invalid array size");
-  }
-  fflush(tsk->output);
-
-  argstack[0] = tsk->globnilpntr;
-}
-
 static void b_numtostring(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
@@ -821,143 +735,6 @@ static void b_numtostring(task *tsk, pntr *argstack)
   CHECK_ARG(0,CELL_NUMBER,B_NUMTOSTRING);
   format_double(str,100,p);
   argstack[0] = string_to_array(tsk,str);
-}
-
-static void b_openfd(task *tsk, pntr *argstack)
-{
-  pntr filenamepntr = argstack[0];
-  char *filename;
-  int fd;
-  int badtype;
-
-  /* FIXME: need to associate the fd with a garbage collectable wrapper so if the whole
-     file isn't read it still gets closed */
-
-  if (0 <= (badtype = array_to_string(filenamepntr,&filename))) {
-    set_error(tsk,"openfd: filename is not a string (contains non-char: %s)",cell_types[badtype]);
-    return;
-  }
-
-  if (0 > (fd = open(filename,O_RDONLY))) {
-    set_error(tsk,"%s: %s",filename,strerror(errno));
-    free(filename);
-    return;
-  }
-
-/*   fprintf(tsk->output,"Opened %s for reading\n",filename); */
-  argstack[0] = fd;
-  free(filename);
-}
-
-static void b_readchunk(task *tsk, pntr *argstack)
-{
-  pntr fdpntr = argstack[1];
-  pntr nextpntr = argstack[0];
-  int fd;
-  int r;
-  unsigned char buf[READBUFSIZE];
-  carray *arr;
-
-  CHECK_ARG(1,CELL_NUMBER,B_READCHUNK);
-  fd = (int)fdpntr;
-
-  r = read(fd,buf,READBUFSIZE);
-  if (0 == r) {
-/*     fprintf(tsk->output,"End of file\n"); */
-    close(fd);
-    argstack[0] = tsk->globnilpntr;
-    return;
-  }
-  if (0 > r) {
-    set_error(tsk,"Error reading file: %s",strerror(errno));
-    return;
-  }
-
-/*   fprintf(tsk->output,"Read %d bytes\n",r); */
-  arr = carray_new(tsk,1,NULL,NULL);
-  make_aref_pntr(argstack[0],arr->wrapper,0);
-
-  carray_append(tsk,&arr,buf,r,1);
-  arr->tail = nextpntr;
-}
-
-static void b_readdir1(task *tsk, pntr *argstack)
-{
-  DIR *dir;
-  char *path;
-  pntr filenamepntr = argstack[0];
-  struct dirent tmp;
-  struct dirent *entry;
-  carray *arr;
-  int badtype;
-
-  if (0 <= (badtype = array_to_string(filenamepntr,&path))) {
-    set_error(tsk,"readdir: path is not a string (contains non-char: %s)",cell_types[badtype]);
-    return;
-  }
-
-  if (NULL == (dir = opendir(path))) {
-    set_error(tsk,"%s: %s",path,strerror(errno));
-    free(path);
-    return;
-  }
-
-  arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
-  make_aref_pntr(argstack[0],arr->wrapper,0);
-
-  while ((0 == readdir_r(dir,&tmp,&entry)) && (NULL != entry)) {
-    char *fullpath = (char*)malloc(strlen(path)+1+strlen(entry->d_name)+1);
-    pntr namep;
-    pntr typep;
-    pntr sizep;
-    pntr entryp;
-    carray *entryarr;
-    struct stat statbuf;
-    char *type;
-
-    if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))
-      continue;
-
-    sprintf(fullpath,"%s/%s",path,entry->d_name);
-    if (0 != stat(fullpath,&statbuf)) {
-      set_error(tsk,"%s: %s",path,strerror(errno));
-      closedir(dir);
-      free(fullpath);
-      free(path);
-      return;
-    }
-
-    if (S_ISREG(statbuf.st_mode))
-      type = "file";
-    else if (S_ISDIR(statbuf.st_mode))
-      type = "directory";
-    else
-      type = "other";
-
-    namep = string_to_array(tsk,entry->d_name);
-    typep = string_to_array(tsk,type);
-    sizep = statbuf.st_size;
-
-    entryarr = carray_new(tsk,sizeof(pntr),NULL,NULL);
-    carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
-    carray_append(tsk,&entryarr,&typep,1,sizeof(pntr));
-    carray_append(tsk,&entryarr,&sizep,1,sizeof(pntr));
-    make_aref_pntr(entryp,entryarr->wrapper,0);
-
-    carray_append(tsk,&arr,&entryp,1,sizeof(pntr));
-
-    free(fullpath);
-  }
-  closedir(dir);
-
-  free(path);
-
-}
-
-static void b_iscons(task *tsk, pntr *argstack)
-{
-  setbool(tsk,&argstack[0],
-          (CELL_CONS == pntrtype(argstack[0])) || (CELL_AREF == pntrtype(argstack[0])));
 }
 
 static void b_teststring(task *tsk, pntr *argstack)
@@ -983,6 +760,713 @@ static void b_testarray(task *tsk, pntr *argstack)
   argstack[0] = p;
 }
 
+static void b_openfd(task *tsk, pntr *argstack)
+{
+  pntr filenamepntr = argstack[0];
+  char *filename;
+  int fd;
+  int badtype;
+  sysobject *so;
+  cell *c;
+
+  if (0 <= (badtype = array_to_string(filenamepntr,&filename))) {
+    set_error(tsk,"openfd: filename is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  if (0 > (fd = open(filename,O_RDONLY))) {
+    set_error(tsk,"%s: %s",filename,strerror(errno));
+    free(filename);
+    return;
+  }
+
+  so = (sysobject*)calloc(1,sizeof(sysobject));
+  so->type = SYSOBJECT_FILE;
+  so->fd = fd;
+  c = alloc_cell(tsk);
+  c->type = CELL_SYSOBJECT;
+  make_pntr(c->field1,so);
+  make_pntr(argstack[0],c);
+
+  free(filename);
+}
+
+static void b_readchunk(task *tsk, pntr *argstack)
+{
+  pntr sopntr = argstack[1];
+  pntr nextpntr = argstack[0];
+  int r;
+  unsigned char buf[IOSIZE];
+  carray *arr;
+  sysobject *so;
+  cell *c;
+  int doclose = 0;
+
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_FILE,B_READCHUNK);
+  c = get_pntr(sopntr);
+  so = psysobject(sopntr);
+
+  r = read(so->fd,buf,IOSIZE);
+  if (0 == r) {
+    argstack[0] = tsk->globnilpntr;
+    doclose = 1;
+  }
+  if (0 > r) {
+    set_error(tsk,"Error reading file: %s",strerror(errno));
+    doclose = 1;
+  }
+
+  if (doclose) {
+    close(so->fd);
+    free(so);
+    c->type = CELL_IND;
+    c->field1 = tsk->globnilpntr;
+    return;
+  }
+
+  arr = carray_new(tsk,1,NULL,NULL);
+  make_aref_pntr(argstack[0],arr->wrapper,0);
+
+  carray_append(tsk,&arr,buf,r,1);
+  arr->tail = nextpntr;
+}
+
+static void b_readdir1(task *tsk, pntr *argstack)
+{
+  DIR *dir;
+  char *path;
+  pntr filenamepntr = argstack[0];
+  struct dirent tmp;
+  struct dirent *entry;
+  carray *arr = NULL;
+  int badtype;
+  int count = 0;
+
+  if (0 <= (badtype = array_to_string(filenamepntr,&path))) {
+    set_error(tsk,"readdir: path is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  if (NULL == (dir = opendir(path))) {
+    set_error(tsk,"%s: %s",path,strerror(errno));
+    free(path);
+    return;
+  }
+
+  argstack[0] = tsk->globnilpntr;
+
+  while ((0 == readdir_r(dir,&tmp,&entry)) && (NULL != entry)) {
+    char *fullpath;
+    pntr namep;
+    pntr typep;
+    pntr sizep;
+    pntr entryp;
+    carray *entryarr;
+    struct stat statbuf;
+    char *type;
+
+    if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))
+      continue;
+
+    fullpath = (char*)malloc(strlen(path)+1+strlen(entry->d_name)+1);
+    sprintf(fullpath,"%s/%s",path,entry->d_name);
+    if (0 == stat(fullpath,&statbuf)) {
+
+      if (S_ISREG(statbuf.st_mode))
+        type = "file";
+      else if (S_ISDIR(statbuf.st_mode))
+        type = "directory";
+      else
+        type = "other";
+
+      namep = string_to_array(tsk,entry->d_name);
+      typep = string_to_array(tsk,type);
+      sizep = statbuf.st_size;
+
+      entryarr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+      carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
+      carray_append(tsk,&entryarr,&typep,1,sizeof(pntr));
+      carray_append(tsk,&entryarr,&sizep,1,sizeof(pntr));
+      make_aref_pntr(entryp,entryarr->wrapper,0);
+
+      if (0 == count) {
+        arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+        make_aref_pntr(argstack[0],arr->wrapper,0);
+      }
+
+      carray_append(tsk,&arr,&entryp,1,sizeof(pntr));
+      count++;
+    }
+
+    free(fullpath);
+  }
+  closedir(dir);
+
+  free(path);
+}
+
+static void b_fexists(task *tsk, pntr *argstack)
+{
+  pntr pathpntr = argstack[0];
+  char *path;
+  int badtype;
+  int s;
+  struct stat statbuf;
+
+  if (0 <= (badtype = array_to_string(pathpntr,&path))) {
+    set_error(tsk,"fexists: filename is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  s = stat(path,&statbuf);
+  if (0 == s) {
+    argstack[0] = tsk->globtruepntr;
+  }
+  else if (ENOENT == errno) {
+    argstack[0] = tsk->globnilpntr;
+  }
+  else {
+    set_error(tsk,"%s: %s",path,strerror(errno));
+  }
+
+  free(path);
+}
+
+static void b_fisdir(task *tsk, pntr *argstack)
+{
+  pntr pathpntr = argstack[0];
+  char *path;
+  int badtype;
+  struct stat statbuf;
+
+  if (0 <= (badtype = array_to_string(pathpntr,&path))) {
+    set_error(tsk,"fisdir: filename is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  if (0 > stat(path,&statbuf)) {
+    set_error(tsk,"stat(%s): %s",path,strerror(errno));
+  }
+  else if (S_ISDIR(statbuf.st_mode)) {
+    argstack[0] = tsk->globtruepntr;
+  }
+  else {
+    argstack[0] = tsk->globnilpntr;
+  }
+
+  free(path);
+}
+
+static void net_suspend(task *tsk)
+{
+  frame *curf = *tsk->runptr;
+  assert(SAFE_TO_ACCESS_TASK(tsk));
+  tsk->netpending++;
+  curf->resume = 1;
+  curf->instr--;
+  block_frame(tsk,curf);
+  check_runnable(tsk);
+}
+
+int so_lookup_connection(task *tsk, sysobject *so, connection **conn)
+{
+  assert(NODE_ALREADY_LOCKED(tsk->n));
+  if (0 != so->status) {
+    *conn = NULL;
+  }
+  else {
+    connection *c2;
+    for (c2 = tsk->n->connections.first; c2; c2 = c2->next)
+      if (c2->status == &so->status)
+        break;
+    assert(c2);
+    assert(c2->tsk == tsk);
+    assert(c2->status == &so->status);
+    *conn = c2;
+  }
+  return so->status;
+}
+
+static int get_ioframe_id(task *tsk, frame *f)
+{
+  int count = tsk->iocount;
+  assert(SAFE_TO_ACCESS_TASK(tsk));
+  if (0 >= tsk->iofree) {
+    int ioid = count;
+
+    if (count == tsk->ioalloc) {
+      tsk->ioalloc *= 2;
+      tsk->ioframes = (ioframe*)realloc(tsk->ioframes,tsk->ioalloc*sizeof(ioframe));
+    }
+
+    tsk->iocount++;
+
+    tsk->ioframes[ioid].f = f;
+    tsk->ioframes[ioid].freelnk = 0;
+    return ioid;
+  }
+  else {
+    int ioid = tsk->iofree;
+    assert(ioid < count);
+    assert(NULL == tsk->ioframes[ioid].f);
+    tsk->iofree = tsk->ioframes[ioid].freelnk;
+
+    tsk->ioframes[ioid].f = f;
+    tsk->ioframes[ioid].freelnk = 0;
+    return ioid;
+  }
+}
+
+static void set_blocked_frame(task *tsk, connection *conn, int type)
+{
+  frame *curf = *tsk->runptr;
+  int ioid = get_ioframe_id(tsk,curf);
+  assert(SAFE_TO_ACCESS_TASK(tsk));
+  assert(0 == conn->frameids[type]);
+  conn->frameids[type] = ioid;
+}
+
+static void b_opencon(task *tsk, pntr *argstack)
+{
+  frame *curf = *tsk->runptr;
+  if (0 == curf->resume) {
+    pntr hostnamepntr = argstack[2];
+    pntr portpntr = argstack[1];
+    connection *conn;
+    int port;
+    int badtype;
+    char *hostname;
+    sysobject *so;
+    cell *c;
+
+    CHECK_ARG(1,CELL_NUMBER,B_OPENCON);
+    port = (int)portpntr;
+
+    if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
+      set_error(tsk,"opencon: hostname is not a string (contains non-char: %s)",
+                cell_types[badtype]);
+      return;
+    }
+
+    /* Create sysobject cell */
+    so = (sysobject*)calloc(1,sizeof(sysobject));
+    so->type = SYSOBJECT_CONNECTION;
+    so->hostname = strdup(hostname);
+    so->port = port;
+    so->len = 0;
+
+    c = alloc_cell(tsk);
+    c->type = CELL_SYSOBJECT;
+    make_pntr(c->field1,so);
+    make_pntr(argstack[2],c);
+
+    node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Initiated connection",hostname,port);
+
+    /* Try to initiate connection */
+    lock_node(tsk->n);
+    conn = node_connect_locked(tsk->n,hostname,port,0);
+    if (conn) {
+      int ioid = get_ioframe_id(tsk,curf);
+      conn->tsk = tsk;
+
+      assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
+      conn->frameids[CONNECT_FRAMEADDR] = ioid;
+
+      conn->dontread = 1;
+      conn->status = &so->status;
+
+      /* Block frame */
+      net_suspend(tsk);
+    }
+    unlock_node(tsk->n);
+
+    if (NULL == conn)
+      set_error(tsk,"Could not connect to %s:%d",hostname,port);
+    free(hostname);
+  }
+  else {
+    sysobject *so;
+    cell *c;
+
+    assert(1 == curf->resume);
+    assert(CELL_SYSOBJECT == pntrtype(argstack[2]));
+    c = get_pntr(argstack[2]);
+    so = (sysobject*)get_pntr(c->field1);
+    assert(SYSOBJECT_CONNECTION == so->type);
+    curf->resume = 0;
+
+    if (!so->connected) {
+      node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Connection failed",so->hostname,so->port);
+      set_error(tsk,"Could not connect to %s:%d",so->hostname,so->port);
+      return;
+    }
+    else {
+      pntr printer;
+      node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Connection successful",so->hostname,so->port);
+
+      /* Start printing output to the connection */
+      printer = resolve_pntr(argstack[0]);
+      node_log(tsk->n,LOG_DEBUG2,"opencon %s:%d: printer is %s",
+               so->hostname,so->port,cell_types[pntrtype(printer)]);
+      if (CELL_FRAME == pntrtype(printer))
+        run_frame(tsk,pframe(printer));
+
+      /* Return the sysobject */
+      argstack[0] = argstack[2];
+    }
+  }
+}
+
+static void b_readcon(task *tsk, pntr *argstack)
+{
+  sysobject *so;
+  pntr sopntr = argstack[1];
+  pntr nextpntr = argstack[0];
+  int status;
+
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION,B_READCON);
+  so = psysobject(sopntr);
+  assert(so->connected);
+
+  if (0 == so->len) {
+    connection *conn;
+    lock_node(tsk->n);
+
+    if (0 == (status = so_lookup_connection(tsk,so,&conn))) {
+      if (!conn->canread) {
+        status = EVENT_DATA_READFINISHED;
+      }
+      else {
+        set_blocked_frame(tsk,conn,READ_FRAMEADDR);
+
+        assert(!conn->collected);
+        assert(conn->dontread);
+        conn->dontread = 0;
+
+        node_notify(tsk->n);
+        net_suspend(tsk);
+
+        node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
+      }
+    }
+    unlock_node(tsk->n);
+  }
+  else {
+    status = so->iorstatus;
+  }
+
+  if (EVENT_CONN_CLOSED == status) {
+    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection is closed",so->hostname,so->port);
+    argstack[0] = tsk->globnilpntr;
+    return;
+  }
+  else if (EVENT_DATA_READFINISHED == status) {
+    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection finished reading",so->hostname,so->port);
+    argstack[0] = tsk->globnilpntr;
+    return;
+  }
+  else if (EVENT_CONN_IOERROR == status) {
+    set_error(tsk,"readcon %s:%d: Connection had I/O error",so->hostname,so->port);
+    return;
+  }
+
+  assert(0 == status);
+
+  if (0 < so->len) {
+    carray *arr = carray_new(tsk,1,NULL,NULL);
+    make_aref_pntr(argstack[0],arr->wrapper,0);
+    carray_append(tsk,&arr,so->buf,so->len,1);
+    arr->tail = nextpntr;
+
+    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Got %d bytes",so->hostname,so->port,so->len);
+
+    free(so->buf);
+    so->buf = NULL;
+    so->len = 0;
+  }
+}
+
+static void listen_callback(struct node *n, void *data, int event,
+                            connection *conn, endpoint *endpt)
+{
+  sysobject *so = (sysobject*)data;
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(SYSOBJECT_LISTENER == so->type);
+  assert(conn->l == so->l);
+  if (EVENT_CONN_ACCEPTED == event) {
+    /* Create the sysobject for the new connection */
+    sysobject *connso = (sysobject*)calloc(1,sizeof(sysobject));
+    connso->type = SYSOBJECT_CONNECTION;
+    connso->hostname = strdup(conn->hostname);
+    connso->port = conn->port;
+    connso->connected = 1;
+    conn->dontread = 1;
+    conn->status = &connso->status;
+    conn->tsk = so->tsk;
+    conn->isreg = 1;
+    assert(NULL == so->newso);
+    so->newso = connso;
+    assert(0 < so->l->accept_frameid);
+
+    /* Notify the blocked accept call that there is a connection available */
+    array *wr;
+    endpointid destid;
+    int ioid = so->l->accept_frameid;
+
+    node_log(n,LOG_DEBUG2,"listen_callback: event %s, ioid %d",event_types[event],ioid);
+
+    destid.nodeip = n->listenip;
+    destid.nodeport = n->mainl->port;
+    destid.localid = conn->tsk->endpt->localid;
+
+    wr = write_start();
+    write_int(wr,ioid);
+    write_int(wr,event);
+    so->l->accept_frameid = 0;
+
+    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,wr->data,wr->nbytes);
+    write_end(wr);
+
+    assert(!so->l->dontaccept);
+    so->l->dontaccept = 1;
+    node_notify(n);
+  }
+}
+
+static void b_startlisten(task *tsk, pntr *argstack)
+{
+  pntr hostnamepntr = argstack[1];
+  pntr portpntr = argstack[0];
+  char *hostname;
+  int port;
+  int badtype;
+  sysobject *so;
+  cell *c;
+
+  CHECK_ARG(0,CELL_NUMBER,B_STARTLISTEN);
+  port = (int)portpntr;
+
+  if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
+    set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
+              cell_types[badtype]);
+    return;
+  }
+
+  /* Create sysobject cell */
+  so = (sysobject*)calloc(1,sizeof(sysobject));
+  so->type = SYSOBJECT_LISTENER;
+  so->hostname = strdup(hostname);
+  so->port = port;
+  so->tsk = tsk;
+
+  /* Start the listener */
+  so->l = node_listen(tsk->n,hostname,port,listen_callback,so,1);
+  if (NULL == so->l) {
+    set_error(tsk,"startlisten %s:%d: listen failed",hostname,port);
+    free(hostname);
+    free(so->hostname);
+    free(so);
+    return;
+  }
+  so->l->dontaccept = 1;
+
+  c = alloc_cell(tsk);
+  c->type = CELL_SYSOBJECT;
+  make_pntr(c->field1,so);
+  make_pntr(argstack[0],c);
+
+  node_log(tsk->n,LOG_DEBUG1,"startlisten %s:%d: listening",hostname,port);
+
+  free(hostname);
+}
+
+static void b_accept(task *tsk, pntr *argstack)
+{
+  sysobject *so;
+  cell *c;
+  pntr sopntr = argstack[1];
+  sysobject *newso;
+
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER,B_ACCEPT);
+  c = get_pntr(sopntr);
+  so = psysobject(sopntr);
+
+  lock_node(tsk->n);
+  newso = so->newso;
+  if (NULL == so->newso) {
+    /* block */
+
+    frame *curf = *tsk->runptr;
+    int ioid = get_ioframe_id(tsk,curf);
+
+    assert(0 == so->l->accept_frameid);
+    so->l->accept_frameid = ioid;
+
+    net_suspend(tsk);
+
+    assert(so->l->dontaccept);
+    so->l->dontaccept = 0;
+    node_notify(tsk->n);
+
+    node_log(tsk->n,LOG_DEBUG1,"accept: suspending");
+  }
+  else {
+    pntr printer;
+    so->newso = NULL;
+    node_log(tsk->n,LOG_DEBUG1,"accept %s:%d: Got new connection",so->hostname,so->port);
+
+    /* Start printing output to the connection */
+    printer = resolve_pntr(argstack[0]);
+    node_log(tsk->n,LOG_DEBUG2,"accept %s:%d: printer is %s",
+             so->hostname,so->port,cell_types[pntrtype(printer)]);
+    if (CELL_FRAME == pntrtype(printer))
+      run_frame(tsk,pframe(printer));
+
+    /* Return the sysobject */
+    c = alloc_cell(tsk);
+    c->type = CELL_SYSOBJECT;
+    make_pntr(c->field1,newso);
+    make_pntr(argstack[0],c);
+  }
+  unlock_node(tsk->n);
+}
+
+static void b_nchars(task *tsk, pntr *argstack)
+{
+  pntr p = argstack[0];
+  if ((CELL_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
+    argstack[0] = aref_array(p)->size - aref_index(p);
+  else
+    argstack[0] = tsk->globnilpntr;
+}
+
+static void write_data(task *tsk, pntr *argstack, const char *data, int len, pntr destpntr)
+{
+  if (CELL_NIL == pntrtype(destpntr)) {
+    /* Write to task output file handle */
+    if (tsk->output) {
+      fwrite(data,1,len,tsk->output);
+      fflush(tsk->output);
+    }
+    argstack[0] = tsk->globnilpntr;
+  }
+  else {
+    /* Write to socket connection (may need to block) */
+    cell *c;
+    int fullbuf;
+    int status = 0;
+    connection *conn;
+    sysobject *so;
+    c = (cell*)get_pntr(destpntr);
+    so = (sysobject*)get_pntr(c->field1);
+    if (SYSOBJECT_CONNECTION != so->type) {
+      set_error(tsk,"write_data: first arg must be CONNECTION, got %s",sysobject_types[so->type]);
+      return;
+    }
+    assert(so->connected);
+
+    lock_node(tsk->n);
+    status = so->status;
+
+    if (0 == (status = so_lookup_connection(tsk,so,&conn))) {
+      fullbuf = (IOSIZE <= conn->sendbuf->nbytes);
+      if (fullbuf) {
+        set_blocked_frame(tsk,conn,WRITE_FRAMEADDR);
+        node_log(tsk->n,LOG_DEBUG2,"write_data: write buffer is full; blocking");
+        net_suspend(tsk);
+      }
+      else {
+        array_append(conn->sendbuf,data,len);
+        node_log(tsk->n,LOG_DEBUG2,"write_data: wrote %d bytes to connection",len);
+      }
+      node_notify(tsk->n);
+    }
+    unlock_node(tsk->n);
+
+    if (EVENT_CONN_CLOSED == status) {
+      set_error(tsk,"write_data %s:%d: Connection is closed",so->hostname,so->port);
+      return;
+    }
+    else if (EVENT_CONN_IOERROR == status) {
+      set_error(tsk,"write_data %s:%d: Connection had I/O error",so->hostname,so->port);
+      return;
+    }
+    else if (!fullbuf) {
+      /* normal return */
+      argstack[0] = tsk->globnilpntr;
+    }
+  }
+}
+
+static void b_print(task *tsk, pntr *argstack)
+{
+  pntr destpntr = argstack[1];
+  pntr p = argstack[0];
+  char c;
+
+  CHECK_ARG(0,CELL_NUMBER,B_PRINT);
+  if (CELL_NIL != pntrtype(destpntr))
+    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION,B_PRINT);
+
+  if ((p == floor(p)) && (0 < p) && (128 > p))
+    c = (int)p;
+  else
+    c = '?';
+  write_data(tsk,argstack,&c,1,destpntr);
+}
+
+static void b_printarray(task *tsk, pntr *argstack)
+{
+  carray *arr;
+  int index;
+  int n;
+  pntr destpntr = argstack[2];
+  pntr npntr = argstack[1];
+  pntr valpntr = argstack[0];
+
+  CHECK_ARG(0,CELL_AREF,B_PRINTARRAY);
+  CHECK_ARG(1,CELL_NUMBER,B_PRINTARRAY);
+  if (CELL_NIL != pntrtype(destpntr))
+    CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION,B_PRINTARRAY);
+
+  n = (int)npntr;
+
+  if ((CELL_AREF != pntrtype(valpntr)) && (CELL_CONS != pntrtype(valpntr))) {
+    set_error(tsk,"printarray: expected aref or cons, got %s",cell_types[pntrtype(valpntr)]);
+    return;
+  }
+
+  arr = aref_array(valpntr);
+  index = aref_index(valpntr);
+
+  assert(1 <= n);
+  assert(index+n <= arr->size);
+  assert(1 == arr->elemsize);
+
+  write_data(tsk,argstack,arr->elements+index,n,destpntr);
+}
+
+static void b_printend(task *tsk, pntr *argstack)
+{
+  if (CELL_NIL != pntrtype(argstack[0])) {
+    sysobject *so;
+    connection *conn;
+
+    CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION,B_PRINTEND);
+    so = psysobject(argstack[0]);
+    assert(so->connected);
+
+    lock_node(tsk->n);
+    if (0 == so_lookup_connection(tsk,so,&conn)) {
+      conn->finwrite = 1;
+      node_notify(tsk->n);
+    }
+    unlock_node(tsk->n);
+  }
+
+  argstack[0] = tsk->globnilpntr;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -993,61 +1477,74 @@ int get_builtin(const char *name)
 }
 
 const builtin builtin_info[NUM_BUILTINS] = {
-{ "+",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_add            },
-{ "-",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_subtract       },
-{ "*",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_multiply       },
-{ "/",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_divide         },
-{ "%",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_mod            },
+/* Arithmetic operations */
+{ "+",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_add            },
+{ "-",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_subtract       },
+{ "*",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_multiply       },
+{ "/",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_divide         },
+{ "%",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_mod            },
 
-{ "=",              2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_eq             },
-{ "!=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_ne             },
-{ "<",              2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_lt             },
-{ "<=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_le             },
-{ ">",              2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_gt             },
-{ ">=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_ge             },
+/* Numeric comparison */
+{ "=",              2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_eq             },
+{ "!=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_ne             },
+{ "<",              2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_lt             },
+{ "<=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_le             },
+{ ">",              2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_gt             },
+{ ">=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_ge             },
 
-{ "and",            2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_and            },
-{ "or",             2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_or             },
-{ "not",            1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_not            },
+/* Bit operations */
+{ "<<",             2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitshl         },
+{ ">>",             2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitshr         },
+{ "&",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitand         },
+{ "|",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitor          },
+{ "^",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitxor         },
+{ "~",              1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_bitnot         },
 
-{ "<<",             2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_bitshl         },
-{ ">>",             2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_bitshr         },
-{ "&",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_bitand         },
-{ "|",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_bitor          },
-{ "^",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE, b_bitxor         },
-{ "~",              1, 1, ALWAYS_VALUE, ALWAYS_TRUE, b_bitnot         },
+/* Numeric functions */
+{ "sqrt",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_sqrt           },
+{ "floor",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_floor          },
+{ "ceil",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_ceil           },
+{ "numtostring",    1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_numtostring    },
 
-{ "sqrt",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE, b_sqrt           },
-{ "floor",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE, b_floor          },
-{ "ceil",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE, b_ceil           },
+/* Logical operations */
+{ "if",             3, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_if             },
+{ "and",            2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_and            },
+{ "or",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_or             },
+{ "not",            1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_not            },
 
-{ "seq",            2, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_seq            },
-{ "par",            2, 0, MAYBE_UNEVAL, MAYBE_FALSE, b_par            },
-{ "parhead",        2, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_parhead        },
+/* Lists and arrays */
+{ "cons",           2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
+{ "head",           1, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_head           },
+{ "tail",           1, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_tail           },
+{ "arraysize",      1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_arraysize      },
+{ "arrayskip",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayskip      },
+{ "arrayprefix",    3, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayprefix    },
+{ "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_teststring     },
+{ "testarray",      2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_testarray      },
 
-{ "echo",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_echo           },
-{ "print",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_print          },
+/* Sequential/parallel directives */
+{ "seq",            2, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_seq            },
+{ "par",            2, 0, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_par            },
+{ "parhead",        2, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_parhead        },
 
-{ "if",             3, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_if             },
-{ "cons",           2, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_cons           },
-{ "head",           1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_head           },
-{ "tail",           1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_tail           },
+/* Filesystem access */
+{ "openfd",         1, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_openfd         },
+{ "readchunk",      2, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_readchunk      },
+{ "readdir1",       1, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_readdir1       },
+{ "fexists",        1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_fexists        },
+{ "fisdir",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_fisdir         },
 
-{ "arraysize",      1, 1, MAYBE_UNEVAL, ALWAYS_TRUE, b_arraysize      },
-{ "arrayskip",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE, b_arrayskip      },
-{ "arrayprefix",    3, 2, MAYBE_UNEVAL, MAYBE_FALSE, b_arrayprefix    },
+/* Networking */
+{ "opencon",        3, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_opencon        },
+{ "readcon",        2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_readcon        },
+{ "startlisten",    2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_startlisten    },
+{ "accept",         2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_accept         },
 
-{ "valarray?",      1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_isvalarray     },
-{ "printarray",     2, 2, ALWAYS_VALUE, MAYBE_FALSE, b_printarray     },
-
-{ "numtostring",    1, 1, MAYBE_UNEVAL, ALWAYS_TRUE, b_numtostring    },
-{ "openfd",         1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_openfd         },
-{ "readchunk",      2, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readchunk      },
-{ "readdir1",       1, 1, MAYBE_UNEVAL, MAYBE_FALSE, b_readdir1       },
-
-{ "cons?",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, b_iscons         },
-{ "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_teststring     },
-{ "testarray",      2, 0, ALWAYS_VALUE, ALWAYS_TRUE, b_testarray      },
+/* Terminal and network output */
+{ "nchars",         1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_nchars         },
+{ "print",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_print          },
+{ "printarray",     3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printarray     },
+{ "printend",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printend       },
 
 };
 

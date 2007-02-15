@@ -50,8 +50,10 @@ void cprintf(connection *conn, const char *format, ...)
 
 static void conn_disconnect(connection *conn)
 {
-  conn->toclose = 1;
   cprintf(conn,"Disconnecting\n");
+  done_reading(conn->n,conn);
+  conn->finwrite = 1;
+  node_notify(conn->n);
 }
 
 static void process_cmd(node *n, connection *conn, int argc, char **argv)
@@ -74,7 +76,7 @@ static void process_cmd(node *n, connection *conn, int argc, char **argv)
       return;
     }
     *colon = '\0';
-    node_connect_locked(n,argv[1],atoi(colon+1));
+    node_connect_locked(n,argv[1],atoi(colon+1),1);
   }
   else if (!strcmp(argv[0],"run") || !strcmp(argv[0],"r")) {
 

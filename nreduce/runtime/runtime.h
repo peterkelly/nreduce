@@ -37,12 +37,14 @@
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
 
+/* Arithmetic operations */
 #define B_ADD            0
 #define B_SUBTRACT       1
 #define B_MULTIPLY       2
 #define B_DIVIDE         3
 #define B_MOD            4
 
+/* Numeric comparison */
 #define B_EQ             5
 #define B_NE             6
 #define B_LT             7
@@ -50,50 +52,61 @@
 #define B_GT             9
 #define B_GE             10
 
-#define B_AND            11
-#define B_OR             12
-#define B_NOT            13
+/* Bit operations */
+#define B_BITSHL         11
+#define B_BITSHR         12
+#define B_BITAND         13
+#define B_BITOR          14
+#define B_BITXOR         15
+#define B_BITNOT         16
 
-#define B_BITSHL         14
-#define B_BITSHR         15
-#define B_BITAND         16
-#define B_BITOR          17
-#define B_BITXOR         18
-#define B_BITNOT         19
+/* Numeric functions */
+#define B_SQRT           17
+#define B_FLOOR          18
+#define B_CEIL           19
+#define B_NUMTOSTRING    20
 
-#define B_SQRT           20
-#define B_FLOOR          21
-#define B_CEIL           22
+/* Logical operations */
+#define B_IF             21
+#define B_AND            22
+#define B_OR             23
+#define B_NOT            24
 
-#define B_SEQ            23
-#define B_PAR            24
-#define B_PARHEAD        25
+/* Lists and arrays */
+#define B_CONS           25
+#define B_HEAD           26
+#define B_TAIL           27
+#define B_ARRAYSIZE      28
+#define B_ARRAYSKIP      29
+#define B_ARRAYPREFIX    30
+#define B_TESTSTRING     31
+#define B_TESTARRAY      32
 
-#define B_ECHO           26
-#define B_PRINT          27
+/* Sequential/parallel directives */
+#define B_SEQ            33
+#define B_PAR            34
+#define B_PARHEAD        35
 
-#define B_IF             28
-#define B_CONS           29
-#define B_HEAD           30
-#define B_TAIL           31
+/* Filesystem access */
+#define B_OPENFD         36
+#define B_READCHUNK      37
+#define B_READDIR1       38
+#define B_FEXISTS        39
+#define B_FISDIR         40
 
-#define B_ARRAYSIZE      32
-#define B_ARRAYSKIP      33
-#define B_ARRAYPREFIX    34
+/* Networking */
+#define B_OPENCON        41
+#define B_READCON        42
+#define B_STARTLISTEN    43
+#define B_ACCEPT         44
 
-#define B_ISVALARRAY     35
-#define B_PRINTARRAY     36
+/* Terminal and network output */
+#define B_NCHARS         45
+#define B_PRINT          46
+#define B_PRINTARRAY     47
+#define B_PRINTEND       48
 
-#define B_NUMTOSTRING    37
-#define B_OPENFD         38
-#define B_READCHUNK      39
-#define B_READDIR1       40
-
-#define B_ISCONS         41
-#define B_TESTSTRING     42
-#define B_TESTARRAY      43
-
-#define NUM_BUILTINS     44
+#define NUM_BUILTINS     49
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -119,7 +132,8 @@ typedef double pntr;
 #define CELL_NIL         0x0B  /*                                                  */
 #define CELL_NUMBER      0x0C  /*                                                  */
 #define CELL_SYMBOL      0x0D  /*                                                  */
-#define CELL_COUNT       0x0E
+#define CELL_SYSOBJECT   0x0E  /* left: obj (sysobject*)                           */
+#define CELL_COUNT       0x0F
 
 typedef struct cell {
   short flags;
@@ -131,7 +145,6 @@ typedef struct cell {
 #define PNTR_VALUE 0xFFF80000
 //#define MAX_ARRAY_SIZE (1 << 19)
 #define MAX_ARRAY_SIZE 65536
-#define READBUFSIZE 16384
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
@@ -139,6 +152,7 @@ typedef struct cell {
 #define ppfield2(__p) (get_pntr(pfield2(__p)))
 #define pglobal(__p) ((global*)ppfield1(__p))
 #define pframe(__p) ((frame*)ppfield1(__p))
+#define psysobject(__p) ((sysobject*)ppfield1(__p))
 
 #define is_pntr(__p) ((*(((unsigned int*)&(__p))+1) & PNTR_VALUE) == PNTR_VALUE)
 #define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
@@ -193,14 +207,40 @@ typedef void (*builtin_f)(struct task *tsk, pntr *argstack);
 #define ALWAYS_TRUE 1
 #define MAYBE_FALSE 0
 
+#define IMPURE 0
+#define PURE   1
+
 typedef struct builtin {
   char *name;
   int nargs;
   int nstrict;
   int reswhnf;
   int restrue;
+  int pure;
   builtin_f f;
 } builtin;
+
+#define SYSOBJECT_FILE           0
+#define SYSOBJECT_CONNECTION     1
+#define SYSOBJECT_LISTENER       2
+#define SYSOBJECT_COUNT          3
+
+typedef struct sysobject {
+  int type;
+  int fd;
+  char *hostname;
+  int port;
+  int connected;
+  char *buf;
+  int len;
+  int closed;
+  int error;
+  int status;
+  int iorstatus;
+  listener *l;
+  struct sysobject *newso;
+  struct task *tsk;
+} sysobject;
 
 typedef struct carray {
   int alloc;
@@ -279,6 +319,7 @@ typedef struct frame {
   pntr *data;
 
   int state;
+  int resume;
 
   struct frame *freelnk;
   struct frame *waitlnk;
@@ -356,12 +397,17 @@ typedef struct block {
   cell values[BLOCK_SIZE];
 } block;
 
-struct task;
-
 /* FIXME: shouldn't need to use function pointers for send/recv anymore */
 typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int size);
 typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
                         int delayms);
+
+#define SAFE_TO_ACCESS_TASK(_tsk) pthread_equal(pthread_self(),(_tsk)->thread)
+
+typedef struct ioframe {
+  frame *f;
+  int freelnk;
+} ioframe;
 
 typedef struct task {
   int memdebug;
@@ -380,8 +426,16 @@ typedef struct task {
   array **distmarks;
   node *n;
 
+  int ioalloc;
+  int iocount;
+  ioframe *ioframes;
+  int iofree;
+
   endpoint *endpt;
   sem_t startsem;
+  int netpending;
+
+  pthread_t thread;
 
   /* globals */
   global **pntrhash;
@@ -559,7 +613,9 @@ int nodetest(const char *host, int port);
 #define MSG_KILLTASK            20
 #define MSG_KILLTASKRESP        21
 
-#define MSG_COUNT               22
+#define MSG_IORESPONSE          22
+
+#define MSG_COUNT               23
 
 typedef struct reader {
   const char *data;
@@ -578,6 +634,7 @@ typedef struct reader {
 #define INT_TAG    0xA492BC09
 #define DOUBLE_TAG 0x44ABC92F
 #define STRING_TAG 0x93EB1123
+#define BINARY_TAG 0x559204A3
 #define GADDR_TAG  0x85113B1C
 #define PNTR_TAG   0xE901FA12
 #define REF_TAG    PNTR_TAG
@@ -592,6 +649,7 @@ int read_char(reader *rd, char *c);
 int read_int(reader *rd, int *i);
 int read_double(reader *rd, double *d);
 int read_string(reader *rd, char **s);
+int read_binary(reader *rd, void **b, int *len);
 int read_gaddr_noack(reader *rd, gaddr *a);
 int read_gaddr(reader *rd, task *tsk, gaddr *a);
 int read_pntr(reader *rd, task *tsk, pntr *pout, int observe);
@@ -606,6 +664,7 @@ void write_char(array *wr, char c);
 void write_int(array *wr, int i);
 void write_double(array *wr, double d);
 void write_string(array *wr, char *s);
+void write_binary(array *wr, const void *b, int len);
 void write_gaddr_noack(array *wr, gaddr a);
 void write_gaddr(array *wr, task *tsk, gaddr a);
 void write_ref(array *arr, task *tsk, pntr p);
@@ -640,10 +699,10 @@ void console(task *tsk);
 
 /* builtin */
 
+int so_lookup_connection(task *tsk, sysobject *so, connection **conn);
 carray *carray_new(task *tsk, int dsize, carray *oldarr, cell *usewrapper);
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 
-void printp(FILE *f, pntr p);
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
 int array_to_string(pntr refpntr, char **str);
@@ -670,6 +729,7 @@ void print_cells(task *tsk);
 void sweep(task *tsk, int all);
 void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
+void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns);
 
 frame *frame_new(task *tsk);
 #define frame_free(tsk,_f) \
@@ -706,6 +766,8 @@ void *execute(task *tsk);
 cell *pntrcell(pntr p);
 global *pntrglobal(pntr p);
 frame *pntrframe(pntr p);
+sysobject *pntrso(pntr p);
+const char *pntrtypename(pntr p);
 
 pntrstack *pntrstack_new(void);
 void pntrstack_push(pntrstack *s, pntr p);
@@ -753,6 +815,7 @@ extern const builtin builtin_info[NUM_BUILTINS];
 
 #ifndef MEMORY_C
 extern const char *cell_types[CELL_COUNT];
+extern const char *sysobject_types[SYSOBJECT_COUNT];
 extern const char *msg_names[MSG_COUNT];
 extern const char *frame_states[5];
 #endif

@@ -37,6 +37,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+#include <unistd.h>
 
 const char *cell_types[CELL_COUNT] = {
   "EMPTY",
@@ -53,6 +54,13 @@ const char *cell_types[CELL_COUNT] = {
   "NIL",
   "NUMBER",
   "SYMBOL",
+  "SYSOBJECT",
+};
+
+const char *sysobject_types[SYSOBJECT_COUNT] = {
+  "FILE",
+  "CONNECTION",
+  "LISTENER",
 };
 
 const char *msg_names[MSG_COUNT] = {
@@ -78,6 +86,7 @@ const char *msg_names[MSG_COUNT] = {
   "STARTTASKRESP",
   "KILLTASK",
   "KILLTASKRESP",
+  "IORESPONSE",
 };
 
 const char *frame_states[5] = {
@@ -110,6 +119,16 @@ global *pntrglobal(pntr p)
 frame *pntrframe(pntr p)
 {
   return (frame*)get_pntr(p);
+}
+
+sysobject *pntrso(pntr p)
+{
+  return (sysobject*)get_pntr(p);
+}
+
+const char *pntrtypename(pntr p)
+{
+  return cell_types[pntrtype(p)];
 }
 
 static void mark(task *tsk, pntr p, short bit);
@@ -243,6 +262,7 @@ static void mark(task *tsk, pntr p, short bit)
     case CELL_NUMBER:
     case CELL_HOLE:
     case CELL_SYMBOL:
+    case CELL_SYSOBJECT:
       break;
     default:
       abort();
@@ -273,7 +293,7 @@ cell *alloc_cell(task *tsk)
   v = tsk->freeptr;
   v->flags = tsk->indistgc ? FLAG_NEW : 0;
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
-  tsk->stats.nallocs++;
+  tsk->stats.nallocs += sizeof(cell);
   tsk->stats.totalallocs++;
   if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     *tsk->endpt->interruptptr = 1;
@@ -320,6 +340,57 @@ void free_cell_fields(task *tsk, cell *v)
   }
   case CELL_REMOTEREF:
     break;
+  case CELL_SYSOBJECT: {
+    sysobject *so = (sysobject*)get_pntr(v->field1);
+    switch (so->type) {
+    case SYSOBJECT_FILE:
+      close(so->fd);
+      break;
+    case SYSOBJECT_CONNECTION: {
+      connection *conn;
+
+      lock_node(tsk->n);
+      if (0 == so_lookup_connection(tsk,so,&conn)) {
+
+        if (!tsk->done) {
+          assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
+          assert(0 == conn->frameids[READ_FRAMEADDR]);
+          assert(0 == conn->frameids[WRITE_FRAMEADDR]);
+          assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
+          assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
+          assert(conn->dontread);
+        }
+
+        conn->status = NULL;
+        conn->collected = 1;
+
+        if (!conn->finwrite) {
+          conn->finwrite = 1;
+          node_notify(tsk->n);
+        }
+
+        done_reading(tsk->n,conn);
+      }
+      unlock_node(tsk->n);
+
+      free(so->hostname);
+      free(so->buf);
+      break;
+    }
+    case SYSOBJECT_LISTENER:
+      /* FIXME: free newso if it's present */
+      /* FIXME: this will cause all connections associated with the listener to be removed,
+         which is probably not what we want */
+      node_remove_listener(tsk->n,so->l);
+      free(so->hostname);
+      break;
+    default:
+      abort();
+      break;
+    }
+    free(so);
+    break;
+  }
   case CELL_SYMBOL:
     free((char*)get_pntr(v->field1));
     break;
@@ -553,6 +624,42 @@ void local_collect(task *tsk)
   #ifdef COLLECTION_DEBUG
   fprintf(tsk->output,"local_collect() finished: %d cells remaining\n",count_alive(tsk));
   #endif
+}
+
+void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns)
+{
+  block *bl;
+  int i;
+
+  *cells = 0;
+  *bytes = 0;
+  *conns = 0;
+  *alloc = 0;
+
+  lock_node(tsk->n);
+  for (bl = tsk->blocks; bl; bl = bl->next) {
+    for (i = 0; i < BLOCK_SIZE; i++) {
+      cell *c = &bl->values[i];
+      if (CELL_AREF == c->type) {
+        carray *arr = (carray*)get_pntr(c->field1);
+        (*bytes) += arr->size*arr->elemsize;
+        (*alloc) += arr->alloc*arr->elemsize;
+      }
+      else if (CELL_SYSOBJECT == c->type) {
+        sysobject *so = (sysobject*)get_pntr(c->field1);
+        if (SYSOBJECT_CONNECTION == so->type) {
+          if (0 == so->status)
+            (*conns)++;
+        }
+      }
+      if (CELL_EMPTY != c->type) {
+        (*bytes) += sizeof(cell);
+        (*cells)++;
+      }
+    }
+    (*alloc) += sizeof(block);
+  }
+  unlock_node(tsk->n);
 }
 
 frame *frame_new(task *tsk)

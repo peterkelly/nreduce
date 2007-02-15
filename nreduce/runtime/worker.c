@@ -124,6 +124,12 @@ static void sigsegv(int sig)
   kill(getpid(),sig);
 }
 
+static void sigpipe(int sig)
+{
+  fprintf(stderr,"Got SIGPIPE\n");
+  exit(1);
+}
+
 task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
@@ -150,10 +156,67 @@ typedef struct worker_data {
   int standalone;
 } worker_data;
 
+static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
+{
+  array *wr;
+  endpointid destid;
+  int ioid = *ioidptr;
+
+  node_log(n,LOG_DEBUG2,"worker: event %s, ioid %d",event_types[event],ioid);
+
+  destid.nodeip = n->listenip;
+  destid.nodeport = n->mainl->port;
+  destid.localid = conn->tsk->endpt->localid;
+
+  wr = write_start();
+  write_int(wr,ioid);
+  write_int(wr,event);
+  *ioidptr = 0;
+
+  if (EVENT_DATA_READ == event) {
+    write_binary(wr,conn->recvbuf->data,conn->recvbuf->nbytes);
+    array_remove_data(conn->recvbuf,conn->recvbuf->nbytes);
+    conn->dontread = 1;
+  }
+  else if ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) {
+    assert(0 == conn->recvbuf->nbytes);
+  }
+
+  node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,wr->data,wr->nbytes);
+  write_end(wr);
+}
+
 static void worker_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
   worker_data *wd = (worker_data*)data;
+
+  if (conn && conn->status &&
+      ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)))
+    *conn->status = event;
+
+  if (conn && (0 < conn->frameids[CONNECT_FRAMEADDR]) &&
+      ((EVENT_CONN_ESTABLISHED == event) ||
+       (EVENT_CONN_FAILED == event)) )
+    send_ioresponse(n,conn,&conn->frameids[CONNECT_FRAMEADDR],event);
+
+  if (conn && (0 < conn->frameids[READ_FRAMEADDR]) &&
+      ((EVENT_DATA_READ == event) ||
+       (EVENT_DATA_READFINISHED == event) ||
+       (EVENT_CONN_IOERROR == event) ||
+       (EVENT_CONN_CLOSED == event)))
+    send_ioresponse(n,conn,&conn->frameids[READ_FRAMEADDR],event);
+
+  if (conn && (0 < conn->frameids[WRITE_FRAMEADDR]) &&
+      ((EVENT_DATA_WRITTEN == event) ||
+       (EVENT_CONN_IOERROR == event) ||
+       (EVENT_CONN_CLOSED == event)))
+    send_ioresponse(n,conn,&conn->frameids[WRITE_FRAMEADDR],event);
+
+  if (conn && (0 < conn->frameids[ACCEPT_FRAMEADDR]) &&
+      (EVENT_CONN_ACCEPTED == event))
+    send_ioresponse(n,conn,&conn->frameids[ACCEPT_FRAMEADDR],event);
+
   if (((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) &&
       !conn->isconsole && !conn->isreg) {
     endpoint *endpt;
@@ -194,7 +257,7 @@ static void worker_callback(struct node *n, void *data, int event,
       node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->localid);
     }
   }
-  else if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
+  if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
     if (TASK_ENDPOINT == endpt->type) {
       node_shutdown_locked(n);
     }
@@ -208,6 +271,7 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
+  signal(SIGPIPE,sigpipe);
 
   memset(&wd,0,sizeof(worker_data));
 
@@ -221,8 +285,10 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   n->isworker = 1;
 
-  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
+  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL,0))) {
+    node_free(n);
     return -1;
+  }
 
   start_manager(n);
 

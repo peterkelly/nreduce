@@ -29,6 +29,10 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#define IOSIZE 65536
+
+//#define DEBUG_SHORT_KEEPALIVE
+
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 
 #define LOG_NONE        0
@@ -43,6 +47,8 @@
 
 struct node;
 struct listener;
+struct task;
+struct gaddr;
 
 typedef struct endpointid {
   struct in_addr nodeip;
@@ -93,6 +99,13 @@ typedef struct endpointlist {
   endpoint *last;
 } endpointlist;
 
+#define CONNECT_FRAMEADDR 0
+#define READ_FRAMEADDR    1
+#define WRITE_FRAMEADDR   2
+#define LISTEN_FRAMEADDR  3
+#define ACCEPT_FRAMEADDR  4
+#define FRAMEADDR_COUNT   5
+
 typedef struct connection {
   char *hostname;
   struct in_addr ip;
@@ -108,10 +121,20 @@ typedef struct connection {
   array *sendbuf;
 
   int donewelcome;
+  int donehandshake;
   int isconsole;
   int isreg;
-  int toclose;
+  int finwrite;
+  int collected;
   void *data;
+  struct task *tsk;
+  int frameids[FRAMEADDR_COUNT];
+  int dontread;
+  int *status;
+  int totalread;
+
+  int canread;
+  int canwrite;
 
   struct connection *prev;
   struct connection *next;
@@ -138,10 +161,13 @@ typedef struct node_callbacklist {
 } node_callbacklist;
 
 typedef struct listener {
+  char *hostname;
   int port;
   int fd;
   node_callbackfun callback;
   void *data;
+  int dontaccept;
+  int accept_frameid;
   struct listener *prev;
   struct listener *next;
 } listener;
@@ -150,6 +176,9 @@ typedef struct listenerlist {
   listener *first;
   listener *last;
 } listenerlist;
+
+#define NODE_ALREADY_LOCKED(_n) is_mutex_locked(&(_n)->lock)
+#define NODE_UNLOCKED(_n) is_mutex_unlocked(&(_n)->lock)
 
 typedef struct node {
   endpointlist endpoints;
@@ -165,6 +194,7 @@ typedef struct node {
   endpoint *managerendpt;
   int ioready_writefd;
   int ioready_readfd;
+  int notified;
   pthread_mutex_t lock;
   pthread_cond_t cond;
   int shutdown;
@@ -175,41 +205,49 @@ typedef struct node {
   pthread_mutex_t liblock;
 } node;
 
-#define EVENT_CONN_ESTABLISHED      0
-#define EVENT_CONN_FAILED           1
-#define EVENT_CONN_ACCEPTED         2
-#define EVENT_CONN_CLOSED           3
-#define EVENT_CONN_IOERROR          4
-#define EVENT_HANDSHAKE_DONE        5
-#define EVENT_HANDSHAKE_FAILED      6
-#define EVENT_DATA                  7
-#define EVENT_ENDPOINT_ADDITION     8
-#define EVENT_ENDPOINT_REMOVAL      9
-#define EVENT_SHUTDOWN              10
-#define EVENT_COUNT                 11
+#define EVENT_NONE                  0
+#define EVENT_CONN_ESTABLISHED      1
+#define EVENT_CONN_FAILED           2
+#define EVENT_CONN_ACCEPTED         3
+#define EVENT_CONN_CLOSED           4
+#define EVENT_CONN_IOERROR          5
+#define EVENT_HANDSHAKE_DONE        6
+#define EVENT_HANDSHAKE_FAILED      7
+#define EVENT_DATA_READ             8
+#define EVENT_DATA_READFINISHED     9
+#define EVENT_DATA_WRITTEN          10
+#define EVENT_ENDPOINT_ADDITION     11
+#define EVENT_ENDPOINT_REMOVAL      12
+#define EVENT_SHUTDOWN              13
+#define EVENT_COUNT                 14
 
 /* node */
+
+#define lock_node(_n) { lock_mutex(&(_n)->lock);
+#define unlock_node(_n) unlock_mutex(&(_n)->lock); }
 
 node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
-listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data);
+listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data,
+                      int dontaccept);
 void node_add_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_callback(node *n, node_callbackfun fun, void *data);
-listener *node_add_listener(node *n, int port, int fd, node_callbackfun callback, void *data);
 void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
-connection *node_connect_locked(node *n, const char *dest, int port);
+connection *node_connect_locked(node *n, const char *dest, int port, int othernode);
 void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
                       int tag, const void *data, int size);
 void node_send(node *n, int sourcelocalid, endpointid destendpointid,
                int tag, const void *data, int size);
 void node_waitclose_locked(node *n, int localid);
 void node_shutdown_locked(node *n);
+void node_notify(node *n);
 void connection_printf(connection *conn, const char *format, ...);
-void connection_close(connection *conn);
+void done_writing(node *n, connection *conn);
+void done_reading(node *n, connection *conn);
 
 endpoint *node_add_endpoint(node *n, int localid, int type, void *data);
 void node_remove_endpoint(node *n, endpoint *endpt);

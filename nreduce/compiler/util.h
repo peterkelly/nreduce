@@ -137,4 +137,11 @@ void free_args(int argc, char **argv);
 
 int parse_address(const char *address, char **host, int *port);
 
+void init_mutex(pthread_mutex_t *mutex);
+void destroy_mutex(pthread_mutex_t *mutex);
+int is_mutex_locked(pthread_mutex_t *mutex);
+int is_mutex_unlocked(pthread_mutex_t *mutex);
+void lock_mutex(pthread_mutex_t *mutex);
+void unlock_mutex(pthread_mutex_t *mutex);
+
 #endif

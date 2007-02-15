@@ -20,6 +20,8 @@
  *
  */
 
+#define _GNU_SOURCE /* for PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -540,4 +542,48 @@ int parse_address(const char *address, char **host, int *port)
   (*host)[colon-address] = '\0';
   *port = atoi(colon+1);
   return 0;
+}
+
+void init_mutex(pthread_mutex_t *mutex)
+{
+  pthread_mutex_t tmp = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+  *mutex = tmp;
+}
+
+void destroy_mutex(pthread_mutex_t *mutex)
+{
+}
+
+int is_mutex_locked(pthread_mutex_t *mutex)
+{
+  if (EDEADLK == pthread_mutex_lock(mutex)) {
+    return 1;
+  }
+  else {
+    pthread_mutex_unlock(mutex);
+    return 0;
+  }
+}
+
+int is_mutex_unlocked(pthread_mutex_t *mutex)
+{
+  if (0 == pthread_mutex_lock(mutex)) {
+    pthread_mutex_unlock(mutex);
+    return 1;
+  }
+  else {
+    return 0;
+  }
+}
+
+void lock_mutex(pthread_mutex_t *mutex)
+{
+  int r = pthread_mutex_lock(mutex);
+  assert(0 == r);
+}
+
+void unlock_mutex(pthread_mutex_t *mutex)
+{
+  int r = pthread_mutex_unlock(mutex);
+  assert(0 == r);
 }

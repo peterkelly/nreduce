@@ -195,6 +195,9 @@ static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, p
   case CELL_CAP:
     abort(); /* don't need to handle this case */
     break;
+  case CELL_SYSOBJECT:
+    fprintf(f,"sysobject(%s)\"];\n",sysobject_types[((sysobject*)get_pntr(c->field1))->type]);
+    break;
   default:
     fprintf(f,"%s\"];\n",cell_types[pntrtype(p)]);
     break;

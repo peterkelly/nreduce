@@ -123,7 +123,10 @@ static void send_error(connection *conn, testconn *tc, int code, const char *str
   cprintf(conn,"Connection: close\r\n");
   cprintf(conn,"\r\n");
   cprintf(conn,"%s\n",msg);
-  conn->toclose = 1;
+
+  done_reading(conn->n,conn);
+  conn->finwrite = 1;
+  node_notify(conn->n);
 }
 
 #define PS_SRCHNAME     0
@@ -253,7 +256,12 @@ static void *http_thread(void *data)
     sleep(1);
   }
   connection_printf(conn,"0\r\n\r\n");
-  connection_close(conn);
+
+  lock_node(n);
+  done_reading(n,conn);
+  conn->finwrite = 1;
+  node_notify(n);
+  unlock_node(n);
 
   node_log(n,LOG_INFO,"http_thread exiting");
   return NULL;
@@ -276,7 +284,7 @@ static void testserver_callback(struct node *n, void *data, int event,
   case EVENT_CONN_IOERROR:
     node_log(n,LOG_INFO,"testserver: connection error");
     break;
-  case EVENT_DATA: {
+  case EVENT_DATA_READ: {
     testconn *tc = (testconn*)conn->data;
     if (TC_STATE_READHEADER == tc->state) {
       char *data = conn->recvbuf->data;
@@ -356,11 +364,17 @@ int nodetest(const char *host, int port)
 
   memset(&tsd,0,sizeof(testserver_data));
 
-  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL)))
+  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL,0))) {
+    node_free(n);
     return -1;
+  }
 
-  if (NULL == (tsd.l = node_listen(n,host,port+1,testserver_callback,&tsd)))
+  if (NULL == (tsd.l = node_listen(n,host,port+1,testserver_callback,&tsd,0))) {
+    node_remove_listener(n,n->mainl);
+    n->mainl = NULL;
+    node_free(n);
     return -1;
+  }
 
   node_add_callback(n,nodetest_callback,NULL);
   node_start_iothread(n);
