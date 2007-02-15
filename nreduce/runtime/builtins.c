@@ -1353,7 +1353,6 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   else {
     /* Write to socket connection (may need to block) */
     cell *c;
-    int fullbuf;
     int status = 0;
     connection *conn;
     sysobject *so;
@@ -1369,15 +1368,15 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
     status = so->status;
 
     if (0 == (status = so_lookup_connection(tsk,so,&conn))) {
-      fullbuf = (IOSIZE <= conn->sendbuf->nbytes);
-      if (fullbuf) {
+      if (IOSIZE <= conn->sendbuf->nbytes) {
         set_blocked_frame(tsk,conn,WRITE_FRAMEADDR);
         node_log(tsk->n,LOG_DEBUG2,"write_data: write buffer is full; blocking");
-        net_suspend(tsk);
+        net_suspend(tsk); /* block */
       }
       else {
         array_append(conn->sendbuf,data,len);
         node_log(tsk->n,LOG_DEBUG2,"write_data: wrote %d bytes to connection",len);
+        argstack[0] = tsk->globnilpntr; /* normal return */
       }
       node_notify(tsk->n);
     }
@@ -1391,10 +1390,7 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
       set_error(tsk,"write_data %s:%d: Connection had I/O error",so->hostname,so->port);
       return;
     }
-    else if (!fullbuf) {
-      /* normal return */
-      argstack[0] = tsk->globnilpntr;
-    }
+    assert(0 == status);
   }
 }
 
