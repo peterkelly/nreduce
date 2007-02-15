@@ -302,6 +302,18 @@ void unblock_frame(task *tsk, frame *f)
   f->state = STATE_RUNNING;
 }
 
+void unblock_frame_toend(task *tsk, frame *f)
+{
+  frame **fp;
+  assert(STATE_BLOCKED == f->state);
+  assert(NULL == f->rnext);
+  fp = tsk->runptr;
+  while (*fp)
+    fp = &((*fp)->rnext);
+  *fp = f;
+  f->state = STATE_RUNNING;
+}
+
 void set_error(task *tsk, const char *format, ...)
 {
   va_list ap;

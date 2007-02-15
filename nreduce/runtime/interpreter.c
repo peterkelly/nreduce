@@ -773,7 +773,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     }
 
     tsk->netpending--;
-    unblock_frame(tsk,f);
+    unblock_frame_toend(tsk,f);
     check_runnable(tsk);
     break;
   }

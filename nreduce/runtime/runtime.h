@@ -547,6 +547,7 @@ void run_frame(task *tsk, frame *f);
 void check_runnable(task *tsk);
 void block_frame(task *tsk, frame *f);
 void unblock_frame(task *tsk, frame *f);
+void unblock_frame_toend(task *tsk, frame *f);
 #define done_frame(tsk,_f) \
 { \
   assert(STATE_RUNNING == (_f)->state); \
