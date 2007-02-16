@@ -9,7 +9,7 @@ genarr x =
    f = (if x 369 (* 400 2))
    lst = (cons 365 (cons 366 (cons 367 (cons 368 (cons f (cons 370 nil))))))
 in
-  (seq (tail6 lst) lst))
+  (if (tail6 lst) lst lst))
 
 main = nil
 ==================================== OUTPUT ====================================

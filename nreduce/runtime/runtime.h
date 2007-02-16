@@ -105,8 +105,9 @@
 #define B_PRINT          46
 #define B_PRINTARRAY     47
 #define B_PRINTEND       48
+#define B_ECHO           49
 
-#define NUM_BUILTINS     49
+#define NUM_BUILTINS     50
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

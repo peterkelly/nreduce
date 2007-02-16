@@ -364,7 +364,7 @@ void reduce(task *tsk, pntrstack *s)
         }
       }
 
-      if ((strictok < strictargs) || !builtin_info[bif].pure) {
+      if (tsk->partial && ((strictok < strictargs) || !builtin_info[bif].pure)) {
         trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
 
         for (i = strictargs; i < reqargs; i++) {

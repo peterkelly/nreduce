@@ -8,7 +8,7 @@ main =
 (letrec
    lst = (append "foo" (cons 65 (cons 66 (cons 67 (cons 68 (cons 69 (cons 70 nil)))))))
 in
-   (seq (tail6 lst) (seq (tail6 lst)) (tail6 lst)))
+   (seq (tail6 lst) (seq (tail6 lst) (tail6 lst))))
 ==================================== OUTPUT ====================================
 DEF
 ================================== RETURN CODE =================================

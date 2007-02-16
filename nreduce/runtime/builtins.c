@@ -1466,6 +1466,21 @@ static void b_printend(task *tsk, pntr *argstack)
   argstack[0] = tsk->globnilpntr;
 }
 
+static void b_echo(task *tsk, pntr *argstack)
+{
+  char *str;
+  int badtype;
+
+  if (0 <= (badtype = array_to_string(argstack[0],&str))) {
+    set_error(tsk,"echo: argument is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  fprintf(tsk->output,"%s",str);
+  free(str);
+  argstack[0] = tsk->globnilpntr;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1544,6 +1559,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "print",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_print          },
 { "printarray",     3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printarray     },
 { "printend",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printend       },
+{ "echo",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_echo           },
 
 };
 
