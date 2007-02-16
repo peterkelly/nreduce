@@ -296,6 +296,19 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
         list_free(trueused,NULL);
         list_free(falseused,NULL);
       }
+      /* As with the true/false branches of an if call, we can also treat the contents of the
+         second argument to seq as strict. The bytecode compiler also contains an optimisation
+         for seq where it will evaluate the first argument, discard the result, and then evaluate
+         the second argument. So we know that any function applications within the second argument
+         will definitely be needed. However, we do not add variables within the expression to our
+         used list, as we need to ensure that things referenced by the second argument are not
+         evaluated until *after* the first argument (like with if). */
+      if ((SNODE_BUILTIN == fun->type) && (B_SEQ == fun->bif)) {
+        snode *after = c->right;
+        list *afterused = NULL;
+        check_strictness_r(sc,after,&afterused,changed);
+        list_free(afterused,NULL);
+      }
     }
 
     /* The expression representing the thing being called is in a strict context, as we definitely
