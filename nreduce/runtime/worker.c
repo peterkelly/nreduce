@@ -157,9 +157,9 @@ typedef struct worker_data {
 
 static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
 {
-  array *wr;
   endpointid destid;
   int ioid = *ioidptr;
+  int msg[2];
 
   node_log(n,LOG_DEBUG2,"worker: event %s, ioid %d",event_types[event],ioid);
 
@@ -167,22 +167,25 @@ static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
   destid.nodeport = n->mainl->port;
   destid.localid = conn->tsk->endpt->localid;
 
-  wr = write_start();
-  write_int(wr,ioid);
-  write_int(wr,event);
+  msg[0] = ioid;
+  msg[1] = event;
   *ioidptr = 0;
 
   if (EVENT_DATA_READ == event) {
-    write_binary(wr,conn->recvbuf->data,conn->recvbuf->nbytes);
-    array_remove_data(conn->recvbuf,conn->recvbuf->nbytes);
+    int fullsize = 2*sizeof(int)+conn->recvbuf->nbytes;
+    char *full = (char*)malloc(fullsize);
+    memcpy(full,msg,2*sizeof(int));
+    memcpy(&full[2*sizeof(int)],conn->recvbuf->data,conn->recvbuf->nbytes);
+    conn->recvbuf->nbytes = 0;
+    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,full,fullsize);
+    free(full);
     conn->dontread = 1;
   }
-  else if ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) {
-    assert(0 == conn->recvbuf->nbytes);
+  else {
+    if ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event))
+      assert(0 == conn->recvbuf->nbytes);
+    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,&msg,2*sizeof(int));
   }
-
-  node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,wr->data,wr->nbytes);
-  write_end(wr);
 }
 
 static void worker_callback(struct node *n, void *data, int event,

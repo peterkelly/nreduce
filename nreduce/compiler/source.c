@@ -128,7 +128,7 @@ void snode_free(snode *c)
 source *source_new()
 {
   source *src = (source*)calloc(1,sizeof(source));
-  src->scombs = array_new(sizeof(scomb*));
+  src->scombs = array_new(sizeof(scomb*),0);
   return src;
 }
 
@@ -409,7 +409,7 @@ int add_parsedfile(source *src, const char *filename)
 {
   char *copy = strdup(filename);
   if (NULL == src->parsedfiles)
-    src->parsedfiles = array_new(sizeof(char*));
+    src->parsedfiles = array_new(sizeof(char*),0);
   array_append(src->parsedfiles,&copy,sizeof(char*));
   return array_count(src->parsedfiles)-1;
 }

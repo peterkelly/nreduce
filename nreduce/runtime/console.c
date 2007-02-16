@@ -177,7 +177,7 @@ static int handle_command(task *tsk, const char *line, int *done)
 void console(task *tsk)
 {
   printf("Console started\n");
-  array *input = array_new(sizeof(char));
+  array *input = array_new(sizeof(char),0);
   int c;
   int i;
   char c2;

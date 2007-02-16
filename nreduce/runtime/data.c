@@ -386,7 +386,7 @@ int read_end(reader *rd)
 
 array *write_start(void)
 {
-  return array_new(sizeof(char));
+  return array_new(sizeof(char),0);
 }
 
 void write_tag(array *wr, int tag)

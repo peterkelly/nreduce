@@ -168,7 +168,7 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
       if (!pntrequal(rtail,arr->tail))
         different = 1;
       if (different) {
-        carray *newarr = carray_new(rd->tsk,sizeof(pntr),NULL,NULL);
+        carray *newarr = carray_new(rd->tsk,sizeof(pntr),0,NULL,NULL);
         pntr refp;
         make_aref_pntr(refp,newarr->wrapper,0);
         carray_append(rd->tsk,&newarr,relems,arr->size-index,sizeof(pntr));
@@ -180,7 +180,7 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
     else {
       graph_replace_r(rd,arr->tail,&rtail);
       if (!pntrequal(rtail,arr->tail)) {
-        carray *newarr = carray_new(rd->tsk,1,NULL,NULL);
+        carray *newarr = carray_new(rd->tsk,1,0,NULL,NULL);
         pntr refp;
         make_aref_pntr(refp,newarr->wrapper,0);
         carray_append(rd->tsk,&newarr,&((char*)arr->elements)[index],arr->size-index,1);

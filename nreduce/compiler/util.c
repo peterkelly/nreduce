@@ -42,11 +42,14 @@
 #include <unistd.h>
 #include <errno.h>
 
-array *array_new(int elemsize)
+array *array_new(int elemsize, int initroom)
 {
   array *arr = (array*)malloc(sizeof(array));
   arr->elemsize = elemsize;
-  arr->alloc = 120;
+  if (0 < initroom)
+    arr->alloc = elemsize*initroom;
+  else
+    arr->alloc = 1024;
   arr->nbytes = 0;
   arr->data = malloc(arr->alloc);
   return arr;
@@ -61,8 +64,9 @@ int array_equals(array *a, array *b)
 
 void array_mkroom(array *arr, const int size)
 {
-  while (arr->nbytes+size > arr->alloc) {
-    arr->alloc *= 2;
+  if (arr->nbytes+size > arr->alloc) {
+    while (arr->nbytes+size > arr->alloc)
+      arr->alloc *= 2;
     arr->data = realloc(arr->data,arr->alloc);
   }
 }

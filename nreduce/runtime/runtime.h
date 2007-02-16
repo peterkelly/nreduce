@@ -709,7 +709,7 @@ void console(task *tsk);
 /* builtin */
 
 int so_lookup_connection(task *tsk, sysobject *so, connection **conn);
-carray *carray_new(task *tsk, int dsize, carray *oldarr, cell *usewrapper);
+carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper);
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 
 int get_builtin(const char *name);

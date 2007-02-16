@@ -303,11 +303,13 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
   tsk->stats.recvbytes[tag] += size;
 
   #ifdef MSG_DEBUG
-/*   fprintf(tsk->output,"[%d] ",list_count(tsk->inflight)); */
-  fprintf(tsk->output,"%d => %s ",from,msg_names[tag]);
-  CHECK_READ(print_data(tsk,data+rd.pos,size-rd.pos));
-  fprintf(tsk->output," (%d bytes)\n",size);
-  fprintf(tsk->output,"\n");
+  if (MSG_IORESPONSE != tag) {
+/*     fprintf(tsk->output,"[%d] ",list_count(tsk->inflight)); */
+    fprintf(tsk->output,"%d => %s ",from,msg_names[tag]);
+    CHECK_READ(print_data(tsk,data+rd.pos,size-rd.pos));
+    fprintf(tsk->output," (%d bytes)\n",size);
+    fprintf(tsk->output,"\n");
+  }
   #endif
 
   switch (tag) {
@@ -702,14 +704,17 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     break;
   }
   case MSG_IORESPONSE: {
-    int event;
     frame *f;
     pntr objp;
     sysobject *so;
     int ioid;
+    int event;
 
-    CHECK_READ(read_int(&rd,&ioid));
-    CHECK_READ(read_int(&rd,&event));
+    assert(2*sizeof(int) <= size);
+    ioid = ((int*)data)[0];
+    event = ((int*)data)[1];
+    assert(((EVENT_DATA_READ == event) && (2*sizeof(int) < size)) ||
+           ((EVENT_DATA_READ != event) && (2*sizeof(int) == size)));
 
     assert(0 <= event);
     assert(EVENT_COUNT > event);
@@ -742,17 +747,12 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     }
     else {
       if (EVENT_DATA_READ == event) {
-        void *b;
-        int len;
-
-        CHECK_READ(read_binary(&rd,&b,&len));
-        assert(0 < len);
-
+        int dstart = 2*sizeof(int);
         assert(NULL == so->buf);
         assert(0 == so->len);
-
-        so->buf = (char*)b;
-        so->len = len;
+        so->len = size-dstart;
+        so->buf = (char*)malloc(so->len);
+        memcpy(so->buf,&data[dstart],so->len);
       }
       else if (EVENT_DATA_READFINISHED == event) {
         so->iorstatus = event;

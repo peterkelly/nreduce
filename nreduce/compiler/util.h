@@ -45,7 +45,7 @@ typedef struct stack {
   void **data;
 } stack;
 
-array *array_new(int elemsize);
+array *array_new(int elemsize, int initroom);
 int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);
 void array_append(array *arr, const void *data, int size);

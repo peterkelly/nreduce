@@ -1173,9 +1173,9 @@ void compile(source *src, char **bcdata, int *bcsize)
   int strcount;
 
 
-  comp->instructions = array_new(sizeof(instruction));
+  comp->instructions = array_new(sizeof(instruction),0);
   comp->si = NULL;
-  comp->stringmap = array_new(sizeof(char*));
+  comp->stringmap = array_new(sizeof(char*),0);
   comp->cdepth = -1;
 
   assert(0 == array_count(comp->stringmap));

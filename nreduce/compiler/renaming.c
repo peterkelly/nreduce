@@ -138,7 +138,7 @@ void rename_variables(source *src, scomb *sc)
   int i;
 
   if (NULL == src->oldnames)
-    src->oldnames = array_new(sizeof(char*));
+    src->oldnames = array_new(sizeof(char*),0);
 
   for (i = 0; i < sc->nargs; i++)
     stack_push(mappings,mapping_new(sc->argnames[i],sc->argnames[i]));

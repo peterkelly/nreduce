@@ -290,10 +290,15 @@ static void b_if(task *tsk, pntr *argstack)
   argstack[0] = source;
 }
 
-carray *carray_new(task *tsk, int dsize, carray *oldarr, cell *usewrapper)
+carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper)
 {
   carray *arr = (carray*)calloc(1,sizeof(carray));
-  arr->alloc = 8;
+  if (MAX_ARRAY_SIZE < alloc)
+    arr->alloc = MAX_ARRAY_SIZE;
+  else if (0 < alloc)
+    arr->alloc = alloc;
+  else
+    arr->alloc = 8;
   arr->size = 0;
   arr->elemsize = dsize;
   arr->elements = (pntr*)calloc(arr->alloc,arr->elemsize);
@@ -388,7 +393,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
       (*arr)->elements = (pntr*)realloc((*arr)->elements,(*arr)->alloc*(*arr)->elemsize);
     }
 
-    memcpy(((char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,data,count*(*arr)->elemsize);
+    memmove(((char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,data,count*(*arr)->elemsize);
     (*arr)->size += count;
 
     data += count;
@@ -399,7 +404,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 
     check_array_convert(tsk,*arr,"append");
 
-    *arr = carray_new(tsk,dsize,*arr,NULL);
+    *arr = carray_new(tsk,dsize,totalcount,*arr,NULL);
   }
 }
 
@@ -425,7 +430,7 @@ void maybe_expand_array(task *tsk, pntr p)
                cell_types[pntrtype(secondtail)]);
       printed = 1;
 
-      arr = carray_new(tsk,sizeof(pntr),NULL,firstcell);
+      arr = carray_new(tsk,sizeof(pntr),0,NULL,firstcell);
       carray_append(tsk,&arr,&firsthead,1,sizeof(pntr));
       carray_append(tsk,&arr,&secondhead,1,sizeof(pntr));
       arr->tail = secondtail;
@@ -476,7 +481,7 @@ pntr string_to_array(task *tsk, const char *str)
     return tsk->globnilpntr;
   }
   else {
-    carray *arr = carray_new(tsk,1,NULL,NULL);
+    carray *arr = carray_new(tsk,1,strlen(str),NULL,NULL);
     pntr p;
     carray_append(tsk,&arr,str,strlen(str),1);
     make_aref_pntr(p,arr->wrapper,0);
@@ -487,7 +492,7 @@ pntr string_to_array(task *tsk, const char *str)
 int array_to_string(pntr refpntr, char **str)
 {
   pntr p = refpntr;
-  array *buf = array_new(1);
+  array *buf = array_new(1,0);
   char zero = '\0';
   int badtype = -1;
 
@@ -717,7 +722,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
     if (n > arr->size-index)
       n = arr->size-index;
 
-    prefix = carray_new(tsk,arr->elemsize,NULL,NULL);
+    prefix = carray_new(tsk,arr->elemsize,n,NULL,NULL);
     prefix->tail = restpntr;
     make_aref_pntr(argstack[0],prefix->wrapper,0);
     carray_append(tsk,&prefix,arr->elements+index*arr->elemsize,n,arr->elemsize);
@@ -750,7 +755,7 @@ static void b_testarray(task *tsk, pntr *argstack)
 {
   pntr content = argstack[1];
   pntr tail = argstack[0];
-  carray *arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+  carray *arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
   pntr p;
   int i;
   make_aref_pntr(p,arr->wrapper,2);
@@ -824,7 +829,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
     return;
   }
 
-  arr = carray_new(tsk,1,NULL,NULL);
+  arr = carray_new(tsk,1,r,NULL,NULL);
   make_aref_pntr(argstack[0],arr->wrapper,0);
 
   carray_append(tsk,&arr,buf,r,1);
@@ -883,14 +888,14 @@ static void b_readdir1(task *tsk, pntr *argstack)
       typep = string_to_array(tsk,type);
       sizep = statbuf.st_size;
 
-      entryarr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+      entryarr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
       carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
       carray_append(tsk,&entryarr,&typep,1,sizeof(pntr));
       carray_append(tsk,&entryarr,&sizep,1,sizeof(pntr));
       make_aref_pntr(entryp,entryarr->wrapper,0);
 
       if (0 == count) {
-        arr = carray_new(tsk,sizeof(pntr),NULL,NULL);
+        arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
         make_aref_pntr(argstack[0],arr->wrapper,0);
       }
 
@@ -1173,7 +1178,7 @@ static void b_readcon(task *tsk, pntr *argstack)
   assert(0 == status);
 
   if (0 < so->len) {
-    carray *arr = carray_new(tsk,1,NULL,NULL);
+    carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
     make_aref_pntr(argstack[0],arr->wrapper,0);
     carray_append(tsk,&arr,so->buf,so->len,1);
     arr->tail = nextpntr;
@@ -1209,9 +1214,9 @@ static void listen_callback(struct node *n, void *data, int event,
     assert(0 < so->l->accept_frameid);
 
     /* Notify the blocked accept call that there is a connection available */
-    array *wr;
     endpointid destid;
     int ioid = so->l->accept_frameid;
+    int msg[2];
 
     node_log(n,LOG_DEBUG2,"listen_callback: event %s, ioid %d",event_types[event],ioid);
 
@@ -1219,13 +1224,11 @@ static void listen_callback(struct node *n, void *data, int event,
     destid.nodeport = n->mainl->port;
     destid.localid = conn->tsk->endpt->localid;
 
-    wr = write_start();
-    write_int(wr,ioid);
-    write_int(wr,event);
+    msg[0] = ioid;
+    msg[1] = event;
     so->l->accept_frameid = 0;
 
-    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,wr->data,wr->nbytes);
-    write_end(wr);
+    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,msg,2*sizeof(int));
 
     assert(!so->l->dontaccept);
     so->l->dontaccept = 1;

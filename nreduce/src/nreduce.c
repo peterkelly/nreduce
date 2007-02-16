@@ -278,7 +278,7 @@ int main(int argc, char **argv)
   srand(time.tv_usec);
 
   memset(&args,0,sizeof(args));
-  args.extra = array_new(sizeof(char*));
+  args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);
 
   if (NULL != getenv("DISABLE_PARTIAL_EVAL"))

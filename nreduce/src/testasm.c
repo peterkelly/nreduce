@@ -1313,7 +1313,7 @@ void testasm(array *cpucode)
 
 int main()
 {
-  array *cpucode = array_new(sizeof(char));
+  array *cpucode = array_new(sizeof(char),0);
   setbuf(stdout,NULL);
   testasm(cpucode);
   write_asm_raw("compiled.s",cpucode);

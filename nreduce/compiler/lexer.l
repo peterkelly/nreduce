@@ -70,7 +70,7 @@ CHAR                     \'.\'
                            BEGIN(INITIAL); }
 
 \"                       { BEGIN(string);
-                           lexstring = array_new(sizeof(char));
+                           lexstring = array_new(sizeof(char),0);
                            lexstring->nbytes = 0; }
 <string>\"               { char c = '\0';
                            BEGIN(INITIAL);

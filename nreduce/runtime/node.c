@@ -264,8 +264,8 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
   conn->n = n;
   conn->readfd = -1;
   conn->port = -1;
-  conn->recvbuf = array_new(1);
-  conn->sendbuf = array_new(1);
+  conn->recvbuf = array_new(1,IOSIZE*2);
+  conn->sendbuf = array_new(1,IOSIZE*2);
   conn->canread = 1;
   conn->canwrite = 1;
   if (l == n->mainl)

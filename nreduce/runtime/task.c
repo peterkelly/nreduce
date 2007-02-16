@@ -515,9 +515,9 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   tsk->inflight_addrs = (array**)calloc(tsk->groupsize,sizeof(array*));
   tsk->unack_msg_acount = (array**)calloc(tsk->groupsize,sizeof(array*));
   for (i = 0; i < tsk->groupsize; i++) {
-    tsk->inflight_addrs[i] = array_new(sizeof(gaddr));
-    tsk->unack_msg_acount[i] = array_new(sizeof(int));
-    tsk->distmarks[i] = array_new(sizeof(gaddr));
+    tsk->inflight_addrs[i] = array_new(sizeof(gaddr),0);
+    tsk->unack_msg_acount[i] = array_new(sizeof(int),0);
+    tsk->distmarks[i] = array_new(sizeof(gaddr),0);
   }
 
   if (n) {
