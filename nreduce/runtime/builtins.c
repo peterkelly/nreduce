@@ -48,23 +48,27 @@
 
 static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
-#define CHECK_ARG(_argno,_type,_bif) {                                  \
+#define CHECK_ARG(_argno,_type) {                                       \
     if ((_type) != pntrtype(argstack[(_argno)])) {                      \
+      int bif = ((*tsk->runptr)->instr-1)->arg0;                        \
+      assert(OP_BIF == ((*tsk->runptr)->instr-1)->opcode);              \
       set_error(tsk,"%s: %s argument must be of type %s, but got %s",   \
-                builtin_info[(_bif)].name,                              \
-                numnames[builtin_info[(_bif)].nargs-1-(_argno)],        \
+                builtin_info[(bif)].name,                               \
+                numnames[builtin_info[(bif)].nargs-1-(_argno)],         \
                 cell_types[(_type)],                                    \
                 cell_types[pntrtype(argstack[(_argno)])]);              \
       return;                                                           \
     }                                                                   \
   }
 
-#define CHECK_SYSOBJECT_ARG(_argno,_sotype,_bif) {                      \
-    CHECK_ARG(_argno,CELL_SYSOBJECT,B_PRINTEND);                        \
+#define CHECK_SYSOBJECT_ARG(_argno,_sotype) {                           \
+    CHECK_ARG(_argno,CELL_SYSOBJECT);                                   \
     if ((_sotype) != psysobject(argstack[(_argno)])->type) {            \
+      int bif = ((*tsk->runptr)->instr-1)->arg0;                        \
+      assert(OP_BIF == ((*tsk->runptr)->instr-1)->opcode);              \
       set_error(tsk,"%s: %s arg must be CONNECTION, got %s",            \
-                builtin_info[(_bif)].name,                              \
-                numnames[builtin_info[(_bif)].nargs-1-(_argno)],        \
+                builtin_info[(bif)].name,                               \
+                numnames[builtin_info[(bif)].nargs-1-(_argno)],         \
                 sysobject_types[psysobject(argstack[(_argno)])->type]); \
       return;                                                           \
     }                                                                   \
@@ -235,20 +239,20 @@ static void b_bitnot(task *tsk, pntr *argstack)
 
 static void b_sqrt(task *tsk, pntr *argstack)
 {
-  CHECK_ARG(0,CELL_NUMBER,B_SQRT);
+  CHECK_ARG(0,CELL_NUMBER);
   setnumber(&argstack[0],sqrt(argstack[0]));
   /* FIXME: handle NaN result properly (it's not a pointer!) */
 }
 
 static void b_floor(task *tsk, pntr *argstack)
 {
-  CHECK_ARG(0,CELL_NUMBER,B_FLOOR);
+  CHECK_ARG(0,CELL_NUMBER);
   setnumber(&argstack[0],floor(argstack[0]));
 }
 
 static void b_ceil(task *tsk, pntr *argstack)
 {
-  CHECK_ARG(0,CELL_NUMBER,B_CEIL);
+  CHECK_ARG(0,CELL_NUMBER);
   setnumber(&argstack[0],ceil(argstack[0]));
 }
 
@@ -648,7 +652,7 @@ static void b_arrayskip(task *tsk, pntr *argstack)
   pntr refpntr = argstack[0];
   int n;
 
-  CHECK_ARG(1,CELL_NUMBER,B_ARRAYSKIP);
+  CHECK_ARG(1,CELL_NUMBER);
 
   maybe_expand_array(tsk,refpntr);
 
@@ -694,7 +698,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   int n;
   carray *prefix;
 
-  CHECK_ARG(2,CELL_NUMBER,B_ARRAYPREFIX);
+  CHECK_ARG(2,CELL_NUMBER);
   n = (int)npntr;
 
   if (CELL_CONS == pntrtype(refpntr)) {
@@ -737,7 +741,7 @@ static void b_numtostring(task *tsk, pntr *argstack)
   pntr p = argstack[0];
   char str[100];
 
-  CHECK_ARG(0,CELL_NUMBER,B_NUMTOSTRING);
+  CHECK_ARG(0,CELL_NUMBER);
   format_double(str,100,p);
   argstack[0] = string_to_array(tsk,str);
 }
@@ -807,7 +811,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
   cell *c;
   int doclose = 0;
 
-  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_FILE,B_READCHUNK);
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_FILE);
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
@@ -1044,7 +1048,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     sysobject *so;
     cell *c;
 
-    CHECK_ARG(1,CELL_NUMBER,B_OPENCON);
+    CHECK_ARG(1,CELL_NUMBER);
     port = (int)portpntr;
 
     if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
@@ -1129,7 +1133,7 @@ static void b_readcon(task *tsk, pntr *argstack)
   pntr nextpntr = argstack[0];
   int status;
 
-  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION,B_READCON);
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
   so = psysobject(sopntr);
   assert(so->connected);
 
@@ -1246,7 +1250,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
   sysobject *so;
   cell *c;
 
-  CHECK_ARG(0,CELL_NUMBER,B_STARTLISTEN);
+  CHECK_ARG(0,CELL_NUMBER);
   port = (int)portpntr;
 
   if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
@@ -1290,7 +1294,7 @@ static void b_accept(task *tsk, pntr *argstack)
   pntr sopntr = argstack[1];
   sysobject *newso;
 
-  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER,B_ACCEPT);
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER);
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
@@ -1403,9 +1407,9 @@ static void b_print(task *tsk, pntr *argstack)
   pntr p = argstack[0];
   char c;
 
-  CHECK_ARG(0,CELL_NUMBER,B_PRINT);
+  CHECK_ARG(0,CELL_NUMBER);
   if (CELL_NIL != pntrtype(destpntr))
-    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION,B_PRINT);
+    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
 
   if ((p == floor(p)) && (0 < p) && (128 > p))
     c = (int)p;
@@ -1423,10 +1427,10 @@ static void b_printarray(task *tsk, pntr *argstack)
   pntr npntr = argstack[1];
   pntr valpntr = argstack[0];
 
-  CHECK_ARG(0,CELL_AREF,B_PRINTARRAY);
-  CHECK_ARG(1,CELL_NUMBER,B_PRINTARRAY);
+  CHECK_ARG(0,CELL_AREF);
+  CHECK_ARG(1,CELL_NUMBER);
   if (CELL_NIL != pntrtype(destpntr))
-    CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION,B_PRINTARRAY);
+    CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION);
 
   n = (int)npntr;
 
@@ -1451,7 +1455,7 @@ static void b_printend(task *tsk, pntr *argstack)
     sysobject *so;
     connection *conn;
 
-    CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION,B_PRINTEND);
+    CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION);
     so = psysobject(argstack[0]);
     assert(so->connected);
 
