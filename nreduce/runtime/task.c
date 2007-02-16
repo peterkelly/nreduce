@@ -447,6 +447,8 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   cell *globnilvalue;
   int i;
   bcheader *bch;
+  const funinfo *finfo;
+  int fno;
 
   tsk->n = n;
   if (n)
@@ -486,6 +488,10 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   tsk->bcsize = bcsize;
 
   bch = (bcheader*)tsk->bcdata;
+  finfo = bc_funinfo(tsk->bcdata);
+  for (fno = 0; fno < bch->nfunctions; fno++)
+    if (tsk->maxstack < finfo[fno].stacksize)
+      tsk->maxstack = finfo[fno].stacksize;
 
   assert(NULL == tsk->strings);
   assert(0 == tsk->nstrings);
@@ -559,11 +565,10 @@ void task_free(task *tsk)
     array_free(tsk->distmarks[i]);
   }
 
-  while (tsk->freeframe) {
-    frame *next = tsk->freeframe->freelnk;
-    free(tsk->freeframe->data);
-    free(tsk->freeframe);
-    tsk->freeframe = next;
+  while (tsk->frameblocks) {
+    frameblock *next = tsk->frameblocks->next;
+    free(tsk->frameblocks);
+    tsk->frameblocks = next;
   }
 
   free(tsk->strings);

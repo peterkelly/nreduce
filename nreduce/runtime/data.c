@@ -185,7 +185,7 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     if ((count > fr->alloc) || (MAX_FRAME_SIZE <= fr->alloc))
       return READER_INCORRECT_CONTENTS;
 
-    fr->data = (pntr*)calloc(fr->alloc,sizeof(pntr));
+    assert(fr->alloc == tsk->maxstack);
     for (i = 0; i < count; i++)
       CHECK_READ(read_pntr(rd,tsk,&fr->data[i],observe));
     break;

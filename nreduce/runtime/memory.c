@@ -358,7 +358,7 @@ void free_cell_fields(task *tsk, cell *v)
           assert(0 == conn->frameids[WRITE_FRAMEADDR]);
           assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
           assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
-          assert(conn->dontread);
+          assert(conn->dontread); /* FIXME: this is being triggered! */
         }
 
         conn->status = NULL;
@@ -665,23 +665,36 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns)
 frame *frame_new(task *tsk)
 {
   frame *f;
-  if (tsk->freeframe) {
-    int alloc;
-    pntr *data;
-    f = tsk->freeframe;
-    tsk->freeframe = f->freelnk;
+  int framesize = sizeof(frame)+tsk->maxstack*sizeof(pntr);
+  if (NULL == tsk->freeframe) {
+    frameblock *fb = (frameblock*)calloc(1,sizeof(frameblock));
+    int i;
+    int framesperblock = FRAMEBLOCK_SIZE/framesize;
+    fb->next = tsk->frameblocks;
+    tsk->frameblocks = fb;
 
-    alloc = f->alloc;
-    data = f->data;
-    memset(f,0,sizeof(frame));
-    f->alloc = alloc;
-    f->data = data;
+    for (i = 0; i < framesperblock-1; i++)
+      ((frame*)&fb->mem[i*framesize])->freelnk = ((frame*)&fb->mem[(i+1)*framesize]);
+    ((frame*)&fb->mem[i*framesize])->freelnk = NULL;
+
+    tsk->freeframe = (frame*)fb->mem;
   }
-  else {
-    f = (frame*)calloc(1,sizeof(frame));
-  }
+
+  f = tsk->freeframe;
+  tsk->freeframe = f->freelnk;
+  tsk->stats.nallocs += framesize;
+
+  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+    *tsk->endpt->interruptptr = 1;
+
+  assert(!f->used);
+  memset(f,0,framesize);
+  f->used = 1;
+  f->alloc = tsk->maxstack;
+  assert(f->data == (pntr*)(((char*)f)+sizeof(frame)));
 
   f->fno = -1;
+
   return f;
 }
 

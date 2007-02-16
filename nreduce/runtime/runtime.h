@@ -316,10 +316,10 @@ typedef struct frame {
   int fno; /* temp */
 
   int alloc;
-  pntr *data;
 
   int state;
   int resume;
+  int used;
 
   struct frame *freelnk;
   struct frame *waitlnk;
@@ -330,6 +330,7 @@ typedef struct frame {
 
   struct frame *waitframe;
   struct global *waitglo;
+  pntr data[0];
 } frame;
 
 typedef struct frameq {
@@ -397,6 +398,11 @@ typedef struct block {
   cell values[BLOCK_SIZE];
 } block;
 
+typedef struct frameblock {
+  struct frameblock *next;
+  char *mem[FRAMEBLOCK_SIZE];
+} frameblock;
+
 /* FIXME: shouldn't need to use function pointers for send/recv anymore */
 typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int size);
 typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
@@ -415,6 +421,7 @@ typedef struct task {
   /* bytecode */
   char *bcdata;
   int bcsize;
+  int maxstack;
 
   /* communication */
   group *grp;
@@ -478,6 +485,7 @@ typedef struct task {
 
   /* memory */
   block *blocks;
+  frameblock *frameblocks;
   cell *freeptr;
   pntr globnilpntr;
   pntr globtruepntr;
@@ -744,6 +752,7 @@ frame *frame_new(task *tsk);
  \
   _f->freelnk = tsk->freeframe; \
   tsk->freeframe = _f; \
+  _f->used = 0; \
 }
 
 cap *cap_alloc(int arity, int address, int fno);

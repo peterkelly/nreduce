@@ -1102,7 +1102,6 @@ void *execute(task *tsk)
         int base = instr->expcount-1;
         f2->instr = program_ops+cp->address+1;
         f2->fno = cp->fno;
-        pntrstack_grow(&f2->alloc,&f2->data,program_finfo[cp->fno].stacksize);
         for (i = 0; i < cp->count; i++)
           f2->data[base+i] = cp->data[i];
         // f2->instr--; /* so we process the GLOBSTART */
@@ -1113,8 +1112,8 @@ void *execute(task *tsk)
         int i;
         int extra = arity-have;
         int nfc = 0;
-        newf->alloc = program_finfo[cp->fno].stacksize;
-        newf->data = (pntr*)realloc(newf->data,newf->alloc*sizeof(pntr));
+        assert(newf->alloc == tsk->maxstack);
+        assert(newf->data);
         newf->instr = program_ops+cp->address;
         newf->fno = cp->fno;
         for (i = newcount-extra; i < newcount; i++)
@@ -1143,7 +1142,6 @@ void *execute(task *tsk)
       else
         runnable->instr = program_ops+program_finfo[instr->arg0].address+1;
       runnable->fno = instr->arg0;
-      pntrstack_grow(&runnable->alloc,&runnable->data,program_finfo[runnable->fno].stacksize);
       // runnable->instr--; /* so we process the GLOBSTART */
       break;
     case OP_JFALSE: {
@@ -1231,8 +1229,8 @@ void *execute(task *tsk)
       frame *newf = frame_new(tsk);
       int nfc = 0;
       if (program_finfo[fno].stacksize > newf->alloc) {
-        newf->alloc = program_finfo[fno].stacksize;
-        newf->data = (pntr*)realloc(newf->data,newf->alloc*sizeof(pntr));
+        assert(newf->alloc == tsk->maxstack);
+        assert(newf->data);
       }
 
       newf->instr = program_ops+program_finfo[fno].address;
