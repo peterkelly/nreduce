@@ -239,10 +239,10 @@ static int process_imports(source *src)
       list_push(&src->imports,strdup(modname));
 
       if (!strcmp(modname,"util")) {
-        r = source_parse_string(src,util_module,"modules/util.l","util");
+        r = source_parse_string(src,util_module,"modules/util.elc","util");
       }
       else if (!strcmp(modname,"http")) {
-        r = source_parse_string(src,http_module,"modules/http.l","http");
+        r = source_parse_string(src,http_module,"modules/http.elc","http");
       }
       else {
         char *modfilename;
@@ -263,7 +263,7 @@ static int process_imports(source *src)
 int is_from_prelude(source *src, scomb *sc)
 {
   return ((0 <= sc->sl.fileno) &&
-          !strcmp(array_item(src->parsedfiles,sc->sl.fileno,char*),"prelude.l"));
+          !strcmp(array_item(src->parsedfiles,sc->sl.fileno,char*),"prelude.elc"));
 }
 
 void compile_stage(source *src, const char *name)
@@ -348,7 +348,7 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
       assert(array_count(src->parsedfiles) > sc->sl.fileno);
       filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
 
-      if (strcmp(filename,"prelude.l") && strcmp(sc->name,"main")) {
+      if (strcmp(filename,"prelude.elc") && strcmp(sc->name,"main")) {
         s = run_partial(src,sc,NULL,0);
         snode_free(sc->body);
         sc->body = s;

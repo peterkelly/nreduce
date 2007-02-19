@@ -285,7 +285,7 @@ int run_program(node *n, const char *filename)
   endpointid *managerids;
 
   src = source_new();
-  if (0 != source_parse_string(src,prelude,"prelude.l",NULL))
+  if (0 != source_parse_string(src,prelude,"prelude.elc",NULL))
     return -1;
   if (0 != source_parse_file(src,filename,""))
     return -1;

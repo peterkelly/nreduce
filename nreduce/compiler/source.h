@@ -38,7 +38,7 @@
 #define SNODE_WRAP        0x0A
 #define SNODE_COUNT       0x0B
 
-#define MODULE_EXTENSION ".l"
+#define MODULE_EXTENSION ".elc"
 #define MODULE_REF '.'
 
 #define GENVAR_PREFIX "_v"
