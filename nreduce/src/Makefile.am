@@ -14,5 +14,5 @@ CLEANFILES = *.da *.bb *.bbg *.gcov prelude.c
 
 prelude.c: prelude.l
 	echo 'const char *prelude = ' > prelude.c
-	cat prelude.l | sed -e 's/\"/\\"/g' -e 's/^/\"/' -e 's/$$/\\n\"/' >> prelude.c
+	cat prelude.l | sed -e 's/\\/\\\\/g' -e 's/\"/\\"/g' -e 's/^/\"/' -e 's/$$/\\n\"/' >> prelude.c
 	echo ';' >> prelude.c

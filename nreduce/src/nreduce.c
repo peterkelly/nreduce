@@ -310,7 +310,7 @@ int main(int argc, char **argv)
 
 /*   debug_stage("Source code parsing"); */
 
-  if (0 != source_parse_string(src,prelude,"prelude.l"))
+  if (0 != source_parse_string(src,prelude,"prelude.l",NULL))
     return -1;
   if (0 != source_parse_file(src,args.filename,""))
     return -1;

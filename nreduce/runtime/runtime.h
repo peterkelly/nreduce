@@ -65,49 +65,53 @@
 #define B_FLOOR          18
 #define B_CEIL           19
 #define B_NUMTOSTRING    20
+#define B_STRINGTONUM1   21
 
 /* Logical operations */
-#define B_IF             21
-#define B_AND            22
-#define B_OR             23
-#define B_NOT            24
+#define B_IF             22
+#define B_AND            23
+#define B_OR             24
+#define B_NOT            25
 
 /* Lists and arrays */
-#define B_CONS           25
-#define B_HEAD           26
-#define B_TAIL           27
-#define B_ARRAYSIZE      28
-#define B_ARRAYSKIP      29
-#define B_ARRAYPREFIX    30
-#define B_TESTSTRING     31
-#define B_TESTARRAY      32
+#define B_CONS           26
+#define B_HEAD           27
+#define B_TAIL           28
+#define B_ARRAYSIZE      29
+#define B_ARRAYSKIP      30
+#define B_ARRAYPREFIX    31
+#define B_TESTSTRING     32
+#define B_TESTARRAY      33
 
 /* Sequential/parallel directives */
-#define B_SEQ            33
-#define B_PAR            34
-#define B_PARHEAD        35
+#define B_SEQ            34
+#define B_PAR            35
+#define B_PARHEAD        36
 
 /* Filesystem access */
-#define B_OPENFD         36
-#define B_READCHUNK      37
-#define B_READDIR1       38
-#define B_FEXISTS        39
-#define B_FISDIR         40
+#define B_OPENFD         37
+#define B_READCHUNK      38
+#define B_READDIR1       39
+#define B_FEXISTS        40
+#define B_FISDIR         41
 
 /* Networking */
-#define B_OPENCON        41
-#define B_READCON        42
-#define B_STARTLISTEN    43
-#define B_ACCEPT         44
+#define B_OPENCON        42
+#define B_READCON        43
+#define B_STARTLISTEN    44
+#define B_ACCEPT         45
 
 /* Terminal and network output */
-#define B_NCHARS         45
-#define B_PRINT          46
-#define B_PRINTARRAY     47
-#define B_PRINTEND       48
-#define B_ECHO           49
+#define B_NCHARS         46
+#define B_PRINT          47
+#define B_PRINTARRAY     48
+#define B_PRINTEND       49
+#define B_ECHO           50
 
-#define NUM_BUILTINS     50
+/* Other */
+#define B_ERROR          51
+
+#define NUM_BUILTINS     52
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

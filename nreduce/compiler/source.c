@@ -56,6 +56,9 @@ const char *snode_types[SNODE_COUNT] = {
 extern int yyparse(void);
 extern FILE *yyin;
 
+extern const char *util_module;
+extern const char *http_module;
+
 #define YY_BUF_SIZE 16384
 
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
@@ -158,7 +161,7 @@ static int check_for_main(source *src)
   return 0;
 }
 
-int source_parse_string(source *src, const char *str, const char *filename)
+int source_parse_string(source *src, const char *str, const char *filename, const char *modname)
 {
   YY_BUFFER_STATE bufstate;
   int r;
@@ -170,7 +173,7 @@ int source_parse_string(source *src, const char *str, const char *filename)
   yy_switch_to_buffer(bufstate);
 
   parse_src = src;
-  parse_modname = "";
+  parse_modname = modname ? modname : "";
   r = yyparse();
 
   yy_delete_buffer(bufstate);
@@ -185,7 +188,6 @@ int source_parse_file(source *src, const char *filename, const char *modname)
 {
   YY_BUFFER_STATE bufstate;
   int r;
-  list *newimports;
 
   if (NULL == (yyin = fopen(filename,"r"))) {
     perror(filename);
@@ -208,31 +210,6 @@ int source_parse_file(source *src, const char *filename, const char *modname)
 
   fclose(yyin);
 
-  if (0 == r) {
-    list *l;
-
-    newimports = src->newimports;
-    src->newimports = NULL;
-
-    for (l = newimports; l; l = l->next) {
-      char *modname = (char*)l->data;
-      list_push(&src->imports,strdup(modname));
-    }
-
-    for (l = newimports; l && (0 == r); l = l->next) {
-      char *modname = (char*)l->data;
-      char *modfilename;
-
-      modfilename = (char*)malloc(strlen(modname)+strlen(MODULE_EXTENSION)+1);
-      sprintf(modfilename,"%s%s",modname,MODULE_EXTENSION);
-
-      r = source_parse_file(src,modfilename,modname);
-
-      free(modfilename);
-    }
-    list_free(newimports,free);
-  }
-
   return r;
 }
 
@@ -246,6 +223,41 @@ void add_import(source *src, const char *name)
     if (!strcmp(name,(char*)l->data))
       return;
   list_push(&src->newimports,strdup(name));
+}
+
+static int process_imports(source *src)
+{
+  int r = 0;
+
+  while ((NULL != src->newimports) && (0 == r)) {
+    list *l;
+    list *newimports = src->newimports;
+    src->newimports = NULL;
+
+    for (l = newimports; l && (0 == r); l = l->next) {
+      char *modname = (char*)l->data;
+      list_push(&src->imports,strdup(modname));
+
+      if (!strcmp(modname,"util")) {
+        r = source_parse_string(src,util_module,"modules/util.l","util");
+      }
+      else if (!strcmp(modname,"http")) {
+        r = source_parse_string(src,http_module,"modules/http.l","http");
+      }
+      else {
+        char *modfilename;
+
+        modfilename = (char*)malloc(strlen(modname)+strlen(MODULE_EXTENSION)+1);
+        sprintf(modfilename,"%s%s",modname,MODULE_EXTENSION);
+
+        r = source_parse_file(src,modfilename,modname);
+
+        free(modfilename);
+      }
+    }
+    list_free(newimports,free);
+  }
+  return r;
 }
 
 int is_from_prelude(source *src, scomb *sc)
@@ -284,12 +296,17 @@ int handle_unbound(source *src, list *unbound)
 
 int source_process(source *src, int stopafterlambda, int dispartialsink)
 {
-  int sccount = array_count(src->scombs);
+  int sccount;
   int scno;
   list *unbound = NULL;
 
+  if (0 != process_imports(src))
+    return -1;
+
   if (0 != check_for_main(src))
     return -1;
+
+  sccount = array_count(src->scombs);
 
   compile_stage(src,"Variable renaming"); /* renaming.c */
   for (scno = 0; scno < sccount; scno++) {

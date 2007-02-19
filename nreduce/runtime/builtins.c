@@ -743,7 +743,28 @@ static void b_numtostring(task *tsk, pntr *argstack)
 
   CHECK_ARG(0,CELL_NUMBER);
   format_double(str,100,p);
+  assert(0 < strlen(str));
   argstack[0] = string_to_array(tsk,str);
+}
+
+static void b_stringtonum1(task *tsk, pntr *argstack)
+{
+  pntr p = argstack[0];
+  int badtype;
+  char *str;
+  char *end = NULL;
+
+  if (0 <= (badtype = array_to_string(p,&str))) {
+    set_error(tsk,"stringtonum1: argument is not a string (contains non-char: %s)",
+              cell_types[badtype]);
+    return;
+  }
+
+  argstack[0] = strtod(str,&end);
+  if (('\0' == *str) || ('\0' != *end))
+    set_error(tsk,"stringtonum1: \"%s\" is not a valid number",str);
+
+  free(str);
 }
 
 static void b_teststring(task *tsk, pntr *argstack)
@@ -1470,7 +1491,7 @@ static void b_printend(task *tsk, pntr *argstack)
   argstack[0] = tsk->globnilpntr;
 }
 
-static void b_echo(task *tsk, pntr *argstack)
+static void b_echo1(task *tsk, pntr *argstack)
 {
   char *str;
   int badtype;
@@ -1483,6 +1504,22 @@ static void b_echo(task *tsk, pntr *argstack)
   fprintf(tsk->output,"%s",str);
   free(str);
   argstack[0] = tsk->globnilpntr;
+}
+
+static void b_error1(task *tsk, pntr *argstack)
+{
+  pntr p = argstack[0];
+  int badtype;
+  char *str;
+
+  if (0 <= (badtype = array_to_string(p,&str))) {
+    set_error(tsk,"error1: argument is not a string (contains non-char: %s)",cell_types[badtype]);
+    return;
+  }
+
+  set_error(tsk,"%s",str);
+  free(str);
+  return;
 }
 
 int get_builtin(const char *name)
@@ -1522,7 +1559,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "sqrt",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_sqrt           },
 { "floor",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_floor          },
 { "ceil",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_ceil           },
-{ "numtostring",    1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_numtostring    },
+{ "numtostring",    1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_numtostring    },
+{ "stringtonum1",   1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_stringtonum1   },
 
 /* Logical operations */
 { "if",             3, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_if             },
@@ -1563,7 +1601,10 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "print",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_print          },
 { "printarray",     3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printarray     },
 { "printend",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printend       },
-{ "echo",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_echo           },
+{ "echo1",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_echo1          },
+
+/* Other */
+{ "error1",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error1         },
 
 };
 

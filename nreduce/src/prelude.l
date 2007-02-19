@@ -64,10 +64,12 @@ len1 !total lst = (if lst
 len lst = (len1 0 lst)
 
 
-skip n lst = (letrec partlen = (arraysize lst) in
+skip n lst = (if (<= n 0)
+                 lst
+             (letrec partlen = (arraysize lst) in
                      (if (< n partlen)
                          (arrayskip n lst)
-                     (skip (- n partlen) (arrayskip partlen lst))))
+                     (skip (- n partlen) (arrayskip partlen lst)))))
 
 item n lst = (letrec partlen = (arraysize lst) in
                      (if (< n partlen)
@@ -129,3 +131,16 @@ filter f lst =
         (cons (head lst) (filter f (tail lst)))
         (filter f (tail lst)))
     nil)
+
+reverse1 lst rev =
+(if lst
+    (reverse1 (tail lst) (cons (head lst) rev))
+    rev)
+
+reverse lst = (reverse1 lst nil)
+
+echo str = (echo1 (forcelist str))
+
+stringtonum str = (stringtonum1 (forcelist str))
+
+error str = (error1 (forcelist str))

@@ -840,13 +840,13 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
   if (NULL == *tsk->runptr) {
     int diffms;
 
-    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
-      return 1;
-
     if (NULL != tsk->sparked.first) {
       run_frame(tsk,tsk->sparked.first);
       return 0;
     }
+
+    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
+      return 1;
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,*nextfish);
