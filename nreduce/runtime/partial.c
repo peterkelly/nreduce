@@ -360,7 +360,7 @@ static int apply_one(task *tsk, pntr p)
     return makeind(tsk,p,innerargs[1],"Applied (tail (cons a b)) -> b");
 
   // Rule 15: (if (restrue ...) a b) -> a
-  if ((B_IF == bif) && builtin_info[innerbif].restrue)
+  if ((B_IF == bif) && (0 <= innerbif) && builtin_info[innerbif].restrue)
     return makeind(tsk,p,args[1],"Applied (if (restrue ...) a b) -> a");
 
   // Rule 16: (if (if a b c) d e) -> (if a (if b d e) (if c d e))
