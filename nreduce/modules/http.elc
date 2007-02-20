@@ -16,17 +16,17 @@ get url = (http:parse_url url (get2 url))
 
 get2 url scheme host port path =
 (letrec
-    request = (appendn 5 "GET " path " HTTP/1.1\r\nHost: " host "\r\nConnection: close\r\n\r\n")
-    stream = (connect host (stringtonum port) request)
+  request = (appendn 5 "GET " path " HTTP/1.1\r\nHost: " host "\r\nConnection: close\r\n\r\n")
+  stream = (connect host (stringtonum port) request)
  in
-    (http:parse_response stream (get3 url)))
+  (http:parse_response stream (get3 url)))
 
 get3 url version status reason headers body =
 (if (= status 302)
-    (get (http:get_header "location" headers))
-    (if (!= status 200)
-        (error (append "HTTP error " (append (numtostring status) (append ": " url))))
-        body))
+  (get (http:get_header "location" headers))
+  (if (!= status 200)
+    (error (append "HTTP error " (append (numtostring status) (append ": " url))))
+    body))
 
 //==================================================================================================
 // http:parse_url str fun
@@ -45,28 +45,28 @@ parse_url str = (pu_scheme str str 0)
 
 pu_scheme str start !count =
 (if (= (head str) ':')
-    (pu_host (prefix count start) (skip 3 str))
-    (pu_scheme (tail str) start (+ count 1)))
+  (pu_host (prefix count start) (skip 3 str))
+  (pu_scheme (tail str) start (+ count 1)))
 
 pu_host scheme str = (pu_host1 scheme str str 0)
 
 pu_host1 scheme str start !count =
 (if str
-    (if (= (head str) ':')
-        (pu_port scheme (prefix count start) (tail str))
-        (if (= (head str) '/')
-            (pu_path scheme (prefix count start) "80" str)
-            (pu_host1 scheme (tail str) start (+ count 1))))
-    (pu_path scheme (prefix count start) "80" "/"))
+  (if (= (head str) ':')
+    (pu_port scheme (prefix count start) (tail str))
+    (if (= (head str) '/')
+      (pu_path scheme (prefix count start) "80" str)
+      (pu_host1 scheme (tail str) start (+ count 1))))
+  (pu_path scheme (prefix count start) "80" "/"))
 
 pu_port scheme host str = (pu_port1 scheme host str str 0)
 
 pu_port1 scheme host str start !count =
 (if str
-    (if (= (head str) '/')
-        (pu_path scheme host (prefix count start) str)
-        (pu_port1 scheme host (tail str) start (+ count 1)))
-    (pu_path scheme host (prefix count start) "/"))
+  (if (= (head str) '/')
+    (pu_path scheme host (prefix count start) str)
+    (pu_port1 scheme host (tail str) start (+ count 1)))
+  (pu_path scheme host (prefix count start) "/"))
 
 pu_path scheme host port path fun = (fun scheme host port path)
 
@@ -84,9 +84,9 @@ pu_path scheme host port path fun = (fun scheme host port path)
 
 got_request startline headers body fun =
 (letrec
-    parts = (util:tokens startline)
+  parts = (util:tokens startline)
  in
-    (fun (item 0 parts) (item 1 parts) (item 2 parts) headers body))
+  (fun (item 0 parts) (item 1 parts) (item 2 parts) headers body))
 
 parse_request stream =
 (parse_message stream got_request)
@@ -105,9 +105,9 @@ parse_request stream =
 
 got_response startline headers body fun =
 (letrec
-    parts = (util:tokens startline)
+  parts = (util:tokens startline)
  in
-    (fun (item 0 parts) (stringtonum (item 1 parts)) (item 2 parts) headers body))
+  (fun (item 0 parts) (stringtonum (item 1 parts)) (item 2 parts) headers body))
 
 parse_response stream =
 (parse_message stream got_response)
@@ -135,30 +135,30 @@ parse_message stream = (parse_message1 nil nil stream stream 0)
 
 parse_message1 startline headers stream start !count =
 (if stream
-    (if (= (head stream) '\n')
-        (parse_message2 startline headers (tail stream) start count)
-        (if (if (= (head stream) '\r')
-                (if (tail stream)
-                    (= (head (tail stream)) '\n')
-                    nil)
-                nil)
-            (parse_message2 startline headers (tail (tail stream)) start count)
-            (parse_message1 startline headers (tail stream) start (+ count 1))))
-    (got_message startline headers))
+  (if (= (head stream) '\n')
+    (parse_message2 startline headers (tail stream) start count)
+    (if (if (= (head stream) '\r')
+        (if (tail stream)
+          (= (head (tail stream)) '\n')
+          nil)
+        nil)
+      (parse_message2 startline headers (tail (tail stream)) start count)
+      (parse_message1 startline headers (tail stream) start (+ count 1))))
+  (got_message startline headers))
 
 parse_message2 startline headers !s start !count =
 (if (= count 0)
-    (got_message startline headers s)
-    (if startline
-        (parse_message1 startline (cons (prefix count start) headers) s s 0)
-        (parse_message1 (prefix count start) headers s s 0)))
+  (got_message startline headers s)
+  (if startline
+    (parse_message1 startline (cons (prefix count start) headers) s s 0)
+    (parse_message1 (prefix count start) headers s s 0)))
 
 got_message startline hdrlines body fun =
 (letrec
-    headers = (parse_headers (reverse hdrlines))
-    chunked = (streq (util:lcase (http:get_header "transfer-encoding" headers)) "chunked")
+  headers = (parse_headers (reverse hdrlines))
+  chunked = (streq (util:lcase (http:get_header "transfer-encoding" headers)) "chunked")
  in
-    (fun startline headers (if chunked (dechunk body) body)))
+  (fun startline headers (if chunked (dechunk body) body)))
 
 //==================================================================================================
 // http:parse_headers lines
@@ -173,27 +173,27 @@ got_message startline hdrlines body fun =
 
 parse_headers lines =
 (if lines
-    (phname (head lines) (head lines) 0 (tail lines))
-    nil)
+  (phname (head lines) (head lines) 0 (tail lines))
+  nil)
 
 phname line start !count rest =
 (if line
-    (if (= (head line) ':')
-        (phvaluestart (util:lcase (prefix count start)) (tail line) rest)
-        (phname (tail line) start (+ count 1) rest))
-    nil)
+  (if (= (head line) ':')
+    (phvaluestart (util:lcase (prefix count start)) (tail line) rest)
+    (phname (tail line) start (+ count 1) rest))
+  nil)
 
 phvaluestart name line rest =
 (if line
-    (if (= (head line) ' ')
-        (phvaluestart name (tail line) rest)
-        (phvalue name nil line line 0 rest))
-    nil)
+  (if (= (head line) ' ')
+    (phvaluestart name (tail line) rest)
+    (phvalue name nil line line 0 rest))
+  nil)
 
 phvalue name got line start count rest =
 (if (if rest (= (head (head rest)) ' ') nil)
-    (phvalue name (append got line) (head rest) (head rest) 0 (tail rest))
-    (cons (cons name (append got line)) (parse_headers rest)))
+  (phvalue name (append got line) (head rest) (head rest) 0 (tail rest))
+  (cons (cons name (append got line)) (parse_headers rest)))
 
 //==================================================================================================
 // http:get_header name lst
@@ -205,13 +205,13 @@ phvalue name got line start count rest =
 
 get_header name lst =
 (if lst
-    (letrec
-        hdr = (head lst)
-     in
-        (if (streq (head hdr) name)
-            (tail hdr)
-            (get_header name (tail lst))))
-    nil)
+  (letrec
+    hdr = (head lst)
+   in
+    (if (streq (head hdr) name)
+      (tail hdr)
+      (get_header name (tail lst))))
+  nil)
 
 //==================================================================================================
 // http:dechunk stream
@@ -229,13 +229,13 @@ dechunk stream =
 
 dechunk_len stream start !count =
 (if (= (head stream) '\r')
-    (letrec
-        chunklen = (util:parsehex (prefix count start))
-        chunkdata = (tail (tail stream))
-        next = (skip (+ chunklen 2) chunkdata)
-     in
-        (if (= chunklen 0)
-            nil
-            (append (prefix chunklen chunkdata)
-                (dechunk_len next next 0))))
-    (dechunk_len (tail stream) start (+ count 1)))
+  (letrec
+    chunklen = (util:parsehex (prefix count start))
+    chunkdata = (tail (tail stream))
+    next = (skip (+ chunklen 2) chunkdata)
+   in
+    (if (= chunklen 0)
+      nil
+      (append (prefix chunklen chunkdata)
+        (dechunk_len next next 0))))
+  (dechunk_len (tail stream) start (+ count 1)))

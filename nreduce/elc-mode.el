@@ -46,8 +46,8 @@
   (if (bobp)
       (indent-line-to 0)                ; First line is always non-indented
     (if (looking-at "^[ \t]*in")
-        (indent-line-to (- (* (buffer-syntactic-context-depth) 4) 3))
-      (indent-line-to (* (buffer-syntactic-context-depth) 4)))))
+        (indent-line-to (- (* (buffer-syntactic-context-depth) default-tab-width) 1))
+      (indent-line-to (* (buffer-syntactic-context-depth) default-tab-width)))))
 
 (defun elc-mode ()
   (interactive)
