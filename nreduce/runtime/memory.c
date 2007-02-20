@@ -321,9 +321,7 @@ void free_cell_fields(task *tsk, cell *v)
   assert(CELL_EMPTY != v->type);
   switch (celltype(v)) {
   case CELL_AREF: {
-    carray *arr = (carray*)get_pntr(v->field1);
-    free(arr->elements);
-    free(arr);
+    free(get_pntr(v->field1));
     break;
   }
   case CELL_FRAME: {

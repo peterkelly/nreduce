@@ -251,10 +251,10 @@ typedef struct carray {
   int alloc;
   int size;
   int elemsize;
-  void *elements;
   pntr tail;
   cell *wrapper;
   int nchars;
+  char elements[];
 } carray;
 
 typedef struct pntrstack {

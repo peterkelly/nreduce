@@ -296,18 +296,19 @@ static void b_if(task *tsk, pntr *argstack)
 
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper)
 {
-  carray *arr = (carray*)calloc(1,sizeof(carray));
+  carray *arr;
+
   if (MAX_ARRAY_SIZE < alloc)
-    arr->alloc = MAX_ARRAY_SIZE;
-  else if (0 < alloc)
-    arr->alloc = alloc;
-  else
-    arr->alloc = 8;
+    alloc = MAX_ARRAY_SIZE;
+  else if (0 >= alloc)
+    alloc = 8;
+
+  arr = (carray*)malloc(sizeof(carray)+alloc*dsize);
+  arr->alloc = alloc;
   arr->size = 0;
   arr->elemsize = dsize;
-  arr->elements = (pntr*)calloc(arr->alloc,arr->elemsize);
   arr->tail = tsk->globnilpntr;
-
+  arr->nchars = 0;
   arr->wrapper = usewrapper ? usewrapper : alloc_cell(tsk);
   arr->wrapper->type = CELL_AREF;
   make_pntr(arr->wrapper->field1,arr);
@@ -328,19 +329,17 @@ int pntr_is_char(pntr p)
   return 0;
 }
 
-void convert_to_string(task *tsk, carray *arr)
+static void convert_to_string(task *tsk, carray *arr)
 {
-  unsigned char *newelements;
+  pntr *elemp = (pntr*)arr->elements;
+  char *charp = (char*)arr->elements;
   int i;
+
   assert(sizeof(pntr) == arr->elemsize);
   assert(arr->nchars == arr->size);
 
-  newelements = (unsigned char*)malloc(arr->size);
   for (i = 0; i < arr->size; i++)
-    newelements[i] = (unsigned char)((pntr*)arr->elements)[i];
-
-  free(arr->elements);
-  arr->elements = newelements;
+    charp[i] = (unsigned char)elemp[i];
   arr->elemsize = 1;
 }
 
@@ -392,9 +391,12 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
       count = MAX_ARRAY_SIZE - (*arr)->size;
 
     if ((*arr)->alloc < (*arr)->size+count) {
+      cell *wrapper = (*arr)->wrapper;
+      assert(wrapper);
       while ((*arr)->alloc < (*arr)->size+count)
         (*arr)->alloc *= 2;
-      (*arr)->elements = (pntr*)realloc((*arr)->elements,(*arr)->alloc*(*arr)->elemsize);
+      (*arr) = (carray*)realloc((*arr),sizeof(carray)+(*arr)->alloc*(*arr)->elemsize);
+      make_pntr(wrapper->field1,*arr);
     }
 
     memmove(((char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,data,count*(*arr)->elemsize);
