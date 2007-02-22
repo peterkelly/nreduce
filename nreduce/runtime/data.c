@@ -191,7 +191,7 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     break;
   }
   case CELL_CAP: {
-    cap *cp = cap_alloc(1,0,0);
+    cap *cp = cap_alloc(tsk,1,0,0);
     cell *capcell;
     int i;
 

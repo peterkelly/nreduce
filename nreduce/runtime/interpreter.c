@@ -815,7 +815,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
   if (tsk->done)
     return 1;
 
-  if (tsk->stats.nallocs >= COLLECT_THRESHOLD) {
+  if (tsk->alloc_bytes >= COLLECT_THRESHOLD) {
     local_collect(tsk);
 
     if (getenv("GC_STATS")) {
@@ -881,7 +881,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
        much memory allocation done during this time, there may be socket connections lying around
        that are no longer referenced and should therefore be cleaned up. */
     if (0 >= timeval_diffms(now,*nextgc)) {
-      tsk->stats.nallocs = COLLECT_THRESHOLD;
+      tsk->alloc_bytes = COLLECT_THRESHOLD;
       *tsk->endpt->interruptptr = 1; /* may be another one */
     }
 
@@ -952,8 +952,8 @@ void *execute(task *tsk)
     }
     #endif
 
-    #ifdef PROFILING
-    tsk->stats.op_usage[instr->opcode]++;
+    #ifdef PROFILING 
+    tsk->stats.ninstrs++;
     tsk->stats.usage[runnable->instr-program_ops-1]++;
     #endif
 
@@ -1075,7 +1075,10 @@ void *execute(task *tsk)
            FRAME's stack */
         int i;
         pntr rep;
-        cap *newcp = cap_alloc(cp->arity,cp->address,cp->fno);
+        cap *newcp = cap_alloc(tsk,cp->arity,cp->address,cp->fno);
+        #ifdef PROFILING
+        tsk->stats.caps[cp->fno]++;
+        #endif
         newcp->sl = cp->sl;
         newcp->data = (pntr*)malloc((instr->expcount-1+cp->count)*sizeof(pntr));
         newcp->count = 0;
@@ -1102,6 +1105,10 @@ void *execute(task *tsk)
         int base = instr->expcount-1;
         f2->instr = program_ops+cp->address+1;
         f2->fno = cp->fno;
+        #ifdef PROFILING
+        if (0 <= f2->fno)
+          tsk->stats.funcalls[f2->fno]++;
+        #endif
         for (i = 0; i < cp->count; i++)
           f2->data[base+i] = cp->data[i];
         // f2->instr--; /* so we process the GLOBSTART */
@@ -1116,6 +1123,9 @@ void *execute(task *tsk)
         assert(newf->data);
         newf->instr = program_ops+cp->address;
         newf->fno = cp->fno;
+        #ifdef PROFILING
+        tsk->stats.frames[cp->fno]++;
+        #endif
         for (i = newcount-extra; i < newcount; i++)
           newf->data[nfc++] = f2->data[i];
         for (i = 0; i < cp->count; i++)
@@ -1142,6 +1152,10 @@ void *execute(task *tsk)
       else
         runnable->instr = program_ops+program_finfo[instr->arg0].address+1;
       runnable->fno = instr->arg0;
+      #ifdef PROFILING
+      if (0 <= runnable->fno)
+        tsk->stats.funcalls[runnable->fno]++;
+      #endif
       // runnable->instr--; /* so we process the GLOBSTART */
       break;
     case OP_JFALSE: {
@@ -1207,7 +1221,10 @@ void *execute(task *tsk)
       int n = instr->arg1;
       int i;
       cell *capv;
-      cap *c = cap_alloc(program_finfo[fno].arity,program_finfo[fno].address,fno);
+      cap *c = cap_alloc(tsk,program_finfo[fno].arity,program_finfo[fno].address,fno);
+      #ifdef PROFILING
+      tsk->stats.caps[fno]++;
+      #endif
       c->sl.fileno = instr->fileno;
       c->sl.lineno = instr->lineno;
       c->data = (pntr*)malloc(n*sizeof(pntr));
@@ -1235,6 +1252,9 @@ void *execute(task *tsk)
 
       newf->instr = program_ops+program_finfo[fno].address;
       newf->fno = fno;
+      #ifdef PROFILING
+      tsk->stats.frames[fno]++;
+      #endif
 
       newfholder = alloc_cell(tsk);
       newfholder->type = CELL_FRAME;
@@ -1298,6 +1318,9 @@ void *execute(task *tsk)
   }
 
   node_log(tsk->n,LOG_INFO,"Task completed");
+  #ifdef PROFILING
+  print_profile(tsk);
+  #endif
   tsk->done = 1;
   task_free(tsk);
   return NULL;

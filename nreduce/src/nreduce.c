@@ -49,14 +49,10 @@
 
 #define WORKER_PORT 2000
 
-extern const char *prelude;
-
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
 struct arguments {
   int compileinfo;
-  char *statistics;
-  int profiling;
   int nopartialsink;
   int bytecode;
   int engine;
@@ -85,8 +81,6 @@ static void usage()
 "\n"
 "  -h, --help               Help (this message)\n"
 "  -c, --compile-stages     Print debug info about each compilation stage\n"
-"  -s, --statistics FILE    Write statistics to FILE\n"
-"  -p, --profiling          Show profiling information\n"
 "  -n, --no-partial         Disable partial evaluation/letrec sinking\n"
 "  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
 "  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
@@ -123,18 +117,10 @@ void parse_args(int argc, char **argv)
     else if (!strcmp(argv[i],"-c") || !strcmp(argv[i],"--compile-stages")) {
       args.compileinfo = 1;
     }
-    else if (!strcmp(argv[i],"-s") || !strcmp(argv[i],"--statistics")) {
-      if (++i >= argc)
-        usage();
-      args.statistics = argv[i];
-    }
-    else if (!strcmp(argv[i],"-p") || !strcmp(argv[i],"--profiling")) {
-      args.profiling = 1;
-    }
     else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--no-partial")) {
       args.nopartialsink = 1;
     }
-    else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-gcode")) {
+    else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-bytecode")) {
       args.bytecode = 1;
     }
     else if (!strcmp(argv[i],"-e") || !strcmp(argv[i],"--engine")) {
@@ -268,7 +254,6 @@ int main(int argc, char **argv)
   source *src;
   int bcsize;
   char *bcdata;
-  FILE *statsfile = NULL;
   struct timeval time;
   int r = 0;
 
@@ -295,11 +280,6 @@ int main(int argc, char **argv)
   if (args.worker)
     return worker_mode();
 
-  if (args.statistics && (NULL == (statsfile = fopen(args.statistics,"w")))) {
-    perror(args.statistics);
-    exit(1);
-  }
-
   if (1 != array_count(args.extra))
     usage();
 
@@ -310,8 +290,6 @@ int main(int argc, char **argv)
 
 /*   debug_stage("Source code parsing"); */
 
-  if (0 != source_parse_string(src,prelude,"prelude.elc",NULL))
-    return -1;
   if (0 != source_parse_file(src,args.filename,""))
     return -1;
 
@@ -331,10 +309,7 @@ int main(int argc, char **argv)
     debug_partial(src,args.partial,args.trace,args.trace_type);
   }
   else if (ENGINE_REDUCER == args.engine) {
-    run_reduction(src,statsfile,args.trace,args.trace_type);
-
-    if (args.statistics)
-      fclose(statsfile);
+    run_reduction(src,args.trace,args.trace_type);
   }
   else {
     if (0 != source_compile(src,&bcdata,&bcsize))
@@ -353,23 +328,8 @@ int main(int argc, char **argv)
     }
 
     if (ENGINE_INTERPRETER == args.engine) {
-      const bcheader *bch = (const bcheader*)bcdata;
-      int *usage = NULL;
       debug_stage("Interpreter");
-
-      if (args.profiling)
-        usage = (int*)malloc(bch->nops*sizeof(int));
-
       r = worker("127.0.0.1",0,bcdata,bcsize);
-
-      if (args.profiling) {
-        fprintf(statsfile,"\n");
-        bc_print(bcdata,statsfile,src,1,usage);
-        free(usage);
-      }
-
-      if (args.statistics)
-        fclose(statsfile);
     }
     else {
 #if 0

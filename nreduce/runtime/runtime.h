@@ -344,25 +344,32 @@ typedef struct frameq {
 } frameq;
 
 typedef struct procstats {
-  int *funcalls;
   int *usage;
-  int *op_usage;
-  int totalallocs;
-  int ncollections;
-  int nscombappls;
+  int ninstrs;
   int nreductions;
   int nsparks;
-  int nallocs;
-  int nextframeid;
-  int *framecompletions;
+  int fetches;
+
+  /* Communication */
   int *sendcount;
   int *sendbytes;
   int *recvcount;
   int *recvbytes;
-  int *fusage;
   int sparks;
   int sparksused;
-  int fetches;
+
+  /* Memory allocation */
+  int cell_allocs;
+  int array_allocs;
+  int array_resizes;
+  int frame_allocs;
+  int cap_allocs;
+  int gcs;
+
+  /* Functions */
+  int *funcalls;
+  int *frames;
+  int *caps;
 } procstats;
 
 typedef struct gaddr {
@@ -500,6 +507,7 @@ typedef struct task {
   int indistgc;
   int inmark;
   pntrstack *markstack;
+  int alloc_bytes;
 
   /* general */
   FILE *output;
@@ -531,6 +539,7 @@ typedef struct task {
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n);
 void task_free(task *tsk);
 void task_kill_locked(task *tsk);
+void print_profile(task *tsk);
 
 global *pntrhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);
@@ -698,7 +707,7 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 pntr makescref(task *tsk, scomb *sc, int skip);
 pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
-void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type);
+void run_reduction(source *src, char *trace_dir, int trace_type);
 
 /* partial evaluation */
 
@@ -760,12 +769,11 @@ frame *frame_new(task *tsk);
   _f->used = 0; \
 }
 
-cap *cap_alloc(int arity, int address, int fno);
+cap *cap_alloc(task *tsk, int arity, int address, int fno);
 void cap_dealloc(cap *c);
 
 void print_pntr(FILE *f, pntr p);
 
-void statistics(task *tsk, FILE *f);
 void dump_info(task *tsk);
 void dump_globals(task *tsk);
 

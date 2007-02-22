@@ -73,8 +73,7 @@ pu_path scheme host port path fun = (fun scheme host port path)
 //==================================================================================================
 // http:parse_request stream fun
 //
-// Parses a HTTP request received from a client. The stream is the 
-// Parses a HTTP response received from a server. The stream is the raw data received over the
+// Parses a HTTP request received from a client. The stream is the raw data received over the
 // connection. fun must be a function of 5 arguments: method uri version headers body; when the
 // request parsing is complete it will be passed the relevant components of the response.
 //
@@ -82,14 +81,14 @@ pu_path scheme host port path fun = (fun scheme host port path)
 // and HTTP version.
 //==================================================================================================
 
+parse_request stream =
+(parse_message stream got_request)
+
 got_request startline headers body fun =
 (letrec
   parts = (util:tokens startline)
  in
   (fun (item 0 parts) (item 1 parts) (item 2 parts) headers body))
-
-parse_request stream =
-(parse_message stream got_request)
 
 //==================================================================================================
 // http:parse_response stream fun
@@ -103,14 +102,14 @@ parse_request stream =
 // passed. You should use the status code instead.
 //==================================================================================================
 
+parse_response stream =
+(parse_message stream got_response)
+
 got_response startline headers body fun =
 (letrec
   parts = (util:tokens startline)
  in
   (fun (item 0 parts) (stringtonum (item 1 parts)) (item 2 parts) headers body))
-
-parse_response stream =
-(parse_message stream got_response)
 
 //==================================================================================================
 // http:parse_message stream fun

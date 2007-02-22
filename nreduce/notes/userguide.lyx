@@ -923,7 +923,7 @@ append
 \family default
 \series default
  know about the different underlying list storage formats and deal with
- them efficently.
+ them efficiently.
  For example, a call to 
 \family typewriter
 \series bold

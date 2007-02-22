@@ -39,6 +39,7 @@
 #define SNODE_COUNT       0x0B
 
 #define MODULE_EXTENSION ".elc"
+#define MODULE_FILENAME_PREFIX "(module) "
 #define MODULE_REF '.'
 
 #define GENVAR_PREFIX "_v"

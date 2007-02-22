@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
+#include "modules/modules.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -37,6 +38,8 @@
 #include <math.h>
 #include <errno.h>
 #include <unistd.h>
+
+extern const module_info *modules;
 
 global *pntrhash_lookup(task *tsk, pntr p)
 {
@@ -271,7 +274,7 @@ void run_frame(task *tsk, frame *f)
 
     #ifdef PROFILING
     if (0 <= f->fno)
-      tsk->stats.fusage[f->fno]++;
+      tsk->stats.funcalls[f->fno]++;
     #endif
   }
 }
@@ -342,34 +345,6 @@ void set_error(task *tsk, const char *format, ...)
     (*tsk->runptr)->fno = -1;
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
   }
-}
-
-void statistics(task *tsk, FILE *f)
-{
-  int i;
-  int total;
-  bcheader *bch = (bcheader*)tsk->bcdata;
-  fprintf(f,"totalallocs = %d\n",tsk->stats.totalallocs);
-  fprintf(f,"ncollections = %d\n",tsk->stats.ncollections);
-  fprintf(f,"nscombappls = %d\n",tsk->stats.nscombappls);
-  fprintf(f,"nreductions = %d\n",tsk->stats.nreductions);
-  fprintf(f,"nsparks = %d\n",tsk->stats.nsparks);
-
-  total = 0;
-  for (i = 0; i < OP_COUNT; i++)
-    total += tsk->stats.op_usage[i];
-
-  for (i = 0; i < OP_COUNT; i++) {
-    double pct = 100.0*(((double)tsk->stats.op_usage[i])/((double)total));
-    fprintf(f,"usage %-12s %-12d %.2f%%\n",opcodes[i],tsk->stats.op_usage[i],pct);
-  }
-
-
-  fprintf(f,"usage total = %d\n",total);
-
-  fprintf(f,"\n");
-  for (i = 0; i < bch->nfunctions; i++)
-    fprintf(f,"%-20s %d\n",bc_function_name(tsk->bcdata,i),tsk->stats.fusage[i]);
 }
 
 void dump_info(task *tsk)
@@ -457,8 +432,6 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
 
   sem_init(&tsk->startsem,0,0);
 
-  tsk->stats.op_usage = (int*)calloc(OP_COUNT,sizeof(int));
-
   globnilvalue = alloc_cell(tsk);
   globnilvalue->type = CELL_NIL;
   globnilvalue->flags |= FLAG_PINNED;
@@ -502,13 +475,13 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   for (i = 0; i < bch->nstrings; i++)
     tsk->strings[i] = string_to_array(tsk,bc_string(tsk->bcdata,i));
   tsk->stats.funcalls = (int*)calloc(bch->nfunctions,sizeof(int));
+  tsk->stats.frames = (int*)calloc(bch->nfunctions,sizeof(int));
+  tsk->stats.caps = (int*)calloc(bch->nfunctions,sizeof(int));
   tsk->stats.usage = (int*)calloc(bch->nops,sizeof(int));
-  tsk->stats.framecompletions = (int*)calloc(bch->nfunctions,sizeof(int));
   tsk->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
   tsk->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
   tsk->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
   tsk->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  tsk->stats.fusage = (int*)calloc(bch->nfunctions,sizeof(int));
   tsk->gcsent = (int*)calloc(tsk->groupsize,sizeof(int));
   tsk->distmarks = (array**)calloc(tsk->groupsize,sizeof(array*));
 
@@ -572,15 +545,14 @@ void task_free(task *tsk)
   }
 
   free(tsk->strings);
-  free(tsk->stats.funcalls);
-  free(tsk->stats.framecompletions);
   free(tsk->stats.sendcount);
   free(tsk->stats.sendbytes);
   free(tsk->stats.recvcount);
   free(tsk->stats.recvbytes);
-  free(tsk->stats.fusage);
+  free(tsk->stats.funcalls);
+  free(tsk->stats.frames);
+  free(tsk->stats.caps);
   free(tsk->stats.usage);
-  free(tsk->stats.op_usage);
   free(tsk->gcsent);
   free(tsk->error);
   free(tsk->distmarks);
@@ -606,4 +578,293 @@ void task_kill_locked(task *tsk)
   tsk->done = 1;
   *tsk->endpt->interruptptr = 1;
   node_waitclose_locked(tsk->n,tsk->endpt->localid);
+}
+
+static array *read_file(const char *filename)
+{
+  FILE *f;
+  int r;
+  array *buf;
+  if (NULL == (f = fopen(filename,"r"))) {
+    perror(filename);
+    return NULL;
+  }
+
+  buf = array_new(1,0);
+  while (1) {
+    array_mkroom(buf,1024);
+    r = fread(&buf->data[buf->nbytes],1,1024,f);
+    if (0 >= r)
+      break;
+    buf->nbytes += r;
+  }
+
+  fclose(f);
+  return buf;
+}
+
+static array *get_lines(const char *data, int len)
+{
+  int pos;
+  int start;
+  array *lines;
+  lines = array_new(sizeof(char*),0);
+
+  start = 0;
+  for (pos = 0; pos <= len; pos++) {
+    if ((pos == len) || ('\n' == data[pos])) {
+      char *line = malloc(pos-start+1);
+      memcpy(line,&data[start],pos-start);
+      line[pos-start] = '\0';
+      array_append(lines,&line,sizeof(char*));
+      start = pos+1;
+    }
+  }
+
+  return lines;
+}
+
+static array *get_file_lines(const char *filename)
+{
+  array *buf;
+  array *lines;
+
+  if (NULL == (buf = read_file(filename)))
+    return NULL;
+
+  lines = get_lines(buf->data,buf->nbytes);
+  array_free(buf);
+  return lines;
+}
+
+typedef struct usage_info {
+  int usage;
+  int fno;
+} usage_info;
+
+int usage_info_compar(const void *a, const void *b)
+{
+  const usage_info *ua = (const usage_info*)a;
+  const usage_info *ub = (const usage_info*)b;
+  return (ub->usage - ua->usage);
+}
+
+void print_profile(task *tsk)
+{
+  const bcheader *bch = (const bcheader*)tsk->bcdata;
+  const instruction *instructions = bc_instructions(tsk->bcdata);
+  FILE *f;
+  int addr;
+  int maxfileno = -1;
+  int fileno;
+  const char **filenames;
+  array **lines;
+  int *nlines;
+  int **lineusage;
+  int nofileusage = 0;
+  int totalusage = 0;
+  usage_info opusage[OP_COUNT];
+  usage_info bifusage[NUM_BUILTINS];
+  usage_info *fusage = (usage_info*)calloc(bch->nfunctions,sizeof(usage_info));
+  int fno = 0;
+  int i;
+
+  memset(opusage,0,OP_COUNT*sizeof(usage_info));
+  memset(bifusage,0,NUM_BUILTINS*sizeof(usage_info));
+
+  if (NULL == (f = fopen(PROFILE_FILENAME,"w"))) {
+    perror(PROFILE_FILENAME);
+    exit(1);
+  }
+
+  for (addr = 0; addr < bch->nops; addr++)
+    if (maxfileno < instructions[addr].fileno)
+      maxfileno = instructions[addr].fileno;
+  assert(maxfileno <= 1024);
+
+  filenames = (const char**)calloc(maxfileno+1,sizeof(const char *));
+  lines = (array**)calloc(maxfileno+1,sizeof(array*));
+  nlines = (int*)calloc(maxfileno+1,sizeof(int));
+  lineusage = (int**)calloc(maxfileno+1,sizeof(int*));
+  for (fileno = 0; fileno <= maxfileno; fileno++) {
+    filenames[fileno] = bc_string(tsk->bcdata,fileno);
+
+    if (!strncmp(filenames[fileno],
+                 MODULE_FILENAME_PREFIX,
+                 strlen(MODULE_FILENAME_PREFIX))) {
+      const module_info *mod;
+      int found = 0;
+      for (mod = modules; mod->name && !found; mod++) {
+        if (!strcmp(mod->filename,filenames[fileno])) {
+          lines[fileno] = get_lines(mod->source,strlen(mod->source));
+          found = 1;
+          break;
+        }
+      }
+      assert(found);
+    }
+    else {
+      lines[fileno] = get_file_lines(filenames[fileno]);
+    }
+
+    if (NULL == lines[fileno])
+      exit(1);
+    nlines[fileno] = array_count(lines[fileno]);
+    lineusage[fileno] = (int*)calloc(nlines[fileno]+1,sizeof(int));
+  }
+
+  for (addr = 0; addr < bch->nops; addr++) {
+    int fileno = instructions[addr].fileno;
+    int lineno = instructions[addr].lineno;
+
+    if (OP_GLOBSTART == instructions[addr].opcode) {
+      fno = instructions[addr].arg0;
+      assert(0 <= fno);
+    }
+    else if (addr >= bch->evaldoaddr) {
+      fno = -1;
+    }
+
+    if (0 <= fno)
+      fusage[fno].usage += tsk->stats.usage[addr];
+
+    if (0 <= fileno) {
+      assert(0 <= lineno);
+      assert(lineno < nlines[fileno]);
+      lineusage[fileno][lineno] += tsk->stats.usage[addr];
+    }
+    else if ((0 > fno) || (NUM_BUILTINS <= fno)) {
+      nofileusage += tsk->stats.usage[addr];
+    }
+    totalusage += tsk->stats.usage[addr];
+  }
+
+  assert(totalusage == tsk->stats.ninstrs);
+
+  for (fno = 0; fno < bch->nfunctions; fno++)
+    fusage[fno].fno = fno;
+
+  qsort(fusage,bch->nfunctions,sizeof(usage_info),usage_info_compar);
+
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"Overall statistics\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"\n");
+  fprintf(f,"Instructions           %d\n",totalusage);
+  fprintf(f,"Cell allocations       %d\n",tsk->stats.cell_allocs);
+  fprintf(f,"Array allocations      %d\n",tsk->stats.array_allocs);
+  fprintf(f,"Array resizes          %d\n",tsk->stats.array_resizes);
+  fprintf(f,"FRAME allocations      %d\n",tsk->stats.frame_allocs);
+  fprintf(f,"CAP allocations        %d\n",tsk->stats.cap_allocs);
+  fprintf(f,"Garbage collections    %d\n",tsk->stats.gcs);
+
+  fprintf(f,"\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"Function usage\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"\n");
+  fprintf(f,"%8s %7s %8s %8s %8s %s\n","Instrs","%Instrs","Calls","FRAMEs","CAPs","Function name");
+  fprintf(f,"%8s %7s %8s %8s %8s %s\n","------","-------","-----","------","----","-------------");
+  for (i = 0; i < bch->nfunctions; i++) {
+    int usage = fusage[i].usage;
+    double proportion = ((double)usage)/((double)totalusage);
+    double pct = 100.0*proportion;
+
+    if (0 == usage)
+      break;
+
+    fno = fusage[i].fno;
+    fprintf(f,"%8d %6.2f%% %8d %8d %8d %s\n",usage,pct,
+            tsk->stats.funcalls[fno],tsk->stats.frames[fno],tsk->stats.caps[fno],
+            bc_function_name(tsk->bcdata,fno));
+  }
+
+  fprintf(f,"\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"Opcode usage\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"\n");
+
+  for (i = 0; i < OP_COUNT; i++)
+    opusage[i].fno = i;
+
+  for (addr = 0; addr < bch->nops; addr++)
+    opusage[instructions[addr].opcode].usage += tsk->stats.usage[addr];
+
+  qsort(opusage,OP_COUNT,sizeof(usage_info),usage_info_compar);
+
+  for (i = 0; i < OP_COUNT; i++) {
+    int usage = opusage[i].usage;
+    int opcode = opusage[i].fno;
+    double proportion = ((double)usage)/((double)totalusage);
+    double pct = 100.0*proportion;
+    fprintf(f,"%8d %6.2f%% %s\n",usage,pct,opcodes[opcode]);
+  }
+
+  fprintf(f,"\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"Built-in function usage\n");
+  fprintf(f,"================================================================================\n");
+  fprintf(f,"\n");
+
+  for (i = 0; i < NUM_BUILTINS; i++)
+    bifusage[i].fno = i;
+
+  for (addr = 0; addr < bch->nops; addr++)
+    if (OP_BIF == instructions[addr].opcode)
+      bifusage[instructions[addr].arg0].usage += tsk->stats.usage[addr];
+
+  qsort(bifusage,NUM_BUILTINS,sizeof(usage_info),usage_info_compar);
+
+  for (i = 0; i < NUM_BUILTINS; i++) {
+    int usage = bifusage[i].usage;
+    int bif = bifusage[i].fno;
+    double proportion = ((double)usage)/((double)totalusage);
+    double pct = 100.0*proportion;
+    if (0 == usage)
+      break;
+    fprintf(f,"%8d %6.2f%% %s\n",usage,pct,builtin_info[bif].name);
+  }
+
+  for (fileno = 0; fileno <= maxfileno; fileno++) {
+    int lineno;
+    fprintf(f,"\n");
+    fprintf(f,"================================================================================\n");
+    fprintf(f,"Source file: %s\n",filenames[fileno]);
+    fprintf(f,"================================================================================\n");
+    fprintf(f,"\n");
+    for (lineno = 0; lineno < nlines[fileno]; lineno++) {
+      int usage = lineusage[fileno][lineno+1];
+      double proportion = ((double)usage)/((double)totalusage);
+      double pct = 100.0*proportion;
+      char *line = array_item(lines[fileno],lineno,char*);
+
+      if (0 < usage)
+        fprintf(f,"%8d %6.2f%% %s\n",usage,pct,line);
+      else
+        fprintf(f,"                 %s\n",line);
+    }
+  }
+  if (0 < nofileusage) {
+    double proportion = ((double)nofileusage)/((double)totalusage);
+    double pct = 100.0*proportion;
+    fprintf(f,"\n");
+    fprintf(f,"Instruction executions not associated with a file: %d (%.2f%%)\n",nofileusage,pct);
+  }
+
+  for (fileno = 0; fileno <= maxfileno; fileno++) {
+    for (i = 0; i < nlines[fileno]; i++)
+      free(array_item(lines[fileno],i,char*));
+    array_free(lines[fileno]);
+    free(lineusage[fileno]);
+  }
+  free(filenames);
+  free(lines);
+  free(nlines);
+  free(lineusage);
+  free(fusage);
+
+  fclose(f);
+
+  printf("Profile written to %s\n",PROFILE_FILENAME);
 }

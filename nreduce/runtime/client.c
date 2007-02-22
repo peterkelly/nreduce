@@ -46,8 +46,6 @@
 #include <signal.h>
 #include <execinfo.h>
 
-extern const char *prelude;
-
 static int get_responses(node *n, endpoint *endpt, int tag,
                          int count, endpointid *managerids, int *responses)
 {
@@ -285,8 +283,6 @@ int run_program(node *n, const char *filename)
   endpointid *managerids;
 
   src = source_new();
-  if (0 != source_parse_string(src,prelude,"prelude.elc",NULL))
-    return -1;
   if (0 != source_parse_file(src,filename,""))
     return -1;
   if (0 != source_process(src,0,0))

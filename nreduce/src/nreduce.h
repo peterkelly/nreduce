@@ -63,6 +63,7 @@
 #define COLLECT_THRESHOLD 8192000
 #define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
+#define PROFILE_FILENAME "profile.out"
 
 #define FLAG_MARKED         0x1
 #define FLAG_NEW            0x2

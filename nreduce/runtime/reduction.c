@@ -182,7 +182,7 @@ void reduce(task *tsk, pntrstack *s)
 
     /* FIXME: if we call collect() here then sometimes the redex gets collected
        (? may have been fixed) */
-    if (tsk->stats.nallocs > COLLECT_THRESHOLD)
+    if (tsk->alloc_bytes > COLLECT_THRESHOLD)
       local_collect(tsk);
 
     redex = s->data[s->count-1];
@@ -222,8 +222,6 @@ void reduce(task *tsk, pntrstack *s)
 
       destno = s->count-1-sc->nargs;
       dest = pntrstack_at(s,destno);
-
-      tsk->stats.nscombappls++;
 
       /* We have enough arguments present to instantiate the supercombinator */
       for (i = s->count-1; i >= s->count-sc->nargs; i--) {
@@ -470,7 +468,7 @@ static void stream(task *tsk, pntr lst)
   tsk->streamstack = NULL;
 }
 
-void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
+void run_reduction(source *src, char *trace_dir, int trace_type)
 {
   scomb *mainsc;
   pntr rootp;
@@ -495,9 +493,6 @@ void run_reduction(source *src, FILE *stats, char *trace_dir, int trace_type)
     trace_step(tsk,rootp,0,"Done");
 
   printf("\n");
-
-  if (stats)
-    statistics(tsk,stats);
 
   task_free(tsk);
 }

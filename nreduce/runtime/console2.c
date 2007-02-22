@@ -101,12 +101,8 @@ static void process_cmd(node *n, connection *conn, int argc, char **argv)
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
       if (TASK_ENDPOINT == endpt->type) {
         task *tsk = (task*)endpt->data;
-        int ninstrs = 0;
-        int i;
-        for (i = 0; i < OP_COUNT; i++)
-          ninstrs += tsk->stats.op_usage[i];
         cprintf(conn,"%-7d %-3d %-9d %-6d %-12d\n",
-                tsk->endpt->localid,tsk->pid,tsk->groupsize,tsk->bcsize,ninstrs);
+                tsk->endpt->localid,tsk->pid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
       }
     }
     return;

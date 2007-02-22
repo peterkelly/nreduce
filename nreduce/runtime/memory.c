@@ -293,9 +293,11 @@ cell *alloc_cell(task *tsk)
   v = tsk->freeptr;
   v->flags = tsk->indistgc ? FLAG_NEW : 0;
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
-  tsk->stats.nallocs += sizeof(cell);
-  tsk->stats.totalallocs++;
-  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  tsk->alloc_bytes += sizeof(cell);
+  #ifdef PROFILING
+  tsk->stats.cell_allocs++;
+  #endif
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     *tsk->endpt->interruptptr = 1;
   return v;
 }
@@ -602,7 +604,11 @@ void local_collect(task *tsk)
   int h;
   global *glo;
 
-  tsk->stats.nallocs = 0;
+  #ifdef PROFILING
+  tsk->stats.gcs++;
+  #endif
+
+  tsk->alloc_bytes = 0;
 
   /* clear */
   clear_marks(tsk,FLAG_MARKED);
@@ -680,9 +686,9 @@ frame *frame_new(task *tsk)
 
   f = tsk->freeframe;
   tsk->freeframe = f->freelnk;
-  tsk->stats.nallocs += framesize;
+  tsk->alloc_bytes += framesize;
 
-  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     *tsk->endpt->interruptptr = 1;
 
   assert(!f->used);
@@ -693,16 +699,25 @@ frame *frame_new(task *tsk)
 
   f->fno = -1;
 
+  #ifdef PROFILING
+  tsk->stats.frame_allocs++;
+  #endif
+
   return f;
 }
 
-cap *cap_alloc(int arity, int address, int fno)
+cap *cap_alloc(task *tsk, int arity, int address, int fno)
 {
   cap *c = (cap*)calloc(1,sizeof(cap));
   c->arity = arity;
   c->address = address;
   c->fno = fno;
   assert(0 < c->arity); /* MKCAP should not be called for CAFs */
+
+  #ifdef PROFILING
+  tsk->stats.cap_allocs++;
+  #endif
+
   return c;
 }
 

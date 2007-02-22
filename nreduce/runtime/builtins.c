@@ -316,6 +316,10 @@ carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewra
   if (oldarr)
     make_aref_pntr(oldarr->tail,arr->wrapper,0);
 
+  #ifdef PROFILING
+  tsk->stats.array_allocs++;
+  #endif
+
   return arr;
 }
 
@@ -380,9 +384,8 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 {
   assert(dsize == (*arr)->elemsize); /* sanity check */
 
-  tsk->stats.nallocs += totalcount*dsize;
-  tsk->stats.totalallocs += totalcount*dsize;
-  if ((tsk->stats.nallocs >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  tsk->alloc_bytes += totalcount*dsize;
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     *tsk->endpt->interruptptr = 1;
 
   while (1) {
@@ -397,6 +400,9 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
         (*arr)->alloc *= 2;
       (*arr) = (carray*)realloc((*arr),sizeof(carray)+(*arr)->alloc*(*arr)->elemsize);
       make_pntr(wrapper->field1,*arr);
+      #ifdef PROFILING
+      tsk->stats.array_resizes++;
+      #endif
     }
 
     memmove(((char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,data,count*(*arr)->elemsize);

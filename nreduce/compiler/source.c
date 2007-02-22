@@ -31,6 +31,7 @@
 #include "src/nreduce.h"
 #include "grammar.tab.h"
 #include "runtime/runtime.h"
+#include "modules/modules.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,6 +39,8 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <math.h>
+
+extern const module_info *modules;
 
 const char *snode_types[SNODE_COUNT] = {
   "EMPTY",
@@ -55,9 +58,6 @@ const char *snode_types[SNODE_COUNT] = {
 
 extern int yyparse(void);
 extern FILE *yyin;
-
-extern const char *util_module;
-extern const char *http_module;
 
 #define YY_BUF_SIZE 16384
 
@@ -132,6 +132,7 @@ source *source_new()
 {
   source *src = (source*)calloc(1,sizeof(source));
   src->scombs = array_new(sizeof(scomb*),0);
+  list_push(&src->newimports,strdup("prelude"));
   return src;
 }
 
@@ -201,7 +202,7 @@ int source_parse_file(source *src, const char *filename, const char *modname)
   bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
   yy_switch_to_buffer(bufstate);
   parse_src = src;
-  parse_modname = modname;
+  parse_modname = modname ? modname : "";
   r = yyparse();
   yy_delete_buffer(bufstate);
 #if HAVE_YYLEX_DESTROY
@@ -236,22 +237,23 @@ static int process_imports(source *src)
 
     for (l = newimports; l && (0 == r); l = l->next) {
       char *modname = (char*)l->data;
+      const module_info *mod;
+      int found = 0;
       list_push(&src->imports,strdup(modname));
 
-      if (!strcmp(modname,"util")) {
-        r = source_parse_string(src,util_module,"modules/util.elc","util");
+      for (mod = modules; mod->name; mod++) {
+        if (!strcmp(modname,mod->name)) {
+          const char *prefix = (!strcmp(mod->name,"prelude") ? NULL : mod->name);
+          r = source_parse_string(src,mod->source,mod->filename,prefix);
+          found = 1;
+          break;
+        }
       }
-      else if (!strcmp(modname,"http")) {
-        r = source_parse_string(src,http_module,"modules/http.elc","http");
-      }
-      else {
-        char *modfilename;
 
-        modfilename = (char*)malloc(strlen(modname)+strlen(MODULE_EXTENSION)+1);
+      if (!found) {
+        char *modfilename = (char*)malloc(strlen(modname)+strlen(MODULE_EXTENSION)+1);
         sprintf(modfilename,"%s%s",modname,MODULE_EXTENSION);
-
         r = source_parse_file(src,modfilename,modname);
-
         free(modfilename);
       }
     }
@@ -263,7 +265,8 @@ static int process_imports(source *src)
 int is_from_prelude(source *src, scomb *sc)
 {
   return ((0 <= sc->sl.fileno) &&
-          !strcmp(array_item(src->parsedfiles,sc->sl.fileno,char*),"prelude.elc"));
+          !strcmp(array_item(src->parsedfiles,sc->sl.fileno,char*),
+                  MODULE_FILENAME_PREFIX"prelude.elc"));
 }
 
 void compile_stage(source *src, const char *name)
@@ -348,7 +351,7 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
       assert(array_count(src->parsedfiles) > sc->sl.fileno);
       filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
 
-      if (strcmp(filename,"prelude.elc") && strcmp(sc->name,"main")) {
+      if (!is_from_prelude(src,sc) && strcmp(sc->name,"main")) {
         s = run_partial(src,sc,NULL,0);
         snode_free(sc->body);
         sc->body = s;
