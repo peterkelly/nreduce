@@ -769,14 +769,15 @@ void print_profile(task *tsk)
     int usage = fusage[i].usage;
     double proportion = ((double)usage)/((double)totalusage);
     double pct = 100.0*proportion;
+    int thisfno = fusage[i].fno;
+    int funcalls = tsk->stats.funcalls[thisfno];
+    int frames = tsk->stats.frames[thisfno];
+    int caps = tsk->stats.caps[thisfno];
 
-    if (0 == usage)
-      break;
-
-    fno = fusage[i].fno;
-    fprintf(f,"%8d %6.2f%% %8d %8d %8d %s\n",usage,pct,
-            tsk->stats.funcalls[fno],tsk->stats.frames[fno],tsk->stats.caps[fno],
-            bc_function_name(tsk->bcdata,fno));
+    if ((0 < usage) || (0 < funcalls) || (0 < frames) || (0 < caps)) {
+      fprintf(f,"%8d %6.2f%% %8d %8d %8d %s\n",
+              usage,pct,funcalls,frames,caps,bc_function_name(tsk->bcdata,thisfno));
+    }
   }
 
   fprintf(f,"\n");
