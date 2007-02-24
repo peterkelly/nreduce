@@ -285,7 +285,7 @@ int run_program(node *n, const char *filename)
   src = source_new();
   if (0 != source_parse_file(src,filename,""))
     return -1;
-  if (0 != source_process(src,0,0))
+  if (0 != source_process(src,0,0,0))
     return -1;
   if (0 != source_compile(src,&bcdata,&bcsize))
     return -1;

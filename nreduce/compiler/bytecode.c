@@ -36,6 +36,10 @@
 #include <stdarg.h>
 #include <math.h>
 
+/* FIXME: Currently we have two statuses: sparked and not sparked. We need to add a third, to
+indicate that the item at that position has been evaluated. This is useful at least for constants,
+so that an unnecessary EVAL/RESOLVE pair is avoided. */
+
 #define BYTECODE_C
 
 
@@ -933,16 +937,27 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
   oldsi = comp->si;
   comp->si = stackinfo_new(NULL);
 
-  for (i = 0; i < sc->nargs; i++)
-    pushstatus(comp->si,0);
+  if (sc->nospark) {
+    /* For supercombinators created during the non-strict expression lifting stage, assume
+       the arguments have already been sparked. This should be handled by the expression which
+       calls this supercombinator. */
+    for (i = 0; i < sc->nargs; i++)
+      pushstatus(comp->si,sc->strictin[i]);
+    GLOBSTART(sc->sl,fno,sc->nargs);
+  }
+  else {
+    /* Otherwise, spark all of the strict expressions; we know we're going to need the values
+       eventually so might as well start evaluation of them now, hopefully in parallel. */
+    for (i = 0; i < sc->nargs; i++)
+      pushstatus(comp->si,0);
 
-  GLOBSTART(sc->sl,fno,sc->nargs);
-  for (i = 0; i < sc->nargs; i++)
-    if (sc->strictin && sc->strictin[i])
-      SPARK(sc->sl,i);
+    GLOBSTART(sc->sl,fno,sc->nargs);
+    for (i = 0; i < sc->nargs; i++)
+      if (sc->strictin && sc->strictin[i])
+        SPARK(sc->sl,i);
+  }
 
   comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
-  GLOBSTART(sc->sl,fno,sc->nargs);
 
 #ifdef DEBUG_BYTECODE_COMPILATION
   printf("\n");
@@ -1235,10 +1250,15 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
 
     if ((OP_GLOBSTART == instr->opcode) && (prevfun != instr->arg0)) {
       if (NUM_BUILTINS <= instr->arg0) {
-        scomb *sc = get_scomb_index(src,instr->arg0-NUM_BUILTINS);
         fprintf(f,"\n");
-        print_scomb_code(src,f,sc);
-        fprintf(f,"\n");
+        if (src) {
+          scomb *sc = get_scomb_index(src,instr->arg0-NUM_BUILTINS);
+          print_scomb_code(src,f,sc);
+          fprintf(f,"\n");
+        }
+        else {
+          fprintf(f,"Function: %s\n",bc_function_name(bcdata,instr->arg0));
+        }
       }
       else if (!builtins) {
         break;

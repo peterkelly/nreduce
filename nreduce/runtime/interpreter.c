@@ -970,6 +970,7 @@ void *execute(task *tsk)
       continue;
     }
     case OP_GLOBSTART:
+      abort();
       break;
     case OP_SPARK: {
       pntr p = resolve_pntr(runnable->data[instr->arg0]);
@@ -1103,7 +1104,11 @@ void *execute(task *tsk)
       else if (s+have == arity) {
         int i;
         int base = instr->expcount-1;
-        f2->instr = program_ops+cp->address+1;
+        f2->instr = program_ops+cp->address;
+
+        assert(OP_GLOBSTART == f2->instr->opcode);
+        f2->instr++;
+
         f2->fno = cp->fno;
         #ifdef PROFILING
         if (0 <= f2->fno)
@@ -1122,6 +1127,10 @@ void *execute(task *tsk)
         assert(newf->alloc == tsk->maxstack);
         assert(newf->data);
         newf->instr = program_ops+cp->address;
+
+        assert(OP_GLOBSTART == newf->instr->opcode);
+        newf->instr++;
+
         newf->fno = cp->fno;
         #ifdef PROFILING
         tsk->stats.frames[cp->fno]++;
@@ -1146,18 +1155,26 @@ void *execute(task *tsk)
 
       break;
     }
-    case OP_JFUN:
-      if (instr->arg1)
-        runnable->instr = program_ops+program_finfo[instr->arg0].addressne+1;
-      else
-        runnable->instr = program_ops+program_finfo[instr->arg0].address+1;
+    case OP_JFUN: {
+      int newfno = instr->arg0;
+      if (instr->arg1) {
+        runnable->instr = program_ops+program_finfo[instr->arg0].addressne;
+      }
+      else {
+        runnable->instr = program_ops+program_finfo[instr->arg0].address;
+
+        assert(OP_GLOBSTART == runnable->instr->opcode);
+        runnable->instr++;
+      }
       runnable->fno = instr->arg0;
+      assert(runnable->fno = newfno);
       #ifdef PROFILING
       if (0 <= runnable->fno)
         tsk->stats.funcalls[runnable->fno]++;
       #endif
       // runnable->instr--; /* so we process the GLOBSTART */
       break;
+    }
     case OP_JFALSE: {
       pntr test = runnable->data[instr->expcount-1];
       assert(CELL_IND != pntrtype(test));
@@ -1251,6 +1268,10 @@ void *execute(task *tsk)
       }
 
       newf->instr = program_ops+program_finfo[fno].address;
+
+      assert(OP_GLOBSTART == newf->instr->opcode);
+      newf->instr++;
+
       newf->fno = fno;
       #ifdef PROFILING
       tsk->stats.frames[fno]++;

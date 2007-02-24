@@ -296,7 +296,9 @@ int main(int argc, char **argv)
 /*   if (compileinfo) */
 /*     print_scombs1(src); */
 
-  if (0 != source_process(src,args.partial || args.lambdadebug,args.nopartialsink))
+  if (0 != source_process(src,args.partial || args.lambdadebug,
+                          args.nopartialsink,
+                          args.reorderdebug))
     return -1;
 
   if (args.reorderdebug || args.lambdadebug) {

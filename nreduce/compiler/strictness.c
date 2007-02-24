@@ -346,7 +346,7 @@ static void check_strictness_r(scomb *sc, snode *c, list **used, int *changed)
  * @param changed Pointer to an integer which will be set to true if there is any change to
  *                the strictness flags or usage information (thus necessitating another iteration)
  */
-static void check_strictness(scomb *sc, int *changed)
+void check_strictness(scomb *sc, int *changed)
 {
   list *used = NULL;
   int i;
@@ -401,15 +401,12 @@ void strictness_analysis(source *src)
   int changed;
   int sccount = array_count(src->scombs);
 
-  compile_stage(src,"Strictness analysis");
-
   for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     if (NULL == sc->strictin)
       sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
   }
 
-#if 1
   /* Begin the first iteration. At this stage, none of the arguments to any supercombinators are
      known to be strict. This will change as we perform the analysis. */
   do {
@@ -426,7 +423,6 @@ void strictness_analysis(source *src)
        can trickle up to other supercombinators which call the one that changed, and then others
        that call them and so forth. */
   } while (changed);
-#endif
 
   if (compileinfo)
     print_scombs1(src);

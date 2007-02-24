@@ -297,7 +297,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, int stopafterlambda, int dispartialsink)
+int source_process(source *src, int stopafterlambda, int dispartialsink, int disstrict)
 {
   int sccount;
   int scno;
@@ -374,14 +374,21 @@ int source_process(source *src, int stopafterlambda, int dispartialsink)
     reorder_letrecs(sc->body);
   }
 
+  if (disstrict)
+    return 0;
+
+  compile_stage(src,"Strictness analysis");
+  strictness_analysis(src);
+
+  compile_stage(src,"Non-strict expression lifting");
+  for (scno = 0; scno < sccount; scno++)
+    nonstrict_lift(src,array_item(src->scombs,scno,scomb*));
+
   return 0;
 }
 
 int source_compile(source *src, char **bcdata, int *bcsize)
 {
-
-  strictness_analysis(src);
-
   compile_stage(src,"Bytecode compilation");
   compile(src,bcdata,bcsize);
 

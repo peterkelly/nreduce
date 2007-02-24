@@ -90,6 +90,7 @@ typedef struct scomb {
   sourceloc sl;
   char *modname;
   int used;
+  int nospark;
   struct scomb *hashnext;
 } scomb;
 
@@ -119,7 +120,7 @@ source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename, const char *modname);
 int source_parse_file(source *src, const char *filename, const char *modname);
 void add_import(source *src, const char *name);
-int source_process(source *src, int stopafterlambda, int dispartialsink);
+int source_process(source *src, int stopafterlambda, int dispartialsink, int disstrict);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
 
@@ -154,6 +155,7 @@ void scomb_free(scomb *sc);
 
 void lift(source *src, scomb *sc);
 void applift(source *src, scomb *sc);
+void nonstrict_lift(source *src, scomb *sc);
 
 /* new */
 
@@ -178,6 +180,7 @@ char *real_scname(source *src, const char *sym);
 
 /* strictness */
 
+void check_strictness(scomb *sc, int *changed);
 void dump_strictinfo(source *src);
 void strictness_analysis(source *src);
 

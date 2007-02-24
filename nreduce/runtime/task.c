@@ -265,8 +265,6 @@ void run_frame(task *tsk, frame *f)
   }
 
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
-    assert((bc_instructions(tsk->bcdata) == f->instr) ||
-           (OP_GLOBSTART == f->instr->opcode));
     add_frame_queue(&tsk->active,f);
     f->rnext = *tsk->runptr;
     *tsk->runptr = f;
