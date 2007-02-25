@@ -1,0 +1,20 @@
+import xml
+
+entryelem parent entry =
+(letrec
+  filename = (head entry)
+  path = (append parent (cons '/' filename))
+ in
+  (if (isdir path)
+    (xml:mkelem "dir" (cons (xml:mkattr "name" filename) nil) (procdir path))
+    (xml:mkelem "file" (cons (xml:mkattr "name" filename) nil) nil)))
+
+
+procdir path =
+(map (entryelem path)
+  (readdir path))
+
+main =
+(xml:printxmlindent
+  (xml:mkelem "result" nil
+    (procdir "/home/peter/etc")))

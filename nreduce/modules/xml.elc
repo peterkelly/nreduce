@@ -1,0 +1,390 @@
+XML_DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+
+TYPE_ELEMENT    = 0
+TYPE_TEXT       = 1
+TYPE_ATTRIBUTE  = 2
+TYPE_DOCUMENT   = 3
+TYPE_STRING     = 4
+TYPE_BOOLEAN    = 5
+TYPE_NUMBER     = 6
+TYPE_ERROR      = 7
+
+TOKEN_STARTELEM = 0
+TOKEN_ENDELEM = 1
+TOKEN_TEXT = 2
+TOKEN_ATTRNAME = 3
+TOKEN_ATTRVALUE = 4
+
+TOKEN_NAMES = "startelem", "endelem", "text", "attrname", "attrvalue", nil
+
+////////////////////////////////////////////////////////////////////////////////
+
+print-token val =
+(if val
+  (if (= (head val) '\r')
+    (append "\\r" (print-token (tail val)))
+    (if (= (head val) '\n')
+      (append "\\n" (print-token (tail val)))
+      (cons (head val) (print-token (tail val)))))
+  nil)
+
+print-tokens !tokens =
+(if (not tokens)
+  nil
+  (letrec
+    !tok = (head tokens)
+    !rest = (tail tokens)
+   in
+    (appendn 5 (item (head tok) TOKEN_NAMES) ": \""
+      (print-token (tail tok)) "\"\n"
+      (print-tokens rest))))
+
+////////////////////////////////////////////////////////////////////////////////
+isspace c = (or (= c ' ') (or (= c '\r') (= c '\n')))
+
+parse_main !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '<')
+      (if (> count 0)
+        (cons (cons TOKEN_TEXT (prefix count start))
+          (parse_namestart rest))
+        (parse_namestart rest))
+      (parse_main rest start (+ count 1))))
+  nil)
+
+parse_pi !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '?')
+      (parse_piend rest)
+      (parse_pi rest)))
+  nil)
+
+parse_piend !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (parse_skipspace rest)
+      (parse_pi rest)))
+  nil)
+
+parse_skipspace !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (isspace c)
+      (parse_skipspace rest)
+      (parse_main stream stream 0)))
+  nil)
+
+parse_namestart !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '/')
+      (parse_endname rest rest 0)
+      (if (= c '?')
+        (parse_pi rest)
+        (parse_name stream stream 0))))
+  nil)
+
+parse_name !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_STARTELEM (prefix count start))
+        (parse_main rest rest 0))
+      (if (isspace c)
+        (cons (cons TOKEN_STARTELEM (prefix count start))
+          (parse_attrsearch rest))
+        (parse_name rest start (+ count 1)))))
+  nil)
+
+parse_endname !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_ENDELEM nil)
+        (parse_main rest rest 0))
+      (parse_endname rest start (+ count 1))))
+  nil)
+
+parse_leafend !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_ENDELEM nil)
+        (parse_main rest rest 0))
+      nil))
+  nil)
+
+parse_attrsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (parse_main rest rest 0)
+      (if (= c '/')
+        (parse_leafend rest)
+        (if (isspace c)
+          (parse_attrsearch rest)
+          (parse_attrname rest stream 0)))))
+  nil)
+
+parse_attrname !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (or (= c '=') (isspace c))
+      (cons (cons TOKEN_ATTRNAME (prefix (+ count 1) start))
+        (parse_eqsearch stream))
+      (parse_attrname rest start (+ count 1))))
+  nil)
+
+parse_eqsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '=')
+      (parse_valsearch rest)
+      (if (isspace c)
+        (parse_eqsearch rest)
+        nil)))
+  nil)
+
+parse_valsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (parse_main rest rest 0)
+      (if (= c '\"')
+        (parse_value rest rest 0)
+        (if (isspace c)
+          (parse_valsearch rest)
+          nil))))
+  nil)
+
+parse_value !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '\"')
+      (cons (cons TOKEN_ATTRVALUE (prefix count start))
+        (parse_attrsearch rest))
+      (parse_value rest start (+ count 1))))
+  nil)
+
+////////////////////////////////////////////////////////////////////////////////
+last !lst =
+(if (not lst)
+  nil
+  (if (not (tail lst))
+    (head lst)
+    (last (tail lst))))
+
+////////////////////////////////////////////////////////////////////////////////
+allbutlast !lst =
+(if (not lst)
+  nil
+  (if (not (tail lst))
+    nil
+    (letrec
+      !a = (head lst)
+      !b = (tail lst)
+     in
+      (cons a (allbutlast b)))))
+
+////////////////////////////////////////////////////////////////////////////////
+
+mkelem name attributes children =
+(cons TYPE_ELEMENT (cons name (cons attributes (cons children nil))))
+
+mkdoc children = (cons TYPE_DOCUMENT children)
+
+mkattr name value =
+(cons TYPE_ATTRIBUTE (cons name (cons value nil)))
+
+mktext value =
+(cons TYPE_TEXT value)
+
+nodechildren node =
+(if (= (head node) TYPE_ELEMENT)
+  (item 3 node)
+  (if (= (head node) TYPE_DOCUMENT)
+    (tail node)
+    nil))
+
+nodeattributes node =
+(if (= (head node) TYPE_ELEMENT)
+  (item 2 node)
+  nil)
+
+getchildren lst =
+(if lst
+  (if (= (head (head lst)) TYPE_ATTRIBUTE)
+    (getchildren (tail lst))
+    lst)
+  nil)
+
+getattributes lst =
+(if lst
+  (if (= (head (head lst)) TYPE_ATTRIBUTE)
+    (cons (head lst) (getattributes (tail lst)))
+    nil)
+  nil)
+
+construct !tokens =
+(if (not tokens)
+  (cons nil nil)
+  (letrec
+    !cur = (head tokens)
+    !rest = (tail tokens)
+    !tag = (head cur)
+   in
+    (if (= tag TOKEN_STARTELEM)
+      (letrec
+        !pair = (construct rest)
+        !contents = (allbutlast pair)
+        !children = (getchildren contents)
+        !attributes = (getattributes contents)
+        !remainingtokens = (last pair)
+        !name = (tail cur)
+        !element = (mkelem name attributes children)
+       in
+        (cons element (construct remainingtokens)))
+      (if (= tag TOKEN_ENDELEM)
+        (cons rest nil)
+        (if (= tag TOKEN_ATTRNAME)
+          (letrec
+            !value = (head rest)
+            rest2 = (tail rest)
+            attr = (mkattr (tail cur) (tail value))
+           in
+            (cons attr (construct rest2)))
+          (if (= tag TOKEN_TEXT)
+            (letrec
+              !text = (tail cur)
+             in
+              (cons (mktext text) (construct rest)))
+            (construct rest)))))))
+
+construct1 !tokens = (allbutlast (construct tokens))
+
+////////////////////////////////////////////////////////////////////////////////
+
+// FIXME: need to escape element/attribute names and values when printing
+
+apmap lst fun = (if lst (append (fun (head lst)) (apmap (tail lst) fun)) nil)
+
+spaces n =
+(if (> n 0)
+  (append "   " (spaces (- n 1)))
+  nil)
+
+printattrs lst next =
+(if lst
+  (letrec
+    attr = (head lst)
+   in
+    (append " "
+      (append (item 1 attr)
+        (append "=\""
+          (append (item 2 attr)
+            (append "\"" (printattrs (tail lst) next)))))))
+  next)
+
+printnodes lst next =
+(if lst
+  (letrec
+    node = (head lst)
+    rest = (tail lst)
+   in
+    (if (= (head node) TYPE_ELEMENT)
+      (if (item 3 node)
+        (cons '<'
+          (append (item 1 node)
+            (printattrs (item 2 node)
+              (cons '>'
+                (printnodes (item 3 node)
+                  (cons '<'
+                    (cons '/'
+                      (append (item 1 node) (append ">" (printnodes rest next))))))))))
+        (cons '<'
+          (append (item 1 node)
+            (printattrs (item 2 node) (append "/>" (printnodes rest next))))))
+      (if (= (head node) TYPE_TEXT)
+        (append (tail node) (printnodes rest next))
+        (if (= (head node) TYPE_DOCUMENT)
+          (printnodes (tail node) (printnodes rest next))
+          (append "OTHER: " (append (numtostring (head node)) (printnodes rest next)))))))
+  next)
+
+isnonws str =
+(if str
+  (if (isspace (head str))
+    (isnonws (tail str))
+    1)
+  nil)
+
+addwsc depth lst =
+(if lst
+  (addwsca depth nil lst)
+  nil)
+
+addwsca depth nonws lst =
+(if lst
+  (letrec
+    this = (head lst)
+    rest = (tail lst)
+    type = (head this)
+   in
+    (if (= type TYPE_ELEMENT)
+      (letrec
+        next = (cons (mkelem (item 1 this)
+            (item 2 this)
+            (addwsc (+ depth 1) (item 3 this)))
+          (addwsca depth nil (tail lst)))
+       in
+        (if nonws
+          next
+          (cons (cons TYPE_TEXT (cons '\n' (spaces depth))) next)))
+      (if (= type TYPE_TEXT)
+        (cons this (addwsca depth (isnonws (tail this)) (tail lst)))
+        (if (= type TYPE_DOCUMENT)
+          (cons (mkdoc (addwsc depth (tail this)))
+            (addwsca depth 1 (tail lst)))
+          (cons this
+            (addwsca depth nil (tail lst)))))))
+  (if nonws
+    nil
+    (cons (cons TYPE_TEXT (cons '\n' (spaces (- depth 1)))) nil)))
+
+////////////////////////////////////////////////////////////////////////////////
+
+stripspaces lst =
+(if lst
+    (letrec
+       cur = (head lst)
+       rest = (tail lst)
+       type = (head cur)
+     in
+       (if (= type TYPE_ELEMENT)
+           (cons (mkelem (item 1 cur) (item 2 cur) (stripspaces (item 3 cur))) (stripspaces rest))
+       (if (= type TYPE_TEXT)
+           (if (isnonws (tail cur))
+               (cons cur (stripspaces rest))
+               (stripspaces rest))
+           (cons cur (stripspaces rest)))))
+    nil)
+
+parsexml stream strip =
+(letrec
+   input = (construct1 (parse_skipspace stream))
+   input2 = (if strip (stripspaces input) input)
+in
+   (mkdoc input2))
+
+printxml root =
+(append XML_DECL
+  (printnodes (cons root nil) "\n"))
+
+printxmlindent root =
+(append XML_DECL
+  (printnodes (addwsc 0 (cons root nil)) "\n"))
+
+// forcelist implemented

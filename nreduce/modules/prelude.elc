@@ -119,7 +119,14 @@ append1 a b =
 (append a (cons b nil))
 
 forcelist1 lst =
-(if lst (seq (head lst) (forcelist1 (tail lst))) nil)
+(if lst
+  (letrec
+    partlen = (nchars lst)
+   in
+    (if partlen
+      (forcelist1 (arrayskip partlen lst))
+      (seq (head lst) (forcelist1 (tail lst)))))
+  nil)
 
 forcelist lst =
 (seq (forcelist1 lst) lst)
