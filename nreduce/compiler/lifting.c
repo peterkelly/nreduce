@@ -459,9 +459,9 @@ static scomb *lift_expr(source *src, snode **k, scomb *sc)
 
   newsc->nargs = list_count(vars);
   newsc->argnames = (char**)malloc(newsc->nargs*sizeof(char*));
-  i = 0;
+  i = newsc->nargs-1;
   for (l = vars; l; l = l->next)
-    newsc->argnames[i++] = (char*)l->data;
+    newsc->argnames[i--] = (char*)l->data;
   list_free(vars,NULL);
 
   (*k) = snode_new(-1,-1);
@@ -578,7 +578,7 @@ static void lift_if_complex(source *src, snode **k, scomb *sc)
     else {
       scomb *newsc = lift_expr(src,k,sc);
       int changed = 0;
-      newsc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+      newsc->strictin = (int*)calloc(newsc->nargs,sizeof(int));
       check_strictness(newsc,&changed);
       newsc->nospark = 1;
       nonstrict_lift_r(src,&newsc->body,newsc);

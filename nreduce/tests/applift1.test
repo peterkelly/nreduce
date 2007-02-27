@@ -18,13 +18,13 @@ foo f =
 main = nil
 ==================================== OUTPUT ====================================
 foo f = (+ (letrec 
-              a = 1
               b = 2
+              a = 1
             in
-              (foo#1 b a f))
+              (foo#1 f a b))
            3)
 main = nil
-foo#1 b a f = (f (letrec 
+foo#1 f a b = (f (letrec 
                     d = (* b 2)
                     c = (* a 2)
                   in
