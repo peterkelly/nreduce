@@ -1246,8 +1246,7 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
 {
   int i;
   int addr;
-  int fno;
-  int prevfun = -1;
+  int fno = -1;
   const bcheader *bch = (const bcheader*)bcdata;
   const instruction *instructions = bc_instructions(bcdata);
   const funinfo *finfo = bc_funinfo(bcdata);
@@ -1261,15 +1260,15 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
   fprintf(f,"\n");
   fprintf(f,"Ops:\n");
   fprintf(f,"\n");
-  fprintf(f,"%8s %-12s %-12s %-12s %-12s %s\n",
-          "address","opcode","arg0","arg1","usage","fileno/lineno");
-  fprintf(f,"%8s %-12s %-12s %-12s %-12s %s\n",
-          "-------","------","----","----","-----","-------------");
+  fprintf(f,"%8s %-12s %-12s %-12s %s\n",
+          "address","opcode","arg0","arg1","fileno/lineno");
+  fprintf(f,"%8s %-12s %-12s %-12s %s\n",
+          "-------","------","----","----","-------------");
   for (addr = 0; addr < bch->nops; addr++) {
     const instruction *instr = &instructions[addr];
     const char *filename = (0 <= instr->fileno) ? bc_string(bcdata,instr->fileno) : "_";
 
-    if ((OP_GLOBSTART == instr->opcode) && (prevfun != instr->arg0)) {
+    if ((OP_GLOBSTART == instr->opcode) && (fno != instr->arg0)) {
       if (NUM_BUILTINS <= instr->arg0) {
         fprintf(f,"\n");
         if (src) {
@@ -1289,34 +1288,49 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
         fprintf(f,"Builtin: %s\n",builtin_info[instr->arg0].name);
       }
       fprintf(f,"\n");
-      prevfun = instr->arg0;
+      fno = instr->arg0;
     }
 
-    fprintf(f,"%-3d/",instr->expcount);
-    fprintf(f,"%4d %-12s %-12d %-12d",addr,opcodes[instr->opcode],instr->arg0,instr->arg1);
-    if (usage)
-      fprintf(f," %-12d",usage[addr]);
-    else
-      fprintf(f,"              ");
-    fprintf(f,"%s:%d",filename,instr->lineno);
+/*     fprintf(f,"%-3d/",instr->expcount); */
+/*     fprintf(f,"%4d %-12s %-12d %-12d",addr,opcodes[instr->opcode],instr->arg0,instr->arg1); */
+/*     fprintf(f,"%s:%d",filename,instr->lineno); */
 
-    switch (instr->opcode) {
-    case OP_MKFRAME:
-    case OP_MKCAP:
-    case OP_JFUN:
-      fprintf(f,"     (%s)",bc_function_name(bcdata,instr->arg0));
-      break;
-    case OP_BIF:
-      fprintf(f,"     (%s)",builtin_info[instr->arg0].name);
-      break;
-    case OP_PUSHNUMBER:
-      fprintf(f,"     ");
-      print_double(f,*((double*)&instr->arg0));
-      break;
-    default:
-      break;
+    fprintf(f,"%-3d/%4d %-12s",instr->expcount,addr,opcodes[instr->opcode]);
+    if (OP_PUSHNUMBER == instr->opcode) {
+      char str[100];
+      format_double(str,100,*((double*)&instr->arg0));
+      fprintf(f," %-25s",str);
     }
-
+    else if ((OP_MKFRAME == instr->opcode) ||
+             (OP_MKCAP == instr->opcode) ||
+             (OP_JFUN == instr->opcode)) {
+      fprintf(f," %-18s %-6d",bc_function_name(bcdata,instr->arg0),instr->arg1);
+    }
+    else if (OP_BIF == instr->opcode) {
+      fprintf(f," %-25s",builtin_info[instr->arg0].name);
+    }
+    else if ((OP_PUSH == instr->opcode) ||
+             (OP_EVAL == instr->opcode) ||
+             (OP_RESOLVE == instr->opcode) ||
+             (OP_JFALSE == instr->opcode) ||
+             (OP_SPARK == instr->opcode)) {
+      int done = 0;
+      if (src && (NUM_BUILTINS <= fno)) {
+        scomb *sc = get_scomb_index(src,fno-NUM_BUILTINS);
+        assert(sc);
+        assert(!strcmp(sc->name,bc_function_name(bcdata,fno)));
+        if (instr->arg0 < sc->nargs) {
+          fprintf(f," %-25s",sc->argnames[sc->nargs-1-instr->arg0]);
+          done = 1;
+        }
+      }
+      if (!done)
+        fprintf(f," %-18d %-6d",instr->arg0,instr->arg1);
+    }
+    else {
+      fprintf(f," %-18d %-6d",instr->arg0,instr->arg1);
+    }
+    fprintf(f," %s:%d",filename,instr->lineno);
     fprintf(f,"\n");
   }
 
