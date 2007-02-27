@@ -707,15 +707,36 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
 static void S(source *src, compilation *comp, snode *source, stack *exprs,
               stack *strict, pmap *p, int n)
 {
-  int m;
+  int m = 0;
+  int count = exprs->count;
+  int remove = n;
   print_comp2_stack(src,comp,"S",exprs,n,"");
-  for (m = 0; m < exprs->count; m++) {
-    if (strict->data[m])
-      E(src,comp,(snode*)exprs->data[m],p,n+m);
-    else
-      C(src,comp,(snode*)exprs->data[m],p,n+m);
+
+  /* If the first few expressions simply pass the function's arguments unchanged, we can
+     avoid adding PUSH instructions for them, and only squeeze out the portion of the
+     stack that will actually be modified. */
+  for (; m < exprs->count; m++) {
+    snode *sn = (snode*)exprs->data[m];
+    if (SNODE_SYMBOL != sn->type)
+      break;
+    if (presolve(src,p,sn->name)-1 != m)
+      break;
+    if (strict->data[m] && !statusat(comp->si,m))
+      break;
+    count--;
+    remove--;
   }
-  SQUEEZE(source->sl,m,n);
+
+  for (; m < exprs->count; m++) {
+    if (strict->data[m])
+      E(src,comp,(snode*)exprs->data[m],p,n);
+    else
+      C(src,comp,(snode*)exprs->data[m],p,n);
+    n++;
+  }
+
+  if (0 < remove)
+    SQUEEZE(source->sl,count,remove);
 }
 
 static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
