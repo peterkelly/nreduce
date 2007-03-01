@@ -6,15 +6,14 @@ entryelem parent entry =
   path = (append parent (cons '/' filename))
  in
   (if (isdir path)
-    (xml:mkelem "dir" (cons (xml:mkattr "name" filename) nil) (procdir path))
-    (xml:mkelem "file" (cons (xml:mkattr "name" filename) nil) nil)))
-
+    (xml:mkelem nil nil "dir" (cons (xml:mkattr nil nil "name" filename) nil) nil (procdir path))
+    (xml:mkelem nil nil "file" (cons (xml:mkattr nil nil "name" filename) nil) nil nil)))
 
 procdir path =
 (map (entryelem path)
   (readdir path))
 
 main =
-(xml:printxmlindent
-  (xml:mkelem "result" nil
+(xml:printxml 1
+  (xml:mkelem nil nil "result" nil nil
     (procdir "/home/peter/etc")))

@@ -1,34 +1,254 @@
 XML_DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
 
+WSDL_NS = "http://schemas.xmlsoap.org/wsdl/"
+SOAP_NS = "http://schemas.xmlsoap.org/wsdl/soap/"
+SOAPENV_NS ="http://schemas.xmlsoap.org/soap/envelope/"
+XSD_NS = "http://www.w3.org/2001/XMLSchema"
+XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+XMLNS_NS = "http://www.w3.org/2000/xmlns/"
+
 TYPE_ELEMENT    = 0
 TYPE_TEXT       = 1
-TYPE_ATTRIBUTE  = 2
-TYPE_DOCUMENT   = 3
-TYPE_STRING     = 4
-TYPE_BOOLEAN    = 5
-TYPE_NUMBER     = 6
-TYPE_ERROR      = 7
+TYPE_COMMENT    = 2
+TYPE_ATTRIBUTE  = 3
+TYPE_DOCUMENT   = 4
+TYPE_STRING     = 5
+TYPE_BOOLEAN    = 6
+TYPE_NUMBER     = 7
+TYPE_ERROR      = 8
+
+NODE_NAMES = "ELEMENT", "TEXT", "ATTRIBUTE", "DOCUMENT", "STRING", "BOOLEAN", "NUMBER", "ERROR", nil
 
 TOKEN_STARTELEM = 0
 TOKEN_ENDELEM = 1
 TOKEN_TEXT = 2
 TOKEN_ATTRNAME = 3
 TOKEN_ATTRVALUE = 4
+TOKEN_COMMENT = 5
 
-TOKEN_NAMES = "startelem", "endelem", "text", "attrname", "attrvalue", nil
+TOKEN_NAMES = "STARTELEM", "ENDELEM", "TEXT", "ATTRNAME", "ATTRVALUE", "COMMENT", nil
 
-////////////////////////////////////////////////////////////////////////////////
+//==================================================================================================
+// xml:tokenize stream
+//
+// This function is used internally by the XML parser. It takes a stream of data representing an
+// XML document, and converts it into a list of tokens. Each token is a cons pair with the head
+// containing the token type (one of the TOKEN_* constants), and the tail set to a string value.
+// This token stream is interpreted by the parser to build up a tree of XML nodes.
+//
+// Possible token types are: STARTELEM, ENDELEM, TEXT, ATTRNAME, ATTRVALUE
+//
+// States of the tokenizer are: main, pi, piend, skipspace, namestart, name, endname, leafend,
+// attrsearch, attrname, eqsearch, valsearch, and value.
+//
+// The tokenizer is implemented as a state machine, with each state represented by a different
+// function. In each state, the tokenizer first checks if there is any more data in the stream,
+// returning nil if the end of the stream is encountered. It then looks at the current character,
+// and depending on its value, either stays in the same state and incremenets the character count
+// for that token, or switches to a new state (optionally producing a token). A token is "produced"
+// by returning a cons pair where the head is the token and the tail is a continuation which can
+// later be invoked to obtain futher tokens.
+//
+// Lazy evaluation is used for the tokenization, so that the parser can begin constructing the
+// element tree before the whole stream has arrived. If a program that uses the XML module only
+// accesses the first part of a document, the rest of the document does not need to be parsed,
+// tokenized, or read from the data source. If an attempt is made to obtain the next token from
+// the stream, and the necessary data is not yet available, then the caller will block; this can
+// happen for example when reading XML data over a slow network connection.
+//==================================================================================================
 
-print-token val =
-(if val
-  (if (= (head val) '\r')
-    (append "\\r" (print-token (tail val)))
-    (if (= (head val) '\n')
-      (append "\\n" (print-token (tail val)))
-      (cons (head val) (print-token (tail val)))))
+tokenize stream = (tokenize_skipspace stream)
+
+tokenize_main !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '<')
+      (if (> count 0)
+        (cons (cons TOKEN_TEXT (prefix count start))
+          (tokenize_namestart rest))
+        (tokenize_namestart rest))
+      (tokenize_main rest start (+ count 1))))
   nil)
 
-print-tokens !tokens =
+tokenize_pi !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '?')
+      (tokenize_piend rest)
+      (tokenize_pi rest)))
+  (error "XML parse error: unexpected end of input in processing instruction"))
+
+tokenize_piend !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (tokenize_skipspace rest)
+      (tokenize_pi rest)))
+  (error "XML parse error: unexpected end of input in processing instruction end"))
+
+tokenize_skipspace !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (isspace c)
+      (tokenize_skipspace rest)
+      (tokenize_main stream stream 0)))
+  nil)
+
+tokenize_namestart !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '/')
+      (tokenize_endname rest rest 0)
+      (if (= c '?')
+        (tokenize_pi rest)
+        (if (= c '!')
+          (tokenize_comment1 rest stream)
+          (tokenize_name stream stream 0)))))
+  (error "XML parse error: unexpected end of input at start of element name"))
+
+tokenize_comment1 !stream !start =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '-')
+      (tokenize_comment2 rest start)
+      (tokenize_name start start 0)))
+  (error "XML parse error: unexpected end of input at start of comment"))
+
+tokenize_comment2 !stream !start =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '-')
+      (tokenize_comment rest rest 0)
+      (tokenize_name start start 0)))
+  (error "XML parse error: unexpected end of input at start of comment"))
+
+tokenize_comment !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '-')
+      (tokenize_comment_end1 rest start (+ count 1))
+      (tokenize_comment rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in comment"))
+
+tokenize_comment_end1 !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '-')
+      (tokenize_comment_end2 rest start (+ count 1))
+      (tokenize_comment rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in comment"))
+
+tokenize_comment_end2 !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_COMMENT (prefix (- count 2) start))
+        (tokenize_main rest rest 0))
+      (tokenize_comment rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in comment"))
+
+tokenize_name !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_STARTELEM (prefix count start))
+        (tokenize_main rest rest 0))
+      (if (isspace c)
+        (cons (cons TOKEN_STARTELEM (prefix count start))
+          (tokenize_attrsearch rest))
+        (tokenize_name rest start (+ count 1)))))
+  (error (append "XML parse error: unexpected end of input in open tag: " start)))
+
+tokenize_endname !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_ENDELEM nil)
+        (tokenize_main rest rest 0))
+      (tokenize_endname rest start (+ count 1))))
+  (error (append "XML parse error: unexpected end of input in close tag: " start)))
+
+tokenize_leafend !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (cons (cons TOKEN_ENDELEM nil)
+        (tokenize_main rest rest 0))
+      nil))
+  (error "XML parse error: unexpected end of input in standalone tag"))
+
+tokenize_attrsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (tokenize_main rest rest 0)
+      (if (= c '/')
+        (tokenize_leafend rest)
+        (if (isspace c)
+          (tokenize_attrsearch rest)
+          (tokenize_attrname rest stream 0)))))
+  (error "XML parse error: unexpected end of input in open tag"))
+
+tokenize_attrname !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (or (= c '=') (isspace c))
+      (cons (cons TOKEN_ATTRNAME (prefix (+ count 1) start))
+        (tokenize_eqsearch stream))
+      (tokenize_attrname rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in attribute name"))
+
+tokenize_eqsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '=')
+      (tokenize_valsearch rest)
+      (if (isspace c)
+        (tokenize_eqsearch rest)
+        nil)))
+  (error "XML parse error: unexpected end of input in attribute"))
+
+tokenize_valsearch !stream =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '>')
+      (tokenize_main rest rest 0)
+      (if (= c '\"')
+        (tokenize_value_dq rest rest 0)
+        (if (= c '\'')
+          (tokenize_value_sq rest rest 0)
+          (if (isspace c)
+            (tokenize_valsearch rest)
+            nil)))))
+  (error "XML parse error: unexpected end of input in attribute value"))
+
+tokenize_value_dq !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '\"')
+      (cons (cons TOKEN_ATTRVALUE (prefix count start))
+        (tokenize_attrsearch rest))
+      (tokenize_value_dq rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in attribute value"))
+
+tokenize_value_sq !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (= c '\'')
+      (cons (cons TOKEN_ATTRVALUE (prefix count start))
+        (tokenize_attrsearch rest))
+      (tokenize_value_sq rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in attribute value"))
+
+isspace c = (or (= c ' ') (or (= c '\r') (= c '\n')))
+
+//==================================================================================================
+// xml:print_tokens tokens
+//
+// Debugging function for printing out the result of the tokenization process
+//==================================================================================================
+
+print_tokens !tokens =
 (if (not tokens)
   nil
   (letrec
@@ -36,234 +256,240 @@ print-tokens !tokens =
     !rest = (tail tokens)
    in
     (appendn 5 (item (head tok) TOKEN_NAMES) ": \""
-      (print-token (tail tok)) "\"\n"
-      (print-tokens rest))))
+      (print_token (tail tok)) "\"\n"
+      (print_tokens rest))))
 
-////////////////////////////////////////////////////////////////////////////////
-isspace c = (or (= c ' ') (or (= c '\r') (= c '\n')))
-
-parse_main !stream !start !count =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '<')
-      (if (> count 0)
-        (cons (cons TOKEN_TEXT (prefix count start))
-          (parse_namestart rest))
-        (parse_namestart rest))
-      (parse_main rest start (+ count 1))))
-  nil)
-
-parse_pi !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '?')
-      (parse_piend rest)
-      (parse_pi rest)))
-  nil)
-
-parse_piend !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (parse_skipspace rest)
-      (parse_pi rest)))
-  nil)
-
-parse_skipspace !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (isspace c)
-      (parse_skipspace rest)
-      (parse_main stream stream 0)))
-  nil)
-
-parse_namestart !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '/')
-      (parse_endname rest rest 0)
-      (if (= c '?')
-        (parse_pi rest)
-        (parse_name stream stream 0))))
-  nil)
-
-parse_name !stream !start !count =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (cons (cons TOKEN_STARTELEM (prefix count start))
-        (parse_main rest rest 0))
-      (if (isspace c)
-        (cons (cons TOKEN_STARTELEM (prefix count start))
-          (parse_attrsearch rest))
-        (parse_name rest start (+ count 1)))))
-  nil)
-
-parse_endname !stream !start !count =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (cons (cons TOKEN_ENDELEM nil)
-        (parse_main rest rest 0))
-      (parse_endname rest start (+ count 1))))
-  nil)
-
-parse_leafend !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (cons (cons TOKEN_ENDELEM nil)
-        (parse_main rest rest 0))
-      nil))
-  nil)
-
-parse_attrsearch !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (parse_main rest rest 0)
-      (if (= c '/')
-        (parse_leafend rest)
-        (if (isspace c)
-          (parse_attrsearch rest)
-          (parse_attrname rest stream 0)))))
-  nil)
-
-parse_attrname !stream !start !count =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (or (= c '=') (isspace c))
-      (cons (cons TOKEN_ATTRNAME (prefix (+ count 1) start))
-        (parse_eqsearch stream))
-      (parse_attrname rest start (+ count 1))))
-  nil)
-
-parse_eqsearch !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '=')
-      (parse_valsearch rest)
-      (if (isspace c)
-        (parse_eqsearch rest)
-        nil)))
-  nil)
-
-parse_valsearch !stream =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '>')
-      (parse_main rest rest 0)
-      (if (= c '\"')
-        (parse_value rest rest 0)
-        (if (isspace c)
-          (parse_valsearch rest)
-          nil))))
-  nil)
-
-parse_value !stream !start !count =
-(if stream
-  (letrec !c = (head stream) !rest = (tail stream) in
-    (if (= c '\"')
-      (cons (cons TOKEN_ATTRVALUE (prefix count start))
-        (parse_attrsearch rest))
-      (parse_value rest start (+ count 1))))
+print_token val =
+(if val
+  (if (= (head val) '\r')
+    (append "\\r" (print_token (tail val)))
+    (if (= (head val) '\n')
+      (append "\\n" (print_token (tail val)))
+      (cons (head val) (print_token (tail val)))))
   nil)
 
 ////////////////////////////////////////////////////////////////////////////////
-last !lst =
-(if (not lst)
-  nil
-  (if (not (tail lst))
-    (head lst)
-    (last (tail lst))))
 
-////////////////////////////////////////////////////////////////////////////////
-allbutlast !lst =
-(if (not lst)
-  nil
-  (if (not (tail lst))
-    nil
-    (letrec
-      !a = (head lst)
-      !b = (tail lst)
-     in
-      (cons a (allbutlast b)))))
-
-////////////////////////////////////////////////////////////////////////////////
-
-mkelem name attributes children =
-(cons TYPE_ELEMENT (cons name (cons attributes (cons children nil))))
+mkelem nsuri nsprefix localname attributes namespaces children =
+(cons TYPE_ELEMENT
+  (cons nsuri
+    (cons nsprefix
+      (cons localname
+        (cons attributes
+          (cons namespaces
+            (cons children nil)))))))
 
 mkdoc children = (cons TYPE_DOCUMENT children)
 
-mkattr name value =
-(cons TYPE_ATTRIBUTE (cons name (cons value nil)))
+mkattr nsuri nsprefix localname value =
+(cons TYPE_ATTRIBUTE
+  (cons nsuri
+    (cons nsprefix
+      (cons localname
+        (cons value nil)))))
 
 mktext value =
 (cons TYPE_TEXT value)
 
-nodechildren node =
+mkcomment value =
+(cons TYPE_COMMENT value)
+
+node_children node =
 (if (= (head node) TYPE_ELEMENT)
-  (item 3 node)
+  (item 6 node)
   (if (= (head node) TYPE_DOCUMENT)
     (tail node)
     nil))
 
-nodeattributes node =
+node_attributes node =
 (if (= (head node) TYPE_ELEMENT)
-  (item 2 node)
+  (item 4 node)
   nil)
 
-getchildren lst =
-(if lst
-  (if (= (head (head lst)) TYPE_ATTRIBUTE)
-    (getchildren (tail lst))
-    lst)
+getnsprefix1 str start !count =
+(if str
+  (if (= (head str) ':')
+    (prefix count start)
+    (getnsprefix1 (tail str) start (+ count 1)))
   nil)
 
-getattributes lst =
-(if lst
-  (if (= (head (head lst)) TYPE_ATTRIBUTE)
-    (cons (head lst) (getattributes (tail lst)))
-    nil)
-  nil)
+getnsprefix qname = (getnsprefix1 qname qname 0)
 
-construct !tokens =
-(if (not tokens)
-  (cons nil nil)
+getlocalname1 qname start =
+(if qname
+  (if (= (head qname) ':')
+    (tail qname)
+    (getlocalname1 (tail qname) start))
+  start)
+
+getlocalname qname = (getlocalname1 qname qname)
+
+get_attribute1 nsuri localname attrs =
+(if attrs
   (letrec
-    !cur = (head tokens)
-    !rest = (tail tokens)
-    !tag = (head cur)
+    attr = (head attrs)
+   in
+    (if
+      (and
+        (streq (item 1 attr) nsuri)
+        (streq (item 3 attr) localname))
+      (item 4 attr)
+      (get_attribute1 nsuri localname (tail attrs))))
+  nil)
+
+get_attribute nsuri localname elem =
+(letrec
+  attrs = (item 4 elem)
+ in
+  (get_attribute1 nsuri localname attrs))
+
+skip_level tokens level =
+(if tokens
+  (letrec
+    cur = (head tokens)
+    rest = (tail tokens)
+    tag = (head cur)
+   in
+    (if (= tag TOKEN_STARTELEM)
+      (skip_level rest (+ level 1))
+      (if (= tag TOKEN_ENDELEM)
+        (if (= level 0)
+          rest
+          (skip_level rest (- level 1)))
+        (skip_level rest level))))
+  nil)
+
+ns_lookup1 nsprefix lst =
+(if lst
+  (letrec
+    ns = (head lst)
+    prefix = (head ns)
+    value = (tail ns)
+   in
+    (if (streq prefix nsprefix)
+      value
+      (ns_lookup1 nsprefix (tail lst))))
+  nil)
+
+ns_lookup2 nsprefix nslists =
+(if nslists
+  (letrec
+    nsuri = (ns_lookup1 nsprefix (head nslists))
+   in
+    (if nsuri
+      nsuri
+      (ns_lookup2 nsprefix (tail nslists))))
+  nil)
+
+ns_lookup nsprefix nslists =
+(if (streq nsprefix "xmlns")
+  XMLNS_NS
+  (ns_lookup2 nsprefix nslists))
+
+parse_attrs tokens namespaces =
+(if (not tokens)
+  nil
+  (letrec
+    cur = (head tokens)
+    rest = (tail tokens)
+    tag = (head cur)
+   in
+    (if (= tag TOKEN_ATTRNAME)
+      (letrec
+        value = (tail (head rest))
+        rest2 = (tail rest)
+        qname = (tail cur)
+        nsprefix = (getnsprefix qname)
+        nsuri = (ns_lookup nsprefix namespaces)
+        localname = (getlocalname qname)
+
+       in
+        // Check if it's a namespace attribute; if so, skip this one
+        (if (streq nsprefix "xmlns")
+          (parse_attrs rest2 namespaces)
+          (if (and (not nsprefix) (streq localname "xmlns"))
+            (parse_attrs rest2 namespaces)
+            // It's a normal attribute; add it to the list
+            (cons
+              (mkattr nsuri nsprefix localname value)
+              (parse_attrs rest2 namespaces)))))
+      nil)))
+
+parse_namespaces tokens =
+(if (not tokens)
+  nil
+  (letrec
+    cur = (head tokens)
+    rest = (tail tokens)
+    tag = (head cur)
+   in
+    (if (= tag TOKEN_ATTRNAME)
+      (letrec
+        value = (tail (head rest))
+        rest2 = (tail rest)
+        qname = (tail cur)
+        nsprefix = (getnsprefix qname)
+        localname = (getlocalname qname)
+       in
+        (if (streq nsprefix "xmlns")
+          (cons
+            (cons localname value)
+            (parse_namespaces rest2))
+          (if (and (not nsprefix) (streq localname "xmlns"))
+            (cons
+              (cons nil value)
+              (parse_namespaces rest2))
+            (parse_namespaces rest2))))
+      nil)))
+
+skip_attrs tokens namespaces !depth =
+(if (not tokens)
+  nil
+  (letrec
+    cur = (head tokens)
+    rest = (tail tokens)
+    tag = (head cur)
+   in
+    (if (or (= tag TOKEN_ATTRNAME) (= tag TOKEN_ATTRVALUE))
+      (skip_attrs rest namespaces depth)
+      (parse1 tokens namespaces depth))))
+
+parse1 tokens namespaces !depth =
+(if (not tokens)
+  (if (> depth 1)
+    (error "XML parse error: missing close tag at end of input")
+    nil)
+  (letrec
+    cur = (head tokens)
+    rest = (tail tokens)
+    tag = (head cur)
    in
     (if (= tag TOKEN_STARTELEM)
       (letrec
-        !pair = (construct rest)
-        !contents = (allbutlast pair)
-        !children = (getchildren contents)
-        !attributes = (getattributes contents)
-        !remainingtokens = (last pair)
-        !name = (tail cur)
-        !element = (mkelem name attributes children)
+        augnamespaces = (cons newnamespaces namespaces)
+        children = (skip_attrs rest augnamespaces (+ depth 1))
+        attributes = (parse_attrs rest augnamespaces)
+        newnamespaces = (parse_namespaces rest)
+        remainingtokens = (skip_level rest 0)
+        qname = (tail cur)
+        nsprefix = (getnsprefix qname)
+        nsuri = (ns_lookup nsprefix augnamespaces)
+        localname = (getlocalname qname)
        in
-        (cons element (construct remainingtokens)))
+        (cons
+          (mkelem nsuri nsprefix localname attributes newnamespaces children)
+          (parse1 remainingtokens namespaces depth)))
       (if (= tag TOKEN_ENDELEM)
-        (cons rest nil)
+        nil
         (if (= tag TOKEN_ATTRNAME)
-          (letrec
-            !value = (head rest)
-            rest2 = (tail rest)
-            attr = (mkattr (tail cur) (tail value))
-           in
-            (cons attr (construct rest2)))
+          nil
           (if (= tag TOKEN_TEXT)
-            (letrec
-              !text = (tail cur)
-             in
-              (cons (mktext text) (construct rest)))
-            (construct rest)))))))
+            (cons (mktext (tail cur)) (parse1 rest namespaces depth))
+            (if (= tag TOKEN_COMMENT)
+              (cons (mkcomment (tail cur)) (parse1 rest namespaces depth))
+              (parse1 rest namespaces depth))))))))
 
-construct1 !tokens = (allbutlast (construct tokens))
+parse tokens = (parse1 tokens nil 0)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -276,42 +502,78 @@ spaces n =
   (append "   " (spaces (- n 1)))
   nil)
 
-printattrs lst next =
+print_attrs lst next =
 (if lst
   (letrec
     attr = (head lst)
+    nsuri = (item 1 attr)
+    nsprefix = (item 2 attr)
+    localname = (item 3 attr)
+    qname = (if nsprefix (append nsprefix (cons ':' localname)) localname)
+    //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
    in
     (append " "
-      (append (item 1 attr)
+      (append qname
         (append "=\""
-          (append (item 2 attr)
-            (append "\"" (printattrs (tail lst) next)))))))
+          (append (item 4 attr)
+            (append "\"" (print_attrs (tail lst) next)))))))
   next)
 
-printnodes lst next =
+print_namespaces lst next =
+(if lst
+  (letrec
+    cur = (head lst)
+    nsprefix = (head cur)
+    nsuri = (tail cur)
+   in
+    (append " xmlns:"
+      (append nsprefix
+        (append "=\""
+          (append nsuri
+            (append "\"" (print_namespaces (tail lst) next)))))))
+  next)
+
+print_nodes lst next =
 (if lst
   (letrec
     node = (head lst)
     rest = (tail lst)
    in
     (if (= (head node) TYPE_ELEMENT)
-      (if (item 3 node)
-        (cons '<'
-          (append (item 1 node)
-            (printattrs (item 2 node)
-              (cons '>'
-                (printnodes (item 3 node)
-                  (cons '<'
-                    (cons '/'
-                      (append (item 1 node) (append ">" (printnodes rest next))))))))))
-        (cons '<'
-          (append (item 1 node)
-            (printattrs (item 2 node) (append "/>" (printnodes rest next))))))
+      (letrec
+        nsuri = (item 1 node)
+        nsprefix = (item 2 node)
+        localname = (item 3 node)
+        attributes = (item 4 node)
+        namespaces = (item 5 node)
+        children = (item 6 node)
+        qname = (if nsprefix (append nsprefix (cons ':' localname)) localname)
+       //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
+       in
+        (if children
+          (cons '<'
+            (append qname
+              (print_namespaces namespaces
+                (print_attrs attributes
+                  (cons '>'
+                    (print_nodes children
+                      (cons '<'
+                        (cons '/'
+                          (append qname
+                            (append ">"
+                              (print_nodes rest next)))))))))))
+          (cons '<'
+            (append qname
+              (print_namespaces namespaces
+                (print_attrs attributes
+                  (append "/>" (print_nodes rest next))))))))
       (if (= (head node) TYPE_TEXT)
-        (append (tail node) (printnodes rest next))
-        (if (= (head node) TYPE_DOCUMENT)
-          (printnodes (tail node) (printnodes rest next))
-          (append "OTHER: " (append (numtostring (head node)) (printnodes rest next)))))))
+        (append (tail node) (print_nodes rest next))
+        (if (= (head node) TYPE_COMMENT)
+          (append "<!--" (append (tail node) (append "-->" (print_nodes rest next))))
+          (if (= (head node) TYPE_DOCUMENT)
+            (print_nodes (tail node) (print_nodes rest next))
+            (append "OTHER: " (append (numtostring (head node)) (print_nodes rest next))))))))
   next)
 
 isnonws str =
@@ -335,9 +597,15 @@ addwsca depth nonws lst =
    in
     (if (= type TYPE_ELEMENT)
       (letrec
-        next = (cons (mkelem (item 1 this)
-            (item 2 this)
-            (addwsc (+ depth 1) (item 3 this)))
+        next =
+        (cons
+          (mkelem
+            (item 1 this) // nsuri
+            (item 2 this) // nsprefix
+            (item 3 this) // localname
+            (item 4 this) // attributes
+            (item 5 this) // namespaces
+            (addwsc (+ depth 1) (item 6 this)))
           (addwsca depth nil (tail lst)))
        in
         (if nonws
@@ -345,11 +613,18 @@ addwsca depth nonws lst =
           (cons (cons TYPE_TEXT (cons '\n' (spaces depth))) next)))
       (if (= type TYPE_TEXT)
         (cons this (addwsca depth (isnonws (tail this)) (tail lst)))
-        (if (= type TYPE_DOCUMENT)
-          (cons (mkdoc (addwsc depth (tail this)))
-            (addwsca depth 1 (tail lst)))
-          (cons this
-            (addwsca depth nil (tail lst)))))))
+        (if (= type TYPE_COMMENT)
+          (letrec
+            next = (addwsca depth 1 (tail lst))
+            in
+            (if nonws
+              (cons this next)
+              (cons (cons TYPE_TEXT (cons '\n' (spaces depth))) (cons this next))))
+          (if (= type TYPE_DOCUMENT)
+            (cons (mkdoc (addwsc depth (tail this)))
+              (addwsca depth 1 (tail lst)))
+            (cons this
+              (addwsca depth nil (tail lst))))))))
   (if nonws
     nil
     (cons (cons TYPE_TEXT (cons '\n' (spaces (- depth 1)))) nil)))
@@ -358,33 +633,37 @@ addwsca depth nonws lst =
 
 stripspaces lst =
 (if lst
-    (letrec
-       cur = (head lst)
-       rest = (tail lst)
-       type = (head cur)
-     in
-       (if (= type TYPE_ELEMENT)
-           (cons (mkelem (item 1 cur) (item 2 cur) (stripspaces (item 3 cur))) (stripspaces rest))
-       (if (= type TYPE_TEXT)
-           (if (isnonws (tail cur))
-               (cons cur (stripspaces rest))
-               (stripspaces rest))
-           (cons cur (stripspaces rest)))))
-    nil)
+  (letrec
+    cur = (head lst)
+    rest = (tail lst)
+    type = (head cur)
+   in
+    (if (= type TYPE_ELEMENT)
+      (cons
+        (mkelem
+          (item 1 cur) // nsuri
+          (item 2 cur) // nsprefix
+          (item 3 cur) // localname
+          (item 4 cur) // attributes
+          (item 5 cur) // namespaces
+          (stripspaces (item 6 cur))) (stripspaces rest))
+      (if (= type TYPE_TEXT)
+        (if (isnonws (tail cur))
+          (cons cur (stripspaces rest))
+          (stripspaces rest))
+        (cons cur (stripspaces rest)))))
+  nil)
 
-parsexml stream strip =
+parsexml strip stream =
 (letrec
-   input = (construct1 (parse_skipspace stream))
-   input2 = (if strip (stripspaces input) input)
-in
-   (mkdoc input2))
+ input = (parse (tokenize stream))
+ input2 = (if strip (stripspaces input) input)
+ in
+  (mkdoc input2))
 
-printxml root =
-(append XML_DECL
-  (printnodes (cons root nil) "\n"))
-
-printxmlindent root =
-(append XML_DECL
-  (printnodes (addwsc 0 (cons root nil)) "\n"))
-
-// forcelist implemented
+printxml indent root =
+(letrec
+  raw = (cons root nil)
+  nodes = (if indent (addwsc 0 raw) raw)
+ in
+  (append XML_DECL (print_nodes nodes nil)))

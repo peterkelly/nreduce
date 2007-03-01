@@ -6,7 +6,7 @@ BUILT_SOURCES = modules.c
 libmodules_la_SOURCES = modules.c
 
 INCLUDES = -I@top_srcdir@
-CLEANFILES = *.da *.bb *.bbg *.gcov util.c http.c xml.c prelude.c
+CLEANFILES = *.da *.bb *.bbg *.gcov *.c
 
 modules.c: *.elc convert_modules
 	./convert_modules
