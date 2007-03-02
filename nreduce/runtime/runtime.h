@@ -80,38 +80,39 @@
 #define B_ARRAYSIZE      29
 #define B_ARRAYSKIP      30
 #define B_ARRAYPREFIX    31
-#define B_TESTSTRING     32
-#define B_TESTARRAY      33
+#define B_STRCMP1        32    
+#define B_TESTSTRING     33
+#define B_TESTARRAY      34
 
 /* Sequential/parallel directives */
-#define B_SEQ            34
-#define B_PAR            35
-#define B_PARHEAD        36
+#define B_SEQ            35
+#define B_PAR            36
+#define B_PARHEAD        37
 
 /* Filesystem access */
-#define B_OPENFD         37
-#define B_READCHUNK      38
-#define B_READDIR1       39
-#define B_FEXISTS        40
-#define B_FISDIR         41
+#define B_OPENFD         38
+#define B_READCHUNK      39
+#define B_READDIR1       40
+#define B_FEXISTS        41
+#define B_FISDIR         42
 
 /* Networking */
-#define B_OPENCON        42
-#define B_READCON        43
-#define B_STARTLISTEN    44
-#define B_ACCEPT         45
+#define B_OPENCON        43
+#define B_READCON        44
+#define B_STARTLISTEN    45
+#define B_ACCEPT         46
 
 /* Terminal and network output */
-#define B_NCHARS         46
-#define B_PRINT          47
-#define B_PRINTARRAY     48
-#define B_PRINTEND       49
-#define B_ECHO           50
+#define B_NCHARS         47
+#define B_PRINT          48
+#define B_PRINTARRAY     49
+#define B_PRINTEND       50
+#define B_ECHO           51
 
 /* Other */
-#define B_ERROR          51
+#define B_ERROR          52
 
-#define NUM_BUILTINS     52
+#define NUM_BUILTINS     53
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

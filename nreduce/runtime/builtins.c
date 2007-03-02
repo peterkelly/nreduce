@@ -744,6 +744,47 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   }
 }
 
+static void b_strcmp1(task *tsk, pntr *argstack)
+{
+  pntr a = argstack[1];
+  pntr b = argstack[0];
+
+  /* If a and b are are both arrays with elemsize=1, and a nil tail, we can do a normal string
+     comparison */
+  if ((CELL_AREF == pntrtype(a)) && (CELL_AREF == pntrtype(b))) {
+    carray *aarr = aref_array(a);
+    carray *barr = aref_array(b);
+    int aindex = aref_index(a);
+    int bindex = aref_index(b);
+    aarr->tail = resolve_pntr(aarr->tail);
+    barr->tail = resolve_pntr(barr->tail);
+    if ((1 == aarr->elemsize) && (1 == barr->elemsize) &&
+        (CELL_NIL == pntrtype(aarr->tail)) && (CELL_NIL == pntrtype(barr->tail))) {
+
+      /* Compare character by character until we reach the end of either or both strings */
+      while ((aindex < aarr->size) && (bindex < barr->size)) {
+        if (aarr->elements[aindex] != barr->elements[aindex]) {
+          argstack[0] = (double)(aarr->elements[aindex]-barr->elements[aindex]);
+          return;
+        }
+        aindex++;
+        bindex++;
+      }
+
+      if (aindex < aarr->size)
+        argstack[0] = 1;
+      else if (bindex < barr->size)
+        argstack[0] = -1;
+      else
+        argstack[0] = 0;
+      return;
+    }
+  }
+
+  /* Otherwise, have to fall back and treat them as cons lists */
+  argstack[0] = tsk->globnilpntr;
+}
+
 static void b_numtostring(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
@@ -1583,6 +1624,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "arraysize",      1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_arraysize      },
 { "arrayskip",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayskip      },
 { "arrayprefix",    3, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayprefix    },
+{ "strcmp1",        2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_strcmp1        },
 { "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_teststring     },
 { "testarray",      2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_testarray      },
 

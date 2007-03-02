@@ -1,0 +1,72 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+dupstring lst =
+(if lst
+  (cons (- (+ (head lst) 1) 1) (dupstring (tail lst)))
+  nil)
+
+showone adup bdup a b =
+(letrec
+  a2 = (if adup (dupstring a) a)
+  b2 = (if bdup (dupstring b) b)
+ in
+  (append "cmp \""
+    (append a
+      (append "\" \""
+        (append b
+          (append "\" = "
+            (append (numtostring (strcmp a2 b2)) "\n")))))))
+
+showcmp adup bdup lst =
+(if lst
+  (append
+    (showone adup bdup (head (head lst)) (tail (head lst)))
+    (showcmp adup bdup (tail lst)))
+  nil)
+
+main =
+(letrec
+  strings =
+  (cons (cons "hello" "hello")
+    (cons (cons "hello" "hell")
+      (cons (cons "hello" "helloo")
+        (cons (cons "hello" "hellp")
+          (cons (cons "hello" "helln")
+            nil)))))
+ in
+  (append (showcmp nil nil strings)
+    (append "\n"
+      (append (showcmp 1 nil strings)
+        (append "\n"
+          (append (showcmp nil 1 strings)
+            (append "\n"
+              (append (showcmp 1 1 strings)
+                nil))))))))
+==================================== OUTPUT ====================================
+cmp "hello" "hello" = 0
+cmp "hello" "hell" = 1
+cmp "hello" "helloo" = -1
+cmp "hello" "hellp" = -1
+cmp "hello" "helln" = 1
+
+cmp "hello" "hello" = 0
+cmp "hello" "hell" = 1
+cmp "hello" "helloo" = -1
+cmp "hello" "hellp" = -1
+cmp "hello" "helln" = 1
+
+cmp "hello" "hello" = 0
+cmp "hello" "hell" = 1
+cmp "hello" "helloo" = -1
+cmp "hello" "hellp" = -1
+cmp "hello" "helln" = 1
+
+cmp "hello" "hello" = 0
+cmp "hello" "hell" = 1
+cmp "hello" "helloo" = -1
+cmp "hello" "hellp" = -1
+cmp "hello" "helln" = 1
+================================== RETURN CODE =================================
+0

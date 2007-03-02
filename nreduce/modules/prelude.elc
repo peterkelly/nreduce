@@ -141,14 +141,25 @@ consn n a b =
   (append1 a b)
   (consn (- n 1) (append1 a b)))
 
-streq a b =
-(if (and a b)
-  (if (= (head a) (head b))
-    (streq (tail a) (tail b))
-    nil)
-  (if (and (not a) (not b))
-    1
-    nil))
+strcmp a b =
+(letrec
+  // try a direct comparison, in the case that both are char arrays
+  res = (strcmp1 a b)
+ in
+  (if res
+    res
+    // fallback: treat as cons list
+    (if a
+      (if b
+        (if (= (head a) (head b))
+          (strcmp (tail a) (tail b))
+          (- (head a) (head b)))
+        1)
+      (if b
+        -1
+        0))))
+
+streq a b = (= (strcmp a b) 0)
 
 map f lst =
 (if lst
