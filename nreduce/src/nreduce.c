@@ -266,8 +266,11 @@ int main(int argc, char **argv)
   args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);
 
-  if (NULL != getenv("DISABLE_PARTIAL_EVAL"))
-    args.nopartialsink = 1;
+/*   if (NULL != getenv("DISABLE_PARTIAL_EVAL")) */
+/*     args.nopartialsink = 1; */
+
+  /* TEMP: disable partial evaluation */
+  args.nopartialsink = 1;
 
   compileinfo = args.compileinfo;
 
