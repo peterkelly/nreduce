@@ -11,13 +11,15 @@ TYPE_ELEMENT    = 0
 TYPE_TEXT       = 1
 TYPE_COMMENT    = 2
 TYPE_ATTRIBUTE  = 3
-TYPE_DOCUMENT   = 4
-TYPE_STRING     = 5
-TYPE_BOOLEAN    = 6
-TYPE_NUMBER     = 7
-TYPE_ERROR      = 8
+TYPE_NAMESPACE  = 4
+TYPE_DOCUMENT   = 5
+TYPE_STRING     = 6
+TYPE_BOOLEAN    = 7
+TYPE_NUMBER     = 8
+TYPE_ERROR      = 9
 
-NODE_NAMES = "ELEMENT", "TEXT", "ATTRIBUTE", "DOCUMENT", "STRING", "BOOLEAN", "NUMBER", "ERROR", nil
+NODE_NAMES = "ELEMENT", "TEXT", "COMMENT", "ATTRIBUTE", "NAMESPACE", "DOCUMENT", "STRING",
+"BOOLEAN", "NUMBER", "ERROR", nil
 
 TOKEN_STARTELEM = 0
 TOKEN_ENDELEM = 1
@@ -501,8 +503,8 @@ skip_attrs tokens namespaces !depth =
 //
 // Each attribute name/value pair in the current element is inspected to see if it is an XML
 // namespace declaration, i.e. if it is of the form xmlns:something="..." or xmlns="...". If so,
-// a namespace mapping consisting of a cons pair with the prefix and namespace URI is created, and
-// added to the list. Attributes other than namespace declarations are ignored.
+// a namespace node containing the prefix and namespace URI is created, and added to the list.
+// Attributes other than namespace declarations are ignored.
 //
 // This function looks no further than the attributes specified for this element. If a tag other
 // than ATTRNAME or ATTRVALUE is encountered, it means that the next part of the token stream
@@ -526,11 +528,11 @@ parse_namespaces tokens =
        in
         (if (streq nsprefix "xmlns")
           (cons
-            (cons localname value)
+            (mknamespace value localname)
             (parse_namespaces rest2))
           (if (and (not nsprefix) (streq localname "xmlns"))
             (cons
-              (cons nil value)
+              (mknamespace value nil)
               (parse_namespaces rest2))
             (parse_namespaces rest2))))
       nil)))
@@ -624,6 +626,11 @@ mkattr nsuri nsprefix localname value =
       (cons localname
         (cons value nil)))))
 
+mknamespace nsuri nsprefix =
+(cons TYPE_NAMESPACE
+  (cons nsuri
+    (cons nsprefix nil)))
+
 mktext value =
 (cons TYPE_TEXT value)
 
@@ -683,8 +690,8 @@ ns_lookup1 nsprefix lst =
 (if lst
   (letrec
     ns = (head lst)
-    prefix = (head ns)
-    value = (tail ns)
+    value = (item 1 ns)
+    prefix = (item 2 ns)
    in
     (if (streq prefix nsprefix)
       value
@@ -731,8 +738,8 @@ print_namespaces lst next =
 (if lst
   (letrec
     cur = (head lst)
-    nsprefix = (head cur)
-    nsuri = (tail cur)
+    nsuri = (item 1 cur)
+    nsprefix = (item 2 cur)
    in
     (append " xmlns:"
       (append nsprefix
@@ -756,7 +763,7 @@ print_nodes lst next =
         namespaces = (item 5 node)
         children = (item 6 node)
         qname = (if nsprefix (append nsprefix (cons ':' localname)) localname)
-       //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
+        //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
        in
         (if children
           (cons '<'

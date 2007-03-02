@@ -10,7 +10,7 @@ main =
     (cons
       // <people xmlns:jobs="http://jobs.net/ns">
       (xml:mkelem nil nil "people" nil
-        (cons (cons "jobs" "http://jobs.net/ns") nil)
+        (cons (xml:mknamespace "http://jobs.net/ns" "jobs") nil)
         (cons
           // <men>
           (xml:mkelem nil nil "men" nil nil

@@ -13,8 +13,8 @@ main =
     (cons
       // <people xmlns:gender="urn:test:gender" xmlns:individual="http://test.com/ns/individuals">
       (xml:mkelem nil nil "people" nil
-        (cons (cons "gender" GENDER_NS)
-          (cons (cons "individual" INDIVIDUAL_NS)
+        (cons (xml:mknamespace GENDER_NS "gender")
+          (cons (xml:mknamespace INDIVIDUAL_NS "individual")
             nil))
         (cons
           // <gender:men>
