@@ -763,8 +763,8 @@ static void b_strcmp1(task *tsk, pntr *argstack)
 
       /* Compare character by character until we reach the end of either or both strings */
       while ((aindex < aarr->size) && (bindex < barr->size)) {
-        if (aarr->elements[aindex] != barr->elements[aindex]) {
-          argstack[0] = (double)(aarr->elements[aindex]-barr->elements[aindex]);
+        if (aarr->elements[aindex] != barr->elements[bindex]) {
+          argstack[0] = (double)(aarr->elements[aindex] - barr->elements[bindex]);
           return;
         }
         aindex++;
