@@ -235,11 +235,13 @@ static int process_imports(source *src)
     list *newimports = src->newimports;
     src->newimports = NULL;
 
+    for (l = newimports; l && (0 == r); l = l->next)
+      list_push(&src->imports,strdup((char*)l->data));
+
     for (l = newimports; l && (0 == r); l = l->next) {
       char *modname = (char*)l->data;
       const module_info *mod;
       int found = 0;
-      list_push(&src->imports,strdup(modname));
 
       for (mod = modules; mod->name; mod++) {
         if (!strcmp(modname,mod->name)) {
