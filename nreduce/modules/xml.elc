@@ -16,11 +16,12 @@ TYPE_DOCUMENT   = 5
 TYPE_STRING     = 6
 TYPE_BOOLEAN    = 7
 TYPE_NUMBER     = 8
-UNTYPED_ATOMIC  = 9
-TYPE_ERROR      = 10
+TYPE_QNAME      = 9
+UNTYPED_ATOMIC  = 10
+TYPE_ERROR      = 11
 
 NODE_NAMES = "ELEMENT", "TEXT", "COMMENT", "ATTRIBUTE", "NAMESPACE", "DOCUMENT", "STRING",
-"BOOLEAN", "NUMBER", "UNTYPED_ATOMIC", "ERROR", nil
+"BOOLEAN", "NUMBER", "QNAME", "UNTYPED_ATOMIC", "ERROR", nil
 
 TOKEN_STARTELEM = 0
 TOKEN_ENDELEM = 1
@@ -609,6 +610,22 @@ skip_level tokens level =
 
 //==================================================================================================
 
+mkstring str =
+(cons TYPE_STRING str)
+
+mknumber num =
+(cons TYPE_NUMBER num)
+
+mkbool b =
+(cons TYPE_BOOLEAN b)
+
+mkqname nsuri nsprefix localname =
+(cons TYPE_QNAME
+  (cons nsuri
+    (cons nsprefix
+      (cons localname
+        nil))))
+
 mkelem nsuri nsprefix localname attributes namespaces children =
 (cons TYPE_ELEMENT
   (cons nsuri
@@ -645,9 +662,38 @@ node_children node =
     (tail node)
     nil))
 
+node_desc_list lst next =
+(if lst
+  (letrec
+    node = (head lst)
+   in
+    (cons node
+      (node_descendants1
+        node
+        (node_desc_list (tail lst) next))))
+  next)
+
+node_descendants1 node next =
+(letrec
+  type = (head node)
+ in
+  (if (= type TYPE_ELEMENT)
+    (node_desc_list (item 6 node) next)
+    (if (= type TYPE_DOCUMENT)
+      (node_desc_list (tail node) next)
+      next)))
+
+node_descendants node =
+(node_descendants1 node nil)
+
 node_attributes node =
 (if (= (head node) TYPE_ELEMENT)
   (item 4 node)
+  nil)
+
+node_namespaces node =
+(if (= (head node) TYPE_ELEMENT)
+  (item 5 node)
   nil)
 
 getnsprefix1 str start !count =
