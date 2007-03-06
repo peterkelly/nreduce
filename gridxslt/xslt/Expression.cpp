@@ -249,6 +249,12 @@ int SyntaxNode::compile(Compilation *comp, Function *fun, OutputPort **cursor)
   return 0;
 }
 
+void SyntaxNode::genELC(StringBuffer *buf)
+{
+  message("ELC generation for syntax node type %d is not supported\n",m_type);
+  ASSERT(0);
+}
+
 bool SyntaxNode::inConditional() const
 {
   if (!m_parent)
@@ -577,6 +583,14 @@ void SequenceExpr::print(StringBuffer &buf)
   m_left->print(buf);
   buf.format(", ");
   m_right->print(buf);
+}
+
+void FilterExpr::print(StringBuffer &buf)
+{
+  m_left->print(buf);
+  buf.format("[");
+  m_right->print(buf);
+  buf.format("]");
 }
 
 void StepExpr::print(StringBuffer &buf)

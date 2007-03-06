@@ -33,8 +33,12 @@
 #include <string.h>
 #include <argp.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 using namespace GridXSLT;
+
+#define ELC_TEMPDIR "elc.tmp"
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -59,6 +63,8 @@ static struct argp_option options[] = {
   {"trace",                    't', NULL,    0, "Enable tracing" },
   {"parse-tree",               'p', NULL,    0, "Dump parse tree" },
   {"server",                   's', NULL,    0, "Run as HTTP server" },
+  {"elc",                      'l', NULL,    0, "Generate ELC" },
+  {"nreduce",                  'n', NULL,    0, "Compile to ELC and run with nreduce" },
   { 0 }
 };
 
@@ -73,6 +79,8 @@ struct arguments {
   bool trace;
   bool print_tree;
   bool server;
+  bool elc;
+  bool nreduce;
 };
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state)
@@ -104,6 +112,12 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
   case 's':
     arguments->server = true;
     break;
+  case 'l':
+    arguments->elc = true;
+    break;
+  case 'n':
+    arguments->nreduce = true;
+    break;
   case ARGP_KEY_ARG:
     if (0 == state->arg_num) {
       arguments->filename = arg;
@@ -128,6 +142,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
+#if 0
 static Value load_input_doc(Error *ei, const char *filename, list *space_decls)
 {
   FILE *f;
@@ -164,6 +179,7 @@ static Value load_input_doc(Error *ei, const char *filename, list *space_decls)
   xmlFreeDoc(doc);
   return Value(docnode);
 }
+#endif
 
 int gridxslt_main(int argc, char **argv)
 {
@@ -171,7 +187,7 @@ int gridxslt_main(int argc, char **argv)
   int r = 0;
   Error ei;
   xslt_source *source = NULL;
-  Program *program = NULL;
+//   Program *program = NULL;
 
   setbuf(stdout,NULL);
 
@@ -195,6 +211,59 @@ int gridxslt_main(int argc, char **argv)
   if (arguments.print_tree)
     source->root->printTree(0);
 
+  if (NULL == arguments.input) {
+    fmessage(stderr,"No input file specified!\n");
+    return 1;
+  }
+
+  /* run with nreduce */
+  FILE *outl;
+  StringBuffer buf;
+  String escaped = escape_str(arguments.input);
+  buf.format("import xml\n\n");
+  buf.format("import xslt\n\n");
+  buf.format("FILENAME = \"%*\"\n\n",&escaped);
+  source->root->genELC(&buf);
+
+  // basic support for <xsl:strip-space> - only handles the * case
+  Statement *sn;
+  bool stripall = false;
+  for (sn = xl_first_decl(source->root); sn; sn = xl_next_decl(sn)) {
+    if (XSLT_DECL_STRIP_SPACE == sn->m_type) {
+      SpaceExpr *space = static_cast<SpaceExpr*>(sn);
+      if (1 == space->m_qnametests.count()) {
+        QNameTest *qt = space->m_qnametests[0];
+        if (qt->qn.isNull())
+          stripall = true;
+      }
+    }
+  }
+  buf.format("STRIPALL = %s\n",stripall ? "1" : "nil");
+
+  df_seroptions *options = xslt_get_output_def(source,NSName::null());
+  if (options->m_indent)
+    buf.format("INDENT = 1\n");
+  else
+    buf.format("INDENT = nil\n");
+  buf.format("main = (xslt:output INDENT (cons (xml:mkdoc (top (xml:parsexml "
+             "STRIPALL (readb FILENAME)) 1 1)) nil))\n\n");
+
+  if (arguments.elc) {
+    message("%*",&buf);
+  }
+  else {
+    if (NULL == (outl = fopen("out.elc","w"))) {
+      fmessage(stderr,"out.elc: %s\n",strerror(errno));
+      return 1;
+    }
+
+    fmessage(outl,"%*",&buf);
+    fclose(outl);
+    system("../nreduce/src/nreduce out.elc");
+  }
+  return 0;
+
+#if 0
   if (0 != xslt_compile(&ei,source,&program)) {
     ei.fprint(stderr);
     ei.clear();
@@ -236,6 +305,7 @@ int gridxslt_main(int argc, char **argv)
   xslt_source_free(source);
   ValueImpl::printRemaining();
   xs_cleanup();
+#endif
 
   return r;
 }

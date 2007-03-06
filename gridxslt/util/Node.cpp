@@ -220,7 +220,7 @@ Node::Node(xmlNodePtr xn)
     m_qn.m_localPart = xn->name;
     if (xn->ns) {
       m_ident.m_ns = xn->ns->href;
-      m_qn.m_localPart = xn->ns->prefix;
+      m_qn.m_prefix = xn->ns->prefix;
     }
 
     for (aptr = xn->properties; aptr; aptr = aptr->next) {
@@ -231,7 +231,7 @@ Node::Node(xmlNodePtr xn)
       attr->m_qn.m_localPart = aptr->name;
       if (aptr->ns) {
         attr->m_ident.m_ns = aptr->ns->href;
-        attr->m_qn.m_localPart = aptr->ns->prefix;
+        attr->m_qn.m_prefix = aptr->ns->prefix;
       }
 
       for (ac = aptr->children; ac; ac = ac->next) {

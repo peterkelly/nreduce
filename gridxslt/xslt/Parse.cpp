@@ -1064,21 +1064,28 @@ static int parse_sequence_constructors(Statement *sn, Node *start,
       // FIXME: ensure that the prefix is ok to use in the result document... i.e. the
       // prefix -> namespace mapping must be established in the result document
       new_sn->m_qn = child->m_qn;
+      new_sn->m_ns = child->m_ident.m_ns;
 
-
-
+//       message("literal result element: ident %* %*\n",
+//               &child->m_ident.m_ns,&child->m_ident.m_name);
+//       message("                        qname %* %*\n",
+//               &child->m_qn.m_prefix,&child->m_qn.m_localPart);
 
       // message("BEGIN Parsing literal result element %s\n",c->name);
 
       int level = 0;
       for (Node *tn = child; tn; tn = tn->parent()) {
         for (xmlNsPtr ns = tn->m_xn->nsDef; ns; ns = ns->next) {
+//           message("  namespace %s, prefix %s\n",ns->href,ns->prefix);
           if ((ns->href != XSLT_NAMESPACE) && !shouldExcludePrefix(child,ns->prefix)) {
-            NamespaceExpr *nsnode = new NamespaceExpr(new StringExpr(ns->prefix),
-                                                      String::null(),
-                                                      new StringExpr(ns->href));
-            nsnode->m_implicit = true;
-            add_node(&child2_ptr,nsnode,filename,child);
+//             message("... keeping\n");
+            if (0 == level) {
+              NamespaceExpr *nsnode = new NamespaceExpr(new StringExpr(ns->prefix),
+                                                        String::null(),
+                                                        new StringExpr(ns->href));
+              nsnode->m_implicit = true;
+              add_node(&child2_ptr,nsnode,filename,child);
+            }
           }
         }
         level++;
@@ -1098,9 +1105,13 @@ static int parse_sequence_constructors(Statement *sn, Node *start,
         if (NULL == selectExpr)
           return -1;
 
+//         message("literal attr, ns=%*, prefix=%*, localname=%*\n",
+//                 &attr->m_ident.m_ns,&attr->m_qn.m_prefix,&attr->m_qn.m_localPart);
+
         AttributeExpr *anode = new AttributeExpr(NULL,selectExpr,true);
+        anode->m_ns = attr->m_ident.m_ns;
         add_node(&child2_ptr,anode,filename,child);
-        anode->m_qn.m_localPart = attr->m_ident.m_name;
+        anode->m_qn = attr->m_qn;
 //      FIXME: copy prefix
 //        if (attr->m_xn->ns && attr->m_xn->ns->prefix)
 //          anode->m_qn.m_prefix = attr->m_xn->ns->prefix;
@@ -1630,7 +1641,7 @@ static int parse_xslt_uri(Error *ei, const String &filename, int line, const cha
   if ((node->m_ident != ELEM_TRANSFORM) &&
       (node->m_ident != ELEM_STYLESHEET)) {
     error(ei,filename,line,errname,"Expected element {%*}%s or {%*}%s",
-          &XS_NAMESPACE,"transform",&XS_NAMESPACE,"schema");
+          &XSLT_NAMESPACE,"transform",&XSLT_NAMESPACE,"stylesheet");
     delete root;
     return -1;
   }

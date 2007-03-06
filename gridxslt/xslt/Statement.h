@@ -111,6 +111,7 @@ public:
   virtual ~ChooseExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 };
 
 class ElementExpr : public Statement {
@@ -123,7 +124,9 @@ public:
   virtual ~ElementExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
+  String m_ns;
   Expression *m_name_expr;
   bool m_literal;
   bool m_includens;
@@ -140,7 +143,9 @@ public:
   virtual ~AttributeExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
+  String m_ns;
   Expression *m_name_expr;
   Expression *m_select;
   bool m_literal;
@@ -157,6 +162,7 @@ public:
   virtual ~NamespaceExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_name_expr;
   Expression *m_select;
@@ -185,6 +191,7 @@ public:
   virtual ~ForEachExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_select;
 };
@@ -197,6 +204,7 @@ public:
   virtual ~XSLTIfExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_select;
 };
@@ -208,6 +216,7 @@ public:
   virtual ~TextExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   GridXSLT::String m_strval;
   bool m_literal;
@@ -223,6 +232,7 @@ public:
   virtual ~ValueOfExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_select;
   Expression *m_expr1;
@@ -236,6 +246,7 @@ public:
   virtual ~XSLTSequenceExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_select;
 };
@@ -249,6 +260,7 @@ public:
   virtual ~VariableExpr() { }
 
   virtual SyntaxNode *resolveVar(const QName &varname);
+  virtual void genELC(StringBuffer *buf);
 
   Expression *m_select;
 };
@@ -260,6 +272,7 @@ public:
 
   virtual SyntaxNode *resolveVar(const QName &varname);
   virtual int resolve(Schema *s, const String &filename, GridXSLT::Error *ei);
+  virtual void genELC(StringBuffer *buf);
 
   GridXSLT::SequenceType m_st;
 
@@ -375,6 +388,8 @@ public:
   }
   virtual ~TemplateExpr() { }
 
+  virtual void genELC(StringBuffer *buf);
+
   class Template *m_tmpl;
   Expression *m_select;
 };
@@ -409,6 +424,8 @@ class TransformExpr : public Statement {
 public:
   TransformExpr() : Statement(XSLT_TRANSFORM) { }
   virtual ~TransformExpr() { }
+
+  virtual void genELC(StringBuffer *buf);
 
   String m_uri;
 };

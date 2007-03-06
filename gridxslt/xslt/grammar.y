@@ -254,6 +254,7 @@ extern String parse_filename;
 %type <expr> XSLTPattern
 %type <expr> XSLTPathPattern
 %type <expr> XSLTRelativePathPattern
+%type <expr> XSLTPatternTest
 %type <expr> XSLTPatternStep
 %type <axis> XSLTPatternAxis
 %type <expr> XSLTIdKeyPattern
@@ -294,7 +295,8 @@ extern String parse_filename;
 %type <expr> XPathPathExpr
 %type <expr> XPathRelativePathExpr
 %type <expr> XPathStepExpr
-%type <expr> XPathAxisStep
+%type <expr> XPathForwardAxisStep
+%type <expr> XPathReverseAxisStep
 %type <ntexpr> XPathForwardStep
 %type <axis> XPathForwardAxis
 %type <ntexpr> XPathAbbrevForwardStep
@@ -305,7 +307,6 @@ extern String parse_filename;
 %type <ntexpr> XPathNameTest
 %type <qn> XPathWildcard
 %type <expr> XPathFilterExpr
-%type <expr> XPathPredicateList
 %type <expr> XPathPredicate
 %type <expr> XPathPrimaryExpr
 %type <expr> XPathLiteral
@@ -369,7 +370,7 @@ extern String parse_filename;
 
 XPathExpr:
   XPathExprSingle                 { $$ = $1; }
-| XPathExpr ',' XPathExprSingle   { $$ = new SequenceExpr($1,$3); }
+| XPathExprSingle ',' XPathExpr   { $$ = new SequenceExpr($1,$3); }
 ;
 
 XPathExprSingle:
@@ -559,16 +560,20 @@ XPathRelativePathExpr:
 ;
 
 XPathStepExpr:
-  XPathAxisStep                   { $$ = $1; }
+  XPathForwardAxisStep            { $$ = $1; }
+| XPathReverseAxisStep            { $$ = $1; }
 | XPathFilterExpr                 { $$ = $1; }
 ;
 
-XPathAxisStep:
+XPathForwardAxisStep:
   XPathForwardStep                { $$ = $1; }
-| XPathForwardStep XPathPredicateList
+| XPathForwardAxisStep XPathPredicate
                                   { $$ = new FilterExpr($1,$2); }
-| XPathReverseStep                { $$ = $1; }
-| XPathReverseStep XPathPredicateList
+;
+
+XPathReverseAxisStep:
+  XPathReverseStep                { $$ = $1; }
+| XPathReverseAxisStep XPathPredicate
                                   { $$ = new FilterExpr($1,$2); }
 ;
 
@@ -645,13 +650,7 @@ XPathWildcard:
 
 XPathFilterExpr:
   XPathPrimaryExpr                { $$ = $1; }
-| XPathPrimaryExpr XPathPredicateList
-                                  { $$ = new FilterExpr($1,$2); }
-;
-
-XPathPredicateList:
-  XPathPredicate                  { $$ = $1; }
-| XPathPredicateList XPathPredicate
+| XPathFilterExpr XPathPredicate
                                   { $$ = new FilterExpr($1,$2); }
 ;
 
@@ -1602,19 +1601,17 @@ XSLTRelativePathPattern:
                                     $$ = new StepExpr($1,step1); }
 ;
 
-XSLTPatternStep:
+XSLTPatternTest:
   XPathNodeTest                   { $1->m_axis = AXIS_CHILD;
                                     $$ = $1; }
-| XPathNodeTest XPathPredicateList
-                                  { FilterExpr *fe = new FilterExpr($1,$2);
-                                    fe->m_axis = AXIS_CHILD;
-                                    $$ = fe; }
 | XSLTPatternAxis XPathNodeTest   { $2->m_axis = $1;
                                     $$ = $2; }
-| XSLTPatternAxis XPathNodeTest XPathPredicateList
-                                  { FilterExpr *fe = new FilterExpr($2,$3);
-                                    fe->m_axis = $1;
-                                    $$ = fe; }
+;
+
+XSLTPatternStep:
+  XSLTPatternTest                 { $$ = $1; }
+| XSLTPatternStep XPathPredicate
+                                  { $$ = new FilterExpr($1,$2); }
 ;
 
 XSLTPatternAxis:

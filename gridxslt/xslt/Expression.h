@@ -198,6 +198,7 @@ public:
   virtual int findReferencedVars(Compilation *comp, Function *fun, SyntaxNode *below,
                                  List<var_reference*> &vars);
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf) { ASSERT(!"Cannot print this type of syntax node"); }
   bool inConditional() const;
   bool isBelow(SyntaxNode *below) const;
@@ -249,6 +250,7 @@ public:
   virtual ~BinaryExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
 protected:
@@ -264,6 +266,7 @@ public:
   virtual ~UnaryExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
 protected:
@@ -308,15 +311,15 @@ public:
 class FilterExpr : public Expression {
 public:
   FilterExpr(Expression *left, Expression *right)
-    : Expression(XPATH_FILTER), m_axis(AXIS_INVALID), m_left(left), m_right(right) {
+    : Expression(XPATH_FILTER), m_left(left), m_right(right) {
     addRef(m_left);
     addRef(m_right);
   }
   virtual ~FilterExpr() { }
 
+  virtual void print(StringBuffer &buf);
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
-
-  Axis m_axis;
+  virtual void genELC(StringBuffer *buf);
 
 protected:
   Expression *m_left;
@@ -333,6 +336,7 @@ public:
   virtual ~StepExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
 protected:
@@ -355,6 +359,7 @@ public:
   virtual ~IntegerExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
   int m_ival;
@@ -366,6 +371,7 @@ public:
   virtual ~DecimalExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
   double m_dval;
@@ -377,6 +383,7 @@ public:
   virtual ~DoubleExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
   double m_dval;
@@ -388,6 +395,7 @@ public:
   virtual ~StringExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
   GridXSLT::String m_strval;
@@ -401,6 +409,7 @@ public:
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
   virtual int findReferencedVars(Compilation *comp, Function *fun, SyntaxNode *below,
                                  List<var_reference*> &vars);
+  virtual void genELC(StringBuffer *buf);
 };
 
 class EmptyExpr : public Expression {
@@ -417,6 +426,7 @@ public:
   virtual ~ContextItemExpr() { }
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 };
 
@@ -429,6 +439,7 @@ public:
 
   virtual int resolve(Schema *s, const String &filename, GridXSLT::Error *ei);
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
+  virtual void genELC(StringBuffer *buf);
   virtual void print(StringBuffer &buf);
 
   NodeTest m_nodetest;
@@ -447,6 +458,7 @@ public:
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
   virtual void print(StringBuffer &buf);
+  virtual void genELC(StringBuffer *buf);
 
 protected:
   Expression *m_left;
@@ -462,6 +474,7 @@ public:
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
   virtual void print(StringBuffer &buf);
+  virtual void genELC(StringBuffer *buf);
 
 protected:
   Expression *m_left;
@@ -563,6 +576,7 @@ public:
 
   virtual int compile(Compilation *comp, Function *fun, OutputPort **cursor);
   virtual void print(StringBuffer &buf);
+  virtual void genELC(StringBuffer *buf);
 
 protected:
   ActualParamExpr *m_left;

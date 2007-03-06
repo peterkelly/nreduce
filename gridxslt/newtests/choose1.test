@@ -1,0 +1,54 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="1 to 15">
+        <xsl:choose>
+          <xsl:when test=". > 10">
+            <big><xsl:sequence select="."/></big>
+          </xsl:when>
+          <xsl:when test=". > 5">
+            <medium><xsl:sequence select="."/></medium>
+          </xsl:when>
+          <xsl:otherwise>
+            <small><xsl:sequence select="."/></small>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <small>1</small>
+   <small>2</small>
+   <small>3</small>
+   <small>4</small>
+   <small>5</small>
+   <medium>6</medium>
+   <medium>7</medium>
+   <medium>8</medium>
+   <medium>9</medium>
+   <medium>10</medium>
+   <big>11</big>
+   <big>12</big>
+   <big>13</big>
+   <big>14</big>
+   <big>15</big>
+</result>
+================================== RETURN CODE =================================
+0
