@@ -1,0 +1,16 @@
+#!/bin/bash
+OUTDIR=$1
+
+if [ -z "$OUTDIR" ]; then
+  echo Please specify output dir
+  exit 1
+fi
+
+#COUNT=1048576
+#COUNT=65536
+#COUNT=1024
+COUNT=100
+./genstrand 0 3 $COUNT > $OUTDIR/strand1
+./genstrand 1 3 $COUNT > $OUTDIR/strand2
+./genstrand 2 3 $COUNT > $OUTDIR/strand3
+./genstrand 0 1 $((COUNT*3)) > $OUTDIR/strandall
