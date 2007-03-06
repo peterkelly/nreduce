@@ -1,4 +1,4 @@
-all: parsh showload nobuftail
+all: parsh showload nobuftail runtests
 
 parsh: parsh.c
 	gcc -g -Wall -o parsh parsh.c
@@ -9,5 +9,8 @@ showload: showload.c
 nobuftail: nobuftail.c
 	gcc -g -Wall -o nobuftail nobuftail.c
 
+runtests: runtests.c
+	gcc -g -Wall -o runtests runtests.c
+
 clean:
-	rm -f parsh showload nobuftail
+	rm -f parsh showload nobuftail runtests
