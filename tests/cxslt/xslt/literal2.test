@@ -1,0 +1,44 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <people xmlns:gender="urn:test:gender" xmlns:individual="http://test.com/ns/individuals">
+      <gender:men>
+        <individual:person name="Fred" age="20" occupation="Plumber"/>
+        <individual:person name="Joe" age="38" occupation="Builder"/>
+        <individual:person name="Peter" age="27" occupation="Student"/>
+      </gender:men>
+      <gender:women>
+        <individual:person name="Susie" age="31" occupation="Painter"/>
+        <individual:person name="Christine" age="44" occupation="Accountant"/>
+      </gender:women>
+    </people>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<people xmlns:gender="urn:test:gender" xmlns:individual="http://test.com/ns/individuals">
+   <gender:men>
+      <individual:person name="Fred" age="20" occupation="Plumber"/>
+      <individual:person name="Joe" age="38" occupation="Builder"/>
+      <individual:person name="Peter" age="27" occupation="Student"/>
+   </gender:men>
+   <gender:women>
+      <individual:person name="Susie" age="31" occupation="Painter"/>
+      <individual:person name="Christine" age="44" occupation="Accountant"/>
+   </gender:women>
+</people>
+================================== RETURN CODE =================================
+0

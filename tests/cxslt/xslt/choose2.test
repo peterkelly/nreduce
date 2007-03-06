@@ -1,0 +1,46 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="-5 to 5">
+        <xsl:choose>
+          <xsl:when test=". > 0">
+            <positive><xsl:sequence select="."/></positive>
+          </xsl:when>
+          <xsl:when test=". &lt; 0">
+            <negative><xsl:sequence select="."/></negative>
+          </xsl:when>
+        </xsl:choose>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <negative>-5</negative>
+   <negative>-4</negative>
+   <negative>-3</negative>
+   <negative>-2</negative>
+   <negative>-1</negative>
+   <positive>1</positive>
+   <positive>2</positive>
+   <positive>3</positive>
+   <positive>4</positive>
+   <positive>5</positive>
+</result>
+================================== RETURN CODE =================================
+0

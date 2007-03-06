@@ -1,0 +1,34 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="(-5 to 5)[(. mod 2) = 0]">
+        <even><xsl:sequence select="."/></even>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <even>-4</even>
+   <even>-2</even>
+   <even>0</even>
+   <even>2</even>
+   <even>4</even>
+</result>
+================================== RETURN CODE =================================
+0

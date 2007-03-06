@@ -1,0 +1,50 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc xmlns:foo="http://foo.com">
+  <elem>Element 1</elem>
+  <elem>Element 2</elem>
+  <foo:elem>Element 3</foo:elem>
+  <foo:elem>Element 4</foo:elem>
+  <elem>Element 5</elem>
+  <other>Other 6</other>
+  <other>Other 7</other>
+  <foo:other>Other 8</foo:other>
+  <other>Other 9</other>
+  <elem>Element 10</elem>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result xmlns:foo="http://foo.com">
+      <xsl:sequence select="doc/*:other"/>
+      <xsl:sequence select="doc/*:elem"/>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result xmlns:foo="http://foo.com">
+   <other>Other 6</other>
+   <other>Other 7</other>
+   <foo:other>Other 8</foo:other>
+   <other>Other 9</other>
+   <elem>Element 1</elem>
+   <elem>Element 2</elem>
+   <foo:elem>Element 3</foo:elem>
+   <foo:elem>Element 4</foo:elem>
+   <elem>Element 5</elem>
+   <elem>Element 10</elem>
+</result>
+================================== RETURN CODE =================================
+0

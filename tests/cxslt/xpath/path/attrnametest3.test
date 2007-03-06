@@ -1,0 +1,55 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc xmlns:foo="http://foo.com">
+  <elem attr="Attribute 1"/>
+  <elem attr="Attribute 2"/>
+  <elem foo:attr="Attribute 3"/>
+  <elem foo:attr="Attribute 4"/>
+  <elem attr="Attribute 5"/>
+  <elem other="Other 6"/>
+  <elem other="Other 7"/>
+  <elem foo:other="Other 8"/>
+  <elem other="Other 9"/>
+  <elem attr="Attribute 10"/>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result xmlns:foo="http://foo.com">
+      <xsl:for-each select="doc/elem/@other">
+        <elem>
+          <xsl:sequence select="."/>
+        </elem>
+      </xsl:for-each>
+      <xsl:for-each select="doc/elem/@attr">
+        <elem>
+          <xsl:sequence select="."/>
+        </elem>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result xmlns:foo="http://foo.com">
+   <elem other="Other 6"/>
+   <elem other="Other 7"/>
+   <elem other="Other 9"/>
+   <elem attr="Attribute 1"/>
+   <elem attr="Attribute 2"/>
+   <elem attr="Attribute 5"/>
+   <elem attr="Attribute 10"/>
+</result>
+================================== RETURN CODE =================================
+0

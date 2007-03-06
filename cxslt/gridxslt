@@ -1,0 +1,3 @@
+#!/bin/bash
+./cxslt $@ > out.elc || exit 1
+../nreduce/src/nreduce out.elc

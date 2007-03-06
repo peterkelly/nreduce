@@ -1,0 +1,42 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<people>
+  <men>
+    <person name="Fred" age="20" occupation="Plumber"/>
+    <person name="Joe" age="38" occupation="Builder">
+      Description of Joe
+    </person>
+    <person name="Peter" age="27" occupation="Student"/>
+  </men>
+  <women>
+    <person name="Susie" age="31" occupation="Painter"/>
+    <person name="Christine" age="44" occupation="Accountant"/>
+  </women>
+</people>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:sequence select="people/women/person"/>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <person name="Susie" age="31" occupation="Painter"/>
+   <person name="Christine" age="44" occupation="Accountant"/>
+</result>
+================================== RETURN CODE =================================
+0

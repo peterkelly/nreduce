@@ -1,0 +1,54 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<calendar style="Gregorian">
+  <month days="31">January</month>
+  <month days="28">February</month>
+  <month days="31">March</month>
+  <month days="30">April</month>
+  <month days="31">May</month>
+  <month days="30">June</month>
+  <month days="31">July</month>
+  <month days="31">August</month>
+  <month days="30">September</month>
+  <month days="31">October</month>
+  <month days="30">November</month>
+  <month days="31">December</month>
+</calendar>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="calendar/month">
+        <item><xsl:value-of select="."/></item>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <item>January</item>
+   <item>February</item>
+   <item>March</item>
+   <item>April</item>
+   <item>May</item>
+   <item>June</item>
+   <item>July</item>
+   <item>August</item>
+   <item>September</item>
+   <item>October</item>
+   <item>November</item>
+   <item>December</item>
+</result>
+================================== RETURN CODE =================================
+0
