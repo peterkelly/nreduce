@@ -3,7 +3,7 @@ gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
 <?xml version="1.0" encoding="utf-8"?>
-<doc>
+<top>
   <aaa/>
   <bbb/>
   <ccc/>
@@ -34,7 +34,7 @@ in.xml
   <xxx/>
   <yyy/>
   <zzz/>
-</doc>
+</top>
 ===================================== FILE =====================================
 test.xsl
 <?xml version="1.0" encoding="utf-8"?>
@@ -46,7 +46,7 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="doc/ddd/eee/descendant::node()/node-name(.)"/>
+      <xsl:sequence select="top/ddd/eee/descendant::node()/node-name(.)"/>
     </result>
   </xsl:template>
 

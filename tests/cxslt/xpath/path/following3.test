@@ -1,0 +1,85 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<top>
+   <zzz/>
+   <yyy/>
+   <rrr>
+      <sss>
+         <xxx/>
+         <www/>
+         <vvv/>
+         <uuu/>
+      </sss>
+   </rrr>
+   <qqq/>
+   <mmm>
+      <nnn>
+         <ppp/>
+         <ooo/>
+      </nnn>
+   </mmm>
+   <kkk>
+      <lll/>
+   </kkk>
+   <jjj/>
+   <iii/>
+   <bbb>
+      <ccc>
+         <ddd>
+            <eee>
+               <hhh/>
+               <ggg/>
+               <fff/>
+            </eee>
+         </ddd>
+      </ccc>
+   </bbb>
+   <aaa/>
+</top>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="top/rrr/sss/xxx/following::*">
+        <item><xsl:value-of select="node-name(.)"/></item>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <item>www</item>
+   <item>vvv</item>
+   <item>uuu</item>
+   <item>qqq</item>
+   <item>mmm</item>
+   <item>nnn</item>
+   <item>ppp</item>
+   <item>ooo</item>
+   <item>kkk</item>
+   <item>lll</item>
+   <item>jjj</item>
+   <item>iii</item>
+   <item>bbb</item>
+   <item>ccc</item>
+   <item>ddd</item>
+   <item>eee</item>
+   <item>hhh</item>
+   <item>ggg</item>
+   <item>fff</item>
+   <item>aaa</item>
+</result>
+================================== RETURN CODE =================================
+0

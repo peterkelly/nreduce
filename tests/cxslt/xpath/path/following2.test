@@ -2,38 +2,42 @@
 gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <top>
-  <aaa/>
-  <bbb/>
-  <ccc/>
-  <ddd>
-    <eee>
-      <fff>
-        <ggg>
-          <hhh/>
-          <iii/>
-          <jjj/>
-        </ggg>
-        <kkk/>
-        <lll/>
-        <mmm/>
-        <nnn/>
-      </fff>
-      <ooo/>
-      <ppp/>
-      <qqq/>
-      <rrr/>
-      <sss/>
-      <ttt/>
-      <uuu/>
-    </eee>
-    <vvv/>
-  </ddd>
-  <www/>
-  <xxx/>
-  <yyy/>
-  <zzz/>
+   <zzz/>
+   <yyy/>
+   <rrr>
+      <sss>
+         <xxx/>
+         <www/>
+         <vvv/>
+         <uuu/>
+      </sss>
+   </rrr>
+   <qqq/>
+   <mmm>
+      <nnn>
+         <ppp/>
+         <ooo/>
+      </nnn>
+   </mmm>
+   <kkk>
+      <lll/>
+   </kkk>
+   <jjj/>
+   <iii/>
+   <bbb>
+      <ccc>
+         <ddd>
+            <eee>
+               <hhh/>
+               <ggg/>
+               <fff/>
+            </eee>
+         </ddd>
+      </ccc>
+   </bbb>
+   <aaa/>
 </top>
 ===================================== FILE =====================================
 test.xsl
@@ -46,13 +50,13 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="top/descendant::node()/node-name(.)"/>
+      <xsl:sequence select="top/rrr/sss/xxx/following::*/node-name(.)"/>
     </result>
   </xsl:template>
 
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo ppp qqq rrr sss ttt uuu vvv www xxx yyy zzz</result>
+<result>www vvv uuu qqq mmm nnn ppp ooo kkk lll jjj iii bbb ccc ddd eee hhh ggg fff aaa</result>
 ================================== RETURN CODE =================================
 0

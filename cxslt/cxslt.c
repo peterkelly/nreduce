@@ -51,6 +51,9 @@ int yyparse();
 void compile_sequence(xmlNodePtr first);
 void compile_expression(expression *expr);
 
+static int option_indent = 0;
+static int option_strip = 0;
+
 void check_attr(const xmlChar *value, const xmlChar *name)
 {
   if (NULL == value) {
@@ -230,17 +233,17 @@ void compile_expression(expression *expr)
   case XPATH_IDIVIDE:    compile_binary(expr,"xslt:idivide");         break; /* FIXME: test */
   case XPATH_MOD:        compile_binary(expr,"xslt:mod");             break;
   case XPATH_INTEGER_LITERAL:
-    printf("(cons (cons xml:TYPE_NUMBER %f) nil)",expr->num);
+    printf("(cons (xml:mknumber %f) nil)",expr->num);
     break;
   case XPATH_DECIMAL_LITERAL:
-    printf("(cons (cons xml:TYPE_NUMBER %f) nil)",expr->num);
+    printf("(cons (xml:mknumber %f) nil)",expr->num);
     break;
   case XPATH_DOUBLE_LITERAL:
-    printf("(cons (cons xml:TYPE_NUMBER %f) nil)",expr->num);
+    printf("(cons (xml:mknumber %f) nil)",expr->num);
     break;
   case XPATH_STRING_LITERAL: {
     xmlChar *esc = escape(expr->str);
-    printf("(cons (cons xml:TYPE_STRING \"%s\") nil)",esc);
+    printf("(cons (xml:mkstring \"%s\") nil)",esc);
     free(esc);
     break;
   }
@@ -294,6 +297,8 @@ void compile_expression(expression *expr)
     printf(")");
     break;
   case XPATH_STEP:
+    /* FIXME: the resulting set should only contain one instance of each node; need to
+       somehow filter out duplicates */
     printf("\n// step\n");
 /*     Note: node sequences are handled differently from atomic value sequences... (?) */
 /*     see XPath 2.0 section 3.2 */
@@ -368,10 +373,31 @@ void compile_expression(expression *expr)
       printf("(xml:node_children citem)");
       break;
     case AXIS_DESCENDANT:
-      printf("(xml:node_descendants citem)");
+      printf("(xslt:node_descendants citem)");
       break;
     case AXIS_DESCENDANT_OR_SELF:
-      printf("(cons citem (xml:node_descendants citem))");
+      printf("(cons citem (xslt:node_descendants citem))");
+      break;
+    case AXIS_PARENT:
+      printf("(xslt:node_parent_list citem)");
+      break;
+    case AXIS_ANCESTOR:
+      printf("(reverse (xslt:node_ancestors citem))");
+      break;
+    case AXIS_ANCESTOR_OR_SELF:
+      printf("(reverse (xslt:node_ancestors_or_self citem))");
+      break;
+    case AXIS_PRECEDING_SIBLING:
+      printf("(reverse (xslt:node_preceding_siblings citem))");
+      break;
+    case AXIS_FOLLOWING_SIBLING:
+      printf("(xslt:node_following_siblings citem)");
+      break;
+    case AXIS_PRECEDING:
+      printf("(reverse (xslt:node_preceding citem))");
+      break;
+    case AXIS_FOLLOWING:
+      printf("(xslt:node_following citem)");
       break;
     case AXIS_ATTRIBUTE:
       printf("(xml:node_attributes citem)");
@@ -522,7 +548,7 @@ void compile_instruction(xmlNodePtr n)
         xmlChar *select = xmlGetProp(n,"select");
         if (select) {
           printf("\n// value-of %s\n",select);
-          printf("(cons (cons xml:TYPE_TEXT (xslt:consimple ");
+          printf("(cons (xml:mktext (xslt:consimple ");
           compile_expr_string(n,select);
           printf(")) nil)\n");
         }
@@ -722,9 +748,6 @@ void compile_sequence(xmlNodePtr first)
 
 void compile_template(xmlNodePtr n)
 {
-/*   xmlNodePtr child; */
-/*   printf("compile_template\n"); */
-
   printf("\n");
   printf("top citem cpos csize =\n");
   compile_sequence(n->children);
@@ -732,30 +755,55 @@ void compile_template(xmlNodePtr n)
   printf("\n");
 }
 
-void process(xmlNodePtr n, int indent)
+void compile_function(xmlNodePtr child)
 {
-  switch (n->type) {
-  case XML_DOCUMENT_NODE:
-    break;
-  case XML_ELEMENT_NODE: {
-    xmlNodePtr child;
+  xmlChar *name = xmlGetProp(child,"name");
+  xmlChar *nsuri = NULL;
+  xmlChar *localname = NULL;
+  xmlChar *ident;
+  xmlNodePtr pn;
+  check_attr(name,"name");
+  qname_to_nsname(name,child,&nsuri,&localname);
+  if (NULL == localname) {
+    fprintf(stderr,"XTSE0740: function must have a prefixed name");
+    exit(1);
+  }
 
-    if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NAMESPACE)) {
+  ident = nsname_to_ident(nsuri,localname);
 
-      if (!xmlStrcmp(n->name,"template")) {
-        compile_template(n);
+  printf("\n");
+  printf("%s",ident);
+
+  for (pn = child->children; pn; pn = pn->next) {
+    if (XML_ELEMENT_NODE == pn->type) {
+      if (pn->ns && !xmlStrcmp(pn->ns->href,XSLT_NAMESPACE) &&
+          !xmlStrcmp(pn->name,"param")) {
+        xmlChar *pname = xmlGetProp(pn,"name");
+        xmlChar *pn_nsuri = NULL;
+        xmlChar *pn_localname = NULL;
+        xmlChar *pn_ident;
+        check_attr(pname,"name");
+        qname_to_nsname(pname,pn,&pn_nsuri,&pn_localname);
+        pn_ident = nsname_to_ident(pn_nsuri,pn_localname);
+        printf(" %s",pn_ident);
+        free(pn_nsuri);
+        free(pn_localname);
+        free(pn_ident);
       }
       else {
-        for (child = n->children; child; child = child->next)
-          process(child,indent+1);
+        break;
       }
     }
+  }
 
-    break;
-  }
-  default:
-    break;
-  }
+  printf(" =\n");
+  compile_sequence(pn);
+  printf("\n");
+  printf("\n");
+
+  free(nsuri);
+  free(localname);
+  free(ident);
 }
 
 void process_toplevel(xmlNodePtr n2)
@@ -767,53 +815,20 @@ void process_toplevel(xmlNodePtr n2)
         compile_template(child);
       }
       else if (!xmlStrcmp(child->name,"function")) {
-        xmlChar *name = xmlGetProp(child,"name");
-        xmlChar *nsuri = NULL;
-        xmlChar *localname = NULL;
-        xmlChar *ident;
-        xmlNodePtr pn;
-        check_attr(name,"name");
-        qname_to_nsname(name,child,&nsuri,&localname);
-        if (NULL == localname) {
-          fprintf(stderr,"XTSE0740: function must have a prefixed name");
-          exit(1);
-        }
-
-        ident = nsname_to_ident(nsuri,localname);
-
-        printf("\n");
-        printf("%s",ident);
-
-        for (pn = child->children; pn; pn = pn->next) {
-          if (XML_ELEMENT_NODE == pn->type) {
-            if (pn->ns && !xmlStrcmp(pn->ns->href,XSLT_NAMESPACE) &&
-                !xmlStrcmp(pn->name,"param")) {
-              xmlChar *pname = xmlGetProp(pn,"name");
-              xmlChar *pn_nsuri = NULL;
-              xmlChar *pn_localname = NULL;
-              xmlChar *pn_ident;
-              check_attr(pname,"name");
-              qname_to_nsname(pname,pn,&pn_nsuri,&pn_localname);
-              pn_ident = nsname_to_ident(pn_nsuri,pn_localname);
-              printf(" %s",pn_ident);
-              free(pn_nsuri);
-              free(pn_localname);
-              free(pn_ident);
-            }
-            else {
-              break;
-            }
-          }
-        }
-
-        printf(" =\n");
-        compile_sequence(pn);
-        printf("\n");
-        printf("\n");
-
-        free(nsuri);
-        free(localname);
-        free(ident);
+        compile_function(child);
+      }
+      else if (!xmlStrcmp(child->name,"output")) {
+        xmlChar *indent = xmlGetProp(child,"indent");
+        if (indent && !xmlStrcmp(indent,"yes"))
+          option_indent = 1;
+        free(indent);
+      }
+      else if (!xmlStrcmp(child->name,"strip-space")) {
+        xmlChar *elements = xmlGetProp(child,"elements");
+        check_attr(elements,"elements");
+        if (!xmlStrcmp(elements,"*"))
+          option_strip = 1;
+        free(elements);
       }
     }
   }
@@ -862,11 +877,10 @@ int main(int argc, char **argv)
   printf("FILENAME = \"%s\"\n",sourcefile);
 
   root = xmlDocGetRootElement(doc);
-/*   process(root,0); */
   process_root(root);
 
-  printf("STRIPALL = 1\n"); /* FIXME: base this on the <xsl:strip-spaces> element */
-  printf("INDENT = 1\n"); /* FIXME: base this on the <xsl:output> element */
+  printf("STRIPALL = %s\n",option_strip ? "1" : "nil");
+  printf("INDENT = %s\n",option_indent ? "1" : "nil");
   printf("main = (xslt:output INDENT (cons (xml:mkdoc (top (xml:parsexml "
          "STRIPALL (readb FILENAME)) 1 1)) nil))\n");
 

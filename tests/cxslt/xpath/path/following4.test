@@ -1,0 +1,107 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<top>
+   <zzz/>
+   <yyy/>
+   <rrr>
+      <sss>
+         <xxx/>
+         <www/>
+         <vvv>text 1</vvv>
+         <!--comment 1-->
+         <uuu/>
+      </sss>
+   </rrr>
+   <qqq/>
+   <mmm>
+      <nnn>
+         <ppp/>
+         <ooo/>
+      </nnn>
+   </mmm>
+   <kkk>
+      <lll/>
+   </kkk>
+   <jjj>text 2</jjj>
+   <iii/>
+   <bbb>
+      <ccc>
+         <ddd>
+            <eee>
+               <hhh/>
+               <!--comment 2-->
+               <ggg/>
+               <fff/>
+            </eee>
+         </ddd>
+      </ccc>
+   </bbb>
+   <aaa/>
+</top>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="top/rrr/sss/xxx/following::node()">
+        <xsl:choose>
+          <xsl:when test="self::element()">
+            <element><xsl:value-of select="node-name(.)"/></element>
+          </xsl:when>
+          <xsl:when test="self::text()">
+            <text><xsl:value-of select="."/></text>
+          </xsl:when>
+          <xsl:when test="self::comment()">
+            <comment><xsl:value-of select="."/></comment>
+          </xsl:when>
+          <xsl:when test="self::document-node()">
+            <doc/>
+          </xsl:when>
+          <xsl:otherwise>
+            <other/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <element>www</element>
+   <element>vvv</element>
+   <text>text 1</text>
+   <comment>comment 1</comment>
+   <element>uuu</element>
+   <element>qqq</element>
+   <element>mmm</element>
+   <element>nnn</element>
+   <element>ppp</element>
+   <element>ooo</element>
+   <element>kkk</element>
+   <element>lll</element>
+   <element>jjj</element>
+   <text>text 2</text>
+   <element>iii</element>
+   <element>bbb</element>
+   <element>ccc</element>
+   <element>ddd</element>
+   <element>eee</element>
+   <element>hhh</element>
+   <comment>comment 2</comment>
+   <element>ggg</element>
+   <element>fff</element>
+   <element>aaa</element>
+</result>
+================================== RETURN CODE =================================
+0

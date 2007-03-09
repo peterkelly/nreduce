@@ -1,3 +1,3 @@
 #!/bin/bash
 echo Running tests using saxonclient
-../gridxslt/src/runtests -s gridxslt=../gridxslt/src/saxonclient $@
+runtests -s gridxslt=../tools/saxonclient $@

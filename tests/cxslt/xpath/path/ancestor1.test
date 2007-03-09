@@ -2,7 +2,7 @@
 gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <top>
   <aaa/>
   <bbb/>
@@ -46,13 +46,13 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="top/descendant::node()/node-name(.)"/>
+      <xsl:sequence select="top/ddd/eee/fff/ancestor::*/node-name(.)"/>
     </result>
   </xsl:template>
 
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo ppp qqq rrr sss ttt uuu vvv www xxx yyy zzz</result>
+<result>top ddd eee</result>
 ================================== RETURN CODE =================================
 0

@@ -1,4 +1,4 @@
-all: parsh showload nobuftail runtests
+all: parsh showload nobuftail runtests saxonclient
 
 parsh: parsh.c
 	gcc -g -Wall -o parsh parsh.c
@@ -12,5 +12,8 @@ nobuftail: nobuftail.c
 runtests: runtests.c
 	gcc -g -Wall -o runtests runtests.c
 
+saxonclient: saxonclient.c
+	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
+
 clean:
-	rm -f parsh showload nobuftail runtests
+	rm -f parsh showload nobuftail runtests saxonclient

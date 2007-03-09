@@ -1,0 +1,107 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<top>
+  <aaa/>
+  <bbb>
+    <ccc>
+      <ddd>
+        <eee>
+          <fff/>
+          <ggg/>
+          <!--comment 1-->
+          <hhh/>
+        </eee>
+      </ddd>
+    </ccc>
+  </bbb>
+  <iii>text 1</iii>
+  <!--comment 2-->
+  <jjj/>
+  <kkk>
+    <lll/>
+  </kkk>
+  <mmm>
+    <nnn>
+      <ooo>text 2</ooo>
+      <ppp/>
+    </nnn>
+  </mmm>
+  <qqq/>
+  <rrr>
+    <sss>
+      <uuu/>
+      <vvv/>
+      <www/>
+      <xxx/>
+    </sss>
+  </rrr>
+  <yyy/>
+  <zzz/>
+</top>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="top/rrr/sss/xxx/preceding::node()">
+        <xsl:choose>
+          <xsl:when test="self::element()">
+            <element><xsl:value-of select="node-name(.)"/></element>
+          </xsl:when>
+          <xsl:when test="self::text()">
+            <text><xsl:value-of select="."/></text>
+          </xsl:when>
+          <xsl:when test="self::comment()">
+            <comment><xsl:value-of select="."/></comment>
+          </xsl:when>
+          <xsl:when test="self::document-node()">
+            <doc/>
+          </xsl:when>
+          <xsl:otherwise>
+            <other/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <element>aaa</element>
+   <element>bbb</element>
+   <element>ccc</element>
+   <element>ddd</element>
+   <element>eee</element>
+   <element>fff</element>
+   <element>ggg</element>
+   <comment>comment 1</comment>
+   <element>hhh</element>
+   <element>iii</element>
+   <text>text 1</text>
+   <comment>comment 2</comment>
+   <element>jjj</element>
+   <element>kkk</element>
+   <element>lll</element>
+   <element>mmm</element>
+   <element>nnn</element>
+   <element>ooo</element>
+   <text>text 2</text>
+   <element>ppp</element>
+   <element>qqq</element>
+   <element>uuu</element>
+   <element>vvv</element>
+   <element>www</element>
+</result>
+================================== RETURN CODE =================================
+0

@@ -2,36 +2,40 @@
 gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <top>
   <aaa/>
-  <bbb/>
-  <ccc/>
-  <ddd>
-    <eee>
-      <fff>
-        <ggg>
+  <bbb>
+    <ccc>
+      <ddd>
+        <eee>
+          <fff/>
+          <ggg/>
           <hhh/>
-          <iii/>
-          <jjj/>
-        </ggg>
-        <kkk/>
-        <lll/>
-        <mmm/>
-        <nnn/>
-      </fff>
+        </eee>
+      </ddd>
+    </ccc>
+  </bbb>
+  <iii/>
+  <jjj/>
+  <kkk>
+    <lll/>
+  </kkk>
+  <mmm>
+    <nnn>
       <ooo/>
       <ppp/>
-      <qqq/>
-      <rrr/>
-      <sss/>
-      <ttt/>
+    </nnn>
+  </mmm>
+  <qqq/>
+  <rrr>
+    <sss>
       <uuu/>
-    </eee>
-    <vvv/>
-  </ddd>
-  <www/>
-  <xxx/>
+      <vvv/>
+      <www/>
+      <xxx/>
+    </sss>
+  </rrr>
   <yyy/>
   <zzz/>
 </top>
@@ -46,13 +50,36 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="top/descendant::node()/node-name(.)"/>
+      <xsl:for-each select="top/rrr/sss/xxx/preceding::*">
+        <item><xsl:value-of select="node-name(.)"/></item>
+      </xsl:for-each>
     </result>
   </xsl:template>
 
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo ppp qqq rrr sss ttt uuu vvv www xxx yyy zzz</result>
+<result>
+   <item>aaa</item>
+   <item>bbb</item>
+   <item>ccc</item>
+   <item>ddd</item>
+   <item>eee</item>
+   <item>fff</item>
+   <item>ggg</item>
+   <item>hhh</item>
+   <item>iii</item>
+   <item>jjj</item>
+   <item>kkk</item>
+   <item>lll</item>
+   <item>mmm</item>
+   <item>nnn</item>
+   <item>ooo</item>
+   <item>ppp</item>
+   <item>qqq</item>
+   <item>uuu</item>
+   <item>vvv</item>
+   <item>www</item>
+</result>
 ================================== RETURN CODE =================================
 0

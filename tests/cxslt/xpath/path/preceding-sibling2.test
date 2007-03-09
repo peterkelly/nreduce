@@ -2,7 +2,7 @@
 gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
 ===================================== FILE =====================================
 in.xml
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <top>
   <aaa/>
   <bbb/>
@@ -46,13 +46,30 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="top/descendant::node()/node-name(.)"/>
+      <xsl:for-each select="top/ddd/eee/rrr/preceding-sibling::node()">
+        <xsl:choose>
+          <xsl:when test="self::element()">
+            <element><xsl:value-of select="node-name(.)"/></element>
+          </xsl:when>
+          <xsl:when test="self::text()">
+            <text><xsl:value-of select="."/></text>
+          </xsl:when>
+          <xsl:otherwise>
+            <other/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:for-each>
     </result>
   </xsl:template>
 
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll mmm nnn ooo ppp qqq rrr sss ttt uuu vvv www xxx yyy zzz</result>
+<result>
+   <element>fff</element>
+   <element>ooo</element>
+   <element>ppp</element>
+   <element>qqq</element>
+</result>
 ================================== RETURN CODE =================================
 0
