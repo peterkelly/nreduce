@@ -48,6 +48,8 @@
 
 static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
+static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF };
+
 #define CHECK_ARG(_argno,_type) {                                       \
     if ((_type) != pntrtype(argstack[(_argno)])) {                      \
       int bif = ((*tsk->runptr)->instr-1)->arg0;                        \
@@ -88,7 +90,10 @@ const builtin builtin_info[NUM_BUILTINS];
 
 static void setnumber(pntr *cptr, double val)
 {
-  *cptr = val;
+  if (isnan(val))
+    *cptr = *(double*)NAN_BITS;
+  else
+    *cptr = val;
 }
 
 static void setbool(task *tsk, pntr *cptr, int b)
@@ -127,8 +132,6 @@ static void b_multiply(task *tsk, pntr *argstack)
 static void b_divide(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_DIVIDE);
-  /* FIXME: handle divide by zero -> NaN properly, i.e. without confusing
-     a true NaN value with a pointer */
   argstack[0] = argstack[1] / argstack[0];
 }
 
@@ -241,7 +244,6 @@ static void b_sqrt(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER);
   setnumber(&argstack[0],sqrt(argstack[0]));
-  /* FIXME: handle NaN result properly (it's not a pointer!) */
 }
 
 static void b_floor(task *tsk, pntr *argstack)
