@@ -86,11 +86,7 @@ skip n lst =
       (arrayskip n lst)
       (skip (- n partlen) (arrayskip partlen lst)))))
 
-item n lst =
-(letrec partlen = (arraysize lst) in
-  (if (< n partlen)
-    (head (arrayskip n lst))
-    (item (- n partlen) (arrayskip partlen lst))))
+item n lst = (head (skip n lst))
 
 prefix n lst =
 (if (<= n 0)
@@ -143,21 +139,23 @@ consn n a b =
 
 strcmp a b =
 (letrec
-  // try a direct comparison, in the case that both are char arrays
-  res = (strcmp1 a b)
+  res = (arraystrcmp a b)
  in
   (if res
     res
-    // fallback: treat as cons list
-    (if a
-      (if b
-        (if (= (head a) (head b))
-          (strcmp (tail a) (tail b))
-          (- (head a) (head b)))
-        1)
-      (if b
-        -1
-        0))))
+    (strcmpcons a b)))
+
+strcmpcons a b =
+(if a
+  (if b
+    (if (= (head a) (head b))
+      (strcmp (tail a) (tail b))
+      (- (head a) (head b)))
+    1)
+  (if b
+    -1
+    0))
+
 
 streq a b = (= (strcmp a b) 0)
 

@@ -454,19 +454,16 @@ void maybe_expand_array(task *tsk, pntr p)
     int count = 0;
     arr->tail = resolve_pntr(arr->tail);
 
-    while (1) {
+    while (CELL_CONS == pntrtype(arr->tail)) {
+      cell *tailcell = get_pntr(arr->tail);
+      pntr tailhead = resolve_pntr(tailcell->field1);
+      carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
+      arr->tail = resolve_pntr(tailcell->field2);
 
-      if (CELL_CONS == pntrtype(arr->tail)) {
-        cell *tailcell = get_pntr(arr->tail);
-        pntr tailhead = resolve_pntr(tailcell->field1);
-        carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
-        arr->tail = resolve_pntr(tailcell->field2);
+      tailcell->type = CELL_IND;
+      make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1);
 
-        count++;
-      }
-      else {
-        break;
-      }
+      count++;
     }
 
     if (0 < count) {
@@ -744,7 +741,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   }
 }
 
-static void b_strcmp1(task *tsk, pntr *argstack)
+static void b_arraystrcmp(task *tsk, pntr *argstack)
 {
   pntr a = argstack[1];
   pntr b = argstack[0];
@@ -876,7 +873,6 @@ static void b_readchunk(task *tsk, pntr *argstack)
   pntr nextpntr = argstack[0];
   int r;
   unsigned char buf[IOSIZE];
-  carray *arr;
   sysobject *so;
   cell *c;
   int doclose = 0;
@@ -903,6 +899,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
     return;
   }
 
+  carray *arr;
   arr = carray_new(tsk,1,r,NULL,NULL);
   make_aref_pntr(argstack[0],arr->wrapper,0);
 
@@ -1624,7 +1621,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "arraysize",      1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_arraysize      },
 { "arrayskip",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayskip      },
 { "arrayprefix",    3, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayprefix    },
-{ "strcmp1",        2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_strcmp1        },
+{ "arraystrcmp",    2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_arraystrcmp    },
 { "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_teststring     },
 { "testarray",      2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_testarray      },
 
