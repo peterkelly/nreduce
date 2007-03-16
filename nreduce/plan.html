@@ -4,30 +4,43 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <title>Project plan</title>
+<style type="text/css">
+.done { color: green }
+.ignore { color: grey }
+.partial { color: red }
+</style>
   </head>
   <body>
 
     <h1>Remaining tasks</h1>
 
     These are the main tasks that need to be completed for the project.
+
+    <br/>
+    <br/>
+
+    <span class="done">[done]</span>
+    <span class="ignore">[ignore]</span>
+    <span class="partial">[partial]</span>
+
     <br/>
     <br/>
 
     Distributed execution
     <ul>
-      <li>Write scripts for easily launching various test configurations</li>
+      <li class="done">Write scripts for easily launching various test configurations</li>
       <li>Enable a process to be started using only a subset of all available nodes</li>
       <li>Implement mechanism for node discovery and deciding which nodes should take part in a
           new process</li>
-      <li>Automatically spark expressions passed as strict arguments (currently parallel execution
+      <li class="done">Automatically spark expressions passed as strict arguments (currently parallel execution
           relies on user code explicitly calling spark)</li>
       <li>Parallel execution: make more robust, and thoroughly test</li>
       <li>Invoke the distributed garbage collector automatically where appropriate, instead of
           manually (as it currently has to be done)</li>
-      <li>Add support for socket connections</li>
+      <li class="done">Add support for socket connections</li>
       <li>Add the ability to write to files</li>
-      <li>Support multiple concurrent tasks running on a node</li>
-      <li>Test for robustness as nodes join/leave the system at runtime</li>
+      <li class="done">Support multiple concurrent tasks running on a node</li>
+      <li class="partial">Test for robustness as nodes join/leave the system at runtime</li>
       <li>Transfer arrays properly between nodes, instead of passing them as cons lists</li>
       <li>Write a tool to monitor a set of running nodes</li>
     </ul>
@@ -35,7 +48,7 @@
     XSLT compiler and runtime support
     <ul>
       <li>Complete main XSLT and XPath constructs (excluding reverse axes)</li>
-      <li>
+      <li class="ignore">
         Implement rules from the paper
         <a href="http://www.pms.ifi.lmu.de/publikationen/PMS-FB/PMS-FB-2002-4.pdf">
           XPath: Looking Forward
@@ -43,8 +56,8 @@
         to transform expressions containing reverse axes into those containing only
         forward axes
       </li>
-      <li>HTTP client</li>
-      <li>HTTP server</li>
+      <li class="done">HTTP client</li>
+      <li class="done">HTTP server</li>
       <li>Support for accessing web services</li>
       <li>Support for exposing an XSLT program as a web service</li>
       <li>Integrate gridxslt and nreduce code trees</li>
@@ -74,12 +87,12 @@
           this using teststring and testarray</li>
       <li>Allow parts of arrays to be garbage collected (i.e. if the first ref to an array is at
           index 1000, then the graphs referenced from all preceding elements are not marked)</li>
-      <li>String comparison operators (have streq already but need gt, lt etc.)</li>
+      <li class="done">String comparison operators (have streq already but need gt, lt etc.)</li>
       <li>Add a field to struct builtin to specify the required type of each argument</li>
       <li>Better error handling for when invalid argument types/values are passed to builtin
           functions. Also check the case of insufficient/too many arguments being passed to
           a supercombinator or builtin function (both at compile time and run time)</li>
-      <li>Garbage collect file handles (and socket connections)</li>
+      <li class="done">Garbage collect file handles (and socket connections)</li>
       <li>Search through the code for FIXMEs and fix them (any big ones should be added as items
           to the plan)</li>
       <li>Deal with any further problems with partial evaluation that arise</li>
@@ -88,7 +101,7 @@
 
     Papers to write
     <ul>
-      <li>Efficient array/string storage</li>
+      <li class="partial">Efficient array/string storage</li>
       <li>nreduce overview</li>
     </ul>
 
@@ -120,16 +133,16 @@
 
     February
     <ul>
-      <li>Full support for socket connections and multiple processes in nreduce</li>
-      <li>Majority of XPath and XSLT constructs supported in the compiler (forward axes only)</li>
+      <li class="done">Full support for socket connections and multiple processes in nreduce</li>
+      <li class="partial">Majority of XPath and XSLT constructs supported in the compiler (forward axes only)</li>
       <li>Minor fixes listed above done</li>
     </ul>
 
     March
     <ul>
       <li>nreduce and gridxslt code trees properly integrated</li>
-      <li>Support for reverse axes (using transformation rules)</li>
-      <li>Numerous test cases written for complex XSLT programs</li>
+      <li class="partial">Support for reverse axes (using transformation rules)</li>
+      <li class="partial">Numerous test cases written for complex XSLT programs</li>
       <li>Robust and well tested support for distributed, parallel execution</li>
       <li>Detailed plan for evaluation</li>
       <li>Ideas/design of sample applications chosen</li>
