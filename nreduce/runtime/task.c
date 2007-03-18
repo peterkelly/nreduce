@@ -414,6 +414,22 @@ void dump_globals(task *tsk)
   }
 }
 
+void task_kill_locked(task *tsk)
+{
+  assert(NODE_ALREADY_LOCKED(tsk->n));
+  printf("Killing task\n");
+  /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
+  tsk->done = 1;
+  *tsk->endpt->interruptptr = 1;
+  node_waitclose_locked(tsk->n,tsk->endpt->localid);
+}
+
+static void task_endpoint_close(endpoint *endpt)
+{
+  task *tsk = (task*)endpt->data;
+  task_kill_locked(tsk);
+}
+
 task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
@@ -425,7 +441,7 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
 
   tsk->n = n;
   if (n)
-    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk);
+    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk,task_endpoint_close);
   tsk->runptr = &tsk->rtemp;
 
   sem_init(&tsk->startsem,0,0);
@@ -568,14 +584,6 @@ void task_free(task *tsk)
 
   if (n)
     node_remove_endpoint(n,endpt);
-}
-
-void task_kill_locked(task *tsk)
-{
-  /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
-  tsk->done = 1;
-  *tsk->endpt->interruptptr = 1;
-  node_waitclose_locked(tsk->n,tsk->endpt->localid);
 }
 
 static array *read_file(const char *filename)

@@ -81,6 +81,10 @@ typedef struct messagelist {
 #define MANAGER_ENDPOINT 2
 #define LAUNCHER_ENDPOINT 3
 
+struct endpoint;
+
+typedef void (*endpoint_closefun)(struct endpoint *endpt);
+
 typedef struct endpoint {
   int localid;
   messagelist mailbox;
@@ -92,6 +96,7 @@ typedef struct endpoint {
   int type;
   void *data;
   int closed;
+  endpoint_closefun closefun;
 } endpoint;
 
 typedef struct endpointlist {
@@ -190,8 +195,6 @@ typedef struct node {
   int havelistenip;
   unsigned short nextlocalid;
   pthread_t iothread;
-  pthread_t managerthread;
-  endpoint *managerendpt;
   int ioready_writefd;
   int ioready_readfd;
   int notified;
@@ -249,7 +252,8 @@ void connection_printf(connection *conn, const char *format, ...);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 
-endpoint *node_add_endpoint(node *n, int localid, int type, void *data);
+endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
+                            endpoint_closefun closefun);
 void node_remove_endpoint(node *n, endpoint *endpt);
 void endpoint_forceclose(endpoint *endpt);
 void endpoint_add_message(endpoint *endpt, message *msg);

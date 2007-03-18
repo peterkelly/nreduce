@@ -98,13 +98,17 @@ static int get_responses(node *n, endpoint *endpt, int tag,
   return 0;
 }
 
-void launcher_kill(launcher *sa)
+static void launcher_endpoint_close(endpoint *endpt)
 {
+  launcher *sa = (launcher*)endpt->data;
+  assert(NODE_ALREADY_LOCKED(sa->n));
+  unlock_mutex(&sa->n->lock);
   sa->cancel = 1;
   endpoint_forceclose(sa->endpt);
 
   if (0 > pthread_join(sa->thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
+  lock_mutex(&sa->n->lock);
 }
 
 static void launcher_free(node *n, launcher *sa)
@@ -163,7 +167,7 @@ static void *launcher_thread(void *arg)
 
   lr->endpointids = (endpointid*)calloc(count,sizeof(endpointid));
   lr->localids = (int*)calloc(count,sizeof(int));
-  lr->endpt = node_add_endpoint(n,0,LAUNCHER_ENDPOINT,arg);
+  lr->endpt = node_add_endpoint(n,0,LAUNCHER_ENDPOINT,arg,launcher_endpoint_close);
 
   for (i = 0; i < count; i++) {
     unsigned char *ipbytes = (unsigned char*)&lr->managerids[i].nodeip.s_addr;

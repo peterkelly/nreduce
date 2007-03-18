@@ -311,10 +311,6 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
   if (0 > pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
-  endpoint_forceclose(n->managerendpt);
-  if (0 > pthread_join(n->managerthread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-
   node_close_endpoints(n);
   node_close_connections(n);
   node_remove_callback(n,worker_callback,&wd);

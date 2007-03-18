@@ -155,27 +155,49 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
   return 0;
 }
 
-static void *manager(void *arg)
+typedef struct manager {
+  node *n;
+  pthread_t thread;
+} manager;
+
+static void manager_endpoint_close(endpoint *endpt)
 {
-  node *n = (node*)arg;
+  manager *man = (manager*)endpt->data;
+  node *n = man->n;
+  pthread_t thread = man->thread;
+
+  unlock_mutex(&n->lock);
+  endpoint_forceclose(endpt);
+  if (0 > pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  lock_mutex(&n->lock);
+}
+
+static void *manager_thread(void *arg)
+{
+  manager *man = (manager*)arg;
+  node *n = man->n;
   message *msg;
+  endpoint *endpt;
 
-  n->managerendpt = node_add_endpoint(n,MANAGER_ID,MANAGER_ENDPOINT,NULL);
+  endpt = node_add_endpoint(n,MANAGER_ID,MANAGER_ENDPOINT,man,manager_endpoint_close);
 
-  while (NULL != (msg = endpoint_next_message(n->managerendpt,-1))) {
-    int r = manager_handle_message(n,n->managerendpt,msg);
+  while (NULL != (msg = endpoint_next_message(endpt,-1))) {
+    int r = manager_handle_message(n,endpt,msg);
     assert(0 == r);
     message_free(msg);
   }
 
-  node_remove_endpoint(n,n->managerendpt);
-  n->managerendpt = NULL;
+  node_remove_endpoint(n,endpt);
+  free(man);
 
   return NULL;
 }
 
 void start_manager(node *n)
 {
-  if (0 > pthread_create(&n->managerthread,NULL,manager,n))
+  manager *man = (manager*)calloc(1,sizeof(manager));
+  man->n = n;
+  if (0 > pthread_create(&man->thread,NULL,manager_thread,man))
     fatal("pthread_create: %s",strerror(errno));
 }

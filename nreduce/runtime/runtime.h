@@ -603,8 +603,6 @@ typedef struct launcher {
   int *localids;
 } launcher;
 
-void launcher_kill(launcher *sa);
-
 void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count);
 int run_program(node *n, const char *filename);
 int do_client(const char *host, int port, int argc, char **argv);

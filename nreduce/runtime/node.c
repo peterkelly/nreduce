@@ -442,6 +442,10 @@ static void handle_new_connection(node *n, listener *l)
   int yes = 1;
   unsigned char *lip;
   char *hostname;
+
+  /* FIXME: should assign our listenip here. Let's just assume that a node will only ever have
+     one IP that clients or other nodes will connect to */
+
   if (0 > (clientfd = accept(l->fd,(struct sockaddr*)&remote_addr,&sin_size))) {
     perror("accept");
     return;
@@ -788,17 +792,8 @@ void node_close_endpoints(node *n)
   endpoint *endpt;
   lock_mutex(&n->lock);
   while (NULL != (endpt = n->endpoints.first)) {
-    if (TASK_ENDPOINT == endpt->type) {
-      task_kill_locked((task*)endpt->data);
-    }
-    else if (LAUNCHER_ENDPOINT == endpt->type) {
-      unlock_mutex(&n->lock);
-      launcher_kill((launcher*)endpt->data);
-      lock_mutex(&n->lock);
-    }
-    else {
-      fatal("Other endpoint type (%d) still active",endpt->type);
-    }
+    assert(endpt->closefun);
+    endpt->closefun(endpt);
   }
   unlock_mutex(&n->lock);
 }
@@ -1046,7 +1041,8 @@ void done_reading(node *n, connection *conn)
 /** @name Public functions - endpoints
  * @{ */
 
-endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
+endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
+                            endpoint_closefun closefun)
 {
   endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
   init_mutex(&endpt->mailbox.lock);
@@ -1054,6 +1050,7 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data)
   endpt->localid = localid;
   endpt->type = type;
   endpt->data = data;
+  endpt->closefun = closefun;
   endpt->interruptptr = &endpt->tempinterrupt;
 
   lock_node(n);
