@@ -51,6 +51,8 @@
 
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
+int max_array_size = (1 << 18);
+
 struct arguments {
   int compileinfo;
   int nopartialsink;
@@ -268,6 +270,9 @@ int main(int argc, char **argv)
 
 /*   if (NULL != getenv("DISABLE_PARTIAL_EVAL")) */
 /*     args.nopartialsink = 1; */
+
+  if (getenv("MAX_ARRAY_SIZE"))
+    max_array_size = atoi(getenv("MAX_ARRAY_SIZE"));
 
   /* TEMP: disable partial evaluation */
   args.nopartialsink = 1;

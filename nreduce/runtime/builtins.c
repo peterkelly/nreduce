@@ -76,16 +76,6 @@ static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0
     }                                                                   \
   }
 
-void arrdebug(task *tsk, const char *format, ...)
-{
-#ifdef ARRAY_DEBUG
-  va_list ap;
-  va_start(ap,format);
-  vfprintf(tsk->output,format,ap);
-  va_end(ap);
-#endif
-}
-
 const builtin builtin_info[NUM_BUILTINS];
 
 static void setnumber(pntr *cptr, double val)
@@ -349,13 +339,12 @@ static void convert_to_string(task *tsk, carray *arr)
   arr->elemsize = 1;
 }
 
-int check_array_convert(task *tsk, carray *arr, const char *from)
+static void check_array_convert(task *tsk, carray *arr, const char *from)
 {
-  int printed = 0;
+#ifndef DISABLE_ARRAYS
   arr->tail = resolve_pntr(arr->tail);
   if ((sizeof(pntr) == arr->elemsize) &&
       ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(arr->tail)))) {
-    int oldchars = arr->nchars;
     pntr *pelements = (pntr*)arr->elements;
 
     while (arr->nchars < arr->size) {
@@ -366,20 +355,10 @@ int check_array_convert(task *tsk, carray *arr, const char *from)
         break;
     }
 
-    if (arr->nchars != oldchars) {
-      arrdebug(tsk,"%s: now arr->nchars = %d, was %d; array size = %d\n",
-               from,arr->nchars,oldchars,arr->size);
-      printed = 1;
-    }
-
-    if (arr->nchars == arr->size) {
-      arrdebug(tsk,"%s: converting %d-element array to string\n",from,arr->size);
-      printed = 1;
-
+    if (arr->nchars == arr->size)
       convert_to_string(tsk,arr);
-    }
   }
-  return printed;
+#endif
 }
 
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize)
@@ -424,7 +403,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 
 void maybe_expand_array(task *tsk, pntr p)
 {
-  int printed = 0;
+#ifndef DISABLE_ARRAYS
   if (CELL_CONS == pntrtype(p)) {
     cell *firstcell = get_pntr(p);
     pntr firsthead = resolve_pntr(firstcell->field1);
@@ -438,11 +417,6 @@ void maybe_expand_array(task *tsk, pntr p)
       pntr secondhead = resolve_pntr(secondcell->field1);
       pntr secondtail = resolve_pntr(secondcell->field2);
       carray *arr;
-
-      arrdebug(tsk,"expand: replacing double cons %s, %s with array (secondtail is %s)\n",
-               cell_types[pntrtype(firsthead)],cell_types[pntrtype(secondhead)],
-               cell_types[pntrtype(secondtail)]);
-      printed = 1;
 
       arr = carray_new(tsk,sizeof(pntr),0,NULL,firstcell);
       carray_append(tsk,&arr,&firsthead,1,sizeof(pntr));
@@ -468,36 +442,41 @@ void maybe_expand_array(task *tsk, pntr p)
       count++;
     }
 
-    if (0 < count) {
-      arrdebug(tsk,"expand: appended %d new values from conses; nchars = %d, elemsize = %d\n",
-               count,arr->nchars,arr->elemsize);
-      printed = 1;
-    }
-
-
-    if (check_array_convert(tsk,arr,"expand"))
-      printed = 1;
+    check_array_convert(tsk,arr,"expand");
   }
 
 
-  if (printed) {
-    arrdebug(tsk,"expand: done\n");
+#endif
+}
+
+static pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
+{
+  #ifdef DISABLE_ARRAYS
+  pntr p = tsk->globnilpntr;
+  pntr *prev = &p;
+  int i;
+  for (i = 0; i < size; i++) {
+    cell *ch = alloc_cell(tsk);
+    ch->type = CELL_CONS;
+    ch->field1 = data[i];
+    make_pntr(*prev,ch);
+    prev = &ch->field2;
   }
+  *prev = tail;
+  return p;
+  #else
+  carray *arr = carray_new(tsk,1,size,NULL,NULL);
+  pntr p;
+  make_aref_pntr(p,arr->wrapper,0);
+  carray_append(tsk,&arr,data,size,1);
+  arr->tail = tail;
+  return p;
+  #endif
 }
 
 pntr string_to_array(task *tsk, const char *str)
 {
-  /* FIXME: handle case where strlen(str) > MAX_ARRAY_SIZE */
-  if (0 == strlen(str)) {
-    return tsk->globnilpntr;
-  }
-  else {
-    carray *arr = carray_new(tsk,1,strlen(str),NULL,NULL);
-    pntr p;
-    carray_append(tsk,&arr,str,strlen(str),1);
-    make_aref_pntr(p,arr->wrapper,0);
-    return p;
-  }
+  return data_to_list(tsk,str,strlen(str),tsk->globnilpntr);
 }
 
 int array_to_string(pntr refpntr, char **str)
@@ -668,9 +647,6 @@ static void b_arrayskip(task *tsk, pntr *argstack)
 
 
   if (CELL_CONS == pntrtype(refpntr)) {
-    #ifdef ARRAY_DEBUG2
-    fprintf(tsk->output,"[as %d,cons]\n",n);
-    #endif
     assert((0 == n) || (1 == n));
 
     if (0 == n)
@@ -683,9 +659,6 @@ static void b_arrayskip(task *tsk, pntr *argstack)
     int index = aref_index(refpntr);
     assert(index < arr->size);
     assert(index+n <= arr->size);
-    #ifdef ARRAY_DEBUG2
-    fprintf(tsk->output,"[as %d,%d]\n",n,arr->size);
-    #endif
 
     if (index+n == arr->size)
       argstack[0] = arr->tail;
@@ -722,8 +695,6 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   else if (CELL_AREF == pntrtype(refpntr)) {
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
-
-    arrdebug(tsk,"arrayprefix: index = %d, arr->size = %d, n = %d\n",index,arr->size,n);
 
     if (0 >= n) {
       argstack[0] = tsk->globnilpntr;
@@ -901,12 +872,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
     return;
   }
 
-  carray *arr;
-  arr = carray_new(tsk,1,r,NULL,NULL);
-  make_aref_pntr(argstack[0],arr->wrapper,0);
-
-  carray_append(tsk,&arr,buf,r,1);
-  arr->tail = nextpntr;
+  argstack[0] = data_to_list(tsk,buf,r,nextpntr);
 }
 
 static void b_readdir1(task *tsk, pntr *argstack)

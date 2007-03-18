@@ -151,6 +151,8 @@ typedef struct cell {
 #define NAN_VALUE 0xFFF80000
 #define PNTR_VALUE 0xFFFC0000
 #define MAX_ARRAY_SIZE (1 << 18)
+//#define MAX_ARRAY_SIZE max_array_size
+//extern int max_array_size;
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)

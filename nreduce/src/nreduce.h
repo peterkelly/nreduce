@@ -51,10 +51,7 @@
 /* #define DISTGC_DEBUG */
 /* #define SHOW_FRAME_COMPLETION */
 /* #define COLLECTION_DEBUG */
-
-/* #define ARRAY_DEBUG */
-/* #define PRINT_DEBUG */
-/* #define ARRAY_DEBUG2 */
+/* #define DISABLE_ARRAYS */
 
 // Misc
 

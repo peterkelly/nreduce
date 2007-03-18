@@ -177,6 +177,9 @@ static void mark(task *tsk, pntr p, short bit)
 {
   cell *c;
   assert(CELL_EMPTY != pntrtype(p));
+  #ifdef DISABLE_ARRAYS
+  assert(CELL_AREF != pntrtype(p));
+  #endif
 
   if (tsk->markstack) {
     if (is_pntr(p) && !(get_pntr(p)->flags & bit))
