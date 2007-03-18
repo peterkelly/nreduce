@@ -104,31 +104,31 @@ static void setbool(task *tsk, pntr *cptr, int b)
 static void b_add(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_ADD);
-  argstack[0] = argstack[1] + argstack[0];
+  setnumber(&argstack[0],argstack[1] + argstack[0]);;
 }
 
 static void b_subtract(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_SUBTRACT);
-  argstack[0] = argstack[1] - argstack[0];
+  setnumber(&argstack[0],argstack[1] - argstack[0]);
 }
 
 static void b_multiply(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MULTIPLY);
-  argstack[0] = argstack[1] * argstack[0];
+  setnumber(&argstack[0],argstack[1] * argstack[0]);
 }
 
 static void b_divide(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_DIVIDE);
-  argstack[0] = argstack[1] / argstack[0];
+  setnumber(&argstack[0],argstack[1] / argstack[0]);
 }
 
 static void b_mod(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MOD);
-  argstack[0] = fmod(argstack[1],argstack[0]);
+  setnumber(&argstack[0],fmod(argstack[1],argstack[0]));
 }
 
 static void b_eq(task *tsk, pntr *argstack)
@@ -465,12 +465,17 @@ static pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
   *prev = tail;
   return p;
   #else
-  carray *arr = carray_new(tsk,1,size,NULL,NULL);
-  pntr p;
-  make_aref_pntr(p,arr->wrapper,0);
-  carray_append(tsk,&arr,data,size,1);
-  arr->tail = tail;
-  return p;
+  if (0 == size) {
+    return tail;
+  }
+  else {
+    carray *arr = carray_new(tsk,1,size,NULL,NULL);
+    pntr p;
+    make_aref_pntr(p,arr->wrapper,0);
+    carray_append(tsk,&arr,data,size,1);
+    arr->tail = tail;
+    return p;
+  }
   #endif
 }
 
@@ -779,7 +784,7 @@ static void b_stringtonum1(task *tsk, pntr *argstack)
     return;
   }
 
-  argstack[0] = strtod(str,&end);
+  setnumber(&argstack[0],strtod(str,&end));
   if (('\0' == *str) || ('\0' != *end))
     set_error(tsk,"stringtonum1: \"%s\" is not a valid number",str);
 
