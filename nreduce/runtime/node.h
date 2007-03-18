@@ -80,6 +80,7 @@ typedef struct messagelist {
 #define TASK_ENDPOINT 1
 #define MANAGER_ENDPOINT 2
 #define LAUNCHER_ENDPOINT 3
+#define CONSOLE_ENDPOINT 4
 
 struct endpoint;
 
@@ -140,6 +141,8 @@ typedef struct connection {
 
   int canread;
   int canwrite;
+
+  endpoint *console_endpt;
 
   struct connection *prev;
   struct connection *next;
@@ -252,6 +255,8 @@ void connection_printf(connection *conn, const char *format, ...);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 
+endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
+                                   endpoint_closefun closefun);
 endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
                             endpoint_closefun closefun);
 void node_remove_endpoint(node *n, endpoint *endpt);
@@ -264,6 +269,8 @@ void message_free(message *msg);
 /* console2 */
 
 void console_process_received(node *n, connection *conn);
+void start_console(node *n, connection *conn);
+void close_console(node *n, connection *conn);
 
 /* manager */
 

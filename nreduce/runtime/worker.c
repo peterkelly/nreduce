@@ -103,13 +103,17 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   return from;
 }
 
+static void *btarray[1024];
+
 static void sigabrt(int sig)
 {
   char *str = "abort()\n";
+  int size;
   write(STDERR_FILENO,str,strlen(str));
-}
 
-static void *btarray[1024];
+  size = backtrace(btarray,1024);
+  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
+}
 
 static void sigsegv(int sig)
 {
@@ -222,16 +226,6 @@ static void worker_callback(struct node *n, void *data, int event,
   if (((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) &&
       !conn->isconsole && !conn->isreg) {
     endpoint *endpt;
-    endpoint *mgrendpt = NULL;
-
-    for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      if (MANAGER_ENDPOINT == endpt->type) {
-        assert(NULL == mgrendpt);
-        mgrendpt = endpt;
-      }
-    }
-    assert(mgrendpt);
-
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
       task *tsk;
       endpointid destid;

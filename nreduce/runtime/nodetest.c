@@ -46,6 +46,16 @@
 #include <signal.h>
 #include <execinfo.h>
 
+void http_printf(connection *conn, const char *format, ...)
+{
+  va_list ap;
+  assert(NODE_ALREADY_LOCKED(conn->n));
+  va_start(ap,format);
+  array_vprintf(conn->sendbuf,format,ap);
+  va_end(ap);
+  node_notify(conn->n);
+}
+
 static void nodetest_callback(struct node *n, void *data, int event,
                               connection *conn, endpoint *endpt)
 {
@@ -117,12 +127,12 @@ static int end_of_line(const char *data, int len, int *pos)
 
 static void send_error(connection *conn, testconn *tc, int code, const char *str, const char *msg)
 {
-  cprintf(conn,"HTTP/1.1 %d %s\r\n",code,str);
-  cprintf(conn,"Content-Type: text/plain; charset=UTF-8\r\n");
-  cprintf(conn,"Content-Length: %d\r\n",strlen(msg)+1);
-  cprintf(conn,"Connection: close\r\n");
-  cprintf(conn,"\r\n");
-  cprintf(conn,"%s\n",msg);
+  http_printf(conn,"HTTP/1.1 %d %s\r\n",code,str);
+  http_printf(conn,"Content-Type: text/plain; charset=UTF-8\r\n");
+  http_printf(conn,"Content-Length: %d\r\n",strlen(msg)+1);
+  http_printf(conn,"Connection: close\r\n");
+  http_printf(conn,"\r\n");
+  http_printf(conn,"%s\n",msg);
 
   done_reading(conn->n,conn);
   conn->finwrite = 1;
@@ -321,7 +331,7 @@ static void testserver_callback(struct node *n, void *data, int event,
             node_log(n,LOG_INFO,"Header: %s=\"%s\"",h->name,h->value);
           }
 
-/*           cprintf(conn,"HTTP/1.1 200 OK\r\n" */
+/*           http_printf(conn,"HTTP/1.1 200 OK\r\n" */
 /*                        "Content-Type: text/plain; charset=UTF-8\r\n" */
 /*                        "Connection: close\r\n" */
 /*                        "\r\n" */

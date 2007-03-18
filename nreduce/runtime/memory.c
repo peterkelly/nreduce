@@ -87,6 +87,8 @@ const char *msg_names[MSG_COUNT] = {
   "KILLTASK",
   "KILLTASKRESP",
   "IORESPONSE",
+  "CONSOLE_LINE",
+  "CONSOLE_CLOSE",
 };
 
 const char *frame_states[5] = {

@@ -101,14 +101,15 @@ static int get_responses(node *n, endpoint *endpt, int tag,
 static void launcher_endpoint_close(endpoint *endpt)
 {
   launcher *sa = (launcher*)endpt->data;
+  node *n = sa->n;
   assert(NODE_ALREADY_LOCKED(sa->n));
-  unlock_mutex(&sa->n->lock);
+  unlock_mutex(&n->lock);
   sa->cancel = 1;
   endpoint_forceclose(sa->endpt);
 
   if (0 > pthread_join(sa->thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
-  lock_mutex(&sa->n->lock);
+  lock_mutex(&n->lock);
 }
 
 static void launcher_free(node *n, launcher *sa)
@@ -246,6 +247,8 @@ int get_managerids(node *n, endpointid **managerids)
   int count = 0;
   int i = 0;
   connection *conn;
+
+  assert(NODE_ALREADY_LOCKED(n));
 
   if (n->isworker && !n->havelistenip)
     fatal("I don't have my listen IP yet!");

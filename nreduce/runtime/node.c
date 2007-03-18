@@ -160,7 +160,7 @@ static void process_received(node *n, connection *conn)
     if (conn->recvbuf->nbytes < strlen(WELCOME_MESSAGE)) {
       if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,conn->recvbuf->nbytes)) {
         /* Data sent so far is not part of the welcome message; must be a console client */
-        conn->isconsole = 1;
+        start_console(n,conn);
         console_process_received(n,conn);
         return;
       }
@@ -172,7 +172,7 @@ static void process_received(node *n, connection *conn)
     else { /* conn->recvbuf->nbytes <= strlen(WELCOME_MESSAGE */
       if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE))) {
         /* Have enough bytes but it's not the welcome message; must be a console client */
-        conn->isconsole = 1;
+        start_console(n,conn);
         console_process_received(n,conn);
         return;
       }
@@ -277,6 +277,8 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
 static void remove_connection(node *n, connection *conn)
 {
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
+  if (conn->console_endpt)
+    close_console(n,conn);
   close(conn->sock);
   llist_remove(&n->connections,conn);
   free(conn->hostname);
@@ -382,6 +384,8 @@ static void handle_read(node *n, connection *conn)
       node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
     dispatch_event(n,EVENT_DATA_READFINISHED,conn,NULL);
     done_reading(n,conn);
+    if (conn->isconsole)
+      remove_connection(n,conn);
     return;
   }
 
@@ -1022,9 +1026,9 @@ void done_writing(node *n, connection *conn)
 
 void done_reading(node *n, connection *conn)
 {
+  assert(NODE_ALREADY_LOCKED(n));
   if (!conn->canread)
     return;
-  assert(NODE_ALREADY_LOCKED(n));
   assert(conn->canread);
   if (0 > shutdown(conn->sock,SHUT_RD))
     node_log(n,LOG_WARNING,"shutdown(SHUT_RD) on %s:%d failed: %s",
@@ -1041,8 +1045,8 @@ void done_reading(node *n, connection *conn)
 /** @name Public functions - endpoints
  * @{ */
 
-endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
-                            endpoint_closefun closefun)
+endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
+                                   endpoint_closefun closefun)
 {
   endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
   init_mutex(&endpt->mailbox.lock);
@@ -1053,7 +1057,6 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
   endpt->closefun = closefun;
   endpt->interruptptr = &endpt->tempinterrupt;
 
-  lock_node(n);
   if (0 == endpt->localid) {
     if (0 == n->nextlocalid)
       fatal("localid wraparound");
@@ -1061,6 +1064,15 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
   }
   llist_append(&n->endpoints,endpt);
   dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
+  return endpt;
+}
+
+endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
+                            endpoint_closefun closefun)
+{
+  endpoint *endpt;
+  lock_node(n);
+  endpt = node_add_endpoint_locked(n,localid,type,data,closefun);
   unlock_node(n);
   return endpt;
 }

@@ -639,7 +639,10 @@ int nodetest(const char *host, int port);
 
 #define MSG_IORESPONSE          22
 
-#define MSG_COUNT               23
+#define MSG_CONSOLE_LINE        23
+#define MSG_CONSOLE_CLOSE       24
+
+#define MSG_COUNT               25
 
 typedef struct reader {
   const char *data;
@@ -718,7 +721,6 @@ void debug_partial(source *src, const char *name, char *trace_dir, int trace_typ
 
 /* console */
 
-void cprintf(connection *conn, const char *format, ...);
 void console(task *tsk);
 
 /* builtin */
