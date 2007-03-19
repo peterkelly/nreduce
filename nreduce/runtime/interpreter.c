@@ -117,8 +117,6 @@ static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
   sl.lineno = op->lineno;
   print_task_sourceloc(tsk,stderr,sl);
   fprintf(stderr,CONSTANT_APP_MSG"\n");
-  /* FIXME: need to print the expression here */
-  abort();
 }
 
 static void handle_error(task *tsk)
@@ -1062,8 +1060,12 @@ void *execute(task *tsk)
         }
       }
 
-      if (CELL_CAP != pntrtype(p))
+      if (CELL_CAP != pntrtype(p)) {
         constant_app_error(tsk,p,instr);
+        interrupt = 1;
+        tsk->done = 1;
+        break;
+      }
       capholder = (cell*)get_pntr(p);
 
       cp = (cap*)get_pntr(capholder->field1);
