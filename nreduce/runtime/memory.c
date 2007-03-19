@@ -261,13 +261,18 @@ static void mark(task *tsk, pntr p, short bit)
       mark_global(tsk,glo,bit);
       break;
     }
+    case CELL_SYSOBJECT: {
+      sysobject *so = (sysobject*)get_pntr(c->field1);
+      if (!is_nullpntr(so->listenerso))
+        mark(tsk,so->listenerso,bit);
+      break;
+    }
     case CELL_BUILTIN:
     case CELL_SCREF:
     case CELL_NIL:
     case CELL_NUMBER:
     case CELL_HOLE:
     case CELL_SYMBOL:
-    case CELL_SYSOBJECT:
       break;
     default:
       abort();
@@ -323,6 +328,56 @@ void free_global(task *tsk, global *glo)
   free(glo);
 }
 
+static void free_sysobject(task *tsk, sysobject *so)
+{
+  switch (so->type) {
+  case SYSOBJECT_FILE:
+    close(so->fd);
+    break;
+  case SYSOBJECT_CONNECTION: {
+    connection *conn;
+
+    lock_node(tsk->n);
+    if (0 == so_lookup_connection(tsk,so,&conn)) {
+
+      if (!tsk->done) {
+        assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
+        assert(0 == conn->frameids[READ_FRAMEADDR]);
+        assert(0 == conn->frameids[WRITE_FRAMEADDR]);
+        assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
+        assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
+        assert(conn->dontread); /* FIXME: this is being triggered! */
+      }
+
+      conn->status = NULL;
+      conn->collected = 1;
+
+      if (!conn->finwrite) {
+        conn->finwrite = 1;
+        node_notify(tsk->n);
+      }
+
+      done_reading(tsk->n,conn);
+    }
+    unlock_node(tsk->n);
+
+    free(so->hostname);
+    free(so->buf);
+    break;
+  }
+  case SYSOBJECT_LISTENER:
+    if (so->newso)
+      free_sysobject(tsk,so->newso);
+    node_remove_listener(tsk->n,so->l);
+    free(so->hostname);
+    break;
+  default:
+    abort();
+    break;
+  }
+  free(so);
+}
+
 void free_cell_fields(task *tsk, cell *v)
 {
   assert(CELL_EMPTY != v->type);
@@ -347,53 +402,7 @@ void free_cell_fields(task *tsk, cell *v)
     break;
   case CELL_SYSOBJECT: {
     sysobject *so = (sysobject*)get_pntr(v->field1);
-    switch (so->type) {
-    case SYSOBJECT_FILE:
-      close(so->fd);
-      break;
-    case SYSOBJECT_CONNECTION: {
-      connection *conn;
-
-      lock_node(tsk->n);
-      if (0 == so_lookup_connection(tsk,so,&conn)) {
-
-        if (!tsk->done) {
-          assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
-          assert(0 == conn->frameids[READ_FRAMEADDR]);
-          assert(0 == conn->frameids[WRITE_FRAMEADDR]);
-          assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
-          assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
-          assert(conn->dontread); /* FIXME: this is being triggered! */
-        }
-
-        conn->status = NULL;
-        conn->collected = 1;
-
-        if (!conn->finwrite) {
-          conn->finwrite = 1;
-          node_notify(tsk->n);
-        }
-
-        done_reading(tsk->n,conn);
-      }
-      unlock_node(tsk->n);
-
-      free(so->hostname);
-      free(so->buf);
-      break;
-    }
-    case SYSOBJECT_LISTENER:
-      /* FIXME: free newso if it's present */
-      /* FIXME: this will cause all connections associated with the listener to be removed,
-         which is probably not what we want */
-      node_remove_listener(tsk->n,so->l);
-      free(so->hostname);
-      break;
-    default:
-      abort();
-      break;
-    }
-    free(so);
+    free_sysobject(tsk,so);
     break;
   }
   case CELL_SYMBOL:

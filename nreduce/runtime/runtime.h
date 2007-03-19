@@ -246,6 +246,7 @@ typedef struct sysobject {
   int status;
   int iorstatus;
   listener *l;
+  pntr listenerso;
   struct sysobject *newso;
   struct task *tsk;
 } sysobject;

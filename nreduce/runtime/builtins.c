@@ -1238,7 +1238,9 @@ static void b_readcon(task *tsk, pntr *argstack)
 static void listen_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
-  sysobject *so = (sysobject*)data;
+  cell *c = (cell*)data;
+  sysobject *so = (sysobject*)get_pntr(c->field1);
+  assert(CELL_SYSOBJECT == c->type);
   assert(NODE_ALREADY_LOCKED(n));
   assert(SYSOBJECT_LISTENER == so->type);
   assert(conn->l == so->l);
@@ -1249,6 +1251,7 @@ static void listen_callback(struct node *n, void *data, int event,
     connso->hostname = strdup(conn->hostname);
     connso->port = conn->port;
     connso->connected = 1;
+    make_pntr(connso->listenerso,c);
     conn->dontread = 1;
     conn->status = &connso->status;
     conn->tsk = so->tsk;
@@ -1306,21 +1309,23 @@ static void b_startlisten(task *tsk, pntr *argstack)
   so->port = port;
   so->tsk = tsk;
 
+  c = alloc_cell(tsk);
+  c->type = CELL_SYSOBJECT;
+  make_pntr(c->field1,so);
+  make_pntr(argstack[0],c);
+
   /* Start the listener */
-  so->l = node_listen(tsk->n,hostname,port,listen_callback,so,1);
+  so->l = node_listen(tsk->n,hostname,port,listen_callback,c,1);
   if (NULL == so->l) {
     set_error(tsk,"startlisten %s:%d: listen failed",hostname,port);
+    c->type = CELL_IND;
+    c->field1 = tsk->globnilpntr;
     free(hostname);
     free(so->hostname);
     free(so);
     return;
   }
   so->l->dontaccept = 1;
-
-  c = alloc_cell(tsk);
-  c->type = CELL_SYSOBJECT;
-  make_pntr(c->field1,so);
-  make_pntr(argstack[0],c);
 
   node_log(tsk->n,LOG_DEBUG1,"startlisten %s:%d: listening",hostname,port);
 
