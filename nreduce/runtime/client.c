@@ -131,7 +131,7 @@ static void send_newtask(launcher *lr)
   ntmsg->bcsize = lr->bcsize;
   memcpy(&ntmsg->bcdata,lr->bcdata,lr->bcsize);
   for (i = 0; i < lr->count; i++) {
-    ntmsg->pid = i;
+    ntmsg->tid = i;
     node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
   }
   free(ntmsg);

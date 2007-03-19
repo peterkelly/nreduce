@@ -151,7 +151,7 @@ static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
       gaddr *ft = (gaddr*)l->data;
       assert(CELL_FRAME != pntrtype(obj));
       /*     fprintf(tsk->output,"1: responding with %s\n",cell_types[pntrtype(obj)]); */
-      msg_fsend(tsk,ft->pid,MSG_RESPOND,"pa",obj,*ft);
+      msg_fsend(tsk,ft->tid,MSG_RESPOND,"pa",obj,*ft);
     }
     list_free(wq->fetchers,free);
     wq->fetchers = NULL;
@@ -161,7 +161,7 @@ static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
 static void frame_return(task *tsk, frame *curf, pntr val)
 {
   #ifdef SHOW_FRAME_COMPLETION
-  if (0 <= tsk->pid) {
+  if (0 <= tsk->tid) {
     int valtype = pntrtype(val);
     fprintf(tsk->output,"FRAME(%d) completed; result is a %s\n",
             curf->fno,cell_types[valtype]);
@@ -196,11 +196,11 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
   /* Create remote reference which will point to the frame on desttsk once an ACK is sent back */
 
   make_pntr(fcp,f->c);
-  addr.pid = desttsk;
+  addr.tid = desttsk;
   addr.lid = -1;
   glo = add_global(tsk,addr,fcp);
 
-  refaddr.pid = tsk->pid;
+  refaddr.tid = tsk->tid;
   refaddr.lid = tsk->nextlid++;
   refglo = add_global(tsk,refaddr,fcp);
 
@@ -208,7 +208,7 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
      assigns to the frame (which we'll store in newref) */
   #ifdef PAREXEC_DEBUG
 /*   fprintf(tsk->output,"Scheduling frame %s on task %d, newrefaddr = %d@%d\n", */
-/*           function_name(tsk->gp,f->fno),desttsk,newrefaddr.lid,newrefaddr.pid); */
+/*           function_name(tsk->gp,f->fno),desttsk,newrefaddr.lid,newrefaddr.tid); */
   #endif
   write_format(msg,tsk,"pa",glo->p,refglo->addr);
 
@@ -262,10 +262,10 @@ static void finish_address_reading(task *tsk, int from, int msgtype)
 
 void add_pending_mark(task *tsk, gaddr addr)
 {
-  assert(0 <= addr.pid);
-  assert(tsk->groupsize >= addr.pid);
+  assert(0 <= addr.tid);
+  assert(tsk->groupsize >= addr.tid);
   assert(tsk->inmark);
-  array_append(tsk->distmarks[addr.pid],&addr,sizeof(gaddr));
+  array_append(tsk->distmarks[addr.tid],&addr,sizeof(gaddr));
 }
 
 static void send_mark_messages(task *tsk)
@@ -279,7 +279,7 @@ static void send_mark_messages(task *tsk)
       for (a = 0; a < count; a++) {
         gaddr addr = array_item(tsk->distmarks[pid],a,gaddr);
         write_gaddr(msg,tsk,addr);
-        tsk->gcsent[addr.pid]++;
+        tsk->gcsent[addr.tid]++;
       }
       msg_send(tsk,pid,MSG_MARKENTRY,msg->data,msg->nbytes);
       write_end(msg);
@@ -312,7 +312,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 
   switch (tag) {
   case MSG_DONE:
-    fprintf(tsk->output,"%d: done\n",tsk->pid);
+    fprintf(tsk->output,"%d: done\n",tsk->tid);
     /* FIXME: check this works! */
     /* FIXME: do we need to signal another interrupt? */
     tsk->done = 1;
@@ -327,7 +327,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     finish_address_reading(tsk,from,tag);
     CHECK_READ(r);
 
-    if (reqtsk == tsk->pid)
+    if (reqtsk == tsk->tid)
       break;
 
     msg = write_start();
@@ -346,10 +346,10 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     if (!scheduled && (0 < (age)--)) {
       int dest;
 
-/*       dest = (tsk->pid+1) % tsk->groupsize; */
+/*       dest = (tsk->tid+1) % tsk->groupsize; */
       do {
         dest = rand() % tsk->groupsize;
-      } while (dest == tsk->pid);
+      } while (dest == tsk->tid);
 
       msg_fsend(tsk,dest,MSG_FISH,"iii",reqtsk,age,nframes);
     }
@@ -373,13 +373,13 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     finish_address_reading(tsk,from,tag);
     CHECK_READ(r);
 
-    CHECK_EXPR(objaddr.pid == tsk->pid);
-    CHECK_EXPR(storeaddr.pid == from);
+    CHECK_EXPR(objaddr.tid == tsk->tid);
+    CHECK_EXPR(storeaddr.tid == from);
     obj = global_lookup_existing(tsk,objaddr);
 
     if (is_nullpntr(obj)) {
       fprintf(tsk->output,"Request for deleted global %d@%d, from task %d\n",
-              objaddr.lid,objaddr.pid,from);
+              objaddr.lid,objaddr.tid,from);
     }
 
     CHECK_EXPR(!is_nullpntr(obj)); /* we should only be asked for a cell we actually have */
@@ -387,7 +387,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 
     #ifdef FETCH_DEBUG
     fprintf(tsk->output,"received FETCH %d@%d -> %d@%d",
-            objaddr.lid,objaddr.pid,storeaddr.lid,storeaddr.pid);
+            objaddr.lid,objaddr.tid,storeaddr.lid,storeaddr.tid);
     #endif
 
     if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
@@ -439,7 +439,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
       #ifdef PAREXEC_DEBUG
       fprintf(tsk->output,
               "Responding to fetch: val %s, req task %d, storeaddr = %d@%d, objaddr = %d@%d\n",
-              cell_types[pntrtype(obj)],from,storeaddr.lid,storeaddr.pid,objaddr.lid,objaddr.pid);
+              cell_types[pntrtype(obj)],from,storeaddr.lid,storeaddr.tid,objaddr.lid,objaddr.tid);
       #endif
       #ifdef FETCH_DEBUG
       fprintf(tsk->output,": case 4\n");
@@ -462,10 +462,10 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 
     ref = global_lookup_existing(tsk,storeaddr);
 
-    CHECK_EXPR(storeaddr.pid == tsk->pid);
+    CHECK_EXPR(storeaddr.tid == tsk->tid);
     if (is_nullpntr(ref)) {
       fprintf(tsk->output,"Respond tried to store in deleted global %d@%d\n",
-              storeaddr.lid,storeaddr.pid);
+              storeaddr.lid,storeaddr.tid);
     }
     CHECK_EXPR(!is_nullpntr(ref));
     CHECK_EXPR(CELL_REMOTEREF == pntrtype(ref));
@@ -473,7 +473,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     objglo = pglobal(ref);
     CHECK_EXPR(objglo->fetching);
     objglo->fetching = 0;
-    CHECK_EXPR(objglo->addr.pid == from);
+    CHECK_EXPR(objglo->addr.tid == from);
     CHECK_EXPR(objglo->addr.lid >= 0);
     CHECK_EXPR(pntrequal(objglo->p,ref));
 
@@ -539,15 +539,15 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 
       ref = global_lookup_existing(tsk,refaddr);
 
-      CHECK_EXPR(refaddr.pid == tsk->pid);
+      CHECK_EXPR(refaddr.tid == tsk->tid);
       CHECK_EXPR(!is_nullpntr(ref));
       CHECK_EXPR(CELL_REMOTEREF == pntrtype(ref));
 
       glo = pglobal(ref);
-      CHECK_EXPR(glo->addr.pid == from);
+      CHECK_EXPR(glo->addr.tid == from);
       CHECK_EXPR(glo->addr.lid == -1);
       CHECK_EXPR(pntrequal(glo->p,ref));
-      CHECK_EXPR(remoteaddr.pid == from);
+      CHECK_EXPR(remoteaddr.tid == from);
 
       addrhash_remove(tsk,glo);
       glo->addr.lid = remoteaddr.lid;
@@ -596,7 +596,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     CHECK_EXPR(!tsk->indistgc);
     tsk->indistgc = 1;
     clear_marks(tsk,FLAG_DMB);
-    msg_send(tsk,(tsk->pid+1)%tsk->groupsize,MSG_STARTDISTGC,data,size);
+    msg_send(tsk,(tsk->tid+1)%tsk->groupsize,MSG_STARTDISTGC,data,size);
     #ifdef DISTGC_DEBUG
     fprintf(tsk->output,"Started distributed garbage collection\n");
     #endif
@@ -623,7 +623,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     /* mark any in-flight gaddrs that refer to remote objects */
     for (l = tsk->inflight; l; l = l->next) {
       gaddr *addr = (gaddr*)l->data;
-      if ((0 <= addr->lid) && (tsk->pid != addr->pid))
+      if ((0 <= addr->lid) && (tsk->tid != addr->tid))
         add_pending_mark(tsk,*addr);
     }
 
@@ -631,7 +631,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
       int count = array_count(tsk->inflight_addrs[pid]);
       for (i = 0; i < count; i++) {
         gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
-        if ((0 <= addr.lid) && (tsk->pid != addr.pid))
+        if ((0 <= addr.lid) && (tsk->tid != addr.tid))
           add_pending_mark(tsk,addr);
       }
     }
@@ -643,7 +643,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
           mark_global(tsk,glo,FLAG_DMB);
 
 
-    tsk->gcsent[tsk->pid]--;
+    tsk->gcsent[tsk->tid]--;
     send_mark_messages(tsk);
     send_update(tsk);
     tsk->inmark = 0;
@@ -663,15 +663,15 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     start_address_reading(tsk,from,tag);
     while (rd.pos < rd.size) {
       CHECK_READ(read_gaddr(&rd,tsk,&addr));
-      CHECK_EXPR(addr.pid == tsk->pid);
+      CHECK_EXPR(addr.tid == tsk->tid);
       glo = addrhash_lookup(tsk,addr);
       if (!glo) {
         fprintf(tsk->output,"Marking request for deleted global %d@%d\n",
-                addr.lid,addr.pid);
+                addr.lid,addr.tid);
       }
       CHECK_EXPR(glo);
       mark_global(tsk,glo,FLAG_DMB);
-      tsk->gcsent[tsk->pid]--;
+      tsk->gcsent[tsk->tid]--;
     }
     finish_address_reading(tsk,from,tag);
 
@@ -864,13 +864,13 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
       int delay = FISH_DELAY_MS + ((rand() % 1000) * FISH_DELAY_MS / 1000);
       *nextfish = timeval_addms(*nextfish,delay);
 
-/*       dest = (tsk->pid+1) % tsk->groupsize; */
+/*       dest = (tsk->tid+1) % tsk->groupsize; */
       do {
         dest = rand() % tsk->groupsize;
-      } while (dest == tsk->pid);
+      } while (dest == tsk->tid);
 
       msg_fsend(tsk,dest,MSG_FISH,
-                "iii",tsk->pid,tsk->groupsize,NSPARKS_REQUESTED);
+                "iii",tsk->tid,tsk->groupsize,NSPARKS_REQUESTED);
       tsk->newfish = 0;
     }
 
@@ -888,7 +888,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
     #ifdef PARALLELISM_DEBUG
     if (0 > from)
       fprintf(tsk->output,"%d: no runnable; slept; sparks = %d, sparksused = %d, fetches = %d\n",
-              tsk->pid,tsk->stats.sparks,tsk->stats.sparksused,tsk->stats.fetches);
+              tsk->tid,tsk->stats.sparks,tsk->stats.sparksused,tsk->stats.fetches);
     #endif
 
     if (0 <= from)
@@ -996,16 +996,16 @@ void *execute(task *tsk)
       else if (CELL_REMOTEREF == pntrtype(p)) {
         global *target = (global*)get_pntr(get_pntr(p)->field1);
         frame *f2 = runnable;
-        assert(target->addr.pid != tsk->pid);
+        assert(target->addr.tid != tsk->tid);
 
         if (!target->fetching && (0 <= target->addr.lid)) {
           global *refglo = make_global(tsk,p);
-          assert(refglo->addr.pid == tsk->pid);
-          msg_fsend(tsk,target->addr.pid,MSG_FETCH,"aa",target->addr,refglo->addr);
+          assert(refglo->addr.tid == tsk->tid);
+          msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
 
           #ifdef FETCH_DEBUG
           fprintf(tsk->output,"sent FETCH %d@%d -> %d@%d\n",
-                  target->addr.lid,target->addr.pid,refglo->addr.lid,refglo->addr.pid);
+                  target->addr.lid,target->addr.tid,refglo->addr.lid,refglo->addr.tid);
           #endif
 
           tsk->stats.fetches++;

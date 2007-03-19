@@ -146,7 +146,7 @@ void mark_global(task *tsk, global *glo, short bit)
   glo->flags |= bit;
   mark(tsk,glo->p,bit);
 
-  if ((FLAG_DMB == bit) && (0 <= glo->addr.lid) && (tsk->pid != glo->addr.pid))
+  if ((FLAG_DMB == bit) && (0 <= glo->addr.lid) && (tsk->tid != glo->addr.tid))
     add_pending_mark(tsk,glo->addr);
 }
 
@@ -346,7 +346,7 @@ static void free_sysobject(task *tsk, sysobject *so)
         assert(0 == conn->frameids[WRITE_FRAMEADDR]);
         assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
         assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
-        assert(conn->dontread); /* FIXME: this is being triggered! */
+        assert(conn->dontread);
       }
 
       conn->status = NULL;
@@ -476,12 +476,12 @@ void mark_roots(task *tsk, short bit)
   /* mark any in-flight gaddrs that refer to objects in this task */
   for (l = tsk->inflight; l; l = l->next) {
     gaddr *addr = (gaddr*)l->data;
-    if ((0 <= addr->lid) && (addr->pid == tsk->pid)) {
+    if ((0 <= addr->lid) && (addr->tid == tsk->tid)) {
       glo = addrhash_lookup(tsk,*addr);
       assert(glo);
       if (tsk->memdebug) {
         fprintf(tsk->output,"root: inflight local ref %d@%d\n",
-                addr->lid,addr->pid);
+                addr->lid,addr->tid);
       }
       mark_global(tsk,glo,bit);
     }
@@ -491,12 +491,12 @@ void mark_roots(task *tsk, short bit)
     int count = array_count(tsk->inflight_addrs[pid]);
     for (i = 0; i < count; i++) {
       gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
-      if ((0 <= addr.lid) && (addr.pid == tsk->pid)) {
+      if ((0 <= addr.lid) && (addr.tid == tsk->tid)) {
         glo = addrhash_lookup(tsk,addr);
         assert(glo);
         if (tsk->memdebug) {
           fprintf(tsk->output,"root: inflight local ref %d@%d\n",
-                  addr.lid,addr.pid);
+                  addr.lid,addr.tid);
         }
         mark_global(tsk,glo,bit);
       }
@@ -575,7 +575,7 @@ void sweep(task *tsk, int all)
 
       if (!needed) {
         #ifdef COLLECTION_DEBUG
-        fprintf(tsk->output,"removing garbage global %d@%d\n",glo->addr.lid,glo->addr.pid);
+        fprintf(tsk->output,"removing garbage global %d@%d\n",glo->addr.lid,glo->addr.tid);
         #endif
         *gptr = (*gptr)->pntrnext;
 
@@ -633,7 +633,7 @@ void local_collect(task *tsk)
   /* treat any objects referenced from other tasks as roots */
   for (h = 0; h < GLOBAL_HASH_SIZE; h++)
     for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
-      if (tsk->pid == glo->addr.pid)
+      if (tsk->tid == glo->addr.tid)
         mark_global(tsk,glo,FLAG_MARKED);
 
   /* sweep */
@@ -819,7 +819,7 @@ void print_pntr(FILE *f, pntr p)
   }
   case CELL_REMOTEREF: {
     global *glo = (global*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"%d@%d",glo->addr.lid,glo->addr.pid);
+    fprintf(f,"%d@%d",glo->addr.lid,glo->addr.tid);
     break;
   }
   case CELL_IND: {

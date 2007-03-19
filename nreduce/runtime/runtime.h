@@ -377,7 +377,7 @@ typedef struct procstats {
 } procstats;
 
 typedef struct gaddr {
-  int pid; /* FIXME: rename to tid */
+  int tid;
   int lid;
 } gaddr;
 
@@ -419,11 +419,6 @@ typedef struct frameblock {
   char *mem[FRAMEBLOCK_SIZE];
 } frameblock;
 
-/* FIXME: shouldn't need to use function pointers for send/recv anymore */
-typedef void (*send_fun)(struct task *tsk, int dest, int tag, char *data, int size);
-typedef int (*recv_fun)(struct task *tsk, int *tag, char **data, int *size, int block,
-                        int delayms);
-
 #define SAFE_TO_ACCESS_TASK(_tsk) pthread_equal(pthread_self(),(_tsk)->thread)
 
 typedef struct ioframe {
@@ -441,7 +436,7 @@ typedef struct task {
 
   /* communication */
   group *grp;
-  int pid;
+  int tid;
   int groupsize;
   int ackmsgsize;
   int naddrsread;
@@ -540,7 +535,7 @@ typedef struct task {
   pntrset *partial_applied;
 } task;
 
-task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n);
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);
 void task_free(task *tsk);
 void task_kill_locked(task *tsk);
 void print_profile(task *tsk);

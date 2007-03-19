@@ -275,7 +275,7 @@ void close_console(node *n, connection *conn);
 /* manager */
 
 typedef struct newtask_msg {
-  int pid;
+  int tid;
   int groupsize;
   int bcsize;
   char bcdata[0];

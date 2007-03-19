@@ -54,7 +54,7 @@ global *addrhash_lookup(task *tsk, gaddr addr)
 {
   int h = hash(&addr,sizeof(gaddr));
   global *g = tsk->addrhash[h];
-  while (g && ((g->addr.pid != addr.pid) || (g->addr.lid != addr.lid)))
+  while (g && ((g->addr.tid != addr.tid) || (g->addr.lid != addr.lid)))
     g = g->addrnext;
   return g;
 }
@@ -164,7 +164,7 @@ gaddr global_addressof(task *tsk, pntr p)
     return glo->addr;
 
   /* It's a local object; give it a global address */
-  addr.pid = tsk->pid;
+  addr.tid = tsk->tid;
   addr.lid = tsk->nextlid++;
   glo = add_global(tsk,addr,p);
   return glo->addr;
@@ -179,10 +179,10 @@ global *make_global(task *tsk, pntr p)
   gaddr addr;
 
   glo = pntrhash_lookup(tsk,p);
-  if (glo && (glo->addr.pid == tsk->pid))
+  if (glo && (glo->addr.tid == tsk->tid))
     return glo;
 
-  addr.pid = tsk->pid;
+  addr.tid = tsk->tid;
   addr.lid = tsk->nextlid++;
   glo = add_global(tsk,addr,p);
   return glo;
@@ -190,7 +190,7 @@ global *make_global(task *tsk, pntr p)
 
 void add_gaddr(list **l, gaddr addr)
 {
-  if ((-1 != addr.pid) || (-1 != addr.lid)) {
+  if ((-1 != addr.tid) || (-1 != addr.lid)) {
     gaddr *copy = (gaddr*)malloc(sizeof(gaddr));
     memcpy(copy,&addr,sizeof(gaddr));
     list_push(l,copy);
@@ -202,19 +202,19 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
 {
   while (*l) {
     gaddr *item = (gaddr*)(*l)->data;
-    if ((item->pid == addr.pid) && (item->lid == addr.lid)) {
+    if ((item->tid == addr.tid) && (item->lid == addr.lid)) {
       list *old = *l;
       *l = (*l)->next;
       free(old->data);
       free(old);
-/*       fprintf(tsk->output,"removed gaddr %d@%d\n",addr.lid,addr.pid); */
+/*       fprintf(tsk->output,"removed gaddr %d@%d\n",addr.lid,addr.tid); */
       return;
     }
     else {
       l = &((*l)->next);
     }
   }
-  fprintf(tsk->output,"gaddr %d@%d not found\n",addr.lid,addr.pid);
+  fprintf(tsk->output,"gaddr %d@%d not found\n",addr.lid,addr.tid);
   fatal("gaddr not found");
 }
 
@@ -408,7 +408,7 @@ void dump_globals(task *tsk)
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
     for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext) {
       fprintf(tsk->output,"%4d@%-4d %-12s %-12p\n",
-              glo->addr.lid,glo->addr.pid,cell_types[pntrtype(glo->p)],
+              glo->addr.lid,glo->addr.tid,cell_types[pntrtype(glo->p)],
               is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
     }
   }
@@ -430,7 +430,7 @@ static void task_endpoint_close(endpoint *endpt)
   task_kill_locked(tsk);
 }
 
-task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
@@ -465,7 +465,7 @@ task *task_new(int pid, int groupsize, const char *bcdata, int bcsize, node *n)
   tsk->ioframes = (ioframe*)calloc(tsk->ioalloc,sizeof(ioframe));
   tsk->iofree = 0;
 
-  tsk->pid = pid;
+  tsk->tid = tid;
   tsk->groupsize = groupsize;
   if (NULL == bcdata)
     return tsk; /* no bytecode; we must be using the reduction engine */

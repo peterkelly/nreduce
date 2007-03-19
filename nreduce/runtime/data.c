@@ -114,7 +114,7 @@ int read_binary(reader *rd, void **b, int *len)
 int read_gaddr_noack(reader *rd, gaddr *a)
 {
   CHECK_READ(read_check_tag(rd,GADDR_TAG));
-  CHECK_READ(read_bytes(rd,&a->pid,sizeof(int)));
+  CHECK_READ(read_bytes(rd,&a->tid,sizeof(int)));
   CHECK_READ(read_bytes(rd,&a->lid,sizeof(int)));
   return READER_OK;
 }
@@ -123,7 +123,7 @@ int read_gaddr(reader *rd, task *tsk, gaddr *a)
 {
   assert(tsk->ackmsg);
   CHECK_READ(read_gaddr_noack(rd,a));
-  if ((-1 != a->pid) || (-1 != a->lid)) {
+  if ((-1 != a->tid) || (-1 != a->lid)) {
     write_gaddr_noack(tsk->ackmsg,*a);
     tsk->naddrsread++;
   }
@@ -353,7 +353,7 @@ int print_data(task *tsk, const char *data, int size)
     case GADDR_TAG: {
       gaddr a;
       CHECK_READ(read_gaddr(&rd,tsk,&a));
-      fprintf(f,"%d@%d",a.lid,a.pid);
+      fprintf(f,"%d@%d",a.lid,a.tid);
       break;
     }
     case PNTR_TAG: {
@@ -430,7 +430,7 @@ void write_binary(array *wr, const void *b, int len)
 void write_gaddr_noack(array *wr, gaddr a)
 {
   write_tag(wr,GADDR_TAG);
-  array_append(wr,&a.pid,sizeof(int));
+  array_append(wr,&a.tid,sizeof(int));
   array_append(wr,&a.lid,sizeof(int));
 }
 
@@ -449,7 +449,7 @@ void write_ref(array *arr, task *tsk, pntr p)
   }
   else {
     gaddr addr;
-    addr.pid = -1;
+    addr.tid = -1;
     addr.lid = -1;
     write_format(arr,tsk,"aid",addr,CELL_NUMBER,p);
   }
@@ -458,7 +458,7 @@ void write_ref(array *arr, task *tsk, pntr p)
 void write_pntr(array *arr, task *tsk, pntr p)
 {
   gaddr addr;
-  addr.pid = -1;
+  addr.tid = -1;
   addr.lid = -1;
 
   if (CELL_IND == pntrtype(p)) {
