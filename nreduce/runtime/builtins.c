@@ -1113,7 +1113,7 @@ static void b_opencon(task *tsk, pntr *argstack)
 
     /* Try to initiate connection */
     lock_node(tsk->n);
-    conn = node_connect_locked(tsk->n,hostname,port,0);
+    conn = node_connect_locked(tsk->n,hostname,INADDR_ANY,port,0);
     if (conn) {
       int ioid = get_ioframe_id(tsk,curf);
       conn->tsk = tsk;

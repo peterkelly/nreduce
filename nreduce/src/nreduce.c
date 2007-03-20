@@ -92,7 +92,7 @@ static void usage()
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
 "  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
-"  --client IP:PORT CMD     Connect to manager at IP:PORT and run command CMD\n"
+"  --client NODESFILE CMD   Run program CMD on nodes read from NODESFILE\n"
 "  --nodetest IP:PORT       Run as test node, listening on IP:PORT\n"
 "\n"
 "Options for printing output of compilation stages:\n"
@@ -218,17 +218,14 @@ static int nodetest_mode()
 static int client_mode()
 {
   int r;
-  char *host = NULL;
-  int port = WORKER_PORT;
 
-  if (0 != parse_address(args.client,&host,&port)) {
-    fprintf(stderr,"Invalid node address: %s\n",args.client);
-    exit(1);
+  if (1 > array_count(args.extra)) {
+    fprintf(stderr,"No program specified\n");
+    array_free(args.extra);
+    return -1;
   }
 
-  r = do_client(host,port,array_count(args.extra),(char**)args.extra->data);
-
-  free(host);
+  r = do_client(args.client,array_item(args.extra,0,char*));
   array_free(args.extra);
   return r;
 }

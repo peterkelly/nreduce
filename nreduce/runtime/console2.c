@@ -68,7 +68,7 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
     }
     *colon = '\0';
     lock_node(n);
-    node_connect_locked(n,argv[1],atoi(colon+1),1);
+    node_connect_locked(n,argv[1],INADDR_ANY,atoi(colon+1),1);
     unlock_node(n);
   }
   else if (!strcmp(argv[0],"run") || !strcmp(argv[0],"r")) {

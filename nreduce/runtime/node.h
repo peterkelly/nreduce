@@ -232,6 +232,9 @@ typedef struct node {
 #define lock_node(_n) { lock_mutex(&(_n)->lock);
 #define unlock_node(_n) unlock_mutex(&(_n)->lock); }
 
+char *lookup_hostname(node *n, struct in_addr addr);
+int lookup_address(node *n, const char *host, struct in_addr *out);
+
 node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
@@ -243,7 +246,8 @@ void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
-connection *node_connect_locked(node *n, const char *dest, int port, int othernode);
+connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
+                                int port, int othernode);
 void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
                       int tag, const void *data, int size);
 void node_send(node *n, int sourcelocalid, endpointid destendpointid,

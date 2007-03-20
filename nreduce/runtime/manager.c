@@ -57,8 +57,6 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
              ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
     newtsk = add_task(n,ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
-
-    /* FIXME: is there a race condition here? what if newtsk gets deleted */
     node_send(n,endpt->localid,msg->hdr.source,MSG_NEWTASKRESP,&newtsk->endpt->localid,sizeof(int));
     break;
   }

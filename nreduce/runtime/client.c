@@ -307,92 +307,133 @@ int run_program(node *n, const char *filename)
   return 0;
 }
 
-typedef struct client_data {
-  pthread_mutex_t lock;
-  pthread_cond_t cond;
-  const char *host;
-  int port;
-  int event;
-} client_data;
+static array *read_nodes(const char *hostsfile)
+{
+  array *hostnames;
+  int start = 0;
+  int pos = 0;
+  array *filedata;
+  FILE *f;
+  int r;
+  char buf[1024];
+
+  if (NULL == (f = fopen(hostsfile,"r"))) {
+    perror(hostsfile);
+    return NULL;
+  }
+
+  filedata = array_new(1,0);
+  while (0 < (r = fread(buf,1,1024,f)))
+    array_append(filedata,buf,r);
+  fclose(f);
+
+  hostnames = array_new(sizeof(char*),0);
+  while (1) {
+    if ((pos == filedata->nbytes) ||
+        ('\n' == filedata->data[pos])) {
+      if (pos > start) {
+        char *hostname = (char*)malloc(pos-start+1);
+        memcpy(hostname,&filedata->data[start],pos-start);
+        hostname[pos-start] = '\0';
+        array_append(hostnames,&hostname,sizeof(char*));
+      }
+      start = pos+1;
+    }
+    if (pos == filedata->nbytes)
+      break;
+    pos++;
+  }
+
+  free(filedata);
+  return hostnames;
+}
+
+static int client_run(node *n, const char *nodesfile, const char *filename)
+{
+  int bcsize;
+  char *bcdata;
+  source *src;
+  int count;
+  endpointid *managerids;
+
+  array *nodes = read_nodes(nodesfile);
+  int i;
+
+  if (NULL == nodes)
+    return -1;
+
+  count = array_count(nodes);
+  managerids = (endpointid*)calloc(count,sizeof(endpointid));
+
+  for (i = 0; i < count; i++) {
+    char *nodename = array_item(nodes,i,char*);
+    char *host = NULL;
+    int port = 0;
+
+    if (0 != parse_address(nodename,&host,&port)) {
+      fprintf(stderr,"Invalid node address: %s\n",nodename);
+      return -1;
+    }
+    managerids[i].nodeport = port;
+    managerids[i].localid = MANAGER_ID;
+
+    if (0 > lookup_address(n,host,&managerids[i].nodeip)) {
+      fprintf(stderr,"%s: hostname lookup failed\n",host);
+      return -1;
+    }
+    free(host);
+  }
+
+  src = source_new();
+  if (0 != source_parse_file(src,filename,""))
+    return -1;
+  if (0 != source_process(src,0,0,0))
+    return -1;
+  if (0 != source_compile(src,&bcdata,&bcsize))
+    return -1;
+  source_free(src);
+
+  node_log(n,LOG_INFO,"Compiled");
+  start_launcher(n,bcdata,bcsize,managerids,count);
+  free(managerids);
+  free(bcdata);
+  return 0;
+}
 
 static void client_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
-  client_data *cd = (client_data*)data;
-  if ((EVENT_HANDSHAKE_DONE == event) || (EVENT_CONN_FAILED == event)) {
-    lock_mutex(&cd->lock);
-    cd->event = event;
-    pthread_cond_signal(&cd->cond);
-    unlock_mutex(&cd->lock);
+  if (EVENT_CONN_FAILED == event) {
+    fprintf(stderr,"Connection to %s:%d failed\n",conn->hostname,conn->port);
+    exit(1);
   }
 }
 
-int do_client(const char *host, int port, int argc, char **argv)
+int do_client(const char *nodesfile, const char *program)
 {
   node *n;
   int r = 0;
-  client_data cd;
-  connection *conn;
-
-  if (1 > argc) {
-    fprintf(stderr,"client: please specify a filename to run\n");
-    return -1;
-  }
-
-  pthread_cond_init(&cd.cond,NULL);
-  pthread_mutex_init(&cd.lock,NULL);
-  cd.host = host;
-  cd.port = port;
-  cd.event = -1;
 
   n = node_new(LOG_INFO);
 
-  if (NULL == (n->mainl = node_listen(n,host,0,NULL,NULL,0))) {
+  if (NULL == (n->mainl = node_listen(n,"0.0.0.0",0,NULL,NULL,0))) {
     node_free(n);
     return -1;
   }
 
-  node_add_callback(n,client_callback,&cd);
+  node_add_callback(n,client_callback,NULL);
   node_start_iothread(n);
 
-  lock_node(n);
-  conn = node_connect_locked(n,host,port,1);
-  unlock_node(n);
-
-  if (NULL == conn) {
-    fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
-    r = 1;
-  }
-  else {
-    int event;
-    /* find out if it's successful... */
-    lock_mutex(&cd.lock);
-    pthread_cond_wait(&cd.cond,&cd.lock);
-    event = cd.event;
-    unlock_mutex(&cd.lock);
-
-    if (EVENT_HANDSHAKE_DONE != event) {
-      fprintf(stderr,"client: Connection to %s:%d failed\n",host,port);
-      r = 1;
-    }
-    else {
-      printf("client: Connection to %s:%d ok\n",host,port);
-
-      if (0 != run_program(n,argv[0]))
-        exit(1);
-    }
-  }
+  if (0 != client_run(n,nodesfile,program))
+    exit(1);
 
   if (0 > pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   node_close_endpoints(n);
   node_close_connections(n);
-  node_remove_callback(n,client_callback,&cd);
+  node_remove_callback(n,client_callback,NULL);
   node_free(n);
-
-  pthread_mutex_destroy(&cd.lock);
-  pthread_cond_destroy(&cd.cond);
 
   return r;
 }

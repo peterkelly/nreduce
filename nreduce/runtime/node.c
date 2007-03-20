@@ -394,7 +394,7 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
-static char *lookup_hostname(node *n, struct in_addr addr)
+char *lookup_hostname(node *n, struct in_addr addr)
 {
   struct hostent *he;
   char *res;
@@ -414,7 +414,7 @@ static char *lookup_hostname(node *n, struct in_addr addr)
   return res;
 }
 
-static int lookup_address(node *n, const char *host, struct in_addr *out)
+int lookup_address(node *n, const char *host, struct in_addr *out)
 {
   struct hostent *he;
   int r = 0;
@@ -842,7 +842,8 @@ static int set_keepalive(node *n, int sock, int s)
 }
 #endif
 
-connection *node_connect_locked(node *n, const char *dest, int port, int othernode)
+connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
+                                int port, int othernode)
 {
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
@@ -861,8 +862,13 @@ connection *node_connect_locked(node *n, const char *dest, int port, int otherno
   addr.sin_port = htons(port);
   memset(&addr.sin_zero,0,8);
 
-  if (0 > lookup_address(n,dest,&addr.sin_addr))
-    return NULL;
+  if (dest) {
+    if (0 > lookup_address(n,dest,&addr.sin_addr))
+      return NULL;
+  }
+  else {
+    addr.sin_addr.s_addr = destaddr;
+  }
 
   if (0 > (sock = socket(AF_INET,SOCK_STREAM,0))) {
     perror("socket");
@@ -943,14 +949,14 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
   else {
     if (NULL == (conn = find_connection(n,destendpointid.nodeip,destendpointid.nodeport))) {
       unsigned char *addrbytes = (unsigned char*)&destendpointid.nodeip.s_addr;
-      node_log(n,LOG_ERROR,"Could not find destination connection to %u.%u.%u.%u:%d",
+      node_log(n,LOG_INFO,"No connection yet to %u.%u.%u.%u:%d; establishing",
                addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
+      conn = node_connect_locked(n,NULL,destendpointid.nodeip.s_addr,destendpointid.nodeport,1);
     }
-    else {
-      array_append(conn->sendbuf,&hdr,sizeof(msgheader));
-      array_append(conn->sendbuf,data,size);
-      node_notify(n);
-    }
+
+    array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+    array_append(conn->sendbuf,data,size);
+    node_notify(n);
   }
 }
 
