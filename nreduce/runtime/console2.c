@@ -257,7 +257,6 @@ void *console_thread(void *arg)
 void start_console(node *n, connection *conn)
 {
   console2 *csl = (console2*)calloc(1,sizeof(console2));
-  printf("start_console\n");
   conn->isconsole = 1;
   csl->n = n;
   csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,console_endpoint_close);
@@ -266,10 +265,10 @@ void start_console(node *n, connection *conn)
     fatal("pthread_create: %s",strerror(errno));
 }
 
+/* FIXME: when this is called, the endpoint may have been deleted */
 void close_console(node *n, connection *conn)
 {
   endpointid destid;
-  printf("close_console\n");
   assert(NODE_ALREADY_LOCKED(n));
   assert(conn->console_endpt);
   destid.nodeip = n->listenip;

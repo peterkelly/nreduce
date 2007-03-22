@@ -414,20 +414,17 @@ void dump_globals(task *tsk)
   }
 }
 
-void task_kill_locked(task *tsk)
-{
-  assert(NODE_ALREADY_LOCKED(tsk->n));
-  printf("Killing task\n");
-  /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
-  tsk->done = 1;
-  *tsk->endpt->interruptptr = 1;
-  node_waitclose_locked(tsk->n,tsk->endpt->localid);
-}
-
 static void task_endpoint_close(endpoint *endpt)
 {
   task *tsk = (task*)endpt->data;
-  task_kill_locked(tsk);
+  node *n = tsk->n;
+  endpointid destid;
+  assert(NODE_ALREADY_LOCKED(tsk->n));
+  destid.nodeip = n->listenip;
+  destid.nodeport = n->mainl->port;
+  destid.localid = tsk->endpt->localid;
+  node_send_locked(tsk->n,destid.localid,destid,MSG_KILL,NULL,0);
+  node_waitclose_locked(n,tsk->endpt->localid);
 }
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)

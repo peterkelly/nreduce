@@ -775,6 +775,11 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     check_runnable(tsk);
     break;
   }
+  case MSG_KILL:
+    /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
+    node_log(tsk->n,LOG_INFO,"task: received KILL");
+    tsk->done = 1;
+    break;
   default:
     fatal("unknown message");
     break;

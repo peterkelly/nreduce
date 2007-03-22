@@ -131,7 +131,8 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
   message *newmsg;
 
   if (NULL == (endpt = find_endpoint(n,hdr->destlocalid))) {
-    report_error(n,"Message received for unknown endpoint %d",hdr->destlocalid);
+    report_error(n,"Message %s received for unknown endpoint %d",
+                 msg_names[hdr->tag],hdr->destlocalid);
     return;
   }
 

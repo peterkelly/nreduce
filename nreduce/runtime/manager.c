@@ -127,25 +127,6 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     node_send(n,endpt->localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
   }
-  case MSG_KILLTASK: {
-    task *newtsk;
-    int localid;
-    if (sizeof(int) > msg->hdr.size)
-      fatal("KILLTASK: invalid message size");
-    localid = *(int*)msg->data;
-
-    node_log(n,LOG_INFO,"KILLTASK %d",localid);
-
-    lock_node(n);
-    newtsk = find_task(n,localid);
-    if (NULL == newtsk)
-      fatal("KILLTASK: task with localid %d does not exist",localid);
-    task_kill_locked(newtsk);
-    unlock_node(n);
-
-    node_log(n,LOG_INFO,"KILLTASK %d: killed",localid);
-    break;
-  }
   default:
     node_log(n,LOG_INFO,"Manager received invalid message: %d",msg->hdr.tag);
     break;

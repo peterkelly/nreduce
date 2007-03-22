@@ -128,12 +128,6 @@ static void sigsegv(int sig)
   kill(getpid(),sig);
 }
 
-static void sigpipe(int sig)
-{
-  fprintf(stderr,"Got SIGPIPE\n");
-  exit(1);
-}
-
 task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
@@ -223,7 +217,9 @@ static void worker_callback(struct node *n, void *data, int event,
       (EVENT_CONN_ACCEPTED == event))
     send_ioresponse(n,conn,&conn->frameids[ACCEPT_FRAMEADDR],event);
 
-  if (((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)) &&
+  if (((EVENT_CONN_IOERROR == event) ||
+       (EVENT_CONN_CLOSED == event) ||
+       (EVENT_DATA_READFINISHED == event)) &&
       !conn->isconsole && !conn->isreg) {
     endpoint *endpt;
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
@@ -247,10 +243,10 @@ static void worker_callback(struct node *n, void *data, int event,
 
       destid.nodeip = n->listenip;
       destid.nodeport = n->mainl->port;
-      destid.localid = MANAGER_ID;
+      destid.localid = tsk->endpt->localid;
 
-      node_send_locked(n,0,destid,MSG_KILLTASK,&endpt->localid,sizeof(int));
       node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->localid);
+      node_send_locked(n,tsk->endpt->localid,destid,MSG_KILL,NULL,0);
     }
   }
   if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
@@ -267,7 +263,7 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
-  signal(SIGPIPE,sigpipe);
+  signal(SIGPIPE,SIG_IGN);
 
   memset(&wd,0,sizeof(worker_data));
 

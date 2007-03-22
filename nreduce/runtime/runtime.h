@@ -537,7 +537,6 @@ typedef struct task {
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);
 void task_free(task *tsk);
-void task_kill_locked(task *tsk);
 void print_profile(task *tsk);
 
 global *pntrhash_lookup(task *tsk, pntr p);
@@ -630,15 +629,14 @@ int nodetest(const char *host, int port);
 #define MSG_INITTASKRESP        17
 #define MSG_STARTTASK           18
 #define MSG_STARTTASKRESP       19
-#define MSG_KILLTASK            20
-#define MSG_KILLTASKRESP        21
+#define MSG_KILL                20
 
-#define MSG_IORESPONSE          22
+#define MSG_IORESPONSE          21
 
-#define MSG_CONSOLE_LINE        23
-#define MSG_CONSOLE_CLOSE       24
+#define MSG_CONSOLE_LINE        22
+#define MSG_CONSOLE_CLOSE       23
 
-#define MSG_COUNT               25
+#define MSG_COUNT               24
 
 typedef struct reader {
   const char *data;
