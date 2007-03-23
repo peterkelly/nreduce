@@ -51,8 +51,8 @@ struct task;
 struct gaddr;
 
 typedef struct endpointid {
-  struct in_addr nodeip;
-  unsigned short nodeport;
+  in_addr_t ip;
+  unsigned short port;
   unsigned short localid;
 } endpointid;
 
@@ -87,7 +87,7 @@ struct endpoint;
 typedef void (*endpoint_closefun)(struct endpoint *endpt);
 
 typedef struct endpoint {
-  int localid;
+  endpointid epid;
   messagelist mailbox;
   int checkmsg;
   int *interruptptr;
@@ -114,15 +114,13 @@ typedef struct endpointlist {
 
 typedef struct connection {
   char *hostname;
-  struct in_addr ip;
+  in_addr_t ip;
   int port;
   int sock;
   struct listener *l;
   struct node *n;
-  struct in_addr localip;
 
   int connected;
-  int readfd;
   array *recvbuf;
   array *sendbuf;
 
@@ -169,7 +167,7 @@ typedef struct node_callbacklist {
 } node_callbacklist;
 
 typedef struct listener {
-  char *hostname;
+  in_addr_t ip;
   int port;
   int fd;
   node_callbackfun callback;
@@ -194,8 +192,8 @@ typedef struct node {
   listenerlist listeners;
   listener *mainl;
   node_callbacklist callbacks;
-  struct in_addr listenip;
-  int havelistenip;
+  in_addr_t listenip;
+  unsigned short listenport;
   unsigned short nextlocalid;
   pthread_t iothread;
   int ioready_writefd;
@@ -225,21 +223,21 @@ typedef struct node {
 #define EVENT_ENDPOINT_ADDITION     11
 #define EVENT_ENDPOINT_REMOVAL      12
 #define EVENT_SHUTDOWN              13
-#define EVENT_COUNT                 14
+#define EVENT_COUNT                 15
 
 /* node */
 
 #define lock_node(_n) { lock_mutex(&(_n)->lock);
 #define unlock_node(_n) unlock_mutex(&(_n)->lock); }
 
-char *lookup_hostname(node *n, struct in_addr addr);
-int lookup_address(node *n, const char *host, struct in_addr *out);
+char *lookup_hostname(node *n, in_addr_t addr);
+int lookup_address(node *n, const char *host, in_addr_t *out);
 
 node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
-listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data,
-                      int dontaccept);
+listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback, void *data,
+                      int dontaccept, int ismain);
 void node_add_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_listener(node *n, listener *l);

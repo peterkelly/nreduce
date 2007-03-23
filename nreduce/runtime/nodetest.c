@@ -374,12 +374,12 @@ int nodetest(const char *host, int port)
 
   memset(&tsd,0,sizeof(testserver_data));
 
-  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL,0))) {
+  if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1)) {
     node_free(n);
     return -1;
   }
 
-  if (NULL == (tsd.l = node_listen(n,host,port+1,testserver_callback,&tsd,0))) {
+  if (NULL == (tsd.l = node_listen(n,n->listenip,port+1,testserver_callback,&tsd,0,0))) {
     node_remove_listener(n,n->mainl);
     n->mainl = NULL;
     node_free(n);

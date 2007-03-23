@@ -143,6 +143,19 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
   endpoint_add_message(endpt,newmsg);
 }
 
+static void remove_connection(node *n, connection *conn)
+{
+  node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
+  if (conn->console_endpt)
+    close_console(n,conn);
+  close(conn->sock);
+  llist_remove(&n->connections,conn);
+  free(conn->hostname);
+  array_free(conn->recvbuf);
+  array_free(conn->sendbuf);
+  free(conn);
+}
+
 static void process_received(node *n, connection *conn)
 {
   int start = 0;
@@ -186,7 +199,7 @@ static void process_received(node *n, connection *conn)
   }
 
   if (conn->donewelcome && !conn->donehandshake) {
-    unsigned char *connip = (unsigned char*)&conn->localip.s_addr;
+    unsigned char *connip = (unsigned char*)&conn->ip;
 
     if (0 > conn->port) {
       if (sizeof(int) > conn->recvbuf->nbytes-start) {
@@ -200,22 +213,6 @@ static void process_received(node *n, connection *conn)
         fatal("Client sent bad listen port: %d",conn->port);
     }
 
-    if (n->havelistenip) {
-      if (memcmp(&n->listenip.s_addr,&conn->localip.s_addr,sizeof(struct in_addr))) {
-        unsigned char *expect = (unsigned char*)&n->listenip.s_addr;
-        fatal("Client is using a different IP to connect to me than what I expect "
-              "(%u.%u.%u.%u instead of %u.%u.%u.%u)",
-              connip[0],connip[1],connip[2],connip[3],
-              expect[0],expect[1],expect[2],expect[3]);
-      }
-    }
-    else {
-      unsigned char *ipbytes = (unsigned char*)&conn->localip.s_addr;
-      memcpy(&n->listenip.s_addr,&conn->localip.s_addr,sizeof(struct in_addr));
-      n->havelistenip = 1;
-      node_log(n,LOG_INFO,"Got my listenip: %u.%u.%u.%u",
-               ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3]);
-    }
     node_log(n,LOG_INFO,"Node %u.%u.%u.%u:%d connected",
              connip[0],connip[1],connip[2],connip[3],conn->port);
     dispatch_event(n,EVENT_HANDSHAKE_DONE,conn,NULL);
@@ -231,8 +228,8 @@ static void process_received(node *n, connection *conn)
     assert(0 <= hdr->tag);
     assert(MSG_COUNT > hdr->tag);
 
-    hdr->source.nodeip = conn->ip;
-    hdr->source.nodeport = conn->port;
+    hdr->source.ip = conn->ip;
+    hdr->source.port = conn->port;
 
     if (MSG_HEADER_SIZE+hdr->size > conn->recvbuf->nbytes-start)
       break; /* incomplete message */
@@ -246,11 +243,11 @@ static void process_received(node *n, connection *conn)
   array_remove_data(conn->recvbuf,start);
 }
 
-static connection *find_connection(node *n, struct in_addr nodeip, unsigned short nodeport)
+static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nodeport)
 {
   connection *conn;
   for (conn = n->connections.first; conn; conn = conn->next)
-    if ((conn->ip.s_addr == nodeip.s_addr) && (conn->port == nodeport))
+    if ((conn->ip == nodeip) && (conn->port == nodeport))
       return conn;
   return NULL;
 }
@@ -259,11 +256,11 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
   conn->hostname = strdup(hostname);
-  conn->ip.s_addr = 0;
+  conn->ip = 0;
   conn->sock = sock;
   conn->l = l;
   conn->n = n;
-  conn->readfd = -1;
+/*   conn->readfd = -1; */
   conn->port = -1;
   conn->recvbuf = array_new(1,IOSIZE*2);
   conn->sendbuf = array_new(1,IOSIZE*2);
@@ -273,19 +270,6 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->connections,conn);
   return conn;
-}
-
-static void remove_connection(node *n, connection *conn)
-{
-  node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
-  if (conn->console_endpt)
-    close_console(n,conn);
-  close(conn->sock);
-  llist_remove(&n->connections,conn);
-  free(conn->hostname);
-  array_free(conn->recvbuf);
-  array_free(conn->sendbuf);
-  free(conn);
 }
 
 static int handle_connected(node *n, connection *conn)
@@ -365,6 +349,8 @@ static void handle_read(node *n, connection *conn)
   int r;
   array *buf = conn->recvbuf;
 
+  assert(conn->canread);
+
   array_mkroom(conn->recvbuf,IOSIZE);
   r = TEMP_FAILURE_RETRY(read(conn->sock,
                               &buf->data[buf->nbytes],
@@ -384,9 +370,9 @@ static void handle_read(node *n, connection *conn)
     else
       node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
     dispatch_event(n,EVENT_DATA_READFINISHED,conn,NULL);
-    done_reading(n,conn);
     if (conn->isconsole)
-      remove_connection(n,conn);
+      done_writing(n,conn);
+    done_reading(n,conn);
     return;
   }
 
@@ -395,13 +381,15 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
-char *lookup_hostname(node *n, struct in_addr addr)
+char *lookup_hostname(node *n, in_addr_t addr)
 {
   struct hostent *he;
   char *res;
+  struct in_addr addr1;
+  addr1.s_addr = addr;
 
   lock_mutex(&n->liblock);
-  he = gethostbyaddr(&addr,sizeof(struct in_addr),AF_INET);
+  he = gethostbyaddr(&addr1,sizeof(struct in_addr),AF_INET);
   if (NULL != he) {
     res = strdup(he->h_name);
   }
@@ -415,7 +403,7 @@ char *lookup_hostname(node *n, struct in_addr addr)
   return res;
 }
 
-int lookup_address(node *n, const char *host, struct in_addr *out)
+int lookup_address(node *n, const char *host, in_addr_t *out)
 {
   struct hostent *he;
   int r = 0;
@@ -430,7 +418,7 @@ int lookup_address(node *n, const char *host, struct in_addr *out)
     r = -1;
   }
   else {
-    *out = *((struct in_addr*)he->h_addr);
+    *out = (*((struct in_addr*)he->h_addr)).s_addr;
   }
   unlock_mutex(&n->liblock);
   return r;
@@ -440,27 +428,15 @@ static void handle_new_connection(node *n, listener *l)
 {
   struct sockaddr_in remote_addr;
   int sin_size = sizeof(struct sockaddr_in);
-  struct sockaddr_in local_addr;
-  int local_size = sizeof(struct sockaddr_in);
   int clientfd;
   connection *conn;
   int yes = 1;
-  unsigned char *lip;
   char *hostname;
-
-  /* FIXME: should assign our listenip here. Let's just assume that a node will only ever have
-     one IP that clients or other nodes will connect to */
 
   if (0 > (clientfd = accept(l->fd,(struct sockaddr*)&remote_addr,&sin_size))) {
     perror("accept");
     return;
   }
-
-  if (0 > getsockname(clientfd,(struct sockaddr*)&local_addr,&local_size)) {
-    perror("getsockname");
-    return;
-  }
-  lip = (unsigned char*)&local_addr.sin_addr;
 
   if (0 > set_non_blocking(clientfd)) {
     close(clientfd);
@@ -472,15 +448,13 @@ static void handle_new_connection(node *n, listener *l)
     return;
   }
 
-  hostname = lookup_hostname(n,remote_addr.sin_addr);
-  node_log(n,LOG_INFO,"Got connection from %s on local ip %u.%u.%u.%u",
-           hostname,lip[0],lip[1],lip[2],lip[3]);
+  hostname = lookup_hostname(n,remote_addr.sin_addr.s_addr);
+  node_log(n,LOG_INFO,"Got connection from %s",hostname);
   conn = add_connection(n,hostname,clientfd,l);
   free(hostname);
 
   conn->connected = 1;
-  conn->ip = remote_addr.sin_addr;
-  conn->localip = local_addr.sin_addr;
+  conn->ip = remote_addr.sin_addr.s_addr;
 
   dispatch_event(n,EVENT_CONN_ACCEPTED,conn,NULL);
 }
@@ -584,6 +558,41 @@ static void *ioloop(void *arg)
   return NULL;
 }
 
+static void determine_ip(node *n)
+{
+  in_addr_t addr = 0;
+  char hostname[4097];
+  FILE *hf = popen("hostname","r");
+  int size;
+  if (NULL == hf) {
+    fprintf(stderr,
+            "Could not determine IP address, because executing the hostname command "
+            "failed (%s)\n",strerror(errno));
+    exit(1);
+  }
+  size = fread(hostname,1,4096,hf);
+  if (0 > hf) {
+    fprintf(stderr,
+            "Could not determine IP address, because reading output from the hostname "
+            "command failed (%s)\n",strerror(errno));
+    pclose(hf);
+    exit(1);
+  }
+  pclose(hf);
+  if ((0 < size) && ('\n' == hostname[size-1]))
+    size--;
+  hostname[size] = '\0';
+
+  if (0 > lookup_address(n,hostname,&addr)) {
+    fprintf(stderr,
+            "Could not determine IP address, because the address \"%s\" "
+            "returned by the hostname command could not be resolved (%s)\n",
+            hostname,strerror(errno));
+    exit(1);
+  }
+  n->listenip = addr;
+}
+
 /* @} */
 
 /** @name Public functions
@@ -596,9 +605,12 @@ node *node_new(int loglevel)
   char *logenv;
 
   init_mutex(&n->lock);
+  init_mutex(&n->liblock);
   pthread_cond_init(&n->cond,NULL);
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = 1;
+
+  determine_ip(n);
 
   if (0 > pipe(pipefds)) {
     perror("pipe");
@@ -623,7 +635,6 @@ node *node_new(int loglevel)
     }
   }
 
-  init_mutex(&n->liblock);
   return n;
 }
 
@@ -661,8 +672,8 @@ void node_log(node *n, int level, const char *format, ...)
   free(newfmt);
 }
 
-listener *node_listen(node *n, const char *host, int port, node_callbackfun callback, void *data,
-                      int dontaccept)
+listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback, void *data,
+                      int dontaccept, int ismain)
 {
   int fd;
   int actualport = 0;
@@ -671,22 +682,11 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
   struct sockaddr_in new_addr;
   int new_size = sizeof(struct sockaddr_in);
   listener *l;
-  struct in_addr any;
-  any.s_addr = INADDR_ANY;
 
   local_addr.sin_family = AF_INET;
   local_addr.sin_port = htons(port);
-  local_addr.sin_addr.s_addr = INADDR_ANY;
+  local_addr.sin_addr.s_addr = ip;
   memset(&local_addr.sin_zero,0,8);
-
-  if ((NULL != host) && (0 > lookup_address(n,host,&local_addr.sin_addr))) {
-    return NULL;
-  }
-
-  if (!n->havelistenip && (memcmp(&local_addr.sin_addr,&any,sizeof(struct in_addr)))) {
-    n->havelistenip = 1;
-    n->listenip = local_addr.sin_addr;
-  }
 
   if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
     node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
@@ -716,16 +716,18 @@ listener *node_listen(node *n, const char *host, int port, node_callbackfun call
 
   assert((0 == port) || (actualport == port));
 
-  if (0 == port)
-    node_log(n,LOG_INFO,"Listening on port %d",actualport);
-
   l = (listener*)calloc(1,sizeof(listener));
-  l->hostname = host ? strdup(host) : NULL;
+  l->ip = ip;
   l->port = port;
   l->fd = fd;
   l->callback = callback;
   l->data = data;
   l->dontaccept = dontaccept;
+
+  if (ismain) {
+    n->listenport = actualport;
+    n->mainl = l;
+  }
 
   lock_node(n);
   llist_append(&n->listeners,l);
@@ -781,7 +783,6 @@ void node_remove_listener(node *n, listener *l)
 
   unlock_node(n);
 
-  free(l->hostname);
   close(l->fd);
   free(l);
 }
@@ -852,9 +853,6 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   int sock;
   int connected = 0;
   connection *conn;
-  struct sockaddr_in local_addr;
-  int local_size = sizeof(struct sockaddr_in);
-  unsigned char *lip;
   char *hostname;
 
   assert(NODE_ALREADY_LOCKED(n));
@@ -864,7 +862,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   memset(&addr.sin_zero,0,8);
 
   if (dest) {
-    if (0 > lookup_address(n,dest,&addr.sin_addr))
+    if (0 > lookup_address(n,dest,&addr.sin_addr.s_addr))
       return NULL;
   }
   else {
@@ -888,21 +886,13 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
     return NULL;
   }
 
-  if (0 > getsockname(sock,(struct sockaddr*)&local_addr,&local_size)) {
-    node_log(n,LOG_WARNING,"getsockname: %s",strerror(errno));
-    return NULL;
-  }
-
 #ifdef DEBUG_SHORT_KEEPALIVE
   /* Set a small keepalive interval so connection timeouts can be tested easily */
   if (0 > set_keepalive(n,sock,2))
     return NULL;
 #endif
 
-  lip = (unsigned char*)&local_addr.sin_addr.s_addr;
-  node_log(n,LOG_INFO,"node_connect: local ip is %u.%u.%u.%u",lip[0],lip[1],lip[2],lip[3]);
-
-  hostname = lookup_hostname(n,addr.sin_addr);
+  hostname = lookup_hostname(n,addr.sin_addr.s_addr);
 
   if (othernode) {
     conn = add_connection(n,hostname,sock,n->mainl);
@@ -915,8 +905,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
 
   free(hostname);
   conn->connected = connected;
-  conn->ip = addr.sin_addr;
-  conn->localip = local_addr.sin_addr;
+  conn->ip = addr.sin_addr.s_addr;
   conn->port = port;
 
   if (conn->connected)
@@ -941,18 +930,18 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
   hdr.size = size;
   hdr.tag = tag;
 
-  if ((destendpointid.nodeip.s_addr == n->listenip.s_addr) &&
-      (destendpointid.nodeport == n->mainl->port)) {
-    hdr.source.nodeip = n->listenip;
-    hdr.source.nodeport = n->mainl->port;
+  if ((destendpointid.ip == n->listenip) &&
+      (destendpointid.port == n->mainl->port)) {
+    hdr.source.ip = n->listenip;
+    hdr.source.port = n->mainl->port;
     got_message(n,&hdr,data);
   }
   else {
-    if (NULL == (conn = find_connection(n,destendpointid.nodeip,destendpointid.nodeport))) {
-      unsigned char *addrbytes = (unsigned char*)&destendpointid.nodeip.s_addr;
+    if (NULL == (conn = find_connection(n,destendpointid.ip,destendpointid.port))) {
+      unsigned char *addrbytes = (unsigned char*)&destendpointid.ip;
       node_log(n,LOG_INFO,"No connection yet to %u.%u.%u.%u:%d; establishing",
-               addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.nodeport);
-      conn = node_connect_locked(n,NULL,destendpointid.nodeip.s_addr,destendpointid.nodeport,1);
+               addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.port);
+      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1);
     }
 
     array_append(conn->sendbuf,&hdr,sizeof(msgheader));
@@ -977,7 +966,7 @@ void node_waitclose_locked(node *n, int localid)
     int alive = 0;
     endpoint *endpt;
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
-      if (endpt->localid == localid)
+      if (endpt->epid.localid == localid)
         alive = 1;
 
     if (!alive)
@@ -1056,18 +1045,22 @@ endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
                                    endpoint_closefun closefun)
 {
   endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
+  assert(0 < n->listenport);
   init_mutex(&endpt->mailbox.lock);
   pthread_cond_init(&endpt->mailbox.cond,NULL);
-  endpt->localid = localid;
+  endpt->epid.ip = n->listenip;
+  endpt->epid.port = n->listenport;
+  endpt->epid.localid = localid;
   endpt->type = type;
   endpt->data = data;
   endpt->closefun = closefun;
   endpt->interruptptr = &endpt->tempinterrupt;
 
-  if (0 == endpt->localid) {
+  if (0 == endpt->epid.localid) {
+    /* FIXME: this will actually run into MANAGER_ID before a wraparound happens... */
     if (0 == n->nextlocalid)
       fatal("localid wraparound");
-    endpt->localid = n->nextlocalid++;
+    endpt->epid.localid = n->nextlocalid++;
   }
   llist_append(&n->endpoints,endpt);
   dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);

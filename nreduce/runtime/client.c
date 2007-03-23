@@ -70,9 +70,9 @@ static int get_responses(node *n, endpoint *endpt, int tag,
 
     if (0 > sender) {
       endpointid id = msg->hdr.source;
-      unsigned char *c = (unsigned char*)&id.nodeip;
+      unsigned char *c = (unsigned char*)&id.ip;
       node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%d/%d",
-               msg_names[tag],c[0],c[1],c[2],c[3],id.nodeport,id.localid);
+               msg_names[tag],c[0],c[1],c[2],c[3],id.port,id.localid);
       abort();
     }
 
@@ -132,7 +132,7 @@ static void send_newtask(launcher *lr)
   memcpy(&ntmsg->bcdata,lr->bcdata,lr->bcsize);
   for (i = 0; i < lr->count; i++) {
     ntmsg->tid = i;
-    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
+    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
   }
   free(ntmsg);
 }
@@ -146,7 +146,7 @@ static void send_inittask(launcher *lr)
   memcpy(initmsg->idmap,lr->endpointids,lr->count*sizeof(endpointid));
   for (i = 0; i < lr->count; i++) {
     initmsg->localid = lr->endpointids[i].localid;
-    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
   }
   free(initmsg);
 }
@@ -155,7 +155,7 @@ static void send_starttask(launcher *lr)
 {
   int i;
   for (i = 0; i < lr->count; i++)
-    node_send(lr->n,lr->endpt->localid,lr->managerids[i],MSG_STARTTASK,
+    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_STARTTASK,
               &lr->localids[i],sizeof(int));
 }
 
@@ -171,13 +171,13 @@ static void *launcher_thread(void *arg)
   lr->endpt = node_add_endpoint(n,0,LAUNCHER_ENDPOINT,arg,launcher_endpoint_close);
 
   for (i = 0; i < count; i++) {
-    unsigned char *ipbytes = (unsigned char*)&lr->managerids[i].nodeip.s_addr;
+    unsigned char *ipbytes = (unsigned char*)&lr->managerids[i].ip;
     node_log(n,LOG_INFO,"Launcher: manager %u.%u.%u.%u:%d %d",
-             ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],lr->managerids[i].nodeport,
+             ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],lr->managerids[i].port,
              lr->managerids[i].localid);
 
-    lr->endpointids[i].nodeip = lr->managerids[i].nodeip;
-    lr->endpointids[i].nodeport = lr->managerids[i].nodeport;
+    lr->endpointids[i].ip = lr->managerids[i].ip;
+    lr->endpointids[i].port = lr->managerids[i].port;
   }
 
   /* Send NEWTASK messages, containing the pid, groupsize, and bytecode */
@@ -250,9 +250,6 @@ int get_managerids(node *n, endpointid **managerids)
 
   assert(NODE_ALREADY_LOCKED(n));
 
-  if (n->isworker && !n->havelistenip)
-    fatal("I don't have my listen IP yet!");
-
   if (n->isworker)
     count++;
 
@@ -263,16 +260,16 @@ int get_managerids(node *n, endpointid **managerids)
   *managerids = (endpointid*)calloc(count,sizeof(endpointid));
 
   if (n->isworker) {
-    (*managerids)[i].nodeip = n->listenip;
-    (*managerids)[i].nodeport = n->mainl->port;
+    (*managerids)[i].ip = n->listenip;
+    (*managerids)[i].port = n->mainl->port;
     (*managerids)[i].localid = MANAGER_ID;
     i++;
   }
 
   for (conn = n->connections.first; conn; conn = conn->next) {
     if (0 <= conn->port) {
-      (*managerids)[i].nodeip = conn->ip;
-      (*managerids)[i].nodeport = conn->port;
+      (*managerids)[i].ip = conn->ip;
+      (*managerids)[i].port = conn->port;
       (*managerids)[i].localid = MANAGER_ID;
       i++;
     }
@@ -374,10 +371,10 @@ static int client_run(node *n, const char *nodesfile, const char *filename)
       fprintf(stderr,"Invalid node address: %s\n",nodename);
       return -1;
     }
-    managerids[i].nodeport = port;
+    managerids[i].port = port;
     managerids[i].localid = MANAGER_ID;
 
-    if (0 > lookup_address(n,host,&managerids[i].nodeip)) {
+    if (0 > lookup_address(n,host,&managerids[i].ip)) {
       fprintf(stderr,"%s: hostname lookup failed\n",host);
       return -1;
     }
@@ -416,12 +413,13 @@ int do_client(const char *nodesfile, const char *program)
 
   n = node_new(LOG_INFO);
 
-  if (NULL == (n->mainl = node_listen(n,"0.0.0.0",0,NULL,NULL,0))) {
+  node_add_callback(n,client_callback,NULL);
+
+  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1)) {
     node_free(n);
     return -1;
   }
 
-  node_add_callback(n,client_callback,NULL);
   node_start_iothread(n);
 
   if (0 != client_run(n,nodesfile,program))

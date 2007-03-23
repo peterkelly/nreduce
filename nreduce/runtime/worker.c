@@ -53,7 +53,7 @@ endpoint *find_endpoint(node *n, int localid)
 {
   endpoint *endpt;
   for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
-    if (endpt->localid == localid)
+    if (endpt->epid.localid == localid)
       break;
   return endpt;
 }
@@ -74,7 +74,7 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   #ifdef MSG_DEBUG
   msg_print(tsk,destid,tag,data,size);
   #endif
-  node_send(n,tsk->endpt->localid,tsk->idmap[destid],tag,data,size);
+  node_send(n,tsk->endpt->epid.localid,tsk->idmap[destid],tag,data,size);
 }
 
 static int get_idmap_index(task *tsk, endpointid tid)
@@ -98,7 +98,7 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   *size = msg->hdr.size;
   from = get_idmap_index(tsk,msg->hdr.source);
   assert(0 <= from);
-  assert(tsk->endpt->localid == msg->hdr.destlocalid);
+  assert(tsk->endpt->epid.localid == msg->hdr.destlocalid);
   free(msg);
   return from;
 }
@@ -155,15 +155,11 @@ typedef struct worker_data {
 
 static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
 {
-  endpointid destid;
+  endpointid destid = conn->tsk->endpt->epid;
   int ioid = *ioidptr;
   int msg[2];
 
   node_log(n,LOG_DEBUG2,"worker: event %s, ioid %d",event_types[event],ioid);
-
-  destid.nodeip = n->listenip;
-  destid.nodeport = n->mainl->port;
-  destid.localid = conn->tsk->endpt->localid;
 
   msg[0] = ioid;
   msg[1] = event;
@@ -175,14 +171,14 @@ static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
     memcpy(full,msg,2*sizeof(int));
     memcpy(&full[2*sizeof(int)],conn->recvbuf->data,conn->recvbuf->nbytes);
     conn->recvbuf->nbytes = 0;
-    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,full,fullsize);
+    node_send_locked(n,destid.localid,destid,MSG_IORESPONSE,full,fullsize);
     free(full);
     conn->dontread = 1;
   }
   else {
     if ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event))
       assert(0 == conn->recvbuf->nbytes);
-    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,&msg,2*sizeof(int));
+    node_send_locked(n,destid.localid,destid,MSG_IORESPONSE,&msg,2*sizeof(int));
   }
 }
 
@@ -224,7 +220,6 @@ static void worker_callback(struct node *n, void *data, int event,
     endpoint *endpt;
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
       task *tsk;
-      endpointid destid;
       int kill = 0;
       int i;
 
@@ -234,19 +229,14 @@ static void worker_callback(struct node *n, void *data, int event,
       tsk = (task*)endpt->data;
       if (tsk->haveidmap) {
         for (i = 0; i < tsk->groupsize; i++)
-          if ((tsk->idmap[i].nodeport == conn->port) &&
-              !memcmp(&tsk->idmap[i].nodeip,&conn->ip,sizeof(struct in_addr)))
+          if ((tsk->idmap[i].ip == conn->ip) && (tsk->idmap[i].port == conn->port))
             kill = 1;
       }
       if (!kill)
         continue;
 
-      destid.nodeip = n->listenip;
-      destid.nodeport = n->mainl->port;
-      destid.localid = tsk->endpt->localid;
-
-      node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->localid);
-      node_send_locked(n,tsk->endpt->localid,destid,MSG_KILL,NULL,0);
+      node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->epid.localid);
+      node_send_locked(n,tsk->endpt->epid.localid,tsk->endpt->epid,MSG_KILL,NULL,0);
     }
   }
   if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
@@ -260,6 +250,7 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 {
   node *n;
   worker_data wd;
+  unsigned char *ipbytes;
 
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
@@ -277,23 +268,23 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
 
   n->isworker = 1;
 
-  if (NULL == (n->mainl = node_listen(n,host,port,NULL,NULL,0))) {
+  if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1)) {
     node_free(n);
     return -1;
   }
 
-  start_manager(n);
-
   node_add_callback(n,worker_callback,&wd);
+  start_manager(n);
   node_start_iothread(n);
 
-  node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %s:%d",
-           getpid(),host ? host : "0.0.0.0",port);
+  ipbytes = (unsigned char*)&n->listenip;
+  node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
+           getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
 
   if (bcdata) {
     endpointid managerid;
-    managerid.nodeip.s_addr = inet_addr("127.0.0.1");
-    managerid.nodeport = n->mainl->port;
+    managerid.ip = n->listenip;
+    managerid.port = n->listenport;
     managerid.localid = MANAGER_ID;
     start_launcher(n,bcdata,bcsize,&managerid,1);
   }

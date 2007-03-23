@@ -97,7 +97,7 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
       if (TASK_ENDPOINT == endpt->type) {
         task *tsk = (task*)endpt->data;
         array_printf(out,"%-7d %-3d %-9d %-6d %-12d\n",
-                tsk->endpt->localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
+                tsk->endpt->epid.localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
       }
     }
     unlock_node(n);
@@ -186,14 +186,10 @@ void console_process_received(node *n, connection *conn)
     }
 
     if ('\n' == conn->recvbuf->data[c]) {
-      endpointid destid;
       assert(conn->console_endpt);
-      destid.nodeip = n->listenip;
-      destid.nodeport = n->mainl->port;
-      destid.localid = conn->console_endpt->localid;
       conn->recvbuf->data[c] = '\0';
-      node_send_locked(n,conn->console_endpt->localid,destid,MSG_CONSOLE_LINE,
-                       &conn->recvbuf->data[start],c+1-start);
+      node_send_locked(n,conn->console_endpt->epid.localid,conn->console_endpt->epid,
+                       MSG_CONSOLE_LINE,&conn->recvbuf->data[start],c+1-start);
       c++;
       start = c;
     }
@@ -268,11 +264,8 @@ void start_console(node *n, connection *conn)
 /* FIXME: when this is called, the endpoint may have been deleted */
 void close_console(node *n, connection *conn)
 {
-  endpointid destid;
   assert(NODE_ALREADY_LOCKED(n));
   assert(conn->console_endpt);
-  destid.nodeip = n->listenip;
-  destid.nodeport = n->mainl->port;
-  destid.localid = conn->console_endpt->localid;
-  node_send_locked(n,conn->console_endpt->localid,destid,MSG_CONSOLE_CLOSE,NULL,0);
+  node_send_locked(n,conn->console_endpt->epid.localid,conn->console_endpt->epid,
+                   MSG_CONSOLE_CLOSE,NULL,0);
 }

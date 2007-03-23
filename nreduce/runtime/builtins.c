@@ -1261,21 +1261,17 @@ static void listen_callback(struct node *n, void *data, int event,
     assert(0 < so->l->accept_frameid);
 
     /* Notify the blocked accept call that there is a connection available */
-    endpointid destid;
     int ioid = so->l->accept_frameid;
     int msg[2];
 
     node_log(n,LOG_DEBUG2,"listen_callback: event %s, ioid %d",event_types[event],ioid);
 
-    destid.nodeip = n->listenip;
-    destid.nodeport = n->mainl->port;
-    destid.localid = conn->tsk->endpt->localid;
-
     msg[0] = ioid;
     msg[1] = event;
     so->l->accept_frameid = 0;
 
-    node_send_locked(n,conn->tsk->endpt->localid,destid,MSG_IORESPONSE,msg,2*sizeof(int));
+    node_send_locked(n,conn->tsk->endpt->epid.localid,conn->tsk->endpt->epid,
+                     MSG_IORESPONSE,msg,2*sizeof(int));
 
     assert(!so->l->dontaccept);
     so->l->dontaccept = 1;
@@ -1292,6 +1288,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
   int badtype;
   sysobject *so;
   cell *c;
+  in_addr_t ip = INADDR_ANY;
 
   CHECK_ARG(0,CELL_NUMBER);
   port = (int)portpntr;
@@ -1299,6 +1296,12 @@ static void b_startlisten(task *tsk, pntr *argstack)
   if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
     set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
               cell_types[badtype]);
+    return;
+  }
+
+  if (0 > lookup_address(tsk->n,hostname,&ip)) {
+    set_error(tsk,"startlisten: could not resolve hostname %s",hostname);
+    free(hostname);
     return;
   }
 
@@ -1315,7 +1318,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
   make_pntr(argstack[0],c);
 
   /* Start the listener */
-  so->l = node_listen(tsk->n,hostname,port,listen_callback,c,1);
+  so->l = node_listen(tsk->n,ip,port,listen_callback,c,1,0);
   if (NULL == so->l) {
     set_error(tsk,"startlisten %s:%d: listen failed",hostname,port);
     c->type = CELL_IND;

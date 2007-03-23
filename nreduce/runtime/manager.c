@@ -57,7 +57,8 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
              ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
     newtsk = add_task(n,ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
-    node_send(n,endpt->localid,msg->hdr.source,MSG_NEWTASKRESP,&newtsk->endpt->localid,sizeof(int));
+    node_send(n,endpt->epid.localid,msg->hdr.source,MSG_NEWTASKRESP,
+              &newtsk->endpt->epid.localid,sizeof(int));
     break;
   }
   case MSG_INITTASK: {
@@ -89,12 +90,12 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     for (i = 0; i < newtsk->groupsize; i++) {
       endpointid id = initmsg->idmap[i];
-      unsigned char *c = (unsigned char*)&id.nodeip;
+      unsigned char *c = (unsigned char*)&id.ip;
       node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %u.%u.%u.%u:%d/%d",
-               i,c[0],c[1],c[2],c[3],id.nodeport,id.localid);
+               i,c[0],c[1],c[2],c[3],id.port,id.localid);
     }
 
-    node_send(n,endpt->localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+    node_send(n,endpt->epid.localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
     newtsk->haveidmap = 1; /* FIXME: another possible race condition */
     break;
   }
@@ -124,7 +125,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     newtsk->started = 1;
     unlock_node(n);
 
-    node_send(n,endpt->localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+    node_send(n,endpt->epid.localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
   }
   default:

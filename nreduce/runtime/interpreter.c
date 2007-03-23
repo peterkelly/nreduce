@@ -517,7 +517,7 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
     write_end(urmsg);
 
-/*     fprintf(tsk->output,"Got %d new frames\n",count); */
+    fprintf(tsk->output,"Got %d new frames\n",count);
     tsk->newfish = 1;
 
     #ifdef PARALLELISM_DEBUG
