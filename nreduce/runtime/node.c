@@ -718,7 +718,7 @@ listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback
 
   l = (listener*)calloc(1,sizeof(listener));
   l->ip = ip;
-  l->port = port;
+  l->port = actualport;
   l->fd = fd;
   l->callback = callback;
   l->data = data;
@@ -895,8 +895,9 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   hostname = lookup_hostname(n,addr.sin_addr.s_addr);
 
   if (othernode) {
+    assert(n->listenport == n->mainl->port);
     conn = add_connection(n,hostname,sock,n->mainl);
-    array_append(conn->sendbuf,&n->mainl->port,sizeof(int));
+    array_append(conn->sendbuf,&n->listenport,sizeof(int));
   }
   else {
     conn = add_connection(n,hostname,sock,NULL);
@@ -923,17 +924,18 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
   msgheader hdr;
 
   assert(NODE_ALREADY_LOCKED(n));
+  assert(n->listenport == n->mainl->port);
 
   memset(&hdr,0,sizeof(msgheader));
+  hdr.source.ip = n->listenip;
+  hdr.source.port = n->listenport;
   hdr.source.localid = sourcelocalid;
   hdr.destlocalid = destendpointid.localid;
   hdr.size = size;
   hdr.tag = tag;
 
   if ((destendpointid.ip == n->listenip) &&
-      (destendpointid.port == n->mainl->port)) {
-    hdr.source.ip = n->listenip;
-    hdr.source.port = n->mainl->port;
+      (destendpointid.port == n->listenport)) {
     got_message(n,&hdr,data);
   }
   else {
@@ -1046,6 +1048,7 @@ endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
 {
   endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
   assert(0 < n->listenport);
+  assert(n->listenport == n->mainl->port);
   init_mutex(&endpt->mailbox.lock);
   pthread_cond_init(&endpt->mailbox.cond,NULL);
   endpt->epid.ip = n->listenip;

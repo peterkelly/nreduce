@@ -261,7 +261,7 @@ int get_managerids(node *n, endpointid **managerids)
 
   if (n->isworker) {
     (*managerids)[i].ip = n->listenip;
-    (*managerids)[i].port = n->mainl->port;
+    (*managerids)[i].port = n->listenport;
     (*managerids)[i].localid = MANAGER_ID;
     i++;
   }
