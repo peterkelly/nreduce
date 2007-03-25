@@ -29,6 +29,7 @@
 #include "compiler/source.h"
 #include "runtime/runtime.h"
 #include "modules/modules.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -414,13 +415,11 @@ void dump_globals(task *tsk)
   }
 }
 
-static void task_endpoint_close(endpoint *endpt)
+static void task_endpoint_close(node *n, endpoint *endpt)
 {
-  task *tsk = (task*)endpt->data;
-  node *n = tsk->n;
-  assert(NODE_ALREADY_LOCKED(tsk->n));
-  node_send_locked(tsk->n,tsk->endpt->epid.localid,tsk->endpt->epid,MSG_KILL,NULL,0);
-  node_waitclose_locked(n,tsk->endpt->epid.localid);
+  assert(NODE_ALREADY_LOCKED(n));
+  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
+  node_waitclose_locked(n,endpt->epid.localid);
 }
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)

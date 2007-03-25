@@ -30,6 +30,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -780,6 +781,15 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     node_log(tsk->n,LOG_INFO,"task: received KILL");
     tsk->done = 1;
     break;
+  case MSG_ENDPOINT_EXIT: {
+    endpoint_exit_msg *m = (endpoint_exit_msg*)data;
+    endpointid_str str;
+    print_endpointid(str,m->epid);
+    assert(sizeof(endpoint_exit_msg) == size);
+    node_log(tsk->n,LOG_INFO,"task: received ENDPOINT_EXIT for %s",str);
+    tsk->done = 1;
+    break;
+  }
   default:
     fatal("unknown message");
     break;

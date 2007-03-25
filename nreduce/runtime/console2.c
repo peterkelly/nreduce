@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -151,8 +152,7 @@ static void process_line(node *n, console2 *csl, const char *line)
   lock_node(n);
 
   for (conn = n->connections.first; conn; conn = conn->next) {
-
-    if (conn->console_endpt != csl->endpt)
+    if (!endpointid_equals(&conn->console_epid,&csl->endpt->epid))
       continue;
 
     if (doclose) {
@@ -186,9 +186,8 @@ void console_process_received(node *n, connection *conn)
     }
 
     if ('\n' == conn->recvbuf->data[c]) {
-      assert(conn->console_endpt);
       conn->recvbuf->data[c] = '\0';
-      node_send_locked(n,conn->console_endpt->epid.localid,conn->console_endpt->epid,
+      node_send_locked(n,conn->console_epid.localid,conn->console_epid,
                        MSG_CONSOLE_LINE,&conn->recvbuf->data[start],c+1-start);
       c++;
       start = c;
@@ -208,25 +207,19 @@ static int console_handle_message(node *n, endpoint *endpt, message *msg)
   case MSG_CONSOLE_LINE:
     process_line(n,csl,msg->data);
     break;
-  case MSG_CONSOLE_CLOSE:
-    printf("CONSOLE_CLOSE\n");
-    endpoint_forceclose(endpt);
+  case MSG_KILL:
+    node_log(n,LOG_INFO,"Console received KILL");
+    return 1;
     break;
   }
   return 0;
 }
 
-static void console_endpoint_close(endpoint *endpt)
+static void console_endpoint_close(node *n, endpoint *endpt)
 {
-  console2 *csl = (console2*)endpt->data;
-  node *n = csl->n;
-  pthread_t thread = csl->thread;
-
-  unlock_mutex(&n->lock);
-  endpoint_forceclose(endpt);
-  if (0 > pthread_join(thread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  lock_mutex(&n->lock);
+  assert(NODE_ALREADY_LOCKED(n));
+  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
+  node_waitclose_locked(n,endpt->epid.localid);
 }
 
 void *console_thread(void *arg)
@@ -234,18 +227,26 @@ void *console_thread(void *arg)
   console2 *csl = (console2*)arg;
   node *n = csl->n;
   message *msg;
-
-  printf("Console thread starting\n");
+  connection *conn;
 
   while (NULL != (msg = endpoint_next_message(csl->endpt,-1))) {
     int r = console_handle_message(n,csl->endpt,msg);
-    assert(0 == r);
     message_free(msg);
+    if (r)
+      break;
   }
+
+  /* De-associate the endpointid with the connection */
+  lock_node(n);
+  for (conn = n->connections.first; conn; conn = conn->next) {
+    if (!endpointid_equals(&conn->console_epid,&csl->endpt->epid))
+      continue;
+    conn->isconsole = 0;
+  }
+  unlock_node(n);
 
   node_remove_endpoint(n,csl->endpt);
   free(csl);
-  printf("Console thread finished\n");
 
   return NULL;
 }
@@ -256,16 +257,14 @@ void start_console(node *n, connection *conn)
   conn->isconsole = 1;
   csl->n = n;
   csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,console_endpoint_close);
-  conn->console_endpt = csl->endpt;
+  conn->console_epid = csl->endpt->epid;
   if (0 > pthread_create(&csl->thread,NULL,console_thread,csl))
     fatal("pthread_create: %s",strerror(errno));
 }
 
-/* FIXME: when this is called, the endpoint may have been deleted */
 void close_console(node *n, connection *conn)
 {
   assert(NODE_ALREADY_LOCKED(n));
-  assert(conn->console_endpt);
-  node_send_locked(n,conn->console_endpt->epid.localid,conn->console_endpt->epid,
-                   MSG_CONSOLE_CLOSE,NULL,0);
+  node_send_locked(n,conn->console_epid.localid,conn->console_epid,
+                   MSG_KILL,NULL,0);
 }

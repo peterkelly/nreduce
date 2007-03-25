@@ -32,6 +32,7 @@
 #include "compiler/util.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -71,7 +72,7 @@ static int get_responses(node *n, endpoint *endpt, int tag,
     if (0 > sender) {
       endpointid id = msg->hdr.source;
       unsigned char *c = (unsigned char*)&id.ip;
-      node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%d/%d",
+      node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%u/%u",
                msg_names[tag],c[0],c[1],c[2],c[3],id.port,id.localid);
       abort();
     }
@@ -98,10 +99,9 @@ static int get_responses(node *n, endpoint *endpt, int tag,
   return 0;
 }
 
-static void launcher_endpoint_close(endpoint *endpt)
+static void launcher_endpoint_close(node *n, endpoint *endpt)
 {
   launcher *sa = (launcher*)endpt->data;
-  node *n = sa->n;
   assert(NODE_ALREADY_LOCKED(sa->n));
   unlock_mutex(&n->lock);
   sa->cancel = 1;

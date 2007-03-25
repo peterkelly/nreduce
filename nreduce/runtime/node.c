@@ -39,6 +39,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -146,7 +147,7 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
 static void remove_connection(node *n, connection *conn)
 {
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
-  if (conn->console_endpt)
+  if (conn->isconsole)
     close_console(n,conn);
   close(conn->sock);
   llist_remove(&n->connections,conn);
@@ -543,7 +544,7 @@ static void *ioloop(void *arg)
     /* Read data */
     for (conn = n->connections.first; conn; conn = next) {
       next = conn->next;
-      if (FD_ISSET(conn->sock,&readfds))
+      if (FD_ISSET(conn->sock,&readfds) && conn->canread)
         handle_read(n,conn);
     }
 
@@ -799,7 +800,7 @@ void node_close_endpoints(node *n)
   lock_mutex(&n->lock);
   while (NULL != (endpt = n->endpoints.first)) {
     assert(endpt->closefun);
-    endpt->closefun(endpt);
+    endpt->closefun(n,endpt);
   }
   unlock_mutex(&n->lock);
 }
@@ -1088,11 +1089,13 @@ void node_remove_endpoint(node *n, endpoint *endpt)
   pthread_cond_broadcast(&n->closecond);
   unlock_node(n);
 
+  list_free(endpt->links,free);
   destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
 }
 
+/* FIXME: get rid of this once all threads handle the KILL message */
 void endpoint_forceclose(endpoint *endpt)
 {
   lock_mutex(&endpt->mailbox.lock);
@@ -1146,6 +1149,25 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
   endpt->checkmsg = (NULL != endpt->mailbox.first);
   unlock_mutex(&endpt->mailbox.lock);
   return msg;
+}
+
+void endpoint_link(node *n, endpoint *endpt, endpointid to)
+{
+  endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
+  memcpy(copy,&to,sizeof(endpointid));
+  assert(NODE_ALREADY_LOCKED(n));
+  list_push(&endpt->links,copy);
+}
+
+int endpointid_equals(const endpointid *e1, const endpointid *e2)
+{
+  return !memcmp(e1,e2,sizeof(endpointid));
+}
+
+void print_endpointid(endpointid_str str, endpointid epid)
+{
+  unsigned char *c = (unsigned char*)&epid.ip;
+  sprintf(str,"%u.%u.%u.%u:%u/%u",c[0],c[1],c[2],c[3],epid.port,epid.localid);
 }
 
 /* @} */

@@ -56,6 +56,8 @@ typedef struct endpointid {
   unsigned short localid;
 } endpointid;
 
+typedef char endpointid_str[100];
+
 typedef struct msgheader {
   endpointid source;
   int destlocalid;
@@ -83,8 +85,9 @@ typedef struct messagelist {
 #define CONSOLE_ENDPOINT 4
 
 struct endpoint;
+struct node;
 
-typedef void (*endpoint_closefun)(struct endpoint *endpt);
+typedef void (*endpoint_closefun)(struct node *n, struct endpoint *endpt);
 
 typedef struct endpoint {
   endpointid epid;
@@ -98,6 +101,7 @@ typedef struct endpoint {
   void *data;
   int closed;
   endpoint_closefun closefun;
+  list *links;
 } endpoint;
 
 typedef struct endpointlist {
@@ -140,7 +144,7 @@ typedef struct connection {
   int canread;
   int canwrite;
 
-  endpoint *console_endpt;
+  endpointid console_epid;
 
   struct connection *prev;
   struct connection *next;
@@ -265,6 +269,9 @@ void node_remove_endpoint(node *n, endpoint *endpt);
 void endpoint_forceclose(endpoint *endpt);
 void endpoint_add_message(endpoint *endpt, message *msg);
 message *endpoint_next_message(endpoint *endpt, int delayms);
+void endpoint_link(node *n, endpoint *endpt, endpointid to);
+int endpointid_equals(const endpointid *e1, const endpointid *e2);
+void print_endpointid(endpointid_str str, endpointid epid);
 
 void message_free(message *msg);
 

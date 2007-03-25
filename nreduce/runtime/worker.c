@@ -24,10 +24,13 @@
 #include "config.h"
 #endif
 
+#define WORKER_C
+
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -48,6 +51,33 @@
 #include <unistd.h>
 #include <signal.h>
 #include <execinfo.h>
+
+const char *msg_names[MSG_COUNT] = {
+  "DONE",
+  "FISH",
+  "FETCH",
+  "TRANSFER",
+  "ACK",
+  "MARKROOTS",
+  "MARKENTRY",
+  "SWEEP",
+  "SWEEPACK",
+  "UPDATE",
+  "RESPOND",
+  "SCHEDULE",
+  "UPDATEREF",
+  "STARTDISTGC",
+  "NEWTASK",
+  "NEWTASKRESP",
+  "INITTASK",
+  "INITTASKRESP",
+  "STARTTASK",
+  "STARTTASKRESP",
+  "KILL",
+  "IORESPONSE",
+  "CONSOLE_LINE",
+  "ENDPOINT_EXIT",
+};
 
 endpoint *find_endpoint(node *n, int localid)
 {
@@ -219,24 +249,28 @@ static void worker_callback(struct node *n, void *data, int event,
       !conn->isconsole && !conn->isreg) {
     endpoint *endpt;
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      task *tsk;
-      int kill = 0;
-      int i;
+      list **lptr = &endpt->links;
+      int removed = 0;
+      int kept = 0;
 
-      if (TASK_ENDPOINT != endpt->type)
-        continue;
-
-      tsk = (task*)endpt->data;
-      if (tsk->haveidmap) {
-        for (i = 0; i < tsk->groupsize; i++)
-          if ((tsk->idmap[i].ip == conn->ip) && (tsk->idmap[i].port == conn->port))
-            kill = 1;
+      while (*lptr) {
+        endpointid *epid = (endpointid*)(*lptr)->data;
+        endpoint_exit_msg msg;
+        if ((epid->ip == conn->ip) && (epid->port == conn->port)) {
+          list *old = *lptr;
+          *lptr = (*lptr)->next;
+          msg.epid = *epid;
+          node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
+                           &msg,sizeof(endpoint_exit_msg));
+          free(epid);
+          free(old);
+          removed++;
+        }
+        else {
+          lptr = &((*lptr)->next);
+          kept++;
+        }
       }
-      if (!kill)
-        continue;
-
-      node_log(n,LOG_WARNING,"Killing task %d due to node IO error",endpt->epid.localid);
-      node_send_locked(n,tsk->endpt->epid.localid,tsk->endpt->epid,MSG_KILL,NULL,0);
     }
   }
   if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {

@@ -63,33 +63,6 @@ const char *sysobject_types[SYSOBJECT_COUNT] = {
   "LISTENER",
 };
 
-const char *msg_names[MSG_COUNT] = {
-  "DONE",
-  "FISH",
-  "FETCH",
-  "TRANSFER",
-  "ACK",
-  "MARKROOTS",
-  "MARKENTRY",
-  "SWEEP",
-  "SWEEPACK",
-  "UPDATE",
-  "RESPOND",
-  "SCHEDULE",
-  "UPDATEREF",
-  "STARTDISTGC",
-  "NEWTASK",
-  "NEWTASKRESP",
-  "INITTASK",
-  "INITTASKRESP",
-  "STARTTASK",
-  "STARTTASKRESP",
-  "KILL",
-  "IORESPONSE",
-  "CONSOLE_LINE",
-  "CONSOLE_CLOSE",
-};
-
 const char *frame_states[5] = {
   "NEW",
   "SPARKED",

@@ -28,6 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "node.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -86,13 +87,17 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (initmsg->count != newtsk->groupsize)
       fatal("INITTASK: idmap size does not match expected");
     memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
+
+    for (i = 0; i < newtsk->groupsize; i++)
+      if (!endpointid_equals(&newtsk->endpt->epid,&initmsg->idmap[i]))
+        endpoint_link(n,newtsk->endpt,initmsg->idmap[i]);
+
     unlock_node(n);
 
     for (i = 0; i < newtsk->groupsize; i++) {
-      endpointid id = initmsg->idmap[i];
-      unsigned char *c = (unsigned char*)&id.ip;
-      node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %u.%u.%u.%u:%d/%d",
-               i,c[0],c[1],c[2],c[3],id.port,id.localid);
+      endpointid_str str;
+      print_endpointid(str,initmsg->idmap[i]);
+      node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %s",i,str);
     }
 
     node_send(n,endpt->epid.localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
@@ -128,6 +133,10 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     node_send(n,endpt->epid.localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
   }
+  case MSG_KILL:
+    node_log(n,LOG_INFO,"Manager received KILL");
+    return 1;
+    break;
   default:
     node_log(n,LOG_INFO,"Manager received invalid message: %d",msg->hdr.tag);
     break;
@@ -140,17 +149,11 @@ typedef struct manager {
   pthread_t thread;
 } manager;
 
-static void manager_endpoint_close(endpoint *endpt)
+static void manager_endpoint_close(node *n, endpoint *endpt)
 {
-  manager *man = (manager*)endpt->data;
-  node *n = man->n;
-  pthread_t thread = man->thread;
-
-  unlock_mutex(&n->lock);
-  endpoint_forceclose(endpt);
-  if (0 > pthread_join(thread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  lock_mutex(&n->lock);
+  assert(NODE_ALREADY_LOCKED(n));
+  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
+  node_waitclose_locked(n,endpt->epid.localid);
 }
 
 static void *manager_thread(void *arg)
@@ -164,8 +167,9 @@ static void *manager_thread(void *arg)
 
   while (NULL != (msg = endpoint_next_message(endpt,-1))) {
     int r = manager_handle_message(n,endpt,msg);
-    assert(0 == r);
     message_free(msg);
+    if (r)
+      break;
   }
 
   node_remove_endpoint(n,endpt);

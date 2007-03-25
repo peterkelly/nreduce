@@ -608,36 +608,6 @@ int nodetest(const char *host, int port);
 
 /* data */
 
-#define MSG_DONE                0
-#define MSG_FISH                1
-#define MSG_FETCH               2
-#define MSG_TRANSFER            3
-#define MSG_ACK                 4
-#define MSG_MARKROOTS           5
-#define MSG_MARKENTRY           6
-#define MSG_SWEEP               7
-#define MSG_SWEEPACK            8
-#define MSG_UPDATE              9
-#define MSG_RESPOND             10
-#define MSG_SCHEDULE            11
-#define MSG_UPDATEREF           12
-#define MSG_STARTDISTGC         13
-
-#define MSG_NEWTASK             14
-#define MSG_NEWTASKRESP         15
-#define MSG_INITTASK            16
-#define MSG_INITTASKRESP        17
-#define MSG_STARTTASK           18
-#define MSG_STARTTASKRESP       19
-#define MSG_KILL                20
-
-#define MSG_IORESPONSE          21
-
-#define MSG_CONSOLE_LINE        22
-#define MSG_CONSOLE_CLOSE       23
-
-#define MSG_COUNT               24
-
 typedef struct reader {
   const char *data;
   int size;
@@ -836,7 +806,6 @@ extern const builtin builtin_info[NUM_BUILTINS];
 #ifndef MEMORY_C
 extern const char *cell_types[CELL_COUNT];
 extern const char *sysobject_types[SYSOBJECT_COUNT];
-extern const char *msg_names[MSG_COUNT];
 extern const char *frame_states[5];
 #endif
 
