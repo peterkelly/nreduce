@@ -415,13 +415,6 @@ void dump_globals(task *tsk)
   }
 }
 
-static void task_endpoint_close(node *n, endpoint *endpt)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
-  node_waitclose_locked(n,endpt->epid.localid);
-}
-
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
@@ -433,7 +426,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
 
   tsk->n = n;
   if (n)
-    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk,task_endpoint_close);
+    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk,endpoint_close_kill);
   tsk->runptr = &tsk->rtemp;
 
   sem_init(&tsk->startsem,0,0);

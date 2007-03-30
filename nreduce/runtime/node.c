@@ -87,6 +87,8 @@ const char *event_types[EVENT_COUNT] = {
   "SHUTDOWN",
 };
 
+static void endpoint_add_message(endpoint *endpt, message *msg);
+
 /** @name Private functions
  * @{ */
 
@@ -132,8 +134,28 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
   message *newmsg;
 
   if (NULL == (endpt = find_endpoint(n,hdr->destlocalid))) {
-    report_error(n,"Message %s received for unknown endpoint %d",
-                 msg_names[hdr->tag],hdr->destlocalid);
+    endpointid_str source;
+    print_endpointid(source,hdr->source);
+
+    /* This handles the case where a link message is sent but the destination has
+       already exited. If the link were to arrive just before the endpoint exits, then
+       node_remove_endpoint() would take care of sending the exit message. */
+    if (MSG_LINK == hdr->tag) {
+      endpointid destid;
+      destid.ip = n->listenip;
+      destid.port = n->listenport;
+      destid.localid = hdr->destlocalid;
+      assert(sizeof(endpointid) == hdr->size);
+      node_send_locked(n,hdr->destlocalid,*(endpointid*)data,MSG_ENDPOINT_EXIT,
+                       &destid,sizeof(endpointid));
+    }
+    else if (MSG_UNLINK == hdr->tag) {
+      /* don't need to do anything in this case */
+    }
+    else {
+      report_error(n,"Message %s received for unknown endpoint %d (source %s)",
+                   msg_names[hdr->tag],hdr->destlocalid,source);
+    }
     return;
   }
 
@@ -926,6 +948,8 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
 
   assert(NODE_ALREADY_LOCKED(n));
   assert(n->listenport == n->mainl->port);
+  assert(INADDR_ANY != destendpointid.ip);
+  assert(0 < destendpointid.port);
 
   memset(&hdr,0,sizeof(msgheader));
   hdr.source.ip = n->listenip;
@@ -1059,6 +1083,7 @@ endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
   endpt->data = data;
   endpt->closefun = closefun;
   endpt->interruptptr = &endpt->tempinterrupt;
+  endpt->n = n;
 
   if (0 == endpt->epid.localid) {
     /* FIXME: this will actually run into MANAGER_ID before a wraparound happens... */
@@ -1083,13 +1108,22 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
 
 void node_remove_endpoint(node *n, endpoint *endpt)
 {
+  list *l;
+
   lock_node(n);
+
+  for (l = endpt->inlinks; l; l = l->next) {
+    node_send_locked(n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
+                     &endpt->epid,sizeof(endpointid));
+  }
+
   dispatch_event(n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
   llist_remove(&n->endpoints,endpt);
   pthread_cond_broadcast(&n->closecond);
   unlock_node(n);
 
-  list_free(endpt->links,free);
+  list_free(endpt->inlinks,free);
+  list_free(endpt->outlinks,free);
   destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
@@ -1110,17 +1144,78 @@ void endpoint_forceclose(endpoint *endpt)
   unlock_mutex(&endpt->mailbox.lock);
 }
 
-void endpoint_add_message(endpoint *endpt, message *msg)
+static int endpoint_has_link(endpoint *endpt, endpointid epid)
 {
-  lock_mutex(&endpt->mailbox.lock);
-  if (!endpt->closed) {
-    llist_append(&endpt->mailbox,msg);
-    endpt->checkmsg = 1;
-    if (endpt->interruptptr)
-      *endpt->interruptptr = 1;
-    pthread_cond_broadcast(&endpt->mailbox.cond);
+  list *l;
+  assert(NODE_ALREADY_LOCKED(endpt->n));
+  for (l = endpt->outlinks; l; l = l->next)
+    if (endpointid_equals((endpointid*)l->data,&epid))
+      return 1;
+  return 0;
+}
+
+void endpoint_link(endpoint *endpt, endpointid to)
+{
+  endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
+  assert(NODE_ALREADY_LOCKED(endpt->n));
+  assert(!endpoint_has_link(endpt,to));
+  memcpy(copy,&to,sizeof(endpointid));
+  list_push(&endpt->outlinks,copy);
+  node_send_locked(endpt->n,endpt->epid.localid,to,MSG_LINK,&endpt->epid,sizeof(endpointid));
+}
+
+static void endpoint_list_remove(list **lptr, endpointid to)
+{
+  while (*lptr) {
+    if (endpointid_equals(((endpointid*)(*lptr)->data),&to)) {
+      list *old = *lptr;
+      *lptr = (*lptr)->next;
+      free(old->data);
+      free(old);
+      return;
+    }
+    lptr = &((*lptr)->next);
   }
-  unlock_mutex(&endpt->mailbox.lock);
+}
+
+void endpoint_unlink(endpoint *endpt, endpointid to)
+{
+  assert(NODE_ALREADY_LOCKED(endpt->n));
+  endpoint_list_remove(&endpt->outlinks,to);
+  node_send_locked(endpt->n,endpt->epid.localid,to,MSG_UNLINK,&endpt->epid,sizeof(endpointid));
+}
+
+static void endpoint_add_message(endpoint *endpt, message *msg)
+{
+  assert(NODE_ALREADY_LOCKED(endpt->n));
+  if (MSG_LINK == msg->hdr.tag) {
+    assert(sizeof(endpointid) == msg->hdr.size);
+    list_push(&endpt->inlinks,(endpointid*)msg->data);
+    free(msg);
+  }
+  else if (MSG_UNLINK == msg->hdr.tag) {
+    assert(sizeof(endpointid) == msg->hdr.size);
+    endpoint_list_remove(&endpt->inlinks,*(endpointid*)msg->data);
+    message_free(msg);
+  }
+  else {
+
+    if (MSG_ENDPOINT_EXIT == msg->hdr.tag) {
+      assert(sizeof(endpointid) == msg->hdr.size);
+      endpoint_list_remove(&endpt->inlinks,*(endpointid*)msg->data);
+      endpoint_list_remove(&endpt->outlinks,*(endpointid*)msg->data);
+    }
+
+    lock_mutex(&endpt->mailbox.lock);
+    if (!endpt->closed) {
+      llist_append(&endpt->mailbox,msg);
+      endpt->checkmsg = 1;
+      if (endpt->interruptptr)
+        *endpt->interruptptr = 1;
+      pthread_cond_broadcast(&endpt->mailbox.cond);
+    }
+    unlock_mutex(&endpt->mailbox.lock);
+  }
 }
 
 message *endpoint_next_message(endpoint *endpt, int delayms)
@@ -1151,14 +1246,6 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
   return msg;
 }
 
-void endpoint_link(node *n, endpoint *endpt, endpointid to)
-{
-  endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
-  memcpy(copy,&to,sizeof(endpointid));
-  assert(NODE_ALREADY_LOCKED(n));
-  list_push(&endpt->links,copy);
-}
-
 int endpointid_equals(const endpointid *e1, const endpointid *e2)
 {
   return !memcmp(e1,e2,sizeof(endpointid));
@@ -1166,8 +1253,14 @@ int endpointid_equals(const endpointid *e1, const endpointid *e2)
 
 void print_endpointid(endpointid_str str, endpointid epid)
 {
-  unsigned char *c = (unsigned char*)&epid.ip;
-  sprintf(str,"%u.%u.%u.%u:%u/%u",c[0],c[1],c[2],c[3],epid.port,epid.localid);
+  sprintf(str,EPID_FORMAT,EPID_ARGS(epid));
+}
+
+void endpoint_close_kill(node *n, endpoint *endpt)
+{
+  assert(NODE_ALREADY_LOCKED(n));
+  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
+  node_waitclose_locked(n,endpt->epid.localid);
 }
 
 /* @} */

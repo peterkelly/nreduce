@@ -29,6 +29,7 @@
 #include "runtime.h"
 #include "node.h"
 #include "messages.h"
+#include "chord.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -90,7 +91,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 
     for (i = 0; i < newtsk->groupsize; i++)
       if (!endpointid_equals(&newtsk->endpt->epid,&initmsg->idmap[i]))
-        endpoint_link(n,newtsk->endpt,initmsg->idmap[i]);
+        endpoint_link(newtsk->endpt,initmsg->idmap[i]);
 
     unlock_node(n);
 
@@ -133,12 +134,18 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     node_send(n,endpt->epid.localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
     break;
   }
+  case MSG_START_CHORD: {
+    start_chord_msg *m = (start_chord_msg*)msg->data;
+    assert(sizeof(start_chord_msg) == msg->hdr.size);
+    start_chord(n,m->ndash,m->caller,m->stabilize_delay);
+    break;
+  }
   case MSG_KILL:
     node_log(n,LOG_INFO,"Manager received KILL");
     return 1;
     break;
   default:
-    node_log(n,LOG_INFO,"Manager received invalid message: %d",msg->hdr.tag);
+    fatal("Manager received invalid message: %d",msg->hdr.tag);
     break;
   }
   return 0;
@@ -149,13 +156,6 @@ typedef struct manager {
   pthread_t thread;
 } manager;
 
-static void manager_endpoint_close(node *n, endpoint *endpt)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
-  node_waitclose_locked(n,endpt->epid.localid);
-}
-
 static void *manager_thread(void *arg)
 {
   manager *man = (manager*)arg;
@@ -163,7 +163,7 @@ static void *manager_thread(void *arg)
   message *msg;
   endpoint *endpt;
 
-  endpt = node_add_endpoint(n,MANAGER_ID,MANAGER_ENDPOINT,man,manager_endpoint_close);
+  endpt = node_add_endpoint(n,MANAGER_ID,MANAGER_ENDPOINT,man,endpoint_close_kill);
 
   while (NULL != (msg = endpoint_next_message(endpt,-1))) {
     int r = manager_handle_message(n,endpt,msg);

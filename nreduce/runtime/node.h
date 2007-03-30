@@ -50,10 +50,19 @@ struct listener;
 struct task;
 struct gaddr;
 
+#define EPID_FORMAT "%u.%u.%u.%u:%u/%u"
+#define EPID_ARGS(epid) \
+   ((unsigned char*)&(epid).ip)[0],                \
+   ((unsigned char*)&(epid).ip)[1],                \
+   ((unsigned char*)&(epid).ip)[2],                \
+   ((unsigned char*)&(epid).ip)[3],                \
+    (epid).port,\
+    (epid).localid
+
 typedef struct endpointid {
   in_addr_t ip;
   unsigned short port;
-  unsigned short localid;
+  unsigned short localid; /* FIXME: maybe make 32 bits, to reduce chances of wraparound */
 } endpointid;
 
 typedef char endpointid_str[100];
@@ -79,10 +88,14 @@ typedef struct messagelist {
   pthread_cond_t cond;
 } messagelist;
 
-#define TASK_ENDPOINT 1
-#define MANAGER_ENDPOINT 2
-#define LAUNCHER_ENDPOINT 3
-#define CONSOLE_ENDPOINT 4
+#define TASK_ENDPOINT        1
+#define MANAGER_ENDPOINT     2
+#define LAUNCHER_ENDPOINT    3
+#define CONSOLE_ENDPOINT     4
+#define CHORD_ENDPOINT       5
+#define STABILIZER_ENDPOINT  6
+#define TEST_ENDPOINT        7
+#define DBC_ENDPOINT         8
 
 struct endpoint;
 struct node;
@@ -97,11 +110,13 @@ typedef struct endpoint {
   int tempinterrupt;
   struct endpoint *prev;
   struct endpoint *next;
+  struct node *n;
   int type;
   void *data;
   int closed;
   endpoint_closefun closefun;
-  list *links;
+  list *inlinks;
+  list *outlinks;
 } endpoint;
 
 typedef struct endpointlist {
@@ -267,11 +282,12 @@ endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
                             endpoint_closefun closefun);
 void node_remove_endpoint(node *n, endpoint *endpt);
 void endpoint_forceclose(endpoint *endpt);
-void endpoint_add_message(endpoint *endpt, message *msg);
+void endpoint_link(endpoint *endpt, endpointid to);
+void endpoint_unlink(endpoint *endpt, endpointid to);
 message *endpoint_next_message(endpoint *endpt, int delayms);
-void endpoint_link(node *n, endpoint *endpt, endpointid to);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 void print_endpointid(endpointid_str str, endpointid epid);
+void endpoint_close_kill(node *n, endpoint *endpt);
 
 void message_free(message *msg);
 
@@ -295,6 +311,9 @@ typedef struct inittask_msg {
   int count;
   endpointid idmap[0];
 } inittask_msg;
+
+
+int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount);
 
 void start_manager(node *n);
 

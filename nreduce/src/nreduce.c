@@ -69,6 +69,7 @@ struct arguments {
   char *address;
   char *client;
   char *nodetest;
+  char *chordtest;
   array *extra;
 };
 
@@ -94,6 +95,7 @@ static void usage()
 "  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
 "  --client NODESFILE CMD   Run program CMD on nodes read from NODESFILE\n"
 "  --nodetest IP:PORT       Run as test node, listening on IP:PORT\n"
+"  --chordtest NODESFILE    Test chord implementation ('' for single-host test)\n"
 "\n"
 "Options for printing output of compilation stages:\n"
 "(these do not actually run the program)\n"
@@ -181,6 +183,11 @@ void parse_args(int argc, char **argv)
         usage();
       args.nodetest = argv[i];
     }
+    else if (!strcmp(argv[i],"--chordtest")) {
+      if (++i >= argc)
+        usage();
+      args.chordtest = argv[i];
+    }
     else {
       array_append(args.extra,&argv[i],sizeof(char*));
     }
@@ -215,6 +222,23 @@ static int nodetest_mode()
   return r;
 }
 
+static int chordtest_mode()
+{
+  int r;
+  char *host = NULL;
+  int port = WORKER_PORT;
+
+  if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
+    fprintf(stderr,"Invalid listening address: %s\n",args.address);
+    exit(1);
+  }
+
+  r = worker(host,port,NULL,0,args.chordtest);
+  free(host);
+  array_free(args.extra);
+  return r;
+}
+
 static int client_mode()
 {
   int r;
@@ -241,7 +265,7 @@ static int worker_mode()
     exit(1);
   }
 
-  r = worker(host,port,NULL,0);
+  r = worker(host,port,NULL,0,NULL);
   free(host);
   array_free(args.extra);
   return r;
@@ -278,6 +302,9 @@ int main(int argc, char **argv)
 
   if (args.nodetest)
     return nodetest_mode();
+
+  if (args.chordtest)
+    return chordtest_mode();
 
   if (args.client)
     return client_mode();
@@ -336,7 +363,7 @@ int main(int argc, char **argv)
 
     if (ENGINE_INTERPRETER == args.engine) {
       debug_stage("Interpreter");
-      r = worker("127.0.0.1",0,bcdata,bcsize);
+      r = worker("127.0.0.1",0,bcdata,bcsize,NULL);
     }
     else {
 #if 0

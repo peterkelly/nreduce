@@ -1,0 +1,3141 @@
+#LyX 1.4.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 245
+\begin_document
+\begin_header
+\textclass article
+\language british
+\inputencoding auto
+\fontscheme ae
+\graphics default
+\paperfontsize 12
+\spacing single
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation landscape
+\leftmargin 1cm
+\topmargin 1cm
+\rightmargin 1cm
+\bottommargin 1cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 2
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join1.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join2.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+
+\newpage
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join3.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+
+\newpage
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join4.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, with a copy of its successor list, and its new predecessor
+ (which is C).
+ Because C sees that the predecessor is equal to itself, it takes no further
+ action.
+ Because A's predecessor has changed however, the old predecessor (B) gets
+ a 
+\series bold
+stabilize
+\series default
+ message, indicating to B that it needs to check its successor.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join5.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, with a copy of its successor list, and its new predecessor
+ (which is C).
+ Because C sees that the predecessor is equal to itself, it takes no further
+ action.
+ Because A's predecessor has changed however, the old predecessor (B) gets
+ a 
+\series bold
+stabilize
+\series default
+ message, indicating to B that it needs to check its successor.
+\end_layout
+
+\begin_layout Enumerate
+B sends a 
+\series bold
+notify
+\series default
+ to its current successor, which is A
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join6.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, with a copy of its successor list, and its new predecessor
+ (which is C).
+ Because C sees that the predecessor is equal to itself, it takes no further
+ action.
+ Because A's predecessor has changed however, the old predecessor (B) gets
+ a 
+\series bold
+stabilize
+\series default
+ message, indicating to B that it needs to check its successor.
+\end_layout
+
+\begin_layout Enumerate
+B sends a 
+\series bold
+notify
+\series default
+ to its current successor, which is A
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message to B, indicating that its predecessor is now C.
+ B updates its successor to C.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join7.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, with a copy of its successor list, and its new predecessor
+ (which is C).
+ Because C sees that the predecessor is equal to itself, it takes no further
+ action.
+ Because A's predecessor has changed however, the old predecessor (B) gets
+ a 
+\series bold
+stabilize
+\series default
+ message, indicating to B that it needs to check its successor.
+\end_layout
+
+\begin_layout Enumerate
+B sends a 
+\series bold
+notify
+\series default
+ to its current successor, which is A
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message to B, indicating that its predecessor is now C.
+ B updates its successor to C.
+\end_layout
+
+\begin_layout Enumerate
+After changing its successor, B sends a new 
+\series bold
+notify
+\series default
+ message to C, which will indicate to C that it has a new predecessor
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename join8.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Node join
+\end_layout
+
+\begin_layout Standard
+Node C wants to join the network.
+ It has a reference to an existing node, X, and an id that lies between
+ that of existing nodes A and B.
+\end_layout
+
+\begin_layout Enumerate
+C needs to determine which node should be its successor.
+ It sends a 
+\series bold
+find_successor
+\series default
+ message to X.
+\end_layout
+
+\begin_layout Enumerate
+A 
+\series bold
+got_successor
+\series default
+ message is sent back to C indicating that A should be C's successor.
+ Because of the way that the lookup process works, this message is sent
+ by the current predecessor of A, which is B.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to A, which inspects the identifier of C and notices that it is
+ closer than that of B.
+ C becomes A's new predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, with a copy of its successor list, and its new predecessor
+ (which is C).
+ Because C sees that the predecessor is equal to itself, it takes no further
+ action.
+ Because A's predecessor has changed however, the old predecessor (B) gets
+ a 
+\series bold
+stabilize
+\series default
+ message, indicating to B that it needs to check its successor.
+\end_layout
+
+\begin_layout Enumerate
+B sends a 
+\series bold
+notify
+\series default
+ to its current successor, which is A
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message to B, indicating that its predecessor is now C.
+ B updates its successor to C.
+\end_layout
+
+\begin_layout Enumerate
+After changing its successor, B sends a new 
+\series bold
+notify
+\series default
+ message to C, which will indicate to C that it has a new predecessor
+\end_layout
+
+\begin_layout Enumerate
+C updates its predecessor to B, and sends back a 
+\series bold
+notify_reply
+\series default
+ message.
+ B inspects the message and sees that it now has the correct successor,
+ and takes no futher action.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin1.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin2.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin3.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin4.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+Problem:
+\end_layout
+
+\begin_layout Itemize
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin5.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+Problem:
+\end_layout
+
+\begin_layout Itemize
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Itemize
+A will receive a notify message from both C and D, with the same identifier
+ but different addresses
+\end_layout
+
+\begin_deeper
+\begin_layout Standard
+\begin_inset Formula $\rightarrow$
+\end_inset
+
+ confusion
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin6.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+Problem:
+\end_layout
+
+\begin_layout Itemize
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Itemize
+A will receive a notify message from both C and D, with the same identifier
+ but different addresses
+\end_layout
+
+\begin_deeper
+\begin_layout Standard
+\begin_inset Formula $\rightarrow$
+\end_inset
+
+ confusion
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Solution 2:
+\end_layout
+
+\begin_layout Itemize
+Detect duplicate IDs on receipt of a 
+\series bold
+notify_reply
+\series default
+ message
+\end_layout
+
+\begin_layout Itemize
+A will pick one of either C or D as its predecessor, depending on the order
+ in which the 
+\series bold
+notify
+\series default
+ messages arrive.
+ In this example, D is chosen.
+\end_layout
+
+\begin_layout Itemize
+The 
+\series bold
+notify_reply
+\series default
+ sent back to both C and D contains {133,D} in the 
+\emph on
+sucprec
+\emph default
+ field.
+\end_layout
+
+\begin_layout Itemize
+D sees that it has been accepted into the network
+\end_layout
+
+\begin_layout Itemize
+C realises that D is already using that identifier and will join again using
+ a different one.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dupjoin7.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers
+\end_layout
+
+\begin_layout Standard
+What happens if a node joins the network and picks the same ID as an existing
+ one?
+\end_layout
+
+\begin_layout Standard
+Solution 1: After step 2 in the join process, look at the node reference
+ returned by the 
+\series bold
+got_successor
+\series default
+ message.
+ If this has the same ID as the node that is joining, then the new node
+ will pick a new ID and initiate the joining process again.
+\end_layout
+
+\begin_layout Standard
+Problem:
+\end_layout
+
+\begin_layout Itemize
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Itemize
+A will receive a notify message from both C and D, with the same identifier
+ but different addresses
+\end_layout
+
+\begin_deeper
+\begin_layout Standard
+\begin_inset Formula $\rightarrow$
+\end_inset
+
+ confusion
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Solution 2:
+\end_layout
+
+\begin_layout Itemize
+Detect duplicate IDs on receipt of a 
+\series bold
+notify_reply
+\series default
+ message
+\end_layout
+
+\begin_layout Itemize
+A will pick one of either C or D as its predecessor, depending on the order
+ in which the 
+\series bold
+notify
+\series default
+ messages arrive.
+ In this example, D is chosen.
+\end_layout
+
+\begin_layout Itemize
+The 
+\series bold
+notify_reply
+\series default
+ sent back to both C and D contains {133,D} in the 
+\emph on
+sucprec
+\emph default
+ field.
+\end_layout
+
+\begin_layout Itemize
+D sees that it has been accepted into the network
+\end_layout
+
+\begin_layout Itemize
+C realises that D is already using that identifier and will join again using
+ a different one.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\begin_inset Graphics
+	filename badjoin1.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin2.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin3.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin4.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin5.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin6.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin7.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to its new successor, E.
+ Because E does not yet have a predecessor set (and does not know about
+ D), it updates its predecessor to point to C.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin8.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to its new successor, E.
+ Because E does not yet have a predecessor set (and does not know about
+ D), it updates its predecessor to point to C.
+\end_layout
+
+\begin_layout Enumerate
+E sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, which sees itself in the 
+\emph on
+sucprec
+\emph default
+ field.
+ C now thinks it has successfully joined the network.
+ This is incorrect, because D is already there.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin9.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to its new successor, E.
+ Because E does not yet have a predecessor set (and does not know about
+ D), it updates its predecessor to point to C.
+\end_layout
+
+\begin_layout Enumerate
+E sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, which sees itself in the 
+\emph on
+sucprec
+\emph default
+ field.
+ C now thinks it has successfully joined the network.
+ This is incorrect, because D is already there.
+\end_layout
+
+\begin_layout Enumerate
+At the next stabilization point, D sends a 
+\series bold
+notify
+\series default
+ to A
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin10.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to its new successor, E.
+ Because E does not yet have a predecessor set (and does not know about
+ D), it updates its predecessor to point to C.
+\end_layout
+
+\begin_layout Enumerate
+E sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, which sees itself in the 
+\emph on
+sucprec
+\emph default
+ field.
+ C now thinks it has successfully joined the network.
+ This is incorrect, because D is already there.
+\end_layout
+
+\begin_layout Enumerate
+At the next stabilization point, D sends a 
+\series bold
+notify
+\series default
+ to A
+\end_layout
+
+\begin_layout Enumerate
+A replies, telling D about the presence of E.
+ D updates it susccessor.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin11.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Problem: C and D may 
+\begin_inset Quotes eld
+\end_inset
+
+join
+\begin_inset Quotes erd
+\end_inset
+
+ to different successors.
+\end_layout
+
+\begin_layout Enumerate
+Nodes C and D both try to join at the same time with the same ID, and both
+ receive a 
+\series bold
+got_successor
+\series default
+ response that differs from the IDs they want to use.
+ They assume it is ok to join, and go ahead with step 3.
+\end_layout
+
+\begin_layout Enumerate
+C encounters a short delay.
+ D sends a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor.
+\end_layout
+
+\begin_layout Enumerate
+A updates its predecessor to point to D, and sends back a 
+\series bold
+notify_reply
+\series default
+ message with 
+\emph on
+sucprec
+\emph default
+ set to D
+\end_layout
+
+\begin_layout Enumerate
+Another node, E, joins the network, becoming A's new predecessor.
+ It does not yet have a predecessor or even know about D.
+\end_layout
+
+\begin_layout Enumerate
+C continues with the joining process, sending a 
+\series bold
+notify
+\series default
+ message to A, indicating that it thinks it should be A's predecessor (since
+ it does not yet know about E).
+\end_layout
+
+\begin_layout Enumerate
+A sends back a 
+\series bold
+notify_reply
+\series default
+ message, indicating to C that there is now a closer node, E.
+ This means that C can update its successor to point to E.
+\end_layout
+
+\begin_layout Enumerate
+C sends a 
+\series bold
+notify
+\series default
+ message to its new successor, E.
+ Because E does not yet have a predecessor set (and does not know about
+ D), it updates its predecessor to point to C.
+\end_layout
+
+\begin_layout Enumerate
+E sends a 
+\series bold
+notify_reply
+\series default
+ message back to C, which sees itself in the 
+\emph on
+sucprec
+\emph default
+ field.
+ C now thinks it has successfully joined the network.
+ This is incorrect, because D is already there.
+\end_layout
+
+\begin_layout Enumerate
+At the next stabilization point, D sends a 
+\series bold
+notify
+\series default
+ to A
+\end_layout
+
+\begin_layout Enumerate
+A replies, telling D about the presence of E.
+ D updates it susccessor.
+\end_layout
+
+\begin_layout Enumerate
+D sends a 
+\series bold
+notify
+\series default
+ to E, remining it that D should be its predecessor
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin12.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Finally, E replices with a 
+\emph on
+sucprec
+\emph default
+ value of C.
+ D notices this and realises the duplication has occured.
+ But it already thinks it is a legitimate member of the network (which it
+ is).
+ This situation is difficult to recover from.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename badjoin12.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Solution 3:
+\end_layout
+
+\begin_layout Itemize
+Add an additional field called 
+\emph on
+old_sucprec
+\emph default
+ 
+\emph on
+to
+\emph default
+ 
+\series bold
+notify_reply
+\series default
+, containing the old predecessor
+\end_layout
+
+\begin_layout Itemize
+When a node receives 
+\series bold
+notify_reply
+\series default
+, it will examine the old predecessor.
+ If 
+\emph on
+sucprec
+\emph default
+ is set to the node's own ID (i.e.
+ this node has just become the new predecessor), it sets its own predecessor
+ to 
+\emph on
+old_sucprec
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename sol3join1.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Solution 3:
+\end_layout
+
+\begin_layout Itemize
+Add an additional field called 
+\emph on
+old_sucprec
+\emph default
+ 
+\emph on
+to
+\emph default
+ 
+\series bold
+notify_reply
+\series default
+, containing the old predecessor
+\end_layout
+
+\begin_layout Itemize
+When a node receives 
+\series bold
+notify_reply
+\series default
+, it will examine the old predecessor.
+ If 
+\emph on
+sucprec
+\emph default
+ is set to the node's own ID (i.e.
+ this node has just become the new predecessor), it sets its own predecessor
+ to 
+\emph on
+old_sucprec
+\end_layout
+
+\begin_layout Standard
+Using solution 3:
+\end_layout
+
+\begin_layout Enumerate
+When E joins and sends a 
+\series bold
+notify
+\series default
+ to A, it will get back a 
+\series bold
+notify_reply
+\series default
+ with 
+\emph on
+sucprec
+\emph default
+ set to the new predecessor (E), as well as 
+\emph on
+old_sucprec
+\emph default
+ containing the old predecessor (D).
+ E will set its predecessor to D.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename sol3join2.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Solution 3:
+\end_layout
+
+\begin_layout Itemize
+Add an additional field called 
+\emph on
+old_sucprec
+\emph default
+ 
+\emph on
+to
+\emph default
+ 
+\series bold
+notify_reply
+\series default
+, containing the old predecessor
+\end_layout
+
+\begin_layout Itemize
+When a node receives 
+\series bold
+notify_reply
+\series default
+, it will examine the old predecessor.
+ If 
+\emph on
+sucprec
+\emph default
+ is set to the node's own ID (i.e.
+ this node has just become the new predecessor), it sets its own predecessor
+ to 
+\emph on
+old_sucprec
+\end_layout
+
+\begin_layout Standard
+Using solution 3:
+\end_layout
+
+\begin_layout Enumerate
+When E joins and sends a 
+\series bold
+notify
+\series default
+ to A, it will get back a 
+\series bold
+notify_reply
+\series default
+ with 
+\emph on
+sucprec
+\emph default
+ set to the new predecessor (E), as well as 
+\emph on
+old_sucprec
+\emph default
+ containing the old predecessor (D).
+ E will set its predecessor to D.
+\end_layout
+
+\begin_layout Enumerate
+C will send a 
+\series bold
+notify
+\series default
+ to A, which will reply with 
+\emph on
+sucprec
+\emph default
+ set to E.
+ C will update its successor to E and send it a 
+\series bold
+notify
+\series default
+ message.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename sol3join3.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Duplicate identifiers - different successors
+\end_layout
+
+\begin_layout Standard
+Solution 3:
+\end_layout
+
+\begin_layout Itemize
+Add an additional field called 
+\emph on
+old_sucprec
+\emph default
+ 
+\emph on
+to
+\emph default
+ 
+\series bold
+notify_reply
+\series default
+, containing the old predecessor
+\end_layout
+
+\begin_layout Itemize
+When a node receives 
+\series bold
+notify_reply
+\series default
+, it will examine the old predecessor.
+ If 
+\emph on
+sucprec
+\emph default
+ is set to the node's own ID (i.e.
+ this node has just become the new predecessor), it sets its own predecessor
+ to 
+\emph on
+old_sucprec
+\end_layout
+
+\begin_layout Standard
+Using solution 3:
+\end_layout
+
+\begin_layout Enumerate
+When E joins and sends a 
+\series bold
+notify
+\series default
+ to A, it will get back a 
+\series bold
+notify_reply
+\series default
+ with 
+\emph on
+sucprec
+\emph default
+ set to the new predecessor (E), as well as 
+\emph on
+old_sucprec
+\emph default
+ containing the old predecessor (D).
+ E will set its predecessor to D.
+\end_layout
+
+\begin_layout Enumerate
+C will send a 
+\series bold
+notify
+\series default
+ to A, which will reply with 
+\emph on
+sucprec
+\emph default
+ set to E.
+ C will update its successor to E and send it a 
+\series bold
+notify
+\series default
+ message.
+\end_layout
+
+\begin_layout Enumerate
+E will send back a 
+\series bold
+notify_reply
+\series default
+ message to C, with 
+\emph on
+sucprec
+\emph default
+ set to D.
+ C will detect that D is already using its identifier, and begin the joining
+ process again with a new one
+\end_layout
+
+\begin_layout Section*
+
+\newpage
+Messaging model
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Non-blocking:
+\series default
+ When a process sends a message, it does not wait until the other side receives
+ it; instead, it can continue to perform computation or send other messages
+ immediately
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Send and forget:
+\series default
+ A process recevies no notification of whether a message it sent reached
+ its destination.
+\end_layout
+
+\begin_layout Itemize
+
+\series bold
+Ordered:
+\series default
+ All messages sent from A to B are received by B in the same order as they
+ were sent.
+\end_layout
+
+\begin_layout Section*
+Linking
+\end_layout
+
+\begin_layout Itemize
+A process may set up a uni-directional 
+\emph on
+link
+\emph default
+ to another process, in order to receive notication of that process's failure
+\end_layout
+
+\begin_layout Itemize
+If A has a link to B, and B exits, then A will recevie an 
+\series bold
+exit
+\series default
+ message
+\end_layout
+
+\begin_layout Itemize
+If A has a link to B, and the network connection between the machine hosting
+ A and the machine hosting B fails, then A will receive an 
+\series bold
+exit
+\series default
+ message for B
+\end_layout
+
+\begin_layout Itemize
+Each process maintains a 
+\emph on
+outgoing links
+\emph default
+ set, which contains the identifier of each process that it expects to receive
+ exit notifications
+\end_layout
+
+\begin_layout Itemize
+Each process also maintains an 
+\emph on
+incoming links
+\emph default
+ set, which contains the identifier of each process that should be notified
+ when it exits.
+ When the process exits, it sends an 
+\series bold
+exit
+\series default
+ message to each entry in this list.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+x
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link1.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+When process A links to process B, three things happen:
+\end_layout
+
+\begin_layout Enumerate
+A adds B to its link list
+\end_layout
+
+\begin_layout Enumerate
+A sends a 
+\series bold
+link
+\series default
+ message to B containing the identifier of A
+\end_layout
+
+\begin_layout Enumerate
+B receives the 
+\series bold
+link
+\series default
+ message and adds A to its notification list
+\end_layout
+
+\begin_layout Standard
+When process B exits, it sees A on its notification list and sends it an
+ 
+\series bold
+exit
+\series default
+ message.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link2.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if process B has already exited before the 
+\series bold
+link
+\series default
+ message is received?
+\end_layout
+
+\begin_layout Standard
+The machine hosting B will notice that a link message has been received
+ for an endpoint that does not exist.
+ It will assume this is because the specified endpoint did exist at one
+ time, and therefore must have exited.
+ An 
+\series bold
+exit
+\series default
+ message will be sent back to A.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link3.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if B's host crashes (or, equivalently, the connection to B's host is
+ lost) at some point?
+\end_layout
+
+\begin_layout Enumerate
+Before the 
+\series bold
+link
+\series default
+ message has been sent: Host 1 will try to reconnect; if it succeeds, then
+ the link message will be sent successfully.
+ If the reconnection fails, A will receive an 
+\series bold
+exit
+\series default
+ message for B.
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link4.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if B's host crashes (or, equivalently, the connection to B's host is
+ lost) at some point?
+\end_layout
+
+\begin_layout Enumerate
+Before the 
+\series bold
+link
+\series default
+ message has been sent: Host 1 will try to reconnect; if it succeeds, then
+ the link message will be sent successfully.
+ If the reconnection fails, A will receive an 
+\series bold
+exit
+\series default
+ message for B.
+\end_layout
+
+\begin_layout Enumerate
+After the link message has been sent, but before B has received it: Host
+ 1 will notice the connection has dropped and send A an 
+\series bold
+exit
+\series default
+ message for B
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link5.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if B's host crashes (or, equivalently, the connection to B's host is
+ lost) at some point?
+\end_layout
+
+\begin_layout Enumerate
+Before the 
+\series bold
+link
+\series default
+ message has been sent: Host 1 will try to reconnect; if it succeeds, then
+ the link message will be sent successfully.
+ If the reconnection fails, A will receive an 
+\series bold
+exit
+\series default
+ message for B.
+\end_layout
+
+\begin_layout Enumerate
+After the link message has been sent, but before B has received it: Host
+ 1 will notice the connection has dropped and send A an 
+\series bold
+exit
+\series default
+ message for B
+\end_layout
+
+\begin_layout Enumerate
+After B has added A to its notification list: As for (2)
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link6.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if B's host crashes (or, equivalently, the connection to B's host is
+ lost) at some point?
+\end_layout
+
+\begin_layout Enumerate
+Before the 
+\series bold
+link
+\series default
+ message has been sent: Host 1 will try to reconnect; if it succeeds, then
+ the link message will be sent successfully.
+ If the reconnection fails, A will receive an 
+\series bold
+exit
+\series default
+ message for B.
+\end_layout
+
+\begin_layout Enumerate
+After the link message has been sent, but before B has received it: Host
+ 1 will notice the connection has dropped and send A an 
+\series bold
+exit
+\series default
+ message for B
+\end_layout
+
+\begin_layout Enumerate
+After B has added A to its notification list: As for (2)
+\end_layout
+
+\begin_layout Enumerate
+After B exits but before A has received the 
+\series bold
+exit
+\series default
+ message: As for (2)
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename link7.eps
+	lyxscale 50
+	scale 75
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Initiating a link
+\end_layout
+
+\begin_layout Standard
+What if B's host crashes (or, equivalently, the connection to B's host is
+ lost) at some point?
+\end_layout
+
+\begin_layout Enumerate
+Before the 
+\series bold
+link
+\series default
+ message has been sent: Host 1 will try to reconnect; if it succeeds, then
+ the link message will be sent successfully.
+ If the reconnection fails, A will receive an 
+\series bold
+exit
+\series default
+ message for B.
+\end_layout
+
+\begin_layout Enumerate
+After the link message has been sent, but before B has received it: Host
+ 1 will notice the connection has dropped and send A an 
+\series bold
+exit
+\series default
+ message for B
+\end_layout
+
+\begin_layout Enumerate
+After B has added A to its notification list: As for (2)
+\end_layout
+
+\begin_layout Enumerate
+After B exits but before A has received the 
+\series bold
+exit
+\series default
+ message: As for (2)
+\end_layout
+
+\begin_layout Enumerate
+After A has received the 
+\series bold
+exit
+\series default
+ message: no action required
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename selffinger.eps
+	lyxscale 50
+	scale 65
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\newpage
+
+\end_layout
+
+\begin_layout Section*
+Finger table
+\end_layout
+
+\begin_layout Standard
+Question: Is it valid for a node to have itself as one of its fingers?
+\end_layout
+
+\begin_layout Standard
+Answer: Yes; see diagram.
+ If there is no node between 
+\begin_inset Formula $N+2^{M}$
+\end_inset
+
+ and 
+\begin_inset Formula $N$
+\end_inset
+
+, then the last finger of its node will point to itself.
+ This is also possible for other fingers, e.g.
+ if A was missing in the example.
+\end_layout
+
+\end_body
+\end_document

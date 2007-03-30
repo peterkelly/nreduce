@@ -700,7 +700,7 @@ int array_to_string(pntr refpntr, char **str);
 /* worker */
 
 endpoint *find_endpoint(node *n, int localid);
-int worker(const char *host, int port, const char *bcdata, int bcsize);
+int worker(const char *host, int port, const char *bcdata, int bcsize, const char *chordtest);
 task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);

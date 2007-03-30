@@ -31,6 +31,7 @@
 #include "runtime.h"
 #include "node.h"
 #include "messages.h"
+#include "chord.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -75,8 +76,24 @@ const char *msg_names[MSG_COUNT] = {
   "STARTTASKRESP",
   "KILL",
   "IORESPONSE",
-  "CONSOLE_LINE",
   "ENDPOINT_EXIT",
+  "LINK",
+  "UNLINK",
+  "CONSOLE_LINE",
+  "FIND_SUCCESSOR",
+  "GOT_SUCCESSOR",
+  "NOTIFY",
+  "NOTIFY_REPLY",
+  "STABILIZE",
+  "GET_TABLE",
+  "REPLY_TABLE",
+  "FIND_ALL",
+  "CHORD_STARTED",
+  "START_CHORD",
+  "DEBUG_START",
+  "DEBUG_DONE",
+  "ID_CHANGED",
+  "JOINED",
 };
 
 endpoint *find_endpoint(node *n, int localid)
@@ -245,32 +262,39 @@ static void worker_callback(struct node *n, void *data, int event,
 
   if (((EVENT_CONN_IOERROR == event) ||
        (EVENT_CONN_CLOSED == event) ||
+       (EVENT_CONN_FAILED == event) ||
        (EVENT_DATA_READFINISHED == event)) &&
       !conn->isconsole && !conn->isreg) {
+    printf("worker: %s\n",event_types[event]);
+
+    /* A connection to another node has failed. Search for links that referenced endpoints
+       on the other node, and sent an ENDPOINT_EXIT to the local endpoint in each case. */
     endpoint *endpt;
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      list **lptr = &endpt->links;
-      int removed = 0;
-      int kept = 0;
+      int max = list_count(endpt->outlinks);
+      endpointid *exited = (endpointid*)malloc(max*sizeof(endpointid));
+      int count = 0;
+      list *l;
+      int i;
 
-      while (*lptr) {
-        endpointid *epid = (endpointid*)(*lptr)->data;
-        endpoint_exit_msg msg;
-        if ((epid->ip == conn->ip) && (epid->port == conn->port)) {
-          list *old = *lptr;
-          *lptr = (*lptr)->next;
-          msg.epid = *epid;
-          node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
-                           &msg,sizeof(endpoint_exit_msg));
-          free(epid);
-          free(old);
-          removed++;
-        }
-        else {
-          lptr = &((*lptr)->next);
-          kept++;
-        }
+      /* We must grab the list of exited endpoints before calling node_send_locked(), because it
+         will call through to endpoint_add_message() which will modify the endpoint list to remove
+         the links, so we can't do this while traversing the list. */
+      for (l = endpt->outlinks; l; l = l->next) {
+        endpointid *epid = (endpointid*)l->data;
+        if ((epid->ip == conn->ip) && (epid->port == conn->port))
+          exited[count++] = *epid;
       }
+
+      /* Now we've found the relevant endpoints, send ENDPOINT_EXIT for each */
+      for (i = 0; i < count; i++) {
+        endpoint_exit_msg msg;
+        msg.epid = exited[i];
+        node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
+                         &msg,sizeof(endpoint_exit_msg));
+      }
+
+      free(exited);
     }
   }
   if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
@@ -280,7 +304,7 @@ static void worker_callback(struct node *n, void *data, int event,
   }
 }
 
-int worker(const char *host, int port, const char *bcdata, int bcsize)
+int worker(const char *host, int port, const char *bcdata, int bcsize, const char *chordtest)
 {
   node *n;
   worker_data wd;
@@ -314,6 +338,28 @@ int worker(const char *host, int port, const char *bcdata, int bcsize)
   ipbytes = (unsigned char*)&n->listenip;
   node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
            getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
+
+  /* FIXME: this is kind of ugly... find a neater way to run the chord test that doesn't
+     involve an extra argument to worker() */
+  if (chordtest) {
+    if (!strcmp(chordtest,"")) {
+      /* no nodes file; run standalone test */
+      endpointid managerid;
+      managerid.ip = n->listenip;
+      managerid.port = n->listenport;
+      managerid.localid = MANAGER_ID;
+      testchord(n,&managerid,1);
+    }
+    else {
+      /* test against nodes specified in file */
+      endpointid *managerids;
+      int nmanagers;
+      if (0 != read_managers(n,chordtest,&managerids,&nmanagers))
+        exit(1);
+      testchord(n,managerids,nmanagers);
+      free(managerids);
+    }
+  }
 
   if (bcdata) {
     endpointid managerid;

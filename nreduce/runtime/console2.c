@@ -215,13 +215,6 @@ static int console_handle_message(node *n, endpoint *endpt, message *msg)
   return 0;
 }
 
-static void console_endpoint_close(node *n, endpoint *endpt)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
-  node_waitclose_locked(n,endpt->epid.localid);
-}
-
 void *console_thread(void *arg)
 {
   console2 *csl = (console2*)arg;
@@ -256,7 +249,7 @@ void start_console(node *n, connection *conn)
   console2 *csl = (console2*)calloc(1,sizeof(console2));
   conn->isconsole = 1;
   csl->n = n;
-  csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,console_endpoint_close);
+  csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,endpoint_close_kill);
   conn->console_epid = csl->endpt->epid;
   if (0 > pthread_create(&csl->thread,NULL,console_thread,csl))
     fatal("pthread_create: %s",strerror(errno));

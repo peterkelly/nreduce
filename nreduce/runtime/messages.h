@@ -50,16 +50,35 @@
 
 #define MSG_IORESPONSE          21
 
-#define MSG_CONSOLE_LINE        22
-#define MSG_ENDPOINT_EXIT       23
+#define MSG_ENDPOINT_EXIT       22
+#define MSG_LINK                23
+#define MSG_UNLINK              24
 
-#define MSG_COUNT               24
+#define MSG_CONSOLE_LINE        25
+
+#define MSG_FIND_SUCCESSOR      26
+#define MSG_GOT_SUCCESSOR       27
+#define MSG_NOTIFY              28
+#define MSG_NOTIFY_REPLY        29
+#define MSG_STABILIZE           30
+
+#define MSG_GET_TABLE           31
+#define MSG_REPLY_TABLE         32
+#define MSG_FIND_ALL            33
+#define MSG_CHORD_STARTED       34
+#define MSG_START_CHORD         35
+#define MSG_DEBUG_START         36
+#define MSG_DEBUG_DONE          37
+#define MSG_ID_CHANGED          38
+#define MSG_JOINED              39
+
+#define MSG_COUNT               40
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];
 #endif
 
-typedef struct endpoint_exit_msg {
+typedef struct {
   endpointid epid;
 } endpoint_exit_msg;
 

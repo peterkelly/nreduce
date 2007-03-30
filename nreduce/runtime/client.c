@@ -345,6 +345,52 @@ static array *read_nodes(const char *hostsfile)
   return hostnames;
 }
 
+int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount)
+{
+  endpointid *managerids;
+  int count;
+  array *nodes = read_nodes(nodesfile);
+  int i;
+
+  *outids = NULL;
+  *outcount = 0;
+
+  if (NULL == nodes)
+    return -1;
+
+  count = array_count(nodes);
+  managerids = (endpointid*)calloc(count,sizeof(endpointid));
+
+  for (i = 0; i < count; i++) {
+    char *nodename = array_item(nodes,i,char*);
+    char *host = NULL;
+    int port = 0;
+
+    if (0 != parse_address(nodename,&host,&port)) {
+      fprintf(stderr,"Invalid node address: %s\n",nodename);
+      array_free(nodes);
+      free(managerids);
+      return -1;
+    }
+    managerids[i].port = port;
+    managerids[i].localid = MANAGER_ID;
+
+    if (0 > lookup_address(n,host,&managerids[i].ip)) {
+      fprintf(stderr,"%s: hostname lookup failed\n",host);
+      array_free(nodes);
+      free(managerids);
+      return -1;
+    }
+    free(host);
+  }
+
+  *outids = managerids;
+  *outcount = count;
+
+  array_free(nodes);
+  return 0;
+}
+
 static int client_run(node *n, const char *nodesfile, const char *filename)
 {
   int bcsize;
