@@ -109,6 +109,39 @@ static int set_non_blocking(int fd)
   return 0;
 }
 
+static void handle_disconnection(node *n, connection *conn)
+{
+  /* A connection to another node has failed. Search for links that referenced endpoints
+     on the other node, and sent an ENDPOINT_EXIT to the local endpoint in each case. */
+  endpoint *endpt;
+  for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
+    int max = list_count(endpt->outlinks);
+    endpointid *exited = (endpointid*)malloc(max*sizeof(endpointid));
+    int count = 0;
+    list *l;
+    int i;
+
+    /* We must grab the list of exited endpoints before calling node_send_locked(), because it
+       will call through to endpoint_add_message() which will modify the endpoint list to remove
+       the links, so we can't do this while traversing the list. */
+    for (l = endpt->outlinks; l; l = l->next) {
+      endpointid *epid = (endpointid*)l->data;
+      if ((epid->ip == conn->ip) && (epid->port == conn->port))
+        exited[count++] = *epid;
+    }
+
+    /* Now we've found the relevant endpoints, send ENDPOINT_EXIT for each */
+    for (i = 0; i < count; i++) {
+      endpoint_exit_msg msg;
+      msg.epid = exited[i];
+      node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
+                       &msg,sizeof(endpoint_exit_msg));
+    }
+
+    free(exited);
+  }
+}
+
 static void dispatch_event(node *n, int event, connection *conn, endpoint *endpt)
 {
   node_callback *cb;
@@ -116,6 +149,14 @@ static void dispatch_event(node *n, int event, connection *conn, endpoint *endpt
     cb->fun(n,cb->data,event,conn,endpt);
   if (conn && conn->l && conn->l->callback)
     conn->l->callback(n,conn->l->data,event,conn,endpt);
+
+  if (((EVENT_CONN_IOERROR == event) ||
+       (EVENT_CONN_CLOSED == event) ||
+       (EVENT_CONN_FAILED == event) ||
+       (EVENT_DATA_READFINISHED == event)) &&
+      !conn->isconsole && !conn->isreg) {
+    handle_disconnection(n,conn);
+  }
 }
 
 static void report_error(node *n, const char *format, ...)
@@ -666,8 +707,14 @@ void node_free(node *n)
   if (n->mainl)
     node_remove_listener(n,n->mainl);
   assert(NULL == n->endpoints.first);
-  assert(NULL == n->callbacks.first);
   assert(NULL == n->listeners.first);
+
+  while (n->callbacks.first) {
+    node_callback *next = n->callbacks.first->next;
+    free(n->callbacks.first);
+    n->callbacks.first = next;
+  }
+
   destroy_mutex(&n->liblock);
   pthread_cond_destroy(&n->closecond);
   destroy_mutex(&n->lock);

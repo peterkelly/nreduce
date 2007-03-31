@@ -17,7 +17,6 @@ libruntime_la_SOURCES = worker.c \
 	tosyntax.c \
 	trace.c \
 	node.c \
-	nodetest.c \
 	chord.c \
 	testchord.c
 

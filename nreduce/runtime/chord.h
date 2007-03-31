@@ -97,4 +97,4 @@ typedef struct {
 
 int chordnode_isnull(chordnode n);
 void start_chord(node *n, chordnode ndash, endpointid caller, int stabilize_delay);
-void testchord(node *n, endpointid *managerids, int nmanagers);
+void run_chordtest(int argc, char **argv);

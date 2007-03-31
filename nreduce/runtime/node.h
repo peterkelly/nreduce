@@ -312,9 +312,7 @@ typedef struct inittask_msg {
   endpointid idmap[0];
 } inittask_msg;
 
-
 int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount);
-
 void start_manager(node *n);
 
 #ifndef NODE_C

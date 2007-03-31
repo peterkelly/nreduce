@@ -50,8 +50,6 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <signal.h>
-#include <execinfo.h>
 
 const char *msg_names[MSG_COUNT] = {
   "DONE",
@@ -150,56 +148,6 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   return from;
 }
 
-static void *btarray[1024];
-
-static void sigabrt(int sig)
-{
-  char *str = "abort()\n";
-  int size;
-  write(STDERR_FILENO,str,strlen(str));
-
-  size = backtrace(btarray,1024);
-  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
-}
-
-static void sigsegv(int sig)
-{
-  char *str = "Segmentation fault\n";
-  int size;
-  write(STDERR_FILENO,str,strlen(str));
-
-  size = backtrace(btarray,1024);
-  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
-
-  signal(sig,SIG_DFL);
-  kill(getpid(),sig);
-}
-
-task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
-{
-  task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
-
-  tsk->commdata = n;
-  tsk->output = stdout;
-
-  if ((0 == pid) && (NULL != bcdata)) {
-    frame *initial = frame_new(tsk);
-    initial->instr = bc_instructions(tsk->bcdata);
-    initial->fno = -1;
-    assert(initial->alloc == tsk->maxstack);
-    initial->c = alloc_cell(tsk);
-    initial->c->type = CELL_FRAME;
-    make_pntr(initial->c->field1,initial);
-    run_frame(tsk,initial);
-  }
-
-  return tsk;
-}
-
-typedef struct worker_data {
-  int standalone;
-} worker_data;
-
 static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
 {
   endpointid destid = conn->tsk->endpt->epid;
@@ -232,8 +180,6 @@ static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
 static void worker_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
-  worker_data *wd = (worker_data*)data;
-
   if (conn && conn->status &&
       ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)))
     *conn->status = event;
@@ -259,123 +205,68 @@ static void worker_callback(struct node *n, void *data, int event,
   if (conn && (0 < conn->frameids[ACCEPT_FRAMEADDR]) &&
       (EVENT_CONN_ACCEPTED == event))
     send_ioresponse(n,conn,&conn->frameids[ACCEPT_FRAMEADDR],event);
-
-  if (((EVENT_CONN_IOERROR == event) ||
-       (EVENT_CONN_CLOSED == event) ||
-       (EVENT_CONN_FAILED == event) ||
-       (EVENT_DATA_READFINISHED == event)) &&
-      !conn->isconsole && !conn->isreg) {
-    printf("worker: %s\n",event_types[event]);
-
-    /* A connection to another node has failed. Search for links that referenced endpoints
-       on the other node, and sent an ENDPOINT_EXIT to the local endpoint in each case. */
-    endpoint *endpt;
-    for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      int max = list_count(endpt->outlinks);
-      endpointid *exited = (endpointid*)malloc(max*sizeof(endpointid));
-      int count = 0;
-      list *l;
-      int i;
-
-      /* We must grab the list of exited endpoints before calling node_send_locked(), because it
-         will call through to endpoint_add_message() which will modify the endpoint list to remove
-         the links, so we can't do this while traversing the list. */
-      for (l = endpt->outlinks; l; l = l->next) {
-        endpointid *epid = (endpointid*)l->data;
-        if ((epid->ip == conn->ip) && (epid->port == conn->port))
-          exited[count++] = *epid;
-      }
-
-      /* Now we've found the relevant endpoints, send ENDPOINT_EXIT for each */
-      for (i = 0; i < count; i++) {
-        endpoint_exit_msg msg;
-        msg.epid = exited[i];
-        node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
-                         &msg,sizeof(endpoint_exit_msg));
-      }
-
-      free(exited);
-    }
-  }
-  if ((EVENT_ENDPOINT_REMOVAL == event) && wd->standalone) {
-    if (TASK_ENDPOINT == endpt->type) {
-      node_shutdown_locked(n);
-    }
-  }
 }
 
-int worker(const char *host, int port, const char *bcdata, int bcsize, const char *chordtest)
+static void standalone_callback(struct node *n, void *data, int event,
+                                connection *conn, endpoint *endpt)
 {
-  node *n;
-  worker_data wd;
+  if ((EVENT_ENDPOINT_REMOVAL == event) && (TASK_ENDPOINT == endpt->type))
+    node_shutdown_locked(n);
+}
+
+static node *worker_startup(int loglevel, int port)
+{
+  node *n = node_new(loglevel);
   unsigned char *ipbytes;
 
-  signal(SIGABRT,sigabrt);
-  signal(SIGSEGV,sigsegv);
-  signal(SIGPIPE,SIG_IGN);
-
-  memset(&wd,0,sizeof(worker_data));
-
-  if (bcdata) {
-    wd.standalone = 1;
-    n = node_new(LOG_ERROR);
-  }
-  else {
-    n = node_new(LOG_INFO);
-  }
-
   n->isworker = 1;
-
   if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1)) {
     node_free(n);
-    return -1;
+    return NULL;
   }
 
-  node_add_callback(n,worker_callback,&wd);
+  node_add_callback(n,worker_callback,NULL);
   start_manager(n);
   node_start_iothread(n);
 
   ipbytes = (unsigned char*)&n->listenip;
   node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
            getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
+  return n;
+}
 
-  /* FIXME: this is kind of ugly... find a neater way to run the chord test that doesn't
-     involve an extra argument to worker() */
-  if (chordtest) {
-    if (!strcmp(chordtest,"")) {
-      /* no nodes file; run standalone test */
-      endpointid managerid;
-      managerid.ip = n->listenip;
-      managerid.port = n->listenport;
-      managerid.localid = MANAGER_ID;
-      testchord(n,&managerid,1);
-    }
-    else {
-      /* test against nodes specified in file */
-      endpointid *managerids;
-      int nmanagers;
-      if (0 != read_managers(n,chordtest,&managerids,&nmanagers))
-        exit(1);
-      testchord(n,managerids,nmanagers);
-      free(managerids);
-    }
-  }
+int standalone(const char *bcdata, int bcsize)
+{
+  endpointid managerid;
+  node *n;
 
-  if (bcdata) {
-    endpointid managerid;
-    managerid.ip = n->listenip;
-    managerid.port = n->listenport;
-    managerid.localid = MANAGER_ID;
-    start_launcher(n,bcdata,bcsize,&managerid,1);
-  }
+  if (NULL == (n = worker_startup(LOG_ERROR,0)))
+    return -1;
+
+  node_add_callback(n,standalone_callback,NULL);
+
+  managerid.ip = n->listenip;
+  managerid.port = n->listenport;
+  managerid.localid = MANAGER_ID;
+  start_launcher(n,bcdata,bcsize,&managerid,1);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
-
   node_close_endpoints(n);
   node_close_connections(n);
-  node_remove_callback(n,worker_callback,&wd);
   node_free(n);
+  return 0;
+}
 
+int worker(const char *xhost, int port, const char *bcdata, int bcsize, const char *chordtest)
+{
+  node *n;
+  if (NULL == (n = worker_startup(LOG_INFO,port)))
+    return -1;
+  if (0 != pthread_join(n->iothread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  node_close_endpoints(n);
+  node_close_connections(n);
+  node_free(n);
   return 0;
 }

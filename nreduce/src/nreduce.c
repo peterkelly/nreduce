@@ -29,6 +29,7 @@
 #include "nreduce.h"
 #include "runtime/runtime.h"
 #include "runtime/node.h"
+#include "runtime/chord.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,16 +41,17 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
+#include <execinfo.h>
+#include <signal.h>
 
 #define NREDUCE_C
 
 #define ENGINE_INTERPRETER 0
-#define ENGINE_NATIVE      1
-#define ENGINE_REDUCER     2
+#define ENGINE_REDUCER     1
 
 #define WORKER_PORT 2000
 
-char *exec_modes[3] = { "interpreter", "native", "reducer" };
+char *exec_modes[3] = { "interpreter", "reducer" };
 
 int max_array_size = (1 << 18);
 
@@ -68,8 +70,7 @@ struct arguments {
   int trace_type;
   char *address;
   char *client;
-  char *nodetest;
-  char *chordtest;
+  int chordtest;
   array *extra;
 };
 
@@ -88,13 +89,12 @@ static void usage()
 "  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
 "  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
 "  -e, --engine ENGINE      Use execution engine:\n"
-"                           (r)educer|(i)nterpreter|(n)ative\n"
+"                           (r)educer|(i)nterpreter\n"
 "                           (default: interpreter)\n"
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
 "  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
 "  --client NODESFILE CMD   Run program CMD on nodes read from NODESFILE\n"
-"  --nodetest IP:PORT       Run as test node, listening on IP:PORT\n"
 "  --chordtest NODESFILE    Test chord implementation ('' for single-host test)\n"
 "\n"
 "Options for printing output of compilation stages:\n"
@@ -132,8 +132,6 @@ void parse_args(int argc, char **argv)
         usage();
       if (!strcmp(argv[i],"i") || !strcmp(argv[i],"interpreter"))
         args.engine = ENGINE_INTERPRETER;
-      else if (!strcmp(argv[i],"n") || !strcmp(argv[i],"native"))
-        args.engine = ENGINE_NATIVE;
       else if (!strcmp(argv[i],"r") || !strcmp(argv[i],"reducer"))
         args.engine = ENGINE_REDUCER;
       else
@@ -178,23 +176,13 @@ void parse_args(int argc, char **argv)
         usage();
       args.client = argv[i];
     }
-    else if (!strcmp(argv[i],"--nodetest")) {
-      if (++i >= argc)
-        usage();
-      args.nodetest = argv[i];
-    }
     else if (!strcmp(argv[i],"--chordtest")) {
-      if (++i >= argc)
-        usage();
-      args.chordtest = argv[i];
+      args.chordtest = 1;
     }
     else {
       array_append(args.extra,&argv[i],sizeof(char*));
     }
   }
-
-/*   if ((NULL == args.filename) && !args.worker) */
-/*     usage(); */
 }
 
 void get_progname(const char *cmd)
@@ -204,39 +192,10 @@ void get_progname(const char *cmd)
   printf("cmd = \"%s\"\n",cmd);
 }
 
-static int nodetest_mode()
-{
-  int r;
-  char *host = NULL;
-  int port = WORKER_PORT;
-
-  if (0 != parse_address(args.nodetest,&host,&port)) {
-    fprintf(stderr,"Invalid node address: %s\n",args.nodetest);
-    exit(1);
-  }
-
-  r = nodetest(host,port);
-
-  free(host);
-  array_free(args.extra);
-  return r;
-}
-
 static int chordtest_mode()
 {
-  int r;
-  char *host = NULL;
-  int port = WORKER_PORT;
-
-  if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
-    fprintf(stderr,"Invalid listening address: %s\n",args.address);
-    exit(1);
-  }
-
-  r = worker(host,port,NULL,0,args.chordtest);
-  free(host);
-  array_free(args.extra);
-  return r;
+  run_chordtest(array_count(args.extra),(char**)args.extra->data);
+  return 0;
 }
 
 static int client_mode()
@@ -271,7 +230,31 @@ static int worker_mode()
   return r;
 }
 
-extern int arefs;
+static void *btarray[1024];
+
+static void sigabrt(int sig)
+{
+  char *str = "abort()\n";
+  int size;
+  write(STDERR_FILENO,str,strlen(str));
+
+  size = backtrace(btarray,1024);
+  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
+}
+
+static void sigsegv(int sig)
+{
+  char *str = "Segmentation fault\n";
+  int size;
+  write(STDERR_FILENO,str,strlen(str));
+
+  size = backtrace(btarray,1024);
+  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
+
+  signal(sig,SIG_DFL);
+  kill(getpid(),sig);
+}
+
 int main(int argc, char **argv)
 {
   source *src;
@@ -281,6 +264,9 @@ int main(int argc, char **argv)
   int r = 0;
 
   setbuf(stdout,NULL);
+  signal(SIGABRT,sigabrt);
+  signal(SIGSEGV,sigsegv);
+  signal(SIGPIPE,SIG_IGN);
 
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
@@ -299,9 +285,6 @@ int main(int argc, char **argv)
   args.nopartialsink = 1;
 
   compileinfo = args.compileinfo;
-
-  if (args.nodetest)
-    return nodetest_mode();
 
   if (args.chordtest)
     return chordtest_mode();
@@ -361,16 +344,8 @@ int main(int argc, char **argv)
       exit(0);
     }
 
-    if (ENGINE_INTERPRETER == args.engine) {
-      debug_stage("Interpreter");
-      r = worker("127.0.0.1",0,bcdata,bcsize,NULL);
-    }
-    else {
-#if 0
-      machine_code_generation();
-      native_execution_engine();
-#endif
-    }
+    debug_stage("Interpreter");
+    r = standalone(bcdata,bcsize);
     free(bcdata);
   }
 

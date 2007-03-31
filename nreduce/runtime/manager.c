@@ -43,6 +43,27 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+static task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
+{
+  task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
+
+  tsk->commdata = n;
+  tsk->output = stdout;
+
+  if ((0 == pid) && (NULL != bcdata)) {
+    frame *initial = frame_new(tsk);
+    initial->instr = bc_instructions(tsk->bcdata);
+    initial->fno = -1;
+    assert(initial->alloc == tsk->maxstack);
+    initial->c = alloc_cell(tsk);
+    initial->c->type = CELL_FRAME;
+    make_pntr(initial->c->field1,initial);
+    run_frame(tsk,initial);
+  }
+
+  return tsk;
+}
+
 static int manager_handle_message(node *n, endpoint *endpt, message *msg)
 {
   switch (msg->hdr.tag) {

@@ -602,10 +602,6 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
 int run_program(node *n, const char *filename);
 int do_client(const char *nodesfile, const char *program);
 
-/* nodetest */
-
-int nodetest(const char *host, int port);
-
 /* data */
 
 typedef struct reader {
@@ -700,11 +696,11 @@ int array_to_string(pntr refpntr, char **str);
 /* worker */
 
 endpoint *find_endpoint(node *n, int localid);
+int standalone(const char *bcdata, int bcsize);
 int worker(const char *host, int port, const char *bcdata, int bcsize, const char *chordtest);
 task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
-task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize);
 
 /* cell */
 

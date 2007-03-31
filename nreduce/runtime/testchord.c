@@ -505,7 +505,7 @@ static void delay(int ms)
   nanosleep(&ts,NULL);
 }
 
-void testchord(node *n, endpointid *managerids, int nmanagers)
+static void testchord(node *n, endpointid *managerids, int nmanagers)
 {
   chordnode nodes[MAX_NODES];
   int i;
@@ -541,4 +541,39 @@ void testchord(node *n, endpointid *managerids, int nmanagers)
 
   check_loop(n,endpt,nodes,ncount,start,NODE_COUNT,managerids,nmanagers);
   node_remove_endpoint(n,endpt);
+}
+
+void run_chordtest(int argc, char **argv)
+{
+  node *n = node_new(LOG_ERROR);
+
+  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1))
+    exit(1);
+
+  start_manager(n);
+  node_start_iothread(n);
+
+  if (0 == argc) {
+    /* Standalone mode; run the test locally */
+    endpointid managerid;
+    managerid.ip = n->listenip;
+    managerid.port = n->listenport;
+    managerid.localid = MANAGER_ID;
+    testchord(n,&managerid,1);
+  }
+  else {
+    /* Client mode; run the chord test on a set of remote nodes specified in the file */
+    endpointid *managerids;
+    int nmanagers;
+    if (0 != read_managers(n,argv[0],&managerids,&nmanagers))
+      exit(1);
+    testchord(n,managerids,nmanagers);
+    free(managerids);
+  }
+
+  if (0 != pthread_join(n->iothread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  node_close_endpoints(n);
+  node_close_connections(n);
+  node_free(n);
 }
