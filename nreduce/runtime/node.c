@@ -812,7 +812,7 @@ void node_remove_listener(node *n, listener *l)
 
 void node_start_iothread(node *n)
 {
-  if (0 > pthread_create(&n->iothread,NULL,ioloop,n))
+  if (0 != pthread_create(&n->iothread,NULL,ioloop,n))
     fatal("pthread_create: %s",strerror(errno));
 }
 

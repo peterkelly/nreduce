@@ -369,7 +369,7 @@ int worker(const char *host, int port, const char *bcdata, int bcsize, const cha
     start_launcher(n,bcdata,bcsize,&managerid,1);
   }
 
-  if (0 > pthread_join(n->iothread,NULL))
+  if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   node_close_endpoints(n);

@@ -182,6 +182,6 @@ void start_manager(node *n)
 {
   manager *man = (manager*)calloc(1,sizeof(manager));
   man->n = n;
-  if (0 > pthread_create(&man->thread,NULL,manager_thread,man))
+  if (0 != pthread_create(&man->thread,NULL,manager_thread,man))
     fatal("pthread_create: %s",strerror(errno));
 }

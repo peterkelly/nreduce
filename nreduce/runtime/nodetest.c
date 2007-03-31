@@ -338,7 +338,7 @@ static void testserver_callback(struct node *n, void *data, int event,
 /*                        "test\n"); */
 /*           conn->toclose = 1; */
 
-          if (0 > pthread_create(&tc->thread,NULL,http_thread,conn))
+          if (0 != pthread_create(&tc->thread,NULL,http_thread,conn))
             fatal("pthread_create: %s",strerror(errno));
 
         }
@@ -391,7 +391,7 @@ int nodetest(const char *host, int port)
 
 
   node_log(n,LOG_INFO,"Blocking main thread");
-  if (0 > pthread_join(n->iothread,NULL))
+  if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   node_log(n,LOG_INFO,"IO thread finished");
 

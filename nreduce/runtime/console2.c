@@ -251,7 +251,7 @@ void start_console(node *n, connection *conn)
   csl->n = n;
   csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,endpoint_close_kill);
   conn->console_epid = csl->endpt->epid;
-  if (0 > pthread_create(&csl->thread,NULL,console_thread,csl))
+  if (0 != pthread_create(&csl->thread,NULL,console_thread,csl))
     fatal("pthread_create: %s",strerror(errno));
 }
 

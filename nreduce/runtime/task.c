@@ -493,9 +493,9 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   }
 
   if (n) {
-    if (0 > pthread_create(&tsk->thread,NULL,(void*)execute,tsk))
+    if (0 != pthread_create(&tsk->thread,NULL,(void*)execute,tsk))
       fatal("pthread_create: %s",strerror(errno));
-    if (0 > pthread_detach(tsk->thread))
+    if (0 != pthread_detach(tsk->thread))
       fatal("pthread_detach: %s",strerror(errno));
   }
 

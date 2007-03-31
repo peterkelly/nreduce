@@ -107,7 +107,7 @@ static void launcher_endpoint_close(node *n, endpoint *endpt)
   sa->cancel = 1;
   endpoint_forceclose(sa->endpt);
 
-  if (0 > pthread_join(sa->thread,NULL))
+  if (0 != pthread_join(sa->thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   lock_mutex(&n->lock);
 }
@@ -236,7 +236,7 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
   lr->havethread = 1;
 
   node_log(n,LOG_INFO,"Distributed process creation starting");
-  if (0 > pthread_create(&lr->thread,NULL,launcher_thread,lr))
+  if (0 != pthread_create(&lr->thread,NULL,launcher_thread,lr))
     fatal("pthread_create: %s",strerror(errno));
 
   node_log(n,LOG_INFO,"Distributed process creation started");
@@ -471,7 +471,7 @@ int do_client(const char *nodesfile, const char *program)
   if (0 != client_run(n,nodesfile,program))
     exit(1);
 
-  if (0 > pthread_join(n->iothread,NULL))
+  if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   node_close_endpoints(n);
