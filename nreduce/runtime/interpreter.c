@@ -925,11 +925,16 @@ void *execute(task *tsk)
   frame *runnable;
   const instruction *instr;
   int interrupt = 1;
+  char semdata;
 
   assert(tsk->n);
   assert(tsk->endpt);
 
-  sem_wait(&tsk->startsem);
+  read(tsk->startfds[0],&semdata,1);
+  close(tsk->startfds[0]);
+  close(tsk->startfds[1]);
+  tsk->startfds[0] = -1;
+  tsk->startfds[1] = -1;
 
   tsk->newfish = 1;
   tsk->endpt->interruptptr = &interrupt;

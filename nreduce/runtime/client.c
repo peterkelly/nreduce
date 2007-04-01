@@ -45,7 +45,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include <execinfo.h>
 
 static int get_responses(node *n, endpoint *endpt, int tag,
                          int count, endpointid *managerids, int *responses)

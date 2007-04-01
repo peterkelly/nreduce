@@ -56,7 +56,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include <execinfo.h>
 
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
@@ -352,7 +351,7 @@ static int handle_connected(node *n, connection *conn)
     conn->connected = 1;
     node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
-    if (0 > setsockopt(conn->sock,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+    if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       perror("setsockopt TCP_NODELAY");
       dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
       remove_connection(n,conn);
@@ -507,7 +506,7 @@ static void handle_new_connection(node *n, listener *l)
     return;
   }
 
-  if (0 > setsockopt(clientfd,SOL_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+  if (0 > setsockopt(clientfd,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
     perror("setsockopt TCP_NODELAY");
     return;
   }

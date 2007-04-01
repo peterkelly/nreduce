@@ -550,15 +550,25 @@ int parse_address(const char *address, char **host, int *port)
 
 void init_mutex(pthread_mutex_t *mutex)
 {
+#ifdef PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
   pthread_mutex_t tmp = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
   *mutex = tmp;
+#else
+  pthread_mutex_init(mutex,NULL);
+#endif
 }
 
 void destroy_mutex(pthread_mutex_t *mutex)
 {
+#ifdef PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
+  /* no action required */
+#else
+  pthread_mutex_destroy(mutex);
+#endif
 }
 
-int is_mutex_locked(pthread_mutex_t *mutex)
+#ifdef PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
+int check_mutex_locked(pthread_mutex_t *mutex)
 {
   if (EDEADLK == pthread_mutex_lock(mutex)) {
     return 1;
@@ -569,7 +579,7 @@ int is_mutex_locked(pthread_mutex_t *mutex)
   }
 }
 
-int is_mutex_unlocked(pthread_mutex_t *mutex)
+int check_mutex_unlocked(pthread_mutex_t *mutex)
 {
   if (0 == pthread_mutex_lock(mutex)) {
     pthread_mutex_unlock(mutex);
@@ -579,6 +589,18 @@ int is_mutex_unlocked(pthread_mutex_t *mutex)
     return 0;
   }
 }
+#else
+/* Note: these functions are only used for assertions, so it is safe to return true here if
+   we don't have support for error checking mutexes (e.g. on OS X). */
+int check_mutex_locked(pthread_mutex_t *mutex)
+{
+  return 1;
+}
+int check_mutex_unlocked(pthread_mutex_t *mutex)
+{
+  return 1;
+}
+#endif
 
 void lock_mutex(pthread_mutex_t *mutex)
 {

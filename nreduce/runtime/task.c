@@ -429,7 +429,8 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
     tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk,endpoint_close_kill);
   tsk->runptr = &tsk->rtemp;
 
-  sem_init(&tsk->startsem,0,0);
+  if (0 > pipe(tsk->startfds))
+    fatal("pipe: %s",strerror(errno));
 
   globnilvalue = alloc_cell(tsk);
   globnilvalue->type = CELL_NIL;
@@ -563,7 +564,10 @@ void task_free(task *tsk)
 
   free(tsk->bcdata);
 
-  sem_destroy(&tsk->startsem);
+  if (0 <= tsk->startfds[0])
+    close(tsk->startfds[0]);
+  if (0 <= tsk->startfds[1])
+    close(tsk->startfds[1]);
 
   free(tsk);
 

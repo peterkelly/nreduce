@@ -450,7 +450,7 @@ typedef struct task {
   int iofree;
 
   endpoint *endpt;
-  sem_t startsem;
+  int startfds[2];
   int netpending;
 
   pthread_t thread;

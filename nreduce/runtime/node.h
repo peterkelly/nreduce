@@ -202,8 +202,8 @@ typedef struct listenerlist {
   listener *last;
 } listenerlist;
 
-#define NODE_ALREADY_LOCKED(_n) is_mutex_locked(&(_n)->lock)
-#define NODE_UNLOCKED(_n) is_mutex_unlocked(&(_n)->lock)
+#define NODE_ALREADY_LOCKED(_n) check_mutex_locked(&(_n)->lock)
+#define NODE_UNLOCKED(_n) check_mutex_unlocked(&(_n)->lock)
 
 typedef struct node {
   endpointlist endpoints;

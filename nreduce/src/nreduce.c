@@ -41,8 +41,11 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
-#include <execinfo.h>
 #include <signal.h>
+
+#ifdef HAVE_EXECINFO_H
+#include <execinfo.h>
+#endif
 
 #define NREDUCE_C
 
@@ -230,27 +233,27 @@ static int worker_mode()
   return r;
 }
 
-static void *btarray[1024];
+static void show_backtrace()
+{
+  #ifdef HAVE_EXECINFO_H
+  void *btarray[1024];
+  int size = backtrace(btarray,1024);
+  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
+  #endif
+}
 
 static void sigabrt(int sig)
 {
   char *str = "abort()\n";
-  int size;
   write(STDERR_FILENO,str,strlen(str));
-
-  size = backtrace(btarray,1024);
-  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
+  show_backtrace();
 }
 
 static void sigsegv(int sig)
 {
   char *str = "Segmentation fault\n";
-  int size;
   write(STDERR_FILENO,str,strlen(str));
-
-  size = backtrace(btarray,1024);
-  backtrace_symbols_fd(btarray,size,STDERR_FILENO);
-
+  show_backtrace();
   signal(sig,SIG_DFL);
   kill(getpid(),sig);
 }

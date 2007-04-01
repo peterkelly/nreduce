@@ -130,6 +130,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     task *newtsk;
     int resp = 0;
     int localid;
+    char semdata;
     if (sizeof(int) > msg->hdr.size)
       fatal("STARTTASK: invalid message size");
     localid = *(int*)msg->data;
@@ -148,7 +149,7 @@ static int manager_handle_message(node *n, endpoint *endpt, message *msg)
     if (newtsk->started)
       fatal("STARTTASK: task with localid %d has already been started",localid);
 
-    sem_post(&newtsk->startsem);
+    write(newtsk->startfds[1],&semdata,1);
     newtsk->started = 1;
     unlock_node(n);
 
