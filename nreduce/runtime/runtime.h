@@ -31,7 +31,6 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <assert.h>
 
 #define MAX_FRAME_SIZE   1024
@@ -416,7 +415,7 @@ typedef struct block {
 
 typedef struct frameblock {
   struct frameblock *next;
-  char *mem[FRAMEBLOCK_SIZE];
+  char mem[FRAMEBLOCK_SIZE];
 } frameblock;
 
 #define SAFE_TO_ACCESS_TASK(_tsk) pthread_equal(pthread_self(),(_tsk)->thread)
