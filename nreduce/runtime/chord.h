@@ -27,8 +27,9 @@
 #define NSUCCESSORS MBITS
 
 //#define DEBUG_CHORD
+//#define CHORDTEST_TIMING
 
-typedef int chordid;
+typedef unsigned int chordid;
 
 typedef struct {
   chordid id;

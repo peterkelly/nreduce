@@ -65,7 +65,7 @@ static int get_responses(node *n, endpoint *endpt, int tag,
       fatal("%s: Got invalid response tag: %d",msg_names[tag],msg->hdr.tag);
 
     for (i = 0; i < count; i++)
-      if (!memcmp(&msg->hdr.source,&managerids[i],sizeof(endpointid)))
+      if (endpointid_equals(&msg->hdr.source,&managerids[i]))
         sender = i;
 
     if (0 > sender) {

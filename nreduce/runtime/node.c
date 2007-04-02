@@ -269,8 +269,9 @@ static void process_received(node *n, connection *conn)
         array_remove_data(conn->recvbuf,start);
         return;
       }
-      conn->port = *(int*)&conn->recvbuf->data[start];
-      start += sizeof(int);
+      conn->port = (int)(*(unsigned short*)&conn->recvbuf->data[start]);
+      start += sizeof(unsigned short);
+      printf("hhh received inter-node connection; port = %d\n",conn->port);
 
       if (0 > conn->port)
         fatal("Client sent bad listen port: %d",conn->port);
@@ -308,11 +309,20 @@ static void process_received(node *n, connection *conn)
 
 static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nodeport)
 {
-  connection *conn;
-  for (conn = n->connections.first; conn; conn = conn->next)
-    if ((conn->ip == nodeip) && (conn->port == nodeport))
-      return conn;
-  return NULL;
+  if (getenv("OUTGOING")) {
+    connection *conn;
+    for (conn = n->connections.first; conn; conn = conn->next)
+      if ((conn->ip == nodeip) && (conn->port == nodeport) && conn->outgoing)
+        return conn;
+    return NULL;
+  }
+  else {
+    connection *conn;
+    for (conn = n->connections.first; conn; conn = conn->next)
+      if ((conn->ip == nodeip) && (conn->port == nodeport))
+        return conn;
+    return NULL;
+  }
 }
 
 static connection *add_connection(node *n, const char *hostname, int sock, listener *l)
@@ -671,7 +681,7 @@ node *node_new(int loglevel)
   init_mutex(&n->liblock);
   pthread_cond_init(&n->cond,NULL);
   pthread_cond_init(&n->closecond,NULL);
-  n->nextlocalid = 1;
+  n->nextlocalid = FIRST_ID;
 
   determine_ip(n);
 
@@ -966,7 +976,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   if (othernode) {
     assert(n->listenport == n->mainl->port);
     conn = add_connection(n,hostname,sock,n->mainl);
-    array_append(conn->sendbuf,&n->listenport,sizeof(int));
+    array_append(conn->sendbuf,&n->listenport,sizeof(unsigned short));
   }
   else {
     conn = add_connection(n,hostname,sock,NULL);
@@ -977,6 +987,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   conn->connected = connected;
   conn->ip = addr.sin_addr.s_addr;
   conn->port = port;
+  conn->outgoing = 1;
 
   if (conn->connected)
     dispatch_event(n,EVENT_CONN_ESTABLISHED,conn,NULL);
@@ -986,7 +997,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   return conn;
 }
 
-void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
+void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                       int tag, const void *data, int size)
 {
   connection *conn;
@@ -1023,7 +1034,7 @@ void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
   }
 }
 
-void node_send(node *n, int sourcelocalid, endpointid destendpointid,
+void node_send(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                int tag, const void *data, int size)
 {
   lock_node(n);
@@ -1132,9 +1143,8 @@ endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
   endpt->n = n;
 
   if (0 == endpt->epid.localid) {
-    /* FIXME: this will actually run into MANAGER_ID before a wraparound happens... */
-    if (0 == n->nextlocalid)
-      fatal("localid wraparound");
+    if (UINT32_MAX == n->nextlocalid)
+      fatal("Out of local identifiers");
     endpt->epid.localid = n->nextlocalid++;
   }
   llist_append(&n->endpoints,endpt);
@@ -1294,7 +1304,7 @@ message *endpoint_next_message(endpoint *endpt, int delayms)
 
 int endpointid_equals(const endpointid *e1, const endpointid *e2)
 {
-  return !memcmp(e1,e2,sizeof(endpointid));
+  return ((e1->ip == e2->ip) && (e1->port == e2->port) && (e1->localid == e2->localid));
 }
 
 void print_endpointid(endpointid_str str, endpointid epid)

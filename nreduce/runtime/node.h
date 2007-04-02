@@ -43,7 +43,9 @@
 #define LOG_DEBUG2      5
 #define LOG_COUNT       6
 
-#define MANAGER_ID      9999
+#define MANAGER_ID      1
+#define CHORD_ID        2
+#define FIRST_ID        3
 
 struct node;
 struct listener;
@@ -62,14 +64,14 @@ struct gaddr;
 typedef struct endpointid {
   in_addr_t ip;
   unsigned short port;
-  unsigned short localid; /* FIXME: maybe make 32 bits, to reduce chances of wraparound */
+  unsigned int localid;
 } endpointid;
 
 typedef char endpointid_str[100];
 
 typedef struct msgheader {
   endpointid source;
-  int destlocalid;
+  unsigned int destlocalid;
   int size;
   int tag;
 } msgheader;
@@ -143,6 +145,7 @@ typedef struct connection {
   array *recvbuf;
   array *sendbuf;
 
+  int outgoing;
   int donewelcome;
   int donehandshake;
   int isconsole;
@@ -213,7 +216,7 @@ typedef struct node {
   node_callbacklist callbacks;
   in_addr_t listenip;
   unsigned short listenport;
-  unsigned short nextlocalid;
+  unsigned int nextlocalid;
   pthread_t iothread;
   int ioready_writefd;
   int ioready_readfd;
@@ -265,9 +268,9 @@ void node_close_endpoints(node *n);
 void node_close_connections(node *n);
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode);
-void node_send_locked(node *n, int sourcelocalid, endpointid destendpointid,
+void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                       int tag, const void *data, int size);
-void node_send(node *n, int sourcelocalid, endpointid destendpointid,
+void node_send(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                int tag, const void *data, int size);
 void node_waitclose_locked(node *n, int localid);
 void node_shutdown_locked(node *n);

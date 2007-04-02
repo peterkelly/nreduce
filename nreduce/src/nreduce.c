@@ -71,7 +71,8 @@ struct arguments {
   int worker;
   char *trace;
   int trace_type;
-  char *address;
+  char *port;
+  char *initial;
   char *client;
   int chordtest;
   array *extra;
@@ -96,7 +97,8 @@ static void usage()
 "                           (default: interpreter)\n"
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
-"  -d, --address IP:PORT    Listen on the specified IP address and port no\n"
+"  -p, --port PORT          Worker mode: listen on the specified port\n"
+"  -i, --initial HOST:PORT  Worker/client mode: initial node to connect to\n"
 "  --client NODESFILE CMD   Run program CMD on nodes read from NODESFILE\n"
 "  --chordtest NODESFILE    Test chord implementation ('' for single-host test)\n"
 "\n"
@@ -169,10 +171,15 @@ void parse_args(int argc, char **argv)
       args.trace = argv[i];
       args.trace_type = TRACE_LANDSCAPE;
     }
-    else if (!strcmp(argv[i],"-d") || !strcmp(argv[i],"--address")) {
+    else if (!strcmp(argv[i],"-p") || !strcmp(argv[i],"--port")) {
       if (++i >= argc)
         usage();
-      args.address = argv[i];
+      args.port = argv[i];
+    }
+    else if (!strcmp(argv[i],"-i") || !strcmp(argv[i],"--initial")) {
+      if (++i >= argc)
+        usage();
+      args.initial = argv[i];
     }
     else if (!strcmp(argv[i],"--client")) {
       if (++i >= argc)
@@ -219,16 +226,19 @@ static int client_mode()
 static int worker_mode()
 {
   int r;
-  char *host = NULL;
   int port = WORKER_PORT;
 
-  if ((NULL != args.address) && (0 != parse_address(args.address,&host,&port))) {
-    fprintf(stderr,"Invalid listening address: %s\n",args.address);
-    exit(1);
+  if (NULL != args.port) {
+    char *end = NULL;
+    port = strtol(args.port,&end,10);
+    if (('\0' == *args.port) || ('\0' != *end)) {
+      fprintf(stderr,"Invalid port: %s\n",args.port);
+      array_free(args.extra);
+      return -1;
+    }
   }
 
-  r = worker(host,port,NULL,0,NULL);
-  free(host);
+  r = worker(port,args.initial);
   array_free(args.extra);
   return r;
 }

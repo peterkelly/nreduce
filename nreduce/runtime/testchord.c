@@ -190,6 +190,9 @@ typedef struct {
   int pending_joins;
   endpointid *managerids;
   int nmanagers;
+
+  struct timeval debug_start;
+  struct timeval node_start;
 } check;
 
 static void check_abort(check *chk)
@@ -225,6 +228,8 @@ static void check_debug_start(check *chk, endpointid *caller)
   chk->total_bad = 0;
   chk->total_hops = 0;
   chk->total_lookups = 0;
+
+  gettimeofday(&chk->debug_start,NULL);
 
   if (0 < chk->pending_joins) {
     printf("skipping debug, due to %d pending joins\n",chk->pending_joins);
@@ -270,6 +275,7 @@ static void check_debug_start(check *chk, endpointid *caller)
   else {
     get_table_msg gtm;
     gtm.sender = chk->endpt->epid;
+    gettimeofday(&chk->node_start,NULL);
     node_send(chk->n,chk->endpt->epid.localid,chk->nodes[0].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
   }
 }
@@ -283,7 +289,15 @@ static void check_check_next(check *chk)
 
     if (chk->cur_node < chk->ncount) {
       get_table_msg gfm;
+
+      #ifdef CHORDTEST_TIMING
+      struct timeval now;
+      gettimeofday(&now,NULL);
+      printf("check node %d took %d\n",chk->cur_node-1,timeval_diffms(chk->node_start,now));
+      #endif
+
       gfm.sender = chk->endpt->epid;
+      gettimeofday(&chk->node_start,NULL);
       node_send(chk->n,chk->endpt->epid.localid,chk->nodes[chk->cur_node].epid,MSG_GET_TABLE,
                 &gfm,sizeof(get_table_msg));
     }
@@ -295,6 +309,10 @@ static void check_check_next(check *chk)
       gettimeofday(&now,NULL);
       diff = timeval_diff(chk->start,now);
       seconds = (double)diff.tv_sec + ((double)diff.tv_usec)/1000000.0;
+
+      #ifdef CHORDTEST_TIMING
+      printf("check round took %d\n",timeval_diffms(chk->debug_start,now));
+      #endif
 
       printf("%.3f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %6d check %d\n",
              seconds,

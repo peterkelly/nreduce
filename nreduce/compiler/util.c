@@ -539,12 +539,20 @@ void free_args(int argc, char **argv)
 int parse_address(const char *address, char **host, int *port)
 {
   const char *colon = strchr(address,':');
+  const char *portstr;
+  char *end = NULL;
+
   if (NULL == colon)
     return -1;
+
+  portstr = colon+1;
+  *port = strtol(portstr,&end,10);
+  if (('\0' == *portstr) || ('\0' != *end))
+    return -1;
+
   *host = (char*)malloc(colon-address+1);
   memcpy(*host,address,colon-address);
   (*host)[colon-address] = '\0';
-  *port = atoi(colon+1);
   return 0;
 }
 

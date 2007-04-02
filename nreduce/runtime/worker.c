@@ -126,7 +126,7 @@ static int get_idmap_index(task *tsk, endpointid tid)
 {
   int i;
   for (i = 0; i < tsk->groupsize; i++)
-    if (!memcmp(&tsk->idmap[i],&tid,sizeof(endpointid)))
+    if (endpointid_equals(&tsk->idmap[i],&tid))
       return i;
   return -1;
 }
@@ -258,7 +258,7 @@ int standalone(const char *bcdata, int bcsize)
   return 0;
 }
 
-int worker(const char *xhost, int port, const char *bcdata, int bcsize, const char *chordtest)
+int worker(int port, const char *initial)
 {
   node *n;
   if (NULL == (n = worker_startup(LOG_INFO,port)))
