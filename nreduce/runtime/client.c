@@ -46,17 +46,30 @@
 #include <unistd.h>
 #include <signal.h>
 
-static int get_responses(node *n, endpoint *endpt, int tag,
+typedef struct launcher {
+  node *n;
+  char *bcdata;
+  int bcsize;
+  int count;
+  endpointid *managerids;
+  int cancel;
+  endpoint *endpt;
+  endpointid *endpointids;
+  int *localids;
+} launcher;
+
+static int get_responses(node *n, launcher *lr, int tag,
                          int count, endpointid *managerids, int *responses)
 {
   int *gotresponse = (int*)calloc(count,sizeof(int));
   int allresponses;
   int i;
   do {
-    message *msg = endpoint_next_message(endpt,-1);
+    message *msg = endpoint_next_message(lr->endpt,-1);
     int sender = -1;
 
-    if (NULL == msg) {
+    if (MSG_KILL == msg->hdr.tag) {
+      lr->cancel = 1;
       free(gotresponse);
       return -1;
     }
@@ -98,26 +111,12 @@ static int get_responses(node *n, endpoint *endpt, int tag,
   return 0;
 }
 
-static void launcher_endpoint_close(node *n, endpoint *endpt)
-{
-  launcher *sa = (launcher*)endpt->data;
-  assert(NODE_ALREADY_LOCKED(sa->n));
-  unlock_mutex(&n->lock);
-  sa->cancel = 1;
-  endpoint_forceclose(sa->endpt);
-
-  if (0 != pthread_join(sa->thread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  lock_mutex(&n->lock);
-}
-
-static void launcher_free(node *n, launcher *sa)
+static void launcher_free(launcher *sa)
 {
   free(sa->endpointids);
   free(sa->localids);
   free(sa->bcdata);
   free(sa->managerids);
-  node_remove_endpoint(n,sa->endpt);
   free(sa);
 }
 
@@ -158,16 +157,18 @@ static void send_starttask(launcher *lr)
               &lr->localids[i],sizeof(int));
 }
 
-static void *launcher_thread(void *arg)
+static void launcher_thread(node *n, endpoint *endpt, void *arg)
 {
   launcher *lr = (launcher*)arg;
-  node *n = lr->n;
   int count = lr->count;
   int i;
 
+  lr->endpt = endpt;
+
+  node_log(n,LOG_INFO,"Distributed process creation starting");
+
   lr->endpointids = (endpointid*)calloc(count,sizeof(endpointid));
   lr->localids = (int*)calloc(count,sizeof(int));
-  lr->endpt = node_add_endpoint(n,0,LAUNCHER_ENDPOINT,arg,launcher_endpoint_close);
 
   for (i = 0; i < count; i++) {
     unsigned char *ipbytes = (unsigned char*)&lr->managerids[i].ip;
@@ -183,10 +184,10 @@ static void *launcher_thread(void *arg)
   send_newtask(lr);
 
   /* Get NEWTASK responses, containing the local id of each task on the remote node */
-  if (0 != get_responses(n,lr->endpt,MSG_NEWTASKRESP,count,lr->managerids,lr->localids)) {
+  if (0 != get_responses(n,lr,MSG_NEWTASKRESP,count,lr->managerids,lr->localids)) {
     assert(lr->cancel);
-    launcher_free(n,arg);
-    return NULL;
+    launcher_free(arg);
+    return;
   }
   for (i = 0; i < count; i++)
     lr->endpointids[i].localid = lr->localids[i];
@@ -196,10 +197,10 @@ static void *launcher_thread(void *arg)
   send_inittask(lr);
 
   /* Wait for all INITTASK messages to be processed */
-  if (0 != get_responses(n,lr->endpt,MSG_INITTASKRESP,count,lr->managerids,NULL)) {
+  if (0 != get_responses(n,lr,MSG_INITTASKRESP,count,lr->managerids,NULL)) {
     assert(lr->cancel);
-    launcher_free(n,arg);
-    return NULL;
+    launcher_free(arg);
+    return;
   }
   node_log(n,LOG_INFO,"All tasks initialised");
 
@@ -207,19 +208,14 @@ static void *launcher_thread(void *arg)
   send_starttask(lr);
 
   /* Wait for notification of all tasks starting */
-  if (0 != get_responses(n,lr->endpt,MSG_STARTTASKRESP,count,lr->managerids,NULL)) {
+  if (0 != get_responses(n,lr,MSG_STARTTASKRESP,count,lr->managerids,NULL)) {
     assert(lr->cancel);
-    launcher_free(n,arg);
-    return NULL;
+    launcher_free(arg);
+    return;
   }
-  node_log(n,LOG_INFO,"All tasks started");
 
   node_log(n,LOG_INFO,"Distributed process creation done");
-
-  /* FIXME: thread will leak here if we're not killed during shutdown */
-
-  launcher_free(n,arg);
-  return NULL;
+  launcher_free(arg);
 }
 
 void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count)
@@ -232,13 +228,8 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
   lr->managerids = malloc(count*sizeof(endpointid));
   memcpy(lr->managerids,managerids,count*sizeof(endpointid));
   memcpy(lr->bcdata,bcdata,bcsize);
-  lr->havethread = 1;
 
-  node_log(n,LOG_INFO,"Distributed process creation starting");
-  if (0 != pthread_create(&lr->thread,NULL,launcher_thread,lr))
-    fatal("pthread_create: %s",strerror(errno));
-
-  node_log(n,LOG_INFO,"Distributed process creation started");
+  node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,NULL);
 }
 
 int get_managerids(node *n, endpointid **managerids)
@@ -247,7 +238,7 @@ int get_managerids(node *n, endpointid **managerids)
   int i = 0;
   connection *conn;
 
-  assert(NODE_ALREADY_LOCKED(n));
+  lock_node(n);
 
   if (n->isworker)
     count++;
@@ -273,6 +264,8 @@ int get_managerids(node *n, endpointid **managerids)
       i++;
     }
   }
+
+  unlock_node(n);
 
   return count;
 }

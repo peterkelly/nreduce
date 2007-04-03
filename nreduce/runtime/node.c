@@ -88,9 +88,6 @@ const char *event_types[EVENT_COUNT] = {
 
 static void endpoint_add_message(endpoint *endpt, message *msg);
 
-/** @name Private functions
- * @{ */
-
 static int set_non_blocking(int fd)
 {
   int flags;
@@ -179,7 +176,7 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
 
     /* This handles the case where a link message is sent but the destination has
        already exited. If the link were to arrive just before the endpoint exits, then
-       node_remove_endpoint() would take care of sending the exit message. */
+       the endpoint removal code would take care of sending the exit message. */
     if (MSG_LINK == hdr->tag) {
       endpointid destid;
       destid.ip = n->listenip;
@@ -271,7 +268,6 @@ static void process_received(node *n, connection *conn)
       }
       conn->port = (int)(*(unsigned short*)&conn->recvbuf->data[start]);
       start += sizeof(unsigned short);
-      printf("hhh received inter-node connection; port = %d\n",conn->port);
 
       if (0 > conn->port)
         fatal("Client sent bad listen port: %d",conn->port);
@@ -666,11 +662,6 @@ static void determine_ip(node *n)
   n->listenip = addr;
 }
 
-/* @} */
-
-/** @name Public functions
- * @{ */
-
 node *node_new(int loglevel)
 {
   node *n = (node*)calloc(1,sizeof(node));
@@ -877,8 +868,8 @@ void node_close_endpoints(node *n)
   endpoint *endpt;
   lock_mutex(&n->lock);
   while (NULL != (endpt = n->endpoints.first)) {
-    assert(endpt->closefun);
-    endpt->closefun(n,endpt);
+    node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
+    node_waitclose_locked(n,endpt->epid.localid);
   }
   unlock_mutex(&n->lock);
 }
@@ -1120,84 +1111,100 @@ void done_reading(node *n, connection *conn)
   }
 }
 
-/* @} */
-
-/** @name Public functions - endpoints
- * @{ */
-
-endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
-                                   endpoint_closefun closefun)
+static void *endpoint_thread(void *data)
 {
-  endpoint *endpt = (endpoint*)calloc(1,sizeof(endpoint));
-  assert(0 < n->listenport);
-  assert(n->listenport == n->mainl->port);
-  init_mutex(&endpt->mailbox.lock);
-  pthread_cond_init(&endpt->mailbox.cond,NULL);
-  endpt->epid.ip = n->listenip;
-  endpt->epid.port = n->listenport;
-  endpt->epid.localid = localid;
-  endpt->type = type;
-  endpt->data = data;
-  endpt->closefun = closefun;
-  endpt->interruptptr = &endpt->tempinterrupt;
-  endpt->n = n;
-
-  if (0 == endpt->epid.localid) {
-    if (UINT32_MAX == n->nextlocalid)
-      fatal("Out of local identifiers");
-    endpt->epid.localid = n->nextlocalid++;
-  }
-  llist_append(&n->endpoints,endpt);
-  dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
-  return endpt;
-}
-
-endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
-                            endpoint_closefun closefun)
-{
-  endpoint *endpt;
-  lock_node(n);
-  endpt = node_add_endpoint_locked(n,localid,type,data,closefun);
-  unlock_node(n);
-  return endpt;
-}
-
-void node_remove_endpoint(node *n, endpoint *endpt)
-{
+  endpoint *endpt = (endpoint*)data;
   list *l;
 
-  lock_node(n);
+  /* Execute the thread */
+  endpt->fun(endpt->n,endpt,endpt->data);
 
-  for (l = endpt->inlinks; l; l = l->next) {
-    node_send_locked(n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
+  /* Remove the endpoint */
+  lock_node(endpt->n);
+  for (l = endpt->inlinks; l; l = l->next)
+    node_send_locked(endpt->n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
                      &endpt->epid,sizeof(endpointid));
-  }
+  dispatch_event(endpt->n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
+  llist_remove(&endpt->n->endpoints,endpt);
+  pthread_cond_broadcast(&endpt->n->closecond);
+  unlock_node(endpt->n);
 
-  dispatch_event(n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
-  llist_remove(&n->endpoints,endpt);
-  pthread_cond_broadcast(&n->closecond);
-  unlock_node(n);
-
+  /* Free data */
   list_free(endpt->inlinks,free);
   list_free(endpt->outlinks,free);
   destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
+  return NULL;
 }
 
-/* FIXME: get rid of this once all threads handle the KILL message */
-void endpoint_forceclose(endpoint *endpt)
+endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
+                                  endpoint_threadfun fun, void *arg, pthread_t *threadp)
 {
-  lock_mutex(&endpt->mailbox.lock);
-  endpt->closed = 1;
-  while (endpt->mailbox.first) {
-    message *msg = endpt->mailbox.first;
-    llist_remove(&endpt->mailbox,msg);
-    free(msg->data);
-    free(msg);
+  pthread_t thread;
+  pthread_attr_t attr;
+  endpointid epid;
+  endpoint *endpt;
+
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(0 < n->listenport);
+  assert(n->listenport == n->mainl->port);
+
+  /* Assign endpoint id */
+  epid.ip = n->listenip;
+  epid.port = n->listenport;
+  if (0 == localid) {
+    if (UINT32_MAX == n->nextlocalid)
+      fatal("Out of local identifiers");
+    epid.localid = n->nextlocalid++;
   }
-  pthread_cond_broadcast(&endpt->mailbox.cond);
-  unlock_mutex(&endpt->mailbox.lock);
+  else {
+    epid.localid = localid;
+  }
+
+  /* Create endpoint */
+  endpt = (endpoint*)calloc(1,sizeof(endpoint));
+  init_mutex(&endpt->mailbox.lock);
+  pthread_cond_init(&endpt->mailbox.cond,NULL);
+  endpt->epid = epid;
+  endpt->type = type;
+  endpt->data = arg;
+  endpt->interruptptr = &endpt->tempinterrupt;
+  endpt->n = n;
+  endpt->fun = fun;
+  dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
+  llist_append(&n->endpoints,endpt);
+
+  /* Start thread */
+  if (0 != pthread_attr_init(&attr))
+    fatal("pthread_attr_init: %s",strerror(errno));
+
+  if ((0 < stacksize) && (0 != pthread_attr_setstacksize(&attr,stacksize)))
+    fatal("pthread_attr_setstacksize: %s",strerror(errno));
+
+  if ((NULL == threadp) && (0 != pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED)))
+    fatal("pthread_attr_setdetachstate: %s",strerror(errno));
+
+  if (0 != pthread_create(&thread,&attr,endpoint_thread,endpt))
+    fatal("pthread_create: %s",strerror(errno));
+
+  if (0 != pthread_attr_destroy(&attr))
+    fatal("pthread_attr_destroy: %s",strerror(errno));
+
+  if (threadp)
+    *threadp = thread;
+
+  return epid;
+}
+
+endpointid node_add_thread(node *n, int localid, int type, int stacksize,
+                           endpoint_threadfun fun, void *arg, pthread_t *threadp)
+{
+  endpointid epid;
+  lock_node(n);
+  epid = node_add_thread_locked(n,localid,type,stacksize,fun,arg,threadp);
+  unlock_node(n);
+  return epid;
 }
 
 static int endpoint_has_link(endpoint *endpt, endpointid epid)
@@ -1312,22 +1319,8 @@ void print_endpointid(endpointid_str str, endpointid epid)
   sprintf(str,EPID_FORMAT,EPID_ARGS(epid));
 }
 
-void endpoint_close_kill(node *n, endpoint *endpt)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_KILL,NULL,0);
-  node_waitclose_locked(n,endpt->epid.localid);
-}
-
-/* @} */
-
-/** @name Public functions - other
- * @{ */
-
 void message_free(message *msg)
 {
   free(msg->data);
   free(msg);
 }
-
-/* @} */

@@ -102,7 +102,7 @@ typedef struct messagelist {
 struct endpoint;
 struct node;
 
-typedef void (*endpoint_closefun)(struct node *n, struct endpoint *endpt);
+typedef void (*endpoint_threadfun)(struct node *n, struct endpoint *endpt, void *arg);
 
 typedef struct endpoint {
   endpointid epid;
@@ -116,9 +116,9 @@ typedef struct endpoint {
   int type;
   void *data;
   int closed;
-  endpoint_closefun closefun;
   list *inlinks;
   list *outlinks;
+  endpoint_threadfun fun;
 } endpoint;
 
 typedef struct endpointlist {
@@ -279,18 +279,15 @@ void connection_printf(connection *conn, const char *format, ...);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 
-endpoint *node_add_endpoint_locked(node *n, int localid, int type, void *data,
-                                   endpoint_closefun closefun);
-endpoint *node_add_endpoint(node *n, int localid, int type, void *data,
-                            endpoint_closefun closefun);
-void node_remove_endpoint(node *n, endpoint *endpt);
-void endpoint_forceclose(endpoint *endpt);
+endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
+                                  endpoint_threadfun fun, void *arg, pthread_t *threadp);
+endpointid node_add_thread(node *n, int localid, int type, int stacksize,
+                           endpoint_threadfun fun, void *arg, pthread_t *threadp);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 message *endpoint_next_message(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 void print_endpointid(endpointid_str str, endpointid epid);
-void endpoint_close_kill(node *n, endpoint *endpt);
 
 void message_free(message *msg);
 

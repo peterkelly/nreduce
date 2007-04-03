@@ -79,10 +79,8 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
       return 0;
     }
 
-    lock_node(n);
     if (0 != run_program(n,argv[1]))
       array_printf(out,"Could not run program\n");
-    unlock_node(n);
   }
   else if (!strcmp(argv[0],"exit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"quit")) {
     return 1;
@@ -136,7 +134,7 @@ static void conn_disconnect(connection *conn)
   node_notify(conn->n);
 }
 
-static void process_line(node *n, console2 *csl, const char *line)
+static void process_line(node *n, endpoint *endpt, console2 *csl, const char *line)
 {
   int argc;
   char **argv;
@@ -152,7 +150,7 @@ static void process_line(node *n, console2 *csl, const char *line)
   lock_node(n);
 
   for (conn = n->connections.first; conn; conn = conn->next) {
-    if (!endpointid_equals(&conn->console_epid,&csl->endpt->epid))
+    if (!endpointid_equals(&conn->console_epid,&endpt->epid))
       continue;
 
     if (doclose) {
@@ -200,33 +198,27 @@ void console_process_received(node *n, connection *conn)
   array_remove_data(conn->recvbuf,start);
 }
 
-static int console_handle_message(node *n, endpoint *endpt, message *msg)
-{
-  console2 *csl = (console2*)endpt->data;
-  switch (msg->hdr.tag) {
-  case MSG_CONSOLE_LINE:
-    process_line(n,csl,msg->data);
-    break;
-  case MSG_KILL:
-    node_log(n,LOG_INFO,"Console received KILL");
-    return 1;
-    break;
-  }
-  return 0;
-}
-
-void *console_thread(void *arg)
+static void console_thread(node *n, endpoint *endpt, void *arg)
 {
   console2 *csl = (console2*)arg;
-  node *n = csl->n;
   message *msg;
   connection *conn;
+  int done = 0;
 
-  while (NULL != (msg = endpoint_next_message(csl->endpt,-1))) {
-    int r = console_handle_message(n,csl->endpt,msg);
-    message_free(msg);
-    if (r)
+  csl->endpt = endpt;
+
+  while (!done) {
+    msg = endpoint_next_message(csl->endpt,-1);
+    switch (msg->hdr.tag) {
+    case MSG_CONSOLE_LINE:
+      process_line(n,endpt,csl,msg->data);
       break;
+    case MSG_KILL:
+      node_log(n,LOG_INFO,"Console received KILL");
+      done = 1;
+      break;
+    }
+    message_free(msg);
   }
 
   /* De-associate the endpointid with the connection */
@@ -235,13 +227,11 @@ void *console_thread(void *arg)
     if (!endpointid_equals(&conn->console_epid,&csl->endpt->epid))
       continue;
     conn->isconsole = 0;
+    memset(&conn->console_epid,0,sizeof(conn->console_epid));
   }
   unlock_node(n);
 
-  node_remove_endpoint(n,csl->endpt);
   free(csl);
-
-  return NULL;
 }
 
 void start_console(node *n, connection *conn)
@@ -249,10 +239,7 @@ void start_console(node *n, connection *conn)
   console2 *csl = (console2*)calloc(1,sizeof(console2));
   conn->isconsole = 1;
   csl->n = n;
-  csl->endpt = node_add_endpoint_locked(n,0,CONSOLE_ENDPOINT,csl,endpoint_close_kill);
-  conn->console_epid = csl->endpt->epid;
-  if (0 != pthread_create(&csl->thread,NULL,console_thread,csl))
-    fatal("pthread_create: %s",strerror(errno));
+  conn->console_epid = node_add_thread_locked(n,0,CONSOLE_ENDPOINT,0,console_thread,csl,NULL);
 }
 
 void close_console(node *n, connection *conn)

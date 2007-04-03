@@ -83,13 +83,11 @@ typedef struct {
   int stabilize_delay;
 } stabilizer;
 
-static void *stabilizer_thread(void *arg)
+static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
 {
   stabilizer *stb = (stabilizer*)arg;
-  node *n = stb->n;
   message *msg;
   int done = 0;
-  endpoint *endpt = node_add_endpoint(n,0,STABILIZER_ENDPOINT,stb,endpoint_close_kill);
 
   lock_node(n);
   endpoint_link(endpt,stb->chord_epid);
@@ -122,9 +120,7 @@ static void *stabilizer_thread(void *arg)
     }
   }
 
-  node_remove_endpoint(n,endpt);
   free(stb);
-  return NULL;
 }
 
 static void start_stabilizer(node *n, endpointid chord_epid, int stabilize_delay)
@@ -133,8 +129,7 @@ static void start_stabilizer(node *n, endpointid chord_epid, int stabilize_delay
   stb->n = n;
   stb->chord_epid = chord_epid;
   stb->stabilize_delay = stabilize_delay;
-  if (0 != pthread_create(&stb->thread,NULL,stabilizer_thread,stb))
-    fatal("pthread_create: %s",strerror(errno));
+  node_add_thread(n,0,STABILIZER_ENDPOINT,0,stabilizer_thread,stb,NULL);
 }
 
 typedef struct {
@@ -528,14 +523,15 @@ static void chord_endpoint_exit(chord *crd, endpoint_exit_msg *m)
   }
 }
 
-static void *chord_thread(void *arg)
+static void chord_thread(node *n, endpoint *endpt, void *arg)
 {
   chord *crd = (chord*)arg;
-  node *n = crd->n;
   message *msg;
   int done = 0;
-  endpoint *endpt = crd->endpt = node_add_endpoint(n,0,CHORD_ENDPOINT,crd,endpoint_close_kill);
   chord_started_msg csm;
+  assert(crd->n);
+  assert(NULL == crd->endpt);
+  crd->endpt = endpt;
 
   crd->self.id = rand() % KEYSPACE;
   crd->self.epid = endpt->epid;
@@ -550,44 +546,36 @@ static void *chord_thread(void *arg)
   while (!done) {
     msg = endpoint_next_message(endpt,-1);
     switch (msg->hdr.tag) {
-      /* FIXME: brackets */
-    case MSG_FIND_SUCCESSOR: {
+    case MSG_FIND_SUCCESSOR:
       assert(sizeof(find_successor_msg) == msg->hdr.size);
       chord_find_successor(crd,(find_successor_msg*)msg->data);
       break;
-    }
-    case MSG_NOTIFY: {
+    case MSG_NOTIFY:
       assert(sizeof(notify_msg) == msg->hdr.size);
       chord_notify(crd,(notify_msg*)msg->data);
       break;
-    }
-    case MSG_NOTIFY_REPLY: {
+    case MSG_NOTIFY_REPLY:
       assert(sizeof(notify_reply_msg) == msg->hdr.size);
       chord_notify_reply(crd,(notify_reply_msg*)msg->data);
       break;
-    }
-    case MSG_GOT_SUCCESSOR: {
+    case MSG_GOT_SUCCESSOR:
       assert(sizeof(got_successor_msg) == msg->hdr.size);
       chord_got_successor(crd,(got_successor_msg*)msg->data);
       break;
-    }
-    case MSG_STABILIZE: {
+    case MSG_STABILIZE:
       assert(check_links(crd));
       chord_stabilize(crd);
       break;
-    }
-    case MSG_GET_TABLE: {
+    case MSG_GET_TABLE:
       assert(sizeof(get_table_msg) == msg->hdr.size);
       chord_get_table(crd,(get_table_msg*)msg->data);
       break;
-    }
     case MSG_FIND_ALL:
       break;
-    case MSG_ENDPOINT_EXIT: {
+    case MSG_ENDPOINT_EXIT:
       assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
       chord_endpoint_exit(crd,(endpoint_exit_msg*)msg->data);
       break;
-    }
     case MSG_KILL:
       done = 1;
       break;
@@ -598,24 +586,15 @@ static void *chord_thread(void *arg)
     message_free(msg);
   }
 
-  node_remove_endpoint(n,endpt);
   free(crd);
-
-  return NULL;
 }
 
 void start_chord(node *n, chordnode ndash, endpointid caller, int stabilize_delay)
 {
   chord *crd = (chord*)calloc(1,sizeof(chord));
-  pthread_attr_t attr;
   crd->n = n;
   crd->ndash = ndash;
   crd->caller = caller;
   crd->stabilize_delay = stabilize_delay;
-  pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr,32768);
-  pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
-  if (0 != pthread_create(&crd->thread,&attr,chord_thread,crd))
-    fatal("pthread_create: %s",strerror(errno));
-  pthread_attr_destroy(&attr);
+  node_add_thread(n,0,CHORD_ENDPOINT,32768,chord_thread,crd,NULL);
 }

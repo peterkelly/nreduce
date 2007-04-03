@@ -450,6 +450,7 @@ typedef struct task {
 
   endpoint *endpt;
   int startfds[2];
+  int threadrunningfds[2]; /* FIXME: temp */
   int netpending;
 
   pthread_t thread;
@@ -582,20 +583,6 @@ void unblock_frame_toend(task *tsk, frame *f);
 void set_error(task *tsk, const char *format, ...);
 
 /* client */
-
-typedef struct launcher {
-  node *n;
-  char *bcdata;
-  int bcsize;
-  int count;
-  endpointid *managerids;
-  int havethread;
-  pthread_t thread;
-  int cancel;
-  endpoint *endpt;
-  endpointid *endpointids;
-  int *localids;
-} launcher;
 
 void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count);
 int run_program(node *n, const char *filename);
@@ -744,7 +731,7 @@ void dump_globals(task *tsk);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
-void *execute(task *tsk);
+void interpreter_thread(node *n, endpoint *endpt, void *arg);
 
 /* memory */
 

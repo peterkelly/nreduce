@@ -915,8 +915,9 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
   return 0;
 }
 
-void *execute(task *tsk)
+void interpreter_thread(node *n, endpoint *endpt, void *arg)
 {
+  task *tsk = (task*)arg;
   struct timeval nextfish;
   struct timeval nextgc;
   int evaldoaddr = ((bcheader*)tsk->bcdata)->evaldoaddr;
@@ -925,10 +926,12 @@ void *execute(task *tsk)
   frame *runnable;
   const instruction *instr;
   int interrupt = 1;
-  char semdata;
+  char semdata = 0;
 
-  assert(tsk->n);
-  assert(tsk->endpt);
+  tsk->n = n;
+  tsk->endpt = endpt;
+
+  write(tsk->threadrunningfds[1],&semdata,1);
 
   read(tsk->startfds[0],&semdata,1);
   close(tsk->startfds[0]);
@@ -1366,5 +1369,4 @@ void *execute(task *tsk)
   #endif
   tsk->done = 1;
   task_free(tsk);
-  return NULL;
 }

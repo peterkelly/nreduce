@@ -425,11 +425,11 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   int fno;
 
   tsk->n = n;
-  if (n)
-    tsk->endpt = node_add_endpoint(n,0,TASK_ENDPOINT,tsk,endpoint_close_kill);
   tsk->runptr = &tsk->rtemp;
 
   if (0 > pipe(tsk->startfds))
+    fatal("pipe: %s",strerror(errno));
+  if (0 > pipe(tsk->threadrunningfds))
     fatal("pipe: %s",strerror(errno));
 
   globnilvalue = alloc_cell(tsk);
@@ -494,10 +494,13 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   }
 
   if (n) {
-    if (0 != pthread_create(&tsk->thread,NULL,(void*)execute,tsk))
-      fatal("pthread_create: %s",strerror(errno));
-    if (0 != pthread_detach(tsk->thread))
-      fatal("pthread_detach: %s",strerror(errno));
+    char semdata = 0;
+    node_add_thread(n,0,TASK_ENDPOINT,0,interpreter_thread,tsk,NULL);
+    read(tsk->threadrunningfds[0],&semdata,1);
+    close(tsk->threadrunningfds[0]);
+    close(tsk->threadrunningfds[1]);
+    tsk->threadrunningfds[0] = -1;
+    tsk->threadrunningfds[1] = -1;
   }
 
   return tsk;
@@ -508,8 +511,6 @@ void task_free(task *tsk)
   int i;
   block *bl;
   int h;
-  node *n = tsk->n;
-  endpoint *endpt = tsk->endpt;
 
   sweep(tsk,1);
 
@@ -570,9 +571,6 @@ void task_free(task *tsk)
     close(tsk->startfds[1]);
 
   free(tsk);
-
-  if (n)
-    node_remove_endpoint(n,endpt);
 }
 
 static array *read_file(const char *filename)

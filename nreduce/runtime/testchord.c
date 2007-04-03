@@ -59,13 +59,11 @@ typedef struct {
   endpointid epid;
 } debug_control;
 
-static void *debug_control_thread(void *arg)
+static void debug_control_thread(node *n, endpoint *endpt, void *arg)
 {
   debug_control *dbc = (debug_control*)arg;
-  node *n = dbc->n;
   message *msg;
   int done = 0;
-  endpoint *endpt = node_add_endpoint(n,0,DBC_ENDPOINT,NULL,endpoint_close_kill);
   int indebug = 0;
 
   while (!done) {
@@ -92,9 +90,7 @@ static void *debug_control_thread(void *arg)
     }
   }
 
-  node_remove_endpoint(n,endpt);
   free(dbc);
-  return NULL;
 }
 
 static chordnode start_one_chord(node *n, endpoint *endpt, chordnode ndash, endpointid managerid)
@@ -523,42 +519,55 @@ static void delay(int ms)
   nanosleep(&ts,NULL);
 }
 
-static void testchord(node *n, endpointid *managerids, int nmanagers)
+typedef struct {
+  endpointid *managerids;
+  int nmanagers;
+} testchord_arg;
+
+static void testchord_thread(node *n, endpoint *endpt, void *arg)
 {
+  testchord_arg *tca = (testchord_arg*)arg;
   chordnode nodes[MAX_NODES];
   int i;
-  endpoint *endpt = node_add_endpoint(n,0,TEST_ENDPOINT,NULL,endpoint_close_kill);
   struct timeval start;
   int ncount = 0;
   debug_control dbc;
-  pthread_t dbc_thread;
   chordnode null_node;
 
   printf("managers:\n");
-  for (i = 0; i < nmanagers; i++)
-    printf(EPID_FORMAT"\n",EPID_ARGS(managerids[i]));
+  for (i = 0; i < tca->nmanagers; i++)
+    printf(EPID_FORMAT"\n",EPID_ARGS(tca->managerids[i]));
 
   memset(&nodes,0,MAX_NODES*sizeof(chordnode));
   memset(&null_node,0,sizeof(chordnode));
 
   delay(250); /* wait for manager to start; FIXME: find a more robust solution */
 
-  nodes[0] = start_one_chord(n,endpt,null_node,managerids[rand()%nmanagers]);
+  nodes[0] = start_one_chord(n,endpt,null_node,tca->managerids[rand()%tca->nmanagers]);
   ncount = 1;
   printf("initial node = #%d ("EPID_FORMAT")\n",nodes[0].id,EPID_ARGS(nodes[0].epid));
 
   for (i = 1; i < NODE_COUNT; i++)
-    add_node(n,endpt,managerids[rand()%nmanagers],nodes[0]);
+    add_node(n,endpt,tca->managerids[rand()%tca->nmanagers],nodes[0]);
 
   gettimeofday(&start,NULL);
 
   dbc.n = n;
   dbc.epid = endpt->epid;
-  if (0 != pthread_create(&dbc_thread,NULL,debug_control_thread,&dbc))
-    fatal("pthread_create: %s",strerror(errno));
+  node_add_thread(n,0,DBC_ENDPOINT,0,debug_control_thread,&dbc,NULL);
 
-  check_loop(n,endpt,nodes,ncount,start,NODE_COUNT,managerids,nmanagers);
-  node_remove_endpoint(n,endpt);
+  check_loop(n,endpt,nodes,ncount,start,NODE_COUNT,tca->managerids,tca->nmanagers);
+}
+
+static void testchord(node *n, endpointid *managerids, int nmanagers)
+{
+  pthread_t thread;
+  testchord_arg *tca = (testchord_arg*)calloc(1,sizeof(testchord_arg));
+  tca->managerids = managerids;
+  tca->nmanagers = nmanagers;
+  node_add_thread(n,0,TEST_ENDPOINT,0,testchord_thread,tca,&thread);
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
 }
 
 void run_chordtest(int argc, char **argv)
