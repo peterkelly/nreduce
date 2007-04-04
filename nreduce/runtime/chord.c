@@ -444,10 +444,13 @@ static void chord_got_successor(chord *crd, got_successor_msg *m)
   assert(!chordnode_isnull(m->successor));
 
   if (m->successor.id == crd->self.id) {
-    if (!endpointid_equals(&m->successor.epid,&crd->self.epid))
+    if (!endpointid_equals(&m->successor.epid,&crd->self.epid)) {
       duplicate_detected(crd,m->successor);
-    else
+      return;
+    }
+    else {
       assert(1 < m->payload);
+    }
   }
 
   if (1 == m->payload)
