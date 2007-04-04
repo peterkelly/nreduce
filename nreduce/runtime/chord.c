@@ -136,7 +136,7 @@ typedef struct {
   node *n;
   pthread_t thread;
   endpointid caller;
-  chordnode ndash;
+  endpointid initial;
   chordnode self;
   chordnode predecessor;
   chordnode fingers[MBITS+1];
@@ -307,19 +307,19 @@ static void chord_join(chord *crd)
 
   chord_clear_tables(crd);
 
-  if (chordnode_isnull(crd->ndash)) {
+  if (0 == crd->initial.localid) {
     CHORD_DEBUG("no existing node");
     set_successor(crd,crd->self);
     chord_notify_joined(crd);
   }
   else {
     find_successor_msg fsm;
-    CHORD_DEBUG("using ndash #%d ("EPID_FORMAT")",crd->ndash.id,EPID_ARGS(crd->ndash.epid));
+    CHORD_DEBUG("using ndash ("EPID_FORMAT")",EPID_ARGS(crd->initial));
     fsm.id = crd->self.id;
     fsm.sender = crd->self.epid;
     fsm.hops = 0;
     fsm.payload = 1;
-    node_send(n,crd->self.epid.localid,crd->ndash.epid,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
+    node_send(n,crd->self.epid.localid,crd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
   }
 }
 
@@ -589,11 +589,11 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   free(crd);
 }
 
-void start_chord(node *n, chordnode ndash, endpointid caller, int stabilize_delay)
+void start_chord(node *n, endpointid initial, endpointid caller, int stabilize_delay)
 {
   chord *crd = (chord*)calloc(1,sizeof(chord));
   crd->n = n;
-  crd->ndash = ndash;
+  crd->initial = initial;
   crd->caller = caller;
   crd->stabilize_delay = stabilize_delay;
   node_add_thread(n,0,CHORD_ENDPOINT,32768,chord_thread,crd,NULL);

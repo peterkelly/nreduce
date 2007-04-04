@@ -93,7 +93,7 @@ static void debug_control_thread(node *n, endpoint *endpt, void *arg)
   free(dbc);
 }
 
-static chordnode start_one_chord(node *n, endpoint *endpt, chordnode ndash, endpointid managerid)
+static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, endpointid managerid)
 {
   int done = 0;
   chordnode cn;
@@ -101,7 +101,7 @@ static chordnode start_one_chord(node *n, endpoint *endpt, chordnode ndash, endp
 
   memset(&cn,0,sizeof(chordnode));
 
-  scm.ndash = ndash;
+  scm.initial = initial;
   scm.caller = endpt->epid;
   scm.stabilize_delay = STABILIZE_DELAY;
   node_send(n,endpt->epid.localid,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
@@ -199,10 +199,10 @@ static void check_abort(check *chk)
   }
 }
 
-static void add_node(node *n, endpoint *endpt, endpointid managerid, chordnode ndash)
+static void add_node(node *n, endpoint *endpt, endpointid managerid, endpointid initial)
 {
   start_chord_msg scm;
-  scm.ndash = ndash;
+  scm.initial = initial;
   scm.caller = endpt->epid;
   scm.stabilize_delay = STABILIZE_DELAY;
   node_send(n,endpt->epid.localid,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
@@ -235,7 +235,7 @@ static void check_debug_start(check *chk, endpointid *caller)
     int i;
     int j;
     int *killindices = (int*)calloc(KILL_COUNT,sizeof(int));
-    chordnode initial = chk->nodes[rand()%chk->ncount];
+    endpointid initial = chk->nodes[rand()%chk->ncount].epid;
     for (i = 0; i < KILL_COUNT; i++) {
       int have;
       int index;
@@ -247,7 +247,7 @@ static void check_debug_start(check *chk, endpointid *caller)
           if (killindices[j] == index)
             have = 1;
 
-        if (endpointid_equals(&initial.epid,&chk->nodes[index].epid))
+        if (endpointid_equals(&initial,&chk->nodes[index].epid))
           have = 1;
 
       } while (have);
@@ -532,23 +532,23 @@ static void testchord_thread(node *n, endpoint *endpt, void *arg)
   struct timeval start;
   int ncount = 0;
   debug_control dbc;
-  chordnode null_node;
+  endpointid null_epid;
 
   printf("managers:\n");
   for (i = 0; i < tca->nmanagers; i++)
     printf(EPID_FORMAT"\n",EPID_ARGS(tca->managerids[i]));
 
   memset(&nodes,0,MAX_NODES*sizeof(chordnode));
-  memset(&null_node,0,sizeof(chordnode));
+  memset(&null_epid,0,sizeof(endpointid));
 
   delay(250); /* wait for manager to start; FIXME: find a more robust solution */
 
-  nodes[0] = start_one_chord(n,endpt,null_node,tca->managerids[rand()%tca->nmanagers]);
+  nodes[0] = start_one_chord(n,endpt,null_epid,tca->managerids[rand()%tca->nmanagers]);
   ncount = 1;
   printf("initial node = #%d ("EPID_FORMAT")\n",nodes[0].id,EPID_ARGS(nodes[0].epid));
 
   for (i = 1; i < NODE_COUNT; i++)
-    add_node(n,endpt,tca->managerids[rand()%tca->nmanagers],nodes[0]);
+    add_node(n,endpt,tca->managerids[rand()%tca->nmanagers],nodes[0].epid);
 
   gettimeofday(&start,NULL);
 

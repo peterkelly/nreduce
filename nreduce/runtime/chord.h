@@ -91,11 +91,11 @@ typedef struct {
 } notify_reply_msg;
 
 typedef struct {
-  chordnode ndash;
+  endpointid initial;
   endpointid caller;
   int stabilize_delay;
 } start_chord_msg;
 
 int chordnode_isnull(chordnode n);
-void start_chord(node *n, chordnode ndash, endpointid caller, int stabilize_delay);
+void start_chord(node *n, endpointid initial, endpointid caller, int stabilize_delay);
 void run_chordtest(int argc, char **argv);

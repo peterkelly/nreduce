@@ -164,7 +164,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     case MSG_START_CHORD: {
       start_chord_msg *m = (start_chord_msg*)msg->data;
       assert(sizeof(start_chord_msg) == msg->hdr.size);
-      start_chord(n,m->ndash,m->caller,m->stabilize_delay);
+      start_chord(n,m->initial,m->caller,m->stabilize_delay);
       break;
     }
     case MSG_KILL:
