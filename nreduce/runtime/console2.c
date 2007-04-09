@@ -72,16 +72,6 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
     node_connect_locked(n,argv[1],INADDR_ANY,atoi(colon+1),1);
     unlock_node(n);
   }
-  else if (!strcmp(argv[0],"run") || !strcmp(argv[0],"r")) {
-
-    if (2 > argc) {
-      array_printf(out,"Usage: run filename\n");
-      return 0;
-    }
-
-    if (0 != run_program(n,argv[1]))
-      array_printf(out,"Could not run program\n");
-  }
   else if (!strcmp(argv[0],"exit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"quit")) {
     return 1;
   }
@@ -115,7 +105,6 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
   else if (!strcmp(argv[0],"help")) {
     array_printf(out,"connections   [c] - List all open connections\n");
     array_printf(out,"open          [o] - Open new connection\n");
-    array_printf(out,"run           [r] - Run program\n");
     array_printf(out,"tasks         [t] - List tasks\n");
     array_printf(out,"kill          [k] - Kill a task\n");
     array_printf(out,"shutdown      [s] - Shut down VM\n");

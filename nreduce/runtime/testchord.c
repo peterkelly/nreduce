@@ -572,6 +572,97 @@ static void testchord(node *n, endpointid *managerids, int nmanagers)
     fatal("pthread_join: %s",strerror(errno));
 }
 
+static array *read_nodes(const char *hostsfile)
+{
+  array *nodenames;
+  int start = 0;
+  int pos = 0;
+  array *filedata;
+  FILE *f;
+  int r;
+  char buf[1024];
+
+  if (NULL == (f = fopen(hostsfile,"r"))) {
+    perror(hostsfile);
+    return NULL;
+  }
+
+  filedata = array_new(1,0);
+  while (0 < (r = fread(buf,1,1024,f)))
+    array_append(filedata,buf,r);
+  fclose(f);
+
+  nodenames = array_new(sizeof(char*),0);
+  while (1) {
+    if ((pos == filedata->nbytes) ||
+        ('\n' == filedata->data[pos])) {
+      if (pos > start) {
+        char *line = (char*)malloc(pos-start+1);
+        memcpy(line,&filedata->data[start],pos-start);
+        line[pos-start] = '\0';
+        array_append(nodenames,&line,sizeof(char*));
+      }
+      start = pos+1;
+    }
+    if (pos == filedata->nbytes)
+      break;
+    pos++;
+  }
+
+  free(filedata);
+  return nodenames;
+}
+
+static int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount)
+{
+  endpointid *managerids;
+  int count;
+  array *nodes = read_nodes(nodesfile);
+  int i;
+
+  *outids = NULL;
+  *outcount = 0;
+
+  if (NULL == nodes)
+    return -1;
+
+  count = array_count(nodes);
+  managerids = (endpointid*)calloc(count,sizeof(endpointid));
+
+  for (i = 0; i < count; i++) {
+    char *nodename = array_item(nodes,i,char*);
+    char *host = NULL;
+    int port = 0;
+
+    if (NULL == strchr(nodename,':')) {
+      host = strdup(nodename);
+      port = WORKER_PORT;
+    }
+    else if (0 > parse_address(nodename,&host,&port)) {
+      fprintf(stderr,"Invalid node address: %s\n",nodename);
+      array_free(nodes);
+      free(managerids);
+      return -1;
+    }
+    managerids[i].port = port;
+    managerids[i].localid = MANAGER_ID;
+
+    if (0 > lookup_address(n,host,&managerids[i].ip)) {
+      fprintf(stderr,"%s: hostname lookup failed\n",host);
+      array_free(nodes);
+      free(managerids);
+      return -1;
+    }
+    free(host);
+  }
+
+  *outids = managerids;
+  *outcount = count;
+
+  array_free(nodes);
+  return 0;
+}
+
 void run_chordtest(int argc, char **argv)
 {
   node *n = node_new(LOG_ERROR);

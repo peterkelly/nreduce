@@ -44,8 +44,10 @@
 #define LOG_COUNT       6
 
 #define MANAGER_ID      1
-#define CHORD_ID        2
+#define MAIN_CHORD_ID   2
 #define FIRST_ID        3
+
+#define WORKER_PORT 2000
 
 struct node;
 struct listener;
@@ -312,7 +314,6 @@ typedef struct inittask_msg {
   endpointid idmap[0];
 } inittask_msg;
 
-int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount);
 void start_manager(node *n);
 
 #ifndef NODE_C

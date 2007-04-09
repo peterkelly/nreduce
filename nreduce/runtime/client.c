@@ -29,6 +29,7 @@
 #include "runtime.h"
 #include "node.h"
 #include "messages.h"
+#include "chord.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -218,7 +219,8 @@ static void launcher_thread(node *n, endpoint *endpt, void *arg)
   launcher_free(arg);
 }
 
-void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count)
+void start_launcher(node *n, const char *bcdata, int bcsize,
+                    endpointid *managerids, int count, pthread_t *threadp)
 {
   launcher *lr = (launcher*)calloc(1,sizeof(launcher));
   lr->n = n;
@@ -229,196 +231,27 @@ void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *manager
   memcpy(lr->managerids,managerids,count*sizeof(endpointid));
   memcpy(lr->bcdata,bcdata,bcsize);
 
-  node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,NULL);
+  node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,threadp);
 }
 
-int get_managerids(node *n, endpointid **managerids)
+static int client_run(node *n, list *nodes, const char *filename)
 {
-  int count = 0;
-  int i = 0;
-  connection *conn;
+  int bcsize;
+  char *bcdata;
+  source *src;
+  int count = list_count(nodes);
+  endpointid *managerids = (endpointid*)calloc(count,sizeof(endpointid));
+  list *l;
+  int i;
+  pthread_t thread;
 
-  lock_node(n);
-
-  if (n->isworker)
-    count++;
-
-  for (conn = n->connections.first; conn; conn = conn->next)
-    if (0 <= conn->port)
-      count++;
-
-  *managerids = (endpointid*)calloc(count,sizeof(endpointid));
-
-  if (n->isworker) {
-    (*managerids)[i].ip = n->listenip;
-    (*managerids)[i].port = n->listenport;
-    (*managerids)[i].localid = MANAGER_ID;
+  i = 0;
+  for (l = nodes; l; l = l->next) {
+    managerids[i] = *(endpointid*)l->data;
+    managerids[i].localid = MANAGER_ID;
     i++;
   }
 
-  for (conn = n->connections.first; conn; conn = conn->next) {
-    if (0 <= conn->port) {
-      (*managerids)[i].ip = conn->ip;
-      (*managerids)[i].port = conn->port;
-      (*managerids)[i].localid = MANAGER_ID;
-      i++;
-    }
-  }
-
-  unlock_node(n);
-
-  return count;
-}
-
-int run_program(node *n, const char *filename)
-{
-  int bcsize;
-  char *bcdata;
-  source *src;
-  int count;
-  endpointid *managerids;
-
-  src = source_new();
-  if (0 != source_parse_file(src,filename,""))
-    return -1;
-  if (0 != source_process(src,0,0,0))
-    return -1;
-  if (0 != source_compile(src,&bcdata,&bcsize))
-    return -1;
-  source_free(src);
-
-  count = get_managerids(n,&managerids);
-
-  node_log(n,LOG_INFO,"Compiled");
-  start_launcher(n,bcdata,bcsize,managerids,count);
-  free(managerids);
-  free(bcdata);
-  return 0;
-}
-
-static array *read_nodes(const char *hostsfile)
-{
-  array *hostnames;
-  int start = 0;
-  int pos = 0;
-  array *filedata;
-  FILE *f;
-  int r;
-  char buf[1024];
-
-  if (NULL == (f = fopen(hostsfile,"r"))) {
-    perror(hostsfile);
-    return NULL;
-  }
-
-  filedata = array_new(1,0);
-  while (0 < (r = fread(buf,1,1024,f)))
-    array_append(filedata,buf,r);
-  fclose(f);
-
-  hostnames = array_new(sizeof(char*),0);
-  while (1) {
-    if ((pos == filedata->nbytes) ||
-        ('\n' == filedata->data[pos])) {
-      if (pos > start) {
-        char *hostname = (char*)malloc(pos-start+1);
-        memcpy(hostname,&filedata->data[start],pos-start);
-        hostname[pos-start] = '\0';
-        array_append(hostnames,&hostname,sizeof(char*));
-      }
-      start = pos+1;
-    }
-    if (pos == filedata->nbytes)
-      break;
-    pos++;
-  }
-
-  free(filedata);
-  return hostnames;
-}
-
-int read_managers(node *n, const char *nodesfile, endpointid **outids, int *outcount)
-{
-  endpointid *managerids;
-  int count;
-  array *nodes = read_nodes(nodesfile);
-  int i;
-
-  *outids = NULL;
-  *outcount = 0;
-
-  if (NULL == nodes)
-    return -1;
-
-  count = array_count(nodes);
-  managerids = (endpointid*)calloc(count,sizeof(endpointid));
-
-  for (i = 0; i < count; i++) {
-    char *nodename = array_item(nodes,i,char*);
-    char *host = NULL;
-    int port = 0;
-
-    if (0 != parse_address(nodename,&host,&port)) {
-      fprintf(stderr,"Invalid node address: %s\n",nodename);
-      array_free(nodes);
-      free(managerids);
-      return -1;
-    }
-    managerids[i].port = port;
-    managerids[i].localid = MANAGER_ID;
-
-    if (0 > lookup_address(n,host,&managerids[i].ip)) {
-      fprintf(stderr,"%s: hostname lookup failed\n",host);
-      array_free(nodes);
-      free(managerids);
-      return -1;
-    }
-    free(host);
-  }
-
-  *outids = managerids;
-  *outcount = count;
-
-  array_free(nodes);
-  return 0;
-}
-
-static int client_run(node *n, const char *nodesfile, const char *filename)
-{
-  int bcsize;
-  char *bcdata;
-  source *src;
-  int count;
-  endpointid *managerids;
-
-  array *nodes = read_nodes(nodesfile);
-  int i;
-
-  if (NULL == nodes)
-    return -1;
-
-  count = array_count(nodes);
-  managerids = (endpointid*)calloc(count,sizeof(endpointid));
-
-  for (i = 0; i < count; i++) {
-    char *nodename = array_item(nodes,i,char*);
-    char *host = NULL;
-    int port = 0;
-
-    if (0 != parse_address(nodename,&host,&port)) {
-      fprintf(stderr,"Invalid node address: %s\n",nodename);
-      return -1;
-    }
-    managerids[i].port = port;
-    managerids[i].localid = MANAGER_ID;
-
-    if (0 > lookup_address(n,host,&managerids[i].ip)) {
-      fprintf(stderr,"%s: hostname lookup failed\n",host);
-      return -1;
-    }
-    free(host);
-  }
-
   src = source_new();
   if (0 != source_parse_file(src,filename,""))
     return -1;
@@ -429,7 +262,11 @@ static int client_run(node *n, const char *nodesfile, const char *filename)
   source_free(src);
 
   node_log(n,LOG_INFO,"Compiled");
-  start_launcher(n,bcdata,bcsize,managerids,count);
+  start_launcher(n,bcdata,bcsize,managerids,count,&thread);
+
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+
   free(managerids);
   free(bcdata);
   return 0;
@@ -444,12 +281,92 @@ static void client_callback(struct node *n, void *data, int event,
   }
 }
 
-int do_client(const char *nodesfile, const char *program)
+typedef struct {
+  endpointid initial;
+  endpointid first;
+  int want;
+  list *nodes;
+} find_nodes_data;
+
+static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
+{
+  find_nodes_data *fsd = (find_nodes_data*)arg;
+  int done = 0;
+  get_table_msg gtm;
+  chordid id = rand()%KEYSPACE;
+  find_successor_msg fsm;
+
+  gtm.sender = endpt->epid;
+
+  fsm.id = id;
+  fsm.sender = endpt->epid;
+  fsm.hops = 0;
+  fsm.payload = 0;
+
+  node_send(n,endpt->epid.localid,fsd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
+
+  while (!done) {
+    message *msg = endpoint_next_message(endpt,-1);
+    switch (msg->hdr.tag) {
+    case MSG_GOT_SUCCESSOR: {
+      got_successor_msg *m = (got_successor_msg*)msg->data;
+      assert(sizeof(got_successor_msg) == msg->hdr.size);
+      node_send(n,endpt->epid.localid,m->successor.epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
+      break;
+    }
+    case MSG_REPLY_TABLE: {
+      reply_table_msg *m = (reply_table_msg*)msg->data;
+      assert(sizeof(reply_table_msg) == msg->hdr.size);
+
+      if (endpointid_equals(&fsd->first,&m->cn.epid)) {
+        done = 1;
+      }
+      else {
+        endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
+        memcpy(copy,&m->cn.epid,sizeof(endpointid));
+        list_push(&fsd->nodes,copy);
+        printf("%d ("EPID_FORMAT")\n",m->cn.id,EPID_ARGS(m->cn.epid));
+        if ((0 < fsd->want) && (list_count(fsd->nodes) >= fsd->want))
+          done = 1;
+        else
+          node_send(n,endpt->epid.localid,m->fingers[1].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
+      }
+
+      if (0 == fsd->first.localid)
+        fsd->first = m->cn.epid;
+      break;
+    }
+    case MSG_KILL:
+      done = 1;
+      break;
+    default:
+      fatal("Invalid message: %d",msg->hdr.tag);
+      break;
+    }
+  }
+}
+
+static list *find_nodes(node *n, endpointid initial, int want)
+{
+  pthread_t thread;
+  find_nodes_data fsd;
+  memset(&fsd,0,sizeof(fsd));
+  fsd.initial = initial;
+  fsd.want = want;
+  node_add_thread(n,0,TEST_ENDPOINT,0,find_nodes_thread,&fsd,&thread);
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  return fsd.nodes;
+}
+
+int do_client(char *initial_str, int argc, char **argv)
 {
   node *n;
   int r = 0;
+  char *cmd;
+  endpointid initial;
 
-  n = node_new(LOG_INFO);
+  n = node_new(LOG_WARNING);
 
   node_add_callback(n,client_callback,NULL);
 
@@ -460,8 +377,42 @@ int do_client(const char *nodesfile, const char *program)
 
   node_start_iothread(n);
 
-  if (0 != client_run(n,nodesfile,program))
+  if (0 > string_to_mainchordid(n,initial_str,&initial))
     exit(1);
+
+  if (1 > argc) {
+    fprintf(stderr,"Please specify a command\n");
+    exit(1);
+  }
+  cmd = argv[0];
+
+  if (!strcmp(cmd,"findall")) {
+    list *nodes = find_nodes(n,initial,0);
+    list_free(nodes,free);
+  }
+  else if (!strcmp(cmd,"run")) {
+    if (3 > argc) {
+      fprintf(stderr,"Please specify number of machines and program\n");
+      exit(1);
+    }
+    else {
+      int want = atoi(argv[1]);
+      char *program = argv[2];
+      list *nodes = find_nodes(n,initial,want);
+      if (0 != client_run(n,nodes,program))
+        exit(1);
+      list_free(nodes,free);
+      printf("Program launched: %s\n",program);
+    }
+  }
+  else {
+    fprintf(stderr,"Unknown command: %s\n",cmd);
+    exit(1);
+  }
+
+  lock_node(n);
+  node_shutdown_locked(n);
+  unlock_node(n);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));

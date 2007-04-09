@@ -54,6 +54,7 @@ typedef struct {
 } get_table_msg;
 
 typedef struct {
+  chordnode cn;
   chordnode fingers[MBITS+1];
   chordnode successors[NSUCCESSORS+1];
   int linksok;
@@ -98,5 +99,5 @@ typedef struct {
 } reply_succlist_msg;
 
 int chordnode_isnull(chordnode n);
-void start_chord(node *n, endpointid initial, endpointid caller, int stabilize_delay);
+void start_chord(node *n, int localid, endpointid initial, endpointid caller, int stabilize_delay);
 void run_chordtest(int argc, char **argv);

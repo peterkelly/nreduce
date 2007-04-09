@@ -584,9 +584,9 @@ void set_error(task *tsk, const char *format, ...);
 
 /* client */
 
-void start_launcher(node *n, const char *bcdata, int bcsize, endpointid *managerids, int count);
-int run_program(node *n, const char *filename);
-int do_client(const char *nodesfile, const char *program);
+void start_launcher(node *n, const char *bcdata, int bcsize,
+                    endpointid *managerids, int count, pthread_t *threadp);
+int do_client(char *initial_str, int argc, char **argv);
 
 /* data */
 
@@ -683,7 +683,8 @@ int array_to_string(pntr refpntr, char **str);
 
 endpoint *find_endpoint(node *n, int localid);
 int standalone(const char *bcdata, int bcsize);
-int worker(int port, const char *initial);
+int string_to_mainchordid(node *n, const char *str, endpointid *out);
+int worker(int port, const char *initial_str);
 task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);

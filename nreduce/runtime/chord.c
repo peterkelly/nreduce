@@ -277,9 +277,11 @@ static void chord_clear_tables(chord *crd)
 
 static void chord_notify_joined(chord *crd, chordnode newnode)
 {
-  joined_msg jm;
-  jm.cn = crd->self;
-  node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_JOINED,&jm,sizeof(jm));
+  if (0 != crd->caller.localid) {
+    joined_msg jm;
+    jm.cn = crd->self;
+    node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_JOINED,&jm,sizeof(jm));
+  }
 }
 
 static void chord_join(chord *crd)
@@ -343,16 +345,18 @@ static void duplicate_detected(chord *crd, chordnode existing)
   #else
   chordid newid = crd->self.id+1;
   #endif
-  id_changed_msg idcm;
 
   CHORD_DEBUG("duplicate; existing #%d ("EPID_FORMAT"); using new id #%d",
               existing.id,EPID_ARGS(existing.epid),newid);
 
   crd->self.id = newid;
 
-  idcm.cn = crd->self;
-  idcm.oldid = oldid;
-  node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_ID_CHANGED,&idcm,sizeof(idcm));
+  if (0 != crd->caller.localid) {
+    id_changed_msg idcm;
+    idcm.cn = crd->self;
+    idcm.oldid = oldid;
+    node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_ID_CHANGED,&idcm,sizeof(idcm));
+  }
 
   chord_join(crd);
 }
@@ -470,6 +474,7 @@ static void chord_get_table(chord *crd, get_table_msg *m)
 {
   reply_table_msg rtm;
 
+  rtm.cn = crd->self;
   memcpy(&rtm.fingers,&crd->fingers,sizeof(crd->fingers));
   memcpy(&rtm.successors,&crd->successors,sizeof(crd->successors));
   rtm.linksok = check_links(crd);
@@ -509,7 +514,6 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   chord *crd = (chord*)arg;
   message *msg;
   int done = 0;
-  chord_started_msg csm;
   assert(crd->n);
   assert(NULL == crd->endpt);
   crd->endpt = endpt;
@@ -521,8 +525,11 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   #endif
   crd->self.epid = endpt->epid;
 
-  csm.cn = crd->self;
-  node_send(n,crd->self.epid.localid,crd->caller,MSG_CHORD_STARTED,&csm,sizeof(csm));
+  if (0 != crd->caller.localid) {
+    chord_started_msg csm;
+    csm.cn = crd->self;
+    node_send(n,crd->self.epid.localid,crd->caller,MSG_CHORD_STARTED,&csm,sizeof(csm));
+  }
 
   start_stabilizer(n,crd->self.epid,crd->stabilize_delay);
 
@@ -581,12 +588,12 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   free(crd);
 }
 
-void start_chord(node *n, endpointid initial, endpointid caller, int stabilize_delay)
+void start_chord(node *n, int localid, endpointid initial, endpointid caller, int stabilize_delay)
 {
   chord *crd = (chord*)calloc(1,sizeof(chord));
   crd->n = n;
   crd->initial = initial;
   crd->caller = caller;
   crd->stabilize_delay = stabilize_delay;
-  node_add_thread(n,0,CHORD_ENDPOINT,32768,chord_thread,crd,NULL);
+  node_add_thread(n,localid,CHORD_ENDPOINT,32768,chord_thread,crd,NULL);
 }

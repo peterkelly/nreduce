@@ -52,8 +52,6 @@
 #define ENGINE_INTERPRETER 0
 #define ENGINE_REDUCER     1
 
-#define WORKER_PORT 2000
-
 char *exec_modes[3] = { "interpreter", "reducer" };
 
 int max_array_size = (1 << 18);
@@ -218,7 +216,7 @@ static int client_mode()
     return -1;
   }
 
-  r = do_client(args.client,array_item(args.extra,0,char*));
+  r = do_client(args.client,array_count(args.extra),(char**)args.extra->data);
   array_free(args.extra);
   return r;
 }

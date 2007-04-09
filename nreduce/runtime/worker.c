@@ -51,6 +51,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#define WORKER_STABILIZE_DELAY 5000
+
 const char *msg_names[MSG_COUNT] = {
   "DONE",
   "FISH",
@@ -250,7 +252,7 @@ int standalone(const char *bcdata, int bcsize)
   managerid.ip = n->listenip;
   managerid.port = n->listenport;
   managerid.localid = MANAGER_ID;
-  start_launcher(n,bcdata,bcsize,&managerid,1);
+  start_launcher(n,bcdata,bcsize,&managerid,1,NULL);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
@@ -260,11 +262,52 @@ int standalone(const char *bcdata, int bcsize)
   return 0;
 }
 
-int worker(int port, const char *initial)
+int string_to_mainchordid(node *n, const char *str, endpointid *out)
+{
+  endpointid initial;
+  memset(&initial,0,sizeof(endpointid));
+  if (str) {
+    char *host = NULL;
+    int port = 0;
+    in_addr_t addr = 0;
+
+    if (NULL == strchr(str,':')) {
+      host = strdup(str);
+      port = WORKER_PORT;
+    }
+    else if (0 > parse_address(str,&host,&port)) {
+      fprintf(stderr,"Invalid address: %s\n",str);
+      return -1;
+    }
+    if (0 > lookup_address(n,host,&addr)) {
+      fprintf(stderr,"Host lookup failed: %s\n",host);
+      free(host);
+      return -1;
+    }
+    initial.ip = addr;
+    initial.port = port;
+    initial.localid = MAIN_CHORD_ID;
+    free(host);
+  }
+  *out = initial;
+  return 0;
+}
+
+int worker(int port, const char *initial_str)
 {
   node *n;
+  endpointid initial;
+  endpointid caller;
+
   if (NULL == (n = worker_startup(LOG_INFO,port)))
     return -1;
+
+  if (0 > string_to_mainchordid(n,initial_str,&initial))
+    exit(1);
+
+  memset(&caller,0,sizeof(endpointid));
+  start_chord(n,MAIN_CHORD_ID,initial,caller,WORKER_STABILIZE_DELAY);
+
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   node_close_endpoints(n);
