@@ -1,0 +1,942 @@
+\documentclass[notes]{prosper}
+\usepackage{epsfig}
+\hypersetup{colorlinks=true,linkcolor=blue}
+
+\title{Distributed data structures}
+%\subtitle{}
+\author{Peter Kelly}
+\email{pmk@cs.adelaide.edu.au}
+\slideCaption{DHPC Group, Adelaide University}
+
+\begin{document}
+
+\begin{slide}{Introduction}
+\begin{itemize}
+\item
+A \emph{distributed data structure} is a data structure whos components reside on
+multiple hosts.
+
+\item
+Pointers within a distributed data structure go across machine boundaries. They
+should consist of a machine identifier \emph{\{ip,port\}}, as well as an opaque identifier
+which references the object on the remote host.
+
+\item
+In the case of the chord implementation, the opaque identifier is the endpoint
+localid.
+
+\end{itemize}
+
+\end{slide}
+
+\overlays{1}{
+\begin{slide}{Basics}
+\diagpage{
+\epsfig{file=figures/linkedlist/linkedlist1.eps,scale=0.65}
+}{
+This figure shows an example of a linked list distributed across multiple hosts
+
+Each item in the list resides on a separate host. The pointers between them
+are in the form \emph{\{ip,port,localid\}}.
+
+In general, objects may be
+\begin{itemize}
+\item in the same address space/process
+\item in different address spaces/processes on the same computer
+\item on different computers
+\begin{itemize}
+\item ... in the same room
+\item ... in different cities
+\item ... in different countries
+\end{itemize}
+\end{itemize}
+
+Therefore
+\begin{itemize}
+\item Latency can be very high
+\begin{itemize}
+\item
+We want to do things concurrently wherver possible; enforcing a sequence on
+a set of operations is not scalable
+\end{itemize}
+
+\item Nodes can fail at unpredictable times
+\begin{itemize}
+\item
+So we need to handle the failure of a single node, or a few nodes, and keep some
+portion of the data structure in place
+\item
+Any inconsistencies that arise due to node failure must be repaired
+\item
+Replication can sometimes be used to retain all the data even if some nodes fail
+\item
+Network failures can also occur. From an external perspective, the failure of
+a connection to a host is indistinguishable from the failure of the host itself.
+\end{itemize}
+\end{itemize}
+}
+\end{slide}}
+
+\overlays{14}{
+\begin{slide}{Traversal}
+\diagpage{
+\onlySlide*{1}{\epsfig{file=figures/iteration/iteration1.eps,scale=0.65}}
+\onlySlide*{2}{\epsfig{file=figures/iteration/iteration2.eps,scale=0.65}}
+\onlySlide*{3}{\epsfig{file=figures/iteration/iteration3.eps,scale=0.65}}
+\onlySlide*{4}{\epsfig{file=figures/iteration/iteration4.eps,scale=0.65}}
+\onlySlide*{5}{\epsfig{file=figures/iteration/iteration5.eps,scale=0.65}}
+\onlySlide*{6}{\epsfig{file=figures/iteration/iteration6.eps,scale=0.65}}
+\onlySlide*{7}{\epsfig{file=figures/iteration/iteration7.eps,scale=0.65}}
+\onlySlide*{8}{\epsfig{file=figures/iteration/iteration8.eps,scale=0.65}}
+\onlySlide*{9}{\epsfig{file=figures/recursion/recursion1.eps,scale=0.65}}
+\onlySlide*{10}{\epsfig{file=figures/recursion/recursion2.eps,scale=0.65}}
+\onlySlide*{11}{\epsfig{file=figures/recursion/recursion3.eps,scale=0.65}}
+\onlySlide*{12}{\epsfig{file=figures/recursion/recursion4.eps,scale=0.65}}
+\fromSlide*{13}{\epsfig{file=figures/recursion/recursion5.eps,scale=0.65}}
+}{
+There are two ways of traversing a distributed data structure:
+\emph{iteration} and \emph{recursion}
+
+\begin{itemize}
+\item
+In iterative mode, the object performing the traversal performs a request/response
+operation to each item in the data structure, in order to determine the relationships
+between items.
+
+In the case of a linked list, this involves retreiving the \emph{next} field of each
+item in turn. A \textbf{get\_next} message is sent to each item, containing a reference
+to the object wishing to receive the reply. The item sends back a \textbf{reply\_next}
+message with a reference to the next item.
+\fromSlide{9}{
+\item
+In recursive mode, the messages are sent directly from one item to another, only returning
+to the originating object once the traversal has completed. This is accomplished using a
+\textbf{traverse} message which contains a reference to the object that should receive the
+final result. The traverse message is passed through the data structure, with the last item
+returning it to the caller.}
+\fromSlide{14}{
+\item
+The previous examples just did a traversal and did not perform any other actions.
+Generally there will be some additional information passed along with the messages,
+for example:
+\begin{itemize}
+\item
+Number of items encountered so far
+\item
+Largest or smallest item encountered so far (according to some ordering)
+\item
+References to all items encountered so far
+\end{itemize}}
+\end{itemize}
+}
+\end{slide}
+}
+
+\overlays{7}{
+\begin{slide}{Concurrent traversal}
+\diagpage{
+\onlySlide*{1}{\epsfig{file=figures/treetrav/treetrav1.eps,scale=0.65}}
+\onlySlide*{2}{\epsfig{file=figures/treetrav/treetrav2.eps,scale=0.65}}
+\onlySlide*{3}{\epsfig{file=figures/treetrav/treetrav3.eps,scale=0.65}}
+\fromSlide*{4}{\epsfig{file=figures/treetrav/treetrav4.eps,scale=0.65}}
+}{
+Some data structures lend themselves to concurrent traversal. This uses the recursive
+approach, and permits an item which receives a \textbf{traverse} message to send multiple
+\textbf{traverse} messages to other items.
+
+An example of such a data structure is a tree. Each branch can be traversed concurrently.
+
+
+\begin{enumstep}
+
+\item
+X sends out the first \textbf{traverse} messeage to A.
+
+\item
+A then forwards the message to both of its children, and sends back a \textbf{reply} to X.
+In this case, X is trying to collect a collection of references to all the items in the
+tree, so the \textbf{reply} message contains A's identifier.
+
+\item
+Both B and C send a \textbf{reply} back to X and forward the \textbf{traverse} message to
+their children
+
+\item
+The leaf nodes do not forward the \textbf{traverse} message any futher, because they have no
+children. They simply send a \textbf{reply} back to X.
+\end{enumstep}
+\fromSlide{5}{
+This can be done in O(log(n)) time, instead of the O(n) time that would be required by
+an iterative traversal of the tree.
+}
+
+\fromSlide{6}{
+Problem: How does X know when it has received all the \textbf{reply} messages?}
+\begin{itemize}
+\fromSlide{6}{
+\item
+This requires \emph{distributed termination detection}}
+\fromSlide{7}{
+\item
+nreduce uses concurrent traversal for distributed garbage collection, but not in the
+context of the chord implementation}
+\end{itemize}
+}
+\end{slide}}
+
+\overlays{5}{
+  \begin{slide}{Singly Linked lists - insertion}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sllinsert/sllinsert1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sllinsert/sllinsert2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sllinsert/sllinsert3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sllinsert/sllinsert4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/sllinsert/sllinsert5.eps,scale=0.65}}
+    }
+    {
+      \onlySlide*{1}{
+        In order to insert an item into a singly linked list, it is necessary to do the following:
+        \begin{enumerate}
+        \item
+        Determine the preceding item
+        \item
+        Initialise the new item's \emph{next} field to the value of the preceding item's
+        \emph{next} field
+        \item
+        Set the preceding item's \emph{next} field to point to the new item
+        \end{enumerate}
+
+        In a normal sequential program where all data is local, these actions are taken
+        by "the program", which is an external entity to the objects themselves. The program
+        is active, the objects are passive.
+
+        However, distributed programs do not have an all-powerful controlling entity. Instead,
+        they consist of interactions between computers (or equivalently, objects). Linked
+        list insertion, as with all other algorithms, must be expressed in terms of the message
+        exchange and local state changes of each object.
+      }
+      \fromSlide{2}{
+        The steps taken to insert a new item N are as follows:
+        \begin{enumerate}
+        \fromSlide{1}{
+          \item
+          N traverses the list until it finds the item it wants to insert itself after. Either
+          iteration or recursion can be used; in this case we use recursion.
+
+          The message must contain some additional information which allows a node to decide when
+          it is the insertion point. In this example, we have an identifier assigned to each object,
+          and the insertion point is chosen based on the numeric ordering of the identifiers.
+
+          The \textbf{find\_preceding} message is used for traversal, and contains the identifier
+          of the object being inserted, as well as a reference to the object itself.
+        }
+
+        \fromSlide{4}{
+          \item
+          When an item in the list has determined that the new one should come after it, an
+          \textbf{insert} message is sent to the new item, containing both references to the
+          preceding and following items in the list. The new item updates is \emph{next} field.
+        }
+
+        \fromSlide{5}{
+          \item
+          The new item sends a \textbf{set\_next} message to the preceding object, which updates
+          its \emph{next} field to point to the new item.
+        }
+        \end{enumerate}
+      }
+    }
+  \end{slide}
+}
+
+\overlays{9}{
+  \begin{slide}{Solution 1: Locking}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sllock/sllock1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sllock/sllock2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sllock/sllock3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sllock/sllock4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/sllock/sllock5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/sllock/sllock6.eps,scale=0.65}}
+      \fromSlide*{7}{\epsfig{file=figures/sllock/sllock7.eps,scale=0.65}}
+    }
+    {
+
+What should happen if two items want to insert themselves into the list at the same time?
+We need to make sure that the modifications to the data structure are done safely.
+
+In a multithreaded program, the solution would be to lock the list before performing the
+insertion, and then unlock it afterwards. 
+
+We could get a similar effect in a distributed setting by locking the list first. However,
+because there is no shared state in which we could record whether or not the whole data
+structure is locked, it would instead be necessary to lock each of the nodes individually.
+
+\begin{enumerate}
+\fromSlide{2}{
+\item
+A recursive traversal is performed to lock all the nodes}
+\fromSlide{6}{
+\item
+The new item is inserted, in the same way as before}
+\fromSlide{7}{
+\item
+Another recursive traversal is performed to unlock all the nodes. The next operation
+can then be performed.}
+\end{enumerate}
+
+\fromSlide{8}{
+But...
+\begin{itemize}
+\item
+It's expensive, since the whole list needs to be traversed twice, in addition to the
+partial traversal for the insertion
+\item
+It forces all insertions to happen in sequence, which doesn't scale
+\item
+It's ugly
+\item
+... a bit like having to pause the internet so that someone can update their website
+\fromSlide{9}{
+\item
+Incidently, the world wide web is an example of a distributed data structure: pages are
+objects, links are pointers, HTTP is the messaging protocol, and URLs are the addressing
+mechanism}
+\end{itemize}}
+
+    }
+  \end{slide}
+}
+
+\overlays{6}{
+  \begin{slide}{Solution 2: No locking}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sllcon/sllcon1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sllcon/sllcon2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sllcon/sllcon3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sllcon/sllcon4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/sllcon/sllcon5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/sllcon/sllcon6.eps,scale=0.65}}
+    }
+    {
+      We could just try to do both insertions without locking. Will this work?
+
+      Consider the case where two new items N and O try to insert themselves into the list at
+      the same time.
+
+      \begin{enumstep}
+        \item
+        First, they both send a \textbf{find\_preceding} message to the first list item, A.
+        \item
+        A receives the message from N slightly before that of O. It sees that the identifier
+        of the new item comes before that of its \emph{next} field, so it forwards the request to B.
+        \item
+        B receives N's request, and determines that N should appear next in the list.
+        It sends an \textbf{insert} message to N, which updates its \emph{next} field to point to
+        C.
+
+        Meanwhile, A processes the \textbf{find\_preceding} message from O, and forwards it to B
+        in the same manner as before.
+        \item
+        A delay occurs at N
+
+        Because B has not yet had its \emph{next} field updated, it thinks that it is ok for O
+        to come directly after it, and thus sends it an \textbf{insert} message. O sets its
+        \emph{next} field to point to C.
+        \item
+        A delay occurs at O
+
+        N sends a \textbf{set\_next} message to B, which updates its \emph{next} field to point
+        to N.
+        \item
+        O sends a \textbf{set\_next} message to B, which updates its \emph{next} field to point
+        to O.
+      \end{enumstep}
+
+      \fromSlide{6}{
+        At this point there is no item pointing to N, and it is thus effectively ``lost''. This
+        state is incorrect; B's \emph{next} field should still point to N, whos \emph{next} field
+        should in turn to point to O. The incorrect pointer adjustment happened because B had not
+        received it \textbf{set\_next} message from N at the time that O joined. This is a race
+        condition
+      }
+    }
+  \end{slide}
+}
+
+
+
+\overlays{5}{
+  \begin{slide}{Solution 3: insert/update}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sllcon/sllcon1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sllcon/sllcon2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sll2sol/sll2sol3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sll2sol/sll2sol4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/sll2sol/sll2sol5.eps,scale=0.65}}
+    }
+    {
+Solution 3:
+
+Instead of using a separate \textbf{set\_next} message, just update the \emph{next} field of the
+preceding node at the same time that the \textbf{insert} message is sent.
+
+\begin{enumstep}
+\item
+N and O send a \textbf{find\_preceding} message to A
+\item
+A sends N's \textbf{find\_preceding} message to B
+\item
+B realises that N should come after it. It updates its \emph{next} field to point to N, and
+sends it the \textbf{insert} message. N updates its \emph{next} field to point to C.
+
+Meanwhile, A sends O's \textbf{find\_preceding} message to B
+\item
+Upon receipt of O's \textbf{find\_preceding} message, B sees that the identifier is stil less
+than that of its \emph{next} pointer, which is now set to N. It forwards the message to N.
+\item
+N receives O's \textbf{find\_preceding} message. It determines that it should be O's preceding
+item, and thus updates its \emph{next} field and sends O an \textbf{insert} message. O updates
+its \emph{next} field to point to C.
+\end{enumstep}
+
+
+    }
+  \end{slide}
+}
+
+\overlays{9}{
+  \begin{slide}{Solution 3: insert/update - race condition}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sllinsert/sllinsert2.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sllinsert/sllinsert3.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sll2race/sll2race4.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sll2race/sll2race5.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/sll2race/sll2race6.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/sll2race/sll2race7.eps,scale=0.65}}
+      \onlySlide*{7}{\epsfig{file=figures/sll2race/sll2race8.eps,scale=0.65}}
+      \onlySlide*{8}{\epsfig{file=figures/sll2race/sll2race9.eps,scale=0.65}}
+      \onlySlide*{9}{\epsfig{file=figures/sll2race/sll2race10.eps,scale=0.65}}
+    }
+    {
+A race condition exists:
+
+It is possible for the \textbf{insert} message to get delayed in the network. During this time,
+the preceding item thinks that the new item is part of the list. This is only partially
+true, however, since until the new item has received the \textbf{insert} message, it does
+not have its \emph{next} field set correctly. During this time, it may receive a message
+from another object, and if that message requires the next pointer to be correct, then the
+behaviour may not be what is expected.
+
+Consider the following case:
+
+\begin{enumerate}
+\fromSlide{1}{
+\item
+Node N starts inserting itself into the list. It begins by sending a \textbf{find\_preceding}
+message to the first item in the list, A.}
+\fromSlide{2}{
+\item
+The message is forwarded to B}
+\fromSlide{3}{
+\item
+B determines that the item should be inserted directly afterwards, and sends the \textbf{insert}
+message to N. However, due to network delays the message does not yet reach its destination.}
+\fromSlide{4}{
+\item
+While the message is still experiencing a delay, another object, X, begins an iterative traversal
+of the list.}
+\fromSlide{8}{
+\item
+After processing B it sends a \textbf{get\_next} message to N.}
+\fromSlide{9}{
+\item
+Because N has still not received the \textbf{insert} message, its \emph{next} field is still
+null. It sends back a \textbf{reply\_next} message to X indicating this. X thinks it has found
+the end of the list, and does not traverse any further.}
+\end{enumerate}
+\fromSlide{9}{
+This behaviour is incorrect, because we would expect that if N is in the list, then
+it should have a correct link, and a traversal should thus succeed.
+}
+    }
+  \end{slide}
+}
+
+\overlays{4}{
+  \begin{slide}{Singly Linked lists - State}
+    \diagpage{
+      \onlySlide*{2}{\epsfig{file=figures/sendorder/sendorder1.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sendorder/sendorder2.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sendorder/sendorder3.eps,scale=0.65}}
+    }
+    {
+We need to ensure that a new item can't receive any messages until the insertion process
+is complete.
+
+Unfortunately in a distributed system it is impossible to have global knowledge.
+Each object can only infer the state of others based on messages it has received.
+
+\fromSlide{2}{
+Our messaging model only guarantees a \emph{partial} ordering of messages}
+
+\begin{itemize}
+\fromSlide{2}{
+\item
+If S performs a send of message $m_1$ to R, followed by a send of message $m_2$ to R,
+then it is guaranteed that R will receive $m_1$ before it receives $m_2$.}
+\item
+\fromSlide{3}{
+However, consider the following case:
+
+S sends $m_1$ to R, then $m_2$ to T. After receiving $m_2$, T sends $m_3$ to R.
+
+The order in which R receives $m_1$ and $m_3$ is non-deterministic, because it is possible
+for messages to get delayed. In the top case, $m_1$ reaches its destination quickly; in the
+bottom case, it experiences a delay that is greater than that of $m_2$ and $m_3$ combined.}
+\end{itemize}
+
+\fromSlide{4}{
+The race condition in solution 2 came about because of a message ordering like in the
+second case shown on the previous slide. Even though $m_1$ (\textbf{insert}) was sent first,
+$m_2$ (\textbf{reply\_next} from B to X) and $m_3$ (\textbf{find\_next} from X to N) both
+reach their destinations before $m_1$.}
+}
+  \end{slide}
+}
+
+\overlays{2}{
+  \begin{slide}{State inconsistency}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sendorder/sendorder4.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sendorder/sendorder5.eps,scale=0.65}}
+    }
+    {
+This problem is due to \emph{inconsistent global state}. The inconsistent state is the
+boolean condition of the presence or absence of item N in the list. In the left-hand figure,
+pink indicates a belief that N is in the list, while yellow indicates a belief that it is not.
+
+The inconsistency exists between the time $t_1$ at which the \textbf{insert} message is sent,
+and the time $t_2$ at which it is received. During this period, B thinks that N is present in
+the list, but N does not.
+
+\fromSlide{2}{
+The problem does not occur with a recursive traversal of the list, because an access to
+N must first go through its preceding item, B.
+
+In the message exchange shown on the left,
+the \textbf{traverse} message will propogate from the start of the list through to B and
+then N, before going on to the rest of the list. It either reach B:
+\begin{itemize}
+\item
+before the \textbf{insert}, in which case it will skip N and go directly on to C
+\item
+after the \textbf{insert}, in which case it will go through N and then onto C
+\end{itemize}
+}
+    }
+  \end{slide}
+}
+
+\overlays{8}{
+  \begin{slide}{Solution 4: Reference transmission}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/refsend/refsend1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/refsend/refsend2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/refsend/refsend3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/refsend/refsend4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/refsend/refsend5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/refsend/refsend6.eps,scale=0.65}}
+      \onlySlide*{7}{\epsfig{file=figures/refsend/refsend7.eps,scale=0.65}}
+      \onlySlide*{8}{\epsfig{file=figures/refsend/refsend8.eps,scale=0.65}}
+    }
+    {
+If we ensure that a reference to an item is only ever sent in a message originating
+from that item itself, then we can guarantee that references to an item that
+has yet to complete the joining process will never ``escape''.
+
+\begin{itemize}
+\item
+This is guaranteed by a recursive traversal, but not by an iterative traversal.
+\item
+We could create a hybrid of iteration and recursion by arranging that in each iteration
+step, the \textbf{reply\_next} message goes \emph{via} the node for which the reference
+is being sent.
+\end{itemize}
+
+\fromSlide{8}{
+This avoids the state inconsistency problem, because there is no message
+delivery order that could lead to incorrect operation.
+
+Downsides:
+\begin{itemize}
+\item
+We pay the cost of 1 extra message per item on iterative traversal
+\end{itemize}
+}
+    }
+  \end{slide}
+}
+
+
+
+
+\overlays{6}{
+  \begin{slide}{Solution 5: set\_next checking}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/sll4sol/sll4sol1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/sll4sol/sll4sol2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/sll4sol/sll4sol3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/sll4sol/sll4sol4.eps,scale=0.65}}
+      \fromSlide*{5}{\epsfig{file=figures/sll4sol/sll4sol5.eps,scale=0.65}}
+    }
+    {
+
+Let's look back to solution 2:
+
+The problem arises when B receives a \textbf{set\_next} message from O, when
+it had already received one from N. It has no way of telling whether or not
+the second message is incorrect.
+
+\begin{itemize}
+\fromSlide{2}{
+\item
+We can solve this by adding an additional parameter to the \textbf{set\_next}
+message containing the \emph{next} field of the item being inserted.
+\item
+B can check this, and if it doesn't match with its own \emph{next} field, then it
+means it must have received an earlier \textbf{set\_next} message. When this
+happens, the process of O's insertion can begin again, by first forwarding
+the request to N which will then send the \textbf{insert} message.}
+
+\fromSlide{5}{
+\item
+When O finally receives the second \textbf{insert} message, it will send back
+another \textbf{set\_next}, this time to N. Because the \emph{next} field now
+matches what N already has, it confirms that the join is valid and updates its
+own \emph{next} field to point to O.}
+\end{itemize}
+
+\fromSlide{6}{
+For accesses to a linked list to occur correctly, the basic requirement is that
+\emph{next} pointers be correct at all times.
+
+An interative or recursive traversal must be able to step through the entire
+list at any point in time - even when one or more items are being inserted.
+It is ok for a traversal to skip past a new item if that item has not yet
+completely finished being inserted.
+
+Solution 5 meets this requirement, and also permits concurrent insertions.}
+}
+
+  \end{slide}
+}
+
+
+
+
+
+\overlays{6}{
+  \begin{slide}{Chord joining process}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/join/join0.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/join/join1.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/join/join2.eps,scale=0.65}}
+      \fromSlide*{4}{\epsfig{file=figures/join/join3.eps,scale=0.65}}
+    }
+    {
+
+\untilSlide*{4}{
+We want to maintain the following invariants (excluding the case of node failure):
+
+\begin{itemize}
+\item
+At all times, the \emph{successor} pointers are correct
+\item
+No \emph{successor} pointer ever refers to a node that has not yet completely
+finished joining
+\end{itemize}
+
+The node joining process is very similar to that of solution 5 for linked lists.
+
+\fromSlide{2}{
+Consider the example of the chord circle shown to the left. Node C wants to
+join the chord, and uses X as its initial point of contact.}
+
+\begin{enumerate}
+\fromSlide{2}{
+\item
+C sends a \textbf{find\_successor} message to X. This does a recursive traversal of the
+list using fingers/\emph{successor} pointers, until it finds the node that comes one
+before the successor of C's id; in this case the node is A.}
+\fromSlide{3}{
+\item
+A sends an \textbf{insert} message to C, containing both its own identifier (so that C
+can send it back a reply), and A's current successor (so that C can initialise
+its \emph{successor} pointer).}
+\fromSlide{4}{
+\item
+C sends back a \textbf{set\_next} message to A, and includes a copy of its \emph{successor}
+pointer as the second argument of the message. A inspects this, notices that
+it is the same as it's own \emph{successor} pointer, and accepts C into the network
+by updating its \emph{successor} field to point to C.}
+\end{enumerate}}
+
+\fromSlide{5}{
+The defining condition for C to be officially part of the network is that it
+is accessible via a \emph{successor} pointer of an existing node. Setting this pointer
+happens as an atomic operation within A.}
+
+\fromSlide{6}{
+An interative or recursive traversal of the chord circle (such as another
+\textbf{find\_successor} operation) will encounter one of two states:
+
+\begin{itemize}
+\item
+A has not yet received a \textbf{set\_next} message with a second field that matches its successor.
+At this point its successor will still be B, and the traversal will proceed directly to B
+without encountering C at all.
+\item
+A has received a \textbf{set\_next} message, and the second field matched its own
+successor. When this happened, A would have updated its \emph{successor} field to point
+to C. A traversal that reaches A will thus be sent on to C next.
+
+Since a successful match of a \textbf{set\_next} message can only occur after C has
+its \emph{successor} pointer set correctly, the traversal will definitely be able to
+proceed on to B afterwards.
+\end{itemize}}
+
+    }
+  \end{slide}
+}
+
+\overlays{6}{
+  \begin{slide}{Concurrent joins - C first}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/conjoin/conjoin1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/conjoin/conjoin2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/conjoin/conjoin3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/conjoin/conjoin4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/conjoin/conjoin5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/conjoin/conjoin6.eps,scale=0.65}}
+    }
+    {
+Suppose two nodes, C and D, both try to join at the same time. They both have
+(different) ids that lie between A and B, and will thus be adjacent when the join
+is complete.
+
+\begin{enumstep}
+\item
+Both send a \textbf{find\_successor} to X, to determine where in the network they should
+be inserted.
+\item
+Since A is the closest node that comes before both ids, it sends an \textbf{insert} message
+to both of them, containing both a reference to A, and the current value of A's
+\emph{successor} field, which currently points to B.
+
+Both C and D receive the \textbf{insert} messages and initialise their \emph{successor} fields
+to point to B.
+
+Note: The \textbf{find\_successor} messages will actually be handled at different times by A;
+in this case the order is irrelevant since A does not change its state yet.
+\item
+The next thing that each node does is send a \textbf{find\_successor} to A. One of the messages
+will be handled first; in this case C's. A finds that the second field of the message,
+representing C's current \emph{successor} field, matches its own. It accepts C into the network
+in the same way as for the single-join case described previously. A's \emph{successor} field now
+points to C.
+\item
+Next, A will receive B's \textbf{set\_next} message. However, the second field of the message
+differs to A's newly-updated \emph{successor} field, which it leaves as-is.
+\item
+Because the successor pointer did not match, A sends a new \textbf{insert} message to D, this
+time giving the new successor, C. D updates its \emph{successor} ponter.
+\item
+D sends back a new \textbf{set\_next} message to A. This time the succesor matches, and A accepts
+D into the network by setting its \emph{successor} field to D.
+\end{enumstep}
+
+    }
+  \end{slide}
+}
+
+\overlays{6}{
+  \begin{slide}{Concurrent joins - D first}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/conjoin/conjoin1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/conjoin/conjoin2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/dconjoin/dconjoin3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/dconjoin/dconjoin4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/dconjoin/dconjoin5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/dconjoin/dconjoin6.eps,scale=0.65}}
+    }
+    {
+What about the case where D's \textbf{set\_next} message arrives first?
+\begin{enumstep}
+\item
+Both nodes send \textbf{find\_successor} to X, as before
+\item
+A sends an \textbf{insert} to both nodes, as before
+\item
+D's \textbf{set\_next} message reaches A. The successor pointers match, and D is accepted into
+the network. A's \emph{successor} field now points to D.
+\item
+C's \textbf{set\_next} message reaches A. The successor pointers do not match, so A does
+not change its state.
+\item
+A sends a new \textbf{insert} message to C. However, since A has
+noticed that C's id comes \emph{after} its \emph{successor} pointer, it retains the
+second value from the \textbf{set\_next} message in the \textbf{insert} message. However, the new
+\textbf{insert} message contains a reference to D instead of A.
+\item
+C sends another \textbf{set\_next} message, this time to D. It includes in the message
+the \emph{successor} field of the \textbf{insert} message, which points to B. D notices that
+the successor pointer in the message matches its own, and accepts C into the
+network. D's \emph{successor} field now points to C.
+\end{enumstep}
+
+\fromSlide{6}{
+The global state at the end of this message exchange sequence is identical to that which results
+from the previous case, where C's initial \textbf{set\_next} message arrives before D's.
+
+If more than two nodes try to join at the same time, then some of them will experience
+repeated ``rejections'', and will be sent new \textbf{insert} messages to update their successor
+pointers until they get both the right successor and send the \textbf{set\_next} back to
+the right predecessor.}
+    }
+  \end{slide}
+}
+
+\overlays{1}{
+  \begin{slide}{Duplicate identifiers}
+    \diagpage{
+      \epsfig{file=figures/dupids/dupids1.eps,scale=0.65}
+    }
+    {
+If two nodes C and D try to join the network with the same id, then only one can
+succeed (say, C). The other must try again with a different id.
+
+There are two cases that need to be catered for:
+
+\begin{itemize}
+\item
+D tries to join \emph{before} C has been accepted into the network
+\item
+D tries to join \emph{after} C has been accepted into the network
+\end{itemize}
+
+Recall that the transition from a state where a node is \emph{not} part of the network
+to a state in which it \emph{is} part of the network is atomic. Prior to
+an existing node (such as A) updating its \emph{successor} field to point to
+a new node, that new node is not considered part of the network.
+    }
+  \end{slide}
+}
+
+\overlays{6}{
+  \begin{slide}{Duplicates joining at the same time}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/dupids/dupids1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/dupids/dupids2.eps,scale=0.65}}
+% FIXME(3): incorrect id for D
+      \onlySlide*{3}{\epsfig{file=figures/dupids/dupids3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/dupids/dupids4.eps,scale=0.65}}
+      \onlySlide*{5}{\epsfig{file=figures/dupids/dupids5.eps,scale=0.65}}
+      \onlySlide*{6}{\epsfig{file=figures/dupids/dupids6.eps,scale=0.65}}
+    }
+    {
+Case 1: D tries to join \emph{before} C has been accepted into the network
+
+\begin{enumerate}
+\item
+The join process proceeds as for the first concurrent join case discussed previously,
+where C is accepted into the network first.
+\fromSlide{4}{
+\item
+When D sends the \textbf{set\_next} message to A, the successor pointers will not match,
+and A will send back an \textbf{insert} message.
+
+D will detect that the second field of the message contains a node reference
+with the same identifier as itself.}
+\fromSlide{6}{
+\item
+It will give up trying to join with this id and start again with a new one.}
+\end{enumerate}
+    }
+  \end{slide}
+}
+
+\overlays{4}{
+  \begin{slide}{Duplicates joining at different times}
+    \diagpage{
+      \onlySlide*{1}{\epsfig{file=figures/difdupids/difdupids1.eps,scale=0.65}}
+      \onlySlide*{2}{\epsfig{file=figures/difdupids/difdupids2.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/difdupids/difdupids3.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/difdupids/difdupids4.eps,scale=0.65}}
+    }
+    {
+Case 2: D tries to join \emph{after} C has been accepted into the network
+
+\begin{enumerate}
+\item
+D performs a \textbf{find\_successeor} lookup for its id.
+\fromSlide{3}{
+\item
+Because C has the same id, it is the successor of that id. The insert message
+will be sent by the node one before it in the circle, A.
+
+D detects that the second field of the insert message, containing A's \emph{successor}
+pointer, has the same id}
+\fromSlide{4}{
+\item
+D tries again with a new identifier}
+\end{enumerate}
+
+    }
+  \end{slide}
+}
+
+\overlays{5}{
+  \begin{slide}{Node failure}
+    \diagpage{
+      \onlySlide*{2}{\epsfig{file=figures/failure/failure1.eps,scale=0.65}}
+      \onlySlide*{3}{\epsfig{file=figures/failure/failure2.eps,scale=0.65}}
+      \onlySlide*{4}{\epsfig{file=figures/failure/failure3.eps,scale=0.65}}
+      \fromSlide*{5}{\epsfig{file=figures/failure/failure4.eps,scale=0.65}}
+    }
+    {
+Nodes register \emph{links} to other nodes, to inform the underlying communications mechanism
+that they wish to be informed when the failure of another node is detected. When it is, the
+node that established the link receives an \textbf{exit} message.
+
+A node maintains a link to its \emph{successor} pointer, as well as each of its finger
+table entries. The links are added/removed whenever one of these changes.
+
+\fromSlide{2}{
+Whenever a node fails, there will be some period of time between the failure occurring and
+other nodes finding out about it. During this time, \textbf{find\_successor} operations
+(and thus joins) will fail.
+
+Since the messaging model is send-and-forget, a node will not explicitly be notified that
+a message did not reach its destination - the message will simply be ``lost''.}
+
+\fromSlide{5}{
+\begin{itemize}
+\item
+If the sender had a link to the recipient, it will receive an \textbf{exit} message.
+This however will not be associated with the last message or messages the sender
+transmitted to the failed recipent.
+\item
+If the sender did not have a link to the recipient, it will simply never get a response.
+It should instead use a timeout to try the operation again after an appropriate period.
+\end{itemize}
+
+Distributed algorithms implemented using this messaging model must take these constraints
+into account.}
+
+    }
+  \end{slide}
+}
+
+
+\end{document}

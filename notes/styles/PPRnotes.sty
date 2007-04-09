@@ -1,0 +1,128 @@
+%==============================================================================
+%% PPRdefault.sty (a slide style for Prosper)
+%% Copyright 2000-2001 Frédéric Goualard
+%%
+%% Note: this style was contributed anonymously by a user.
+%%
+%% This program may be distributed and/or modified under the
+%% conditions of the LaTeX Project Public License, either version 1.2
+%% of this license or (at your option) any later version.
+%% The latest version of this license is in
+%%   http://www.latex-project.org/lppl.txt
+%% and version 1.2 or later is part of all distributions of LaTeX 
+%% version 1999/12/01 or later.
+%%
+%% This program consists of the files listed in manifest.txt
+%%
+%% CVSId : $Id: PPRdefault.sty,v 1.3 2001/10/24 15:11:25 exupery Exp $
+%%=============================================================================
+\NeedsTeXFormat{LaTeX2e}[1995/12/01]
+\ProvidesPackage{PPRdefault}[2000/11/30]
+\typeout{`default' style for Prosper ---}
+\typeout{CVSId: $Id: PPRdefault.sty,v 1.3 2001/10/24 15:11:25 exupery Exp $}
+\typeout{ }
+
+\IfFileExists{pst-grad}{\RequirePackage{pst-grad}}{\RequirePackage{gradient}}
+
+\RequirePackage{amssymb}
+\RequirePackage{multicol}
+
+% Loading packages necessary to define this slide style.
+% none
+
+\newrgbcolor{dkblue}{0 0 0.5}
+
+\newgray{grayb}{.5}
+
+\FontTitle{\white\usefont{T1}{phv}{b}{n}\fontsize{20.74pt}{18pt}\selectfont}
+          {\white\usefont{T1}{phv}{b}{n}\fontsize{20.74pt}{18pt}\selectfont}
+\FontText{\black\usefont{T1}{ptm}{m}{n}\fontsize{12pt}{12pt}\selectfont}
+         {\black\usefont{T1}{ptm}{m}{n}\fontsize{12pt}{12pt}\selectfont}
+
+
+% Positionning of the title of a slide.
+\newcommand{\slidetitle}[1]{%
+  \rput[c](11.0,9.9){\fontTitle{#1}}
+}
+
+% Positionning for a logo
+\LogoPosition{-1,-1.1}
+
+% Definition of this style for slides.
+
+\newcommand{\BasicFrame}[1]{%
+%\psframe[fillstyle=gradient,gradbegin=blue,gradend=black,gradmidpoint=1,
+%         gradangle=90,linestyle=none](-3.0,16.9)(25.0,18.0)
+%\psframe[fillstyle=gradient,gradbegin=blue,gradend=black,gradmidpoint=1,
+%         gradangle=90,linestyle=none](-3.0,-3.0)(25.0,-2.0)
+\psframe[fillstyle=solid,fillcolor=dkblue,linestyle=none](-3.0,16.9)(25.0,18.0)
+\psframe[fillstyle=solid,fillcolor=dkblue,linestyle=none](-3.0,-3.0)(25.0,-2.0)
+
+\PutLogo % Mandatory
+{#1}}
+
+\NewSlideStyle[260mm]{t}{11.0,8.2}{BasicFrame}
+\PDFCroppingBox{10 40 594 800}
+\RequirePackage{semhelv}
+
+\myitem{1}{\includegraphics[width=.4cm]{red-bullet-on-white.ps}}
+\myitem{2}{\includegraphics[width=.3cm]{green-bullet-on-white.ps}}
+\myitem{3}{\includegraphics[width=.3cm]{yellow-bullet-on-white.ps}}
+
+\newcommand{\diagpage}[2]{
+\begin{center}
+\begin{tabular}{ll}
+\begin{minipage}[t]{12cm}
+~
+
+{#1}
+\end{minipage}
+&
+~
+
+\begin{minipage}[t]{12cm}
+\setlength\parskip{\medskipamount}
+\setlength\parindent{0pt}
+{#2}
+\end{minipage}
+\end{tabular}
+\end{center}
+}
+
+
+
+\newcommand{\twocolslide}[1]{
+\end{raggedright}
+\setlength\parskip{\medskipamount}
+\setlength\parindent{0pt}
+\begin{multicols}{2}{}
+\fontText{
+{#1}
+
+
+~
+}
+\end{multicols}
+\begin{raggedright}
+}
+
+
+\newcounter{enum@step}
+\newenvironment{enumstep}[1][1]{%
+  \begin{enumerate}\begin{raggedright}%
+      \ifnum\the\@itemdepth=1%
+         \setcounter{enum@step}{#1}%
+         \addtocounter{enum@step}{-1}%
+      \fi%
+      \def\item{\stepcounter{enum@step}%
+         \FromSlide{\theenum@step}\orig@item}%
+    }{\end{raggedright}\end{enumerate}\ifnum\the\@itemdepth=0\setcounter{enum@step}{0}\fi}
+
+\slidesmag{0}
+
+\endinput
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: t
+%%% End: 
