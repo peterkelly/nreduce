@@ -80,8 +80,8 @@ const char *msg_names[MSG_COUNT] = {
   "CONSOLE_LINE",
   "FIND_SUCCESSOR",
   "GOT_SUCCESSOR",
-  "NOTIFY",
-  "NOTIFY_REPLY",
+  "GET_SUCCLIST",
+  "REPLY_SUCCLIST",
   "STABILIZE",
   "GET_TABLE",
   "REPLY_TABLE",
@@ -92,6 +92,8 @@ const char *msg_names[MSG_COUNT] = {
   "DEBUG_DONE",
   "ID_CHANGED",
   "JOINED",
+  "INSERT",
+  "SET_NEXT",
 };
 
 endpoint *find_endpoint(node *n, int localid)

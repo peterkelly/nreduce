@@ -164,7 +164,7 @@ typedef struct {
 
   int incorrect_nodes;
   int incorrect_successor;
-  int incorrect_predecessor;
+  int incorrect_links;
   int incorrect_fingers;
   int incorrect_succlist;
   int total_bad;
@@ -218,7 +218,7 @@ static void check_debug_start(check *chk, endpointid *caller)
 
   chk->incorrect_nodes = 0;
   chk->incorrect_successor = 0;
-  chk->incorrect_predecessor = 0;
+  chk->incorrect_links = 0;
   chk->incorrect_fingers = 0;
   chk->incorrect_succlist = 0;
   chk->total_bad = 0;
@@ -232,37 +232,39 @@ static void check_debug_start(check *chk, endpointid *caller)
     check_abort(chk);
   }
   else if ((1 <= chk->iterations) && (0 == (chk->iterations % DISRUPT_INTERVAL))) {
-    int i;
-    int j;
-    int *killindices = (int*)calloc(KILL_COUNT,sizeof(int));
-    endpointid initial = chk->nodes[rand()%chk->ncount].epid;
-    for (i = 0; i < KILL_COUNT; i++) {
-      int have;
-      int index;
-      do {
-        have = 0;
-        index = rand()%chk->ncount;
-
-        for (j = 0; j < i; j++)
-          if (killindices[j] == index)
-            have = 1;
-
-        if (endpointid_equals(&initial,&chk->nodes[index].epid))
-          have = 1;
-
-      } while (have);
-      killindices[i] = index;
+    if (0 == (chk->iterations % (2*DISRUPT_INTERVAL))) {
+      /* Add some new nodes */
+      endpointid initial = chk->nodes[rand()%chk->ncount].epid;
+      int i;
+      for (i = 0; i < JOIN_COUNT; i++) {
+        add_node(chk->n,chk->endpt,chk->managerids[rand()%chk->nmanagers],initial);
+        chk->pending_joins++;
+      }
     }
+    else {
+      /* Kill some existing nodes */
+      int i;
+      int j;
+      int *killindices = (int*)calloc(KILL_COUNT,sizeof(int));
+      for (i = 0; i < KILL_COUNT; i++) {
+        int have;
+        int index;
+        do {
+          have = 0;
+          index = rand()%chk->ncount;
 
-    for (i = 0; i < KILL_COUNT; i++) {
-      node_send(chk->n,chk->endpt->epid.localid,chk->nodes[killindices[i]].epid,MSG_KILL,NULL,0);
-    }
+          for (j = 0; j < i; j++)
+            if (killindices[j] == index)
+              have = 1;
+        } while (have);
+        killindices[i] = index;
+      }
 
-    free(killindices);
+      for (i = 0; i < KILL_COUNT; i++) {
+        node_send(chk->n,chk->endpt->epid.localid,chk->nodes[killindices[i]].epid,MSG_KILL,NULL,0);
+      }
 
-    for (i = 0; i < JOIN_COUNT; i++) {
-      add_node(chk->n,chk->endpt,chk->managerids[rand()%chk->nmanagers],initial);
-      chk->pending_joins++;
+      free(killindices);
     }
 
     chk->iterations++;
@@ -314,7 +316,7 @@ static void check_check_next(check *chk)
              seconds,
              100.0*chk->incorrect_nodes/(double)chk->ncount,
              100.0*chk->incorrect_successor/(double)chk->ncount,
-             100.0*chk->incorrect_predecessor/(double)chk->ncount,
+             100.0*chk->incorrect_links/(double)chk->ncount,
              100.0*chk->incorrect_fingers/(double)(MBITS*chk->ncount),
              100.0*chk->total_bad/(double)chk->total_lookups,
              chk->total_hops/(double)chk->total_lookups,
@@ -344,16 +346,15 @@ static void check_reply_table(check *chk, reply_table_msg *rtm)
   if (!chk->indebug)
     return;
   chordnode exp_successor = chk->nodes[(chk->cur_node+1)%chk->ncount];
-  chordnode exp_predecessor = chk->nodes[(chk->cur_node+chk->ncount-1)%chk->ncount];
   int k;
 
   /* Check successor pointer */
   if (chordnode_isnull(rtm->fingers[1]) || (rtm->fingers[1].id != exp_successor.id))
     chk->incorrect_successor++;
 
-  /* Check predecessor */
-  if (chordnode_isnull(rtm->predecessor) || (rtm->predecessor.id != exp_predecessor.id))
-    chk->incorrect_predecessor++;
+  /* Check links */
+  if (!rtm->linksok)
+    chk->incorrect_links++;
 
   /* Check fingers (including successor) */
   for (k = 1; k <= MBITS; k++) {
@@ -446,6 +447,7 @@ static void check_id_changed(check *chk, id_changed_msg *m)
 static void check_joined(check *chk, joined_msg *m)
 {
   chk->pending_joins--;
+  assert(0 <= chk->pending_joins);
   printf("#%d ("EPID_FORMAT") has joined the network; %d pending\n",
          m->cn.id,EPID_ARGS(m->cn.epid),chk->pending_joins);
   check_abort(chk);

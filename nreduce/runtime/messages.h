@@ -58,8 +58,8 @@
 
 #define MSG_FIND_SUCCESSOR      26
 #define MSG_GOT_SUCCESSOR       27
-#define MSG_NOTIFY              28
-#define MSG_NOTIFY_REPLY        29
+#define MSG_GET_SUCCLIST        28
+#define MSG_REPLY_SUCCLIST      29
 #define MSG_STABILIZE           30
 
 #define MSG_GET_TABLE           31
@@ -71,8 +71,10 @@
 #define MSG_DEBUG_DONE          37
 #define MSG_ID_CHANGED          38
 #define MSG_JOINED              39
+#define MSG_INSERT              40
+#define MSG_SET_NEXT            41
 
-#define MSG_COUNT               40
+#define MSG_COUNT               42
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];

@@ -50,25 +50,13 @@ typedef struct {
 } got_successor_msg;
 
 typedef struct {
-  chordnode ndash;
-} notify_msg;
-
-typedef struct {
-  endpointid sender;
-} stabilize2_msg;
-
-typedef struct {
-  chordnode sucprec;
-} stabilize3_msg;
-
-typedef struct {
   endpointid sender;
 } get_table_msg;
 
 typedef struct {
-  chordnode predecessor;
   chordnode fingers[MBITS+1];
   chordnode successors[NSUCCESSORS+1];
+  int linksok;
 } reply_table_msg;
 
 typedef struct {
@@ -85,16 +73,29 @@ typedef struct {
 } joined_msg;
 
 typedef struct {
-  chordnode old_sucprec;
-  chordnode sucprec;
-  chordnode successors[NSUCCESSORS+1];
-} notify_reply_msg;
+  endpointid predecessor;
+  chordnode successor;
+} insert_msg;
+
+typedef struct {
+  chordnode new_successor;
+  chordnode old_successor;
+} set_next_msg;
 
 typedef struct {
   endpointid initial;
   endpointid caller;
   int stabilize_delay;
 } start_chord_msg;
+
+typedef struct {
+  endpointid sender;
+} get_succlist_msg;
+
+typedef struct {
+  endpointid sender;
+  chordnode successors[NSUCCESSORS+1];
+} reply_succlist_msg;
 
 int chordnode_isnull(chordnode n);
 void start_chord(node *n, endpointid initial, endpointid caller, int stabilize_delay);

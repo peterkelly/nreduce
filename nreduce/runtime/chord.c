@@ -45,6 +45,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#define RANDOM_IDS
+
 #ifdef DEBUG_CHORD
 #define CHORD_DEBUG(...) chord_debug(crd->self,__func__,__VA_ARGS__)
 
@@ -138,12 +140,10 @@ typedef struct {
   endpointid caller;
   endpointid initial;
   chordnode self;
-  chordnode predecessor;
   chordnode fingers[MBITS+1];
   chordnode successors[NSUCCESSORS+1];
   endpoint *endpt;
   int stabilize_delay;
-  int joined;
 } chord;
 
 int chordnode_isnull(chordnode n)
@@ -193,9 +193,6 @@ static int have_link(endpoint *endpt, endpointid epid)
 static int link_ok_to_have(chord *crd, endpointid epid)
 {
   int i;
-  if (!chordnode_isnull(crd->predecessor) &&
-      endpointid_equals(&crd->predecessor.epid,&epid))
-    return 1;
   for (i = 1; i < MBITS; i++) {
     if (!chordnode_isnull(crd->fingers[i]) &&
         endpointid_equals(&crd->fingers[i].epid,&epid))
@@ -210,8 +207,6 @@ static int check_links(chord *crd)
   list *l;
   int r = 1;
   lock_node(crd->n);
-  if (!chordnode_isnull(crd->predecessor) && !have_link(crd->endpt,crd->predecessor.epid))
-    r = 0;
   for (i = 1; i < MBITS; i++) {
     if (!chordnode_isnull(crd->fingers[i]) && !have_link(crd->endpt,crd->fingers[i].epid))
       r = 0;
@@ -229,9 +224,6 @@ static int count_instances(chord *crd, endpointid epid)
 {
   int i;
   int count = 0;
-  if (!chordnode_isnull(crd->predecessor) &&
-      endpointid_equals(&crd->predecessor.epid,&epid))
-    count++;
   for (i = 1; i < MBITS; i++) {
     if (!chordnode_isnull(crd->fingers[i]) &&
         endpointid_equals(&crd->fingers[i].epid,&epid))
@@ -262,11 +254,6 @@ static void set_noderef(chord *crd, chordnode *ptr, chordnode cn)
   unlock_node(crd->n);
 }
 
-static void set_predecessor(chord *crd, chordnode newpredecessor)
-{
-  set_noderef(crd,&crd->predecessor,newpredecessor);
-}
-
 static void set_finger(chord *crd, int i, chordnode newfinger)
 {
   set_noderef(crd,&crd->fingers[i],newfinger);
@@ -283,25 +270,22 @@ static void chord_clear_tables(chord *crd)
   chordnode null_node;
   memset(&null_node,0,sizeof(chordnode));
 
-  set_predecessor(crd,null_node);
   for (i = 1; i <= MBITS; i++)
     set_finger(crd,i,null_node);
   memset(&crd->successors,0,sizeof(crd->successors));
 }
 
-static void chord_notify_joined(chord *crd)
+static void chord_notify_joined(chord *crd, chordnode newnode)
 {
   joined_msg jm;
   jm.cn = crd->self;
   node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_JOINED,&jm,sizeof(jm));
-  crd->joined = 1;
 }
 
 static void chord_join(chord *crd)
 {
   node *n = crd->n;
 
-  assert(sizeof(chordnode) == sizeof(crd->predecessor));
   assert((MBITS+1)*sizeof(chordnode) == sizeof(crd->fingers));
   assert((NSUCCESSORS+1)*sizeof(chordnode) == sizeof(crd->successors));
 
@@ -310,7 +294,7 @@ static void chord_join(chord *crd)
   if (0 == crd->initial.localid) {
     CHORD_DEBUG("no existing node");
     set_successor(crd,crd->self);
-    chord_notify_joined(crd);
+    chord_notify_joined(crd,crd->self);
   }
   else {
     find_successor_msg fsm;
@@ -327,15 +311,22 @@ static void chord_find_successor(chord *crd, find_successor_msg *m)
 {
   chordnode successor = crd->fingers[1];
 
-  assert(crd->joined);
   assert(!chordnode_isnull(successor));
 
   if (inrange_open_closed(m->id,crd->self.id,successor.id)) {
-    got_successor_msg gsm;
-    gsm.successor = successor;
-    gsm.hops = m->hops;
-    gsm.payload = m->payload;
-    node_send(crd->n,crd->self.epid.localid,m->sender,MSG_GOT_SUCCESSOR,&gsm,sizeof(gsm));
+    if (1 == m->payload) {
+      insert_msg im;
+      im.predecessor = crd->self.epid;
+      im.successor = successor;
+      node_send(crd->n,crd->self.epid.localid,m->sender,MSG_INSERT,&im,sizeof(im));
+    }
+    else {
+      got_successor_msg gsm;
+      gsm.successor = successor;
+      gsm.hops = m->hops;
+      gsm.payload = m->payload;
+      node_send(crd->n,crd->self.epid.localid,m->sender,MSG_GOT_SUCCESSOR,&gsm,sizeof(gsm));
+    }
   }
   else {
     chordnode closest = closest_preceding_finger(crd,m->id);
@@ -344,52 +335,18 @@ static void chord_find_successor(chord *crd, find_successor_msg *m)
   }
 }
 
-static void chord_notify(chord *crd, notify_msg *m)
-{
-  chordnode successor = crd->fingers[1];
-  notify_reply_msg nrm;
-  int i;
-
-  nrm.old_sucprec = crd->predecessor;
-
-  if (successor.id == crd->self.id) {
-    assert(endpointid_equals(&successor.epid,&crd->self.epid));
-    set_successor(crd,m->ndash);
-  }
-
-  if (!chordnode_isnull(crd->predecessor) && (crd->predecessor.id == m->ndash.id) &&
-      !endpointid_equals(&crd->predecessor.epid,&m->ndash.epid)) {
-    CHORD_DEBUG("duplicate join attempt: #%d ("EPID_FORMAT" and "EPID_FORMAT")",
-                crd->predecessor.id,EPID_ARGS(crd->predecessor.epid),EPID_ARGS(m->ndash.epid));
-  }
-
-  if (chordnode_isnull(crd->predecessor)) {
-    CHORD_DEBUG("predecessor -> #%d",m->ndash.id);
-    set_predecessor(crd,m->ndash);
-  }
-  else if (inrange_open(m->ndash.id,crd->predecessor.id,crd->self.id)) {
-    CHORD_DEBUG("predecessor #%d -> #%d",crd->predecessor.id,m->ndash.id);
-    node_send(crd->n,crd->self.epid.localid,crd->predecessor.epid,MSG_STABILIZE,NULL,0);
-    set_predecessor(crd,m->ndash);
-  }
-  nrm.sucprec = crd->predecessor;
-
-  nrm.successors[1] = crd->fingers[1];
-  for (i = 2; i <= NSUCCESSORS; i++)
-    nrm.successors[i] = crd->successors[i-1];
-
-  node_send(crd->n,crd->self.epid.localid,m->ndash.epid,MSG_NOTIFY_REPLY,&nrm,sizeof(nrm));
-}
-
 static void duplicate_detected(chord *crd, chordnode existing)
 {
   chordid oldid = crd->self.id;
+  #ifdef RANDOM_IDS
   chordid newid = rand()%KEYSPACE;
+  #else
+  chordid newid = crd->self.id+1;
+  #endif
   id_changed_msg idcm;
 
   CHORD_DEBUG("duplicate; existing #%d ("EPID_FORMAT"); using new id #%d",
               existing.id,EPID_ARGS(existing.epid),newid);
-  assert(!crd->joined);
 
   crd->self.id = newid;
 
@@ -400,61 +357,89 @@ static void duplicate_detected(chord *crd, chordnode existing)
   chord_join(crd);
 }
 
-static void chord_notify_reply(chord *crd, notify_reply_msg *m)
+static void chord_insert(chord *crd, insert_msg *m)
 {
-  if (!chordnode_isnull(m->sucprec)) {
-    chordnode successor = crd->fingers[1];
-
-    if (m->sucprec.id == crd->self.id) {
-      if (!endpointid_equals(&m->sucprec.epid,&crd->self.epid)) {
-        duplicate_detected(crd,m->sucprec);
-        return;
-      }
-      else if (!crd->joined) {
-        /* set the new predecessor */
-        assert(chordnode_isnull(crd->predecessor));
-        set_predecessor(crd,m->old_sucprec);
-
-        CHORD_DEBUG("join successful; successor %d, sucprec #%d ("EPID_FORMAT")",
-                    successor.id,m->sucprec.id,EPID_ARGS(m->sucprec.epid));
-        CHORD_DEBUG("predecessor -> #%d",crd->predecessor);
-        chord_notify_joined(crd);
-      }
-    }
-
-    if (inrange_open(m->sucprec.id,crd->self.id,successor.id)) {
-      notify_msg nm;
-      CHORD_DEBUG("successor %d -> %d E (%d,%d)",
-                  successor.id,m->sucprec.id,crd->self.id,successor.id);
-      set_successor(crd,m->sucprec);
-      nm.ndash = crd->self;
-      node_send(crd->n,crd->self.epid.localid,m->sucprec.epid,MSG_NOTIFY,&nm,sizeof(nm));
-    }
+  if (m->successor.id == crd->self.id) {
+    /* Node with our id already exists in the network; we have to pick a new one */
+    duplicate_detected(crd,m->successor);
   }
+  else {
+    /* Initialize our successor and try to update the sender's successor pointer */
+    set_next_msg snm;
+    CHORD_DEBUG("successor %d ("EPID_FORMAT"), predecessor ("EPID_FORMAT")",
+                m->successor.id,EPID_ARGS(m->successor.epid),EPID_ARGS(m->predecessor));
+    set_successor(crd,m->successor);
+    snm.new_successor = crd->self;
+    snm.old_successor = m->successor;
+    node_send(crd->n,crd->self.epid.localid,m->predecessor,MSG_SET_NEXT,&snm,sizeof(snm));
+  }
+}
+
+static void chord_set_next(chord *crd, set_next_msg *m)
+{
+  chordnode successor = crd->fingers[1];
+  if (!endpointid_equals(&m->old_successor.epid,&successor.epid)) {
+    /* Another node joined since we sent this one the insert message; send another insert */
+    insert_msg im;
+    CHORD_DEBUG("mismatch: new %d ("EPID_FORMAT"), old %d ("EPID_FORMAT"); sending another insert",
+                m->new_successor.id,EPID_ARGS(m->new_successor.epid),
+                successor.id,EPID_ARGS(successor.epid));
+
+    assert(m->old_successor.id != successor.id);
+    assert(m->new_successor.id != crd->self.id);
+
+    if (inrange_open_closed(m->new_successor.id,crd->self.id,successor.id)) {
+      /* New node sits between me and my succcessor */
+      im.predecessor = crd->self.epid;
+      im.successor = successor;
+    }
+    else {
+      /* New node comes after my successor */
+      im.predecessor = successor.epid;
+      im.successor = m->old_successor;
+    }
+
+    node_send(crd->n,crd->self.epid.localid,m->new_successor.epid,MSG_INSERT,&im,sizeof(im));
+  }
+  else {
+    /* Successor pointers match; accept the new node into the network */
+    CHORD_DEBUG("match: new %d ("EPID_FORMAT"), old %d ("EPID_FORMAT"); join successful",
+                m->new_successor.id,EPID_ARGS(m->new_successor.epid),
+                successor.id,EPID_ARGS(successor.epid));
+    assert(m->old_successor.id == successor.id);
+    set_successor(crd,m->new_successor);
+    chord_notify_joined(crd,m->new_successor);
+  }
+}
+
+static void chord_get_succlist(chord *crd, get_succlist_msg *m)
+{
+  reply_succlist_msg rsm;
+  int i;
+
+  rsm.sender = crd->self.epid;
+  rsm.successors[1] = crd->fingers[1];
+  for (i = 2; i <= NSUCCESSORS; i++)
+    rsm.successors[i] = crd->successors[i-1];
+
+  node_send(crd->n,crd->self.epid.localid,m->sender,MSG_REPLY_SUCCLIST,&rsm,sizeof(rsm));
+}
+
+static void chord_reply_succlist(chord *crd, reply_succlist_msg *m)
+{
+  /* Ignore it if our successor has changed since the request */
+  if (!endpointid_equals(&m->sender,&crd->fingers[1].epid))
+    return;
+
   memcpy(&crd->successors,m->successors,sizeof(m->successors));
 }
 
 static void chord_got_successor(chord *crd, got_successor_msg *m)
 {
-  if (1 == m->payload) {
-    CHORD_DEBUG("setting successor = #%d ("EPID_FORMAT")",
-                m->successor.id,EPID_ARGS(m->successor.epid));
-  }
-
+  assert(1 < m->payload);
   assert(!chordnode_isnull(m->successor));
-
-  if (m->successor.id == crd->self.id) {
-    if (!endpointid_equals(&m->successor.epid,&crd->self.epid)) {
-      duplicate_detected(crd,m->successor);
-      return;
-    }
-    else {
-      assert(1 < m->payload);
-    }
-  }
-
-  if (1 == m->payload)
-    node_send(crd->n,crd->endpt->epid.localid,crd->self.epid,MSG_STABILIZE,NULL,0);
+  assert((m->successor.id != crd->self.id) ||
+         endpointid_equals(&m->successor.epid,&crd->self.epid));
 
   set_finger(crd,m->payload,m->successor);
 }
@@ -462,36 +447,32 @@ static void chord_got_successor(chord *crd, got_successor_msg *m)
 static void chord_stabilize(chord *crd)
 {
   chordnode successor = crd->fingers[1];
-  notify_msg nm;
+  get_succlist_msg gsm;
 
   if (chordnode_isnull(successor))
     return; /* still joining */
 
-  /* Send a NOTIFY message to our current successor */
-  nm.ndash = crd->self;
-  node_send(crd->n,crd->self.epid.localid,successor.epid,MSG_NOTIFY,&nm,sizeof(nm));
+  gsm.sender = crd->self.epid;
+  node_send(crd->n,crd->self.epid.localid,successor.epid,MSG_GET_SUCCLIST,&gsm,sizeof(gsm));
 
   /* Update a random finger */
-  if (crd->joined) {
-    int k;
-    find_successor_msg fsm;
-    k = 2+rand()%(MBITS-2);
-    fsm.id = crd->self.id+(int)pow(2,k-1);
-    fsm.sender = crd->self.epid;
-    fsm.hops = 0;
-    fsm.payload = k;
-    node_send(crd->n,crd->self.epid.localid,crd->self.epid,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
-  }
+  int k;
+  find_successor_msg fsm;
+  k = 2+rand()%(MBITS-2);
+  fsm.id = crd->self.id+(int)pow(2,k-1);
+  fsm.sender = crd->self.epid;
+  fsm.hops = 0;
+  fsm.payload = k;
+  node_send(crd->n,crd->self.epid.localid,crd->self.epid,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
 }
 
 static void chord_get_table(chord *crd, get_table_msg *m)
 {
   reply_table_msg rtm;
 
-  rtm.predecessor = crd->predecessor;
-
   memcpy(&rtm.fingers,&crd->fingers,sizeof(crd->fingers));
   memcpy(&rtm.successors,&crd->successors,sizeof(crd->successors));
+  rtm.linksok = check_links(crd);
   node_send(crd->n,crd->self.epid.localid,m->sender,MSG_REPLY_TABLE,&rtm,sizeof(rtm));
 }
 
@@ -502,9 +483,6 @@ static void chord_endpoint_exit(chord *crd, endpoint_exit_msg *m)
   memset(&null_node,0,sizeof(chordnode));
   CHORD_DEBUG("received ENDPOINT_EXIT for "
               EPID_FORMAT,EPID_ARGS(m->epid));
-
-  if (endpointid_equals(&m->epid,&crd->predecessor.epid))
-    set_predecessor(crd,null_node);
 
   if (endpointid_equals(&m->epid,&crd->fingers[1].epid)) {
     if (!chordnode_isnull(crd->successors[1])) {
@@ -536,7 +514,11 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   assert(NULL == crd->endpt);
   crd->endpt = endpt;
 
-  crd->self.id = rand() % KEYSPACE;
+  #ifdef RANDOM_IDS
+  crd->self.id = rand()%KEYSPACE;
+  #else
+  crd->self.id = 4;
+  #endif
   crd->self.epid = endpt->epid;
 
   csm.cn = crd->self;
@@ -553,20 +535,27 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(find_successor_msg) == msg->hdr.size);
       chord_find_successor(crd,(find_successor_msg*)msg->data);
       break;
-    case MSG_NOTIFY:
-      assert(sizeof(notify_msg) == msg->hdr.size);
-      chord_notify(crd,(notify_msg*)msg->data);
+    case MSG_INSERT:
+      assert(sizeof(insert_msg) == msg->hdr.size);
+      chord_insert(crd,(insert_msg*)msg->data);
       break;
-    case MSG_NOTIFY_REPLY:
-      assert(sizeof(notify_reply_msg) == msg->hdr.size);
-      chord_notify_reply(crd,(notify_reply_msg*)msg->data);
+    case MSG_SET_NEXT:
+      assert(sizeof(set_next_msg) == msg->hdr.size);
+      chord_set_next(crd,(set_next_msg*)msg->data);
+      break;
+    case MSG_GET_SUCCLIST:
+      assert(sizeof(get_succlist_msg) == msg->hdr.size);
+      chord_get_succlist(crd,(get_succlist_msg*)msg->data);
+      break;
+    case MSG_REPLY_SUCCLIST:
+      assert(sizeof(reply_succlist_msg) == msg->hdr.size);
+      chord_reply_succlist(crd,(reply_succlist_msg*)msg->data);
       break;
     case MSG_GOT_SUCCESSOR:
       assert(sizeof(got_successor_msg) == msg->hdr.size);
       chord_got_successor(crd,(got_successor_msg*)msg->data);
       break;
     case MSG_STABILIZE:
-      assert(check_links(crd));
       chord_stabilize(crd);
       break;
     case MSG_GET_TABLE:
