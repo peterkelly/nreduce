@@ -930,6 +930,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
   tsk->n = n;
   tsk->endpt = endpt;
+  tsk->thread = pthread_self();
 
   write(tsk->threadrunningfds[1],&semdata,1);
 
