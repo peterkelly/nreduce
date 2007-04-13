@@ -454,6 +454,9 @@ void mark_roots(task *tsk, short bit)
   if (tsk->partial)
     mark(tsk,tsk->partial_scp,bit);
 
+  if (tsk->out_so)
+    mark(tsk,tsk->out_so->p,bit);
+
   for (f = tsk->sparked.first; f; f = f->next) {
     mark_frame(tsk,f,bit);
     assert(NULL == f->wq.frames);

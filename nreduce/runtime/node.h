@@ -322,6 +322,7 @@ typedef struct newtask_msg {
   int tid;
   int groupsize;
   int bcsize;
+  socketid out_sockid;
   char bcdata[0];
 } newtask_msg;
 

@@ -1466,6 +1466,14 @@ static void b_error1(task *tsk, pntr *argstack)
   return;
 }
 
+static void b_getoutput(task *tsk, pntr *argstack)
+{
+  if (tsk->out_so)
+    argstack[0] = tsk->out_so->p;
+  else
+    argstack[0] = tsk->globnilpntr;
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1550,6 +1558,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 /* Other */
 { "error1",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error1         },
+{ "getoutput",      1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_getoutput      },
 
 };
 

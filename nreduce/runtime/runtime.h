@@ -110,8 +110,9 @@
 
 /* Other */
 #define B_ERROR          52
+#define B_GETOUTPUT      53
 
-#define NUM_BUILTINS     53
+#define NUM_BUILTINS     54
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -446,6 +447,8 @@ typedef struct task {
   array *ackmsg;
   array **distmarks;
   node *n;
+  socketid out_sockid;
+  sysobject *out_so;
 
   int ioalloc;
   int iocount;
@@ -589,7 +592,7 @@ void set_error(task *tsk, const char *format, ...);
 /* client */
 
 void start_launcher(node *n, const char *bcdata, int bcsize,
-                    endpointid *managerids, int count, pthread_t *threadp);
+                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid);
 int do_client(char *initial_str, int argc, char **argv);
 
 /* data */

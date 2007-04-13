@@ -26,7 +26,7 @@ spark val =
 (seq (sparklist val) val)
 
 __start =
-(printer nil main)
+(printer (getoutput nil) main)
 
 streamfd fd =
 (readchunk fd (streamfd fd))

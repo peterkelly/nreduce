@@ -299,6 +299,18 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
                ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
       newtsk = add_task(n,ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
+      newtsk->out_sockid = ntmsg->out_sockid;
+
+      if (!socketid_isnull(&newtsk->out_sockid)) {
+        cell *c;
+        sysobject *so = new_sysobject(newtsk,SYSOBJECT_CONNECTION,&c);
+        so->hostname = strdup("client");
+        so->port = -1;
+        so->sockid = newtsk->out_sockid;
+        so->connected = 1;
+        newtsk->out_so = so;
+      }
+
       node_send(n,endpt->epid.localid,msg->hdr.source,MSG_NEWTASKRESP,
                 &newtsk->endpt->epid.localid,sizeof(int));
       break;

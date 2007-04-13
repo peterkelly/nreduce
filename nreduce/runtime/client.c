@@ -57,6 +57,7 @@ typedef struct launcher {
   endpoint *endpt;
   endpointid *endpointids;
   int *localids;
+  socketid out_sockid;
 } launcher;
 
 static int get_responses(node *n, launcher *lr, int tag,
@@ -129,6 +130,7 @@ static void send_newtask(launcher *lr)
   ntmsg->groupsize = lr->count;
   ntmsg->bcsize = lr->bcsize;
   memcpy(&ntmsg->bcdata,lr->bcdata,lr->bcsize);
+  ntmsg->out_sockid = lr->out_sockid;
   for (i = 0; i < lr->count; i++) {
     ntmsg->tid = i;
     node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
@@ -220,7 +222,7 @@ static void launcher_thread(node *n, endpoint *endpt, void *arg)
 }
 
 void start_launcher(node *n, const char *bcdata, int bcsize,
-                    endpointid *managerids, int count, pthread_t *threadp)
+                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid)
 {
   launcher *lr = (launcher*)calloc(1,sizeof(launcher));
   lr->n = n;
@@ -230,11 +232,12 @@ void start_launcher(node *n, const char *bcdata, int bcsize,
   lr->managerids = malloc(count*sizeof(endpointid));
   memcpy(lr->managerids,managerids,count*sizeof(endpointid));
   memcpy(lr->bcdata,bcdata,bcsize);
+  lr->out_sockid = out_sockid;
 
   node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,threadp);
 }
 
-static int client_run(node *n, list *nodes, const char *filename)
+static int client_run(node *n, list *nodes, const char *filename, socketid out_sockid)
 {
   int bcsize;
   char *bcdata;
@@ -262,7 +265,7 @@ static int client_run(node *n, list *nodes, const char *filename)
   source_free(src);
 
   node_log(n,LOG_INFO,"Compiled");
-  start_launcher(n,bcdata,bcsize,managerids,count,&thread);
+  start_launcher(n,bcdata,bcsize,managerids,count,&thread,out_sockid);
 
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
@@ -270,6 +273,51 @@ static int client_run(node *n, list *nodes, const char *filename)
   free(managerids);
   free(bcdata);
   return 0;
+}
+
+/* FIXME: make sure that when the task has an error, the message is sent back to the client */
+static void output_thread(node *n, endpoint *endpt, void *arg)
+{
+  int done = 0;
+  while (!done) {
+    message *msg = endpoint_next_message(endpt,-1);
+    switch (msg->hdr.tag) {
+    case MSG_WRITE: {
+      char *tmp;
+      write_response_msg wrm;
+      write_msg *m = (write_msg*)msg->data;
+      assert(sizeof(write_msg) <= msg->hdr.size);
+      tmp = malloc(m->len+1);
+      memcpy(tmp,m->data,m->len);
+      tmp[m->len] = '\0';
+      printf("%s",tmp);
+      free(tmp);
+
+      wrm.ioid = m->ioid;
+      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+      break;
+    }
+    case MSG_FINWRITE: {
+      finwrite_response_msg frm;
+      finwrite_msg *m = (finwrite_msg*)msg->data;
+      assert(sizeof(finwrite_msg) == msg->hdr.size);
+      frm.ioid = m->ioid;
+      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_FINWRITE_RESPONSE,
+                &frm,sizeof(frm));
+      break;
+    }
+    case MSG_DELETE_CONNECTION:
+      done = 1;
+      break;
+    case MSG_KILL:
+      done = 1;
+      break;
+    default:
+      fatal("invalid message: %d",msg->hdr.tag);
+      break;
+    }
+    message_free(msg);
+  }
 }
 
 static void client_callback(struct node *n, void *data, int event,
@@ -399,10 +447,18 @@ int do_client(char *initial_str, int argc, char **argv)
       int want = atoi(argv[1]);
       char *program = argv[2];
       list *nodes = find_nodes(n,initial,want);
-      if (0 != client_run(n,nodes,program))
+      pthread_t thread;
+      socketid out_sockid;
+      out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,NULL,&thread);
+      out_sockid.sid = 1;
+      if (0 != client_run(n,nodes,program,out_sockid))
         exit(1);
       list_free(nodes,free);
-      printf("Program launched: %s\n",program);
+
+      if (0 != pthread_join(thread,NULL))
+        fatal("pthread_join: %s",strerror(errno));
+
+/*       printf("Program launched: %s\n",program); */
     }
   }
   else {
