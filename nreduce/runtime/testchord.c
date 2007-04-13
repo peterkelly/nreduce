@@ -80,7 +80,7 @@ static void debug_control_thread(node *n, endpoint *endpt, void *arg)
         indebug = 0;
         break;
       case MSG_KILL:
-        done = 1;
+        fatal("Node shutdown during chord test");
         break;
       default:
         fatal("debug_control received invalid message: %d",msg->hdr.tag);
@@ -109,8 +109,7 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
   while (!done) {
     message *msg = endpoint_next_message(endpt,20000);
     if (!msg) {
-      printf("timeout waiting for CHORD_STARTED message\n");
-      abort();
+      fatal("Timeout waiting for CHORD_STARTED message");
     }
     switch (msg->hdr.tag) {
     case MSG_CHORD_STARTED: {
@@ -126,8 +125,7 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
       break;
     }
     case MSG_KILL:
-      /* FIXME */
-      abort();
+      fatal("Node shutdown during chord test");
       break;
     default:
       fatal("start_one_chord received invalid message: %d",msg->hdr.tag);
@@ -506,19 +504,11 @@ static void check_loop(node *n, endpoint *endpt, chordnode *nodes, int ncount2,
       check_joined(chk,(joined_msg*)msg->data);
       break;
     case MSG_KILL:
-      done = 1;
+      fatal("Node shutdown during chord test");
       break;
     }
   }
   free(chk);
-}
-
-static void delay(int ms)
-{
-  struct timespec ts;
-  ts.tv_sec = ms/1000;
-  ts.tv_nsec = (ms%1000)*1000000;
-  nanosleep(&ts,NULL);
 }
 
 typedef struct {
@@ -542,8 +532,6 @@ static void testchord_thread(node *n, endpoint *endpt, void *arg)
 
   memset(&nodes,0,MAX_NODES*sizeof(chordnode));
   memset(&null_epid,0,sizeof(endpointid));
-
-  delay(250); /* wait for manager to start; FIXME: find a more robust solution */
 
   nodes[0] = start_one_chord(n,endpt,null_epid,tca->managerids[rand()%tca->nmanagers]);
   ncount = 1;
