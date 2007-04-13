@@ -290,6 +290,171 @@ static void send_mark_messages(task *tsk)
   }
 }
 
+static frame *retrieve_blocked_frame(task *tsk, int ioid)
+{
+  frame *f;
+  assert(0 < ioid);
+  assert(ioid < tsk->iocount);
+  assert(tsk->ioframes[ioid].f);
+  f = tsk->ioframes[ioid].f;
+  tsk->ioframes[ioid].f = NULL;
+  tsk->ioframes[ioid].freelnk = tsk->iofree;
+  tsk->iofree = ioid;
+  tsk->netpending--;
+  unblock_frame_toend(tsk,f);
+  check_runnable(tsk);
+  return f;
+}
+
+static sysobject *get_frame_sysobject(frame *f)
+{
+  pntr objp;
+  sysobject *so;
+  assert(OP_BIF == f->instr->opcode);
+  assert((B_OPENCON == f->instr->arg0) ||
+         (B_READCON == f->instr->arg0) ||
+         (B_PRINT == f->instr->arg0) ||
+         (B_PRINTARRAY == f->instr->arg0) ||
+         (B_PRINTEND == f->instr->arg0) ||
+         (B_ACCEPT == f->instr->arg0) ||
+         (B_STARTLISTEN == f->instr->arg0));
+  assert(f->alloc >= f->instr->expcount);
+  assert(1 <= f->instr->expcount);
+  objp = f->data[f->instr->expcount-1];
+  assert(CELL_SYSOBJECT == pntrtype(objp));
+  so = (sysobject*)get_pntr(get_pntr(objp)->field1);
+  assert((SYSOBJECT_CONNECTION == so->type) || (SYSOBJECT_LISTENER == so->type));
+  return so;
+}
+
+static void interpreter_listen_response(task *tsk, listen_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  assert(B_STARTLISTEN == f2->instr->arg0);
+  assert(SYSOBJECT_LISTENER == so->type);
+
+  assert(m->ioid == so->frameids[LISTEN_FRAMEADDR]);
+  so->frameids[LISTEN_FRAMEADDR] = 0;
+
+  if (m->error) {
+    so->error = 1;
+    memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
+  }
+
+  so->sockid = m->sockid;
+}
+
+static void interpreter_accept_response(task *tsk, accept_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  sysobject *connso;
+  cell *c;
+  assert(B_ACCEPT == f2->instr->arg0);
+  assert(SYSOBJECT_LISTENER == so->type);
+
+  assert(m->ioid == so->frameids[ACCEPT_FRAMEADDR]);
+  so->frameids[ACCEPT_FRAMEADDR] = 0;
+
+  connso = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
+  connso->hostname = strdup(m->hostname);
+  connso->port = m->port;
+  connso->connected = 1;
+  make_pntr(connso->listenerso,so->c);
+  connso->sockid = m->sockid;
+  assert(NULL == so->newso);
+  so->newso = connso;
+}
+
+static void interpreter_connect_response(task *tsk, connect_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  assert(SYSOBJECT_CONNECTION == so->type);
+
+  assert(B_OPENCON == f2->instr->arg0);
+  assert((EVENT_CONN_ESTABLISHED == m->event) || (EVENT_CONN_FAILED == m->event));
+
+  assert(m->ioid == so->frameids[CONNECT_FRAMEADDR]);
+  so->frameids[CONNECT_FRAMEADDR] = 0;
+
+  if (EVENT_CONN_ESTABLISHED == m->event) {
+    so->connected = 1;
+  }
+  else {
+    so->closed = 1;
+    so->error = 1;
+    memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
+  }
+
+  assert(0 == so->sockid.sid);
+  assert(!socketid_isnull(&m->sockid) || (EVENT_CONN_FAILED == m->event));
+  so->sockid = m->sockid;
+}
+
+static void interpreter_read_response(task *tsk, read_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  assert(SYSOBJECT_CONNECTION == so->type);
+
+  assert(B_READCON == f2->instr->arg0);
+  assert((EVENT_DATA_READ == m->event) || (EVENT_DATA_READFINISHED == m->event));
+  assert(0 == so->len);
+
+  assert(m->ioid == so->frameids[READ_FRAMEADDR]);
+  so->frameids[READ_FRAMEADDR] = 0;
+
+  if (EVENT_DATA_READ == m->event) {
+    assert(NULL == so->buf);
+    assert(0 == so->len);
+    so->len = m->len;
+    so->buf = (char*)malloc(m->len);
+    memcpy(so->buf,m->data,m->len);
+  }
+  else {
+    assert(0 == m->len);
+  }
+}
+
+static void interpreter_write_response(task *tsk, write_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  assert(SYSOBJECT_CONNECTION == so->type);
+  assert((B_PRINT == f2->instr->arg0) || (B_PRINTARRAY == f2->instr->arg0));
+
+  assert(m->ioid == so->frameids[WRITE_FRAMEADDR]);
+  so->frameids[WRITE_FRAMEADDR] = 0;
+}
+
+static void interpreter_finwrite_response(task *tsk, finwrite_response_msg *m)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  sysobject *so = get_frame_sysobject(f2);
+  assert(SYSOBJECT_CONNECTION == so->type);
+  assert(B_PRINTEND == f2->instr->arg0);
+
+  assert(m->ioid == so->frameids[FINWRITE_FRAMEADDR]);
+  so->frameids[FINWRITE_FRAMEADDR] = 0;
+}
+
+static void interpreter_connection_event(task *tsk, connection_event_msg *m)
+{
+  sysobject *so = find_sysobject(tsk,&m->sockid);
+  if (NULL != so) {
+    so->closed = 1;
+    so->error = (EVENT_CONN_IOERROR == m->event);
+    memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
+
+    if (0 != so->frameids[READ_FRAMEADDR])
+      retrieve_blocked_frame(tsk,so->frameids[READ_FRAMEADDR]);
+    if (0 != so->frameids[WRITE_FRAMEADDR])
+      retrieve_blocked_frame(tsk,so->frameids[WRITE_FRAMEADDR]);
+  }
+}
+
 static int handle_message2(task *tsk, int from, int tag, char *data, int size)
 {
   int r = READER_OK;
@@ -302,6 +467,8 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
   tsk->stats.recvbytes[tag] += size;
 
   #ifdef MSG_DEBUG
+  /* FIXME: this is currently broken due to the new IO response messages. Need to somehow
+     record the format a message uses */
   if (MSG_IORESPONSE != tag) {
 /*     fprintf(tsk->output,"[%d] ",list_count(tsk->inflight)); */
     fprintf(tsk->output,"%d => %s ",from,msg_names[tag]);
@@ -702,80 +869,34 @@ static int handle_message2(task *tsk, int from, int tag, char *data, int size)
     #endif
     break;
   }
-  case MSG_IORESPONSE: {
-    frame *f;
-    pntr objp;
-    sysobject *so;
-    int ioid;
-    int event;
-
-    assert(2*sizeof(int) <= size);
-    ioid = ((int*)data)[0];
-    event = ((int*)data)[1];
-    assert(((EVENT_DATA_READ == event) && (2*sizeof(int) < size)) ||
-           ((EVENT_DATA_READ != event) && (2*sizeof(int) == size)));
-
-    assert(0 <= event);
-    assert(EVENT_COUNT > event);
-    node_log(tsk->n,LOG_DEBUG2,"IORESPONSE: ioid = %d, event = %s",ioid,event_types[event]);
-
-    assert(0 < ioid);
-    assert(ioid < tsk->iocount);
-    f = tsk->ioframes[ioid].f;
-    tsk->ioframes[ioid].f = NULL;
-    tsk->ioframes[ioid].freelnk = tsk->iofree;
-    tsk->iofree = ioid;
-
-    assert(OP_BIF == f->instr->opcode);
-    assert((B_OPENCON == f->instr->arg0) ||
-           (B_READCON == f->instr->arg0) ||
-           (B_PRINT == f->instr->arg0) ||
-           (B_PRINTARRAY == f->instr->arg0) ||
-           (B_ACCEPT == f->instr->arg0));
-    assert(f->alloc >= f->instr->expcount);
-    assert(2 <= f->instr->expcount);
-    objp = f->data[f->instr->expcount-1];
-    assert(CELL_SYSOBJECT == pntrtype(objp));
-    so = (sysobject*)get_pntr(get_pntr(objp)->field1);
-    assert((SYSOBJECT_CONNECTION == so->type) || (SYSOBJECT_LISTENER == so->type));
-
-    if (B_OPENCON == f->instr->arg0) {
-      assert((EVENT_CONN_ESTABLISHED == event) ||
-             (EVENT_CONN_FAILED == event));
-      so->connected = (EVENT_CONN_ESTABLISHED == event);
-    }
-    else {
-      if (EVENT_DATA_READ == event) {
-        int dstart = 2*sizeof(int);
-        assert(NULL == so->buf);
-        assert(0 == so->len);
-        so->len = size-dstart;
-        so->buf = (char*)malloc(so->len);
-        memcpy(so->buf,&data[dstart],so->len);
-      }
-      else if (EVENT_DATA_READFINISHED == event) {
-        so->iorstatus = event;
-      }
-      else if (EVENT_DATA_WRITTEN == event) {
-      }
-      else if (EVENT_CONN_ACCEPTED == event) {
-      }
-      else if (EVENT_CONN_IOERROR == event) {
-        so->error = 1;
-        so->iorstatus = event;
-      }
-      else {
-        assert(EVENT_CONN_CLOSED == event);
-        so->closed = 1;
-        so->iorstatus = event;
-      }
-    }
-
-    tsk->netpending--;
-    unblock_frame_toend(tsk,f);
-    check_runnable(tsk);
+  case MSG_LISTEN_RESPONSE:
+    assert(sizeof(listen_response_msg) == size);
+    interpreter_listen_response(tsk,(listen_response_msg*)data);
     break;
-  }
+  case MSG_ACCEPT_RESPONSE:
+    assert(sizeof(accept_response_msg) == size);
+    interpreter_accept_response(tsk,(accept_response_msg*)data);
+    break;
+  case MSG_CONNECT_RESPONSE:
+    assert(sizeof(connect_response_msg) == size);
+    interpreter_connect_response(tsk,(connect_response_msg*)data);
+    break;
+  case MSG_READ_RESPONSE:
+    assert(sizeof(read_response_msg) <= size);
+    interpreter_read_response(tsk,(read_response_msg*)data);
+    break;
+  case MSG_WRITE_RESPONSE:
+    assert(sizeof(write_response_msg) == size);
+    interpreter_write_response(tsk,(write_response_msg*)data);
+    break;
+  case MSG_FINWRITE_RESPONSE:
+    assert(sizeof(finwrite_response_msg) == size);
+    interpreter_finwrite_response(tsk,(finwrite_response_msg*)data);
+    break;
+  case MSG_CONNECTION_EVENT:
+    assert(sizeof(connection_event_msg) == size);
+    interpreter_connection_event(tsk,(connection_event_msg*)data);
+    break;
   case MSG_KILL:
     /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
     node_log(tsk->n,LOG_INFO,"task: received KILL");
@@ -835,10 +956,11 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
       int cells;
       int bytes;
       int alloc;
-      int conns;
-      memusage(tsk,&cells,&bytes,&alloc,&conns);
-      printf("Collect: %d cells, %dk memory, %dk allocated, %d connections\n",
-             cells,bytes/1024,alloc/1024,conns);
+      int connections;
+      int listeners;
+      memusage(tsk,&cells,&bytes,&alloc,&connections,&listeners);
+      printf("Collect: %d cells, %dk memory, %dk allocated, %d connections, %d listeners\n",
+             cells,bytes/1024,alloc/1024,connections,listeners);
     }
 
     gettimeofday(&now,NULL);

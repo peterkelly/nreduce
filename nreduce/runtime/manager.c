@@ -43,6 +43,26 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+static connection *get_connection(node *n, socketid id)
+{
+  connection *conn;
+  assert(NODE_ALREADY_LOCKED(n));
+  for (conn = n->connections.first; conn; conn = conn->next)
+    if (socketid_equals(&conn->sockid,&id))
+      return conn;
+  return NULL;
+}
+
+static listener *get_listener(node *n, socketid id)
+{
+  listener *l;
+  assert(NODE_ALREADY_LOCKED(n));
+  for (l = n->listeners.first; l; l = l->next)
+    if (socketid_equals(&l->sockid,&id))
+      return l;
+  return NULL;
+}
+
 static task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
@@ -62,6 +82,215 @@ static task *add_task(node *n, int pid, int groupsize, const char *bcdata, int b
   }
 
   return tsk;
+}
+
+static void listen_callback(struct node *n, void *data, int event,
+                            connection *conn, endpoint *endpt)
+{
+  if (EVENT_CONN_ACCEPTED == event) {
+    listener *l = conn->l;
+    accept_response_msg arm;
+    assert(!socketid_isnull(&l->sockid));
+    assert(!endpointid_isnull(&l->owner));
+
+    conn->dontread = 1;
+    conn->owner = l->owner;
+    conn->isreg = 1;
+
+    /* send message */
+    assert(0 != l->accept_frameid);
+    arm.ioid = l->accept_frameid;
+    arm.sockid = conn->sockid;
+    snprintf(arm.hostname,HOSTNAME_MAX,"%s",conn->hostname);
+    arm.hostname[HOSTNAME_MAX] = '\0';
+    arm.port = conn->port;
+
+    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
+    assert((l->owner.ip == n->listenip) && (l->owner.port == n->listenport));
+    node_send_locked(n,l->owner.localid,l->owner,MSG_ACCEPT_RESPONSE,&arm,sizeof(arm));
+
+    l->accept_frameid = 0;
+    assert(!l->dontaccept);
+    l->dontaccept = 1;
+    node_notify(n);
+  }
+}
+
+static void manager_listen(node *n, endpoint *endpt, listen_msg *m, endpointid source)
+{
+  listener *l;
+  listen_response_msg lrm;
+
+  l = node_listen(n,m->ip,m->port,listen_callback,NULL,1,0,&m->owner,lrm.errmsg,ERRMSG_MAX);
+  lrm.errmsg[ERRMSG_MAX] = '\0';
+
+  lrm.ioid = m->ioid;
+  if (NULL != l) {
+    lrm.error = 0;
+    lrm.sockid = l->sockid;
+  }
+  else {
+    lrm.error = 1;
+    memset(&lrm.sockid,0,sizeof(socketid));
+  }
+
+  /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
+  assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
+  node_send(n,source.localid,source,MSG_LISTEN_RESPONSE,&lrm,sizeof(lrm));
+}
+
+static void manager_accept(node *n, endpoint *endpt, accept_msg *m, endpointid source)
+{
+  listener *l;
+
+  lock_node(n);
+  l = get_listener(n,m->sockid);
+  assert(NULL != l);
+  assert(0 == l->accept_frameid);
+  l->accept_frameid = m->ioid;
+  assert(l->dontaccept);
+  l->dontaccept = 0;
+  node_notify(n);
+  unlock_node(n);
+}
+
+static void manager_connect(node *n, endpoint *endpt, connect_msg *m, endpointid source)
+{
+  connection *conn;
+  connect_response_msg crm;
+
+  lock_node(n);
+  conn = node_connect_locked(n,m->hostname,INADDR_ANY,m->port,0,crm.errmsg,ERRMSG_MAX);
+  crm.errmsg[ERRMSG_MAX] = '\0';
+  if (NULL == conn) {
+    crm.ioid = m->ioid;
+    crm.event = EVENT_CONN_FAILED;
+    memset(&crm.sockid,0,sizeof(crm.sockid));
+
+    /* FIXME: at the moment we wend the message as if it's coming from the sender,
+       since the interpreter thread expects all messages it receives to be from one of the
+       members of the task's group. This restriction needs to be lifted so that it can accept
+       IORESPONSE messages from remote manager threads (and workers)
+       Note: We could possibly just remove the sender info from the messages altogether, and
+       enforce it to be include explicitly within the message bodies where it is needed. */
+    assert((m->owner.ip == endpt->epid.ip) && (m->owner.port == endpt->epid.port));
+    node_send_locked(n,m->owner.localid,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
+  }
+  else {
+    assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
+    conn->frameids[CONNECT_FRAMEADDR] = m->ioid;
+    conn->dontread = 1;
+    conn->owner = m->owner;
+  }
+  unlock_node(n);
+}
+
+static void manager_read(node *n, endpoint *endpt, read_msg *m)
+{
+  connection *conn;
+
+  lock_node(n);
+  /* If the connection doesn't exist any more, ignore the request - the caller is about to
+     receive a CONNECTION_EVENT MESSAGE */
+  if (NULL != (conn = get_connection(n,m->sockid))) {
+    assert(conn->canread);
+    assert(!conn->collected);
+    assert(conn->dontread);
+    assert(0 == conn->frameids[READ_FRAMEADDR]);
+
+    conn->frameids[READ_FRAMEADDR] = m->ioid;
+    conn->dontread = 0;
+    node_notify(n);
+  }
+  unlock_node(n);
+}
+
+static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid source)
+{
+  connection *conn;
+
+  lock_node(n);
+
+  /* If the connection doesn't exist any more, ignore the request - the caller is about to
+     receive a CONNECTION_EVENT MESSAGE */
+  if (NULL != (conn = get_connection(n,m->sockid))) {
+    assert(!conn->collected);
+
+    array_append(conn->sendbuf,m->data,m->len);
+
+    assert(0 == conn->frameids[WRITE_FRAMEADDR]);
+
+    /* The calling frame will block when it sends us the WRITE message. If the write buffer
+       still has room left for more data, wake it up immediately. Otherwise, keep it blocked
+       until some of the data has been written. */
+    if (IOSIZE > conn->sendbuf->nbytes) {
+      write_response_msg wrm;
+      wrm.ioid = m->ioid;
+
+      /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
+      assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
+      node_send_locked(n,source.localid,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+    }
+    else {
+      conn->frameids[WRITE_FRAMEADDR] = m->ioid;
+    }
+
+    node_notify(n);
+  }
+  unlock_node(n);
+}
+
+static void manager_finwrite(node *n, endpoint *endpt, finwrite_msg *m, endpointid source)
+{
+  connection *conn;
+
+  lock_node(n);
+
+  /* If the connection doesn't exist any more, ignore the request - the caller is about to
+     receive a CONNECTION_EVENT MESSAGE */
+  if (NULL != (conn = get_connection(n,m->sockid))) {
+    finwrite_response_msg frm;
+    assert(!conn->collected);
+    conn->finwrite = 1;
+    node_notify(n);
+
+    frm.ioid = m->ioid;
+
+    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
+    assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
+    node_send_locked(n,source.localid,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
+  }
+  unlock_node(n);
+}
+
+static void manager_delete_connection(node *n, endpoint *endpt,
+                                      delete_connection_msg *m, endpointid source)
+{
+  connection *conn;
+
+  lock_node(n);
+  if (NULL != (conn = get_connection(n,m->sockid))) {
+    conn->collected = 1;
+    if (!conn->finwrite) {
+      conn->finwrite = 1;
+      node_notify(n);
+    }
+    done_reading(n,conn);
+  }
+  unlock_node(n);
+}
+
+static void manager_delete_listener(node *n, endpoint *endpt,
+                                    delete_listener_msg *m, endpointid source)
+{
+  listener *l;
+
+  lock_node(n);
+  l = get_listener(n,m->sockid);
+  unlock_node(n);
+
+  if (NULL != l)
+    node_remove_listener(n,l);
 }
 
 static void manager_thread(node *n, endpoint *endpt, void *arg)
@@ -170,6 +399,38 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     case MSG_KILL:
       node_log(n,LOG_INFO,"Manager received KILL");
       done = 1;
+      break;
+    case MSG_LISTEN:
+      assert(sizeof(listen_msg) == msg->hdr.size);
+      manager_listen(n,endpt,(listen_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_ACCEPT:
+      assert(sizeof(accept_msg) == msg->hdr.size);
+      manager_accept(n,endpt,(accept_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_CONNECT:
+      assert(sizeof(connect_msg) == msg->hdr.size);
+      manager_connect(n,endpt,(connect_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_READ:
+      assert(sizeof(read_msg) == msg->hdr.size);
+      manager_read(n,endpt,(read_msg*)msg->data);
+      break;
+    case MSG_WRITE:
+      assert(sizeof(write_msg) <= msg->hdr.size);
+      manager_write(n,endpt,(write_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_FINWRITE:
+      assert(sizeof(finwrite_msg) <= msg->hdr.size);
+      manager_finwrite(n,endpt,(finwrite_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_DELETE_CONNECTION:
+      assert(sizeof(delete_connection_msg) <= msg->hdr.size);
+      manager_delete_connection(n,endpt,(delete_connection_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_DELETE_LISTENER:
+      assert(sizeof(delete_listener_msg) <= msg->hdr.size);
+      manager_delete_listener(n,endpt,(delete_listener_msg*)msg->data,msg->hdr.source);
       break;
     default:
       fatal("Manager received invalid message: %d",msg->hdr.tag);

@@ -835,12 +835,8 @@ static void b_openfd(task *tsk, pntr *argstack)
     return;
   }
 
-  so = (sysobject*)calloc(1,sizeof(sysobject));
-  so->type = SYSOBJECT_FILE;
+  so = new_sysobject(tsk,SYSOBJECT_FILE,&c);
   so->fd = fd;
-  c = alloc_cell(tsk);
-  c->type = CELL_SYSOBJECT;
-  make_pntr(c->field1,so);
   make_pntr(argstack[0],c);
 
   free(filename);
@@ -1007,42 +1003,16 @@ static void b_fisdir(task *tsk, pntr *argstack)
   free(path);
 }
 
-static void net_suspend(task *tsk)
-{
-  frame *curf = *tsk->runptr;
-  assert(SAFE_TO_ACCESS_TASK(tsk));
-  tsk->netpending++;
-  curf->resume = 1;
-  curf->instr--;
-  block_frame(tsk,curf);
-  check_runnable(tsk);
-}
-
-int so_lookup_connection(task *tsk, sysobject *so, connection **conn)
-{
-  assert(NODE_ALREADY_LOCKED(tsk->n));
-  if (0 != so->status) {
-    *conn = NULL;
-  }
-  else {
-    connection *c2;
-    for (c2 = tsk->n->connections.first; c2; c2 = c2->next)
-      if (c2->status == &so->status)
-        break;
-    assert(c2);
-    assert(c2->tsk == tsk);
-    assert(c2->status == &so->status);
-    *conn = c2;
-  }
-  return so->status;
-}
-
-static int get_ioframe_id(task *tsk, frame *f)
+static int suspend_current_frame(task *tsk, frame *f)
 {
   int count = tsk->iocount;
+  int ioid;
   assert(SAFE_TO_ACCESS_TASK(tsk));
+  assert(f == *tsk->runptr);
+
+  /* Allocate ioid */
   if (0 >= tsk->iofree) {
-    int ioid = count;
+    ioid = count;
 
     if (count == tsk->ioalloc) {
       tsk->ioalloc *= 2;
@@ -1053,27 +1023,25 @@ static int get_ioframe_id(task *tsk, frame *f)
 
     tsk->ioframes[ioid].f = f;
     tsk->ioframes[ioid].freelnk = 0;
-    return ioid;
   }
   else {
-    int ioid = tsk->iofree;
+    ioid = tsk->iofree;
     assert(ioid < count);
     assert(NULL == tsk->ioframes[ioid].f);
     tsk->iofree = tsk->ioframes[ioid].freelnk;
 
     tsk->ioframes[ioid].f = f;
     tsk->ioframes[ioid].freelnk = 0;
-    return ioid;
   }
-}
 
-static void set_blocked_frame(task *tsk, connection *conn, int type)
-{
-  frame *curf = *tsk->runptr;
-  int ioid = get_ioframe_id(tsk,curf);
-  assert(SAFE_TO_ACCESS_TASK(tsk));
-  assert(0 == conn->frameids[type]);
-  conn->frameids[type] = ioid;
+  /* Suspend frame */
+  tsk->netpending++;
+  f->resume = 1;
+  f->instr--;
+  block_frame(tsk,f);
+  check_runnable(tsk);
+
+  return ioid;
 }
 
 static void b_opencon(task *tsk, pntr *argstack)
@@ -1082,12 +1050,12 @@ static void b_opencon(task *tsk, pntr *argstack)
   if (0 == curf->resume) {
     pntr hostnamepntr = argstack[2];
     pntr portpntr = argstack[1];
-    connection *conn;
     int port;
     int badtype;
     char *hostname;
     sysobject *so;
     cell *c;
+    connect_msg cm;
 
     CHECK_ARG(1,CELL_NUMBER);
     port = (int)portpntr;
@@ -1099,39 +1067,23 @@ static void b_opencon(task *tsk, pntr *argstack)
     }
 
     /* Create sysobject cell */
-    so = (sysobject*)calloc(1,sizeof(sysobject));
-    so->type = SYSOBJECT_CONNECTION;
+    so = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
     so->hostname = strdup(hostname);
     so->port = port;
     so->len = 0;
 
-    c = alloc_cell(tsk);
-    c->type = CELL_SYSOBJECT;
-    make_pntr(c->field1,so);
     make_pntr(argstack[2],c);
 
     node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Initiated connection",hostname,port);
 
-    /* Try to initiate connection */
-    lock_node(tsk->n);
-    conn = node_connect_locked(tsk->n,hostname,INADDR_ANY,port,0);
-    if (conn) {
-      int ioid = get_ioframe_id(tsk,curf);
-      conn->tsk = tsk;
+    snprintf(cm.hostname,HOSTNAME_MAX,"%s",hostname);
+    cm.hostname[HOSTNAME_MAX] = '\0';
+    cm.port = port;
+    cm.owner = tsk->endpt->epid;
+    cm.ioid = suspend_current_frame(tsk,*tsk->runptr);
+    so->frameids[CONNECT_FRAMEADDR] = cm.ioid;
+    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_CONNECT,&cm,sizeof(cm));
 
-      assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
-      conn->frameids[CONNECT_FRAMEADDR] = ioid;
-
-      conn->dontread = 1;
-      conn->status = &so->status;
-
-      /* Block frame */
-      net_suspend(tsk);
-    }
-    unlock_node(tsk->n);
-
-    if (NULL == conn)
-      set_error(tsk,"Could not connect to %s:%d",hostname,port);
     free(hostname);
   }
   else {
@@ -1147,7 +1099,7 @@ static void b_opencon(task *tsk, pntr *argstack)
 
     if (!so->connected) {
       node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Connection failed",so->hostname,so->port);
-      set_error(tsk,"Could not connect to %s:%d",so->hostname,so->port);
+      set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
       return;
     }
     else {
@@ -1167,207 +1119,173 @@ static void b_opencon(task *tsk, pntr *argstack)
   }
 }
 
+/*
+
+Readcon process
+
+Normal operation
+
+1. b_readcon() called; curf->resume will be 0 since it has not yet blocked
+2. Task sends a READ message to manager and blocks frame (setting curf->resume = 1)
+3. Manager records the ioid of the frame and enables reading on the connection
+4. Data arrives and is read from connection
+5. Worker sends READ_RESPONSE message to task
+6. Task handles READ_RESPONSE message, stores data in so->buf, and unblocks frame
+7. b_readcon() invoked again with curf->resume == 1, returns data to caller
+
+Error occurs during read
+1-3: as above
+4. Connection has error or is closed by peer
+5. Workers sends CONNECTION_EVENT message with event either CONN_IOERROR or CONN_CLOSED
+6. Task handles CONNECTION_EVENT, marks so as closed, sets error = 1 or 0, unblocks frame
+7. b_readcon() invoked again with curf->resume == 1, reports error or close condition to caller
+
+Error occurs before call to read
+1. Workers sends CONNECTION_EVENT message with event either CONN_IOERROR or CONN_CLOSED
+2. Task handles CONNECTION_EVENT, marks so as closed, sets error = 1 or 0,
+3. b_readcon() called, detects so->closed, reports error or close condition to caller
+
+*/
+
 static void b_readcon(task *tsk, pntr *argstack)
 {
-  sysobject *so;
+  frame *curf = *tsk->runptr;
   pntr sopntr = argstack[1];
   pntr nextpntr = argstack[0];
-  int status;
+  sysobject *so;
 
   CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
   so = psysobject(sopntr);
   assert(so->connected);
 
-  if (0 == so->len) {
-    connection *conn;
-    lock_node(tsk->n);
-
-    if (0 == (status = so_lookup_connection(tsk,so,&conn))) {
-      if (!conn->canread) {
-        status = EVENT_DATA_READFINISHED;
-      }
-      else {
-        set_blocked_frame(tsk,conn,READ_FRAMEADDR);
-
-        assert(!conn->collected);
-        assert(conn->dontread);
-        conn->dontread = 0;
-
-        node_notify(tsk->n);
-        net_suspend(tsk);
-
-        node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
-      }
+  if (so->closed) {
+    if (so->error) {
+      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
+      set_error(tsk,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
     }
-    unlock_node(tsk->n);
+    else {
+      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection is closed",so->hostname,so->port);
+      argstack[0] = tsk->globnilpntr;
+    }
+    curf->resume = 0;
+    return;
+  }
+
+  if (0 == curf->resume) {
+    read_msg rm;
+    rm.sockid = so->sockid;
+    rm.ioid = suspend_current_frame(tsk,*tsk->runptr);
+    assert(0 == so->frameids[READ_FRAMEADDR]);
+    so->frameids[READ_FRAMEADDR] = rm.ioid;
+    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_READ,&rm,sizeof(rm));
+    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
   }
   else {
-    status = so->iorstatus;
-  }
-
-  if (EVENT_CONN_CLOSED == status) {
-    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection is closed",so->hostname,so->port);
-    argstack[0] = tsk->globnilpntr;
-    return;
-  }
-  else if (EVENT_DATA_READFINISHED == status) {
-    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection finished reading",so->hostname,so->port);
-    argstack[0] = tsk->globnilpntr;
-    return;
-  }
-  else if (EVENT_CONN_IOERROR == status) {
-    set_error(tsk,"readcon %s:%d: Connection had I/O error",so->hostname,so->port);
-    return;
-  }
-
-  assert(0 == status);
-
-  if (0 < so->len) {
-    carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
-    make_aref_pntr(argstack[0],arr->wrapper,0);
-    carray_append(tsk,&arr,so->buf,so->len,1);
-    arr->tail = nextpntr;
-
-    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Got %d bytes",so->hostname,so->port,so->len);
-
-    free(so->buf);
-    so->buf = NULL;
-    so->len = 0;
+    curf->resume = 0;
+    if (0 == so->len) {
+      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Finished reading",so->hostname,so->port);
+      argstack[0] = tsk->globnilpntr;
+    }
+    else {
+      carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
+      make_aref_pntr(argstack[0],arr->wrapper,0);
+      carray_append(tsk,&arr,so->buf,so->len,1);
+      arr->tail = nextpntr;
+      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Read %d bytes",so->hostname,so->port,so->len);
+      free(so->buf);
+      so->buf = NULL;
+      so->len = 0;
+    }
   }
 }
 
-static void listen_callback(struct node *n, void *data, int event,
-                            connection *conn, endpoint *endpt)
-{
-  cell *c = (cell*)data;
-  sysobject *so = (sysobject*)get_pntr(c->field1);
-  assert(CELL_SYSOBJECT == c->type);
-  assert(NODE_ALREADY_LOCKED(n));
-  assert(SYSOBJECT_LISTENER == so->type);
-  assert(conn->l == so->l);
-  if (EVENT_CONN_ACCEPTED == event) {
-    /* Create the sysobject for the new connection */
-    sysobject *connso = (sysobject*)calloc(1,sizeof(sysobject));
-    connso->type = SYSOBJECT_CONNECTION;
-    connso->hostname = strdup(conn->hostname);
-    connso->port = conn->port;
-    connso->connected = 1;
-    make_pntr(connso->listenerso,c);
-    conn->dontread = 1;
-    conn->status = &connso->status;
-    conn->tsk = so->tsk;
-    conn->isreg = 1;
-    assert(NULL == so->newso);
-    so->newso = connso;
-    assert(0 < so->l->accept_frameid);
-
-    /* Notify the blocked accept call that there is a connection available */
-    int ioid = so->l->accept_frameid;
-    int msg[2];
-
-    node_log(n,LOG_DEBUG2,"listen_callback: event %s, ioid %d",event_types[event],ioid);
-
-    msg[0] = ioid;
-    msg[1] = event;
-    so->l->accept_frameid = 0;
-
-    node_send_locked(n,conn->tsk->endpt->epid.localid,conn->tsk->endpt->epid,
-                     MSG_IORESPONSE,msg,2*sizeof(int));
-
-    assert(!so->l->dontaccept);
-    so->l->dontaccept = 1;
-    node_notify(n);
-  }
-}
-
+/* FIXME: remove the IP address parameter to listen... it's a bit pointless for our case */
 static void b_startlisten(task *tsk, pntr *argstack)
 {
-  pntr hostnamepntr = argstack[1];
-  pntr portpntr = argstack[0];
-  char *hostname;
-  int port;
-  int badtype;
-  sysobject *so;
-  cell *c;
-  in_addr_t ip = INADDR_ANY;
+  frame *curf = *tsk->runptr;
 
-  CHECK_ARG(0,CELL_NUMBER);
-  port = (int)portpntr;
+  if (0 == curf->resume) {
+    pntr hostnamepntr = argstack[1];
+    pntr portpntr = argstack[0];
+    char *hostname;
+    int port;
+    int badtype;
+    sysobject *so;
+    cell *c;
+    in_addr_t ip = INADDR_ANY;
+    listen_msg lm;
 
-  if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
-    set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
-              cell_types[badtype]);
-    return;
-  }
+    CHECK_ARG(0,CELL_NUMBER);
+    port = (int)portpntr;
 
-  if (0 > lookup_address(tsk->n,hostname,&ip)) {
-    set_error(tsk,"startlisten: could not resolve hostname %s",hostname);
+    if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
+      set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
+                cell_types[badtype]);
+      return;
+    }
+
+    if (0 > lookup_address(tsk->n,hostname,&ip,NULL)) {
+      set_error(tsk,"startlisten: could not resolve hostname %s",hostname);
+      free(hostname);
+      return;
+    }
+
+    /* Create sysobject cell */
+    so = new_sysobject(tsk,SYSOBJECT_LISTENER,&c);
+    so->hostname = strdup(hostname);
+    so->port = port;
+    so->tsk = tsk;
+
+    make_pntr(argstack[0],c);
+    make_pntr(argstack[1],c);
+
+    lm.ip = ip;
+    lm.port = port;
+    lm.owner = tsk->endpt->epid;
+    lm.ioid = suspend_current_frame(tsk,curf);
+    so->frameids[LISTEN_FRAMEADDR] = lm.ioid;
+
+    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_LISTEN,&lm,sizeof(lm));
+
     free(hostname);
-    return;
   }
-
-  /* Create sysobject cell */
-  so = (sysobject*)calloc(1,sizeof(sysobject));
-  so->type = SYSOBJECT_LISTENER;
-  so->hostname = strdup(hostname);
-  so->port = port;
-  so->tsk = tsk;
-
-  c = alloc_cell(tsk);
-  c->type = CELL_SYSOBJECT;
-  make_pntr(c->field1,so);
-  make_pntr(argstack[0],c);
-
-  /* Start the listener */
-  so->l = node_listen(tsk->n,ip,port,listen_callback,c,1,0);
-  if (NULL == so->l) {
-    set_error(tsk,"startlisten %s:%d: listen failed",hostname,port);
-    c->type = CELL_IND;
-    c->field1 = tsk->globnilpntr;
-    free(hostname);
-    free(so->hostname);
-    free(so);
-    return;
+  else {
+    sysobject *so;
+    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER);
+    so = psysobject(argstack[1]);
+    curf->resume = 0;
+    if (so->error) {
+      set_error(tsk,"startlisten: %s",so->errmsg);
+      return;
+    }
   }
-  so->l->dontaccept = 1;
-
-  node_log(tsk->n,LOG_DEBUG1,"startlisten %s:%d: listening",hostname,port);
-
-  free(hostname);
 }
 
 static void b_accept(task *tsk, pntr *argstack)
 {
+  frame *curf = *tsk->runptr;
   sysobject *so;
   cell *c;
   pntr sopntr = argstack[1];
-  sysobject *newso;
 
   CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER);
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
-  lock_node(tsk->n);
-  newso = so->newso;
-  if (NULL == so->newso) {
-    /* block */
-
-    frame *curf = *tsk->runptr;
-    int ioid = get_ioframe_id(tsk,curf);
-
-    assert(0 == so->l->accept_frameid);
-    so->l->accept_frameid = ioid;
-
-    net_suspend(tsk);
-
-    assert(so->l->dontaccept);
-    so->l->dontaccept = 0;
-    node_notify(tsk->n);
-
-    node_log(tsk->n,LOG_DEBUG1,"accept: suspending");
+  if (0 == curf->resume) {
+    accept_msg am;
+    am.sockid = so->sockid;
+    am.ioid = suspend_current_frame(tsk,curf);
+    assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
+    so->frameids[ACCEPT_FRAMEADDR] = am.ioid;
+    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_ACCEPT,&am,sizeof(am));
   }
   else {
+    curf->resume = 0;
+
     pntr printer;
+    sysobject *newso = so->newso;
+    assert(newso);
     so->newso = NULL;
     node_log(tsk->n,LOG_DEBUG1,"accept %s:%d: Got new connection",so->hostname,so->port);
 
@@ -1379,12 +1297,8 @@ static void b_accept(task *tsk, pntr *argstack)
       run_frame(tsk,pframe(printer));
 
     /* Return the sysobject */
-    c = alloc_cell(tsk);
-    c->type = CELL_SYSOBJECT;
-    make_pntr(c->field1,newso);
-    make_pntr(argstack[0],c);
+    make_pntr(argstack[0],newso->c);
   }
-  unlock_node(tsk->n);
 }
 
 static void b_nchars(task *tsk, pntr *argstack)
@@ -1398,6 +1312,10 @@ static void b_nchars(task *tsk, pntr *argstack)
 
 static void write_data(task *tsk, pntr *argstack, const char *data, int len, pntr destpntr)
 {
+  frame *curf = *tsk->runptr;
+  cell *c;
+  sysobject *so;
+
   if (CELL_NIL == pntrtype(destpntr)) {
     /* Write to task output file handle */
     if (tsk->output) {
@@ -1405,48 +1323,41 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
       fflush(tsk->output);
     }
     argstack[0] = tsk->globnilpntr;
+    return;
+  }
+
+  c = (cell*)get_pntr(destpntr);
+  so = (sysobject*)get_pntr(c->field1);
+  if (SYSOBJECT_CONNECTION != so->type) {
+    set_error(tsk,"write_data: first arg must be CONNECTION, got %s",sysobject_types[so->type]);
+    return;
+  }
+  assert(so->connected);
+
+  if (so->closed) {
+    if (so->error)
+      set_error(tsk,"writecon %s:%d: %s",so->hostname,so->port,so->errmsg);
+    else
+      set_error(tsk,"writecon %s:%d: Connection is closed",so->hostname,so->port);
+    curf->resume = 0;
+    return;
+  }
+
+  if (curf->resume) {
+    argstack[0] = tsk->globnilpntr; /* normal return */
+    curf->resume = 0;
   }
   else {
-    /* Write to socket connection (may need to block) */
-    cell *c;
-    int status = 0;
-    connection *conn;
-    sysobject *so;
-    c = (cell*)get_pntr(destpntr);
-    so = (sysobject*)get_pntr(c->field1);
-    if (SYSOBJECT_CONNECTION != so->type) {
-      set_error(tsk,"write_data: first arg must be CONNECTION, got %s",sysobject_types[so->type]);
-      return;
-    }
-    assert(so->connected);
-
-    lock_node(tsk->n);
-    status = so->status;
-
-    if (0 == (status = so_lookup_connection(tsk,so,&conn))) {
-      if (IOSIZE <= conn->sendbuf->nbytes) {
-        set_blocked_frame(tsk,conn,WRITE_FRAMEADDR);
-        node_log(tsk->n,LOG_DEBUG2,"write_data: write buffer is full; blocking");
-        net_suspend(tsk); /* block */
-      }
-      else {
-        array_append(conn->sendbuf,data,len);
-        node_log(tsk->n,LOG_DEBUG2,"write_data: wrote %d bytes to connection",len);
-        argstack[0] = tsk->globnilpntr; /* normal return */
-      }
-      node_notify(tsk->n);
-    }
-    unlock_node(tsk->n);
-
-    if (EVENT_CONN_CLOSED == status) {
-      set_error(tsk,"write_data %s:%d: Connection is closed",so->hostname,so->port);
-      return;
-    }
-    else if (EVENT_CONN_IOERROR == status) {
-      set_error(tsk,"write_data %s:%d: Connection had I/O error",so->hostname,so->port);
-      return;
-    }
-    assert(0 == status);
+    int msglen = sizeof(write_msg)+len;
+    write_msg *wm = (write_msg*)malloc(msglen);
+    wm->sockid = so->sockid;
+    wm->ioid = suspend_current_frame(tsk,curf);
+    wm->len = len;
+    assert(0 == so->frameids[WRITE_FRAMEADDR]);
+    so->frameids[WRITE_FRAMEADDR] = wm->ioid;
+    memcpy(wm->data,data,len);
+    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_WRITE,wm,msglen);
+    free(wm);
   }
 }
 
@@ -1500,23 +1411,28 @@ static void b_printarray(task *tsk, pntr *argstack)
 
 static void b_printend(task *tsk, pntr *argstack)
 {
-  if (CELL_NIL != pntrtype(argstack[0])) {
+  frame *curf = *tsk->runptr;
+  if (CELL_NIL == pntrtype(argstack[0]))
+    return;
+  if (0 == curf->resume) {
     sysobject *so;
-    connection *conn;
+    finwrite_msg fwm;
 
     CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION);
     so = psysobject(argstack[0]);
     assert(so->connected);
 
-    lock_node(tsk->n);
-    if (0 == so_lookup_connection(tsk,so,&conn)) {
-      conn->finwrite = 1;
-      node_notify(tsk->n);
-    }
-    unlock_node(tsk->n);
-  }
+    fwm.sockid = so->sockid;
+    fwm.ioid = suspend_current_frame(tsk,curf);
+    assert(0 == so->frameids[FINWRITE_FRAMEADDR]);
+    so->frameids[FINWRITE_FRAMEADDR] = fwm.ioid;
 
-  argstack[0] = tsk->globnilpntr;
+    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+  }
+  else {
+    curf->resume = 0;
+    argstack[0] = tsk->globnilpntr;
+  }
 }
 
 static void b_echo1(task *tsk, pntr *argstack)

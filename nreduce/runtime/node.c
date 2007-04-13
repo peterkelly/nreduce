@@ -324,6 +324,10 @@ static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nod
 static connection *add_connection(node *n, const char *hostname, int sock, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(MANAGER_ID == n->managerid.localid);
+  conn->sockid.managerid = n->managerid;
+  conn->sockid.sid = n->nextsid++;
   conn->hostname = strdup(hostname);
   conn->ip = 0;
   conn->sock = sock;
@@ -347,7 +351,9 @@ static int handle_connected(node *n, connection *conn)
   int optlen = sizeof(int);
 
   if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
-    perror("getsockopt");
+    snprintf(conn->errmsg,ERRMSG_MAX,"getsockopt SO_ERROR: %s",strerror(errno));
+    conn->errmsg[ERRMSG_MAX] = '\0';
+    dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
     remove_connection(n,conn);
     return -1;
   }
@@ -358,7 +364,8 @@ static int handle_connected(node *n, connection *conn)
     node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
     if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
-      perror("setsockopt TCP_NODELAY");
+      snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt TCP_NODELAY: %s",strerror(errno));
+      conn->errmsg[ERRMSG_MAX] = '\0';
       dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
       remove_connection(n,conn);
       return -1;
@@ -369,6 +376,8 @@ static int handle_connected(node *n, connection *conn)
   else {
     node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
              conn->hostname,conn->port,strerror(err));
+    snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
+    conn->errmsg[ERRMSG_MAX] = '\0';
     dispatch_event(n,EVENT_CONN_FAILED,conn,NULL);
     remove_connection(n,conn);
     return -1;
@@ -387,6 +396,8 @@ static void handle_write(node *n, connection *conn)
     if (0 > w) {
       node_log(n,LOG_WARNING,"write() to %s:%d failed: %s",
                conn->hostname,conn->port,strerror(errno));
+      snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
+      conn->errmsg[ERRMSG_MAX] = '\0';
       dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
       remove_connection(n,conn);
       return;
@@ -395,6 +406,7 @@ static void handle_write(node *n, connection *conn)
     if (0 == w) {
       node_log(n,LOG_WARNING,"write() to %s:%d failed: connection closed",
                conn->hostname,conn->port);
+      snprintf(conn->errmsg,ERRMSG_MAX,"connection closed");
       dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
       remove_connection(n,conn);
       return;
@@ -428,6 +440,8 @@ static void handle_read(node *n, connection *conn)
   if (0 > r) {
     node_log(n,LOG_WARNING,"read() from %s:%d failed: %s",
              conn->hostname,conn->port,strerror(errno));
+    snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
+    conn->errmsg[ERRMSG_MAX] = '\0';
     dispatch_event(n,EVENT_CONN_IOERROR,conn,NULL);
     remove_connection(n,conn);
     return;
@@ -472,17 +486,21 @@ char *lookup_hostname(node *n, in_addr_t addr)
   return res;
 }
 
-int lookup_address(node *n, const char *host, in_addr_t *out)
+int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout)
 {
   struct hostent *he;
   int r = 0;
 
   lock_mutex(&n->liblock);
   if (NULL == (he = gethostbyname(host))) {
+    if (h_errout)
+      *h_errout = h_errno;
     node_log(n,LOG_WARNING,"%s: %s",host,hstrerror(h_errno));
-    r =  -1;
+    r = -1;
   }
   else if (4 != he->h_length) {
+    if (h_errout)
+      *h_errout = HOST_NOT_FOUND;
     node_log(n,LOG_WARNING,"%s: invalid address type",host);
     r = -1;
   }
@@ -652,7 +670,7 @@ static void determine_ip(node *n)
     size--;
   hostname[size] = '\0';
 
-  if (0 > lookup_address(n,hostname,&addr)) {
+  if (0 > lookup_address(n,hostname,&addr,NULL)) {
     fprintf(stderr,
             "Could not determine IP address, because the address \"%s\" "
             "returned by the hostname command could not be resolved (%s)\n",
@@ -673,6 +691,7 @@ node *node_new(int loglevel)
   pthread_cond_init(&n->cond,NULL);
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = FIRST_ID;
+  n->nextsid = 1;
 
   determine_ip(n);
 
@@ -743,7 +762,7 @@ void node_log(node *n, int level, const char *format, ...)
 }
 
 listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback, void *data,
-                      int dontaccept, int ismain)
+                      int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen)
 {
   int fd;
   int actualport = 0;
@@ -759,28 +778,43 @@ listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback
   memset(&local_addr.sin_zero,0,8);
 
   if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
-    node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
+    else
+      node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
     return NULL;
   }
 
   if (-1 == setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt: %s",strerror(errno));
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
+    else
+      node_log(n,LOG_ERROR,"setsockopt: %s",strerror(errno));
     return NULL;
   }
 
   if (-1 == bind(fd,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
-    node_log(n,LOG_ERROR,"bind: %s",strerror(errno));
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
+    else
+      node_log(n,LOG_ERROR,"bind: %s",strerror(errno));
     return NULL;
   }
 
   if (0 > getsockname(fd,(struct sockaddr*)&new_addr,&new_size)) {
-    node_log(n,LOG_ERROR,"getsockname: %s",strerror(errno));
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
+    else
+      node_log(n,LOG_ERROR,"getsockname: %s",strerror(errno));
     return NULL;
   }
   actualport = ntohs(new_addr.sin_port);
 
   if (-1 == listen(fd,LISTEN_BACKLOG)) {
-    node_log(n,LOG_ERROR,"listen: %s",strerror(errno));
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
+    else
+      node_log(n,LOG_ERROR,"listen: %s",strerror(errno));
     return NULL;
   }
 
@@ -793,13 +827,21 @@ listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback
   l->callback = callback;
   l->data = data;
   l->dontaccept = dontaccept;
+  if (owner)
+    l->owner = *owner;
 
   if (ismain) {
     n->listenport = actualport;
     n->mainl = l;
+
+    n->managerid.ip = n->listenip;
+    n->managerid.port = n->listenport;
+    n->managerid.localid = MANAGER_ID;
   }
 
   lock_node(n);
+  l->sockid.managerid = n->managerid;
+  l->sockid.sid = n->nextsid++;
   llist_append(&n->listeners,l);
   node_notify(n);
   unlock_node(n);
@@ -915,7 +957,7 @@ static int set_keepalive(node *n, int sock, int s)
 #endif
 
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
-                                int port, int othernode)
+                                int port, int othernode, char *errmsg, int errlen)
 {
   /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
      is modified to run in a separate thread */
@@ -924,6 +966,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   int connected = 0;
   connection *conn;
   char *hostname;
+  int r;
 
   assert(NODE_ALREADY_LOCKED(n));
 
@@ -932,34 +975,48 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   memset(&addr.sin_zero,0,8);
 
   if (dest) {
-    if (0 > lookup_address(n,dest,&addr.sin_addr.s_addr))
+    int error = 0;
+    if (0 > lookup_address(n,dest,&addr.sin_addr.s_addr,&error)) {
+      if (errmsg)
+        snprintf(errmsg,errlen,"%s",hstrerror(error));
       return NULL;
+    }
   }
   else {
     addr.sin_addr.s_addr = destaddr;
   }
 
   if (0 > (sock = socket(AF_INET,SOCK_STREAM,0))) {
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
     perror("socket");
     return NULL;
   }
 
-  if (0 > set_non_blocking(sock))
+  if (0 > set_non_blocking(sock)) {
+    if (errmsg)
+      snprintf(errmsg,errlen,"cannot set non-blocking socket");
     return NULL;
-
-  if (0 == connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))) {
-    connected = 1;
-    node_log(n,LOG_INFO,"Connected (immediately) to %s",dest);
   }
-  else if (EINPROGRESS != errno) {
+
+  /* We expect the connect() call to not succeed immediately, because the socket is in
+     non-blocking mode */
+  r = connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr));
+  assert(0 > r);
+  if (EINPROGRESS != errno) {
+    if (errmsg)
+      snprintf(errmsg,errlen,"%s",strerror(errno));
     node_log(n,LOG_WARNING,"connect: %s",strerror(errno));
     return NULL;
   }
 
 #ifdef DEBUG_SHORT_KEEPALIVE
   /* Set a small keepalive interval so connection timeouts can be tested easily */
-  if (0 > set_keepalive(n,sock,2))
+  if (0 > set_keepalive(n,sock,2)) {
+    if (errmsg)
+      snprintf(errmsg,errlen,"error initializing keepalive");
     return NULL;
+  }
 #endif
 
   hostname = lookup_hostname(n,addr.sin_addr.s_addr);
@@ -1016,7 +1073,7 @@ void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpoi
       unsigned char *addrbytes = (unsigned char*)&destendpointid.ip;
       node_log(n,LOG_INFO,"No connection yet to %u.%u.%u.%u:%d; establishing",
                addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.port);
-      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1);
+      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1,NULL,0);
     }
 
     array_append(conn->sendbuf,&hdr,sizeof(msgheader));
@@ -1314,6 +1371,11 @@ int endpointid_equals(const endpointid *e1, const endpointid *e2)
   return ((e1->ip == e2->ip) && (e1->port == e2->port) && (e1->localid == e2->localid));
 }
 
+int endpointid_isnull(const endpointid *epid)
+{
+  return (0 == epid->localid);
+}
+
 void print_endpointid(endpointid_str str, endpointid epid)
 {
   sprintf(str,EPID_FORMAT,EPID_ARGS(epid));
@@ -1323,4 +1385,14 @@ void message_free(message *msg)
 {
   free(msg->data);
   free(msg);
+}
+
+int socketid_equals(const socketid *a, const socketid *b)
+{
+  return (endpointid_equals(&a->managerid,&b->managerid) && (a->sid == b->sid));
+}
+
+int socketid_isnull(const socketid *a)
+{
+  return (0 == a->sid);
 }

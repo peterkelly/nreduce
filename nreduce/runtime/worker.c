@@ -96,6 +96,21 @@ const char *msg_names[MSG_COUNT] = {
   "JOINED",
   "INSERT",
   "SET_NEXT",
+  "LISTEN",
+  "ACCEPT",
+  "CONNECT",
+  "READ",
+  "WRITE",
+  "FINWRITE",
+  "LISTEN_RESPONSE",
+  "ACCEPT_RESPONSE",
+  "CONNECT_RESPONSE",
+  "READ_RESPONSE",
+  "WRITE_RESPONSE",
+  "CONNECTION_EVENT",
+  "FINWRITE_RESPONSE",
+  "DELETE_CONNECTION",
+  "DELETE_LISTENER",
 };
 
 endpoint *find_endpoint(node *n, int localid)
@@ -152,63 +167,67 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
   return from;
 }
 
-static void send_ioresponse(node *n, connection *conn, int *ioidptr, int event)
-{
-  endpointid destid = conn->tsk->endpt->epid;
-  int ioid = *ioidptr;
-  int msg[2];
-
-  node_log(n,LOG_DEBUG2,"worker: event %s, ioid %d",event_types[event],ioid);
-
-  msg[0] = ioid;
-  msg[1] = event;
-  *ioidptr = 0;
-
-  if (EVENT_DATA_READ == event) {
-    int fullsize = 2*sizeof(int)+conn->recvbuf->nbytes;
-    char *full = (char*)malloc(fullsize);
-    memcpy(full,msg,2*sizeof(int));
-    memcpy(&full[2*sizeof(int)],conn->recvbuf->data,conn->recvbuf->nbytes);
-    conn->recvbuf->nbytes = 0;
-    node_send_locked(n,destid.localid,destid,MSG_IORESPONSE,full,fullsize);
-    free(full);
-    conn->dontread = 1;
-  }
-  else {
-    if ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event))
-      assert(0 == conn->recvbuf->nbytes);
-    node_send_locked(n,destid.localid,destid,MSG_IORESPONSE,&msg,2*sizeof(int));
-  }
-}
-
 static void worker_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
-  if (conn && conn->status &&
-      ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event)))
-    *conn->status = event;
-
   if (conn && (0 < conn->frameids[CONNECT_FRAMEADDR]) &&
       ((EVENT_CONN_ESTABLISHED == event) ||
-       (EVENT_CONN_FAILED == event)) )
-    send_ioresponse(n,conn,&conn->frameids[CONNECT_FRAMEADDR],event);
+       (EVENT_CONN_FAILED == event)) ) {
+    connect_response_msg crm;
+
+    crm.ioid = conn->frameids[CONNECT_FRAMEADDR];
+    crm.event = event;
+    if (EVENT_CONN_ESTABLISHED == event)
+      crm.sockid = conn->sockid;
+    else
+      memset(&crm.sockid,0,sizeof(crm.sockid));
+    memcpy(crm.errmsg,conn->errmsg,sizeof(crm.errmsg));
+
+    conn->frameids[CONNECT_FRAMEADDR] = 0;
+
+    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
+    assert((conn->owner.ip == n->listenip) && (conn->owner.port == n->listenport));
+    node_send_locked(n,conn->owner.localid,conn->owner,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
+  }
 
   if (conn && (0 < conn->frameids[READ_FRAMEADDR]) &&
       ((EVENT_DATA_READ == event) ||
-       (EVENT_DATA_READFINISHED == event) ||
-       (EVENT_CONN_IOERROR == event) ||
-       (EVENT_CONN_CLOSED == event)))
-    send_ioresponse(n,conn,&conn->frameids[READ_FRAMEADDR],event);
+       (EVENT_DATA_READFINISHED == event))) {
+
+
+    int rrmlen = sizeof(read_response_msg)+conn->recvbuf->nbytes;
+    read_response_msg *rrm = (read_response_msg*)malloc(rrmlen);
+
+    rrm->ioid = conn->frameids[READ_FRAMEADDR];
+    rrm->event = event;
+    rrm->sockid = conn->sockid;
+    rrm->len = conn->recvbuf->nbytes;
+    memcpy(rrm->data,conn->recvbuf->data,conn->recvbuf->nbytes);
+
+    node_send_locked(n,conn->owner.localid,conn->owner,MSG_READ_RESPONSE,rrm,rrmlen);
+
+    conn->frameids[READ_FRAMEADDR] = 0;
+    conn->recvbuf->nbytes = 0;
+    conn->dontread = 1;
+    free(rrm);
+  }
+
+  if (conn && (0 != conn->owner.localid) &&
+      ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event))) {
+    connection_event_msg cem;
+    cem.sockid = conn->sockid;
+    cem.event = event;
+    memcpy(cem.errmsg,conn->errmsg,sizeof(cem.errmsg));
+    node_send_locked(n,conn->owner.localid,conn->owner,MSG_CONNECTION_EVENT,&cem,sizeof(cem));
+  }
 
   if (conn && (0 < conn->frameids[WRITE_FRAMEADDR]) &&
-      ((EVENT_DATA_WRITTEN == event) ||
-       (EVENT_CONN_IOERROR == event) ||
-       (EVENT_CONN_CLOSED == event)))
-    send_ioresponse(n,conn,&conn->frameids[WRITE_FRAMEADDR],event);
-
-  if (conn && (0 < conn->frameids[ACCEPT_FRAMEADDR]) &&
-      (EVENT_CONN_ACCEPTED == event))
-    send_ioresponse(n,conn,&conn->frameids[ACCEPT_FRAMEADDR],event);
+      (EVENT_DATA_WRITTEN == event) && (IOSIZE > conn->sendbuf->nbytes)) {
+    write_response_msg wrm;
+    wrm.ioid = conn->frameids[WRITE_FRAMEADDR];
+    conn->frameids[WRITE_FRAMEADDR] = 0;
+    node_send_locked(n,conn->owner.localid,conn->owner,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+  }
 }
 
 static void standalone_callback(struct node *n, void *data, int event,
@@ -224,7 +243,7 @@ static node *worker_startup(int loglevel, int port)
   unsigned char *ipbytes;
 
   n->isworker = 1;
-  if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1)) {
+  if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1,NULL,NULL,0)) {
     node_free(n);
     return NULL;
   }
@@ -279,7 +298,7 @@ int string_to_mainchordid(node *n, const char *str, endpointid *out)
       fprintf(stderr,"Invalid address: %s\n",str);
       return -1;
     }
-    if (0 > lookup_address(n,host,&addr)) {
+    if (0 > lookup_address(n,host,&addr,NULL)) {
       fprintf(stderr,"Host lookup failed: %s\n",host);
       free(host);
       return -1;

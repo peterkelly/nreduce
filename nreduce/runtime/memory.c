@@ -30,6 +30,7 @@
 #include "compiler/bytecode.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -237,6 +238,8 @@ static void mark(task *tsk, pntr p, short bit)
       sysobject *so = (sysobject*)get_pntr(c->field1);
       if (!is_nullpntr(so->listenerso))
         mark(tsk,so->listenerso,bit);
+      if (so->newso)
+        mark(tsk,so->newso->p,bit);
       break;
     }
     case CELL_BUILTIN:
@@ -284,6 +287,34 @@ cell *alloc_cell(task *tsk)
   return v;
 }
 
+sysobject *new_sysobject(task *tsk, int type, cell **c)
+{
+  sysobject *so = (sysobject*)calloc(1,sizeof(sysobject));
+  so->type = type;
+  (*c) = so->c = alloc_cell(tsk);
+  make_pntr(so->p,so->c);
+  (*c)->type = CELL_SYSOBJECT;
+  make_pntr((*c)->field1,so);
+  return so;
+}
+
+sysobject *find_sysobject(task *tsk, const socketid *sockid)
+{
+  block *bl;
+  int i;
+  for (bl = tsk->blocks; bl; bl = bl->next) {
+    for (i = 0; i < BLOCK_SIZE; i++) {
+      if (CELL_SYSOBJECT == bl->values[i].type) {
+        cell *c = &bl->values[i];
+        sysobject *so = (sysobject*)get_pntr(c->field1);
+        if (socketid_equals(&so->sockid,sockid))
+          return so;
+      }
+    }
+  }
+  return NULL;
+}
+
 void free_global(task *tsk, global *glo)
 {
   list_free(glo->wq.fetchers,free);
@@ -307,42 +338,29 @@ static void free_sysobject(task *tsk, sysobject *so)
     close(so->fd);
     break;
   case SYSOBJECT_CONNECTION: {
-    connection *conn;
-
-    lock_node(tsk->n);
-    if (0 == so_lookup_connection(tsk,so,&conn)) {
-
-      if (!tsk->done) {
-        assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
-        assert(0 == conn->frameids[READ_FRAMEADDR]);
-        assert(0 == conn->frameids[WRITE_FRAMEADDR]);
-        assert(0 == conn->frameids[LISTEN_FRAMEADDR]);
-        assert(0 == conn->frameids[ACCEPT_FRAMEADDR]);
-        assert(conn->dontread);
-      }
-
-      conn->status = NULL;
-      conn->collected = 1;
-
-      if (!conn->finwrite) {
-        conn->finwrite = 1;
-        node_notify(tsk->n);
-      }
-
-      done_reading(tsk->n,conn);
+    delete_connection_msg dcm;
+    dcm.sockid = so->sockid;
+    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_CONNECTION,
+              &dcm,sizeof(dcm));
+    if (!tsk->done) {
+      assert(0 == so->frameids[CONNECT_FRAMEADDR]);
+      assert(0 == so->frameids[READ_FRAMEADDR]);
+      assert(0 == so->frameids[WRITE_FRAMEADDR]);
+      assert(0 == so->frameids[LISTEN_FRAMEADDR]);
+      assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
     }
-    unlock_node(tsk->n);
-
     free(so->hostname);
     free(so->buf);
     break;
   }
-  case SYSOBJECT_LISTENER:
-    if (so->newso)
-      free_sysobject(tsk,so->newso);
-    node_remove_listener(tsk->n,so->l);
+  case SYSOBJECT_LISTENER: {
+    delete_listener_msg dlm;
+    dlm.sockid = so->sockid;
+    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_LISTENER,
+              &dlm,sizeof(dlm));
     free(so->hostname);
     break;
+  }
   default:
     abort();
     break;
@@ -616,17 +634,30 @@ void local_collect(task *tsk)
   #endif
 }
 
-void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns)
+void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners)
 {
   block *bl;
   int i;
+  connection *conn;
+  listener *l;
 
   *cells = 0;
   *bytes = 0;
-  *conns = 0;
+  *connections = 0;
+  *listeners = 0;
   *alloc = 0;
 
   lock_node(tsk->n);
+  for (conn = tsk->n->connections.first; conn; conn = conn->next) {
+    if (conn->isreg)
+      (*connections)++;
+  }
+  for (l = tsk->n->listeners.first; l; l = l->next) {
+    if (l != tsk->n->mainl)
+      (*listeners)++;
+  }
+  unlock_node(tsk->n);
+
   for (bl = tsk->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {
       cell *c = &bl->values[i];
@@ -635,13 +666,6 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns)
         (*bytes) += arr->size*arr->elemsize;
         (*alloc) += arr->alloc*arr->elemsize;
       }
-      else if (CELL_SYSOBJECT == c->type) {
-        sysobject *so = (sysobject*)get_pntr(c->field1);
-        if (SYSOBJECT_CONNECTION == so->type) {
-          if (0 == so->status)
-            (*conns)++;
-        }
-      }
       if (CELL_EMPTY != c->type) {
         (*bytes) += sizeof(cell);
         (*cells)++;
@@ -649,7 +673,6 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns)
     }
     (*alloc) += sizeof(block);
   }
-  unlock_node(tsk->n);
 }
 
 frame *frame_new(task *tsk)

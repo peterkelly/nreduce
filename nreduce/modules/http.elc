@@ -143,9 +143,9 @@ parse_message1 startline headers stream start !count =
         nil)
       (parse_message2 startline headers (tail (tail stream)) start count)
       (parse_message1 startline headers (tail stream) start (+ count 1))))
-  (got_message startline headers))
+  (got_message startline headers nil))
 
-parse_message2 startline headers !s start !count =
+parse_message2 startline headers s start !count =
 (if (= count 0)
   (got_message startline headers s)
   (if startline

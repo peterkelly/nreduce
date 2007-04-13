@@ -31,6 +31,9 @@
 
 #define IOSIZE 65536
 
+#define HOSTNAME_MAX 256
+#define ERRMSG_MAX 256
+
 //#define DEBUG_SHORT_KEEPALIVE
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
@@ -128,14 +131,21 @@ typedef struct endpointlist {
   endpoint *last;
 } endpointlist;
 
-#define CONNECT_FRAMEADDR 0
-#define READ_FRAMEADDR    1
-#define WRITE_FRAMEADDR   2
-#define LISTEN_FRAMEADDR  3
-#define ACCEPT_FRAMEADDR  4
-#define FRAMEADDR_COUNT   5
+#define CONNECT_FRAMEADDR        0
+#define READ_FRAMEADDR           1
+#define WRITE_FRAMEADDR          2
+#define FINWRITE_FRAMEADDR       3
+#define LISTEN_FRAMEADDR         4
+#define ACCEPT_FRAMEADDR         5
+#define FRAMEADDR_COUNT          6
+
+typedef struct {
+  endpointid managerid;
+  unsigned int sid;
+} socketid;
 
 typedef struct connection {
+  socketid sockid;
   char *hostname;
   in_addr_t ip;
   int port;
@@ -155,19 +165,19 @@ typedef struct connection {
   int finwrite;
   int collected;
   void *data;
-  struct task *tsk;
   int frameids[FRAMEADDR_COUNT];
   int dontread;
-  int *status;
   int totalread;
 
   int canread;
   int canwrite;
 
   endpointid console_epid;
+  endpointid owner;
 
   struct connection *prev;
   struct connection *next;
+  char errmsg[ERRMSG_MAX+1];
 } connection;
 
 typedef struct connectionlist {
@@ -191,6 +201,7 @@ typedef struct node_callbacklist {
 } node_callbacklist;
 
 typedef struct listener {
+  socketid sockid;
   in_addr_t ip;
   int port;
   int fd;
@@ -200,6 +211,7 @@ typedef struct listener {
   int accept_frameid;
   struct listener *prev;
   struct listener *next;
+  endpointid owner;
 } listener;
 
 typedef struct listenerlist {
@@ -219,6 +231,7 @@ typedef struct node {
   in_addr_t listenip;
   unsigned short listenport;
   unsigned int nextlocalid;
+  unsigned int nextsid;
   pthread_t iothread;
   int ioready_writefd;
   int ioready_readfd;
@@ -231,6 +244,7 @@ typedef struct node {
   int loglevel;
   pthread_cond_t closecond;
   pthread_mutex_t liblock;
+  endpointid managerid;
 } node;
 
 #define EVENT_NONE                  0
@@ -255,13 +269,13 @@ typedef struct node {
 #define unlock_node(_n) unlock_mutex(&(_n)->lock); }
 
 char *lookup_hostname(node *n, in_addr_t addr);
-int lookup_address(node *n, const char *host, in_addr_t *out);
+int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
 
 node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
 listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback, void *data,
-                      int dontaccept, int ismain);
+                      int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen);
 void node_add_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_callback(node *n, node_callbackfun fun, void *data);
 void node_remove_listener(node *n, listener *l);
@@ -269,7 +283,7 @@ void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
-                                int port, int othernode);
+                                int port, int othernode, char *errmsg, int errlen);
 void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                       int tag, const void *data, int size);
 void node_send(node *n, unsigned int sourcelocalid, endpointid destendpointid,
@@ -289,9 +303,13 @@ void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 message *endpoint_next_message(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
+int endpointid_isnull(const endpointid *epid);
 void print_endpointid(endpointid_str str, endpointid epid);
 
 void message_free(message *msg);
+
+int socketid_equals(const socketid *a, const socketid *b);
+int socketid_isnull(const socketid *a);
 
 /* console2 */
 

@@ -370,7 +370,7 @@ int do_client(char *initial_str, int argc, char **argv)
 
   node_add_callback(n,client_callback,NULL);
 
-  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1)) {
+  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1,NULL,NULL,0)) {
     node_free(n);
     return -1;
   }

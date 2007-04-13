@@ -647,7 +647,7 @@ static int read_managers(node *n, const char *nodesfile, endpointid **outids, in
     managerids[i].port = port;
     managerids[i].localid = MANAGER_ID;
 
-    if (0 > lookup_address(n,host,&managerids[i].ip)) {
+    if (0 > lookup_address(n,host,&managerids[i].ip,NULL)) {
       fprintf(stderr,"%s: hostname lookup failed\n",host);
       array_free(nodes);
       free(managerids);
@@ -667,7 +667,7 @@ void run_chordtest(int argc, char **argv)
 {
   node *n = node_new(LOG_ERROR);
 
-  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1))
+  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1,NULL,NULL,0))
     exit(1);
 
   start_manager(n);

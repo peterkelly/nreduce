@@ -48,7 +48,7 @@
 #define MSG_STARTTASKRESP       19
 #define MSG_KILL                20
 
-#define MSG_IORESPONSE          21
+#define MSG_IORESPONSE          21 /* FIXME: remove */
 
 #define MSG_ENDPOINT_EXIT       22
 #define MSG_LINK                23
@@ -74,7 +74,23 @@
 #define MSG_INSERT              40
 #define MSG_SET_NEXT            41
 
-#define MSG_COUNT               42
+#define MSG_LISTEN              42
+#define MSG_ACCEPT              43
+#define MSG_CONNECT             44
+#define MSG_READ                45
+#define MSG_WRITE               46
+#define MSG_FINWRITE            47
+#define MSG_LISTEN_RESPONSE     48
+#define MSG_ACCEPT_RESPONSE     49
+#define MSG_CONNECT_RESPONSE    50
+#define MSG_READ_RESPONSE       51
+#define MSG_WRITE_RESPONSE      52
+#define MSG_CONNECTION_EVENT    53
+#define MSG_FINWRITE_RESPONSE   54
+#define MSG_DELETE_CONNECTION   55
+#define MSG_DELETE_LISTENER     56
+
+#define MSG_COUNT               57
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];
@@ -83,5 +99,92 @@ extern const char *msg_names[MSG_COUNT];
 typedef struct {
   endpointid epid;
 } endpoint_exit_msg;
+
+typedef struct {
+  in_addr_t ip;
+  int port;
+  endpointid owner;
+  int ioid;
+} listen_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} accept_msg;
+
+typedef struct {
+  char hostname[HOSTNAME_MAX+1];
+  int port;
+  endpointid owner;
+  int ioid;
+} connect_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} read_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+  int len;
+  char data[0];
+} write_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} finwrite_msg;
+
+typedef struct {
+  int ioid;
+  int error;
+  char errmsg[ERRMSG_MAX+1];
+  socketid sockid;
+} listen_response_msg;
+
+typedef struct {
+  int ioid;
+  socketid sockid;
+  char hostname[HOSTNAME_MAX+1];
+  int port;
+} accept_response_msg;
+
+typedef struct {
+  int ioid;
+  int event;
+  socketid sockid;
+  char errmsg[ERRMSG_MAX+1];
+} connect_response_msg;
+
+typedef struct {
+  int ioid;
+  int event;
+  socketid sockid;
+  int len;
+  char data[0];
+} read_response_msg;
+
+typedef struct {
+  int ioid;
+} write_response_msg;
+
+typedef struct {
+  int ioid;
+} finwrite_response_msg;
+
+typedef struct {
+  socketid sockid;
+  int event;
+  char errmsg[ERRMSG_MAX+1];
+} connection_event_msg;
+
+typedef struct {
+  socketid sockid;
+} delete_connection_msg;
+
+typedef struct {
+  socketid sockid;
+} delete_listener_msg;
 
 #endif

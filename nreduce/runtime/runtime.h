@@ -242,12 +242,16 @@ typedef struct sysobject {
   int len;
   int closed;
   int error;
-  int status;
-  int iorstatus;
-  listener *l;
+  char errmsg[ERRMSG_MAX+1];
   pntr listenerso;
   struct sysobject *newso;
   struct task *tsk;
+  socketid sockid;
+  cell *c;
+  pntr p;
+  int newclosed;
+  int newerror;
+  int frameids[FRAMEADDR_COUNT];
 } sysobject;
 
 typedef struct carray {
@@ -671,7 +675,6 @@ void console(task *tsk);
 
 /* builtin */
 
-int so_lookup_connection(task *tsk, sysobject *so, connection **conn);
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper);
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 
@@ -692,6 +695,8 @@ int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 /* cell */
 
 cell *alloc_cell(task *tsk);
+sysobject *new_sysobject(task *tsk, int type, cell **c);
+sysobject *find_sysobject(task *tsk, const socketid *sockid);
 void free_global(task *tsk, global *glo);
 void free_cell_fields(task *tsk, cell *v);
 
@@ -702,7 +707,7 @@ void print_cells(task *tsk);
 void sweep(task *tsk, int all);
 void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
-void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *conns);
+void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners);
 
 frame *frame_new(task *tsk);
 #define frame_free(tsk,_f) \
