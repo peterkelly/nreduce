@@ -1,4 +1,4 @@
-all: shellserver echoserver dataserver webserver readserver genstrand
+all: shellserver echoserver dataserver webserver readserver genstrand slowget
 
 shellserver: shellserver.c util.h util.c
 	gcc -Wall -O0 -ggdb3 -o shellserver shellserver.c util.c
@@ -18,5 +18,8 @@ readserver: readserver.c util.h util.c
 genstrand: genstrand.c
 	gcc -Wall -O0 -ggdb3 -o genstrand genstrand.c
 
+slowget: slowget.c
+	gcc -Wall -O0 -ggdb3 -o slowget slowget.c
+
 clean:
-	rm -f shellserver echoserver dataserver webserver readserver genstrand
+	rm -f shellserver echoserver dataserver webserver readserver genstrand slowget
