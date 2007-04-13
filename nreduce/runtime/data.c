@@ -655,8 +655,3 @@ void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)
   msg_send(tsk,dest,tag,wr->data,wr->nbytes);
   write_end(wr);
 }
-
-int msg_recv(task *tsk, int *tag, char **data, int *size, int delayms)
-{
-  return socket_recv(tsk,tag,data,size,delayms);
-}

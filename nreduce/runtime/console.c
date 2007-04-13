@@ -39,6 +39,13 @@
 #include <sys/time.h>
 #include <time.h>
 
+/* FIXME: remove */
+int msg_recv(task *tsk, int *tag, char **data, int *size, int delayms)
+{
+  assert(0);
+  return 0;
+}
+
 static int send_around(task *tsk, char tag)
 {
   array *wr;

@@ -141,32 +141,6 @@ void socket_send(task *tsk, int destid, int tag, char *data, int size)
   node_send(n,tsk->endpt->epid.localid,tsk->idmap[destid],tag,data,size);
 }
 
-static int get_idmap_index(task *tsk, endpointid tid)
-{
-  int i;
-  for (i = 0; i < tsk->groupsize; i++)
-    if (endpointid_equals(&tsk->idmap[i],&tid))
-      return i;
-  return -1;
-}
-
-int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms)
-{
-  message *msg = endpoint_next_message(tsk->endpt,delayms);
-  int from;
-  if (NULL == msg)
-    return -1;
-
-  *tag = msg->hdr.tag;
-  *data = msg->data;
-  *size = msg->hdr.size;
-  from = get_idmap_index(tsk,msg->hdr.source);
-  assert(0 <= from);
-  assert(tsk->endpt->epid.localid == msg->hdr.destlocalid);
-  free(msg);
-  return from;
-}
-
 static void worker_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
@@ -185,9 +159,7 @@ static void worker_callback(struct node *n, void *data, int event,
 
     conn->frameids[CONNECT_FRAMEADDR] = 0;
 
-    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
-    assert((conn->owner.ip == n->listenip) && (conn->owner.port == n->listenport));
-    node_send_locked(n,conn->owner.localid,conn->owner,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
+    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
   }
 
   if (conn && (0 < conn->frameids[READ_FRAMEADDR]) &&
@@ -204,7 +176,7 @@ static void worker_callback(struct node *n, void *data, int event,
     rrm->len = conn->recvbuf->nbytes;
     memcpy(rrm->data,conn->recvbuf->data,conn->recvbuf->nbytes);
 
-    node_send_locked(n,conn->owner.localid,conn->owner,MSG_READ_RESPONSE,rrm,rrmlen);
+    node_send_locked(n,MANAGER_ID,conn->owner,MSG_READ_RESPONSE,rrm,rrmlen);
 
     conn->frameids[READ_FRAMEADDR] = 0;
     conn->recvbuf->nbytes = 0;
@@ -218,7 +190,7 @@ static void worker_callback(struct node *n, void *data, int event,
     cem.sockid = conn->sockid;
     cem.event = event;
     memcpy(cem.errmsg,conn->errmsg,sizeof(cem.errmsg));
-    node_send_locked(n,conn->owner.localid,conn->owner,MSG_CONNECTION_EVENT,&cem,sizeof(cem));
+    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECTION_EVENT,&cem,sizeof(cem));
   }
 
   if (conn && (0 < conn->frameids[WRITE_FRAMEADDR]) &&
@@ -226,7 +198,7 @@ static void worker_callback(struct node *n, void *data, int event,
     write_response_msg wrm;
     wrm.ioid = conn->frameids[WRITE_FRAMEADDR];
     conn->frameids[WRITE_FRAMEADDR] = 0;
-    node_send_locked(n,conn->owner.localid,conn->owner,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+    node_send_locked(n,MANAGER_ID,conn->owner,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
   }
 }
 

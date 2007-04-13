@@ -105,9 +105,7 @@ static void listen_callback(struct node *n, void *data, int event,
     arm.hostname[HOSTNAME_MAX] = '\0';
     arm.port = conn->port;
 
-    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
-    assert((l->owner.ip == n->listenip) && (l->owner.port == n->listenport));
-    node_send_locked(n,l->owner.localid,l->owner,MSG_ACCEPT_RESPONSE,&arm,sizeof(arm));
+    node_send_locked(n,MANAGER_ID,l->owner,MSG_ACCEPT_RESPONSE,&arm,sizeof(arm));
 
     l->accept_frameid = 0;
     assert(!l->dontaccept);
@@ -134,9 +132,7 @@ static void manager_listen(node *n, endpoint *endpt, listen_msg *m, endpointid s
     memset(&lrm.sockid,0,sizeof(socketid));
   }
 
-  /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
-  assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
-  node_send(n,source.localid,source,MSG_LISTEN_RESPONSE,&lrm,sizeof(lrm));
+  node_send(n,MANAGER_ID,source,MSG_LISTEN_RESPONSE,&lrm,sizeof(lrm));
 }
 
 static void manager_accept(node *n, endpoint *endpt, accept_msg *m, endpointid source)
@@ -167,14 +163,7 @@ static void manager_connect(node *n, endpoint *endpt, connect_msg *m, endpointid
     crm.event = EVENT_CONN_FAILED;
     memset(&crm.sockid,0,sizeof(crm.sockid));
 
-    /* FIXME: at the moment we wend the message as if it's coming from the sender,
-       since the interpreter thread expects all messages it receives to be from one of the
-       members of the task's group. This restriction needs to be lifted so that it can accept
-       IORESPONSE messages from remote manager threads (and workers)
-       Note: We could possibly just remove the sender info from the messages altogether, and
-       enforce it to be include explicitly within the message bodies where it is needed. */
-    assert((m->owner.ip == endpt->epid.ip) && (m->owner.port == endpt->epid.port));
-    node_send_locked(n,m->owner.localid,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
+    node_send_locked(n,MANAGER_ID,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
   }
   else {
     assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
@@ -227,9 +216,7 @@ static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid sou
       write_response_msg wrm;
       wrm.ioid = m->ioid;
 
-      /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
-      assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
-      node_send_locked(n,source.localid,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+      node_send_locked(n,MANAGER_ID,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
     }
     else {
       conn->frameids[WRITE_FRAMEADDR] = m->ioid;
@@ -256,9 +243,7 @@ static void manager_finwrite(node *n, endpoint *endpt, finwrite_msg *m, endpoint
 
     frm.ioid = m->ioid;
 
-    /* FIXME: send with the source id set to this manager; see comment in manager_connect() */
-    assert((source.ip == endpt->epid.ip) && (source.port == endpt->epid.port));
-    node_send_locked(n,source.localid,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
+    node_send_locked(n,MANAGER_ID,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
   }
   unlock_node(n);
 }

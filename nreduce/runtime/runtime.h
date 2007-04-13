@@ -652,7 +652,6 @@ void write_end(array *wr);
 
 void msg_send(task *tsk, int dest, int tag, char *data, int size);
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...);
-int msg_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 
 void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
@@ -690,7 +689,6 @@ int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
 task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
-int socket_recv(task *tsk, int *tag, char **data, int *size, int delayms);
 
 /* cell */
 
