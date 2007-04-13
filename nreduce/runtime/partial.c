@@ -341,7 +341,7 @@ static int apply_one(task *tsk, pntr p)
 
   // Rule 10: (if true a b) -> a
   if ((B_IF == bif) && istrue(args[0]))
-    return makeind(tsk,p,args[1],"Applied (if true a b) -> a"); /* FIXME: test this */
+    return makeind(tsk,p,args[1],"Applied (if true a b) -> a");
 
   // Rule 11: (head (CONS a b)) -> a
   if ((B_HEAD == bif) && (CELL_CONS == pntrtype(args[0])))

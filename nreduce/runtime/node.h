@@ -239,7 +239,6 @@ typedef struct node {
   pthread_mutex_t lock;
   pthread_cond_t cond;
   int shutdown;
-  int isworker; /* FIXME: shouldn't need this */
   FILE *logfile;
   int loglevel;
   pthread_cond_t closecond;

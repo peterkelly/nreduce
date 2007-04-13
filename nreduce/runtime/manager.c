@@ -328,6 +328,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       if (initmsg->count != newtsk->groupsize)
         fatal("INITTASK: idmap size does not match expected");
       memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
+      newtsk->haveidmap = 1;
 
       for (i = 0; i < newtsk->groupsize; i++)
         if (!endpointid_equals(&newtsk->endpt->epid,&initmsg->idmap[i]))
@@ -342,7 +343,6 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       }
 
       node_send(n,endpt->epid.localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
-      newtsk->haveidmap = 1; /* FIXME: another possible race condition */
       break;
     }
     case MSG_STARTTASK: {

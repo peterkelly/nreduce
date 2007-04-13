@@ -48,49 +48,47 @@
 #define MSG_STARTTASKRESP       19
 #define MSG_KILL                20
 
-#define MSG_IORESPONSE          21 /* FIXME: remove */
+#define MSG_ENDPOINT_EXIT       21
+#define MSG_LINK                22
+#define MSG_UNLINK              23
 
-#define MSG_ENDPOINT_EXIT       22
-#define MSG_LINK                23
-#define MSG_UNLINK              24
+#define MSG_CONSOLE_LINE        24
 
-#define MSG_CONSOLE_LINE        25
+#define MSG_FIND_SUCCESSOR      25
+#define MSG_GOT_SUCCESSOR       26
+#define MSG_GET_SUCCLIST        27
+#define MSG_REPLY_SUCCLIST      28
+#define MSG_STABILIZE           29
 
-#define MSG_FIND_SUCCESSOR      26
-#define MSG_GOT_SUCCESSOR       27
-#define MSG_GET_SUCCLIST        28
-#define MSG_REPLY_SUCCLIST      29
-#define MSG_STABILIZE           30
+#define MSG_GET_TABLE           30
+#define MSG_REPLY_TABLE         31
+#define MSG_FIND_ALL            32
+#define MSG_CHORD_STARTED       33
+#define MSG_START_CHORD         34
+#define MSG_DEBUG_START         35
+#define MSG_DEBUG_DONE          36
+#define MSG_ID_CHANGED          37
+#define MSG_JOINED              38
+#define MSG_INSERT              39
+#define MSG_SET_NEXT            40
 
-#define MSG_GET_TABLE           31
-#define MSG_REPLY_TABLE         32
-#define MSG_FIND_ALL            33
-#define MSG_CHORD_STARTED       34
-#define MSG_START_CHORD         35
-#define MSG_DEBUG_START         36
-#define MSG_DEBUG_DONE          37
-#define MSG_ID_CHANGED          38
-#define MSG_JOINED              39
-#define MSG_INSERT              40
-#define MSG_SET_NEXT            41
+#define MSG_LISTEN              41
+#define MSG_ACCEPT              42
+#define MSG_CONNECT             43
+#define MSG_READ                44
+#define MSG_WRITE               45
+#define MSG_FINWRITE            46
+#define MSG_LISTEN_RESPONSE     47
+#define MSG_ACCEPT_RESPONSE     48
+#define MSG_CONNECT_RESPONSE    49
+#define MSG_READ_RESPONSE       50
+#define MSG_WRITE_RESPONSE      51
+#define MSG_CONNECTION_EVENT    52
+#define MSG_FINWRITE_RESPONSE   53
+#define MSG_DELETE_CONNECTION   54
+#define MSG_DELETE_LISTENER     55
 
-#define MSG_LISTEN              42
-#define MSG_ACCEPT              43
-#define MSG_CONNECT             44
-#define MSG_READ                45
-#define MSG_WRITE               46
-#define MSG_FINWRITE            47
-#define MSG_LISTEN_RESPONSE     48
-#define MSG_ACCEPT_RESPONSE     49
-#define MSG_CONNECT_RESPONSE    50
-#define MSG_READ_RESPONSE       51
-#define MSG_WRITE_RESPONSE      52
-#define MSG_CONNECTION_EVENT    53
-#define MSG_FINWRITE_RESPONSE   54
-#define MSG_DELETE_CONNECTION   55
-#define MSG_DELETE_LISTENER     56
-
-#define MSG_COUNT               57
+#define MSG_COUNT               56
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];

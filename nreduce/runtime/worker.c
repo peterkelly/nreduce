@@ -75,7 +75,6 @@ const char *msg_names[MSG_COUNT] = {
   "STARTTASK",
   "STARTTASKRESP",
   "KILL",
-  "IORESPONSE",
   "ENDPOINT_EXIT",
   "LINK",
   "UNLINK",
@@ -214,7 +213,6 @@ static node *worker_startup(int loglevel, int port)
   node *n = node_new(loglevel);
   unsigned char *ipbytes;
 
-  n->isworker = 1;
   if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1,NULL,NULL,0)) {
     node_free(n);
     return NULL;

@@ -180,8 +180,6 @@ void reduce(task *tsk, pntrstack *s)
 
     tsk->stats.nreductions++;
 
-    /* FIXME: if we call collect() here then sometimes the redex gets collected
-       (? may have been fixed) */
     if (tsk->alloc_bytes > COLLECT_THRESHOLD)
       local_collect(tsk);
 
@@ -232,7 +230,6 @@ void reduce(task *tsk, pntrstack *s)
         s->data[i] = get_pntr(arg)->field2;
       }
 
-      /* FIXME: could we reduce infinitely with a 0-arg supercombinator? */
       if (tsk->partial && skip) {
         trace_step(tsk,redex,1,"Not instantiating supercombinator %s more than once",sc->name);
 

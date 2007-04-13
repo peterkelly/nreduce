@@ -959,8 +959,6 @@ static int set_keepalive(node *n, int sock, int s)
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen)
 {
-  /* FIXME: add a lock here when modifying ther connection list, but *only* when the console
-     is modified to run in a separate thread */
   struct sockaddr_in addr;
   int sock;
   int connected = 0;
