@@ -449,6 +449,7 @@ typedef struct task {
   node *n;
   socketid out_sockid;
   sysobject *out_so;
+  endpointid gc;
 
   int ioalloc;
   int iocount;

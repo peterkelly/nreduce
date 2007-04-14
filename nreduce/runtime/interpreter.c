@@ -221,18 +221,16 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
   frame_free(tsk,f);
 }
 
-/* FIXME: need to send this to a GC endpoint, it's not part of the task group! */
 static void send_update(task *tsk)
 {
-  int homesite = tsk->groupsize-1;
-  array *wr = write_start();
   int i;
-  for (i = 0; i < tsk->groupsize-1; i++) {
-    write_int(wr,tsk->gcsent[i]);
+  assert(tsk->indistgc);
+  assert(!endpointid_isnull(&tsk->gc));
+
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,
+            MSG_UPDATE,tsk->gcsent,tsk->groupsize*sizeof(int));
+  for (i = 0; i < tsk->groupsize; i++)
     tsk->gcsent[i] = 0;
-  }
-  msg_send(tsk,homesite,MSG_UPDATE,wr->data,wr->nbytes);
-  write_end(wr);
 }
 
 static void start_address_reading(task *tsk, int from, int msgtype)
@@ -792,18 +790,21 @@ static void interpreter_ack(task *tsk, message *msg)
   array_remove_items(tsk->inflight_addrs[from],remove);
 }
 
-static void interpreter_startdistgc(task *tsk, message *msg)
+static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
 {
-  reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
-  assert(0 <= from);
-
-  rd = read_start(msg->data,msg->hdr.size);
-
+/*   printf("tsk->indistgc = %d\n",tsk->indistgc); */
   CHECK_EXPR(!tsk->indistgc);
   tsk->indistgc = 1;
+  tsk->gc = m->gc;
   clear_marks(tsk,FLAG_DMB);
-  msg_send(tsk,(tsk->tid+1)%tsk->groupsize,MSG_STARTDISTGC,msg->data,msg->hdr.size);
+  if (tsk->tid < tsk->groupsize-1) {
+    node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[tsk->tid+1],
+              MSG_STARTDISTGC,m,sizeof(startdistgc_msg));
+  }
+  else {
+    node_send(tsk->n,tsk->endpt->epid.localid,m->gc,
+              MSG_STARTDISTGC,m,sizeof(startdistgc_msg));
+  }
   #ifdef DISTGC_DEBUG
   fprintf(tsk->output,"Started distributed garbage collection\n");
   #endif
@@ -818,11 +819,10 @@ static void interpreter_markroots(task *tsk, message *msg)
   int h;
   global *glo;
 
-  reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
-  assert(0 <= from);
+  assert(tsk->indistgc);
+  assert(!endpointid_isnull(&tsk->gc));
 
-  rd = read_start(msg->data,msg->hdr.size);
+/*   printf("markroots\n"); */
 
   CHECK_EXPR(tsk->indistgc);
 
@@ -879,6 +879,9 @@ static void interpreter_markentry(task *tsk, message *msg)
   int from = get_idmap_index(tsk,msg->hdr.source);
   assert(0 <= from);
 
+  assert(tsk->indistgc);
+  assert(!endpointid_isnull(&tsk->gc));
+
   rd = read_start(data,size);
 
   CHECK_EXPR(tsk->indistgc);
@@ -912,16 +915,14 @@ static void interpreter_markentry(task *tsk, message *msg)
 static void interpreter_sweep(task *tsk, message *msg)
 {
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
-  assert(0 <= from);
+  assert(tsk->indistgc);
+  assert(!endpointid_isnull(&tsk->gc));
 
   rd = read_start(msg->data,msg->hdr.size);
 
-  CHECK_EXPR(tsk->indistgc);
-
   /* do sweep */
   tsk->memdebug = 1;
-  msg_fsend(tsk,from,MSG_SWEEPACK,"");
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_SWEEPACK,NULL,0);
 
   clear_marks(tsk,FLAG_MARKED);
   mark_roots(tsk,FLAG_MARKED);
@@ -978,7 +979,8 @@ static void handle_message(task *tsk, message *msg)
     interpreter_ack(tsk,msg);
     break;
   case MSG_STARTDISTGC:
-    interpreter_startdistgc(tsk,msg);
+    assert(sizeof(startdistgc_msg) == msg->hdr.size);
+    interpreter_startdistgc(tsk,(startdistgc_msg*)msg->data);
     break;
   case MSG_MARKROOTS:
     interpreter_markroots(tsk,msg);
@@ -1032,7 +1034,7 @@ static void handle_message(task *tsk, message *msg)
     break;
   }
   default:
-    fatal("unknown message");
+    fatal("interpreter: unexpected message %s",msg_names[msg->hdr.tag]);
     break;
   }
   message_free(msg);

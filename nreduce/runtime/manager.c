@@ -43,6 +43,121 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#define DISTGC_DELAY 3000
+//#define DEBUG_DISTGC
+
+typedef struct {
+  int ntasks;
+  endpointid idmap[0];
+} gcarg;
+
+/* FIXME: get this to exit when the process completes */
+static void gc_thread(node *n, endpoint *endpt, void *arg)
+{
+  gcarg *ga = (gcarg*)arg;
+  int done = 0;
+  int i;
+  int ingc = 0;
+  int *count = (int*)calloc(ga->ntasks,sizeof(int));
+  int mark_done = 0;
+  int rem_sweepacks = 0;
+
+  #ifdef DEBUG_DISTGC
+  printf("gc_thread\n");
+  for (i = 0; i < ga->ntasks; i++)
+    printf("gc_thread: idmap[%d] = "EPID_FORMAT"\n",i,EPID_ARGS(ga->idmap[i]));
+  #endif
+
+  while (!done) {
+    message *msg = endpoint_next_message(endpt,ingc ? -1 : DISTGC_DELAY);
+    if (NULL == msg) {
+      startdistgc_msg sm;
+      sm.gc = endpt->epid;
+      #ifdef DEBUG_DISTGC
+      printf("Starting distributed garbage collection\n");
+      #endif
+      assert(!ingc);
+      ingc = 1;
+      node_send(n,endpt->epid.localid,ga->idmap[0],MSG_STARTDISTGC,&sm,sizeof(sm));
+      continue;
+    }
+    switch (msg->hdr.tag) {
+    case MSG_STARTDISTGC: {
+      int i;
+      assert(ingc);
+      #ifdef DEBUG_DISTGC
+      printf("All tasks have received STARTDISTGC\n");
+      #endif
+      memset(count,0,ga->ntasks*sizeof(int));
+
+      for (i = 0; i < ga->ntasks; i++) {
+        node_send(n,endpt->epid.localid,ga->idmap[i],MSG_MARKROOTS,NULL,0);
+        count[i]++;
+      }
+
+      break;
+    }
+    case MSG_UPDATE: {
+      int *values = (int*)msg->data;
+      assert(ingc);
+      assert(ga->ntasks*sizeof(int) == msg->hdr.size);
+      assert(!mark_done);
+
+      for (i = 0; i < ga->ntasks; i++)
+        count[i] += values[i];
+
+      #ifdef DEBUG_DISTGC
+      printf("after update from "EPID_FORMAT":",EPID_ARGS(msg->hdr.source));
+      for (i = 0; i < ga->ntasks; i++)
+        printf(" %d",count[i]);
+      printf("\n");
+      #endif
+
+      mark_done = 1;
+      for (i = 0; i < ga->ntasks; i++)
+        if (count[i])
+          mark_done = 0;
+
+      if (mark_done) {
+        #ifdef DEBUG_DISTGC
+        printf("Mark done\n");
+        #endif
+        for (i = 0; i < ga->ntasks; i++)
+          node_send(n,endpt->epid.localid,ga->idmap[i],MSG_SWEEP,NULL,0);
+        rem_sweepacks = ga->ntasks;
+      }
+      break;
+    }
+    case MSG_SWEEPACK: {
+      assert(ingc);
+      assert(mark_done);
+      assert(0 < rem_sweepacks);
+      rem_sweepacks--;
+      if (0 == rem_sweepacks) {
+        #ifdef DEBUG_DISTGC
+        printf("Distributed garbage collection completed\n");
+        #endif
+        ingc = 0;
+        mark_done = 0;
+        for (i = 0; i < ga->ntasks; i++) {
+          assert(0 == count[i]);
+        }
+      }
+      break;
+    }
+    case MSG_KILL:
+      done = 1;
+      break;
+    default:
+      fatal("gc: unexpected message %s",msg_names[msg->hdr.tag]);
+      break;
+    }
+    message_free(msg);
+  }
+  free(count);
+  free(ga);
+}
+
 static connection *get_connection(node *n, socketid id)
 {
   connection *conn;
@@ -278,6 +393,15 @@ static void manager_delete_listener(node *n, endpoint *endpt,
     node_remove_listener(n,l);
 }
 
+static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid source)
+{
+  gcarg *ga = (gcarg*)calloc(1,sizeof(gcarg)+m->count*sizeof(endpointid));
+  ga->ntasks = m->count;
+  memcpy(ga->idmap,m->idmap,m->count*sizeof(endpointid));
+  node_add_thread(n,0,TEST_ENDPOINT,0,gc_thread,ga,NULL);
+  node_send(n,endpt->epid.localid,source,MSG_STARTGC_RESPONSE,NULL,0);
+}
+
 static void manager_thread(node *n, endpoint *endpt, void *arg)
 {
   message *msg;
@@ -418,19 +542,23 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       manager_write(n,endpt,(write_msg*)msg->data,msg->hdr.source);
       break;
     case MSG_FINWRITE:
-      assert(sizeof(finwrite_msg) <= msg->hdr.size);
+      assert(sizeof(finwrite_msg) == msg->hdr.size);
       manager_finwrite(n,endpt,(finwrite_msg*)msg->data,msg->hdr.source);
       break;
     case MSG_DELETE_CONNECTION:
-      assert(sizeof(delete_connection_msg) <= msg->hdr.size);
+      assert(sizeof(delete_connection_msg) == msg->hdr.size);
       manager_delete_connection(n,endpt,(delete_connection_msg*)msg->data,msg->hdr.source);
       break;
     case MSG_DELETE_LISTENER:
-      assert(sizeof(delete_listener_msg) <= msg->hdr.size);
+      assert(sizeof(delete_listener_msg) == msg->hdr.size);
       manager_delete_listener(n,endpt,(delete_listener_msg*)msg->data,msg->hdr.source);
       break;
+    case MSG_STARTGC:
+      assert(sizeof(startgc_msg) <= msg->hdr.size);
+      manager_startgc(n,endpt,(startgc_msg*)msg->data,msg->hdr.source);
+      break;
     default:
-      fatal("Manager received invalid message: %d",msg->hdr.tag);
+      fatal("manager: unexpected message %s",msg_names[msg->hdr.tag]);
       break;
     }
     message_free(msg);

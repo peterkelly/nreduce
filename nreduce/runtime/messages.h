@@ -88,7 +88,10 @@
 #define MSG_DELETE_CONNECTION   54
 #define MSG_DELETE_LISTENER     55
 
-#define MSG_COUNT               56
+#define MSG_STARTGC             56
+#define MSG_STARTGC_RESPONSE    57
+
+#define MSG_COUNT               58
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];
@@ -184,5 +187,14 @@ typedef struct {
 typedef struct {
   socketid sockid;
 } delete_listener_msg;
+
+typedef struct {
+  int count;
+  endpointid idmap[0];
+} startgc_msg;
+
+typedef struct {
+  endpointid gc;
+} startdistgc_msg;
 
 #endif

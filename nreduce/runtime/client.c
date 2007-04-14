@@ -160,6 +160,27 @@ static void send_starttask(launcher *lr)
               &lr->localids[i],sizeof(int));
 }
 
+static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)
+{
+  int msglen = sizeof(startgc_msg)+lr->count*sizeof(endpointid);
+  message *msg;
+  startgc_msg *sgcm = (startgc_msg*)calloc(1,msglen);
+  sgcm->count = lr->count;
+  memcpy(sgcm->idmap,lr->endpointids,lr->count*sizeof(endpointid));
+  node_send(n,endpt->epid.localid,lr->managerids[0],MSG_STARTGC,sgcm,msglen);
+  free(sgcm);
+
+  msg = endpoint_next_message(endpt,-1);
+  if (MSG_KILL == msg->hdr.tag) {
+    lr->cancel = 1;
+  }
+  else {
+    assert(MSG_STARTGC_RESPONSE == msg->hdr.tag);
+    printf("garbage collector started\n");
+  }
+  message_free(msg);
+}
+
 static void launcher_thread(node *n, endpoint *endpt, void *arg)
 {
   launcher *lr = (launcher*)arg;
@@ -216,6 +237,10 @@ static void launcher_thread(node *n, endpoint *endpt, void *arg)
     launcher_free(arg);
     return;
   }
+
+  /* Start the garbage collector */
+  if (1 < lr->count)
+    launcher_startgc(n,endpt,lr);
 
   node_log(n,LOG_INFO,"Distributed process creation done");
   launcher_free(arg);
