@@ -224,13 +224,18 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 static void send_update(task *tsk)
 {
   int i;
+  int msglen = sizeof(update_msg)+tsk->groupsize*sizeof(int);
+  update_msg *um = (update_msg*)malloc(msglen);
   assert(tsk->indistgc);
   assert(!endpointid_isnull(&tsk->gc));
 
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,
-            MSG_UPDATE,tsk->gcsent,tsk->groupsize*sizeof(int));
+  um->gciter = tsk->gciter;
+  memcpy(um->counts,tsk->gcsent,tsk->groupsize*sizeof(int));
+
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_UPDATE,um,msglen);
   for (i = 0; i < tsk->groupsize; i++)
     tsk->gcsent[i] = 0;
+  free(um);
 }
 
 static void start_address_reading(task *tsk, int from, int msgtype)
@@ -796,21 +801,17 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
   CHECK_EXPR(!tsk->indistgc);
   tsk->indistgc = 1;
   tsk->gc = m->gc;
+  tsk->gciter = m->gciter;
   clear_marks(tsk,FLAG_DMB);
-  if (tsk->tid < tsk->groupsize-1) {
-    node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[tsk->tid+1],
-              MSG_STARTDISTGC,m,sizeof(startdistgc_msg));
-  }
-  else {
-    node_send(tsk->n,tsk->endpt->epid.localid,m->gc,
-              MSG_STARTDISTGC,m,sizeof(startdistgc_msg));
-  }
+
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_STARTDISTGCACK,NULL,0);
+
   #ifdef DISTGC_DEBUG
   fprintf(tsk->output,"Started distributed garbage collection\n");
   #endif
 }
 
-static void interpreter_markroots(task *tsk, message *msg)
+static void interpreter_markroots(task *tsk)
 {
 /* An RMT (Root Marking Task) */
   list *l;
@@ -983,7 +984,7 @@ static void handle_message(task *tsk, message *msg)
     interpreter_startdistgc(tsk,(startdistgc_msg*)msg->data);
     break;
   case MSG_MARKROOTS:
-    interpreter_markroots(tsk,msg);
+    interpreter_markroots(tsk);
     break;
   case MSG_MARKENTRY:
     interpreter_markentry(tsk,msg);

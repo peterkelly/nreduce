@@ -60,7 +60,9 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
   int ingc = 0;
   int *count = (int*)calloc(ga->ntasks,sizeof(int));
   int mark_done = 0;
+  int rem_startacks = 0;
   int rem_sweepacks = 0;
+  int gciter = 0;
 
   #ifdef DEBUG_DISTGC
   printf("gc_thread\n");
@@ -73,41 +75,50 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
     if (NULL == msg) {
       startdistgc_msg sm;
       sm.gc = endpt->epid;
+      sm.gciter = ++gciter;
       #ifdef DEBUG_DISTGC
       printf("Starting distributed garbage collection\n");
       #endif
       assert(!ingc);
       ingc = 1;
-      node_send(n,endpt->epid.localid,ga->idmap[0],MSG_STARTDISTGC,&sm,sizeof(sm));
+
+      for (i = 0; i < ga->ntasks; i++)
+        node_send(n,endpt->epid.localid,ga->idmap[i],MSG_STARTDISTGC,&sm,sizeof(sm));
+      rem_startacks = ga->ntasks;
+
       continue;
     }
     switch (msg->hdr.tag) {
-    case MSG_STARTDISTGC: {
-      int i;
+    case MSG_STARTDISTGCACK: {
       assert(ingc);
-      #ifdef DEBUG_DISTGC
-      printf("All tasks have received STARTDISTGC\n");
-      #endif
-      memset(count,0,ga->ntasks*sizeof(int));
+      assert(!mark_done);
+      assert(0 < rem_startacks);
+      rem_startacks--;
+      if (0 == rem_startacks) {
+        #ifdef DEBUG_DISTGC
+        printf("All tasks have received STARTDISTGC\n");
+        #endif
+        memset(count,0,ga->ntasks*sizeof(int));
 
-      for (i = 0; i < ga->ntasks; i++) {
-        node_send(n,endpt->epid.localid,ga->idmap[i],MSG_MARKROOTS,NULL,0);
-        count[i]++;
+        for (i = 0; i < ga->ntasks; i++) {
+          node_send(n,endpt->epid.localid,ga->idmap[i],MSG_MARKROOTS,NULL,0);
+          count[i]++;
+        }
       }
-
       break;
     }
     case MSG_UPDATE: {
-      int *values = (int*)msg->data;
+      update_msg *m = (update_msg*)msg->data;
+      assert(sizeof(update_msg)+ga->ntasks*sizeof(int) == msg->hdr.size);
       assert(ingc);
-      assert(ga->ntasks*sizeof(int) == msg->hdr.size);
       assert(!mark_done);
+      assert(m->gciter == gciter);
 
       for (i = 0; i < ga->ntasks; i++)
-        count[i] += values[i];
+        count[i] += m->counts[i];
 
       #ifdef DEBUG_DISTGC
-      printf("after update from "EPID_FORMAT":",EPID_ARGS(msg->hdr.source));
+      printf("after update (gciter %d) from "EPID_FORMAT":",m->gciter,EPID_ARGS(msg->hdr.source));
       for (i = 0; i < ga->ntasks; i++)
         printf(" %d",count[i]);
       printf("\n");

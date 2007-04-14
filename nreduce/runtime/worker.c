@@ -112,6 +112,7 @@ const char *msg_names[MSG_COUNT] = {
   "DELETE_LISTENER",
   "STARTGC",
   "STARTGC_RESPONSE",
+  "STARTDISTGCACK",
 };
 
 endpoint *find_endpoint(node *n, int localid)
