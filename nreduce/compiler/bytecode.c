@@ -817,7 +817,6 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             BIF(app->sl,bif);
 
             if (!bi->reswhnf) {
-              RESOLVE(app->sl,0);
               EVAL(app->sl,0);
               DO(app->sl,1);
             }
