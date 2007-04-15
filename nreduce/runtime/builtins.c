@@ -437,8 +437,9 @@ void maybe_expand_array(task *tsk, pntr p)
       carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
       arr->tail = resolve_pntr(tailcell->field2);
 
-      tailcell->type = CELL_IND;
-      make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1);
+      /* FIXME: is there a way to do this safely? */
+/*       tailcell->type = CELL_IND; */
+/*       make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1); */
 
       count++;
     }
