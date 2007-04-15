@@ -299,7 +299,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, int stopafterlambda, int dispartialsink, int disstrict)
+int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict)
 {
   int sccount;
   int scno;
@@ -342,7 +342,7 @@ int source_process(source *src, int stopafterlambda, int dispartialsink, int dis
   if (stopafterlambda)
     return 0;
 
-  if (!dispartialsink) {
+  if (!nopartial) {
     compile_stage(src,"Partial evaluation"); /* partial.c */
     for (scno = 0; scno < sccount; scno++) {
       scomb *sc = array_item(src->scombs,scno,scomb*);
@@ -359,7 +359,9 @@ int source_process(source *src, int stopafterlambda, int dispartialsink, int dis
         sc->body = s;
       }
     }
+  }
 
+  if (!nosink) {
     compile_stage(src,"Letrec sinking"); /* sinking.c */
     for (scno = 0; scno < sccount; scno++)
       sink_letrecs(src,array_item(src->scombs,scno,scomb*)->body);

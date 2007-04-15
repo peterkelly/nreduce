@@ -120,7 +120,7 @@ source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename, const char *modname);
 int source_parse_file(source *src, const char *filename, const char *modname);
 void add_import(source *src, const char *name);
-int source_process(source *src, int stopafterlambda, int dispartialsink, int disstrict);
+int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
 

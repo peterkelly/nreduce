@@ -58,7 +58,8 @@ int max_array_size = (1 << 18);
 
 struct arguments {
   int compileinfo;
-  int nopartialsink;
+  int nopartial;
+  int nosink;
   int bytecode;
   int engine;
   char *filename;
@@ -125,7 +126,8 @@ void parse_args(int argc, char **argv)
       args.compileinfo = 1;
     }
     else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--no-partial")) {
-      args.nopartialsink = 1;
+      args.nopartial = 1;
+      args.nosink = 1;
     }
     else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-bytecode")) {
       args.bytecode = 1;
@@ -287,13 +289,13 @@ int main(int argc, char **argv)
   parse_args(argc,argv);
 
 /*   if (NULL != getenv("DISABLE_PARTIAL_EVAL")) */
-/*     args.nopartialsink = 1; */
+/*     args.nopartial = 1; */
 
   if (getenv("MAX_ARRAY_SIZE"))
     max_array_size = atoi(getenv("MAX_ARRAY_SIZE"));
 
   /* TEMP: disable partial evaluation */
-  args.nopartialsink = 1;
+  args.nopartial = 1;
 
   compileinfo = args.compileinfo;
 
@@ -323,7 +325,8 @@ int main(int argc, char **argv)
 /*     print_scombs1(src); */
 
   if (0 != source_process(src,args.partial || args.lambdadebug,
-                          args.nopartialsink,
+                          args.nopartial,
+                          args.nosink,
                           args.reorderdebug))
     return -1;
 

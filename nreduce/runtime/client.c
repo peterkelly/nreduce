@@ -284,7 +284,7 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
   src = source_new();
   if (0 != source_parse_file(src,filename,""))
     return -1;
-  if (0 != source_process(src,0,nopartialsink,0))
+  if (0 != source_process(src,0,nopartialsink,nopartialsink,0))
     return -1;
   if (0 != source_compile(src,&bcdata,&bcsize))
     return -1;

@@ -152,7 +152,7 @@ void remove_wrappers(snode *s)
   }
 }
 
-static void sink_single(source *src, snode *s)
+static void sink_single(source *src, snode *s, int *changed)
 {
   letrec **recptr;
   assert(SNODE_LETREC == s->type);
@@ -167,12 +167,13 @@ static void sink_single(source *src, snode *s)
         hu = common_parent(user,hu);
     }
 
-    if (hu->parent && (SNODE_LETREC == hu->parent->type))
+    if (hu && hu->parent && (SNODE_LETREC == hu->parent->type))
       hu = hu->parent;
 
-    if (hu != s) {
+    if (hu && (hu != s)) {
       letrec **otherpntr;
       letrec *thisrec;
+      *changed = 1;
 
       assert(SNODE_WRAP != hu->type);
       if (SNODE_LETREC != hu->type) {
@@ -223,22 +224,22 @@ static void sink_single(source *src, snode *s)
   }
 }
 
-static void sink_letrecs_r(source *src, snode *s)
+static void sink_letrecs_r(source *src, snode *s, int *changed)
 {
   switch (s->type) {
   case SNODE_APPLICATION:
-    sink_letrecs_r(src,s->left);
-    sink_letrecs_r(src,s->right);
+    sink_letrecs_r(src,s->left,changed);
+    sink_letrecs_r(src,s->right,changed);
     break;
   case SNODE_LAMBDA:
-    sink_letrecs_r(src,s->body);
+    sink_letrecs_r(src,s->body,changed);
     break;
   case SNODE_LETREC: {
     letrec *rec;
     for (rec = s->bindings; rec; rec = rec->next)
-      sink_letrecs_r(src,rec->value);
-    sink_letrecs_r(src,s->body);
-    sink_single(src,s);
+      sink_letrecs_r(src,rec->value,changed);
+    sink_letrecs_r(src,s->body,changed);
+    sink_single(src,s,changed);
     break;
   }
   default:
@@ -248,8 +249,12 @@ static void sink_letrecs_r(source *src, snode *s)
 
 void sink_letrecs(source *src, snode *s)
 {
-  set_parents(s,NULL);
-  find_users(s);
-  sink_letrecs_r(src,s);
-  remove_wrappers(s);
+  int changed;
+  do {
+    changed = 0;
+    set_parents(s,NULL);
+    find_users(s);
+    sink_letrecs_r(src,s,&changed);
+    remove_wrappers(s);
+  } while (changed);
 }
