@@ -272,6 +272,7 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
   list *l;
   int i;
   pthread_t thread;
+  int nopartialsink = 1;
 
   i = 0;
   for (l = nodes; l; l = l->next) {
@@ -283,7 +284,7 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
   src = source_new();
   if (0 != source_parse_file(src,filename,""))
     return -1;
-  if (0 != source_process(src,0,0,0))
+  if (0 != source_process(src,0,nopartialsink,0))
     return -1;
   if (0 != source_compile(src,&bcdata,&bcsize))
     return -1;
