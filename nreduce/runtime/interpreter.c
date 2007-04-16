@@ -1277,10 +1277,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
         check_runnable(tsk);
         continue;
       }
-      else {
-        assert(OP_RESOLVE == program_ops[runnable->instr-program_ops].opcode);
-        runnable->instr++; // skip RESOLVE
-      }
       break;
     }
     case OP_RETURN:
@@ -1590,11 +1586,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       runnable->data[instr->expcount] = tsk->strings[instr->arg0];
       break;
     }
-    case OP_RESOLVE:
-      runnable->data[instr->arg0] =
-        resolve_pntr(runnable->data[instr->arg0]);
-      assert(CELL_REMOTEREF != pntrtype(runnable->data[instr->arg0]));
-      break;
     case OP_ERROR:
       handle_error(tsk);
       break;

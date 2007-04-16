@@ -63,10 +63,7 @@
                                 int pos = comp->si->count-1-arg0; \
                                 if (!comp->si || (STATUS_UNRESVAL > statusat(comp->si,pos))) \
                                   add_instruction(comp,_s,OP_EVAL,pos,0); \
-                                if (!comp->si || (STATUS_RESVAL > statusat(comp->si,pos))) \
-                                  add_instruction(comp,_s,OP_RESOLVE,pos,0); \
                               }
-#define RESOLVE(_s,_a)        add_instruction(comp,_s,OP_RESOLVE,comp->si->count-1-(_a),0)
 #define RETURN(_s)            add_instruction(comp,_s,OP_RETURN,0,0)
 #define PUSH(_s,_a)           add_instruction(comp,_s,OP_PUSH,comp->si->count-1-(_a),0)
 #define POP(_s,_a)            add_instruction(comp,_s,OP_POP,(_a),0)
@@ -131,7 +128,6 @@ const char *opcodes[OP_COUNT] = {
 "PUSHNIL",
 "PUSHNUMBER",
 "PUSHSTRING",
-"RESOLVE",
 "POP",
 "ERROR",
 "EVAL",
@@ -388,10 +384,6 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_PUSHSTRING:
     pushstatus(comp->si,1);
-    break;
-  case OP_RESOLVE:
-    if (STATUS_UNRESVAL == statusat(comp->si,arg0))
-      setstatusat(comp->si,arg0,STATUS_RESVAL);
     break;
   case OP_ERROR:
     comp->si->invalid = 1;
@@ -1343,7 +1335,6 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
     }
     else if ((OP_PUSH == instr->opcode) ||
              (OP_EVAL == instr->opcode) ||
-             (OP_RESOLVE == instr->opcode) ||
              (OP_JFALSE == instr->opcode) ||
              (OP_SPARK == instr->opcode)) {
       int done = 0;

@@ -45,14 +45,13 @@
 #define OP_PUSHNIL       16
 #define OP_PUSHNUMBER    17
 #define OP_PUSHSTRING    18
-#define OP_RESOLVE       19
-#define OP_POP           20
-#define OP_ERROR         21
-#define OP_EVAL          22
-#define OP_COUNT         23
+#define OP_POP           19
+#define OP_ERROR         20
+#define OP_EVAL          21
+#define OP_COUNT         22
 
 #define CONSTANT_APP_MSG "constant cannot be applied to arguments"
-#define EVALDO_SEQUENCE_SIZE 3
+#define EVALDO_SEQUENCE_SIZE 2
 
 typedef struct instruction {
   int opcode;
