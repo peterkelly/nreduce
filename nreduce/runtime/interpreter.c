@@ -1418,14 +1418,19 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     }
     case OP_JFUN: {
       int newfno = instr->arg0;
-      if (instr->arg1) {
+      switch (instr->arg1) {
+      case 2:
+        runnable->instr = program_ops+program_finfo[instr->arg0].addressed;
+        break;
+      case 1:
         runnable->instr = program_ops+program_finfo[instr->arg0].addressne;
-      }
-      else {
+        break;
+      default:
         runnable->instr = program_ops+program_finfo[instr->arg0].address;
 
         assert(OP_GLOBSTART == runnable->instr->opcode);
         runnable->instr++;
+        break;
       }
       runnable->fno = instr->arg0;
       assert(runnable->fno = newfno);

@@ -36,31 +36,35 @@
 #include <stdarg.h>
 #include <math.h>
 
-/* FIXME: Currently we have two statuses: sparked and not sparked. We need to add a third, to
-indicate that the item at that position has been evaluated. This is useful at least for constants,
-so that an unnecessary EVAL/RESOLVE pair is avoided. */
-
 #define BYTECODE_C
 
+#define STATUS_UNKNOWN  0
+#define STATUS_SPARKED  1
+#define STATUS_UNRESVAL 2
+#define STATUS_RESVAL   3
 
 #define MKCAP(_s,_a,_b)       add_instruction(comp,_s,OP_MKCAP,(_a),(_b))
 //#define MKFRAME(_s,_a,_b)     add_instruction(comp,_s,OP_MKFRAME,(_a),(_b))
 #define MKFRAME(_s,_a,_b)     domkframe(src,comp,(_s),(_a),(_b))
-#define JFUN(_s,_a)           { if (!have_values(src,(_a),comp->si)) \
-                                  add_instruction(comp,_s,OP_JFUN,(_a),0); \
+#define JFUN(_s,_a)           { if (have_resvals(src,(_a),comp->si)) \
+                                  add_instruction(comp,_s,OP_JFUN,(_a),2); \
+                                else if (have_reqsparks(src,(_a),comp->si)) \
+                                  add_instruction(comp,_s,OP_JFUN,(_a),1); \
                                 else \
-                                  add_instruction(comp,_s,OP_JFUN,(_a),1); }
+                                  add_instruction(comp,_s,OP_JFUN,(_a),0); }
 #define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,comp->si->count-1-(_a),0)
 #define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0);
 #define SPARK(_s,_a)          { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
-                                if (!comp->si || !statusat(comp->si,pos)) { \
+                                if (!comp->si || (STATUS_SPARKED > statusat(comp->si,pos))) { \
                                    add_instruction(comp,_s,OP_SPARK,pos,0); \
                               }}
 #define EVAL(_s,_a)           { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
-                                add_instruction(comp,_s,OP_EVAL,pos,0); \
-                                add_instruction(comp,_s,OP_RESOLVE,pos,0); \
+                                if (!comp->si || (STATUS_UNRESVAL > statusat(comp->si,pos))) \
+                                  add_instruction(comp,_s,OP_EVAL,pos,0); \
+                                if (!comp->si || (STATUS_RESVAL > statusat(comp->si,pos))) \
+                                  add_instruction(comp,_s,OP_RESOLVE,pos,0); \
                               }
 #define RESOLVE(_s,_a)        add_instruction(comp,_s,OP_RESOLVE,comp->si->count-1-(_a),0)
 #define RETURN(_s)            add_instruction(comp,_s,OP_RETURN,0,0)
@@ -313,7 +317,8 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_SPARK:
     assert(0 <= arg0);
-    setstatusat(comp->si,arg0,1);
+    if (STATUS_SPARKED > statusat(comp->si,arg0))
+      setstatusat(comp->si,arg0,STATUS_SPARKED);
     break;
   case OP_RETURN:
     // After RETURN we don't know what the stack size will be... but since it's always the
@@ -370,7 +375,10 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_BIF:
     popstatus(comp->si,builtin_info[arg0].nargs-1);
-    setstatusat(comp->si,comp->si->count-1,builtin_info[arg0].reswhnf);
+    if (builtin_info[arg0].reswhnf)
+      setstatusat(comp->si,comp->si->count-1,STATUS_RESVAL);
+    else
+      setstatusat(comp->si,comp->si->count-1,STATUS_UNKNOWN);
     break;
   case OP_PUSHNIL:
     pushstatus(comp->si,1);
@@ -382,11 +390,15 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     pushstatus(comp->si,1);
     break;
   case OP_RESOLVE:
+    if (STATUS_UNRESVAL == statusat(comp->si,arg0))
+      setstatusat(comp->si,arg0,STATUS_RESVAL);
     break;
   case OP_ERROR:
     comp->si->invalid = 1;
     break;
   case OP_EVAL:
+    if (STATUS_UNRESVAL > statusat(comp->si,arg0))
+      setstatusat(comp->si,arg0,STATUS_UNRESVAL);
     break;
   default:
     abort();
@@ -426,13 +438,24 @@ int function_strictin(source *src, int fno, int argno)
     return get_scomb_index(src,fno-NUM_BUILTINS)->strictin[argno];
 }
 
-int have_values(source *src, int fno, stackinfo *si)
+int have_reqsparks(source *src, int fno, stackinfo *si)
 {
   int nargs = function_nargs(src,fno);
   int i;
   assert(nargs <= si->count);
   for (i = 0; i < nargs; i++)
-    if (!statusat(si,si->count-nargs+i) && function_strictin(src,fno,i))
+    if ((STATUS_SPARKED > statusat(si,si->count-1-i)) && function_strictin(src,fno,i))
+      return 0;
+  return 1;
+}
+
+int have_resvals(source *src, int fno, stackinfo *si)
+{
+  int nargs = function_nargs(src,fno);
+  int i;
+  assert(nargs <= si->count);
+  for (i = 0; i < nargs; i++)
+    if ((STATUS_RESVAL > statusat(si,si->count-1-i)) && function_strictin(src,fno,i))
       return 0;
   return 1;
 }
@@ -721,7 +744,7 @@ static void S(source *src, compilation *comp, snode *source, stack *exprs,
       break;
     if (presolve(src,p,sn->name)-1 != m)
       break;
-    if (strict->data[m] && !statusat(comp->si,m))
+    if (strict->data[m] && (STATUS_UNKNOWN == statusat(comp->si,m)))
       break;
     count--;
     remove--;
@@ -812,7 +835,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             assert(comp->si->count >= bi->nstrict);
 
             for (argno = 0; argno < bi->nstrict; argno++)
-              assert(statusat(comp->si,comp->si->count-1-argno));
+              assert(STATUS_SPARKED <= statusat(comp->si,comp->si->count-1-argno));
 
             BIF(app->sl,bif);
 
@@ -961,9 +984,15 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
     /* For supercombinators created during the non-strict expression lifting stage, assume
        the arguments have already been sparked. This should be handled by the expression which
        calls this supercombinator. */
-    for (i = 0; i < sc->nargs; i++)
-      pushstatus(comp->si,sc->strictin[i]);
+    for (i = 0; i < sc->nargs; i++) {
+      if (sc->strictin[i])
+        pushstatus(comp->si,STATUS_SPARKED);
+      else
+        pushstatus(comp->si,STATUS_UNKNOWN);
+    }
     GLOBSTART(sc->sl,fno,sc->nargs);
+    comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
+    comp->finfo[NUM_BUILTINS+sc->index].addressed = array_count(comp->instructions);
   }
   else {
     /* Otherwise, spark all of the strict expressions; we know we're going to need the values
@@ -975,9 +1004,12 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
     for (i = 0; i < sc->nargs; i++)
       if (sc->strictin && sc->strictin[i])
         SPARK(sc->sl,i);
+    comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
+    for (i = 0; i < sc->nargs; i++)
+      if (sc->strictin && sc->strictin[i])
+        EVAL(sc->sl,i);
+    comp->finfo[NUM_BUILTINS+sc->index].addressed = array_count(comp->instructions);
   }
-
-  comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
 
 #ifdef DEBUG_BYTECODE_COMPILATION
   printf("\n");
@@ -1158,6 +1190,7 @@ static void compile_builtins(compilation *comp)
 
     comp->finfo[i].address = array_count(comp->instructions);
     comp->finfo[i].addressne = array_count(comp->instructions);
+    comp->finfo[i].addressed = array_count(comp->instructions);
     comp->finfo[i].arity = bi->nargs;
     comp->finfo[i].name = add_string(comp,bi->name);
     GLOBSTART(nosl,i,bi->nargs);

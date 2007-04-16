@@ -66,6 +66,7 @@ typedef struct instruction {
 typedef struct funinfo {
   int address;
   int addressne;
+  int addressed;
   int arity;
   int stacksize;
   int name;
