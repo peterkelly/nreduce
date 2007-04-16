@@ -38,10 +38,9 @@
 
 #define BYTECODE_C
 
-#define STATUS_UNKNOWN  0
-#define STATUS_SPARKED  1
-#define STATUS_UNRESVAL 2
-#define STATUS_RESVAL   3
+#define STATUS_UNKNOWN     0
+#define STATUS_SPARKED     1
+#define STATUS_EVALUATED   2
 
 #define MKCAP(_s,_a,_b)       add_instruction(comp,_s,OP_MKCAP,(_a),(_b))
 //#define MKFRAME(_s,_a,_b)     add_instruction(comp,_s,OP_MKFRAME,(_a),(_b))
@@ -61,7 +60,7 @@
                               }}
 #define EVAL(_s,_a)           { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
-                                if (!comp->si || (STATUS_UNRESVAL > statusat(comp->si,pos))) \
+                                if (!comp->si || (STATUS_EVALUATED > statusat(comp->si,pos))) \
                                   add_instruction(comp,_s,OP_EVAL,pos,0); \
                               }
 #define RETURN(_s)            add_instruction(comp,_s,OP_RETURN,0,0)
@@ -372,7 +371,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_BIF:
     popstatus(comp->si,builtin_info[arg0].nargs-1);
     if (builtin_info[arg0].reswhnf)
-      setstatusat(comp->si,comp->si->count-1,STATUS_RESVAL);
+      setstatusat(comp->si,comp->si->count-1,STATUS_EVALUATED);
     else
       setstatusat(comp->si,comp->si->count-1,STATUS_UNKNOWN);
     break;
@@ -389,8 +388,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     comp->si->invalid = 1;
     break;
   case OP_EVAL:
-    if (STATUS_UNRESVAL > statusat(comp->si,arg0))
-      setstatusat(comp->si,arg0,STATUS_UNRESVAL);
+    setstatusat(comp->si,arg0,STATUS_EVALUATED);
     break;
   default:
     abort();
@@ -447,7 +445,7 @@ int have_resvals(source *src, int fno, stackinfo *si)
   int i;
   assert(nargs <= si->count);
   for (i = 0; i < nargs; i++)
-    if ((STATUS_RESVAL > statusat(si,si->count-1-i)) && function_strictin(src,fno,i))
+    if ((STATUS_EVALUATED > statusat(si,si->count-1-i)) && function_strictin(src,fno,i))
       return 0;
   return 1;
 }
