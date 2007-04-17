@@ -1303,6 +1303,12 @@ void endpoint_unlink(endpoint *endpt, endpointid to)
   node_send_locked(endpt->n,endpt->epid.localid,to,MSG_UNLINK,&endpt->epid,sizeof(endpointid));
 }
 
+void endpoint_interrupt(endpoint *endpt)
+{
+  if (endpt->interruptptr)
+    *endpt->interruptptr = 1;
+}
+
 static void endpoint_add_message(endpoint *endpt, message *msg)
 {
   assert(NODE_ALREADY_LOCKED(endpt->n));

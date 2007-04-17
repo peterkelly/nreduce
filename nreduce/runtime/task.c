@@ -281,7 +281,7 @@ void run_frame(task *tsk, frame *f)
 void check_runnable(task *tsk)
 {
   if (NULL == *tsk->runptr)
-    *tsk->endpt->interruptptr = 1;
+    endpoint_interrupt(tsk->endpt);
 }
 
 void block_frame(task *tsk, frame *f)

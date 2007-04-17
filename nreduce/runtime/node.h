@@ -300,6 +300,7 @@ endpointid node_add_thread(node *n, int localid, int type, int stacksize,
                            endpoint_threadfun fun, void *arg, pthread_t *threadp);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
+void endpoint_interrupt(endpoint *endpt);
 message *endpoint_next_message(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 int endpointid_isnull(const endpointid *epid);

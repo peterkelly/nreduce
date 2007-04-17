@@ -1082,7 +1082,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
 
   if (NULL != (msg = endpoint_next_message(tsk->endpt,0))) {
     handle_message(tsk,msg);
-    *tsk->endpt->interruptptr = 1; /* may be another one */
+    endpoint_interrupt(tsk->endpt); /* may be another one */
   }
 
   if (NULL == *tsk->runptr) {
@@ -1130,7 +1130,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
        that are no longer referenced and should therefore be cleaned up. */
     if (0 >= timeval_diffms(now,*nextgc)) {
       tsk->alloc_bytes = COLLECT_THRESHOLD;
-      *tsk->endpt->interruptptr = 1; /* may be another one */
+      endpoint_interrupt(tsk->endpt); /* may be another one */
     }
 
     msg = endpoint_next_message(tsk->endpt,FISH_DELAY_MS);
@@ -1143,7 +1143,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
 
     if (NULL != msg)
       handle_message(tsk,msg);
-    *tsk->endpt->interruptptr = 1; /* still no runnable frames */
+    endpoint_interrupt(tsk->endpt); /* still no runnable frames */
     return 0;
   }
 

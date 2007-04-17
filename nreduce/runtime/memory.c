@@ -283,7 +283,7 @@ cell *alloc_cell(task *tsk)
   tsk->stats.cell_allocs++;
   #endif
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
-    *tsk->endpt->interruptptr = 1;
+    endpoint_interrupt(tsk->endpt);
   return v;
 }
 
@@ -701,7 +701,7 @@ frame *frame_new(task *tsk)
   tsk->alloc_bytes += framesize;
 
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
-    *tsk->endpt->interruptptr = 1;
+    endpoint_interrupt(tsk->endpt);
 
   assert(!f->used);
   memset(f,0,framesize);

@@ -368,7 +368,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 
   tsk->alloc_bytes += totalcount*dsize;
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
-    *tsk->endpt->interruptptr = 1;
+    endpoint_interrupt(tsk->endpt);
 
   while (1) {
     int count = totalcount;
