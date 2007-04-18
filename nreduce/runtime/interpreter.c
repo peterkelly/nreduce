@@ -471,14 +471,17 @@ static void interpreter_fish(task *tsk, message *msg)
 {
   int r = READER_OK;
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
-  assert(0 <= from);
-
-  rd = read_start(msg->data,msg->hdr.size);
-
+  frameblock *fb;
+  int i;
   int reqtsk, age, nframes;
   int scheduled = 0;
   array *newmsg;
+  int from = get_idmap_index(tsk,msg->hdr.source);
+  int done = 0;
+
+  assert(0 <= from);
+
+  rd = read_start(msg->data,msg->hdr.size);
 
   start_address_reading(tsk,from,msg->hdr.tag);
   r = read_format(&rd,tsk,0,"iii.",&reqtsk,&age,&nframes);
@@ -489,10 +492,22 @@ static void interpreter_fish(task *tsk, message *msg)
     return;
 
   newmsg = write_start();
-  while ((NULL != tsk->sparked.first) && (1 <= nframes--)) {
-    schedule_frame(tsk,tsk->sparked.last,reqtsk,newmsg);
-    scheduled++;
+
+  for (fb = tsk->frameblocks; fb && !done; fb = fb->next) {
+    for (i = 0; (i < tsk->framesperblock) && !done; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if (STATE_SPARKED == f->state) {
+        if (1 <= nframes--) {
+          schedule_frame(tsk,f,reqtsk,newmsg);
+          scheduled++;
+        }
+        else {
+          done = 1;
+        }
+      }
+    }
   }
+
   if (0 < scheduled)
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
   write_end(newmsg);
@@ -688,11 +703,9 @@ static void interpreter_schedule(task *tsk, message *msg)
     frameglo = make_global(tsk,framep);
     write_format(urmsg,tsk,"aa",tellsrc,frameglo->addr);
 
-    spark_frame(tsk,pframe(framep)); /* FIXME: temp; just to count sparks */
     run_frame(tsk,pframe(framep));
 
     count++;
-    tsk->stats.sparks++;
   }
   finish_address_reading(tsk,from,msg->hdr.tag);
 
@@ -1087,10 +1100,17 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
 
   if (NULL == *tsk->runptr) {
     int diffms;
+    frameblock *fb;
+    int i;
 
-    if (NULL != tsk->sparked.first) {
-      run_frame(tsk,tsk->sparked.first);
-      return 0;
+    for (fb = tsk->frameblocks; fb; fb = fb->next) {
+      for (i = 0; i < tsk->framesperblock; i++) {
+        frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+        if (STATE_SPARKED == f->state) {
+          run_frame(tsk,f);
+          return 0;
+        }
+      }
     }
 
     if ((1 == tsk->groupsize) && (0 == tsk->netpending))
@@ -1102,11 +1122,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
     if ((tsk->newfish || (0 >= diffms)) && (1 < tsk->groupsize)) {
       int dest;
       #ifdef PARALLELISM_DEBUG
-      fprintf(tsk->output,
-              "sending FISH; outstanding fetches = %d, sparks = %d, "
-              "sparksused = %d, blocked = %d\n",
-              tsk->stats.fetches,tsk->stats.sparks,tsk->stats.sparksused,
-              frameq_count(&tsk->active));
+      fprintf(tsk->output,"sending FISH; outstanding fetches = %d\n",tsk->stats.fetches);
       #endif
 
       /* avoid sending another until after the sleep period */
@@ -1137,8 +1153,7 @@ static int handle_interrupt(task *tsk, struct timeval *nextfish, struct timeval 
 
     #ifdef PARALLELISM_DEBUG
     if (0 > from)
-      fprintf(tsk->output,"%d: no runnable; slept; sparks = %d, sparksused = %d, fetches = %d\n",
-              tsk->tid,tsk->stats.sparks,tsk->stats.sparksused,tsk->stats.fetches);
+      fprintf(tsk->output,"%d: no runnable; slept; fetches = %d\n",tsk->tid,tsk->stats.fetches);
     #endif
 
     if (NULL != msg)

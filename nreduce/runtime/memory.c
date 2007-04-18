@@ -433,10 +433,11 @@ void mark_roots(task *tsk, short bit)
 {
   int pid;
   int i;
-  frame *f;
+/*   frame *f; */
   list *l;
   int h;
   global *glo;
+  frameblock *fb;
 
   tsk->memdebug = 0;
 
@@ -457,14 +458,13 @@ void mark_roots(task *tsk, short bit)
   if (tsk->out_so)
     mark(tsk,tsk->out_so->p,bit);
 
-  for (f = tsk->sparked.first; f; f = f->next) {
-    mark_frame(tsk,f,bit);
-    assert(NULL == f->wq.frames);
-    assert(NULL == f->wq.fetchers);
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if ((STATE_SPARKED == f->state) || (STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state))
+        mark_frame(tsk,f,bit);
+    }
   }
-
-  for (f = tsk->active.first; f; f = f->next)
-    mark_frame(tsk,f,bit);
 
   /* mark any in-flight gaddrs that refer to objects in this task */
   for (l = tsk->inflight; l; l = l->next) {
@@ -681,30 +681,28 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, i
 frame *frame_new(task *tsk)
 {
   frame *f;
-  int framesize = sizeof(frame)+tsk->maxstack*sizeof(pntr);
   if (NULL == tsk->freeframe) {
     frameblock *fb = (frameblock*)calloc(1,sizeof(frameblock));
     int i;
-    int framesperblock = FRAMEBLOCK_SIZE/framesize;
     fb->next = tsk->frameblocks;
     tsk->frameblocks = fb;
 
-    for (i = 0; i < framesperblock-1; i++)
-      ((frame*)&fb->mem[i*framesize])->freelnk = ((frame*)&fb->mem[(i+1)*framesize]);
-    ((frame*)&fb->mem[i*framesize])->freelnk = NULL;
+    for (i = 0; i < tsk->framesperblock-1; i++)
+      ((frame*)&fb->mem[i*tsk->framesize])->freelnk = ((frame*)&fb->mem[(i+1)*tsk->framesize]);
+    ((frame*)&fb->mem[i*tsk->framesize])->freelnk = NULL;
 
     tsk->freeframe = (frame*)fb->mem;
   }
 
   f = tsk->freeframe;
   tsk->freeframe = f->freelnk;
-  tsk->alloc_bytes += framesize;
+  tsk->alloc_bytes += tsk->framesize;
 
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     endpoint_interrupt(tsk->endpt);
 
   assert(!f->used);
-  memset(f,0,framesize);
+  memset(f,0,tsk->framesize);
   f->used = 1;
   f->alloc = tsk->maxstack;
   assert(f->data == (pntr*)(((char*)f)+sizeof(frame)));

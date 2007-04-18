@@ -355,7 +355,6 @@ typedef struct procstats {
   int *usage;
   int ninstrs;
   int nreductions;
-  int nsparks;
   int fetches;
 
   /* Communication */
@@ -363,8 +362,6 @@ typedef struct procstats {
   int *sendbytes;
   int *recvcount;
   int *recvbytes;
-  int sparks;
-  int sparksused;
 
   /* Memory allocation */
   int cell_allocs;
@@ -470,8 +467,6 @@ typedef struct task {
 
   /* runtime info */
   int done;
-  frameq sparked;
-  frameq active;
   frame **runptr;
   frame *rtemp;
   int interrupted;
@@ -516,6 +511,8 @@ typedef struct task {
   int inmark;
   pntrstack *markstack;
   int alloc_bytes;
+  int framesize;
+  int framesperblock;
 
   /* general */
   FILE *output;
@@ -584,8 +581,6 @@ void unblock_frame_toend(task *tsk, frame *f);
  \
   *tsk->runptr = (_f)->rnext; \
   (_f)->rnext = NULL; \
- \
-  remove_frame_queue(&tsk->active,(_f)); \
   (_f)->state = STATE_DONE; \
 }
 

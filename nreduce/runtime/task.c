@@ -237,18 +237,13 @@ void transfer_waiters(waitqueue *from, waitqueue *to)
 
 void spark_frame(task *tsk, frame *f)
 {
-  if (STATE_NEW == f->state) {
-    add_frame_queue_end(&tsk->sparked,f);
+  if (STATE_NEW == f->state)
     f->state = STATE_SPARKED;
-    tsk->stats.nsparks++;
-  }
 }
 
 void unspark_frame(task *tsk, frame *f)
 {
   assert((STATE_SPARKED == f->state) || (STATE_NEW == f->state));
-  if (STATE_SPARKED == f->state)
-    remove_frame_queue(&tsk->sparked,f);
   f->state = STATE_NEW;
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);
@@ -260,13 +255,7 @@ void unspark_frame(task *tsk, frame *f)
 
 void run_frame(task *tsk, frame *f)
 {
-  if (STATE_SPARKED == f->state) {
-    tsk->stats.sparksused++;
-    remove_frame_queue(&tsk->sparked,f);
-  }
-
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
-    add_frame_queue(&tsk->active,f);
     f->rnext = *tsk->runptr;
     *tsk->runptr = f;
     f->state = STATE_RUNNING;
@@ -465,6 +454,9 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   for (fno = 0; fno < bch->nfunctions; fno++)
     if (tsk->maxstack < finfo[fno].stacksize)
       tsk->maxstack = finfo[fno].stacksize;
+
+  tsk->framesize = sizeof(frame)+tsk->maxstack*sizeof(pntr);
+  tsk->framesperblock = FRAMEBLOCK_SIZE/tsk->framesize;
 
   assert(NULL == tsk->strings);
   assert(0 == tsk->nstrings);
