@@ -41,7 +41,7 @@ pntr makescref(task *tsk, scomb *sc, int skip)
   pntr p;
   c->type = CELL_SCREF;
   make_pntr(c->field1,sc);
-  c->field2 = skip;
+  set_pntrdouble(c->field2,(double)skip);
   make_pntr(p,c);
   return p;
 }
@@ -73,8 +73,7 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
     }
     fprintf(stderr,"Unknown variable: %s\n",source->name);
     exit(1);
-    make_pntr(p,NULL);
-    return p;
+    return NULL_PNTR;
   }
   case SNODE_LETREC: {
     int oldcount = names->count;
@@ -123,8 +122,11 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
   }
   case SNODE_NIL:
     return tsk->globnilpntr;
-  case SNODE_NUMBER:
-    return source->num;
+  case SNODE_NUMBER: {
+    pntr p;
+    set_pntrdouble(p,source->num);
+    return p;
+  }
   case SNODE_STRING:
     return string_to_array(tsk,source->value);
   default:
@@ -208,7 +210,7 @@ void reduce(task *tsk, pntrstack *s)
       pntr dest;
       pntr res;
       scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
-      int skip = (int)get_pntr(target)->field2;
+      int skip = (int)pntrdouble(get_pntr(target)->field2);
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
@@ -423,8 +425,9 @@ static void stream(task *tsk, pntr lst)
       /* nothing */
     }
     else if (CELL_NUMBER == pntrtype(p)) {
-      if ((p == floor(p)) && (0 < p) && (128 > p))
-        printf("%c",(int)p);
+      double d = pntrdouble(p);
+      if ((d == floor(d)) && (0 < d) && (128 > d))
+        printf("%c",(int)d);
       else
         printf("?");
     }

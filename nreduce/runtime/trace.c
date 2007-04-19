@@ -76,7 +76,7 @@ static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, p
     fprintf(f,"c%08x%08x [",((int*)&p)[0],((int*)&p)[1]);
     if (fun)
       fun(f,p,arg);
-    fprintf(f,"label=\"%d\"];\n",(int)p);
+    fprintf(f,"label=\"%d\"];\n",(int)pntrdouble(p));
     return;
   }
   else if (CELL_NIL == pntrtype(p)) {
@@ -210,9 +210,7 @@ void dot_graph(const char *prefix, int number, pntr root, int doind,
   FILE *f;
   char *filename = (char*)malloc(strlen(prefix)+50);
   pntrset *done = pntrset_new();
-  pntr nullpntr;
 
-  make_pntr(nullpntr,NULL);
   sprintf(filename,"%s%04d.dot",prefix,number);
 
   if (NULL == (f = fopen(filename,"w"))) {
@@ -236,7 +234,7 @@ void dot_graph(const char *prefix, int number, pntr root, int doind,
   }
 
   fprintf(f,"node [fontsize=24,color=white];\n");
-  dot_graph_r(f,root,done,doind,fun,arg,nullpntr,landscape);
+  dot_graph_r(f,root,done,doind,fun,arg,NULL_PNTR,landscape);
   fprintf(f,"}\n");
   fprintf(f,"}\n");
 

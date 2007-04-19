@@ -123,11 +123,9 @@ global *add_global(task *tsk, gaddr addr, pntr p)
 pntr global_lookup_existing(task *tsk, gaddr addr)
 {
   global *glo;
-  pntr p;
   if (NULL != (glo = addrhash_lookup(tsk,addr)))
     return glo->p;
-  make_pntr(p,NULL);
-  return p;
+  return NULL_PNTR;
 }
 
 pntr global_lookup(task *tsk, gaddr addr, pntr val)
@@ -415,6 +413,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
 
   tsk->n = n;
   tsk->runptr = &tsk->rtemp;
+  tsk->freeptr = (cell*)1;
 
   if (0 > pipe(tsk->startfds))
     fatal("pipe: %s",strerror(errno));
@@ -426,7 +425,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   globnilvalue->flags |= FLAG_PINNED;
 
   make_pntr(tsk->globnilpntr,globnilvalue);
-  tsk->globtruepntr = 1.0;
+  set_pntrdouble(tsk->globtruepntr,1.0);
 
   if (is_pntr(tsk->globtruepntr))
     get_pntr(tsk->globtruepntr)->flags |= FLAG_PINNED;

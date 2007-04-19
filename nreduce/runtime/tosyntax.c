@@ -45,6 +45,8 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
   snode *s = NULL;
   cell *c;
   int eno;
+  pntr zero;
+  set_pntrdouble(zero,0);
 
   p = resolve_pntr(p);
 
@@ -52,7 +54,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
   case CELL_NUMBER:
     s = snode_new(-1,-1);
     s->type = SNODE_NUMBER;
-    s->num = p;
+    s->num = pntrdouble(p);
     return s;
   case CELL_NIL:
     s = snode_new(-1,-1);
@@ -113,7 +115,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
 
   c = get_pntr(p);
   s = snode_new(-1,-1);
-  pntrmap_add(d->pm,p,s,NULL,0);
+  pntrmap_add(d->pm,p,s,NULL,zero);
 
   switch (celltype(c)) {
   case CELL_APPLICATION: {

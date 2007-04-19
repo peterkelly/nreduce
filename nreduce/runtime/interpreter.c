@@ -1595,7 +1595,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       runnable->data[instr->expcount] = tsk->globnilpntr;
       break;
     case OP_PUSHNUMBER:
-      runnable->data[instr->expcount] = *((double*)&instr->arg0);
+      runnable->data[instr->expcount] = *((pntr*)&instr->arg0);
       break;
     case OP_PUSHSTRING: {
       runnable->data[instr->expcount] = tsk->strings[instr->arg0];

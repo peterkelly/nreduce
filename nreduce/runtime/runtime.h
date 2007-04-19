@@ -122,7 +122,9 @@
 #define celltype(_c) (checkcell(_c)->type)
 #define pntrtype(p) (is_pntr(p) ? celltype(get_pntr(p)) : CELL_NUMBER)
 
-typedef double pntr;
+typedef struct {
+  unsigned int data[2];
+} pntr;
 
 #define CELL_EMPTY       0x00
 #define CELL_APPLICATION 0x01  /* left: function (cell*)   right: argument (cell*) */
@@ -148,11 +150,10 @@ typedef struct cell {
   pntr field2;
 } cell;
 
-#define NAN_VALUE 0xFFF80000
-#define PNTR_VALUE 0xFFFC0000
+#define PNTR_MASK  0xFFF80000
+#define PNTR_VALUE 0xFFF00000
+#define NULL_PNTR (*(pntr*)NULL_PNTR_BITS)
 #define MAX_ARRAY_SIZE (1 << 18)
-//#define MAX_ARRAY_SIZE max_array_size
-//extern int max_array_size;
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
@@ -161,25 +162,20 @@ typedef struct cell {
 #define pglobal(__p) ((global*)ppfield1(__p))
 #define pframe(__p) ((frame*)ppfield1(__p))
 #define psysobject(__p) ((sysobject*)ppfield1(__p))
-
-#define is_pntr(__p) ((*(((unsigned int*)&(__p))+1) & PNTR_VALUE) == PNTR_VALUE)
-#define make_pntr(__p,__c) { *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
-                            *(((unsigned int*)&(__p))+1) = PNTR_VALUE; }
-
+#define pntrdouble(__p) (*(double*)&(__p))
+#define set_pntrdouble(__p,__val) ({ (*(double*)&(__p)) = (__val); })
+#define is_pntr(__p) (((__p).data[1] & PNTR_MASK) == PNTR_VALUE)
+#define make_pntr(__p,__c) { (__p).data[0] = (unsigned int)(__c); \
+                             (__p).data[1] = PNTR_VALUE; }
 #define make_aref_pntr(__p,__c,__i) { assert((__i) < MAX_ARRAY_SIZE); \
-                            *(((unsigned int*)&(__p))+0) = (unsigned int)(__c); \
-                            *(((unsigned int*)&(__p))+1) = (PNTR_VALUE | (__i)); }
-
-#define aref_index(__p) (*(((unsigned int*)&(__p))+1) & ~PNTR_VALUE)
+                            (__p).data[0] = (unsigned int)(__c); \
+                            (__p).data[1] = (PNTR_VALUE | (__i)); }
+#define aref_index(__p) ((__p).data[1] & ~PNTR_MASK)
 #define aref_array(__p) ((carray*)get_pntr(get_pntr(__p)->field1))
-
-
 #define get_pntr(__p) (assert(is_pntr(__p)), ((cell*)(*((unsigned int*)&(__p)))))
+#define pntrequal(__a,__b) (((__a).data[0] == (__b).data[0]) && ((__a).data[1] == (__b).data[1]))
 
-#define pntrequal(__a,__b) ((*(((unsigned int*)&(__a))+0) == *(((unsigned int*)&(__b))+0)) && \
-                            (*(((unsigned int*)&(__a))+1) == *(((unsigned int*)&(__b))+1)))
-
-#define is_nullpntr(__p) (is_pntr(__p) && (NULL == get_pntr(__p)))
+#define is_nullpntr(__p) (is_pntr(__p) && ((cell*)1 == get_pntr(__p)))
 #ifndef NO_STATEMENT_EXPRS
 #define INLINE_RESOLVE_PNTR
 #endif
@@ -790,6 +786,7 @@ extern const builtin builtin_info[NUM_BUILTINS];
 #endif
 
 #ifndef MEMORY_C
+extern unsigned char NULL_PNTR_BITS[8];
 extern const char *cell_types[CELL_COUNT];
 extern const char *sysobject_types[SYSOBJECT_COUNT];
 extern const char *frame_states[5];

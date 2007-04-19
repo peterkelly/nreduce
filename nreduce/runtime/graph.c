@@ -44,7 +44,6 @@ typedef struct replace_data {
 static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
 {
   int n;
-  pntr nullp;
 
   *repl = p;
 
@@ -73,7 +72,7 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
     else {
       cell *newc = alloc_cell(rd->tsk);
       newc->type = CELL_IND;
-      newc->field1 = 999;
+      set_pntrdouble(newc->field1,999);
       make_pntr(*repl,newc);
       rd->map->data[n].s = (snode*)1;
       rd->map->data[n].val = *repl;
@@ -81,8 +80,7 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
     }
   }
 
-  make_pntr(nullp,NULL);
-  n = pntrmap_add(rd->map,p,NULL,NULL,nullp);
+  n = pntrmap_add(rd->map,p,NULL,NULL,NULL_PNTR);
 
   switch (pntrtype(p)) {
   case CELL_APPLICATION: {
@@ -201,7 +199,7 @@ static void graph_replace_r(replace_data *rd, pntr p, pntr *repl)
   if (rd->map->data[n].s) {
     pmentry *entry = &rd->map->data[n];
     assert(CELL_IND == pntrtype(entry->val));
-    assert(999 == get_pntr(entry->val)->field1);
+    assert(999 == pntrdouble(get_pntr(entry->val)->field1));
     get_pntr(entry->val)->field1 = *repl;
   }
   else {
@@ -278,7 +276,7 @@ pntrset *pntrset_new()
   ps->count = 1;
   ps->alloc = 1024;
   ps->data = (psentry*)malloc(ps->alloc*sizeof(psentry));
-  make_pntr(ps->data[0].p,NULL);
+  ps->data[0].p = NULL_PNTR;
   ps->data[0].next = 0;
   return ps;
 }
@@ -323,7 +321,7 @@ pntrmap *pntrmap_new()
   pm->count = 1;
   pm->alloc = 1024;
   pm->data = (pmentry*)calloc(pm->alloc,sizeof(pmentry));
-  make_pntr(pm->data[0].p,NULL);
+  pm->data[0].p = NULL_PNTR;
   pm->data[0].next = 0;
   return pm;
 }

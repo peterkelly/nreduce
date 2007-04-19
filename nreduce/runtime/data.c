@@ -162,8 +162,7 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     break;
   }
   case CELL_REMOTEREF:
-    make_pntr(*pout,NULL);
-    *pout = global_lookup(tsk,addr,*pout);
+    *pout = global_lookup(tsk,addr,NULL_PNTR);
     break;
   case CELL_HOLE:
     fatal("shouldn't receive HOLE");
@@ -215,10 +214,13 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
   case CELL_NIL:
     *pout = tsk->globnilpntr;
     break;
-  case CELL_NUMBER:
-    CHECK_READ(read_double(rd,pout));
+  case CELL_NUMBER: {
+    double d;
+    CHECK_READ(read_double(rd,&d));
+    set_pntrdouble(*pout,d);
     assert(!is_pntr(*pout));
     break;
+  }
   case CELL_SYSOBJECT:
     /* FIXME: these should't migrate... how to handle them? */
     abort();
@@ -551,7 +553,7 @@ void write_pntr(array *arr, task *tsk, pntr p)
   case CELL_NIL:
     break;
   case CELL_NUMBER:
-    write_double(arr,p);
+    write_double(arr,pntrdouble(p));
     break;
   case CELL_SYSOBJECT:
     /* FIXME: these should't migrate... how to handle them? */

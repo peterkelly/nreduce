@@ -24,6 +24,8 @@
 #include "config.h"
 #endif
 
+#define _GNU_SOURCE /* for feenableexcept() */
+
 #include "compiler/source.h"
 #include "compiler/bytecode.h"
 #include "nreduce.h"
@@ -42,6 +44,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <signal.h>
+#include <fenv.h>
 
 #ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
@@ -280,6 +283,7 @@ int main(int argc, char **argv)
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
   signal(SIGPIPE,SIG_IGN);
+  feenableexcept(FE_INVALID);
 
   gettimeofday(&time,NULL);
   srand(time.tv_usec);

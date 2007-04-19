@@ -144,7 +144,7 @@ int matches_r(scomb *sc, pntr s, pntr p, pntr *args,
     return 0;
 
   if (CELL_NUMBER == pntrtype(s))
-    return (s == p);
+    return (pntrdouble(s) == pntrdouble(p));
 
   c = get_pntr(s);
   pc = get_pntr(p);
@@ -246,7 +246,7 @@ int match_repl(task *tsk, scomb *sc, pntr p)
   pntr *args = (pntr*)malloc(sc->nargs*sizeof(pntr));
   int res = 0;
   for (i = 0; i < sc->nargs; i++)
-    make_pntr(args[i],NULL);
+    args[i] = NULL_PNTR;
   if (matches(tsk,sc,p,args)) {
     int all = 1;
     int same = 0;

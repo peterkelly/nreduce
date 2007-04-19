@@ -40,6 +40,8 @@
 #include <math.h>
 #include <unistd.h>
 
+unsigned char NULL_PNTR_BITS[8] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF };
+
 const char *cell_types[CELL_COUNT] = {
   "EMPTY",
   "APPLICATION",
@@ -264,14 +266,14 @@ cell *alloc_cell(task *tsk)
 {
   cell *v;
   assert(tsk);
-  if (NULL == tsk->freeptr) {
+  if ((cell*)1 == tsk->freeptr) { /* 64 bit pntrs use 1 in second byte for null */
     block *bl = (block*)calloc(1,sizeof(block));
     int i;
     bl->next = tsk->blocks;
     tsk->blocks = bl;
     for (i = 0; i < BLOCK_SIZE-1; i++)
       make_pntr(bl->values[i].field1,&bl->values[i+1]);
-    make_pntr(bl->values[i].field1,NULL);
+    bl->values[i].field1 = NULL_PNTR;
 
     tsk->freeptr = &bl->values[0];
   }
@@ -798,7 +800,7 @@ void print_pntr(FILE *f, pntr p)
   p = resolve_pntr(p);
   switch (pntrtype(p)) {
   case CELL_NUMBER:
-    print_double(f,p);
+    print_double(f,pntrdouble(p));
     break;
   case CELL_NIL:
     fprintf(f,"nil");

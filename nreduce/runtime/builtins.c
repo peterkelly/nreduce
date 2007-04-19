@@ -82,9 +82,9 @@ const builtin builtin_info[NUM_BUILTINS];
 static void setnumber(pntr *cptr, double val)
 {
   if (isnan(val))
-    *cptr = *(double*)NAN_BITS;
+    *cptr = *(pntr*)NAN_BITS;
   else
-    *cptr = val;
+    set_pntrdouble(*cptr,val);
 }
 
 static void setbool(task *tsk, pntr *cptr, int b)
@@ -105,67 +105,67 @@ static void setbool(task *tsk, pntr *cptr, int b)
 static void b_add(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_ADD);
-  setnumber(&argstack[0],argstack[1] + argstack[0]);;
+  setnumber(&argstack[0],pntrdouble(argstack[1]) + pntrdouble(argstack[0]));
 }
 
 static void b_subtract(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_SUBTRACT);
-  setnumber(&argstack[0],argstack[1] - argstack[0]);
+  setnumber(&argstack[0],pntrdouble(argstack[1]) - pntrdouble(argstack[0]));
 }
 
 static void b_multiply(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MULTIPLY);
-  setnumber(&argstack[0],argstack[1] * argstack[0]);
+  setnumber(&argstack[0],pntrdouble(argstack[1]) * pntrdouble(argstack[0]));
 }
 
 static void b_divide(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_DIVIDE);
-  setnumber(&argstack[0],argstack[1] / argstack[0]);
+  setnumber(&argstack[0],pntrdouble(argstack[1]) / pntrdouble(argstack[0]));
 }
 
 static void b_mod(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_MOD);
-  setnumber(&argstack[0],fmod(argstack[1],argstack[0]));
+  setnumber(&argstack[0],fmod(pntrdouble(argstack[1]),pntrdouble(argstack[0])));
 }
 
 static void b_eq(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_EQ);
-  setbool(tsk,&argstack[0],argstack[1] == argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) == pntrdouble(argstack[0]));
 }
 
 static void b_ne(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_NE);
-  setbool(tsk,&argstack[0],argstack[1] != argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) != pntrdouble(argstack[0]));
 }
 
 static void b_lt(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_LT);
-  setbool(tsk,&argstack[0],argstack[1] <  argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) <  pntrdouble(argstack[0]));
 }
 
 static void b_le(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_LE);
-  setbool(tsk,&argstack[0],argstack[1] <= argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) <= pntrdouble(argstack[0]));
 }
 
 static void b_gt(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_GT);
-  setbool(tsk,&argstack[0],argstack[1] >  argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) >  pntrdouble(argstack[0]));
 }
 
 static void b_ge(task *tsk, pntr *argstack)
 {
   CHECK_NUMERIC_ARGS(B_GE);
-  setbool(tsk,&argstack[0],argstack[1] >= argstack[0]);
+  setbool(tsk,&argstack[0],pntrdouble(argstack[1]) >= pntrdouble(argstack[0]));
 }
 
 static void b_and(task *tsk, pntr *argstack)
@@ -200,8 +200,8 @@ static void b_bitop(task *tsk, pntr *argstack, int bif)
     exit(1);
   }
 
-  a = (int)val1;
-  b = (int)val2;
+  a = (int)pntrdouble(val1);
+  b = (int)pntrdouble(val2);
 
   switch (bif) {
   case B_BITSHL:  setnumber(&argstack[0],(double)(a << b));  break;
@@ -227,26 +227,26 @@ static void b_bitnot(task *tsk, pntr *argstack)
     fprintf(stderr,"~: incompatible argument (must be a number)\n");
     exit(1);
   }
-  val = (int)arg;
+  val = (int)pntrdouble(arg);
   setnumber(&argstack[0],(double)(~val));
 }
 
 static void b_sqrt(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER);
-  setnumber(&argstack[0],sqrt(argstack[0]));
+  setnumber(&argstack[0],sqrt(pntrdouble(argstack[0])));
 }
 
 static void b_floor(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER);
-  setnumber(&argstack[0],floor(argstack[0]));
+  setnumber(&argstack[0],floor(pntrdouble(argstack[0])));
 }
 
 static void b_ceil(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER);
-  setnumber(&argstack[0],ceil(argstack[0]));
+  setnumber(&argstack[0],ceil(pntrdouble(argstack[0])));
 }
 
 static void b_seq(task *tsk, pntr *argstack)
@@ -319,7 +319,7 @@ carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewra
 int pntr_is_char(pntr p)
 {
   if (CELL_NUMBER == pntrtype(p)) {
-    double d = p;
+    double d = pntrdouble(p);
     if ((floor(d) == d) && (0 <= d) && (255 >= d))
       return 1;
   }
@@ -336,7 +336,7 @@ static void convert_to_string(task *tsk, carray *arr)
   assert(arr->nchars == arr->size);
 
   for (i = 0; i < arr->size; i++)
-    charp[i] = (unsigned char)elemp[i];
+    charp[i] = (unsigned char)pntrdouble(elemp[i]);
   arr->elemsize = 1;
 }
 
@@ -502,7 +502,7 @@ int array_to_string(pntr refpntr, char **str)
       pntr head = resolve_pntr(c->field1);
       pntr tail = resolve_pntr(c->field2);
       if (pntr_is_char(head)) {
-        char cc = (char)head;
+        char cc = (char)pntrdouble(head);
         array_append(buf,&cc,1);
       }
       else {
@@ -524,7 +524,7 @@ int array_to_string(pntr refpntr, char **str)
         for (i = index; i < arr->size; i++) {
           pntr elem = resolve_pntr(pelements[i]);
           if (pntr_is_char(elem)) {
-            char cc = (char)elem;
+            char cc = (char)pntrdouble(elem);
             array_append(buf,&cc,1);
           }
           else {
@@ -585,7 +585,7 @@ static void b_head(task *tsk, pntr *argstack)
     if (sizeof(pntr) == arr->elemsize)
       argstack[0] = ((pntr*)arr->elements)[index];
     else if (1 == arr->elemsize)
-      argstack[0] = (double)(((char*)arr->elements)[index]);
+      set_pntrdouble(argstack[0],(double)(((char*)arr->elements)[index]));
     else
       set_error(tsk,"head: invalid array size");
   }
@@ -649,7 +649,7 @@ static void b_arrayskip(task *tsk, pntr *argstack)
 
   maybe_expand_array(tsk,refpntr);
 
-  n = (int)npntr;
+  n = (int)pntrdouble(npntr);
   assert(0 <= n);
 
 
@@ -686,7 +686,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   carray *prefix;
 
   CHECK_ARG(2,CELL_NUMBER);
-  n = (int)npntr;
+  n = (int)pntrdouble(npntr);
 
   if (CELL_CONS == pntrtype(refpntr)) {
     cell *newcons;
@@ -741,7 +741,7 @@ static void b_arraystrcmp(task *tsk, pntr *argstack)
       /* Compare character by character until we reach the end of either or both strings */
       while ((aindex < aarr->size) && (bindex < barr->size)) {
         if (aarr->elements[aindex] != barr->elements[bindex]) {
-          argstack[0] = (double)(aarr->elements[aindex] - barr->elements[bindex]);
+          set_pntrdouble(argstack[0],(double)(aarr->elements[aindex] - barr->elements[bindex]));
           return;
         }
         aindex++;
@@ -749,11 +749,11 @@ static void b_arraystrcmp(task *tsk, pntr *argstack)
       }
 
       if (aindex < aarr->size)
-        argstack[0] = 1;
+        set_pntrdouble(argstack[0],1);
       else if (bindex < barr->size)
-        argstack[0] = -1;
+        set_pntrdouble(argstack[0],-1);
       else
-        argstack[0] = 0;
+        set_pntrdouble(argstack[0],0);
       return;
     }
   }
@@ -768,7 +768,7 @@ static void b_numtostring(task *tsk, pntr *argstack)
   char str[100];
 
   CHECK_ARG(0,CELL_NUMBER);
-  format_double(str,100,p);
+  format_double(str,100,pntrdouble(p));
   assert(0 < strlen(str));
   argstack[0] = string_to_array(tsk,str);
 }
@@ -928,7 +928,7 @@ static void b_readdir1(task *tsk, pntr *argstack)
 
       namep = string_to_array(tsk,entry->d_name);
       typep = string_to_array(tsk,type);
-      sizep = statbuf.st_size;
+      set_pntrdouble(sizep,statbuf.st_size);
 
       entryarr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
       carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
@@ -1059,7 +1059,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     connect_msg cm;
 
     CHECK_ARG(1,CELL_NUMBER);
-    port = (int)portpntr;
+    port = (int)pntrdouble(portpntr);
 
     if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
       set_error(tsk,"opencon: hostname is not a string (contains non-char: %s)",
@@ -1217,7 +1217,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
     listen_msg lm;
 
     CHECK_ARG(0,CELL_NUMBER);
-    port = (int)portpntr;
+    port = (int)pntrdouble(portpntr);
 
     if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
       set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
@@ -1306,7 +1306,7 @@ static void b_nchars(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
   if ((CELL_AREF == pntrtype(p)) && (1 == aref_array(p)->elemsize))
-    argstack[0] = aref_array(p)->size - aref_index(p);
+    set_pntrdouble(argstack[0],aref_array(p)->size - aref_index(p));
   else
     argstack[0] = tsk->globnilpntr;
 }
@@ -1365,15 +1365,16 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
 static void b_print(task *tsk, pntr *argstack)
 {
   pntr destpntr = argstack[1];
-  pntr p = argstack[0];
+  double d;
   char c;
 
   CHECK_ARG(0,CELL_NUMBER);
   if (CELL_NIL != pntrtype(destpntr))
     CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
 
-  if ((p == floor(p)) && (0 < p) && (128 > p))
-    c = (int)p;
+  d = pntrdouble(argstack[0]);
+  if ((d == floor(d)) && (0 < d) && (128 > d))
+    c = (int)d;
   else
     c = '?';
   write_data(tsk,argstack,&c,1,destpntr);
@@ -1393,7 +1394,7 @@ static void b_printarray(task *tsk, pntr *argstack)
   if (CELL_NIL != pntrtype(destpntr))
     CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION);
 
-  n = (int)npntr;
+  n = (int)pntrdouble(npntr);
 
   if ((CELL_AREF != pntrtype(valpntr)) && (CELL_CONS != pntrtype(valpntr))) {
     set_error(tsk,"printarray: expected aref or cons, got %s",cell_types[pntrtype(valpntr)]);

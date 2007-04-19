@@ -277,7 +277,16 @@ static int getsignbit(double d)
 
 void format_double(char *str, int size, double d)
 {
-  if (d == (double)((int)(d))) {
+  if (isnan(d)) {
+    snprintf(str,size,"NaN");
+  }
+  else if (isinf(d) && (0.0 < d)) {
+    snprintf(str,size,"INF");
+  }
+  else if (isinf(d) && (0.0 > d)) {
+    snprintf(str,size,"-INF");
+  }
+  else if (d == (double)((int)(d))) {
     int i = (int)d;
     if (getsignbit(d) && (0.0 == d))
       snprintf(str,size,"-0");
@@ -309,15 +318,6 @@ void format_double(char *str, int size, double d)
   }
   else if (0.0 == d) {
     snprintf(str,size,"0");
-  }
-  else if (isnan(d)) {
-    snprintf(str,size,"NaN");
-  }
-  else if (isinf(d) && (0.0 < d)) {
-    snprintf(str,size,"INF");
-  }
-  else if (isinf(d) && (0.0 > d)) {
-    snprintf(str,size,"-INF");
   }
   else {
     snprintf(str,size,"%f",d);
