@@ -259,8 +259,8 @@ void run_frame(task *tsk, frame *f)
     f->state = STATE_RUNNING;
 
     #ifdef PROFILING
-    if (0 <= f->fno)
-      tsk->stats.funcalls[f->fno]++;
+    if (0 <= frame_fno(tsk,f))
+      tsk->stats.funcalls[frame_fno(tsk,f)]++;
     #endif
   }
 }
@@ -303,6 +303,13 @@ void unblock_frame_toend(task *tsk, frame *f)
   f->state = STATE_RUNNING;
 }
 
+int frame_fno(task *tsk, frame *f)
+{
+  const instruction *program_ops = bc_instructions(tsk->bcdata);
+  int bcaddr = f->instr-program_ops;
+  return tsk->bcaddr_to_fno[bcaddr];
+}
+
 void set_error(task *tsk, const char *format, ...)
 {
   va_list ap;
@@ -328,7 +335,6 @@ void set_error(task *tsk, const char *format, ...)
     tsk->errorsl.fileno = instr->fileno;
     tsk->errorsl.lineno = instr->lineno;
 
-    (*tsk->runptr)->fno = -1;
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
   }
 }
@@ -349,7 +355,7 @@ void dump_info(task *tsk)
       if (CELL_FRAME == c->type) {
         f = (frame*)get_pntr(c->field1);
         if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = bc_function_name(tsk->bcdata,f->fno);
+          const char *fname = bc_function_name(tsk->bcdata,frame_fno(tsk,f));
           int nfetchers = list_count(f->wq.fetchers);
           int nframes = 0;
           frame *f2;
@@ -371,7 +377,7 @@ void dump_info(task *tsk)
   fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
           "------","--------","------","--------","-------------");
   for (f = *tsk->runptr; f; f = f->rnext) {
-    const char *fname = bc_function_name(tsk->bcdata,f->fno);
+    const char *fname = bc_function_name(tsk->bcdata,frame_fno(tsk,f));
     int nfetchers = list_count(f->wq.fetchers);
     int nframes = 0;
     frame *f2;
@@ -410,6 +416,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   bcheader *bch;
   const funinfo *finfo;
   int fno;
+  int cur;
 
   tsk->n = n;
   tsk->runptr = &tsk->rtemp;
@@ -453,6 +460,19 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   for (fno = 0; fno < bch->nfunctions; fno++)
     if (tsk->maxstack < finfo[fno].stacksize)
       tsk->maxstack = finfo[fno].stacksize;
+
+
+  tsk->bcaddr_to_fno = (int*)malloc(bch->nops*sizeof(int));
+  for (i = 0; i < bch->nops; i++)
+    tsk->bcaddr_to_fno[i] = -1;
+  for (fno = 0; fno < bch->nfunctions; fno++)
+    tsk->bcaddr_to_fno[finfo[fno].address] = fno;
+  cur = -1;
+  for (i = 0; i < bch->nops; i++) {
+    if (0 <= tsk->bcaddr_to_fno[i])
+      cur = tsk->bcaddr_to_fno[i];
+    tsk->bcaddr_to_fno[i] = cur;
+  }
 
   tsk->framesize = sizeof(frame)+tsk->maxstack*sizeof(pntr);
   tsk->framesperblock = FRAMEBLOCK_SIZE/tsk->framesize;
@@ -554,6 +574,7 @@ void task_free(task *tsk)
   free(tsk->inflight_addrs);
   free(tsk->unack_msg_acount);
 
+  free(tsk->bcaddr_to_fno);
   free(tsk->bcdata);
 
   if (0 <= tsk->startfds[0])

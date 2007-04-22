@@ -709,8 +709,6 @@ frame *frame_new(task *tsk)
   f->alloc = tsk->maxstack;
   assert(f->data == (pntr*)(((char*)f)+sizeof(frame)));
 
-  f->fno = -1;
-
   #ifdef PROFILING
   tsk->stats.frame_allocs++;
   #endif
@@ -811,8 +809,7 @@ void print_pntr(FILE *f, pntr p)
     break;
   }
   case CELL_FRAME: {
-    frame *fr = (frame*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"frame(%d)",fr->fno);
+    fprintf(f,"frame");
     break;
   }
   case CELL_REMOTEREF: {

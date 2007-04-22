@@ -430,6 +430,7 @@ typedef struct task {
   char *bcdata;
   int bcsize;
   int maxstack;
+  int *bcaddr_to_fno;
 
   /* communication */
   group *grp;
@@ -579,6 +580,7 @@ void unblock_frame_toend(task *tsk, frame *f);
   (_f)->rnext = NULL; \
   (_f)->state = STATE_DONE; \
 }
+int frame_fno(task *tsk, frame *f);
 
 void set_error(task *tsk, const char *format, ...);
 

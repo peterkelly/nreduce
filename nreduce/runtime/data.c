@@ -178,7 +178,7 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     make_pntr(fr->c->field1,fr);
     make_pntr(*pout,fr->c);
 
-    CHECK_READ(read_format(rd,tsk,observe,"iii",&address,&fr->fno,&fr->alloc));
+    CHECK_READ(read_format(rd,tsk,observe,"ii",&address,&fr->alloc));
     fr->instr = bc_instructions(tsk->bcdata)+address;
 
     count = fr->instr->expcount;
@@ -531,7 +531,7 @@ void write_pntr(array *arr, task *tsk, pntr p)
     assert(STATE_NEW == f->state);
     assert(!f->prev && !f->next);
 
-    write_format(arr,tsk,"iii",address,f->fno,f->alloc);
+    write_format(arr,tsk,"ii",address,f->alloc);
     for (i = 0; i < count; i++) {
       pntr arg = resolve_pntr(f->data[i]);
       if ((CELL_NUMBER == pntrtype(arg)) || (CELL_NIL == pntrtype(arg)))

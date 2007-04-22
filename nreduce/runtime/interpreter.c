@@ -165,7 +165,7 @@ static void frame_return(task *tsk, frame *curf, pntr val)
   if (0 <= tsk->tid) {
     int valtype = pntrtype(val);
     fprintf(tsk->output,"FRAME(%d) completed; result is a %s\n",
-            curf->fno,cell_types[valtype]);
+            frame_fno(tsk,curf),cell_types[valtype]);
   }
   #endif
 
@@ -1381,10 +1381,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
         assert(OP_GLOBSTART == f2->instr->opcode);
         f2->instr++;
 
-        f2->fno = cp->fno;
         #ifdef PROFILING
-        if (0 <= f2->fno)
-          tsk->stats.funcalls[f2->fno]++;
+        if (0 <= cp->fno)
+          tsk->stats.funcalls[cp->fno]++;
         #endif
         for (i = 0; i < cp->count; i++)
           f2->data[base+i] = cp->data[i];
@@ -1403,7 +1402,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
         assert(OP_GLOBSTART == newf->instr->opcode);
         newf->instr++;
 
-        newf->fno = cp->fno;
         #ifdef PROFILING
         tsk->stats.frames[cp->fno]++;
         #endif
@@ -1420,7 +1418,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
         newcount += 1-extra;
 
         f2->instr = program_ops+evaldoaddr;
-        f2->fno = -1;
 
         f2->instr += (newcount-1)*EVALDO_SEQUENCE_SIZE;
       }
@@ -1428,26 +1425,24 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       break;
     }
     case OP_JFUN: {
-      int newfno = instr->arg0;
+      int fno = instr->arg0;
       switch (instr->arg1) {
       case 2:
-        runnable->instr = program_ops+program_finfo[instr->arg0].addressed;
+        runnable->instr = program_ops+program_finfo[fno].addressed;
         break;
       case 1:
-        runnable->instr = program_ops+program_finfo[instr->arg0].addressne;
+        runnable->instr = program_ops+program_finfo[fno].addressne;
         break;
       default:
-        runnable->instr = program_ops+program_finfo[instr->arg0].address;
+        runnable->instr = program_ops+program_finfo[fno].address;
 
         assert(OP_GLOBSTART == runnable->instr->opcode);
         runnable->instr++;
         break;
       }
-      runnable->fno = instr->arg0;
-      assert(runnable->fno = newfno);
       #ifdef PROFILING
-      if (0 <= runnable->fno)
-        tsk->stats.funcalls[runnable->fno]++;
+      if (0 <= frame_fno(tsk,runnable))
+        tsk->stats.funcalls[frame_fno(tsk,runnable)]++;
       #endif
       // runnable->instr--; /* so we process the GLOBSTART */
       break;
@@ -1549,7 +1544,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       assert(OP_GLOBSTART == newf->instr->opcode);
       newf->instr++;
 
-      newf->fno = fno;
       #ifdef PROFILING
       tsk->stats.frames[fno]++;
       #endif
