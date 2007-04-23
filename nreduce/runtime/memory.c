@@ -382,6 +382,7 @@ void free_cell_fields(task *tsk, cell *v)
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
     assert(tsk->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
+    assert(tsk->done || (NULL == f->retf));
     frame_free(tsk,f);
     break;
   }
@@ -680,7 +681,7 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, i
   }
 }
 
-frame *frame_new(task *tsk)
+frame *frame_new(task *tsk, int addalloc)
 {
   frame *f;
   if (NULL == tsk->freeframe) {
@@ -698,7 +699,8 @@ frame *frame_new(task *tsk)
 
   f = tsk->freeframe;
   tsk->freeframe = f->freelnk;
-  tsk->alloc_bytes += tsk->framesize;
+  if (addalloc)
+    tsk->alloc_bytes += tsk->framesize;
 
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     endpoint_interrupt(tsk->endpt);

@@ -330,6 +330,9 @@ typedef struct frame {
   int resume;
   int used;
 
+  struct frame *retf;
+  int retpos;
+
   struct frame *freelnk;
   struct frame *waitlnk;
   struct frame *rnext;
@@ -705,10 +708,10 @@ void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
 void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners);
 
-frame *frame_new(task *tsk);
+frame *frame_new(task *tsk, int addalloc);
 #define frame_free(tsk,_f) \
 { \
-  assert(tsk->done || (NULL == _f->c)); \
+  assert(tsk->done || ((NULL == _f->retf) && (NULL == _f->c)));       \
   assert(tsk->done || (STATE_DONE == _f->state) || (STATE_NEW == _f->state)); \
   assert(tsk->done || (NULL == _f->wq.frames)); \
   assert(tsk->done || (NULL == _f->wq.fetchers)); \

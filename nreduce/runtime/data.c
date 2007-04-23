@@ -168,7 +168,7 @@ int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
     fatal("shouldn't receive HOLE");
     break;
   case CELL_FRAME: {
-    frame *fr = frame_new(tsk);
+    frame *fr = frame_new(tsk,1);
     int i;
     int count;
     int address;

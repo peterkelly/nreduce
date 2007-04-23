@@ -171,11 +171,18 @@ static void frame_return(task *tsk, frame *curf, pntr val)
 
 
   assert(!is_nullpntr(val));
-  assert(NULL != curf->c);
-  assert(CELL_FRAME == celltype(curf->c));
-  curf->c->type = CELL_IND;
-  curf->c->field1 = val;
-  curf->c = NULL;
+  if (curf->c) {
+    assert(NULL == curf->retf);
+    assert(CELL_FRAME == celltype(curf->c));
+    curf->c->type = CELL_IND;
+    curf->c->field1 = val;
+    curf->c = NULL;
+  }
+  else {
+    assert(curf->retf);
+    curf->retf->data[curf->retpos] = val;
+    curf->retf = NULL;
+  }
 
   done_frame(tsk,curf);
   resume_waiters(tsk,&curf->wq,val);
@@ -196,6 +203,7 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 
   /* Create remote reference which will point to the frame on desttsk once an ACK is sent back */
 
+  assert(f->c);
   make_pntr(fcp,f->c);
   addr.tid = desttsk;
   addr.lid = -1;
@@ -608,6 +616,7 @@ static void interpreter_fetch(task *tsk, message *msg)
     CHECK_EXPR(is_nullpntr(ref));
 
     /* Replace our copy of a frame to a reference to the remote object */
+    assert(f->c);
     make_pntr(fcp,f->c);
     glo = add_global(tsk,storeaddr,fcp);
 
@@ -1236,6 +1245,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       frame *f = runnable;
       done_frame(tsk,f);
       check_runnable(tsk);
+      assert(f->c);
       f->c->type = CELL_NIL;
       f->c = NULL;
       frame_free(tsk,f);
@@ -1311,11 +1321,16 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
       if (instr->arg0) {
         if (CELL_FRAME == pntrtype(p)) {
+          /* FIXME: this code cannot be reached, because an EVAL is always placed before it
+             (to avoid the argument to DO being an IND cell). Either remove the EVAL and do a
+             resolve above, or get rid of this code (and transfer_waiters(), since this is
+             the only place it is called). */
           frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
           pntr val;
 
           /* Deactivate the current frame */
           transfer_waiters(&f2->wq,&newf->wq);
+          assert(newf->c);
           make_pntr(val,newf->c);
           frame_return(tsk,f2,val);
 
@@ -1361,10 +1376,19 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
           newcp->data[newcp->count++] = cp->data[i];
 
         /* replace the current FRAME with the new CAP */
-        f2->c->type = CELL_CAP;
-        make_pntr(f2->c->field1,newcp);
-        make_pntr(rep,f2->c);
-        f2->c = NULL;
+        if (f2->c) {
+          f2->c->type = CELL_CAP;
+          make_pntr(f2->c->field1,newcp);
+          make_pntr(rep,f2->c);
+          f2->c = NULL;
+        }
+        else {
+          cell *capc = alloc_cell(tsk);
+          capc->type = CELL_CAP;
+          make_pntr(capc->field1,newcp);
+          make_pntr(f2->retf->data[f2->retpos],capc);
+          f2->retf = NULL;
+        }
 
         /* return to caller */
         done_frame(tsk,f2);
@@ -1391,7 +1415,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       }
       else { /* s+have > arity */
         int newcount = instr->expcount-1;
-        frame *newf = frame_new(tsk);
+        frame *newf = frame_new(tsk,1);
         int i;
         int extra = arity-have;
         int nfc = 0;
@@ -1532,7 +1556,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       int n = instr->arg1;
       cell *newfholder;
       int i;
-      frame *newf = frame_new(tsk);
+      frame *newf = frame_new(tsk,1);
       int nfc = 0;
       if (program_finfo[fno].stacksize > newf->alloc) {
         assert(newf->alloc == tsk->maxstack);
@@ -1598,6 +1622,35 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     case OP_ERROR:
       handle_error(tsk);
       break;
+    case OP_CALL: {
+      frame *f2 = runnable;
+      int fno = instr->arg0;
+      int n = instr->arg1;
+      frame *newf;
+      int nfc = 0;
+      int i;
+
+      assert(OP_GLOBSTART == program_ops[program_finfo[fno].address].opcode);
+
+      newf = frame_new(tsk,0);
+      newf->instr = &program_ops[program_finfo[fno].address+1];
+      newf->retf = f2;
+      newf->retpos = instr->expcount-n;
+
+      for (i = instr->expcount-n; i < instr->expcount; i++)
+        newf->data[nfc++] = runnable->data[i];
+
+      block_frame(tsk,f2);
+      run_frame(tsk,newf);
+      check_runnable(tsk);
+      f2->waitframe = newf;
+      add_waiter_frame(&newf->wq,f2);
+
+      #ifdef PROFILING
+      tsk->stats.frames[fno]++;
+      #endif
+      break;
+    }
     default:
       abort();
       break;

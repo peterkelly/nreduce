@@ -130,6 +130,7 @@ const char *opcodes[OP_COUNT] = {
 "POP",
 "ERROR",
 "EVAL",
+"CALL",
 };
 
 static stackinfo *stackinfo_new(stackinfo *source)
@@ -717,6 +718,20 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
   comp->cdepth--;
 }
 
+static void S2(source *src, compilation *comp, snode *source, stack *exprs,
+              stack *strict, pmap *p, int n)
+{
+  int m;
+  print_comp2_stack(src,comp,"S2",exprs,n,"");
+
+  for (m = 0; m < exprs->count; m++) {
+    if (strict->data[m])
+      E(src,comp,(snode*)exprs->data[m],p,n+m);
+    else
+      C(src,comp,(snode*)exprs->data[m],p,n+m);
+  }
+}
+
 static void S(source *src, compilation *comp, snode *source, stack *exprs,
               stack *strict, pmap *p, int n)
 {
@@ -819,7 +834,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             int bif;
             const builtin *bi;
             int argno;
-            S(src,comp,app,args,argstrict,p,n);
+            S2(src,comp,app,args,argstrict,p,n);
             bif = app->bif;
             bi = &builtin_info[bif];
             assert(comp->si->count >= bi->nstrict);
@@ -828,6 +843,9 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
               assert(STATUS_SPARKED <= statusat(comp->si,comp->si->count-1-argno));
 
             BIF(app->sl,bif);
+            if (0 < n)
+              SQUEEZE(app->sl,1,n);
+            assert(1 == comp->si->count);
 
             if (!bi->reswhnf) {
               EVAL(app->sl,0);
@@ -949,6 +967,78 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
   comp->cdepth--;
 }
 
+static void peephole(compilation *comp, int start)
+{
+  int addr1;
+  instruction *instrs = (instruction*)comp->instructions->data;
+  int count = array_count(comp->instructions);
+  int *map = (int*)calloc(count,sizeof(int));
+  int changed;
+
+  for (addr1 = start; addr1 < count; addr1++) {
+    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode)) {
+      instrs[addr1].arg0 += addr1;
+      assert(instrs[addr1].arg0 >= start);
+      assert(instrs[addr1].arg0 < count);
+    }
+  }
+
+  do {
+    int source = start;
+    int dest = start;
+
+    changed = 0;
+
+    for (addr1 = start; addr1 < count; addr1++)
+      map[addr1] = addr1;
+
+    while (source < count) {
+      if ((source+1 < count) &&
+          (OP_SPARK == instrs[source].opcode) &&
+          (OP_EVAL == instrs[source+1].opcode) &&
+          (instrs[source].arg0 == instrs[source+1].arg0)) {
+        instrs[dest] = instrs[source+1];
+        map[source] = dest;
+        map[source+1] = dest;
+        dest++;
+        source += 2;
+        changed = 1;
+      }
+      else if ((source+1 < count) &&
+          (OP_MKFRAME == instrs[source].opcode) &&
+          (OP_EVAL == instrs[source+1].opcode) &&
+          (instrs[source+1].expcount-1 == instrs[source+1].arg0)) {
+        instrs[dest].opcode = OP_CALL;
+        map[source] = dest;
+        dest++;
+        source++;
+      }
+      else {
+        instrs[dest] = instrs[source];
+        map[source] = dest;
+        dest++;
+        source++;
+      }
+    }
+    count = dest;
+
+    for (addr1 = start; addr1 < count; addr1++)
+      if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode))
+        instrs[addr1].arg0 = map[instrs[addr1].arg0];
+
+  } while (changed);
+
+  for (addr1 = start; addr1 < count; addr1++) {
+    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode)) {
+      assert(instrs[addr1].arg0 >= start);
+      assert(instrs[addr1].arg0 < count);
+      instrs[addr1].arg0 -= addr1;
+    }
+  }
+
+  free(map);
+  comp->instructions->nbytes = count*sizeof(instruction);
+}
 
 /* FIXME: could probably remove the GLOBSTART instruction, since the information it contains can
    now be obtained from the function table. */
@@ -959,6 +1049,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
   stackinfo *oldsi;
   pmap pm;
   char *namestr;
+  int bodystart;
 
   comp->finfo[NUM_BUILTINS+sc->index].address = array_count(comp->instructions);
   comp->finfo[NUM_BUILTINS+sc->index].arity = sc->nargs;
@@ -1000,6 +1091,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
         EVAL(sc->sl,i);
     comp->finfo[NUM_BUILTINS+sc->index].addressed = array_count(comp->instructions);
   }
+  bodystart = array_count(comp->instructions);
 
 #ifdef DEBUG_BYTECODE_COMPILATION
   printf("\n");
@@ -1016,6 +1108,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
   }
 
   R(src,comp,copy,&pm,sc->nargs);
+  peephole(comp,bodystart);
 
   stack_free(pm.names);
   stack_free(pm.indexes);
@@ -1324,6 +1417,7 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
       fprintf(f," %-25s",str);
     }
     else if ((OP_MKFRAME == instr->opcode) ||
+             (OP_CALL == instr->opcode) ||
              (OP_MKCAP == instr->opcode) ||
              (OP_JFUN == instr->opcode)) {
       fprintf(f," %-18s %-6d",bc_function_name(bcdata,instr->arg0),instr->arg1);
