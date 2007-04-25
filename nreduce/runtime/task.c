@@ -245,8 +245,6 @@ void unspark_frame(task *tsk, frame *f)
   f->state = STATE_NEW;
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);
-  assert(NULL == f->next);
-  assert(NULL == f->prev);
   assert((NULL == f->c) || (CELL_FRAME == celltype(f->c)));
   assert((NULL == f->c) || (f == (frame*)get_pntr(f->c->field1)));
 }

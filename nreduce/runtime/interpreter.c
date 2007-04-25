@@ -376,7 +376,6 @@ static sysobject *get_frame_sysobject(frame *f)
          (B_PRINTEND == f->instr->arg0) ||
          (B_ACCEPT == f->instr->arg0) ||
          (B_STARTLISTEN == f->instr->arg0));
-  assert(f->alloc >= f->instr->expcount);
   assert(1 <= f->instr->expcount);
   objp = f->data[f->instr->expcount-1];
   assert(CELL_SYSOBJECT == pntrtype(objp));
@@ -1367,7 +1366,6 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
     int i;
     int extra = arity-have;
     int nfc = 0;
-    assert(newf->alloc == tsk->maxstack);
     assert(newf->data);
     newf->instr = program_ops+cp->address;
 
@@ -1519,10 +1517,6 @@ inline void op_mkframe(task *tsk, frame *runnable, const instruction *instr)
   int i;
   frame *newf = frame_new(tsk,1);
   int nfc = 0;
-  if (program_finfo[fno].stacksize > newf->alloc) {
-    assert(newf->alloc == tsk->maxstack);
-    assert(newf->data);
-  }
 
   newf->instr = program_ops+program_finfo[fno].address;
 

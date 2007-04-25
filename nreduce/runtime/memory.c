@@ -705,10 +705,7 @@ frame *frame_new(task *tsk, int addalloc)
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     endpoint_interrupt(tsk->endpt);
 
-  assert(!f->used);
   memset(f,0,tsk->framesize);
-  f->used = 1;
-  f->alloc = tsk->maxstack;
   assert(f->data == (pntr*)(((char*)f)+sizeof(frame)));
 
   #ifdef PROFILING

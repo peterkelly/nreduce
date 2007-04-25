@@ -321,20 +321,14 @@ typedef struct frame {
 
   cell *c;
 
-  int alloc;
-
   int state;
   int resume;
-  int used;
 
   pntr *retp;
 
   struct frame *freelnk;
   struct frame *waitlnk;
   struct frame *rnext;
-
-  struct frame *next;
-  struct frame *prev;
 
   struct frame *waitframe;
   struct global *waitglo;
@@ -720,7 +714,6 @@ frame *frame_new(task *tsk, int addalloc);
  \
   _f->freelnk = tsk->freeframe; \
   tsk->freeframe = _f; \
-  _f->used = 0; \
 }
 
 cap *cap_alloc(task *tsk, int arity, int address, int fno);

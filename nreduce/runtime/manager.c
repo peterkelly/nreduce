@@ -199,7 +199,6 @@ static task *add_task(node *n, int pid, int groupsize, const char *bcdata, int b
   if ((0 == pid) && (NULL != bcdata)) {
     frame *initial = frame_new(tsk,1);
     initial->instr = bc_instructions(tsk->bcdata);
-    assert(initial->alloc == tsk->maxstack);
     initial->c = alloc_cell(tsk);
     initial->c->type = CELL_FRAME;
     make_pntr(initial->c->field1,initial);
