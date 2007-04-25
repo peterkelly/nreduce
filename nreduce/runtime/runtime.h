@@ -144,8 +144,8 @@ typedef struct {
 #define CELL_COUNT       0x0F
 
 typedef struct cell {
-  short flags;
-  short type;
+  int type;
+  int flags;
   pntr field1;
   pntr field2;
 } cell;
@@ -411,11 +411,13 @@ typedef struct global {
 
 typedef struct block {
   struct block *next;
+  int pad;
   cell values[BLOCK_SIZE];
 } block;
 
 typedef struct frameblock {
   struct frameblock *next;
+  int pad;
   char mem[FRAMEBLOCK_SIZE];
 } frameblock;
 
@@ -539,6 +541,8 @@ typedef struct task {
   pntrset *partial_tmp2;
   pntrset *partial_sel;
   pntrset *partial_applied;
+  struct timeval nextfish;
+  struct timeval nextgc;
 } task;
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);

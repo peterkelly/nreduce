@@ -285,6 +285,11 @@ int main(int argc, char **argv)
   signal(SIGPIPE,SIG_IGN);
   feenableexcept(FE_INVALID);
 
+  assert(0 == sizeof(frame)%8);
+  assert(0 == ((int)&((frameblock*)0)->mem)%8);
+  assert(0 == sizeof(cell)%8);
+  assert(0 == ((int)&((block*)0)->values)%8);
+
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
 
