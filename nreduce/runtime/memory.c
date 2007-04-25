@@ -382,7 +382,7 @@ void free_cell_fields(task *tsk, cell *v)
     frame *f = (frame*)get_pntr(v->field1);
     f->c = NULL;
     assert(tsk->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
-    assert(tsk->done || (NULL == f->retf));
+    assert(tsk->done || (NULL == f->retp));
     frame_free(tsk,f);
     break;
   }

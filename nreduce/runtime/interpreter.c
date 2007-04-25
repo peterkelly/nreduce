@@ -219,16 +219,16 @@ static void frame_return(task *tsk, frame *curf, pntr val)
 
   assert(!is_nullpntr(val));
   if (curf->c) {
-    assert(NULL == curf->retf);
+    assert(NULL == curf->retp);
     assert(CELL_FRAME == celltype(curf->c));
     curf->c->type = CELL_IND;
     curf->c->field1 = val;
     curf->c = NULL;
   }
   else {
-    assert(curf->retf);
-    curf->retf->data[curf->retpos] = val;
-    curf->retf = NULL;
+    assert(curf->retp);
+    *(curf->retp) = val;
+    curf->retp = NULL;
   }
 
   done_frame(tsk,curf);
@@ -1334,8 +1334,8 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
       cell *capc = alloc_cell(tsk);
       capc->type = CELL_CAP;
       make_pntr(capc->field1,newcp);
-      make_pntr(f2->retf->data[f2->retpos],capc);
-      f2->retf = NULL;
+      make_pntr(*f2->retp,capc);
+      f2->retp = NULL;
     }
 
     /* return to caller */
@@ -1655,8 +1655,7 @@ inline void op_call(task *tsk, frame *runnable, const instruction *instr)
 
   newf = frame_new(tsk,0);
   newf->instr = &program_ops[program_finfo[fno].address+1];
-  newf->retf = f2;
-  newf->retpos = instr->expcount-n;
+  newf->retp = &f2->data[instr->expcount-n];
 
   for (i = instr->expcount-n; i < instr->expcount; i++)
     newf->data[nfc++] = runnable->data[i];
