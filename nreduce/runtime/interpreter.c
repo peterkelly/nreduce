@@ -43,6 +43,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <time.h>
+#include <signal.h>
 
 /* #define PARALLELISM_DEBUG */
 /* #define FETCH_DEBUG */
@@ -133,29 +134,31 @@ void print_stack(FILE *f, pntr *stk, int size, int dir)
   }
 }
 
-static void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl)
+void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl)
 {
   if (0 <= sl.fileno)
     fprintf(f,"%s:%d: ",bc_string(tsk->bcdata,sl.fileno),sl.lineno);
 }
 
-static void cap_error(task *tsk, pntr cappntr, const instruction *op)
+void cap_error(task *tsk, pntr cappntr)
 {
-  sourceloc sl;
   assert(CELL_CAP == pntrtype(cappntr));
   cell *capval = get_pntr(cappntr);
   cap *c = (cap*)get_pntr(capval->field1);
   const char *name = bc_function_name(tsk->bcdata,c->fno);
   int nargs = c->arity;
 
-  sl.fileno = op->fileno;
-  sl.lineno = op->lineno;
-  print_task_sourceloc(tsk,stderr,sl);
-  fprintf(stderr,"Attempt to evaluate incomplete function application\n");
-
-  print_task_sourceloc(tsk,stderr,c->sl);
-  fprintf(stderr,"%s requires %d args, only have %d\n",name,nargs,c->count);
-  exit(1);
+  if (0 <= c->sl.fileno) {
+    set_error(tsk,"Attempt to evaluate incomplete function application\n"
+              "%s:%d: %s requires %d args, only have %d",
+              bc_string(tsk->bcdata,c->sl.fileno),c->sl.lineno,
+              name,nargs,c->count);
+  }
+  else {
+    set_error(tsk,"Attempt to evaluate incomplete function application\n"
+              "%s requires %d args, only have %d",
+              name,nargs,c->count);
+  }
 }
 
 static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
@@ -167,11 +170,12 @@ static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
   fprintf(stderr,CONSTANT_APP_MSG"\n");
 }
 
-static void handle_error(task *tsk)
+void handle_error(task *tsk)
 {
   print_task_sourceloc(tsk,stderr,tsk->errorsl);
   fprintf(stderr,"%s\n",tsk->error);
-  exit(1);
+  *tsk->endpt->interruptptr = 1;
+  tsk->done = 1;
 }
 
 static void add_waiter_frame(waitqueue *wq, frame *f)
@@ -181,12 +185,11 @@ static void add_waiter_frame(waitqueue *wq, frame *f)
   wq->frames = f;
 }
 
-static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
+void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
 {
   while (wq->frames) {
     frame *f = wq->frames;
     wq->frames = f->waitlnk;
-    f->waitframe = NULL;
     f->waitglo = NULL;
     f->waitlnk = NULL;
     unblock_frame(tsk,f);
@@ -206,7 +209,7 @@ static void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
   }
 }
 
-static void frame_return(task *tsk, frame *curf, pntr val)
+void frame_return(task *tsk, frame *curf, pntr val)
 {
   #ifdef SHOW_FRAME_COMPLETION
   if (0 <= tsk->tid) {
@@ -1122,10 +1125,12 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
-static int handle_interrupt(task *tsk)
+int handle_interrupt(task *tsk)
 {
   struct timeval now;
   message *msg;
+
+  assert((void*)1 != *tsk->runptr);
 
   if (tsk->done)
     return 1;
@@ -1293,6 +1298,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
   }
 
   if (CELL_CAP != pntrtype(p)) {
+    /* FIXME: test this with native code */
     constant_app_error(tsk,p,instr);
     endpoint_interrupt(tsk->endpt);
     tsk->done = 1;
@@ -1426,8 +1432,10 @@ inline void op_jfalse(task *tsk, frame *runnable, const instruction *instr)
   assert(CELL_APPLICATION != pntrtype(test));
   assert(CELL_FRAME != pntrtype(test));
 
-  if (CELL_CAP == pntrtype(test))
-    cap_error(tsk,test,instr);
+  if (CELL_CAP == pntrtype(test)) {
+    cap_error(tsk,test);
+    return;
+  }
 
   if (CELL_NIL == pntrtype(test))
     runnable->instr += instr->arg0-1;
@@ -1518,10 +1526,7 @@ inline void op_mkframe(task *tsk, frame *runnable, const instruction *instr)
   frame *newf = frame_new(tsk,1);
   int nfc = 0;
 
-  newf->instr = program_ops+program_finfo[fno].address;
-
-  assert(OP_GLOBSTART == newf->instr->opcode);
-  newf->instr++;
+  assert(OP_GLOBSTART == program_ops[program_finfo[fno].address].opcode);
 
   #ifdef PROFILING
   tsk->stats.frames[fno]++;
@@ -1532,6 +1537,7 @@ inline void op_mkframe(task *tsk, frame *runnable, const instruction *instr)
   make_pntr(newfholder->field1,newf);
   newf->c = newfholder;
 
+  newf->instr = &program_ops[program_finfo[fno].address+1];
   for (i = instr->expcount-n; i < instr->expcount; i++)
     newf->data[nfc++] = runnable->data[i];
   make_pntr(runnable->data[instr->expcount-n],newfholder);
@@ -1548,9 +1554,6 @@ inline void op_bif(task *tsk, frame *runnable, const instruction *instr)
     assert(CELL_APPLICATION != pntrtype(runnable->data[instr->expcount-1-i]));
     assert(CELL_FRAME != pntrtype(runnable->data[instr->expcount-1-i]));
     assert(CELL_REMOTEREF != pntrtype(runnable->data[instr->expcount-1-i]));
-
-    if (CELL_CAP == pntrtype(runnable->data[instr->expcount-1-i]))
-      cap_error(tsk,runnable->data[instr->expcount-1-i],instr);
   }
 
   for (i = 0; i < builtin_info[bif].nstrict; i++)
@@ -1586,25 +1589,24 @@ inline void op_pop(task *tsk, frame *runnable, const instruction *instr)
 
 inline void op_error(task *tsk, frame *runnable, const instruction *instr)
 {
-      handle_error(tsk);
+  handle_error(tsk);
 }
 
 inline void op_eval(task *tsk, frame *runnable, const instruction *instr)
 {
   pntr p;
-  runnable->data[instr->arg0] =
-    resolve_pntr(runnable->data[instr->arg0]);
+  runnable->data[instr->arg0] = resolve_pntr(runnable->data[instr->arg0]);
   p = runnable->data[instr->arg0];
 
   if (CELL_FRAME == pntrtype(p)) {
     frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
     frame *f2 = runnable;
     f2->instr--;
+
+    add_waiter_frame(&newf->wq,f2);
     block_frame(tsk,f2);
     run_frame(tsk,newf);
     check_runnable(tsk);
-    f2->waitframe = newf;
-    add_waiter_frame(&newf->wq,f2);
     return;
   }
   else if (CELL_REMOTEREF == pntrtype(p)) {
@@ -1654,11 +1656,9 @@ inline void op_call(task *tsk, frame *runnable, const instruction *instr)
   for (i = instr->expcount-n; i < instr->expcount; i++)
     newf->data[nfc++] = runnable->data[i];
 
+  add_waiter_frame(&newf->wq,f2);
   block_frame(tsk,f2);
   run_frame(tsk,newf);
-  check_runnable(tsk);
-  f2->waitframe = newf;
-  add_waiter_frame(&newf->wq,f2);
 
   #ifdef PROFILING
   tsk->stats.frames[fno]++;
@@ -1699,6 +1699,52 @@ inline void op_jcmp(task *tsk, frame *runnable, const instruction *instr)
     runnable->instr += instr->arg0-1;
 }
 
+inline void op_invalid(task *tsk, frame *runnable, const instruction *instr)
+{
+  fatal("Invalid instruction");
+}
+
+typedef void (native_fun)();
+
+void *signal_thread(void *arg)
+{
+  task *tsk = (task*)arg;
+  struct timespec ts;
+  int million = 1000000;
+  while(1) {
+    ts.tv_sec = 0;
+    ts.tv_nsec = 10*million;
+    nanosleep(&ts,NULL);
+    printf("sending sigusr1\n");
+    pthread_kill(tsk->endpt->thread,SIGUSR1);\
+  }
+  return NULL;
+}
+
+void interpreter_sigfpe(int sig, siginfo_t *ino, void *uc1)
+{
+  task *tsk = pthread_getspecific(task_key);
+  frame *f = *tsk->runptr;
+  const instruction *instr = f->instr-1;
+
+  if ((OP_BIF == instr->opcode) || (OP_JCMP == instr->opcode)) {
+    int bif = (OP_BIF == instr->opcode) ? instr->arg0 : instr->arg1;
+    pntr *argstack = &f->data[instr->expcount-2];
+    if ((2 == builtin_info[bif].nargs) &&
+        ((CELL_NUMBER != pntrtype(argstack[1])) || (CELL_NUMBER != pntrtype(argstack[0]))))
+      set_error(tsk,"%s: incompatible arguments: (%s,%s)",
+                builtin_info[bif].name,
+                cell_types[pntrtype(argstack[1])],cell_types[pntrtype(argstack[0])]);
+    else
+      set_error(tsk,"%s: floating point exception",builtin_info[bif].name);
+  }
+  else {
+    set_error(tsk,"floating point exception");
+  }
+
+  longjmp(tsk->jbuf,1);
+}
+
 void interpreter_thread(node *n, endpoint *endpt, void *arg)
 {
   task *tsk = (task*)arg;
@@ -1710,6 +1756,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->n = n;
   tsk->endpt = endpt;
   tsk->thread = pthread_self();
+  pthread_setspecific(task_key,tsk);
 
   write(tsk->threadrunningfds[1],&semdata,1);
 
@@ -1730,110 +1777,139 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->rtemp = NULL;
   tsk->runptr = &runnable;
 
-  while (1) {
+  if (ENGINE_NATIVE == engine_type) {
+    struct timeval start;
+    struct timeval end;
 
-    if (interrupt) {
-      interrupt = 0;
-      if (handle_interrupt(tsk))
+    array *cpucode = array_new(1,0);
+    gettimeofday(&start,NULL);
+    native_compile(tsk->bcdata,tsk->bcsize,cpucode,tsk);
+    gettimeofday(&end,NULL);
+
+    tsk->endpt->signal = 1;
+
+    if (getenv("INTERRUPTS")) {
+      pthread_t sigthread;
+      pthread_create(&sigthread,NULL,signal_thread,tsk);
+    }
+
+    ((native_fun*)tsk->code)();;
+    array_free(cpucode);
+  }
+  else if (0 != setjmp(tsk->jbuf)) {
+    /* skip any futher interpretation */
+    handle_error(tsk);
+  }
+  else {
+
+    while (1) {
+
+      if (interrupt) {
+        interrupt = 0;
+        if (handle_interrupt(tsk))
+          break;
+        else
+          continue;
+      }
+
+      assert(runnable);
+
+      instr = runnable->instr;
+      runnable->instr++;
+
+#ifdef EXECUTION_TRACE
+      if (compileinfo) {
+        /*       print_ginstr(tsk->output,gp,runnable->address,instr); */
+        fprintf(tsk->output,"%-6d %s\n",instr-program_ops,opcodes[instr->opcode]);
+        /*       print_stack(tsk->output,runnable->data,instr->expcount,0); */
+      }
+#endif
+
+#ifdef PROFILING 
+      tsk->stats.ninstrs++;
+      tsk->stats.usage[runnable->instr-program_ops-1]++;
+#endif
+
+      switch (instr->opcode) {
+      case OP_BEGIN:
+        op_begin(tsk,runnable,instr);
         break;
-      else
-        continue;
-    }
-
-    assert(runnable);
-
-    instr = runnable->instr;
-    runnable->instr++;
-
-    #ifdef EXECUTION_TRACE
-    if (compileinfo) {
-/*       print_ginstr(tsk->output,gp,runnable->address,instr); */
-      fprintf(tsk->output,"%-6d %s\n",instr-program_ops,opcodes[instr->opcode]);
-/*       print_stack(tsk->output,runnable->data,instr->expcount,0); */
-    }
-    #endif
-
-    #ifdef PROFILING 
-    tsk->stats.ninstrs++;
-    tsk->stats.usage[runnable->instr-program_ops-1]++;
-    #endif
-
-    switch (instr->opcode) {
-    case OP_BEGIN:
-      op_begin(tsk,runnable,instr);
-      break;
-    case OP_END:
-      op_end(tsk,runnable,instr);
-      break;
-    case OP_GLOBSTART:
-      abort();
-      break;
-    case OP_SPARK:
-      op_spark(tsk,runnable,instr);
-      break;
-    case OP_EVAL:
-      op_eval(tsk,runnable,instr);
-      break;
-    case OP_RETURN:
-      op_return(tsk,runnable,instr);
-      break;
-    case OP_DO:
-      op_do(tsk,runnable,instr);
-      break;
-    case OP_JFUN:
-      op_jfun(tsk,runnable,instr);
-      break;
-    case OP_JFALSE:
-      op_jfalse(tsk,runnable,instr);
-      break;
-    case OP_JUMP:
-      op_jump(tsk,runnable,instr);
-      break;
-    case OP_PUSH:
-      op_push(tsk,runnable,instr);
-      break;
-    case OP_POP:
-      op_pop(tsk,runnable,instr);
-      break;
-    case OP_UPDATE:
-      op_update(tsk,runnable,instr);
-      break;
-    case OP_ALLOC:
-      op_alloc(tsk,runnable,instr);
-      break;
-    case OP_SQUEEZE:
-      op_squeeze(tsk,runnable,instr);
-      break;
-    case OP_MKCAP:
-      op_mkcap(tsk,runnable,instr);
-      break;
-    case OP_MKFRAME:
-      op_mkframe(tsk,runnable,instr);
-      break;
-    case OP_BIF:
-      op_bif(tsk,runnable,instr);
-      break;
-    case OP_PUSHNIL:
-      op_pushnil(tsk,runnable,instr);
-      break;
-    case OP_PUSHNUMBER:
-      op_pushnumber(tsk,runnable,instr);
-      break;
-    case OP_PUSHSTRING:
-      op_pushstring(tsk,runnable,instr);
-      break;
-    case OP_ERROR:
-      op_error(tsk,runnable,instr);
-      break;
-    case OP_CALL:
-      op_call(tsk,runnable,instr);
-      break;
-    case OP_JCMP:
-      op_jcmp(tsk,runnable,instr);
-      break;
-    default:
-      abort();
-      break;
+      case OP_END:
+        op_end(tsk,runnable,instr);
+        break;
+      case OP_GLOBSTART:
+        abort();
+        break;
+      case OP_SPARK:
+        op_spark(tsk,runnable,instr);
+        break;
+      case OP_EVAL:
+        op_eval(tsk,runnable,instr);
+        break;
+      case OP_RETURN:
+        op_return(tsk,runnable,instr);
+        break;
+      case OP_DO:
+        op_do(tsk,runnable,instr);
+        break;
+      case OP_JFUN:
+        op_jfun(tsk,runnable,instr);
+        break;
+      case OP_JFALSE:
+        op_jfalse(tsk,runnable,instr);
+        break;
+      case OP_JUMP:
+        op_jump(tsk,runnable,instr);
+        break;
+      case OP_PUSH:
+        op_push(tsk,runnable,instr);
+        break;
+      case OP_POP:
+        op_pop(tsk,runnable,instr);
+        break;
+      case OP_UPDATE:
+        op_update(tsk,runnable,instr);
+        break;
+      case OP_ALLOC:
+        op_alloc(tsk,runnable,instr);
+        break;
+      case OP_SQUEEZE:
+        op_squeeze(tsk,runnable,instr);
+        break;
+      case OP_MKCAP:
+        op_mkcap(tsk,runnable,instr);
+        break;
+      case OP_MKFRAME:
+        op_mkframe(tsk,runnable,instr);
+        break;
+      case OP_BIF:
+        op_bif(tsk,runnable,instr);
+        break;
+      case OP_PUSHNIL:
+        op_pushnil(tsk,runnable,instr);
+        break;
+      case OP_PUSHNUMBER:
+        op_pushnumber(tsk,runnable,instr);
+        break;
+      case OP_PUSHSTRING:
+        op_pushstring(tsk,runnable,instr);
+        break;
+      case OP_ERROR:
+        op_error(tsk,runnable,instr);
+        break;
+      case OP_CALL:
+        op_call(tsk,runnable,instr);
+        break;
+      case OP_JCMP:
+        op_jcmp(tsk,runnable,instr);
+        break;
+      case OP_INVALID:
+        op_invalid(tsk,runnable,instr);
+        break;
+      default:
+        abort();
+        break;
+      }
     }
   }
 

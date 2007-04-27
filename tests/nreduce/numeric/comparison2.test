@@ -1,0 +1,69 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main =
+(appendn 30
+(append "1 = 3 ... " (if (= 1 3) "true\n" "false\n"))
+(append "2 = 3 ... " (if (= 2 3) "true\n" "false\n"))
+(append "3 = 3 ... " (if (= 3 3) "true\n" "false\n"))
+(append "4 = 3 ... " (if (= 4 3) "true\n" "false\n"))
+(append "5 = 3 ... " (if (= 5 3) "true\n" "false\n"))
+(append "1 != 3 ... " (if (!= 1 3) "true\n" "false\n"))
+(append "2 != 3 ... " (if (!= 2 3) "true\n" "false\n"))
+(append "3 != 3 ... " (if (!= 3 3) "true\n" "false\n"))
+(append "4 != 3 ... " (if (!= 4 3) "true\n" "false\n"))
+(append "5 != 3 ... " (if (!= 5 3) "true\n" "false\n"))
+(append "1 < 3 ... " (if (< 1 3) "true\n" "false\n"))
+(append "2 < 3 ... " (if (< 2 3) "true\n" "false\n"))
+(append "3 < 3 ... " (if (< 3 3) "true\n" "false\n"))
+(append "4 < 3 ... " (if (< 4 3) "true\n" "false\n"))
+(append "5 < 3 ... " (if (< 5 3) "true\n" "false\n"))
+(append "1 <= 3 ... " (if (<= 1 3) "true\n" "false\n"))
+(append "2 <= 3 ... " (if (<= 2 3) "true\n" "false\n"))
+(append "3 <= 3 ... " (if (<= 3 3) "true\n" "false\n"))
+(append "4 <= 3 ... " (if (<= 4 3) "true\n" "false\n"))
+(append "5 <= 3 ... " (if (<= 5 3) "true\n" "false\n"))
+(append "1 > 3 ... " (if (> 1 3) "true\n" "false\n"))
+(append "2 > 3 ... " (if (> 2 3) "true\n" "false\n"))
+(append "3 > 3 ... " (if (> 3 3) "true\n" "false\n"))
+(append "4 > 3 ... " (if (> 4 3) "true\n" "false\n"))
+(append "5 > 3 ... " (if (> 5 3) "true\n" "false\n"))
+(append "1 >= 3 ... " (if (>= 1 3) "true\n" "false\n"))
+(append "2 >= 3 ... " (if (>= 2 3) "true\n" "false\n"))
+(append "3 >= 3 ... " (if (>= 3 3) "true\n" "false\n"))
+(append "4 >= 3 ... " (if (>= 4 3) "true\n" "false\n"))
+(append "5 >= 3 ... " (if (>= 5 3) "true\n" "false\n")))
+==================================== OUTPUT ====================================
+1 = 3 ... false
+2 = 3 ... false
+3 = 3 ... true
+4 = 3 ... false
+5 = 3 ... false
+1 != 3 ... true
+2 != 3 ... true
+3 != 3 ... false
+4 != 3 ... true
+5 != 3 ... true
+1 < 3 ... true
+2 < 3 ... true
+3 < 3 ... false
+4 < 3 ... false
+5 < 3 ... false
+1 <= 3 ... true
+2 <= 3 ... true
+3 <= 3 ... true
+4 <= 3 ... false
+5 <= 3 ... false
+1 > 3 ... false
+2 > 3 ... false
+3 > 3 ... false
+4 > 3 ... true
+5 > 3 ... true
+1 >= 3 ... false
+2 >= 3 ... false
+3 >= 3 ... true
+4 >= 3 ... true
+5 >= 3 ... true
+================================== RETURN CODE =================================
+0

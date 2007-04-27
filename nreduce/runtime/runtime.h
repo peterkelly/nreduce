@@ -32,6 +32,12 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <assert.h>
+#include <setjmp.h>
+#include <signal.h>
+
+#define ENGINE_INTERPRETER 0
+#define ENGINE_NATIVE      1
+#define ENGINE_REDUCER     2
 
 #define MAX_FRAME_SIZE   1024
 #define MAX_CAP_SIZE     1024
@@ -330,7 +336,7 @@ typedef struct frame {
   struct frame *waitlnk;
   struct frame *rnext;
 
-  struct frame *waitframe;
+  int pad;
   struct global *waitglo;
   pntr data[0];
 } frame;
@@ -475,6 +481,10 @@ typedef struct task {
   gaddr **infaddrs;
   int *infcount;
   int *infalloc;
+  int haveerror;
+  int havefpe;
+  jmp_buf jbuf;
+  int rc;
 
   /* Each element of inflight_addrs is an array containing the addresses that have been sent
      to a particular task but not yet acknowledged. */
@@ -533,6 +543,37 @@ typedef struct task {
   pntrset *partial_applied;
   struct timeval nextfish;
   struct timeval nextgc;
+
+  /* native execution */
+  void **instraddrs;
+  unsigned char **bpaddrs1;
+  unsigned char **bpaddrs2;
+  void *code;
+  int codesize;
+  int *cpu_to_bcaddr;
+  void *bcend_addr;
+  void *interrupt_addr;
+  void *caperror_addr;
+  void *argerror_addr;
+
+  void *interrupt_end;
+  void *caperror_end;
+  void *argerror_end;
+
+  void *normal_esp;
+  void *interrupt_return_eip;
+  int interrupt_again;
+  int native_finished;
+  int swapped;
+  int fpe_bcaddr;
+  pntr *fpe_data;
+  void *breakpoint_addr;
+  int *bplabels1;
+  int *bplabels2;
+  unsigned char bcold1;
+  unsigned char bcold2;
+  int trap_pending;
+  int interrupt_bcaddr;
 } task;
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);
@@ -669,6 +710,9 @@ void console(task *tsk);
 
 /* builtin */
 
+void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
+void invalid_binary_args(task *tsk, pntr *argstack, int bif);
+
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper);
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 
@@ -726,9 +770,13 @@ void dump_globals(task *tsk);
 
 /* interpreter */
 
+void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
 void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
+void cap_error(task *tsk, pntr cappntr);
+void handle_error(task *tsk);
+void interpreter_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void interpreter_thread(node *n, endpoint *endpt, void *arg);
 
 /* memory */
@@ -779,6 +827,14 @@ void dot_graph(const char *prefix, int number, pntr root, int doind,
                dotfun fun, pntr arg, const char *msg, int landscape);
 void trace_step(task *tsk, pntr target, int allapps, const char *format, ...);
 
+/* native */
+
+void native_sigusr1(int sig, siginfo_t *ino, void *uc1);
+void native_sigtrap(int sig, siginfo_t *ino, void *uc1);
+void native_sigfpe(int sig, siginfo_t *ino, void *uc1);
+void native_sigsegv(int sig, siginfo_t *ino, void *uc1);
+void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk);
+
 #ifndef BUILTINS_C
 extern const builtin builtin_info[NUM_BUILTINS];
 #endif
@@ -788,6 +844,11 @@ extern unsigned char NULL_PNTR_BITS[8];
 extern const char *cell_types[CELL_COUNT];
 extern const char *sysobject_types[SYSOBJECT_COUNT];
 extern const char *frame_states[5];
+#endif
+
+#ifndef TASK_C
+extern pthread_key_t task_key;
+extern int engine_type;
 #endif
 
 #endif

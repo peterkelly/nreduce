@@ -1249,6 +1249,8 @@ endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
   if (threadp)
     *threadp = thread;
 
+  endpt->thread = thread;
+
   return epid;
 }
 
@@ -1303,10 +1305,12 @@ void endpoint_unlink(endpoint *endpt, endpointid to)
   node_send_locked(endpt->n,endpt->epid.localid,to,MSG_UNLINK,&endpt->epid,sizeof(endpointid));
 }
 
-void endpoint_interrupt(endpoint *endpt)
+void endpoint_interrupt(endpoint *endpt) /* Can be called from native code */
 {
   if (endpt->interruptptr)
     *endpt->interruptptr = 1;
+  if (endpt->signal)
+    pthread_kill(endpt->thread,SIGUSR1);
 }
 
 static void endpoint_add_message(endpoint *endpt, message *msg)
@@ -1334,8 +1338,7 @@ static void endpoint_add_message(endpoint *endpt, message *msg)
     if (!endpt->closed) {
       llist_append(&endpt->mailbox,msg);
       endpt->checkmsg = 1;
-      if (endpt->interruptptr)
-        *endpt->interruptptr = 1;
+      endpoint_interrupt(endpt);
       pthread_cond_broadcast(&endpt->mailbox.cond);
     }
     unlock_mutex(&endpt->mailbox.lock);

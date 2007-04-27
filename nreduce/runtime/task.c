@@ -24,6 +24,8 @@
 #include "config.h"
 #endif
 
+#define TASK_C
+
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "compiler/source.h"
@@ -41,6 +43,9 @@
 #include <unistd.h>
 
 extern const module_info *modules;
+
+pthread_key_t task_key;
+int engine_type = ENGINE_INTERPRETER;
 
 global *pntrhash_lookup(task *tsk, pntr p)
 {
@@ -253,8 +258,8 @@ void run_frame(task *tsk, frame *f)
 {
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     f->rnext = *tsk->runptr;
-    *tsk->runptr = f;
     f->state = STATE_RUNNING;
+    *tsk->runptr = f;
 
     #ifdef PROFILING
     if (0 <= frame_fno(tsk,f))
@@ -265,19 +270,21 @@ void run_frame(task *tsk, frame *f)
 
 void check_runnable(task *tsk)
 {
+  assert((void*)1 != *tsk->runptr);
   if (NULL == *tsk->runptr)
     endpoint_interrupt(tsk->endpt);
 }
 
 void block_frame(task *tsk, frame *f)
 {
+  frame *next;
   assert(STATE_RUNNING == f->state);
   assert(f == *tsk->runptr);
 
-  *tsk->runptr = f->rnext;
+  next = f->rnext;
   f->rnext = NULL;
-
   f->state = STATE_BLOCKED;
+  *tsk->runptr = next;
 }
 
 void unblock_frame(task *tsk, frame *f)
@@ -332,8 +339,10 @@ void set_error(task *tsk, const char *format, ...)
     instr = f->instr-1;
     tsk->errorsl.fileno = instr->fileno;
     tsk->errorsl.lineno = instr->lineno;
+    tsk->haveerror = 1;
 
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
+    tsk->rc = 1;
   }
 }
 
@@ -579,6 +588,11 @@ void task_free(task *tsk)
     close(tsk->startfds[0]);
   if (0 <= tsk->startfds[1])
     close(tsk->startfds[1]);
+
+  free(tsk->instraddrs);
+  free(tsk->bpaddrs1);
+  free(tsk->bpaddrs2);
+  free(tsk->cpu_to_bcaddr);
 
   free(tsk);
 }

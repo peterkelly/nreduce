@@ -1,0 +1,58 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+showcomp op opstr num =
+(if (<= num 5)
+  (letrec
+    res = (op num 3)
+   in
+    (append (numtostring num)
+      (append " "
+        (append opstr
+          (append " 3 ... "
+            (append (if res "true" "false")
+              (append "\n"
+                (showcomp op opstr (+ num 1)))))))))
+  nil)
+
+main =
+(append (showcomp = "=" 1)
+(append (showcomp != "!=" 1)
+(append (showcomp < "<" 1)
+(append (showcomp <= "<=" 1)
+(append (showcomp > ">" 1)
+(append (showcomp >= ">=" 1) nil))))))
+==================================== OUTPUT ====================================
+1 = 3 ... false
+2 = 3 ... false
+3 = 3 ... true
+4 = 3 ... false
+5 = 3 ... false
+1 != 3 ... true
+2 != 3 ... true
+3 != 3 ... false
+4 != 3 ... true
+5 != 3 ... true
+1 < 3 ... true
+2 < 3 ... true
+3 < 3 ... false
+4 < 3 ... false
+5 < 3 ... false
+1 <= 3 ... true
+2 <= 3 ... true
+3 <= 3 ... true
+4 <= 3 ... false
+5 <= 3 ... false
+1 > 3 ... false
+2 > 3 ... false
+3 > 3 ... false
+4 > 3 ... true
+5 > 3 ... true
+1 >= 3 ... false
+2 >= 3 ... false
+3 >= 3 ... true
+4 >= 3 ... true
+5 >= 3 ... true
+================================== RETURN CODE =================================
+0

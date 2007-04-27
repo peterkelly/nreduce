@@ -1,0 +1,10 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main =
+(append (numtostring (sqrt "test")) "\n")
+==================================== OUTPUT ====================================
+runtests.tmp/test.l:2: sqrt: first argument must be of type NUMBER, but got AREF
+================================== RETURN CODE =================================
+1

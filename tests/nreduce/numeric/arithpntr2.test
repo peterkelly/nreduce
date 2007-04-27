@@ -2,10 +2,9 @@
 nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-test = (sqrt (sqrt -1))
-
-main = (append (numtostring test) "\n")
+main =
+(append (numtostring (+ "test" 2)) "\n")
 ==================================== OUTPUT ====================================
-NaN
+runtests.tmp/test.l:2: +: incompatible arguments: (AREF,NUMBER)
 ================================== RETURN CODE =================================
-0
+1

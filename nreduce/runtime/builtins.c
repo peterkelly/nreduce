@@ -55,11 +55,7 @@ static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0
     if ((_type) != pntrtype(argstack[(_argno)])) {                      \
       int bif = ((*tsk->runptr)->instr-1)->arg0;                        \
       assert(OP_BIF == ((*tsk->runptr)->instr-1)->opcode);              \
-      set_error(tsk,"%s: %s argument must be of type %s, but got %s",   \
-                builtin_info[(bif)].name,                               \
-                numnames[builtin_info[(bif)].nargs-1-(_argno)],         \
-                cell_types[(_type)],                                    \
-                cell_types[pntrtype(argstack[(_argno)])]);              \
+      invalid_arg(tsk,argstack[(_argno)],bif,(_argno),(_type));         \
       return;                                                           \
     }                                                                   \
   }
@@ -77,6 +73,13 @@ static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0
     }                                                                   \
   }
 
+#define CHECK_NUMERIC_ARGS(bif)                                         \
+  if ((CELL_NUMBER != pntrtype(argstack[1])) ||                         \
+      (CELL_NUMBER != pntrtype(argstack[0]))) {                         \
+    invalid_binary_args(tsk,argstack,bif);                              \
+    return;                                                             \
+  }
+
 const builtin builtin_info[NUM_BUILTINS];
 
 static void setnumber(pntr *cptr, double val)
@@ -92,15 +95,27 @@ static void setbool(task *tsk, pntr *cptr, int b)
   *cptr = (b ? tsk->globtruepntr : tsk->globnilpntr);
 }
 
-#define CHECK_NUMERIC_ARGS(bif)                                         \
-  if ((CELL_NUMBER != pntrtype(argstack[1])) || (CELL_NUMBER != pntrtype(argstack[0]))) { \
-    int t1 = pntrtype(argstack[1]); \
-    int t2 = pntrtype(argstack[0]); \
-    set_error(tsk,"%s: incompatible arguments: (%s,%s)", \
-              builtin_info[bif].name,cell_types[t1],cell_types[t2]); \
-    argstack[0] = tsk->globnilpntr; \
-    return; \
-  }
+void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type)
+{
+  if (CELL_CAP == pntrtype(arg))
+    cap_error(tsk,arg);
+  else
+    set_error(tsk,"%s: %s argument must be of type %s, but got %s",
+              builtin_info[bif].name,numnames[builtin_info[bif].nargs-1-argno],
+              cell_types[type],cell_types[pntrtype(arg)]);
+}
+
+void invalid_binary_args(task *tsk, pntr *argstack, int bif)
+{
+  if (CELL_CAP == pntrtype(argstack[1]))
+    cap_error(tsk,argstack[1]);
+  else if (CELL_CAP == pntrtype(argstack[0]))
+    cap_error(tsk,argstack[0]);
+  else
+    set_error(tsk,"%s: incompatible arguments: (%s,%s)",builtin_info[bif].name,
+              cell_types[pntrtype(argstack[1])],cell_types[pntrtype(argstack[0])]);
+  argstack[0] = tsk->globnilpntr;
+}
 
 static void b_add(task *tsk, pntr *argstack)
 {

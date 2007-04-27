@@ -52,10 +52,7 @@
 
 #define NREDUCE_C
 
-#define ENGINE_INTERPRETER 0
-#define ENGINE_REDUCER     1
-
-char *exec_modes[3] = { "interpreter", "reducer" };
+char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
 int max_array_size = (1 << 18);
 
@@ -64,7 +61,6 @@ struct arguments {
   int nopartial;
   int nosink;
   int bytecode;
-  int engine;
   char *filename;
   int strictdebug;
   int lambdadebug;
@@ -95,7 +91,7 @@ static void usage()
 "  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
 "  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
 "  -e, --engine ENGINE      Use execution engine:\n"
-"                           (r)educer|(i)nterpreter\n"
+"                           (r)educer|(i)nterpreter|(n)ative\n"
 "                           (default: interpreter)\n"
 "  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
@@ -113,6 +109,23 @@ static void usage()
 "  -o, --reorder-debug      Print results of letrec reordering\n"
 "  -r, --strictness-debug   Print supercombinators strictness information\n");
   exit(1);
+}
+
+void set_engine(const char *str)
+{
+  if (!strcmp(str,"i") || !strcmp(str,"interpreter")) {
+    engine_type = ENGINE_INTERPRETER;
+  }
+  else if (!strcmp(str,"n") || !strcmp(str,"native")) {
+    engine_type = ENGINE_NATIVE;
+  }
+  else if (!strcmp(str,"r") || !strcmp(str,"reducer")) {
+    engine_type = ENGINE_REDUCER;
+  }
+  else {
+    fprintf(stderr,"Invalid execution engine: %s\n",str);
+    exit(1);
+  }
 }
 
 void parse_args(int argc, char **argv)
@@ -138,12 +151,7 @@ void parse_args(int argc, char **argv)
     else if (!strcmp(argv[i],"-e") || !strcmp(argv[i],"--engine")) {
       if (++i >= argc)
         usage();
-      if (!strcmp(argv[i],"i") || !strcmp(argv[i],"interpreter"))
-        args.engine = ENGINE_INTERPRETER;
-      else if (!strcmp(argv[i],"r") || !strcmp(argv[i],"reducer"))
-        args.engine = ENGINE_REDUCER;
-      else
-        usage();
+      set_engine(argv[i]);
     }
     else if (!strcmp(argv[i],"-r") || !strcmp(argv[i],"--strictness-debug")) {
       args.strictdebug = 1;
@@ -285,6 +293,11 @@ int main(int argc, char **argv)
   signal(SIGPIPE,SIG_IGN);
   feenableexcept(FE_INVALID);
 
+  if (0 != pthread_key_create(&task_key,NULL)) {
+    perror("pthread_key_create");
+    exit(1);
+  }
+
   assert(0 == sizeof(frame)%8);
   assert(0 == ((int)&((frameblock*)0)->mem)%8);
   assert(0 == sizeof(cell)%8);
@@ -293,9 +306,40 @@ int main(int argc, char **argv)
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
 
+  if (getenv("ENGINE"))
+    set_engine(getenv("ENGINE"));
+
   memset(&args,0,sizeof(args));
   args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);
+
+  if (ENGINE_NATIVE == engine_type) {
+    struct sigaction act;
+    sigemptyset(&act.sa_mask);
+    sigaddset(&act.sa_mask,SIGUSR1);
+    sigaddset(&act.sa_mask,SIGFPE);
+    sigaddset(&act.sa_mask,SIGTRAP);
+    act.sa_flags = SA_SIGINFO;
+
+    act.sa_sigaction = native_sigusr1;
+    sigaction(SIGUSR1,&act,NULL);
+
+    act.sa_sigaction = native_sigfpe;
+    sigaction(SIGFPE,&act,NULL);
+
+    act.sa_sigaction = native_sigtrap;
+    sigaction(SIGTRAP,&act,NULL);
+
+    act.sa_sigaction = native_sigsegv;
+    sigaction(SIGSEGV,&act,NULL);
+  }
+  else if (ENGINE_INTERPRETER == engine_type) {
+    struct sigaction act;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = interpreter_sigfpe;
+    sigaction(SIGFPE,&act,NULL);
+  }
 
 /*   if (NULL != getenv("DISABLE_PARTIAL_EVAL")) */
 /*     args.nopartial = 1; */
@@ -348,7 +392,7 @@ int main(int argc, char **argv)
   if (NULL != args.partial) {
     debug_partial(src,args.partial,args.trace,args.trace_type);
   }
-  else if (ENGINE_REDUCER == args.engine) {
+  else if (ENGINE_REDUCER == engine_type) {
     run_reduction(src,args.trace,args.trace_type);
   }
   else {
@@ -367,7 +411,7 @@ int main(int argc, char **argv)
       exit(0);
     }
 
-    debug_stage("Interpreter");
+    debug_stage("Execution");
     r = standalone(bcdata,bcsize);
     free(bcdata);
   }

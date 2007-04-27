@@ -1,0 +1,14 @@
+=================================== PROGRAM ====================================
+nreduce -n runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+b x y = (a x y)
+c x y = (b x y)
+a x y = (sqrt x)
+d x y = (c x y)
+main = (d + 2)
+==================================== OUTPUT ====================================
+runtests.tmp/test.l:3: Attempt to evaluate incomplete function application
+runtests.tmp/test.l:5: + requires 2 args, only have 0
+================================== RETURN CODE =================================
+1

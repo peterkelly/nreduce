@@ -2,15 +2,9 @@
 nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-test =
-(letrec
-  v = (sqrt -1)
- in
-  (+ v v))
-
 main =
-(append (numtostring test) "\n")
+(append (numtostring (/ 0 0)) "\n")
 ==================================== OUTPUT ====================================
-NaN
+runtests.tmp/test.l:2: /: floating point exception
 ================================== RETURN CODE =================================
-0
+1

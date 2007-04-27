@@ -124,6 +124,8 @@ typedef struct endpoint {
   list *inlinks;
   list *outlinks;
   endpoint_threadfun fun;
+  pthread_t thread;
+  int signal;
 } endpoint;
 
 typedef struct endpointlist {

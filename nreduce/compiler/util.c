@@ -201,7 +201,7 @@ void *list_item(list *l, int item)
   return l->data;
 }
 
-void list_free(list *l, list_d_t d)
+void list_free(list *l, list_d_t d) /* Can be called from native code */
 {
   while (l) {
     list *next = l->next;

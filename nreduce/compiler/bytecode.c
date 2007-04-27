@@ -82,6 +82,7 @@
 #define PUSHSTRING(_s,_a)     add_instruction(comp,_s,OP_PUSHSTRING,(_a),0)
 #define SQUEEZE(_s,_a,_b)     add_instruction(comp,_s,OP_SQUEEZE,(_a),(_b))
 #define ERROR(_s)             add_instruction(comp,_s,OP_ERROR,0,0)
+#define INVALID(_s)           add_instruction(comp,_s,OP_INVALID,0,0)
 
 #define JFALSE(_s,addr)       { EVAL(_s,0); \
                                 addr = array_count(comp->instructions); \
@@ -132,6 +133,7 @@ const char *opcodes[OP_COUNT] = {
 "EVAL",
 "CALL",
 "JCMP",
+"INVALID",
 };
 
 static stackinfo *stackinfo_new(stackinfo *source)
@@ -387,6 +389,9 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     pushstatus(comp->si,1);
     break;
   case OP_ERROR:
+    comp->si->invalid = 1;
+    break;
+  case OP_INVALID:
     comp->si->invalid = 1;
     break;
   case OP_EVAL:
@@ -1388,6 +1393,7 @@ void compile(source *src, char **bcdata, int *bcsize)
   compile_scombs(comp,src);
   compile_builtins(comp);
   compile_evaldo(comp,src);
+  INVALID(nosl);
 
   compute_stacksizes(comp);
 

@@ -207,8 +207,12 @@ static void worker_callback(struct node *n, void *data, int event,
 static void standalone_callback(struct node *n, void *data, int event,
                                 connection *conn, endpoint *endpt)
 {
-  if ((EVENT_ENDPOINT_REMOVAL == event) && (TASK_ENDPOINT == endpt->type))
+  if ((EVENT_ENDPOINT_REMOVAL == event) && (TASK_ENDPOINT == endpt->type)) {
+    int *rc = (int*)data;
+    task *tsk = (task*)endpt->data;
+    *rc = tsk->rc;
     node_shutdown_locked(n);
+  }
 }
 
 static node *worker_startup(int loglevel, int port)
@@ -236,11 +240,12 @@ int standalone(const char *bcdata, int bcsize)
   endpointid managerid;
   socketid out_sockid;
   node *n;
+  int rc = 0;
 
   if (NULL == (n = worker_startup(LOG_ERROR,0)))
     return -1;
 
-  node_add_callback(n,standalone_callback,NULL);
+  node_add_callback(n,standalone_callback,&rc);
 
   managerid.ip = n->listenip;
   managerid.port = n->listenport;
@@ -253,7 +258,7 @@ int standalone(const char *bcdata, int bcsize)
   node_close_endpoints(n);
   node_close_connections(n);
   node_free(n);
-  return 0;
+  return rc;
 }
 
 int string_to_mainchordid(node *n, const char *str, endpointid *out)

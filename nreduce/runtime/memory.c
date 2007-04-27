@@ -681,7 +681,7 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, i
   }
 }
 
-frame *frame_new(task *tsk, int addalloc)
+frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
 {
   frame *f;
   if (NULL == tsk->freeframe) {
@@ -697,16 +697,28 @@ frame *frame_new(task *tsk, int addalloc)
     tsk->freeframe = (frame*)fb->mem;
   }
 
-  f = tsk->freeframe;
-  tsk->freeframe = f->freelnk;
   if (addalloc)
     tsk->alloc_bytes += tsk->framesize;
 
   if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
     endpoint_interrupt(tsk->endpt);
 
-  memset(f,0,tsk->framesize);
-  assert(f->data == (pntr*)(((char*)f)+sizeof(frame)));
+  f = tsk->freeframe;
+  tsk->freeframe = f->freelnk;
+
+  f->c = 0; /* should be set by caller */
+  f->instr = 0; /* should be set by caller */
+
+  f->state = 0;
+  f->resume = 0;
+  f->freelnk = 0;
+  f->retp = NULL;
+
+  assert(NULL == f->wq.frames);
+  assert(NULL == f->wq.fetchers);
+  assert(NULL == f->waitlnk);
+  assert(NULL == f->rnext);
+  assert(NULL == f->waitglo);
 
   #ifdef PROFILING
   tsk->stats.frame_allocs++;
