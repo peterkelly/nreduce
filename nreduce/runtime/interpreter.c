@@ -1665,6 +1665,40 @@ inline void op_call(task *tsk, frame *runnable, const instruction *instr)
   #endif
 }
 
+inline void op_jcmp(task *tsk, frame *runnable, const instruction *instr)
+{
+  pntr p1 = runnable->data[instr->expcount-1];
+  pntr p2 = runnable->data[instr->expcount-2];
+  double a;
+  double b;
+  int cmp = 0;
+  int bif = instr->arg1;
+
+  if ((CELL_NUMBER != pntrtype(p1)) || (CELL_NUMBER != pntrtype(p2))) {
+    int t1 = pntrtype(p1);
+    int t2 = pntrtype(p2);
+    set_error(tsk,"%s: incompatible arguments: (%s,%s)",
+              builtin_info[bif].name,cell_types[t1],cell_types[t2]);
+    return;
+  }
+
+  a = pntrdouble(p1);
+  b = pntrdouble(p2);
+
+  switch (bif) {
+  case B_EQ: cmp = (a == b); break;
+  case B_NE: cmp = (a != b); break;
+  case B_LT: cmp = (a < b); break;
+  case B_LE: cmp = (a <= b); break;
+  case B_GT: cmp = (a > b); break;
+  case B_GE: cmp = (a >= b); break;
+  default: abort(); break;
+  }
+
+  if (!cmp)
+    runnable->instr += instr->arg0-1;
+}
+
 void interpreter_thread(node *n, endpoint *endpt, void *arg)
 {
   task *tsk = (task*)arg;
@@ -1793,6 +1827,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       break;
     case OP_CALL:
       op_call(tsk,runnable,instr);
+      break;
+    case OP_JCMP:
+      op_jcmp(tsk,runnable,instr);
       break;
     default:
       abort();

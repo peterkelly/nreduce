@@ -49,7 +49,8 @@
 #define OP_ERROR         20
 #define OP_EVAL          21
 #define OP_CALL          22
-#define OP_COUNT         23
+#define OP_JCMP          23
+#define OP_COUNT         24
 
 #define CONSTANT_APP_MSG "constant cannot be applied to arguments"
 #define EVALDO_SEQUENCE_SIZE 2

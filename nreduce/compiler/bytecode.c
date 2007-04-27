@@ -131,6 +131,7 @@ const char *opcodes[OP_COUNT] = {
 "ERROR",
 "EVAL",
 "CALL",
+"JCMP",
 };
 
 static stackinfo *stackinfo_new(stackinfo *source)
@@ -390,6 +391,14 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_EVAL:
     setstatusat(comp->si,arg0,STATUS_EVALUATED);
+    break;
+  case OP_CALL:
+    /* Should only be added during peephole optimisation */
+    abort();
+    break;
+  case OP_JCMP:
+    /* Should only be added during peephole optimisation */
+    abort();
     break;
   default:
     abort();
@@ -976,7 +985,8 @@ static void peephole(compilation *comp, int start)
   int changed;
 
   for (addr1 = start; addr1 < count; addr1++) {
-    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode)) {
+    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
+        (OP_JCMP == instrs[addr1].opcode)) {
       instrs[addr1].arg0 += addr1;
       assert(instrs[addr1].arg0 >= start);
       assert(instrs[addr1].arg0 < count);
@@ -1013,6 +1023,37 @@ static void peephole(compilation *comp, int start)
         dest++;
         source++;
       }
+      else if ((source+1 < count) &&
+               (OP_SQUEEZE == instrs[source].opcode) &&
+               (OP_RETURN == instrs[source+1].opcode)) {
+        assert(0 < instrs[source].arg1);
+        instrs[source+1].expcount = instrs[source].expcount;
+        instrs[dest] = instrs[source+1];
+        map[source] = dest;
+        map[source+1] = dest;
+        dest++;
+        source += 2;
+        changed = 1;
+      }
+      else if ((source+1 < count) &&
+               (OP_BIF == instrs[source].opcode) &&
+               (OP_JFALSE == instrs[source+1].opcode) &&
+               ((B_EQ == instrs[source].arg0) ||
+                (B_NE == instrs[source].arg0) ||
+                (B_LT == instrs[source].arg0) ||
+                (B_LE == instrs[source].arg0) ||
+                (B_GT == instrs[source].arg0) ||
+                (B_GE == instrs[source].arg0))) {
+        instrs[dest] = instrs[source];
+        instrs[dest].opcode = OP_JCMP;
+        instrs[dest].arg1 = instrs[dest].arg0;
+        instrs[dest].arg0 = instrs[source+1].arg0;
+        map[source] = dest;
+        map[source+1] = dest;
+        dest++;
+        source += 2;
+        changed = 1;
+      }
       else {
         instrs[dest] = instrs[source];
         map[source] = dest;
@@ -1023,13 +1064,15 @@ static void peephole(compilation *comp, int start)
     count = dest;
 
     for (addr1 = start; addr1 < count; addr1++)
-      if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode))
+      if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
+          (OP_JCMP == instrs[addr1].opcode))
         instrs[addr1].arg0 = map[instrs[addr1].arg0];
 
   } while (changed);
 
   for (addr1 = start; addr1 < count; addr1++) {
-    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode)) {
+    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
+        (OP_JCMP == instrs[addr1].opcode)) {
       assert(instrs[addr1].arg0 >= start);
       assert(instrs[addr1].arg0 < count);
       instrs[addr1].arg0 -= addr1;
@@ -1322,6 +1365,9 @@ void compile(source *src, char **bcdata, int *bcsize)
   compilation *comp = (compilation*)calloc(1,sizeof(compilation));
   int count = array_count(src->parsedfiles);
   int strcount;
+  sourceloc nosl;
+  nosl.fileno = -1;
+  nosl.lineno = -1;
 
 
   comp->instructions = array_new(sizeof(instruction),0);
@@ -1425,9 +1471,11 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
     else if (OP_BIF == instr->opcode) {
       fprintf(f," %-25s",builtin_info[instr->arg0].name);
     }
+    else if (OP_JCMP == instr->opcode) {
+      fprintf(f," %-18d %-6s",instr->arg0,builtin_info[instr->arg1].name);
+    }
     else if ((OP_PUSH == instr->opcode) ||
              (OP_EVAL == instr->opcode) ||
-             (OP_JFALSE == instr->opcode) ||
              (OP_SPARK == instr->opcode)) {
       int done = 0;
       if (src && (NUM_BUILTINS <= fno)) {
