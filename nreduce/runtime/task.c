@@ -342,7 +342,7 @@ void set_error(task *tsk, const char *format, ...)
     tsk->haveerror = 1;
 
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
-    tsk->rc = 1;
+    tsk->endpt->rc = 1;
   }
 }
 

@@ -494,7 +494,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       task *newtsk;
       int resp = 0;
       int localid;
-      char semdata;
+      char semdata = 0;
       if (sizeof(int) > msg->hdr.size)
         fatal("STARTTASK: invalid message size");
       localid = *(int*)msg->data;

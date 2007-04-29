@@ -484,7 +484,6 @@ typedef struct task {
   int haveerror;
   int havefpe;
   jmp_buf jbuf;
-  int rc;
 
   /* Each element of inflight_addrs is an array containing the addresses that have been sent
      to a particular task but not yet acknowledged. */

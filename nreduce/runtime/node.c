@@ -1169,27 +1169,33 @@ void done_reading(node *n, connection *conn)
 static void *endpoint_thread(void *data)
 {
   endpoint *endpt = (endpoint*)data;
+  node *n = endpt->n;
   list *l;
 
   /* Execute the thread */
-  endpt->fun(endpt->n,endpt,endpt->data);
+  endpt->fun(n,endpt,endpt->data);
 
   /* Remove the endpoint */
-  lock_node(endpt->n);
+  lock_node(n);
   for (l = endpt->inlinks; l; l = l->next)
-    node_send_locked(endpt->n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
+    node_send_locked(n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
                      &endpt->epid,sizeof(endpointid));
-  dispatch_event(endpt->n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
-  llist_remove(&endpt->n->endpoints,endpt);
-  pthread_cond_broadcast(&endpt->n->closecond);
-  unlock_node(endpt->n);
+  dispatch_event(n,EVENT_ENDPOINT_REMOVAL,NULL,endpt);
+  llist_remove(&n->endpoints,endpt);
+  pthread_cond_broadcast(&n->closecond);
 
   /* Free data */
+  while (NULL != endpt->mailbox.first) {
+    message *next = endpt->mailbox.first->next;
+    message_free(endpt->mailbox.first);
+    endpt->mailbox.first = next;
+  }
   list_free(endpt->inlinks,free);
   list_free(endpt->outlinks,free);
   destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
   free(endpt);
+  unlock_node(n);
   return NULL;
 }
 

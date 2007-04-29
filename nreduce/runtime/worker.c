@@ -209,8 +209,7 @@ static void standalone_callback(struct node *n, void *data, int event,
 {
   if ((EVENT_ENDPOINT_REMOVAL == event) && (TASK_ENDPOINT == endpt->type)) {
     int *rc = (int*)data;
-    task *tsk = (task*)endpt->data;
-    *rc = tsk->rc;
+    *rc = endpt->rc;
     node_shutdown_locked(n);
   }
 }
