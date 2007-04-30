@@ -7,6 +7,7 @@ libcompiler_la_SOURCES = util.c \
 	strictness.c \
 	super.c \
 	lifting.c \
+	appendopt.c \
 	renaming.c \
 	resolve.c \
 	reorder.c \

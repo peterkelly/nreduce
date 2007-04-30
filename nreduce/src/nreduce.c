@@ -65,6 +65,7 @@ struct arguments {
   int strictdebug;
   int lambdadebug;
   int reorderdebug;
+  int appendoptdebug;
   char *partial;
   int worker;
   char *trace;
@@ -107,6 +108,7 @@ static void usage()
 "  -g, --just-bytecode      Print compiled bytecode and exit\n"
 "  -l, --lambdadebug        Print results of lambda lifting\n"
 "  -o, --reorder-debug      Print results of letrec reordering\n"
+"      --appopt-debug       Print results of append optimisation\n"
 "  -r, --strictness-debug   Print supercombinators strictness information\n");
   exit(1);
 }
@@ -161,6 +163,9 @@ void parse_args(int argc, char **argv)
     }
     else if (!strcmp(argv[i],"-o") || !strcmp(argv[i],"--reorder-debug")) {
       args.reorderdebug = 1;
+    }
+    else if (!strcmp(argv[i],"--appopt-debug")) {
+      args.appendoptdebug = 1;
     }
     else if (!strcmp(argv[i],"-a") || !strcmp(argv[i],"--partial-eval")) {
       if (++i >= argc)
@@ -380,10 +385,11 @@ int main(int argc, char **argv)
   if (0 != source_process(src,args.partial || args.lambdadebug,
                           args.nopartial,
                           args.nosink,
-                          args.reorderdebug))
+                          args.reorderdebug,
+                          args.appendoptdebug))
     return -1;
 
-  if (args.reorderdebug || args.lambdadebug) {
+  if (args.reorderdebug || args.lambdadebug || args.appendoptdebug) {
     print_scombs1(src);
     source_free(src);
     exit(0);
@@ -417,5 +423,6 @@ int main(int argc, char **argv)
   }
 
   source_free(src);
+
   return r;
 }

@@ -62,7 +62,7 @@ static void mappings_set_count(stack *mappings, int count)
   mappings->count = count;
 }
 
-static char *next_var(source *src, const char *oldname)
+char *next_var(source *src, const char *oldname)
 {
   char *name = (char*)malloc(strlen(GENVAR_PREFIX)+20);
   char *copy;
@@ -140,8 +140,12 @@ void rename_variables(source *src, scomb *sc)
   if (NULL == src->oldnames)
     src->oldnames = array_new(sizeof(char*),0);
 
-  for (i = 0; i < sc->nargs; i++)
-    stack_push(mappings,mapping_new(sc->argnames[i],sc->argnames[i]));
+  for (i = 0; i < sc->nargs; i++) {
+    char *newname = next_var(src,sc->argnames[i]);
+    stack_push(mappings,mapping_new(sc->argnames[i],newname));
+    free(sc->argnames[i]);
+    sc->argnames[i] = newname;
+  }
 
   rename_variables_r(src,sc->body,mappings);
 

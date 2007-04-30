@@ -50,7 +50,6 @@ typedef struct sourceloc {
 } sourceloc;
 
 typedef struct snode {
-  int flags;
   int type;
 
   struct snode *left;
@@ -92,6 +91,8 @@ typedef struct scomb {
   int used;
   int nospark;
   struct scomb *hashnext;
+  int doesappend;
+  struct scomb *appendver;
 } scomb;
 
 typedef struct source {
@@ -120,7 +121,8 @@ source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename, const char *modname);
 int source_parse_file(source *src, const char *filename, const char *modname);
 void add_import(source *src, const char *name);
-int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict);
+int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict,
+                   int appendoptdebug);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
 
@@ -150,6 +152,8 @@ scomb *get_scomb(source *src, const char *name);
 int get_scomb_var(scomb *sc, const char *name);
 scomb *add_scomb(source *src, const char *name1);
 void scomb_free(scomb *sc);
+void schash_rebuild(source *src);
+int schash_check(source *src);
 
 /* lifting */
 
@@ -157,8 +161,12 @@ void lift(source *src, scomb *sc);
 void applift(source *src, scomb *sc);
 void nonstrict_lift(source *src, scomb *sc);
 
-/* new */
+/* appendopt */
+void appendopt(source *src);
 
+/* renaming */
+
+char *next_var(source *src, const char *oldname);
 void rename_variables(source *src, scomb *sc);
 
 /* debug */

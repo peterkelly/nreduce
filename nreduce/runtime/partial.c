@@ -507,10 +507,12 @@ void rename_oldnames(source *src)
   int i;
   int varno = 0;
   for (i = count-1; 0 <= i; i--) {
-    char *name = (char*)malloc(strlen(GENVAR_PREFIX)+20);
-    sprintf(name,"%s%d",GENVAR_PREFIX,varno++);
-    free(((char**)src->oldnames->data)[i]);
-    ((char**)src->oldnames->data)[i] = name;
+    if (!strncmp(((char**)src->oldnames->data)[i],GENVAR_PREFIX,strlen(GENVAR_PREFIX))) {
+      char *name = (char*)malloc(strlen(GENVAR_PREFIX)+20);
+      sprintf(name,"%s%d",GENVAR_PREFIX,varno++);
+      free(((char**)src->oldnames->data)[i]);
+      ((char**)src->oldnames->data)[i] = name;
+    }
   }
 }
 

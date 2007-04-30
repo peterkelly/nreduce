@@ -274,6 +274,7 @@ int is_from_prelude(source *src, scomb *sc)
 void compile_stage(source *src, const char *name)
 {
   static int stageno = 0;
+  assert(schash_check(src));
   if ((0 < stageno++) && compileinfo)
     print_scombs1(src);
   debug_stage(name);
@@ -299,7 +300,8 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict)
+int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict,
+                   int appendoptdebug)
 {
   int sccount;
   int scno;
@@ -332,6 +334,12 @@ int source_process(source *src, int stopafterlambda, int nopartial, int nosink, 
   for (scno = 0; scno < sccount; scno++)
     lift(src,array_item(src->scombs,scno,scomb*));
   sccount = array_count(src->scombs); /* lift() may have added some */
+
+  compile_stage(src,"Append optimisation"); /* appendopt.c */
+  appendopt(src);
+  sccount = array_count(src->scombs); /* appendopt() may have added some */
+  if (appendoptdebug)
+    return 0;
 
 /*   if (args.lambdadebug) { */
 /*     print_scombs1(src); */

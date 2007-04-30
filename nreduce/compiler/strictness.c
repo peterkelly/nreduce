@@ -423,7 +423,4 @@ void strictness_analysis(source *src)
        can trickle up to other supercombinators which call the one that changed, and then others
        that call them and so forth. */
   } while (changed);
-
-  if (compileinfo)
-    print_scombs1(src);
 }

@@ -1752,6 +1752,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   const instruction *instr;
   int interrupt = 1;
   char semdata = 0;
+  #ifdef PROFILING
+  const instruction *program_ops = bc_instructions(tsk->bcdata);
+  #endif
 
   tsk->n = n;
   tsk->endpt = endpt;
