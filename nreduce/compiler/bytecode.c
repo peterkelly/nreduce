@@ -1487,7 +1487,7 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
       if (src && (NUM_BUILTINS <= fno)) {
         scomb *sc = get_scomb_index(src,fno-NUM_BUILTINS);
         assert(sc);
-        assert(!strcmp(sc->name,bc_function_name(bcdata,fno)));
+        assert(!strcmp(real_scname(src,sc->name),bc_function_name(bcdata,fno)));
         if (instr->arg0 < sc->nargs) {
           fprintf(f," %-25s",sc->argnames[sc->nargs-1-instr->arg0]);
           done = 1;
