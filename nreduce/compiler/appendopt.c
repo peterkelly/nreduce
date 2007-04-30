@@ -38,7 +38,7 @@
 /* Optimize away usage of append where possible. See the paper titled "The concatenate vanishes"
    by Philip Wadler. */
 
-static snode *snode_copy(snode *s)
+snode *snode_copy(snode *s)
 {
   snode *repl = snode_new(s->sl.fileno,s->sl.lineno);
   repl->type = s->type;

@@ -335,20 +335,23 @@ int source_process(source *src, int stopafterlambda, int nopartial, int nosink, 
     lift(src,array_item(src->scombs,scno,scomb*));
   sccount = array_count(src->scombs); /* lift() may have added some */
 
+  /* Run with -a or -l; don't go any further */
+  if (stopafterlambda)
+    return 0;
+
   compile_stage(src,"Append optimisation"); /* appendopt.c */
   appendopt(src);
   sccount = array_count(src->scombs); /* appendopt() may have added some */
   if (appendoptdebug)
     return 0;
 
+  compile_stage(src,"Inlining"); /* inlining.c */
+  inlining(src);
+
 /*   if (args.lambdadebug) { */
 /*     print_scombs1(src); */
 /*     exit(0); */
 /*   } */
-
-  /* Run with -a or -l; don't go any further */
-  if (stopafterlambda)
-    return 0;
 
   if (!nopartial) {
     compile_stage(src,"Partial evaluation"); /* partial.c */

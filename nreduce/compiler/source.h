@@ -93,6 +93,7 @@ typedef struct scomb {
   struct scomb *hashnext;
   int doesappend;
   struct scomb *appendver;
+  int caninline;
 } scomb;
 
 typedef struct source {
@@ -161,7 +162,13 @@ void lift(source *src, scomb *sc);
 void applift(source *src, scomb *sc);
 void nonstrict_lift(source *src, scomb *sc);
 
+/* inlining */
+
+void inlining(source *src);
+
 /* appendopt */
+
+snode *snode_copy(snode *s);
 void appendopt(source *src);
 
 /* renaming */

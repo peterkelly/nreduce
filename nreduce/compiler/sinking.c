@@ -160,17 +160,33 @@ static void sink_single(source *src, snode *s, int *changed)
   while (*recptr) {
     snode *user;
     snode *hu = NULL;
+    int nusers = 0;
 
     if ((*recptr)->users) {
       hu = (*recptr)->users;
-      for (user = (*recptr)->users->nextuser; user; user = user->nextuser)
+      nusers = 1;
+      for (user = (*recptr)->users->nextuser; user; user = user->nextuser) {
         hu = common_parent(user,hu);
+        nusers++;
+      }
     }
 
-    if (hu && hu->parent && (SNODE_LETREC == hu->parent->type))
+    while (hu && hu->parent && 
+           ((SNODE_LETREC == hu->parent->type) || (SNODE_WRAP == hu->parent->type)))
       hu = hu->parent;
 
-    if (hu && (hu != s)) {
+    if (1 == nusers) {
+      letrec *rec = *recptr;
+      snode *u = rec->users;
+      assert(SNODE_SYMBOL == u->type);
+      free(u->name);
+      u->type = SNODE_WRAP;
+      u->target = rec->value;
+      *recptr = rec->next;
+      free(rec->name);
+      free(rec);
+    }
+    else if (hu && (hu != s)) {
       letrec **otherpntr;
       letrec *thisrec;
       *changed = 1;
