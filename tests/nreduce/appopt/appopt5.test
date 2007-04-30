@@ -1,0 +1,14 @@
+Use of rules * and 1
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b = (if a nil "hello")
+main = (append (test 1 2) " world")
+==================================== OUTPUT ====================================
+test a b rest = (if a 
+                    rest 
+                    (append "hello" rest))
+main = (test 1 2 " world")
+================================== RETURN CODE =================================
+0

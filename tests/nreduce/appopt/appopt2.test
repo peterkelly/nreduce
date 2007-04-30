@@ -1,0 +1,13 @@
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b = (if a "hello" "goodbye")
+main = (append (test 1 2) " world")
+==================================== OUTPUT ====================================
+test a b rest = (if a 
+                    (append "hello" rest) 
+                    (append "goodbye" rest))
+main = (test 1 2 " world")
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,12 @@
+Use of rules * and 3
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b = (append "greeting: " "hello")
+main = (append (test 1 2) " world")
+==================================== OUTPUT ====================================
+test a b rest = (append "greeting: " (append "hello" rest))
+main = (test 1 2 " world")
+================================== RETURN CODE =================================
+0

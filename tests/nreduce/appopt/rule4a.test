@@ -1,0 +1,16 @@
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+rule4 a b c d = (append (if a b c) (reverse d))
+main = nil
+==================================== OUTPUT ====================================
+rule4 a b c d = (letrec 
+                   first = (reverse d)
+                 in
+                   (if a 
+                       (append b first) 
+                       (append c first)))
+main = nil
+================================== RETURN CODE =================================
+0

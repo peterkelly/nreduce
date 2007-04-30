@@ -1,0 +1,15 @@
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+apreverse lst = (if lst
+                    (append (apreverse (tail lst)) (cons (head lst) nil))
+                    nil)
+main = nil
+==================================== OUTPUT ====================================
+apreverse lst rest = (if lst 
+                         (apreverse (tail lst) (cons (head lst) rest)) 
+                         rest)
+main = nil
+================================== RETURN CODE =================================
+0

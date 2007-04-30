@@ -1,0 +1,34 @@
+Example to demonstrate why we can't just replace references to test that
+are not within an append with (append (test ...) nil). In this case it would
+cause an error because it would result in a number being passed to append,
+which expects either a list or nil as its first argument.
+
+(append x nil) -> x is a valid optimisation, because x has to be a list,
+otherwise an error would occur. The only effect it could have is it could
+result in a program not being erroneous when it previously was, but we do
+not consider this to be a problem.
+
+x -> (append x nil) is not a valid transformation, because x may not be
+something that can safely be passed to append.
+
+In this case we have to keep the old version of test around for non-append
+uses.
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b = (if a "hello" (* 3 b))
+main =
+(append
+  (append (test 1 2) " world")
+  (numtostring (test nil 6)))
+==================================== OUTPUT ====================================
+test a b = (if a 
+               "hello" 
+               (* 3 b))
+main = (test#1 1 2 (append " world" (numtostring (test nil 6))))
+test#1 a b rest = (if a 
+                      (append "hello" rest) 
+                      (append (* 3 b) rest))
+================================== RETURN CODE =================================
+0

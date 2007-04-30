@@ -1,0 +1,10 @@
+Use of rules *, 2, and 1
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main = (append (append (append (append "one\n" "two\n") "three\n") "four\n") "five\n")
+==================================== OUTPUT ====================================
+main = (append "one\n" (append "two\n" (append "three\n" (append "four\n" "five\n"))))
+================================== RETURN CODE =================================
+0

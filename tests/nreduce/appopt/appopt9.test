@@ -1,0 +1,24 @@
+Use of rules *, 2, and 1
+=================================== PROGRAM ====================================
+nreduce --appopt-debug runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+test a b c = (if a
+                 (append "greeting: " "hello")
+                 (if b
+                     (cons '!' nil)
+                     (if c
+                         "place: "
+                         nil)))
+main = (append (test 1 2 3) " world")
+==================================== OUTPUT ====================================
+test a b c rest = (if a 
+                      (append "greeting: " (append "hello" rest)) 
+                      (if b 
+                          (cons 33 rest) 
+                          (if c 
+                              (append "place: " rest) 
+                              rest)))
+main = (test 1 2 3 " world")
+================================== RETURN CODE =================================
+0
