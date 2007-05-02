@@ -268,14 +268,7 @@ normalize1 lst =
     (cons (xml:mkstring "") nil))
 
 isatomic x =
-(letrec
-   type = (xml:item_type x)
- in
-   (or (= type xml:UNTYPED_ATOMIC)
-   (or (= type xml:TYPE_NUMBER)
-   (or (= type xml:TYPE_BOOLEAN)
-   (or (= type xml:TYPE_STRING)
-       (= type xml:TYPE_QNAME))))))
+(<= (xml:item_type x) xml:MAX_ATOMIC_TYPE)
 
 atom_to_string x =
 (letrec
@@ -310,7 +303,7 @@ normalize2 lst =
 getstrings lst =
 (if lst
     (if (= (xml:item_type (head lst)) xml:TYPE_STRING)
-        (appendn 3 " " (xml:string_value (head lst)) (getstrings (tail lst)))
+        (append " " (append (xml:string_value (head lst)) (getstrings (tail lst))))
         nil)
     lst)
 
@@ -341,7 +334,7 @@ normalize5 lst = lst
 gettexts lst =
 (if lst
     (if (= (xml:item_type (head lst)) xml:TYPE_TEXT)
-        (appendn 3 " " (xml:text_content (head lst)) (gettexts (tail lst)))
+        (append " " (append (xml:text_content (head lst)) (gettexts (tail lst))))
         nil)
     lst)
 
@@ -393,25 +386,22 @@ getnumber x =
 
 range min max = (if (<= min max) (cons (xml:mknumber min) (range (+ min 1) max)) nil)
 
-apmap3 f lst = (apmap3a f lst 1 (len lst))
+apmap3 f lst = (apmap3a f lst 1 0)
 
-apmap3a f lst pos size =
+apmap3a f lst !pos !total =
 (if lst
-    (append (f (head lst) pos size)
-            (apmap3a f (tail lst) (+ pos 1) size))
+    (append (f (head lst) pos (+ total (len lst)))
+            (apmap3a f (tail lst) (+ pos 1) (+ total 1)))
     nil)
 
+filter3 f lst = (filter3a f lst 1 0)
 
-
-filter3 f lst = (filter3a f lst 1 (len lst))
-
-filter3a f lst pos size =
+filter3a f lst !pos !total =
 (if lst
-    (if (f (head lst) pos size)
-        (cons (head lst) (filter3a f (tail lst) (+ pos 1) size))
-        (filter3a f (tail lst) (+ pos 1) size))
+    (if (f (head lst) pos (+ total (len lst)))
+        (cons (head lst) (filter3a f (tail lst) (+ pos 1) (+ total 1)))
+        (filter3a f (tail lst) (+ pos 1) (+ total 1)))
     nil)
-
 
 isnode x =
 (or (= (xml:item_type x) xml:TYPE_ELEMENT)

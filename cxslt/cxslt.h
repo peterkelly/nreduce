@@ -130,7 +130,7 @@ typedef struct seqtype {
 expression *new_expression(int type);
 expression *new_expression2(int type, expression *left, expression *right);
 void free_expression(expression *expr);
-const xmlChar *lookup_nsuri(xmlNodePtr n, const xmlChar *prefix);
+const char *lookup_nsuri(xmlNodePtr n, const char *prefix);
 
 expression *new_TypeExpr(int type, seqtype *st, expression *right);
 expression *new_ForExpr(expression *left, expression *right);

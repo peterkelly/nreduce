@@ -54,7 +54,7 @@ void compile_expression(expression *expr);
 static int option_indent = 0;
 static int option_strip = 0;
 
-void check_attr(const xmlChar *value, const xmlChar *name)
+void check_attr(const char *value, const char *name)
 {
   if (NULL == value) {
     fprintf(stderr,"Missing attribute: %s\n",name);
@@ -64,7 +64,7 @@ void check_attr(const xmlChar *value, const xmlChar *name)
 
 int ignore_node(xmlNodePtr n)
 {
-  const xmlChar *c;
+  const char *c;
   if (XML_TEXT_NODE != n->type)
     return 0;
   for (c = n->content; *c; c++)
@@ -108,7 +108,7 @@ void free_expression(expression *expr)
     free(expr->str);
 }
 
-const xmlChar *lookup_nsuri(xmlNodePtr n, const xmlChar *prefix)
+const char *lookup_nsuri(xmlNodePtr n, const char *prefix)
 {
   xmlNs *ns;
 /*   printf("\n\nlooking up prefix \"%s\" in node %s\n",prefix,n->name); */
@@ -129,10 +129,10 @@ const xmlChar *lookup_nsuri(xmlNodePtr n, const xmlChar *prefix)
   exit(1);
 }
 
-void qname_to_nsname(const xmlChar *qname, xmlNodePtr n,
-                    xmlChar **nsuri, xmlChar **localname)
+void qname_to_nsname(const char *qname, xmlNodePtr n,
+                    char **nsuri, char **localname)
 {
-  xmlChar *qncopy = xmlStrdup(qname);
+  char *qncopy = xmlStrdup(qname);
   char *colon = strchr(qncopy,':');
   if (colon) {
     *colon = '\0';
@@ -146,20 +146,85 @@ void qname_to_nsname(const xmlChar *qname, xmlNodePtr n,
   free(qncopy);
 }
 
-xmlChar *nsname_to_ident(const xmlChar *nsuri, const xmlChar *localname)
+qname string_to_qname(const char *str, xmlNodePtr n)
 {
-  /* FIXME: make sure this returns a unique string depending on both the uri and localname */
-  int len = strlen(localname);
-  char *ident = malloc(len+2);
-  ident[0] = 'X';
-  memcpy(&ident[1],localname,len);
-  ident[len+1] = '\0';
-  return ident;
+  char *copy = strdup(str);
+  char *colon = strchr(copy,':');
+  qname qn;
+  if (colon) {
+    *colon = '\0';
+    qn.uri = strdup(lookup_nsuri(n,copy));
+    qn.prefix = strdup(copy);
+    qn.localpart = strdup(colon+1);
+  }
+  else {
+    qn.uri = strdup(lookup_nsuri(n,""));
+    qn.prefix = strdup("");
+    qn.localpart = strdup(copy);
+  }
+  free(copy);
+  return qn;
 }
 
-xmlChar *escape(const xmlChar *str2)
+char *string_to_ident(const char *str)
 {
-  // FIXME: probably not safe with xmlChar
+  const char *hexdigits = "0123456789ABCDEF";
+  const char *c;
+  int len = 0;
+  int pos = 0;
+  char *ret;
+
+  for (c = str; '\0' != *c; c++) {
+    if ((('A' <= *c) && ('Z' >= *c)) ||
+        (('a' <= *c) && ('z' >= *c)) ||
+        (('0' <= *c) && ('9' >= *c)))
+      len++;
+    else
+      len += 3;
+  }
+
+  ret = (char*)malloc(len+1);
+
+  for (c = str; '\0' != *c; c++) {
+    if ((('A' <= *c) && ('Z' >= *c)) ||
+        (('a' <= *c) && ('z' >= *c)) ||
+        (('0' <= *c) && ('9' >= *c))) {
+      ret[pos++] = *c;
+    }
+    else {
+      ret[pos++] = '_';
+      ret[pos++] = hexdigits[(*c)&0x0F];
+      ret[pos++] = hexdigits[((*c)&0xF0)>>4];
+    }
+  }
+  ret[pos] = '\0';
+
+  return ret;
+}
+
+char *nsname_to_ident(const char *nsuri, const char *localname)
+{
+  if (nsuri) {
+    char *nsident = string_to_ident(nsuri);
+    char *lnident = string_to_ident(localname);
+    char *full = (char*)malloc(1+strlen(nsident)+1+strlen(lnident)+1);
+    sprintf(full,"V%s_%s",nsident,lnident);
+    free(nsident);
+    free(lnident);
+    return full;
+  }
+  else {
+    char *lnident = string_to_ident(localname);
+    char *full = (char*)malloc(1+strlen(lnident)+1);
+    sprintf(full,"V%s",lnident);
+    free(lnident);
+    return full;
+  }
+}
+
+char *escape(const char *str2)
+{
+  // FIXME: probably not safe with char
   const char *str = (const char*)str2;
   const char *c;
   char *escaped;
@@ -189,7 +254,7 @@ xmlChar *escape(const xmlChar *str2)
   }
   assert(p == escaped+len);
   *p = '\0';
-  return (xmlChar*)escaped;
+  return (char*)escaped;
 }
 
 void compile_binary(expression *expr, const char *fun)
@@ -242,7 +307,7 @@ void compile_expression(expression *expr)
     printf("(cons (xml:mknumber %f) nil)",expr->num);
     break;
   case XPATH_STRING_LITERAL: {
-    xmlChar *esc = escape(expr->str);
+    char *esc = escape(expr->str);
     printf("(cons (xml:mkstring \"%s\") nil)",esc);
     free(esc);
     break;
@@ -284,7 +349,7 @@ void compile_expression(expression *expr)
     printf("nil");
     break;
   case XPATH_VAR_REF: {
-    xmlChar *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
+    char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
     printf("%s",ident);
     free(ident);
     break;
@@ -416,7 +481,7 @@ void compile_expression(expression *expr)
   }
   case XPATH_FUNCTION_CALL:
     if (strcmp(expr->qn.prefix,"")) {
-      xmlChar *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
+      char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
       expression *p;
       printf("(%s",ident);
 
@@ -461,7 +526,7 @@ void compile_expression(expression *expr)
   }
 }
 
-void compile_expr_string(xmlNodePtr n, const xmlChar *str)
+void compile_expr_string(xmlNodePtr n, const char *str)
 {
   YY_BUFFER_STATE bufstate;
   int r;
@@ -538,14 +603,14 @@ void compile_instruction(xmlNodePtr n)
 /*     xmlNodePtr child; */
     if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NAMESPACE)) {
       if (!xmlStrcmp(n->name,"sequence")) {
-        xmlChar *select = xmlGetProp(n,"select");
+        char *select = xmlGetProp(n,"select");
         check_attr(select,"select");
 
         printf("\n// sequence %s\n",select);
         compile_expr_string(n,select);
       }
       else if (!xmlStrcmp(n->name,"value-of")) {
-        xmlChar *select = xmlGetProp(n,"select");
+        char *select = xmlGetProp(n,"select");
         if (select) {
           printf("\n// value-of %s\n",select);
           printf("(cons (xml:mktext (xslt:consimple ");
@@ -588,7 +653,7 @@ void compile_instruction(xmlNodePtr n)
         free(str);
       }
       else if (!xmlStrcmp(n->name,"for-each")) {
-        xmlChar *select = xmlGetProp(n,"select");
+        char *select = xmlGetProp(n,"select");
         check_attr(select,"select");
 
         printf("\n// for-each %s\n",select);
@@ -604,7 +669,7 @@ void compile_instruction(xmlNodePtr n)
         printf("select))\n");
       }
       else if (!xmlStrcmp(n->name,"if")) {
-        xmlChar *test = xmlGetProp(n,"test");
+        char *test = xmlGetProp(n,"test");
         check_attr(test,"test");
         printf("\n// if %s\n",test);
         printf("(if\n");
@@ -624,7 +689,7 @@ void compile_instruction(xmlNodePtr n)
           if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
               !xmlStrcmp(child->name,"when")) {
             // when
-            xmlChar *test = xmlGetProp(child,"test");
+            char *test = xmlGetProp(child,"test");
             check_attr(test,"test");
 
             printf("\n// when %s\n",test);
@@ -725,13 +790,25 @@ void compile_sequence(xmlNodePtr first)
   for (child = first; child; child = child->next) {
     if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
         !xmlStrcmp(child->name,"variable")) {
-      xmlChar *name = xmlGetProp(child,"name");
-      xmlChar *select = xmlGetProp(child,"select");
+      char *name = xmlGetProp(child,"name");
+      char *select = xmlGetProp(child,"select");
+      char *ident;
+      qname qn;
       check_attr(name,"name");
       check_attr(select,"select");
-      printf("(letrec %s = ",name);
+
+      qn = string_to_qname(name,child);
+      ident = nsname_to_ident(qn.uri,qn.localpart);
+
+      printf("(letrec %s = ",ident);
       compile_expr_string(child,select);
       printf(" in ");
+
+      free(ident);
+      free(qn.uri);
+      free(qn.prefix);
+      free(qn.localpart);
+
       count++;
     }
     else if (!ignore_node(child)) {
@@ -757,10 +834,10 @@ void compile_template(xmlNodePtr n)
 
 void compile_function(xmlNodePtr child)
 {
-  xmlChar *name = xmlGetProp(child,"name");
-  xmlChar *nsuri = NULL;
-  xmlChar *localname = NULL;
-  xmlChar *ident;
+  char *name = xmlGetProp(child,"name");
+  char *nsuri = NULL;
+  char *localname = NULL;
+  char *ident;
   xmlNodePtr pn;
   check_attr(name,"name");
   qname_to_nsname(name,child,&nsuri,&localname);
@@ -778,10 +855,10 @@ void compile_function(xmlNodePtr child)
     if (XML_ELEMENT_NODE == pn->type) {
       if (pn->ns && !xmlStrcmp(pn->ns->href,XSLT_NAMESPACE) &&
           !xmlStrcmp(pn->name,"param")) {
-        xmlChar *pname = xmlGetProp(pn,"name");
-        xmlChar *pn_nsuri = NULL;
-        xmlChar *pn_localname = NULL;
-        xmlChar *pn_ident;
+        char *pname = xmlGetProp(pn,"name");
+        char *pn_nsuri = NULL;
+        char *pn_localname = NULL;
+        char *pn_ident;
         check_attr(pname,"name");
         qname_to_nsname(pname,pn,&pn_nsuri,&pn_localname);
         pn_ident = nsname_to_ident(pn_nsuri,pn_localname);
@@ -818,13 +895,13 @@ void process_toplevel(xmlNodePtr n2)
         compile_function(child);
       }
       else if (!xmlStrcmp(child->name,"output")) {
-        xmlChar *indent = xmlGetProp(child,"indent");
+        char *indent = xmlGetProp(child,"indent");
         if (indent && !xmlStrcmp(indent,"yes"))
           option_indent = 1;
         free(indent);
       }
       else if (!xmlStrcmp(child->name,"strip-space")) {
-        xmlChar *elements = xmlGetProp(child,"elements");
+        char *elements = xmlGetProp(child,"elements");
         check_attr(elements,"elements");
         if (!xmlStrcmp(elements,"*"))
           option_strip = 1;
@@ -881,8 +958,8 @@ int main(int argc, char **argv)
 
   printf("STRIPALL = %s\n",option_strip ? "1" : "nil");
   printf("INDENT = %s\n",option_indent ? "1" : "nil");
-  printf("main = (xslt:output INDENT (cons (xml:mkdoc (top (xml:parsexml "
-         "STRIPALL (readb FILENAME)) 1 1)) nil))\n");
+  printf("main = (xslt:output INDENT (cons (xml:mkdoc (xslt:concomplex (top (xml:parsexml "
+         "STRIPALL (readb FILENAME)) 1 1))) nil))\n");
 
   xmlFreeDoc(doc);
 
