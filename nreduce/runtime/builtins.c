@@ -302,6 +302,7 @@ static void b_if(task *tsk, pntr *argstack)
   argstack[0] = source;
 }
 
+ /* Can be called from native code */
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper)
 {
   carray *arr;
@@ -443,20 +444,35 @@ void maybe_expand_array(task *tsk, pntr p)
 
   if ((CELL_AREF == pntrtype(p)) && (sizeof(pntr) == aref_array(p)->elemsize)) {
     carray *arr = aref_array(p);
-    int count = 0;
     arr->tail = resolve_pntr(arr->tail);
 
-    while (CELL_CONS == pntrtype(arr->tail)) {
-      cell *tailcell = get_pntr(arr->tail);
-      pntr tailhead = resolve_pntr(tailcell->field1);
-      carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
-      arr->tail = resolve_pntr(tailcell->field2);
+    /* FIXME: need to optimise this code by making sure it adjusts references to the
+       old tails to point to this array, wherver possible. We can't just replace the
+       old tails with INDs, because the execution engine assumes that once a cell is
+       non-IND, it remains non-IND for the rest of its lifetime. */
 
-      /* FIXME: is there a way to do this safely? */
-/*       tailcell->type = CELL_IND; */
-/*       make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1); */
+    while (MAX_ARRAY_SIZE > arr->size) {
+      if (CELL_CONS == pntrtype(arr->tail)) {
+        cell *tailcell = get_pntr(arr->tail);
+        pntr tailhead = resolve_pntr(tailcell->field1);
+        carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
+        arr->tail = resolve_pntr(tailcell->field2);
 
-      count++;
+        /* FIXME: is there a way to do this safely? */
+/*         tailcell->type = CELL_IND; */
+/*         make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1); */
+      }
+      else if ((CELL_AREF == pntrtype(arr->tail)) &&
+               (sizeof(pntr) == aref_array(arr->tail)->elemsize)) {
+        carray *otharr = aref_array(arr->tail);
+        int othindex = aref_index(arr->tail);
+        carray_append(tsk,&arr,&((pntr*)otharr->elements)[othindex],
+                      otharr->size-othindex,sizeof(pntr));
+        arr->tail = otharr->tail;
+      }
+      else {
+        break;
+      }
     }
 
     check_array_convert(tsk,arr,"expand");
@@ -466,7 +482,7 @@ void maybe_expand_array(task *tsk, pntr p)
 #endif
 }
 
-static pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
+pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
 {
   #ifdef DISABLE_ARRAYS
   pntr p = tsk->globnilpntr;

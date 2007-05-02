@@ -96,6 +96,8 @@ void op_pop(task *tsk, frame *runnable, const instruction *instr);
 void op_error(task *tsk, frame *runnable, const instruction *instr);
 void op_call(task *tsk, frame *runnable, const instruction *instr);
 void op_jcmp(task *tsk, frame *runnable, const instruction *instr);
+void op_consn(task *tsk, frame *runnable, const instruction *instr);
+void op_itemn(task *tsk, frame *runnable, const instruction *instr);
 void op_invalid(task *tsk, frame *runnable, const instruction *instr);
 int handle_interrupt(task *tsk);
 
@@ -124,6 +126,8 @@ op_fun *op_handlers[OP_COUNT] = {
   op_eval,
   op_call,
   op_jcmp,
+  op_consn,
+  op_itemn,
   op_invalid,
 };
 
@@ -211,6 +215,12 @@ op_fun *op_handlers[OP_COUNT] = {
 #define TASK_FREEFRAME ((int)&((task*)0)->freeframe)
 #define WAITQUEUE_FRAMES ((int)&((waitqueue*)0)->frames)
 #define WAITQUEUE_FETCHERS ((int)&((waitqueue*)0)->fetchers)
+
+#define CARRAY_ELEMENTS ((int)&((carray*)0)->elements[0])
+#define CARRAY_SIZE ((int)&((carray*)0)->size)
+#define CARRAY_TAIL ((int)&((carray*)0)->tail)
+#define CARRAY_WRAPPER ((int)&((carray*)0)->wrapper)
+#define CARRAY_ELEMSIZE ((int)&((carray*)0)->elemsize)
 
 void print_value(const char *str, void *p)
 {
@@ -1508,6 +1518,102 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       break;
     }
     #endif
+    case OP_CONSN: {
+      int n = instr->arg0;
+      int i;
+
+      // carray *arr = carray_new(tsk,sizeof(pntr),n-1,NULL,NULL);
+      // EDI: arr
+      BEGIN_CALL;
+      I_PUSH(imm(0));
+      I_PUSH(imm(0));
+      I_PUSH(imm(n-1));
+      I_PUSH(imm(sizeof(pntr)));
+      I_PUSH(imm((int)tsk));
+      I_MOV(reg(EAX),imm((int)carray_new));
+      I_CALL(reg(EAX));
+      I_ADD(reg(ESP),imm(20));
+      I_MOV(regmem(ESP,32-PUSHAD_OFFSET_EDI),reg(EAX));
+      END_CALL;
+
+      for (i = 0; i < n-1; i++) {
+        // ((pntr*)arr->elements)[i] = runnable->data[instr->expcount-i-1];
+        I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-i-1)));
+        I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-i-1)+4));
+        I_MOV(regmem(EDI,CARRAY_ELEMENTS+8*i),reg(EAX));
+        I_MOV(regmem(EDI,CARRAY_ELEMENTS+8*i+4),reg(EBX));
+      }
+
+      // arr->size = n-1;
+      I_MOV(regmem(EDI,CARRAY_SIZE),imm(n-1));
+
+      // arr->tail = runnable->data[instr->expcount-n];
+      I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-n)));
+      I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4));
+      I_MOV(regmem(EDI,CARRAY_TAIL),reg(EAX));
+      I_MOV(regmem(EDI,CARRAY_TAIL+4),reg(EBX));
+
+      // make_aref_pntr(runnable->data[instr->expcount-n],arr->wrapper,0);
+      I_MOV(reg(EAX),regmem(EDI,CARRAY_WRAPPER));
+      I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)),reg(EAX));
+      I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4),imm(PNTR_VALUE));
+
+      LABEL(tsk->bplabels1[addr]);
+      break;
+    }
+    case OP_ITEMN: {
+      int Lfallback = as->labels++;
+      int Ldone = as->labels++;
+      int pos = instr->arg0;
+
+      /* Check if it's a pointer */
+      asm_jump_if_number(tsk,as,instr->expcount-1,Lfallback); // uses EAX
+
+      // if (0 == index)
+      {
+        I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4));
+        I_AND(reg(EBX),imm(INDEX_MASK));
+        I_CMP(reg(EBX),imm(0));
+        I_JNE(label(Lfallback));
+
+        I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+        I_MOV(reg(EAX),regmem(EAX,CELL_FIELD1));
+
+        // if (sizeof(pntr) == arr->elemsize)
+        I_CMP(regmem(EAX,CARRAY_ELEMSIZE),imm(sizeof(pntr)));
+        I_JNE(label(Lfallback));
+        {
+          // if (pos < arr->size)
+          {
+            I_ADD(reg(EBX),imm(pos));
+            I_CMP(reg(EBX),regmem(EAX,CARRAY_SIZE));
+            I_JGE(label(Lfallback));
+
+            I_MOV(reg(ECX),regmemscaled(EAX,CARRAY_ELEMENTS,SCALE_8,EBX));
+            I_MOV(reg(EDX),regmemscaled(EAX,CARRAY_ELEMENTS+4,SCALE_8,EBX));
+            I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)),reg(ECX));
+            I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4),reg(EDX));
+            I_JMP(label(Ldone));
+          }
+        }
+      }
+
+      LABEL(Lfallback);
+
+      BEGIN_CALL;
+      I_PUSH(imm(pos));
+      I_PUSH(imm(instr->expcount));
+      I_PUSH(reg(EBP));
+      I_PUSH(imm((int)tsk));
+      I_MOV(reg(EAX),imm((int)make_item_frame));
+      I_CALL(reg(EAX));
+      I_ADD(reg(ESP),imm(16));
+      END_CALL;
+
+      LABEL(Ldone);
+      LABEL(tsk->bplabels1[addr]);
+      break;
+    }
     case OP_INVALID:
       PRINT_MESSAGE("INVALID INSTRUCTION\n");
       I_MOV(absmem((int)&tsk->native_finished),imm(1));

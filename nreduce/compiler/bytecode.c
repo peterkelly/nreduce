@@ -81,6 +81,8 @@
 #define PUSHNUMBER(_s,_a,_b)  add_instruction(comp,_s,OP_PUSHNUMBER,(_a),(_b))
 #define PUSHSTRING(_s,_a)     add_instruction(comp,_s,OP_PUSHSTRING,(_a),0)
 #define SQUEEZE(_s,_a,_b)     add_instruction(comp,_s,OP_SQUEEZE,(_a),(_b))
+#define CONSN(_s,_a)          add_instruction(comp,_s,OP_CONSN,(_a),0)
+#define ITEMN(_s,_a,_b)       add_instruction(comp,_s,OP_ITEMN,(_a),(_b))
 #define ERROR(_s)             add_instruction(comp,_s,OP_ERROR,0,0)
 #define INVALID(_s)           add_instruction(comp,_s,OP_INVALID,0,0)
 
@@ -133,6 +135,8 @@ const char *opcodes[OP_COUNT] = {
 "EVAL",
 "CALL",
 "JCMP",
+"CONSN",
+"ITEMN",
 "INVALID",
 };
 
@@ -405,6 +409,13 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     /* Should only be added during peephole optimisation */
     abort();
     break;
+  case OP_CONSN:
+    popstatus(comp->si,arg0-1);
+    setstatusat(comp->si,comp->si->count-1,STATUS_EVALUATED);
+    break;
+  case OP_ITEMN:
+    setstatusat(comp->si,comp->si->count-1,STATUS_UNKNOWN);
+    break;
   default:
     abort();
     break;
@@ -616,6 +627,36 @@ static void Cletrec(source *src, compilation *comp, snode *c, int n, pmap *p, in
   }
 }
 
+static int iscons(snode *c)
+{
+  return ((SNODE_APPLICATION == c->type) &&
+          (SNODE_APPLICATION == c->left->type) &&
+          (SNODE_BUILTIN == c->left->left->type) &&
+          (B_CONS == c->left->left->bif));
+}
+
+static void Ccons(source *src, compilation *comp, snode *c, pmap *p, int n)
+{
+  stack *s = stack_new();
+  snode *app = c;
+  int count = 1;
+
+  while (iscons(app)) {
+    stack_push(s,app);
+    count++;
+    app = app->right;
+  }
+  C(src,comp,app,p,n++);
+
+  while (0 < s->count) {
+    app = s->data[--s->count];
+    C(src,comp,app->left->right,p,n++);
+  }
+  CONSN(c->sl,count);
+
+  stack_free(s);
+}
+
 static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
 {
   comp->cdepth++;
@@ -678,6 +719,17 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       EVAL(expr1->sl,0);
       POP(expr1->sl,1);
       E(src,comp,expr2,p,n);
+    }
+    else if ((m == k) &&
+             (m == 2) &&
+             (SNODE_SCREF == app->type) &&
+             !strcmp(app->sc->name,"item") &&
+             (SNODE_NUMBER == c->left->right->type) &&
+             (c->left->right->num == floor(c->left->right->num))) {
+      int index = (int)c->left->right->num;
+      E(src,comp,c->right,p,n);
+      ITEMN(app->sl,index,0);
+      SPARK(app->sl,0);
     }
     else {
       m = 0;
@@ -791,6 +843,13 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
     stack *argstrict = stack_new();
     snode *app;
     int m;
+
+    if (iscons(c) && iscons(c->right)) {
+      Ccons(src,comp,c,p,n);
+      RETURN(c->sl);
+      return;
+    }
+
     for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
       stack_push(args,app->right);
       stack_push(argstrict,(void*)app->strict);
@@ -870,6 +929,19 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             }
           }
         }
+        else if ((m == 2) &&
+                 (SNODE_SCREF == app->type) &&
+                 !strcmp(app->sc->name,"item") &&
+                 (SNODE_NUMBER == c->left->right->type) &&
+                 (c->left->right->num == floor(c->left->right->num))) {
+          int index = (int)c->left->right->num;
+          E(src,comp,c->right,p,n);
+          ITEMN(app->sl,index,1);
+          if (0 < n)
+            SQUEEZE(app->sl,1,n);
+          EVAL(app->sl,0);
+          DO(app->sl,1);
+        }
         else {
           S(src,comp,app,args,argstrict,p,n);
           JFUN(app->sl,fno);
@@ -938,6 +1010,7 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
     snode *app;
     int fno;
     int k;
+
     for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
       C(src,comp,app->right,p,n+m);
       m++;
@@ -1098,6 +1171,9 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
   pmap pm;
   char *namestr;
   int bodystart;
+
+  if (!strcmp(sc->name,"item"))
+    comp->bch.itemfno = fno;
 
   comp->finfo[NUM_BUILTINS+sc->index].address = array_count(comp->instructions);
   comp->finfo[NUM_BUILTINS+sc->index].arity = sc->nargs;

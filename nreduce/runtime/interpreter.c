@@ -1699,6 +1699,67 @@ inline void op_jcmp(task *tsk, frame *runnable, const instruction *instr)
     runnable->instr += instr->arg0-1;
 }
 
+inline void op_consn(task *tsk, frame *runnable, const instruction *instr)
+{
+  int n = instr->arg0;
+  carray *arr = carray_new(tsk,sizeof(pntr),n-1,NULL,NULL);
+  int i;
+
+  assert(n-1 == arr->alloc);
+  for (i = 0; i < n-1; i++)
+    ((pntr*)arr->elements)[i] = runnable->data[instr->expcount-i-1];
+  arr->size = n-1;
+  arr->tail = runnable->data[instr->expcount-n];
+  make_aref_pntr(runnable->data[instr->expcount-n],arr->wrapper,0);
+
+}
+
+void make_item_frame(task *tsk, frame *runnable, int expcount, int pos)
+{
+  const instruction *program_ops = bc_instructions(tsk->bcdata);
+  const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
+  const bcheader *bch = (const bcheader*)tsk->bcdata;
+  cell *newfholder;
+  frame *newf = frame_new(tsk,1);
+  double index = pos;
+
+  assert(OP_GLOBSTART == program_ops[program_finfo[bch->itemfno].address].opcode);
+
+  #ifdef PROFILING
+  tsk->stats.frames[bch->itemfno]++;
+  #endif
+
+  newfholder = alloc_cell(tsk);
+  newfholder->type = CELL_FRAME;
+  make_pntr(newfholder->field1,newf);
+  newf->c = newfholder;
+
+  newf->instr = &program_ops[program_finfo[bch->itemfno].address+1];
+  newf->data[0] = runnable->data[expcount-1];
+  newf->data[1] = *((pntr*)&index);
+
+  make_pntr(runnable->data[expcount-1],newfholder);
+}
+
+inline void op_itemn(task *tsk, frame *runnable, const instruction *instr)
+{
+  int pos = instr->arg0;
+  pntr p;
+  runnable->data[instr->expcount-1] = resolve_pntr(runnable->data[instr->expcount-1]);
+  p = runnable->data[instr->expcount-1];
+
+  if (CELL_AREF == pntrtype(p)) {
+    carray *arr = aref_array(p);
+    int index = aref_index(p);
+    if ((sizeof(pntr) == arr->elemsize) && (index+pos < arr->size)) {
+      runnable->data[instr->expcount-1] = ((pntr*)arr->elements)[index+pos];
+      return;
+    }
+  }
+
+  make_item_frame(tsk,runnable,instr->expcount,pos);
+}
+
 inline void op_invalid(task *tsk, frame *runnable, const instruction *instr)
 {
   fatal("Invalid instruction");
@@ -1906,6 +1967,12 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       case OP_JCMP:
         op_jcmp(tsk,runnable,instr);
         break;
+      case OP_CONSN:
+        op_consn(tsk,runnable,instr);
+        break;
+      case OP_ITEMN:
+        op_itemn(tsk,runnable,instr);
+        break;
       case OP_INVALID:
         op_invalid(tsk,runnable,instr);
         break;
@@ -1918,7 +1985,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
   node_log(tsk->n,LOG_INFO,"Task completed");
   #ifdef PROFILING
-  print_profile(tsk);
+  if (ENGINE_INTERPRETER == engine_type)
+    print_profile(tsk);
   #endif
   tsk->done = 1;
   task_free(tsk);

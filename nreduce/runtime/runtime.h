@@ -157,6 +157,7 @@ typedef struct cell {
 } cell;
 
 #define PNTR_MASK  0xFFF80000
+#define INDEX_MASK 0x0003FFFF
 #define PNTR_VALUE 0xFFF00000
 #define NULL_PNTR (*(pntr*)NULL_PNTR_BITS)
 #define MAX_ARRAY_SIZE (1 << 18)
@@ -264,7 +265,7 @@ typedef struct carray {
   pntr tail;
   cell *wrapper;
   int nchars;
-  char elements[];
+  char elements[]; /* FIXME: align this on an 8-byte boundary */
 } carray;
 
 typedef struct pntrstack {
@@ -714,6 +715,7 @@ void invalid_binary_args(task *tsk, pntr *argstack, int bif);
 
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper);
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
+pntr data_to_list(task *tsk, const char *data, int size, pntr tail);
 
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
@@ -775,6 +777,7 @@ void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
 void cap_error(task *tsk, pntr cappntr);
 void handle_error(task *tsk);
+void make_item_frame(task *tsk, frame *runnable, int expcount, int pos);
 void interpreter_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void interpreter_thread(node *n, endpoint *endpt, void *arg);
 
