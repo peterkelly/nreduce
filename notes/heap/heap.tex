@@ -1,0 +1,121 @@
+\documentclass[notes]{prosper}
+\usepackage{epsfig}
+\hypersetup{colorlinks=true,linkcolor=blue}
+
+\title{Distributed data structures}
+%\subtitle{}
+\author{Peter Kelly}
+\email{pmk@cs.adelaide.edu.au}
+\slideCaption{DHPC Group, Adelaide University}
+
+\begin{document}
+
+\overlays{3}{
+\begin{slide}{Introduction}
+\diagpage{
+\onlySlide*{1}{\epsfig{file=figures/basics/basics1.eps,scale=0.65}}
+\onlySlide*{2}{\epsfig{file=figures/basics/basics2.eps,scale=0.65}}
+\onlySlide*{3}{\epsfig{file=figures/basics/basics3.eps,scale=0.65}}
+}{
+Memory in a running program is organised into a graph of objects, known as the
+\emph{heap}
+
+\begin{itemize}
+\item
+When running in local mode, the entire heap is stored on one host
+\begin{itemize}
+\item
+Access to an object can be done directly using pointers, and does not require
+any communication or blocking
+\end{itemize}
+\fromSlide{2}{
+\item
+When running in distributed mode, the heap is distributed across multiple hosts
+\begin{itemize}
+\item
+Access to an object may require sending a message to the remote host, and waiting
+for a reply
+\item
+If this happens then the current frame will block
+\item
+If there are frames in the runnable queue, they may continue execution while the
+blocked one is waiting for a reply
+\end{itemize}}
+\end{itemize}
+
+\fromSlide{3}{
+References between objects on different hosts are indirect; they use global addresses
+instead of local memory addresses. A global address is a tuple \{tid,lid\}, where tid is
+the id of the task that owns the object, and lid is a unique local identifier for the object.
+
+Each task maintains a global address table (GAT), which maps between global addresses and local
+memory pointers. The black boxes on the boundaries of the hosts on the left represent
+entries in this table.
+}
+}
+\end{slide}}
+
+
+\overlays{3}{
+\begin{slide}{Global address table}
+\diagpage{
+\onlySlide*{1}{\epsfig{file=figures/gattypes/gattypes1.eps,scale=0.65}}
+\onlySlide*{2}{\epsfig{file=figures/gattypes/gattypes2.eps,scale=0.65}}
+\onlySlide*{3}{\epsfig{file=figures/gattypes/gattypes3.eps,scale=0.65}}
+}{
+There are three types of GAT entries:
+
+\begin{itemstep}
+\item
+\emph{Entry items.} These are associated with objects that are referenced from another task. 
+The address of these entries has a tid equal to the local task id, and the pointer may refer
+to any type of object on the local heap.
+\item
+\emph{Exit items.} These are for references from the local task to a remote task. The address has a
+tid equal to that of the remote task, and the pointer is always of type \emph{remote referrence}.
+\item
+\emph{Replicas.} These represent an object in the local task that is a \emph{copy} of one that is
+owned by a remote task. The address refers to the tid of the remote task, and the pointer refers to
+the local copy, which may be any type of object.
+\end{itemstep}
+
+}
+\end{slide}}
+
+
+\overlays{4}{
+\begin{slide}{Fetching}
+\diagpage{
+\onlySlide*{1}{\epsfig{file=figures/fetch/fetch1.eps,scale=0.65}}
+\onlySlide*{2}{\epsfig{file=figures/fetch/fetch2.eps,scale=0.65}}
+\onlySlide*{3}{\epsfig{file=figures/fetch/fetch3.eps,scale=0.65}}
+\onlySlide*{4}{\epsfig{file=figures/fetch/fetch4.eps,scale=0.65}}
+}{
+Suppose a local frame wants to access an object that is owned by a remote task.
+
+\begin{enumstep}
+\item
+The current frame executes an EVAL instruction, with a remote reference at the appropriate
+stack position.
+
+The frame blocks.
+\item
+The local task looks up the address of the reference in the GAT and sends a FETCH message
+to the task that owns the object.
+\item
+The remote task replies with a RESPOND message containing the data associated with the object.
+The pointers the object had to objects in its own local heap are transferred as remote
+references.
+
+The blocked frame is awoken.
+\item
+The object copy is added to the local heap.
+
+Its GAT entry becomes a replica; the remote reference object associated with the entry is
+converted into an indirection cell pointing to the local copy of the object.
+\end{enumstep}
+
+}
+\end{slide}}
+
+\end{document}
