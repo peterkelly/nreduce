@@ -385,25 +385,35 @@ void print_instruction(task *tsk, int ebp, int addr, int opcode)
 }
 
 /*
- * SIGUSR1 is sent to the thread when there is some exceptional condition that needs to be handled,
- * e.g. the allocation threshold has been reached (meaning GC is needed), or a message has arrived.
- * By handling it this way we avoid needing to poll explicitly for these events, which would slow
- * down execution. The signal is sent by endpoint_interrupt().
- *
- * We cannot handle the event directly within the signal handler because the program could be
- * part way through some important operation and the task may be in an inconsistent state. Instead,
- * we set a breakpoint in the native code that will occur at the end of the current bytecode
- * instruction, guaranteeing that the program state is consistent. When this happens, a SIGTRAP
- * will be sent to the thread, and the appropriate action cab be taken then.
- *
- * The breakpoint is set by replacing a single byte at the start of the instruction with 0xCC,
- * which corresponts to an INT 3. This can thus be used regardless of how many bytes the
- * instruction we want to break at uses. Note that this is the same technique as used by gdb,
- * which makes debugging the generated code difficult (but not impossible).
+ * SIGUSR1 is sent to the thread when there is some exceptional condition that needs to be dealt
+ * with, such as the garbage collection threshold being reached (meaning the GC should be
+ * invoked), or a message being received over the network. When this occurs, we break out of the
+ * normal code execution stream and deal with the event in handle_interrupt(). By using a signal
+ * handler to deal with these events, we avoid having to continuously poll to check if there
+ * is something that needs done, which is the method used by the interpreter.
+ * 
+ * We cannot handle the event directly in the signal handler, because the task could be part way
+ * through some important operation and the memory may not be in a consistent state. For example
+ * the program could be performing a malloc operation or updating a 64-bit field (which requires
+ * two instructions). Instead of handling it immediately, we modify an instruction that is due
+ * to be executed shortly. The point at which the interrupt will be handled lies at the
+ * boundary between the current bytecode instruction and the next.
+ * 
+ * To do this, we set the 5 bytes at the "breakpoint address" of the current instruction. This is
+ * usually the start address of the next bytecode instruction, or the address of a jump which comes
+ * right at the end of this one. Because there are some opcodes which have two possible exit
+ * paths (notably JFALSE and EVAL), we must modify two instructions in some cases. Both are
+ * replaced with a CALL whos destination is the interrupt handler hook. Because the CALL
+ * instruction takes 5 bytes of memory, a bytecode instruction with two breakpoint addresses has
+ * these at least 5 bytes apart (the compiler pads the code with NOPs where necessary).
+ * 
+ * The code modification used to be done by setting a single byte 0xCC at both places, which
+ * corresponds to an INT 3 instruction that causes a SIGTRAP signal to be sent to the process.
+ * However, a kernel bug in OS X causes the SIGTRAP signals to be occasionally missed. For this
+ * reason we now use CALL instead.
  */
 void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 {
-/*   printf("sigusr1\n"); */
   ucontext_t *uc = (ucontext_t*)uc1;
   task *tsk = pthread_getspecific(task_key);
   int stackoffset = tsk->normal_esp-(void*)UC_ESP(uc);
@@ -411,26 +421,29 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   void **peip;
   int offset;
   int bcaddr;
+  unsigned char zero5[5] = {0,0,0,0,0};
+  int bp;
 
   assert(tsk);
   assert(pthread_self() == tsk->endpt->thread);
 
-  if (!tsk->usr1setup) {
-/*     printf("SIGUSR1: ignoring, task not yet started\n"); */
+  if (!tsk->usr1setup)
     return;
-  }
 
   tsk->interrupt_again = 0;
 
   if (tsk->trap_pending || tsk->native_finished)
     return;
 
-  if (((void*)UC_EIP(uc) >= tsk->interrupt_addr) &&
-      ((void*)UC_EIP(uc) < tsk->interrupt_end)) {
+  if (((void*)UC_EIP(uc) >= tsk->interrupt_addr) && ((void*)UC_EIP(uc) < tsk->interrupt_end)) {
     /* At very first instruction of interrupt handler, before 0 has been pushed onto stack */
     tsk->interrupt_again = 1;
     return;
   }
+
+  if (tsk->in_trap ||
+      (((void*)UC_EIP(uc) >= tsk->trap_addr) && ((void*)UC_EIP(uc) < tsk->trap_end)))
+    return;
 
   /* There are three possibilities for what the task could be doing right before the call.
 
@@ -474,17 +487,16 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
      of straight-line code, this will be the first machine instruction that comes after the end of
      the current bytecode instruction. In the case of native code that contains jumps, there may
      be two places we need to set the breakpoint. */
-  assert(tsk->bpaddrs1[bcaddr]);
-  if (tsk->bpaddrs1[bcaddr]) {
-    assert(0 == tsk->bcold1);
-    tsk->bcold1 = *tsk->bpaddrs1[bcaddr];
-    *tsk->bpaddrs1[bcaddr] = 0xCC;
-  }
+  assert(tsk->bpaddrs[0][bcaddr]);
 
-  if (tsk->bpaddrs2[bcaddr]) {
-    assert(0 == tsk->bcold2);
-    tsk->bcold2 = *tsk->bpaddrs2[bcaddr];
-    *tsk->bpaddrs2[bcaddr] = 0xCC;
+  for (bp = 0; bp <= 1; bp++) {
+    if (tsk->bpaddrs[bp][bcaddr]) {
+      int offset = (int)tsk->trap_addr-((int)tsk->bpaddrs[bp][bcaddr]+5);
+      assert(!memcmp(tsk->bcbackup[bp],zero5,5));
+      memcpy(tsk->bcbackup[bp],tsk->bpaddrs[bp][bcaddr],5);
+      tsk->bpaddrs[bp][bcaddr][0] = 0xe8;
+      memcpy(&tsk->bpaddrs[bp][bcaddr][1],&offset,4);
+    }
   }
 
   tsk->trap_pending = 1;
@@ -501,43 +513,41 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
  * that the thread can jump back to the original position after the interrupt has been dealt with.
  *
  * FIXME: should we block SIGUSR1 when inside native_sigtrap() and native_sigfpe()?
+ *
+ * FIXME: now that this is no longer a signal handler, we could possibly just call
+ *        handle_interrupt() directly from here. Need to be careful about honouring
+ *        tsk->interrupt_again.
  */
-void native_sigtrap(int sig, siginfo_t *ino, void *uc1)
+void *handle_trap(task *tsk, frame *curf, void *eip)
 {
-  ucontext_t *uc = (ucontext_t*)uc1;
-  task *tsk = pthread_getspecific(task_key);
   bcheader *bch = (bcheader*)tsk->bcdata;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   int bcaddr;
-  frame *curf = (void*)UC_EBP(uc);
+  int bp;
+  void *ret;
   assert((void*)1 == *tsk->runptr);
 
   /* Check that we're actually expecting this signal, and that we were invoked from generated code
      (i.e. not from some other C function) */
   assert(tsk->trap_pending);
-  assert(tsk->normal_esp == (void*)UC_ESP(uc));
-
   bcaddr = tsk->interrupt_bcaddr;
-  UC_EIP(uc)--;
-  assert(((void*)UC_EIP(uc) == tsk->bpaddrs1[bcaddr]) ||
-         ((void*)UC_EIP(uc) == tsk->bpaddrs2[bcaddr]));
-  assert(UC_EIP(uc) >= (int)tsk->instraddrs[bcaddr]);
+
+  assert(((void*)eip == tsk->bpaddrs[0][bcaddr]) ||
+         ((void*)eip == tsk->bpaddrs[1][bcaddr]));
+  assert(eip >= tsk->instraddrs[bcaddr]);
   assert((bcaddr == bch->nops-1) ||
-         (UC_EIP(uc) <= (int)tsk->instraddrs[bcaddr+1]));
+         (eip <= tsk->instraddrs[bcaddr+1]));
 
   /* Clear the breakpoint(s), by restoring the previous values that were at the start of the
      relevant machine instrucitons. These were temporarily set to 0xCC in native_sigusr1() */
-  assert(tsk->bpaddrs1[bcaddr]);
-  if (tsk->bpaddrs1[bcaddr]) {
-    assert(0xCC == *tsk->bpaddrs1[bcaddr]);
-    *tsk->bpaddrs1[bcaddr] = tsk->bcold1;
-    tsk->bcold1 = 0;
-  }
+  assert(tsk->bpaddrs[0][bcaddr]);
 
-  if (tsk->bpaddrs2[bcaddr]) {
-    assert(0xCC == *tsk->bpaddrs2[bcaddr]);
-    *tsk->bpaddrs2[bcaddr] = tsk->bcold2;
-    tsk->bcold2 = 0;
+  for (bp = 0; bp <= 1; bp++) {
+    if (tsk->bpaddrs[bp][bcaddr]) {
+      assert(0xe8 == *tsk->bpaddrs[bp][bcaddr]);
+      memcpy(tsk->bpaddrs[bp][bcaddr],tsk->bcbackup[bp],5);
+      memset(tsk->bcbackup[bp],0,5);
+    }
   }
 
   tsk->trap_pending = 0;
@@ -549,9 +559,12 @@ void native_sigtrap(int sig, siginfo_t *ino, void *uc1)
 
   /* Save the return address and get the thread to jump to the interrupt/error handler upon return
      from this function. */
-  tsk->interrupt_return_eip = (void*)UC_EIP(uc);
-  UC_EIP(uc) = (int)tsk->interrupt_addr;
+  tsk->interrupt_return_eip = (void*)eip;
+  ret = tsk->interrupt_addr;
   tsk->interrupt_bcaddr = 0;
+
+  /* Return the address that should be jumped to */
+  return ret;
 }
 
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1)
@@ -904,24 +917,26 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   int *tempaddrs = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
   int Lfinished = as->labels++;
   int Linterrupt = as->labels++;
+  int Ltrap = as->labels++;
   int Lcaperror = as->labels++;
   int Largerror = as->labels++;
   int Lbcend = as->labels++;
   int *instrlabels;
   int i;
-  tsk->bplabels1 = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
-  tsk->bplabels2 = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
+  int *bplabels[2];
+  bplabels[0] = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
+  bplabels[1] = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
   tsk->instraddrs = (void**)calloc(bch->nops,sizeof(int));
-  tsk->bpaddrs1 = (unsigned char**)calloc(bch->nops,sizeof(int));
-  tsk->bpaddrs2 = (unsigned char**)calloc(bch->nops,sizeof(int));
+  tsk->bpaddrs[0] = (unsigned char**)calloc(bch->nops,sizeof(int));
+  tsk->bpaddrs[1] = (unsigned char**)calloc(bch->nops,sizeof(int));
 
   instrlabels = (int*)malloc(bch->nops*sizeof(int));
   for (i = 0; i < bch->nops; i++)
     instrlabels[i] = as->labels++;
 
   for (addr = 0; addr < bch->nops; addr++) {
-    tsk->bplabels1[addr] = as->labels++;
-    tsk->bplabels2[addr] = as->labels++;
+    bplabels[0][addr] = as->labels++;
+    bplabels[1][addr] = as->labels++;
   }
 
   I_PUSHAD();
@@ -957,19 +972,19 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
     switch (instr->opcode) {
     case OP_END:
       I_MOV(absmem((int)&tsk->native_finished),imm(1));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JMP(label(Lfinished));
       break;
     #ifdef NATIVE_BEGIN
     case OP_BEGIN:
       /* NOOP */
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     #endif
     #ifdef NATIVE_GLOBSTART
     case OP_GLOBSTART:
       /* NOOP */
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     #endif
     #ifdef NATIVE_SPARK
@@ -992,7 +1007,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       I_JNE(label(Ldone));
       I_MOV(regmem(EAX,FRAME_STATE),imm(STATE_SPARKED));
       LABEL(Ldone);
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
@@ -1122,7 +1137,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         I_MOV(absmem((int)&tsk->freeframe),reg(EDI));
       }
 
-      swap_in(tsk,as,tsk->bplabels1[addr]);
+      swap_in(tsk,as,bplabels[0][addr]);
       break;
     }
     #endif
@@ -1134,7 +1149,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
       int newfno = instr->arg0;
       const funinfo *fi = &program_finfo[newfno];
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       switch (instr->arg1) {
       case 2:  I_JMP(label(instrlabels[fi->addressed])); break;
       case 1:  I_JMP(label(instrlabels[fi->addressne])); break;
@@ -1168,17 +1183,17 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       /* NIL - jump to target */
       I_CMP(reg(EBX),imm(CELL_NIL));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JZ(label(instrlabels[addr+instr->arg0]));
 
       LABEL(Ltrue);
-      LABEL(tsk->bplabels2[addr]);
+      LABEL(bplabels[1][addr]);
       break;
     }
     #endif
     #ifdef NATIVE_JUMP
     case OP_JUMP:
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JMP(label(instrlabels[addr+instr->arg0]));
       break;
     #endif
@@ -1188,7 +1203,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*instr->arg0+4));
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),reg(EAX));
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),reg(EBX));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     #endif
     #ifdef NATIVE_UPDATE
@@ -1209,7 +1224,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         I_MOV(regmem(EBP,FRAME_DATA+8*(base+i)),reg(EAX));
         I_MOV(regmem(EBP,FRAME_DATA+8*(base+i)+4),reg(EBX));
       }
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
@@ -1285,7 +1300,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)),reg(ESI));
       I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4),imm(PNTR_VALUE));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
@@ -1308,7 +1323,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         case B_DIVIDE:   I_FDIV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2))); break;
         }
         I_FSTP_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)));
-        LABEL(tsk->bplabels1[addr]);
+        LABEL(bplabels[0][addr]);
         break;
       }
       case B_EQ:
@@ -1346,14 +1361,14 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)+4),imm(trueval[1]));
 
         LABEL(Lend);
-        LABEL(tsk->bplabels1[addr]);
+        LABEL(bplabels[0][addr]);
         break;
       }
       case B_SQRT:
         I_FLD_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
         I_FSQRT();
         I_FSTP_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
-        LABEL(tsk->bplabels1[addr]);
+        LABEL(bplabels[0][addr]);
         break;
       default:
         I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
@@ -1369,7 +1384,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         END_CALL;
 
         runnable_owner_native_code(tsk,as);
-        swap_in(tsk,as,tsk->bplabels1[addr]);
+        swap_in(tsk,as,bplabels[0][addr]);
         break;
       }
       break;
@@ -1381,7 +1396,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       int *p = (int*)&tsk->globnilpntr;
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),imm(p[0]));
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),imm(p[1]));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
@@ -1390,7 +1405,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       // runnable->data[instr->expcount] = *((double*)&instr->arg0);
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),imm(instr->arg0));
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),imm(instr->arg1));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
@@ -1400,20 +1415,20 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       int *p = (int*)&tsk->strings[instr->arg0];
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),imm(p[0]));
       I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),imm(p[1]));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     #endif
     #ifdef NATIVE_POP
     case OP_POP:
       /* NOOP */
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     #endif
     //#ifdef NATIVE_ERROR
     case OP_ERROR:
       I_MOV(absmem((int)&tsk->native_finished),imm(1));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JMP(label(Largerror));
       break;
     //#endif
@@ -1473,11 +1488,14 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       // check_runnable(tsk);
       asm_check_runnable(tsk,as);
 
-      swap_in(tsk,as,tsk->bplabels1[addr]);
+      swap_in(tsk,as,bplabels[0][addr]);
+      I_NOP(); /* pad to 5 bytes between labels */
+      I_NOP();
+      I_NOP();
 
       /* FIXME: handle remote references */
       LABEL(Ldone);
-      LABEL(tsk->bplabels2[addr]);
+      LABEL(bplabels[1][addr]);
       break;
     }
     #endif
@@ -1524,7 +1542,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       /* Jump directly to the new frame, instead of calling swap_in() */
       I_MOV(reg(EBP),reg(EDI));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JMP(label(instrlabels[program_finfo[fno].address+1]));
       break;
     }
@@ -1537,7 +1555,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       I_FUCOMPP();
       I_FNSTSW_AX();
       I_SAHF();
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       switch (bif) {
       case B_EQ: I_JNE(label(instrlabels[addr+instr->arg0])); break;
       case B_NE: I_JZ(label(instrlabels[addr+instr->arg0])); break;
@@ -1590,7 +1608,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)),reg(EAX));
       I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4),imm(PNTR_VALUE));
 
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     case OP_ITEMN: {
@@ -1643,13 +1661,13 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       END_CALL;
 
       LABEL(Ldone);
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       break;
     }
     case OP_INVALID:
       PRINT_MESSAGE("INVALID INSTRUCTION\n");
       I_MOV(absmem((int)&tsk->native_finished),imm(1));
-      LABEL(tsk->bplabels1[addr]);
+      LABEL(bplabels[0][addr]);
       I_JMP(label(Lfinished));
       break;
     default: {
@@ -1667,7 +1685,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       END_CALL;
 
       runnable_owner_native_code(tsk,as);
-      swap_in(tsk,as,tsk->bplabels1[addr]);
+      swap_in(tsk,as,bplabels[0][addr]);
       break;
     }
     }
@@ -1678,9 +1696,30 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   I_POPAD();
   I_RET();
 
+  /************** Trap ************/
+  LABEL(Ltrap);
+  I_MOV(absmem((int)&tsk->in_trap),imm(1));
 
+  BEGIN_CALL(16); /* note: 4 extra bytes because of EIP pushed by caller */
 
+  I_MOV(reg(EAX),absmem((int)&tsk->normal_esp));
+  I_MOV(reg(EAX),regmem(EAX,-4));
+  I_SUB(reg(EAX),imm(5));
 
+  I_PUSH(reg(EAX));
+  I_PUSH(reg(EBP));
+  I_PUSH(imm((int)tsk));
+  I_MOV(reg(EAX),imm((int)handle_trap));
+  I_CALL(reg(EAX));
+
+  /* set return address */
+  I_MOV(reg(EBX),absmem((int)&tsk->normal_esp));
+  I_MOV(regmem(EBX,-4),reg(EAX));
+
+  I_ADD(reg(ESP),imm(12));
+  END_CALL;
+  I_MOV(absmem((int)&tsk->in_trap),imm(0));
+  I_RET();
 
   /************** Interrupt ************/
   LABEL(Linterrupt);
@@ -1759,14 +1798,18 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
   for (addr = 0; addr < bch->nops; addr++) {
     int cpuaddr = as->instructions[tempaddrs[addr]].addr;
-    int bplabel1 = tsk->bplabels1[addr];
-    int bplabel2 = tsk->bplabels2[addr];
+    int bplabel1 = bplabels[0][addr];
+    int bplabel2 = bplabels[1][addr];
     tsk->instraddrs[addr] = (void*)(((char*)cpucode->data)+cpuaddr);
 
     assert(as->labeladdrs[bplabel1]);
-    tsk->bpaddrs1[addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel1];
-    if (as->labeladdrs[bplabel2])
-      tsk->bpaddrs2[addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel2];
+    tsk->bpaddrs[0][addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel1];
+    if (as->labeladdrs[bplabel2]) {
+      tsk->bpaddrs[1][addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel2];
+
+      /* ensure sufficient space between breakpoint addresses to insert CALL */
+      assert(5 <= abs(as->labeladdrs[bplabel2]-as->labeladdrs[bplabel1]));
+    }
 
     if (0 == addr) {
       for (i = last; i < cpuaddr; i++)
@@ -1782,13 +1825,13 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
     tsk->cpu_to_bcaddr[i] = addr-1;
 
   tsk->bcend_addr = cpucode->data+as->labeladdrs[Lbcend];
+  tsk->trap_addr = cpucode->data+as->labeladdrs[Ltrap];
   tsk->interrupt_addr = cpucode->data+as->labeladdrs[Linterrupt];
   tsk->caperror_addr = cpucode->data+as->labeladdrs[Lcaperror];
   tsk->argerror_addr = cpucode->data+as->labeladdrs[Largerror];
 
+  tsk->trap_end = tsk->interrupt_addr;
   tsk->interrupt_end = tsk->caperror_addr;
-  tsk->caperror_end = tsk->argerror_addr;
-  tsk->argerror_end = cpucode->data+cpucode->nbytes;
 
   tsk->code = cpucode->data;
   tsk->codesize = cpucode->nbytes;

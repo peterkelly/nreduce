@@ -321,7 +321,6 @@ int main(int argc, char **argv)
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask,SIGUSR1);
     sigaddset(&act.sa_mask,SIGFPE);
-    sigaddset(&act.sa_mask,SIGTRAP);
     act.sa_flags = SA_SIGINFO;
 
     act.sa_sigaction = native_sigusr1;
@@ -329,9 +328,6 @@ int main(int argc, char **argv)
 
     act.sa_sigaction = native_sigfpe;
     sigaction(SIGFPE,&act,NULL);
-
-    act.sa_sigaction = native_sigtrap;
-    sigaction(SIGTRAP,&act,NULL);
 
     act.sa_sigaction = native_sigsegv;
     sigaction(SIGSEGV,&act,NULL);

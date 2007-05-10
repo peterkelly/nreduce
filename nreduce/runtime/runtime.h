@@ -547,32 +547,26 @@ typedef struct task {
 
   /* native execution */
   void **instraddrs;
-  unsigned char **bpaddrs1;
-  unsigned char **bpaddrs2;
+  unsigned char **bpaddrs[2];
   void *code;
   int codesize;
   int *cpu_to_bcaddr;
   void *bcend_addr;
+  void *trap_addr;
   void *interrupt_addr;
   void *caperror_addr;
   void *argerror_addr;
 
+  void *trap_end;
   void *interrupt_end;
-  void *caperror_end;
-  void *argerror_end;
 
   void *normal_esp;
   void *interrupt_return_eip;
   int interrupt_again;
   int native_finished;
   int swapped;
-  int fpe_bcaddr;
-  pntr *fpe_data;
-  void *breakpoint_addr;
-  int *bplabels1;
-  int *bplabels2;
-  unsigned char bcold1;
-  unsigned char bcold2;
+  int in_trap;
+  unsigned char bcbackup[2][5];
   int trap_pending;
   int interrupt_bcaddr;
 } task;
@@ -833,7 +827,6 @@ void trace_step(task *tsk, pntr target, int allapps, const char *format, ...);
 /* native */
 
 void native_sigusr1(int sig, siginfo_t *ino, void *uc1);
-void native_sigtrap(int sig, siginfo_t *ino, void *uc1);
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void native_sigsegv(int sig, siginfo_t *ino, void *uc1);
 void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk);

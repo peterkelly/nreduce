@@ -590,8 +590,8 @@ void task_free(task *tsk)
     close(tsk->startfds[1]);
 
   free(tsk->instraddrs);
-  free(tsk->bpaddrs1);
-  free(tsk->bpaddrs2);
+  free(tsk->bpaddrs[0]);
+  free(tsk->bpaddrs[1]);
   free(tsk->cpu_to_bcaddr);
 
   free(tsk);
