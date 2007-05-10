@@ -465,6 +465,7 @@ typedef struct task {
   global **addrhash;
 
   /* runtime info */
+  int usr1setup;
   int done;
   frame **runptr;
   frame *rtemp;

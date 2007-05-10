@@ -1,5 +1,9 @@
 #!/bin/bash
-libtoolize --force --copy
+if [ -e /usr/bin/glibtoolize ]; then
+  glibtoolize --force --copy
+else
+  libtoolize --force --copy
+fi
 aclocal -I .
 autoconf
 autoheader

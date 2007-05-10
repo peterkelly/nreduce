@@ -33,7 +33,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
-#include <argp.h>
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
@@ -177,25 +176,6 @@ const char *progsubst_lookup(list *substitutions, const char *name)
   return NULL;
 }
 
-/* const char *argp_program_version = */
-/*   "runtests 0.1"; */
-
-static char doc[] =
-  "Perform a series of regression tests";
-
-static char args_doc[] = "PATH";
-
-static struct argp_option options[] = {
-  {"diff",                  'd', 0,      0,  "Print a diff between the expected and actual output"},
-  {"inprocess",             'i', 0,      0,  "Run all tests in-process"},
-  {"repeat",                'n', "N",    0,  "Run tests n times (dirs only)"},
-  {"hide-output",           'h', 0,      0,  "Hide status output"},
-  {"valgrind",              'v', "CMD",  0,  "Run tests through valgrind command CMD and report "
-                                             "leaks/errors"},
-  {"substitute",            's', "NAME=PROG",0,  "Use PROG as the executable whenever a test specifies NAME"},
-  { 0 }
-};
-
 struct arguments {
   char *path;
   int inprocess;
@@ -207,64 +187,74 @@ struct arguments {
   list *substitutions;
 };
 
-error_t parse_opt (int key, char *arg, struct argp_state *state)
+static void usage()
 {
-  struct arguments *arguments = (struct arguments*)state->input;
-
-  switch (key) {
-  case 'd':
-    arguments->diff = 1;
-    break;
-  case 'v':
-    arguments->valgrind = 1;
-    arguments->valgrind_cmd = arg;
-    break;
-  case 'i':
-    arguments->inprocess = 1;
-    break;
-  case 'n':
-    arguments->n = atoi(arg);
-    break;
-  case 'h':
-    arguments->hide_output = 1;
-    break;
-  case 's': {
-    progsubst *s = (progsubst*)calloc(1,sizeof(progsubst));
-    char *equals = strchr(arg,'=');
-    int namelen;
-    int proglen;
-    if (NULL == equals) {
-      fprintf(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
-      exit(1);
-    }
-    namelen = equals-arg;
-    proglen = strlen(arg)-namelen-1;
-    s->name = (char*)malloc(namelen+1);
-    s->prog = (char*)malloc(proglen+1);
-    memcpy(s->name,arg,namelen);
-    memcpy(s->prog,equals+1,proglen);
-    s->name[namelen] = '\0';
-    s->prog[proglen] = '\0';
-    list_append(&arguments->substitutions,s);
-    break;
-  }
-  case ARGP_KEY_ARG:
-    if (0 == state->arg_num)
-      arguments->path = arg;
-    else
-      argp_usage (state);
-    break;
-  case ARGP_KEY_END:
-    if (1 > state->arg_num)
-      argp_usage (state);
-    break;
-  default:
-    return ARGP_ERR_UNKNOWN;
-  }
-  return 0;
+  printf(
+"Usage: runtests [OPTION...] PATH\n"
+"Perform a series of regression tests\n"
+"\n"
+"  -d, --diff                 Print a diff between the expected and actual\n"
+"                             output\n"
+"  -h, --hide-output          Hide status output\n"
+"  -i, --inprocess            Run all tests in-process\n"
+"  -n, --repeat=N             Run tests n times (dirs only)\n"
+"  -s, --substitute=NAME=PROG Use PROG as the executable whenever a test\n"
+"                             specifies NAME\n"
+"  -v, --valgrind=CMD         Run tests through valgrind command CMD and report\n"
+"                             leaks/errors\n");
+  exit(1);
 }
 
-static struct argp argp = { options, parse_opt, args_doc, doc };
+static void parse_args(int argc, char **argv, struct arguments *arguments)
+{
+  int i;
+  if (1 >= argc)
+    usage();
+
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i],"-d") || !strcmp(argv[i],"--diff")) {
+      arguments->diff = 1;
+    }
+    else if (!strcmp(argv[i],"-v") || !strcmp(argv[i],"--valgrind")) {
+      arguments->valgrind = 1;
+      arguments->valgrind_cmd = argv[i];
+    }
+    else if (!strcmp(argv[i],"-i") || !strcmp(argv[i],"--inprocess")) {
+      arguments->inprocess = 1;
+    }
+    else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--repeat")) {
+      arguments->n = atoi(argv[i]);
+    }
+    else if (!strcmp(argv[i],"-h") || !strcmp(argv[i],"--hide-output")) {
+      arguments->hide_output = 1;
+    }
+    else if (!strcmp(argv[i],"-s") || !strcmp(argv[i],"--substitute")) {
+      progsubst *s = (progsubst*)calloc(1,sizeof(progsubst));
+      char *equals = strchr(argv[i],'=');
+      int namelen;
+      int proglen;
+      if (NULL == equals) {
+	fprintf(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
+	exit(1);
+      }
+      namelen = equals-argv[i];
+      proglen = strlen(argv[i])-namelen-1;
+      s->name = (char*)malloc(namelen+1);
+      s->prog = (char*)malloc(proglen+1);
+      memcpy(s->name,argv[i],namelen);
+      memcpy(s->prog,equals+1,proglen);
+      s->name[namelen] = '\0';
+      s->prog[proglen] = '\0';
+      list_append(&arguments->substitutions,s);
+    }
+    else if (NULL == arguments->path) {
+      arguments->path = argv[i];
+    }
+    else {
+      usage();
+    }
+  }
+}
 
 #define TEMP_DIR "runtests.tmp"
 
@@ -1029,7 +1019,7 @@ int main(int argc, char **argv)
 
   setbuf(stdout,NULL);
 
-  argp_parse (&argp, argc, argv, 0, 0, &arguments);
+  parse_args(argc,argv,&arguments);
 
   pathend = &arguments.path[strlen(arguments.path)-1];
   while ((pathend >= arguments.path) && ('/' == *pathend))

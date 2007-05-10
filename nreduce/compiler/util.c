@@ -41,6 +41,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fenv.h>
 
 array *array_new(int elemsize, int initroom)
 {
@@ -620,4 +621,20 @@ void unlock_mutex(pthread_mutex_t *mutex)
 {
   int r = pthread_mutex_unlock(mutex);
   assert(0 == r);
+}
+
+void enable_invalid_fpe()
+{
+#ifdef HAVE_FEENABLEEXCEPT
+  feenableexcept(FE_INVALID);
+#else
+/*   printf("mac: setting floating point environment, thread = %p\n",pthread_self()); */
+  fenv_t env;
+  if (0 != fegetenv(&env))
+    fatal("fegetenv: %s",strerror(errno));
+  env.__control &= ~FE_INVALID;
+  env.__mxcsr &= (~FE_INVALID << 7);
+  if (0 != fesetenv(&env))
+    fatal("fesetenv: %s",strerror(errno));
+#endif
 }

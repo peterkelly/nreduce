@@ -144,4 +144,6 @@ int check_mutex_unlocked(pthread_mutex_t *mutex);
 void lock_mutex(pthread_mutex_t *mutex);
 void unlock_mutex(pthread_mutex_t *mutex);
 
+void enable_invalid_fpe();
+
 #endif

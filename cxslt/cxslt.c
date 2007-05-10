@@ -31,6 +31,8 @@
 /* FIXME: escape strings when printing (note that xmlChar complicates things) */
 /* FIXME: can't use reserved words like eq, text, item for element names in path
    expressions. Need to fix the tokenizer/parser */
+/* FIXME: use an autoconf script to set YYLEX_DESTROY where appropriate - currently
+   it does not get set at all */
 
 #define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
 
@@ -42,7 +44,9 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
 YY_BUFFER_STATE yy_scan_string(const char *str);
 void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
 void yy_delete_buffer(YY_BUFFER_STATE buffer);
+#if HAVE_YYLEX_DESTROY
 int yylex_destroy(void);
+#endif
 
 extern FILE *yyin;
 extern int lex_lineno;
@@ -543,7 +547,9 @@ void compile_expr_string(xmlNodePtr n, const char *str)
   r = yyparse();
 
   yy_delete_buffer(bufstate);
+#if HAVE_YYLEX_DESTROY
   yylex_destroy();
+#endif
 
   if (0 != r) {
     fprintf(stderr,"XPath parse error\n");

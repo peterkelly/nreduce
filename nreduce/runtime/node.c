@@ -348,7 +348,7 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
 static int handle_connected(node *n, connection *conn)
 {
   int err;
-  int optlen = sizeof(int);
+  socklen_t optlen = sizeof(int);
 
   if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
     snprintf(conn->errmsg,ERRMSG_MAX,"getsockopt SO_ERROR: %s",strerror(errno));
@@ -514,7 +514,7 @@ int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout)
 static void handle_new_connection(node *n, listener *l)
 {
   struct sockaddr_in remote_addr;
-  int sin_size = sizeof(struct sockaddr_in);
+  socklen_t sin_size = sizeof(struct sockaddr_in);
   int clientfd;
   connection *conn;
   int yes = 1;
@@ -769,7 +769,7 @@ listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback
   int yes = 1;
   struct sockaddr_in local_addr;
   struct sockaddr_in new_addr;
-  int new_size = sizeof(struct sockaddr_in);
+  socklen_t new_size = sizeof(struct sockaddr_in);
   listener *l;
 
   local_addr.sin_family = AF_INET;
@@ -1171,6 +1171,8 @@ static void *endpoint_thread(void *data)
   endpoint *endpt = (endpoint*)data;
   node *n = endpt->n;
   list *l;
+
+  enable_invalid_fpe();
 
   /* Execute the thread */
   endpt->fun(n,endpt,endpt->data);

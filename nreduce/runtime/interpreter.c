@@ -1857,6 +1857,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       pthread_create(&sigthread,NULL,signal_thread,tsk);
     }
 
+    pthread_kill(tsk->thread,SIGUSR1);
+    tsk->usr1setup = 1;
     ((native_fun*)tsk->code)();;
     array_free(cpucode);
   }

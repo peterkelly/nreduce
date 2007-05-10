@@ -879,7 +879,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
   pntr sopntr = argstack[1];
   pntr nextpntr = argstack[0];
   int r;
-  unsigned char buf[IOSIZE];
+  char buf[IOSIZE];
   sysobject *so;
   cell *c;
   int doclose = 0;

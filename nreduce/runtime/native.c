@@ -40,9 +40,12 @@
 #include <math.h>
 #include <signal.h>
 #include <ucontext.h>
-#include <execinfo.h>
 #include <unistd.h>
 #include <fenv.h>
+
+#ifdef HAVE_EXECINFO_H
+#include <execinfo.h>
+#endif
 
 #define NATIVE_BEGIN
 #define NATIVE_END
@@ -131,6 +134,19 @@ op_fun *op_handlers[OP_COUNT] = {
   op_invalid,
 };
 
+#ifdef HAVE_MCONTEXT_T_GREGS
+#define UC_ESP(uc) (uc->uc_mcontext.gregs[REG_ESP])
+#define UC_EBP(uc) (uc->uc_mcontext.gregs[REG_EBP])
+#define UC_EIP(uc) (uc->uc_mcontext.gregs[REG_EIP])
+#else
+#define UC_ESP(uc) (uc->uc_mcontext->ss.esp)
+#define UC_EBP(uc) (uc->uc_mcontext->ss.ebp)
+#define UC_EIP(uc) (uc->uc_mcontext->ss.eip)
+#endif
+
+#define STACK_ALIGNMENT 16
+#define NATIVE_ESP_OFFSET 8
+
 #define PUSHAD_OFFSET_EAX 4
 #define PUSHAD_OFFSET_ECX 8
 #define PUSHAD_OFFSET_EDX 12
@@ -140,21 +156,26 @@ op_fun *op_handlers[OP_COUNT] = {
 #define PUSHAD_OFFSET_ESI 28
 #define PUSHAD_OFFSET_EDI 32
 
-#define BEGIN_CALL {                         \
+#define STACK_PADDING(argbytes) (STACK_ALIGNMENT-((NATIVE_ESP_OFFSET+(argbytes))%STACK_ALIGNMENT))
+
+#define BEGIN_CALL(argbytes) {		     \
   int Ltemp = as->labels++;                  \
   int Ltempend = as->labels++;               \
+  int _addstack = STACK_PADDING(argbytes);   \
   I_CALL(label(Ltemp));                      \
   I_JMP(label(Ltempend));                    \
   LABEL(Ltemp);                              \
+  I_SUB(reg(ESP),imm(_addstack));            \
   I_PUSHAD();
 
 #define END_CALL                             \
   I_POPAD();                                 \
+  I_ADD(reg(ESP),imm(_addstack));            \
   I_RET();                                   \
   LABEL(Ltempend); }
 
 #define PRINT_VALUE(str,val) \
-      BEGIN_CALL; \
+      BEGIN_CALL(8);	     \
       I_PUSH(val); \
       I_PUSH(imm((int)str));                 \
       I_MOV(reg(EAX),imm((int)print_value)); \
@@ -172,7 +193,7 @@ op_fun *op_handlers[OP_COUNT] = {
       I_POPAD();
 
 #define PRINT_MESSAGE(str) \
-      BEGIN_CALL; \
+      BEGIN_CALL(4);			     \
       I_PUSH(imm((int)str));                 \
       I_MOV(reg(EAX),imm((int)print_message)); \
       I_CALL(reg(EAX)); \
@@ -296,6 +317,9 @@ void print_eip_bytecode(task *tsk, void *eip, char *str)
 
 void function_below(char *name)
 {
+#ifndef HAVE_EXECINFO_H
+  sprintf(name,"unknown");
+#else
   int explicit_interrupt = 0;
   int pos;
   int skiplines;
@@ -352,6 +376,7 @@ void function_below(char *name)
     snprintf(name,1024,"EI/%s",&buf[start]);
   else
     snprintf(name,1024,"%s",&buf[start]);
+#endif
 }
 
 void print_instruction(task *tsk, int ebp, int addr, int opcode)
@@ -378,9 +403,10 @@ void print_instruction(task *tsk, int ebp, int addr, int opcode)
  */
 void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 {
+/*   printf("sigusr1\n"); */
   ucontext_t *uc = (ucontext_t*)uc1;
   task *tsk = pthread_getspecific(task_key);
-  int stackoffset = tsk->normal_esp-(void*)uc->uc_mcontext.gregs[REG_ESP];
+  int stackoffset = tsk->normal_esp-(void*)UC_ESP(uc);
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   void **peip;
   int offset;
@@ -388,13 +414,19 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 
   assert(tsk);
   assert(pthread_self() == tsk->endpt->thread);
+
+  if (!tsk->usr1setup) {
+/*     printf("SIGUSR1: ignoring, task not yet started\n"); */
+    return;
+  }
+
   tsk->interrupt_again = 0;
 
   if (tsk->trap_pending || tsk->native_finished)
     return;
 
-  if (((void*)uc->uc_mcontext.gregs[REG_EIP] >= tsk->interrupt_addr) &&
-      ((void*)uc->uc_mcontext.gregs[REG_EIP] < tsk->interrupt_end)) {
+  if (((void*)UC_EIP(uc) >= tsk->interrupt_addr) &&
+      ((void*)UC_EIP(uc) < tsk->interrupt_end)) {
     /* At very first instruction of interrupt handler, before 0 has been pushed onto stack */
     tsk->interrupt_again = 1;
     return;
@@ -406,7 +438,7 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
     tsk->normal_esp (since the generated code doesn't change ESP except for when it makes a call
     to C code). */
   if (0 == stackoffset) { /* Native code */
-    peip = (void**)&uc->uc_mcontext.gregs[REG_EIP];
+    peip = (void**)&UC_EIP(uc);
   }
   else {
 
@@ -477,21 +509,21 @@ void native_sigtrap(int sig, siginfo_t *ino, void *uc1)
   bcheader *bch = (bcheader*)tsk->bcdata;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   int bcaddr;
-  frame *curf = (void*)uc->uc_mcontext.gregs[REG_EBP];
+  frame *curf = (void*)UC_EBP(uc);
   assert((void*)1 == *tsk->runptr);
 
   /* Check that we're actually expecting this signal, and that we were invoked from generated code
      (i.e. not from some other C function) */
   assert(tsk->trap_pending);
-  assert(tsk->normal_esp == (void*)uc->uc_mcontext.gregs[REG_ESP]);
+  assert(tsk->normal_esp == (void*)UC_ESP(uc));
 
   bcaddr = tsk->interrupt_bcaddr;
-  uc->uc_mcontext.gregs[REG_EIP]--;
-  assert(((void*)uc->uc_mcontext.gregs[REG_EIP] == tsk->bpaddrs1[bcaddr]) ||
-         ((void*)uc->uc_mcontext.gregs[REG_EIP] == tsk->bpaddrs2[bcaddr]));
-  assert(uc->uc_mcontext.gregs[REG_EIP] >= (int)tsk->instraddrs[bcaddr]);
+  UC_EIP(uc)--;
+  assert(((void*)UC_EIP(uc) == tsk->bpaddrs1[bcaddr]) ||
+         ((void*)UC_EIP(uc) == tsk->bpaddrs2[bcaddr]));
+  assert(UC_EIP(uc) >= (int)tsk->instraddrs[bcaddr]);
   assert((bcaddr == bch->nops-1) ||
-         (uc->uc_mcontext.gregs[REG_EIP] <= (int)tsk->instraddrs[bcaddr+1]));
+         (UC_EIP(uc) <= (int)tsk->instraddrs[bcaddr+1]));
 
   /* Clear the breakpoint(s), by restoring the previous values that were at the start of the
      relevant machine instrucitons. These were temporarily set to 0xCC in native_sigusr1() */
@@ -517,8 +549,8 @@ void native_sigtrap(int sig, siginfo_t *ino, void *uc1)
 
   /* Save the return address and get the thread to jump to the interrupt/error handler upon return
      from this function. */
-  tsk->interrupt_return_eip = (void*)uc->uc_mcontext.gregs[REG_EIP];
-  uc->uc_mcontext.gregs[REG_EIP] = (int)tsk->interrupt_addr;
+  tsk->interrupt_return_eip = (void*)UC_EIP(uc);
+  UC_EIP(uc) = (int)tsk->interrupt_addr;
   tsk->interrupt_bcaddr = 0;
 }
 
@@ -530,16 +562,16 @@ void native_sigfpe(int sig, siginfo_t *ino, void *uc1)
   int bcaddr;
   task *tsk = pthread_getspecific(task_key);
   const instruction *program_ops = bc_instructions(tsk->bcdata);
-  int stackoffset = tsk->normal_esp-(void*)uc->uc_mcontext.gregs[REG_ESP];
+  int stackoffset = tsk->normal_esp-(void*)UC_ESP(uc);
   const instruction *instr;
   frame *curf;
 
   if ((void*)1 == *tsk->runptr)
-    *tsk->runptr = (void*)uc->uc_mcontext.gregs[REG_EBP];
+    *tsk->runptr = (void*)UC_EBP(uc);
   curf = *tsk->runptr;
 
   if (0 == stackoffset) { /* Native code */
-    eip = (void*)uc->uc_mcontext.gregs[REG_EIP];
+    eip = (void*)UC_EIP(uc);
   }
   else { /* C function */
     eip = *(void**)(tsk->normal_esp-4);
@@ -579,8 +611,8 @@ void native_sigfpe(int sig, siginfo_t *ino, void *uc1)
     set_error(tsk,"floating point exception");
   }
 
-  uc->uc_mcontext.gregs[REG_ESP] = (int)tsk->normal_esp;
-  uc->uc_mcontext.gregs[REG_EIP] = (int)tsk->argerror_addr;
+  UC_ESP(uc) = (int)tsk->normal_esp;
+  UC_EIP(uc) = (int)tsk->argerror_addr;
   tsk->native_finished = 1;
 }
 
@@ -589,9 +621,9 @@ void native_sigsegv(int sig, siginfo_t *ino, void *uc1)
   ucontext_t *uc = (ucontext_t*)uc1;
   task *tsk = pthread_getspecific(task_key);
   printf("SIGSEGV: eip = %p, rel eip = 0x%x, ebp = %p\n",
-         (void*)uc->uc_mcontext.gregs[REG_EIP],
-         (void*)uc->uc_mcontext.gregs[REG_EIP]-tsk->code,
-         (void*)uc->uc_mcontext.gregs[REG_EBP]);
+         (void*)UC_EIP(uc),
+         (void*)UC_EIP(uc)-tsk->code,
+         (void*)UC_EBP(uc));
   exit(1);
 }
 
@@ -622,7 +654,7 @@ void native_assert_equal(task *tsk, const char *str, void *a, void *b)
 void asm_assert_equal(task *tsk, x86_assembly *as, const char *str, x86_arg a, x86_arg b)
 {
 #if 0
-  BEGIN_CALL;
+  BEGIN_CALL(16);
   I_PUSH(b);
   I_PUSH(a);
   I_PUSH(imm((int)str));
@@ -705,7 +737,7 @@ void asm_check_runnable(task *tsk, x86_assembly *as)
   I_CMP(reg(EBP),imm(0));
   I_JNE(label(Lno));
 
-  BEGIN_CALL;
+  BEGIN_CALL(4);
   I_PUSH(imm((int)tsk->endpt));
   I_MOV(reg(EAX),imm((int)endpoint_interrupt));
   I_CALL(reg(EAX));
@@ -724,7 +756,7 @@ void asm_check_collect_needed(task *tsk, x86_assembly *as)
   I_CMP(absmem((int)&tsk->alloc_bytes),imm(COLLECT_THRESHOLD));
   I_JL(label(Laftermemcheck));
 
-  BEGIN_CALL;
+  BEGIN_CALL(4);
   I_PUSH(imm((int)tsk->endpt));
   I_MOV(reg(EAX),imm((int)endpoint_interrupt));
   I_CALL(reg(EAX));
@@ -806,7 +838,7 @@ void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
   I_JNE(label(Lhavefree));
   {
     /* Fall back to C version */
-    BEGIN_CALL;
+    BEGIN_CALL(8);
     I_PUSH(imm(addalloc));
     I_PUSH(imm((int)tsk));
     I_MOV(reg(EAX),imm((int)frame_new));
@@ -911,7 +943,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
     if (getenv("TRACE")) {
       /* Print out message for this instruction */
-      BEGIN_CALL;
+      BEGIN_CALL(16);
       I_PUSH(imm(instr->opcode));
       I_PUSH(imm(instr-program_ops));
       I_PUSH(reg(EBP));
@@ -1073,7 +1105,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         I_CMP(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS),imm(0));
         I_JZ(label(Ldonefetchers));
 
-        BEGIN_CALL;
+        BEGIN_CALL(8);
         I_PUSH(imm((int)free));
         I_PUSH(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS));
         I_MOV(reg(EAX),imm((int)list_free)); /* FIXME: test this code branch (parallel only) */
@@ -1208,7 +1240,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       /* Note: an extra sizeof(cell) will get added to alloc_bytes here, but it doesn't affect
          program correctness (the next collection will just happen very slightly sooner) */
 
-      BEGIN_CALL;
+      BEGIN_CALL(4);
       I_PUSH(imm((int)tsk));
       I_MOV(reg(EAX),imm((int)alloc_cell));
       I_CALL(reg(EAX));
@@ -1328,7 +1360,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
         I_LEA(reg(ECX),regmem(EBP,FRAME_DATA+8*(instr->expcount-nargs)));
         runnable_owner_task(tsk,as);
 
-        BEGIN_CALL;
+        BEGIN_CALL(8);
         I_PUSH(reg(ECX));
         I_PUSH(imm((int)tsk));
         I_MOV(reg(EAX),imm((int)builtin_info[bif].f));
@@ -1524,7 +1556,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       // carray *arr = carray_new(tsk,sizeof(pntr),n-1,NULL,NULL);
       // EDI: arr
-      BEGIN_CALL;
+      BEGIN_CALL(20);
       I_PUSH(imm(0));
       I_PUSH(imm(0));
       I_PUSH(imm(n-1));
@@ -1600,7 +1632,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       LABEL(Lfallback);
 
-      BEGIN_CALL;
+      BEGIN_CALL(16);
       I_PUSH(imm(pos));
       I_PUSH(imm(instr->expcount));
       I_PUSH(reg(EBP));
@@ -1625,7 +1657,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       runnable_owner_task(tsk,as);
 
       /* Call the appropriate op_* function */
-      BEGIN_CALL;
+      BEGIN_CALL(12);
       I_PUSH(imm((int)(instr)));
       I_PUSH(absmem((int)tsk->runptr));
       I_PUSH(imm((int)tsk));
@@ -1700,7 +1732,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   LABEL(Lcaperror);
   // Caller has set EAX = pntr* referring to offending value
   runnable_owner_task(tsk,as);
-  BEGIN_CALL;
+  BEGIN_CALL(12);
   I_PUSH(regmem(EAX,4));
   I_PUSH(regmem(EAX,0));
   I_PUSH(imm((int)tsk));
@@ -1712,7 +1744,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
   /************** arg_error ************/
   LABEL(Largerror);
-  BEGIN_CALL;
+  BEGIN_CALL(4);
   I_PUSH(imm((int)tsk));
   I_MOV(reg(EAX),imm((int)native_arg_error));
   I_CALL(reg(EAX));
