@@ -279,8 +279,8 @@ void dump_asm(task *tsk, const char *filename, array *cpucode)
       bcaddr = tsk->cpu_to_bcaddr[i];
       fprintf(f,"bytecode%d_%s:\n",bcaddr,opcodes[program_ops[bcaddr].opcode]);
     }
-    else if (i == tsk->interrupt_addr-tsk->code) {
-      fprintf(f,"interrupt:\n");
+    else if (i == tsk->trap_addr-tsk->code) {
+      fprintf(f,"trap:\n");
     }
     else if (i == tsk->caperror_addr-tsk->code) {
       fprintf(f,"caperror:\n");
@@ -307,8 +307,8 @@ void print_eip_bytecode(task *tsk, void *eip, char *str)
     else
       snprintf(str,100,"%-6d %-12s",addr,opcodes[instr->opcode]);
   }
-  else if (tsk->interrupt_addr == eip) {
-    snprintf(str,100,"(interrupt)        ");
+  else if (tsk->trap_addr == eip) {
+    snprintf(str,100,"(trap)        ");
   }
   else {
     snprintf(str,100,"???????????????????");
@@ -418,7 +418,7 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   task *tsk = pthread_getspecific(task_key);
   int stackoffset = tsk->normal_esp-(void*)UC_ESP(uc);
   const instruction *program_ops = bc_instructions(tsk->bcdata);
-  void **peip;
+  void *eip;
   int offset;
   int bcaddr;
   unsigned char zero5[5] = {0,0,0,0,0};
@@ -430,55 +430,23 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   if (!tsk->usr1setup)
     return;
 
-  tsk->interrupt_again = 0;
-
   if (tsk->trap_pending || tsk->native_finished)
     return;
 
-  if (((void*)UC_EIP(uc) >= tsk->interrupt_addr) && ((void*)UC_EIP(uc) < tsk->interrupt_end)) {
-    /* At very first instruction of interrupt handler, before 0 has been pushed onto stack */
-    tsk->interrupt_again = 1;
-    return;
-  }
-
-  if (tsk->in_trap ||
-      (((void*)UC_EIP(uc) >= tsk->trap_addr) && ((void*)UC_EIP(uc) < tsk->trap_end)))
-    return;
-
-  /* There are three possibilities for what the task could be doing right before the call.
-
-    If it was executing the generated code for a bytecode insturction, then ESP will be equal to
-    tsk->normal_esp (since the generated code doesn't change ESP except for when it makes a call
-    to C code). */
   if (0 == stackoffset) { /* Native code */
-    peip = (void**)&UC_EIP(uc);
+    eip = (void*)UC_EIP(uc);
   }
-  else {
-
-    /* If the task was executing C code, then the ESP value will be different, and the first 32
-       bit value after tsk->normal_esp will contain the saved EIP that the code will jump back to
-       after the call; this can be used to determine which bytecode instruction the code is
-       executiong. */
-    if (0 != *((void**)(tsk->normal_esp-4))) { /* C function */
-      peip = (void**)(tsk->normal_esp-4);
-    }
-
-    /* If the ESP is not equal to tsk->normal_esp, but the 32 bit value at that spot is 0, this
-       means we are in the interrupt handler. This case is simple; we simply need to set the
-       interrupt_again flag so that handle_interrupt() will be called again. */
-    else { /* Interrupt handler */
-      tsk->interrupt_again = 1;
-      return;
-    }
+  else { /* C function or trap handler */
+    eip = *(void**)(tsk->normal_esp-4);
   }
 
-  /* At this point, *peip is the machine address that the native code is currently at. We need
+  /* At this point, eip is the machine address that the native code is currently at. We need
      to figure out which bytecode instruction this corresponds to */
 
-  assert(*peip >= tsk->code);
-  assert(*peip < tsk->bcend_addr);
+  assert(eip >= tsk->code);
+  assert(eip < tsk->bcend_addr);
 
-  offset = *peip-tsk->code;
+  offset = eip-tsk->code;
   assert((0 <= offset) && (tsk->codesize > offset));
   bcaddr = tsk->cpu_to_bcaddr[offset];
   assert(OP_INVALID != program_ops[bcaddr].opcode);
@@ -499,8 +467,9 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
     }
   }
 
+  assert(0 == tsk->trap_bcaddr);
   tsk->trap_pending = 1;
-  tsk->interrupt_bcaddr = bcaddr;
+  tsk->trap_bcaddr = bcaddr;
 }
 
 /*
@@ -518,19 +487,20 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
  *        handle_interrupt() directly from here. Need to be careful about honouring
  *        tsk->interrupt_again.
  */
-void *handle_trap(task *tsk, frame *curf, void *eip)
+void handle_trap(task *tsk, void *eip)
 {
   bcheader *bch = (bcheader*)tsk->bcdata;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   int bcaddr;
   int bp;
-  void *ret;
-  assert((void*)1 == *tsk->runptr);
+  frame *curf = *tsk->runptr;
+  assert((void*)1 != curf);
+  assert((eip >= tsk->code) && (eip < tsk->code+tsk->codesize));
 
   /* Check that we're actually expecting this signal, and that we were invoked from generated code
      (i.e. not from some other C function) */
   assert(tsk->trap_pending);
-  bcaddr = tsk->interrupt_bcaddr;
+  bcaddr = tsk->trap_bcaddr;
 
   assert(((void*)eip == tsk->bpaddrs[0][bcaddr]) ||
          ((void*)eip == tsk->bpaddrs[1][bcaddr]));
@@ -550,21 +520,17 @@ void *handle_trap(task *tsk, frame *curf, void *eip)
     }
   }
 
+  tsk->trap_bcaddr = 0;
   tsk->trap_pending = 0;
 
   /* Swap out - set the current frame's instruction pointer to the correct value according to
      the bytecode address that the native code is executing */
-  if (curf)
+  if (curf && (NULL == curf->instr))
     curf->instr = &program_ops[bcaddr+1];
 
-  /* Save the return address and get the thread to jump to the interrupt/error handler upon return
-     from this function. */
-  tsk->interrupt_return_eip = (void*)eip;
-  ret = tsk->interrupt_addr;
-  tsk->interrupt_bcaddr = 0;
+  handle_interrupt(tsk);
 
-  /* Return the address that should be jumped to */
-  return ret;
+  assert((NULL == curf) || (curf == *tsk->runptr));
 }
 
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1)
@@ -916,7 +882,6 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   bcheader *bch = (bcheader*)bcdata;
   int *tempaddrs = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
   int Lfinished = as->labels++;
-  int Linterrupt = as->labels++;
   int Ltrap = as->labels++;
   int Lcaperror = as->labels++;
   int Largerror = as->labels++;
@@ -1698,74 +1663,27 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
   /************** Trap ************/
   LABEL(Ltrap);
-  I_MOV(absmem((int)&tsk->in_trap),imm(1));
-
-  BEGIN_CALL(16); /* note: 4 extra bytes because of EIP pushed by caller */
-
-  I_MOV(reg(EAX),absmem((int)&tsk->normal_esp));
-  I_MOV(reg(EAX),regmem(EAX,-4));
-  I_SUB(reg(EAX),imm(5));
-
-  I_PUSH(reg(EAX));
-  I_PUSH(reg(EBP));
-  I_PUSH(imm((int)tsk));
-  I_MOV(reg(EAX),imm((int)handle_trap));
-  I_CALL(reg(EAX));
-
-  /* set return address */
-  I_MOV(reg(EBX),absmem((int)&tsk->normal_esp));
-  I_MOV(regmem(EBX,-4),reg(EAX));
-
-  I_ADD(reg(ESP),imm(12));
-  END_CALL;
-  I_MOV(absmem((int)&tsk->in_trap),imm(0));
-  I_RET();
-
-  /************** Interrupt ************/
-  LABEL(Linterrupt);
-
-  /* Push a 0 onto the stack directly on top of normal_esp. If an interrupt signal is sent
-     while we are in this function, sigusr1() will detect that this value (the saved eip)
-     is 0, and realise that we are already in the interrupt handler. If this happens, it will
-     set interrupt_again to 1. */
-  I_PUSH(imm(0));
   I_PUSHF();
   runnable_owner_task(tsk,as);
   I_PUSHAD();
 
-  /* Handle the interrupt. This will try again if another interrupt was received during
-     the process (in which interrupt_again will be set to true).
+  /* Decrement the saved EIP by 5 bytes to put it back where the temporary CALL starts */
+  I_MOV(reg(EAX),absmem((int)&tsk->normal_esp));
+  I_SUB(regmem(EAX,-4),imm(5));
+  I_MOV(reg(EAX),regmem(EAX,-4));
 
-     do {
-       interrupt_again = 0;
-       handle_interrupt(tsk);
-     } while (interrupt_again); */
-
-  int Linterruptstart = as->labels++;
-  int Linterruptend = as->labels++;
-  LABEL(Linterruptstart);
-  I_MOV(absmem((int)&tsk->interrupt_again),imm(0));
-
-  I_MOV(absmem((int)tsk->endpt->interruptptr),imm(0));
-
-  I_PUSHAD();
+  BEGIN_CALL(16); /* note: 8 extra bytes because of EIP pushed by caller and the PUSHF above */
+  I_PUSH(reg(EAX));
   I_PUSH(imm((int)tsk));
-  I_MOV(reg(EAX),imm((int)handle_interrupt));
+  I_MOV(reg(EAX),imm((int)handle_trap));
   I_CALL(reg(EAX));
-  I_ADD(reg(ESP),imm(4));
-  I_POPAD();
-
-  I_CMP(absmem((int)&tsk->interrupt_again),imm(0));
-  I_JZ(label(Linterruptend));
-  I_JMP(label(Linterruptstart));
-
-  LABEL(Linterruptend);
+  I_ADD(reg(ESP),imm(8));
+  END_CALL;
 
   I_POPAD();
   runnable_owner_native_code(tsk,as);
   I_POPF();
-  I_MOV(reg(ESP),absmem((int)&tsk->normal_esp));
-  I_JMP(absmem((int)&tsk->interrupt_return_eip));
+  I_RET();
 
   /************** cap_error ************/
   LABEL(Lcaperror);
@@ -1826,12 +1744,8 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
   tsk->bcend_addr = cpucode->data+as->labeladdrs[Lbcend];
   tsk->trap_addr = cpucode->data+as->labeladdrs[Ltrap];
-  tsk->interrupt_addr = cpucode->data+as->labeladdrs[Linterrupt];
   tsk->caperror_addr = cpucode->data+as->labeladdrs[Lcaperror];
   tsk->argerror_addr = cpucode->data+as->labeladdrs[Largerror];
-
-  tsk->trap_end = tsk->interrupt_addr;
-  tsk->interrupt_end = tsk->caperror_addr;
 
   tsk->code = cpucode->data;
   tsk->codesize = cpucode->nbytes;

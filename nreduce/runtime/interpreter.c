@@ -731,7 +731,8 @@ static void interpreter_respond(task *tsk, message *msg)
   resume_waiters(tsk,&objglo->wq,obj);
 
   if (CELL_FRAME == pntrtype(obj))
-    run_frame(tsk,pframe(obj));
+    run_frame(tsk,pframe(obj)); /* FIXME: will break native code - see comment
+				   in handle_interrupt() */
   tsk->stats.fetches--;
 }
 
@@ -1125,6 +1126,11 @@ static int frameq_count(frameq *fq)
 }
 #endif
 
+/* Note: handle_interrupt() should never change the frame at the head of the runnable queue
+   unless the queue is empty. This is because when handle_trap() returns, it will go back to
+   an EIP which is within the code for the current frame. If the current frame changes, EBP
+   will be updated to have its new value, and the program will be running the code for one frame
+   with the EBP set to another. */
 int handle_interrupt(task *tsk)
 {
   struct timeval now;

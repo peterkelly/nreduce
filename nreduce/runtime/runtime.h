@@ -553,22 +553,15 @@ typedef struct task {
   int *cpu_to_bcaddr;
   void *bcend_addr;
   void *trap_addr;
-  void *interrupt_addr;
   void *caperror_addr;
   void *argerror_addr;
 
-  void *trap_end;
-  void *interrupt_end;
-
   void *normal_esp;
-  void *interrupt_return_eip;
-  int interrupt_again;
   int native_finished;
   int swapped;
-  int in_trap;
   unsigned char bcbackup[2][5];
   int trap_pending;
-  int interrupt_bcaddr;
+  int trap_bcaddr;
 } task;
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);
