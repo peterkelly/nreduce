@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<project name="htmlbib" default="jar" basedir=".">
+
+  <target name="compile">
+    <mkdir dir="classes"/>
+    <javac srcdir="src" destdir="classes" classpath="lib/javabib-bin.jar"/>
+  </target>
+
+  <target name="jar" depends="compile">
+    <unzip src="lib/javabib-bin.jar" dest="classes"/>
+    <delete file="classes/META-INF/MANIFEST.MF"/>
+    <jar destfile="htmlbib.jar" manifest="src/MANIFEST.MF" basedir="classes"/>
+  </target>
+
+  <target name="clean">
+    <delete dir="classes"/>
+  </target>
+
+</project>
