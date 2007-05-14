@@ -156,8 +156,12 @@ public class HTMLBib
 		String filename = "";
 		if ((new File(papersdir+"/"+key+".pdf")).exists())
 		    filename = papersdir+"/"+key+".pdf";
-		if ((new File(papersdir+"/"+key+".ps.gz")).exists())
+		else if ((new File(papersdir+"/"+key+".ps.gz")).exists())
 		    filename = papersdir+"/"+key+".ps.gz";
+		else if ((new File(papersdir+"/"+key+".ps")).exists())
+		    filename = papersdir+"/"+key+".ps";
+		else if ((new File(papersdir+"/"+key+".html")).exists())
+		    filename = papersdir+"/"+key+".html";
 
 		if (filename.length() > 0) {
 		    Element a = outDoc.createElementNS("http://www.w3.org/1999/xhtml","a");
