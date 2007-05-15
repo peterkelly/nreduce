@@ -760,7 +760,7 @@ void compile_instruction(xmlNodePtr n)
     break;
   }
   case XML_TEXT_NODE: {
-    char *esc = escape(n->content);
+    char *esc = escape((const char*)n->content);
     printf("(cons (xml:mktext \"%s\") nil)",esc);
     free(esc);
     break;
@@ -805,13 +805,19 @@ void compile_sequence(xmlNodePtr first)
       char *ident;
       qname qn;
       check_attr(name,"name");
-      check_attr(select,"select");
 
       qn = string_to_qname(name,child);
       ident = nsname_to_ident(qn.uri,qn.localpart);
 
       printf("(letrec %s = ",ident);
-      compile_expr_string(child,select);
+      if (select) {
+	compile_expr_string(child,select);
+      }
+      else {
+	printf("(cons (xml:mkdoc ");
+	compile_sequence(child->children);
+	printf(") nil)");
+      }
       printf(" in ");
 
       free(ident);
