@@ -28,6 +28,10 @@
 #include <libxml/parser.h>
 #include "cxslt.h"
 
+#define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
+#define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
+#define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+
 /* FIXME: escape strings when printing (note that xmlChar complicates things) */
 /* FIXME: can't use reserved words like eq, text, item for element names in path
    expressions. Need to fix the tokenizer/parser */
@@ -71,7 +75,7 @@ int ignore_node(xmlNodePtr n)
   const char *c;
   if (XML_TEXT_NODE != n->type)
     return 0;
-  for (c = n->content; *c; c++)
+  for (c = (const char*)n->content; *c; c++)
     if (!isspace(*c))
       return 0;
   return 1;
@@ -121,7 +125,7 @@ const char *lookup_nsuri(xmlNodePtr n, const char *prefix)
     for (ns = n->nsDef; ns; ns = ns->next) {
 /*       printf("ns: %s %s\n",ns->prefix,ns->href); */
       if (!xmlStrcmp(ns->prefix,prefix)) {
-        return ns->href;
+        return (const char*)ns->href;
       }
     }
   }
