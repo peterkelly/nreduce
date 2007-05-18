@@ -28,17 +28,13 @@
 #include <libxml/parser.h>
 #include "cxslt.h"
 
-#define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
-#define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
-#define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+elcgen *gen2;
 
 /* FIXME: escape strings when printing (note that xmlChar complicates things) */
 /* FIXME: can't use reserved words like eq, text, item for element names in path
    expressions. Need to fix the tokenizer/parser */
 /* FIXME: use an autoconf script to set YYLEX_DESTROY where appropriate - currently
    it does not get set at all */
-
-#define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
 
 int parse_firstline = 0;
 expression *parse_expr = NULL;
@@ -174,6 +170,13 @@ qname string_to_qname(const char *str, xmlNodePtr n)
   return qn;
 }
 
+void free_qname(qname qn)
+{
+  free(qn.uri);
+  free(qn.prefix);
+  free(qn.localpart);
+}
+
 char *string_to_ident(const char *str)
 {
   const char *hexdigits = "0123456789ABCDEF";
@@ -265,6 +268,34 @@ char *escape(const char *str2)
   return (char*)escaped;
 }
 
+int have_user_function(elcgen *gen, qname qn)
+{
+  xmlNodePtr c;
+  int have = 0;
+  for (c = gen->toplevel->children; c; c = c->next) {
+    if (c->ns &&
+	!xmlStrcmp(c->ns->href,XSLT_NAMESPACE) &&
+	!xmlStrcmp(c->name,"function")) {
+      char *name = xmlGetProp(c,"name");
+      check_attr(name,"name");
+      char *nsuri = NULL;
+      char *localname = NULL;
+      qname_to_nsname(name,c,&nsuri,&localname);
+
+      if (!strcmp(nsuri,qn.uri) && !strcmp(localname,qn.localpart))
+	have = 1;
+
+      free(name);
+      free(nsuri);
+      free(localname);
+
+      if (have)
+	return 1;
+    }
+  }
+  return 0;
+}
+
 void compile_binary(expression *expr, const char *fun)
 {
   printf("(%s\n",fun);
@@ -278,6 +309,116 @@ void too_many_args(const char *fname)
 {
   fprintf(stderr,"%s: too many arguments\n",fname);
   exit(1);
+}
+
+void compile_ws_call(elcgen *gen, expression *expr)
+{
+  char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
+  wsdlfile *wf;
+  char *service_url;
+  qname inelem;
+  qname outelem;
+  list *inargs = NULL;
+  list *outargs = NULL;
+  int supplied;
+  int expected;
+  expression *p;
+  list *l;
+
+#if 0
+  printf("\n\n\n");
+  printf("//////////////// compile_ws_call\n");
+  printf("uri = %s\n",expr->qn.uri);
+  printf("prefix = %s\n",expr->qn.prefix);
+  printf("localpart = %s\n",expr->qn.localpart);
+#endif
+
+  wf = process_wsdl(gen,expr->qn.uri);
+  service_url = wsdl_get_url(wf);
+
+  wsdl_get_operation_messages(wf,expr->qn.localpart,&inelem,&outelem,&inargs,&outargs);
+
+#if 0
+  printf("service url = %s\n",service_url);
+  printf("input element = {%s}%s\n",inelem.uri,inelem.localpart);
+  printf("output element = {%s}%s\n",outelem.uri,outelem.localpart);
+
+  printf("inargs =");
+  for (l = inargs; l; l = l->next)
+    printf(" %s",(char*)l->data);
+  printf("\n");
+
+  printf("outargs =");
+  for (l = outargs; l; l = l->next)
+    printf(" %s",(char*)l->data);
+  printf("\n");
+#endif
+
+  supplied = 0;
+  for (p = expr->left; p; p = p->right)
+    supplied++;
+  expected = list_count(inargs);
+
+  if (supplied != expected)
+    fatal("Incorrect # args for web service call %s: expected %d, got %d\n",
+	  expr->qn.localpart,expected,supplied);
+
+
+  printf("(letrec requestxml = ");
+  printf("(cons (xml:mkelem \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
+  printf("(cons (xml:mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
+
+  printf("(cons (xml:mkelem \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
+
+  printf("(cons (xml:mkelem \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
+	 inelem.uri,inelem.localpart,inelem.uri);
+
+
+  //printf("nil");
+  l = inargs;
+  for (p = expr->left; p; p = p->right) {
+    assert(XPATH_ACTUAL_PARAM == p->type);
+    printf("(cons (xml:mkelem \"%s\" nil \"%s\" nil nil ",
+	   inelem.uri,(char*)l->data);
+    printf("(xslt:concomplex (xslt:get_children ");
+    compile_expression(p->left);
+    printf("))) ");
+    l = l->next;
+  }
+  printf("nil");
+  for (p = expr->left; p; p = p->right)
+    printf(")");
+
+  printf(") nil)");
+  printf(") nil)) nil)");
+  printf("request = (xslt:output 1 requestxml)");
+  printf("response = (xslt:post \"%s\" request)",service_url);
+  printf("responsedoc = (xml:parsexml 1 response)");
+  printf("topelems = (xml:node_children responsedoc)");
+
+  printf("bodies = (xslt:apmap3 (!citem.!cpos.!csize.\n");
+  printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
+	 "(xml:node_children citem))",SOAPENV_NAMESPACE,"Body");
+  printf(") topelems)");
+
+  printf("respelems = (xslt:apmap3 (!citem.!cpos.!csize.\n");
+  printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
+	 "(xml:node_children citem))",outelem.uri,outelem.localpart);
+  printf(") bodies)");
+
+  printf("returns = (xslt:apmap3 (!citem.!cpos.!csize.(xml:node_children citem)) respelems)");
+
+  printf("in returns)");
+
+
+
+  free(ident);
+  free(inelem.uri);
+  free(inelem.localpart);
+  free(outelem.uri);
+  free(outelem.localpart);
+  list_free(inargs,free);
+  list_free(outargs,free);
 }
 
 void compile_expression(expression *expr)
@@ -489,16 +630,22 @@ void compile_expression(expression *expr)
   }
   case XPATH_FUNCTION_CALL:
     if (strcmp(expr->qn.prefix,"")) {
-      char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
-      expression *p;
-      printf("(%s",ident);
 
-      for (p = expr->left; p; p = p->right) {
-        assert(XPATH_ACTUAL_PARAM == p->type);
-        printf(" ");
-        compile_expression(p->left);
+      if (have_user_function(gen2,expr->qn)) {
+	char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
+	expression *p;
+	printf("(%s",ident);
+
+	for (p = expr->left; p; p = p->right) {
+	  assert(XPATH_ACTUAL_PARAM == p->type);
+	  printf(" ");
+	  compile_expression(p->left);
+	}
+	printf(")");
       }
-      printf(")");
+      else {
+	compile_ws_call(gen2,expr);
+      }
     }
     else {
       expression *p;
@@ -932,6 +1079,7 @@ void process_root(xmlNodePtr n)
   if (XML_ELEMENT_NODE == n->type) {
     if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NAMESPACE) &&
         (!xmlStrcmp(n->name,"stylesheet") || !xmlStrcmp(n->name,"transform"))) {
+      gen2->toplevel = n;
       process_toplevel(n);
     }
     else {
@@ -949,6 +1097,8 @@ int main(int argc, char **argv)
   char *xsltfile;
   xmlDocPtr doc;
   xmlNodePtr root;
+
+  gen2 = (elcgen*)calloc(1,sizeof(elcgen));
 
   setbuf(stdout,NULL);
 
@@ -978,6 +1128,7 @@ int main(int argc, char **argv)
          "STRIPALL (readb FILENAME)) 1 1))) nil))\n");
 
   xmlFreeDoc(doc);
+  free(gen2);
 
   return 0;
 }

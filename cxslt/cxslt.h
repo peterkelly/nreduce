@@ -3,6 +3,44 @@
 
 #include <libxml/tree.h>
 
+#define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
+#define WSDL_NAMESPACE "http://schemas.xmlsoap.org/wsdl/"
+#define WSDLSOAP_NAMESPACE "http://schemas.xmlsoap.org/wsdl/soap/"
+#define XMLSCHEMA_NAMESPACE "http://www.w3.org/2001/XMLSchema"
+#define SOAPENV_NAMESPACE "http://schemas.xmlsoap.org/soap/envelope/"
+
+#define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
+#define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
+#define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+
+/* util */
+
+typedef struct list list;
+struct list {
+  void *data;
+  list *next;
+};
+
+typedef void (*list_d_t)(void *a);
+typedef void* (*list_copy_t)(void *a);
+
+list *list_new(void *data, list *next);
+list *list_copy(list *orig, list_copy_t copy);
+void list_append(list **l, void *data);
+void list_push(list **l, void *data);
+void *list_pop(list **l);
+int list_count(list *l);
+void *list_item(list *l, int item);
+void list_free(list *l, list_d_t d);
+
+int list_contains_string(list *l, const char *str);
+int list_contains_ptr(list *l, const void *data);
+void list_remove_ptr(list **l, void *ptr);
+
+void fatal(const char *format, ...);
+
+/* cxslt */
+
 #define XPATH_INVALID                     0
 #define XPATH_FOR                         1
 #define XPATH_SOME                        2
@@ -139,5 +177,30 @@ expression *new_VarInListExpr(expression *left, expression *right);
 expression *new_QuantifiedExpr(int type, expression *left, expression *right);
 expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch);
 expression *new_RootExpr(expression *left);
+
+typedef struct {
+  char *filename;
+  xmlDocPtr doc;
+  xmlNodePtr root;
+} wsdlfile;
+
+typedef struct {
+  list *wsdlfiles;
+  xmlNodePtr toplevel;
+} elcgen;
+
+void qname_to_nsname(const char *qname, xmlNodePtr n,
+		     char **nsuri, char **localname);
+qname string_to_qname(const char *str, xmlNodePtr n);
+void free_qname(qname qn);
+
+/* wsdl */
+
+wsdlfile *process_wsdl(elcgen *gen, const char *filename);
+xmlNodePtr wsdl_get_object(wsdlfile *wf, const char *type, const char *name);
+char *wsdl_get_url(wsdlfile *wf);
+void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
+				 qname *inqn, qname *outqn,
+				 list **inargs, list **outargs);
 
 #endif

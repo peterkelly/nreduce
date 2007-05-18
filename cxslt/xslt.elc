@@ -725,3 +725,36 @@ node_following node =
 
  in
   (gonext node))
+
+fn_post content =
+  (letrec
+   text = (post "http://localhost:8080/axis/Test.jws" (xslt:output 1 content))
+  in
+  (cons (xml:parsexml 1 text) nil))
+
+
+
+
+
+
+
+
+
+
+post url content = (http:parse_url url (post2 url content))
+
+post2 url content scheme host port path =
+(letrec
+  request = (append "POST " (append path (append " HTTP/1.1\r\nHost: " (append host (append "\r\nContent-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\nContent-Length: " (append (numtostring (len content)) (append "\r\nConnection: close\r\n\r\n" content)))))))
+  stream = (connect host (stringtonum port) request)
+ in
+  (http:parse_response stream (post3 url content)))
+
+post3 url content version status reason headers body =
+(if (= status 302)
+  (post (http:get_header "location" headers) content)
+  (if (!= status 200)
+    (error
+     (append "HTTP error "
+	     (append (numtostring status) (append ": " (append url (append "\n" body))))))
+    body))

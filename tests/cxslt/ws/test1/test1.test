@@ -1,0 +1,41 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		xmlns:test1="../webservices/test1/test1.wsdl"
+		exclude-result-prefixes="test1"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <test1>
+	<xsl:sequence select="test1:sayHello('Peter')"/>
+      </test1>
+      <test1>
+	<xsl:sequence select="test1:add(13,5)"/>
+      </test1>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <test1>
+      <sayHelloReturn>Hello Peter</sayHelloReturn>
+   </test1>
+   <test1>
+      <addReturn>18</addReturn>
+   </test1>
+</result>
+================================== RETURN CODE =================================
+0

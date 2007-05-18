@@ -904,7 +904,7 @@ print_namespaces lst next =
     nsuri = (namespace_nsuri cur)
     nsprefix = (namespace_nsprefix cur)
    in
-    (append " xmlns:"
+    (append (if nsprefix " xmlns:" " xmlns")
       (append nsprefix
         (append "=\""
           (append nsuri

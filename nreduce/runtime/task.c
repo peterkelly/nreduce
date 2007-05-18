@@ -169,7 +169,7 @@ gaddr global_addressof(task *tsk, pntr p)
 
   /* It's a local object; give it a global address */
   addr.tid = tsk->tid;
-  addr.lid = tsk->nextlid++;
+  addr.lid = tsk->nextlid++; /* FIXME: what happens when this wraps around? could be bad... */
   glo = add_global(tsk,addr,p);
   return glo->addr;
 }
