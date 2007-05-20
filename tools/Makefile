@@ -15,5 +15,9 @@ runtests: runtests.c
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
 
+saxonwebapp: SaxonServlet.java
+	javac SaxonServlet.java
+	cp SaxonServlet.class saxon/WEB-INF/classes
+
 clean:
-	rm -f parsh showload nobuftail runtests saxonclient
+	rm -f parsh showload nobuftail runtests saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class

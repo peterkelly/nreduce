@@ -197,10 +197,10 @@ static void usage()
 "                             output\n"
 "  -h, --hide-output          Hide status output\n"
 "  -i, --inprocess            Run all tests in-process\n"
-"  -n, --repeat=N             Run tests n times (dirs only)\n"
-"  -s, --substitute=NAME=PROG Use PROG as the executable whenever a test\n"
+"  -n, --repeat N             Run tests n times (dirs only)\n"
+"  -s, --substitute NAME=PROG Use PROG as the executable whenever a test\n"
 "                             specifies NAME\n"
-"  -v, --valgrind=CMD         Run tests through valgrind command CMD and report\n"
+"  -v, --valgrind CMD         Run tests through valgrind command CMD and report\n"
 "                             leaks/errors\n");
   exit(1);
 }
@@ -216,6 +216,8 @@ static void parse_args(int argc, char **argv, struct arguments *arguments)
       arguments->diff = 1;
     }
     else if (!strcmp(argv[i],"-v") || !strcmp(argv[i],"--valgrind")) {
+      if (++i >= argc)
+        usage();
       arguments->valgrind = 1;
       arguments->valgrind_cmd = argv[i];
     }
@@ -223,16 +225,25 @@ static void parse_args(int argc, char **argv, struct arguments *arguments)
       arguments->inprocess = 1;
     }
     else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--repeat")) {
+      if (++i >= argc)
+        usage();
       arguments->n = atoi(argv[i]);
     }
     else if (!strcmp(argv[i],"-h") || !strcmp(argv[i],"--hide-output")) {
       arguments->hide_output = 1;
     }
     else if (!strcmp(argv[i],"-s") || !strcmp(argv[i],"--substitute")) {
-      progsubst *s = (progsubst*)calloc(1,sizeof(progsubst));
-      char *equals = strchr(argv[i],'=');
+      progsubst *s;
+      char *equals;
       int namelen;
       int proglen;
+
+      if (++i >= argc)
+        usage();
+
+      s = (progsubst*)calloc(1,sizeof(progsubst));
+      equals = strchr(argv[i],'=');
+
       if (NULL == equals) {
 	fprintf(stderr,"Invalid program substitution: must be of the form NAME=PROG\n");
 	exit(1);
@@ -365,7 +376,7 @@ int run_program_exec(char *program, char *infilename, stringbuf *output, int *st
     close(fds[0]);
     expand_args(program,infilename,&args);
     execvp(args[0],args);
-    perror("execvp");
+    perror(args[0]);
     exit(-1);
   }
   else {
