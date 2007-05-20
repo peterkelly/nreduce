@@ -59,13 +59,21 @@ void compile_expression(expression *expr);
 static int option_indent = 0;
 static int option_strip = 0;
 static xmlDocPtr parse_doc = NULL; /* FIXME: make this non-global */
+static char *parse_filename = NULL; /* FIXME: make this non-global */
 
-void check_attr(const char *value, const char *name)
+void check_attr(xmlNodePtr n, const char *value, const char *name)
 {
   if (NULL == value) {
-    fprintf(stderr,"Missing attribute: %s\n",name);
+    fprintf(stderr,"%s:%d: Missing attribute: %s\n",parse_filename,n->line,name);
     exit(1);
   }
+}
+
+char *get_required_attr(xmlNodePtr n, const char *name)
+{
+  char *value = (char*)xmlGetProp(n,name);
+  check_attr(n,value,name);
+  return value;
 }
 
 int ignore_node(xmlNodePtr n)
@@ -104,14 +112,14 @@ expression *new_RootExpr(expression *left) { return NULL; }
 
 void free_expression(expression *expr)
 {
-/*   switch (expr->type) { */
-/*   } */
   if (expr->left)
     free_expression(expr->left);
   if (expr->right)
     free_expression(expr->right);
   if (expr->str)
     free(expr->str);
+  free_qname(expr->qn);
+  free(expr);
 }
 
 const char *lookup_nsuri(xmlNodePtr n, const char *prefix)
@@ -133,23 +141,6 @@ const char *lookup_nsuri(xmlNodePtr n, const char *prefix)
 
   fprintf(stderr,"line %d: invalid namespace prefix \"%s\"\n",n->line,prefix);
   exit(1);
-}
-
-void qname_to_nsname(const char *qname, xmlNodePtr n,
-                    char **nsuri, char **localname)
-{
-  char *qncopy = xmlStrdup(qname);
-  char *colon = strchr(qncopy,':');
-  if (colon) {
-    *colon = '\0';
-    *nsuri = xmlStrdup(lookup_nsuri(n,qncopy));
-    *localname = xmlStrdup(colon+1);
-  }
-  else {
-    *nsuri = xmlStrdup(lookup_nsuri(n,""));
-    *localname = xmlStrdup(qncopy);
-  }
-  free(qncopy);
 }
 
 qname string_to_qname(const char *str, xmlNodePtr n)
@@ -278,18 +269,14 @@ int have_user_function(elcgen *gen, qname qn)
     if (c->ns &&
 	!xmlStrcmp(c->ns->href,XSLT_NAMESPACE) &&
 	!xmlStrcmp(c->name,"function")) {
-      char *name = xmlGetProp(c,"name");
-      check_attr(name,"name");
-      char *nsuri = NULL;
-      char *localname = NULL;
-      qname_to_nsname(name,c,&nsuri,&localname);
+      char *name = get_required_attr(c,"name");
+      qname funqn = string_to_qname(name,c);
 
-      if (!strcmp(nsuri,qn.uri) && !strcmp(localname,qn.localpart))
+      if (!strcmp(funqn.uri,qn.uri) && !strcmp(funqn.localpart,qn.localpart))
 	have = 1;
 
+      free_qname(funqn);
       free(name);
-      free(nsuri);
-      free(localname);
 
       if (have)
 	return 1;
@@ -644,6 +631,7 @@ void compile_expression(expression *expr)
 	  compile_expression(p->left);
 	}
 	printf(")");
+	free(ident);
       }
       else {
 	compile_ws_call(gen2,expr);
@@ -740,24 +728,24 @@ void compile_avt(xmlNodePtr n, const char *str)
 {
   char *tmp = (char*)malloc(strlen(str)+3);
   expression *expr;
+  expression *cur;
   int count = 0;
   sprintf(tmp,"}%s{",str);
 
-  expr = parse_string(n,tmp);
+  cur = expr = parse_string(n,tmp);
 
-  while (XPATH_AVT_COMPONENT == expr->type) {
+  while (XPATH_AVT_COMPONENT == cur->type) {
     printf("(append ");
-    compile_avt_component(expr->left);
+    compile_avt_component(cur->left);
 
     count++;
-    expr = expr->right;
+    cur = cur->right;
   }
 
-  compile_avt_component(expr);
+  compile_avt_component(cur);
 
   while (0 < count--)
     printf(")");
-
 
   free_expression(expr);
   free(tmp);
@@ -810,58 +798,32 @@ void compile_instruction(xmlNodePtr n)
 /*     xmlNodePtr child; */
     if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NAMESPACE)) {
       if (!xmlStrcmp(n->name,"sequence")) {
-        char *select = xmlGetProp(n,"select");
-        check_attr(select,"select");
+        char *select = get_required_attr(n,"select");
 
         printf("\n// sequence %s\n",select);
         compile_expr_string(n,select);
+	free(select);
       }
       else if (!xmlStrcmp(n->name,"value-of")) {
         char *select = xmlGetProp(n,"select");
-        if (select) {
-          printf("\n// value-of %s\n",select);
-          printf("(cons (xml:mktext (xslt:consimple ");
+	printf("\n// value-of %s\n",select);
+	printf("(cons (xml:mktext (xslt:consimple ");
+        if (select)
           compile_expr_string(n,select);
-          printf(")) nil)\n");
-        }
-        else {
-          /* FIXME: support content within a value attribute */
-          check_attr(select,"select");
-        }
+        else
+	  compile_sequence(n->children);
+	printf(")) nil)\n");
+	free(select);
       }
       else if (!xmlStrcmp(n->name,"text")) {
-        xmlNodePtr child;
-        int count = 0;
-        int len = 0;
-        int pos = 0;
-        char *str;
-        char *esc;
-        for (child = n->children; child; child = child->next) {
-          if (XML_TEXT_NODE == child->type) {
-            count++;
-            len += xmlStrlen(child->content);
-          }
-        }
-        printf("\n// text: %d children, %d len\n",count,len);
-        str = (char*)malloc(len+1);
-
-        for (child = n->children; child; child = child->next) {
-          if (XML_TEXT_NODE == child->type) {
-            memcpy(&str[pos],child->content,xmlStrlen(child->content));
-            pos += xmlStrlen(child->content);
-          }
-        }
-        assert(pos == len);
-        str[pos] = '\0';
-
-        esc = escape(str);
+	char *str = xmlNodeListGetString(parse_doc,n->children,1);
+	char *esc = escape(str);
         printf("(cons (xml:mktext \"%s\") nil)",esc);
         free(esc);
         free(str);
       }
       else if (!xmlStrcmp(n->name,"for-each")) {
-        char *select = xmlGetProp(n,"select");
-        check_attr(select,"select");
+        char *select = get_required_attr(n,"select");
 
         printf("\n// for-each %s\n",select);
         printf("(letrec\n");
@@ -874,10 +836,10 @@ void compile_instruction(xmlNodePtr n)
         printf(")\n");
 
         printf("select))\n");
+	free(select);
       }
       else if (!xmlStrcmp(n->name,"if")) {
-        char *test = xmlGetProp(n,"test");
-        check_attr(test,"test");
+        char *test = get_required_attr(n,"test");
         printf("\n// if %s\n",test);
         printf("(if\n");
         printf("(xslt:ebv\n");
@@ -885,6 +847,7 @@ void compile_instruction(xmlNodePtr n)
         printf(")\n");
         compile_sequence(n->children);
         printf("\nnil)");
+	free(test);
       }
       else if (!xmlStrcmp(n->name,"choose")) {
         xmlNodePtr child;
@@ -896,8 +859,7 @@ void compile_instruction(xmlNodePtr n)
           if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
               !xmlStrcmp(child->name,"when")) {
             // when
-            char *test = xmlGetProp(child,"test");
-            check_attr(test,"test");
+            char *test = get_required_attr(child,"test");
 
             printf("\n// when %s\n",test);
 
@@ -906,6 +868,7 @@ void compile_instruction(xmlNodePtr n)
             printf(") ");
             compile_sequence(child->children);
             printf(" ");
+	    free(test);
             count++;
           }
           else if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
@@ -926,8 +889,7 @@ void compile_instruction(xmlNodePtr n)
       }
       else if (!xmlStrcmp(n->name,"element")) {
 	/* FIXME: complete this, and handle namespaces properly */
-        char *name = xmlGetProp(n,"name");
-        check_attr(name,"name");
+        char *name = get_required_attr(n,"name");
 
         printf("\n// element %s\n",name);
 
@@ -943,12 +905,12 @@ void compile_instruction(xmlNodePtr n)
 	printf("content =\n");
 	compile_sequence(n->children);
 	printf("\nin\n(cons elem nil))");
+	free(name);
       }
       else if (!xmlStrcmp(n->name,"attribute")) {
 	/* FIXME: handle namespaces properly */
-        char *name = xmlGetProp(n,"name");
+        char *name = get_required_attr(n,"name");
         char *select = xmlGetProp(n,"select");
-        check_attr(name,"name");
 
 	printf("\n// attribute %s\n",name);
 	printf("(cons (xml:mkattr ");
@@ -967,6 +929,8 @@ void compile_instruction(xmlNodePtr n)
 	printf(")");
 
 	printf(") nil)");
+	free(name);
+	free(select);
       }
       else {
         fprintf(stderr,"Unsupported XSLT instruction: %s\n",n->name);
@@ -1041,11 +1005,10 @@ void compile_sequence(xmlNodePtr first)
   for (child = first; child; child = child->next) {
     if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
         !xmlStrcmp(child->name,"variable")) {
-      char *name = xmlGetProp(child,"name");
+      char *name = get_required_attr(child,"name");
       char *select = xmlGetProp(child,"select");
       char *ident;
       qname qn;
-      check_attr(name,"name");
 
       qn = string_to_qname(name,child);
       ident = nsname_to_ident(qn.uri,qn.localpart);
@@ -1062,9 +1025,9 @@ void compile_sequence(xmlNodePtr first)
       printf(" in ");
 
       free(ident);
-      free(qn.uri);
-      free(qn.prefix);
-      free(qn.localpart);
+      free_qname(qn);
+      free(name);
+      free(select);
 
       count++;
     }
@@ -1091,19 +1054,16 @@ void compile_template(xmlNodePtr n)
 
 void compile_function(xmlNodePtr child)
 {
-  char *name = xmlGetProp(child,"name");
-  char *nsuri = NULL;
-  char *localname = NULL;
+  char *name = get_required_attr(child,"name");
   char *ident;
   xmlNodePtr pn;
-  check_attr(name,"name");
-  qname_to_nsname(name,child,&nsuri,&localname);
-  if (NULL == localname) {
+  qname fqn = string_to_qname(name,child);
+  if (NULL == fqn.localpart) {
     fprintf(stderr,"XTSE0740: function must have a prefixed name");
     exit(1);
   }
 
-  ident = nsname_to_ident(nsuri,localname);
+  ident = nsname_to_ident(fqn.uri,fqn.localpart);
 
   printf("\n");
   printf("%s",ident);
@@ -1112,17 +1072,14 @@ void compile_function(xmlNodePtr child)
     if (XML_ELEMENT_NODE == pn->type) {
       if (pn->ns && !xmlStrcmp(pn->ns->href,XSLT_NAMESPACE) &&
           !xmlStrcmp(pn->name,"param")) {
-        char *pname = xmlGetProp(pn,"name");
-        char *pn_nsuri = NULL;
-        char *pn_localname = NULL;
+        char *pname = get_required_attr(pn,"name");
         char *pn_ident;
-        check_attr(pname,"name");
-        qname_to_nsname(pname,pn,&pn_nsuri,&pn_localname);
-        pn_ident = nsname_to_ident(pn_nsuri,pn_localname);
+	qname pqn = string_to_qname(pname,pn);
+        pn_ident = nsname_to_ident(pqn.uri,pqn.localpart);
         printf(" %s",pn_ident);
-        free(pn_nsuri);
-        free(pn_localname);
+	free_qname(pqn);
         free(pn_ident);
+	free(pname);
       }
       else {
         break;
@@ -1135,9 +1092,9 @@ void compile_function(xmlNodePtr child)
   printf("\n");
   printf("\n");
 
-  free(nsuri);
-  free(localname);
+  free_qname(fqn);
   free(ident);
+  free(name);
 }
 
 void process_toplevel(xmlNodePtr n2)
@@ -1158,8 +1115,7 @@ void process_toplevel(xmlNodePtr n2)
         free(indent);
       }
       else if (!xmlStrcmp(child->name,"strip-space")) {
-        char *elements = xmlGetProp(child,"elements");
-        check_attr(elements,"elements");
+        char *elements = get_required_attr(child,"elements");
         if (!xmlStrcmp(elements,"*"))
           option_strip = 1;
         free(elements);
@@ -1214,6 +1170,7 @@ int main(int argc, char **argv)
   printf("FILENAME = \"%s\"\n",sourcefile);
 
   parse_doc = doc;
+  parse_filename = xsltfile;
   root = xmlDocGetRootElement(doc);
   process_root(root);
 

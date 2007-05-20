@@ -192,8 +192,6 @@ typedef struct {
   xmlNodePtr toplevel;
 } elcgen;
 
-void qname_to_nsname(const char *qname, xmlNodePtr n,
-		     char **nsuri, char **localname);
 qname string_to_qname(const char *str, xmlNodePtr n);
 void free_qname(qname qn);
 

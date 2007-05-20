@@ -34,11 +34,6 @@ extern int lex_lineno;
 int yylex();
 int yyerror(const char *err);
 
-/* extern Statement *parse_tree; */
-/* extern SequenceTypeImpl *parse_SequenceTypeImpl; */
-/* extern char *parse_errstr; */
-/* extern Error *parse_ei; */
-/* extern String parse_filename; */
 extern expression *parse_expr;
 extern int parse_firstline;
 extern xmlNodePtr parse_node;
@@ -716,11 +711,6 @@ QName:
 
 int yyerror(const char *err)
 {
-/*   if (parse_ei) */
-/*     error(parse_ei,parse_filename,parse_firstline+lex_lineno,String::null(),"%s",err); */
-/*   else if (parse_errstr) */
-/*     fmessage(stderr,"Parse error at line %d%s: %s\n",parse_firstline+lex_lineno,parse_errstr,err); */
-/*   else */
   fprintf(stderr,"Parse error at line %d: %s\n",parse_firstline+lex_lineno,err);
   return 1;
 }
