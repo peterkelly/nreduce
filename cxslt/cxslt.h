@@ -12,6 +12,7 @@
 #define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
 #define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
 #define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+#define xmlNodeListGetString(doc,list,inLine) (char*)xmlNodeListGetString(doc,list,inLine)
 
 /* util */
 
@@ -105,6 +106,8 @@ void fatal(const char *format, ...);
 #define XPATH_PARAMLIST                   57
 #define XPATH_FILTER                      58
 #define XPATH_NAME_TEST                   59
+
+#define XPATH_AVT_COMPONENT               60
 
 #define AXIS_INVALID                      0
 #define AXIS_CHILD                        1

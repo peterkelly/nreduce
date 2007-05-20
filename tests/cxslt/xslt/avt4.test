@@ -1,0 +1,24 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <item test="{4+5}{3+7}hello{(4+5,3+7)}"/>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<item test="910hello9 10"/>
+================================== RETURN CODE =================================
+0

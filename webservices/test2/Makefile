@@ -11,7 +11,6 @@ all:
 	-y WRAPPED
 	java org.apache.axis.wsdl.WSDL2Java -o . -d Session -s -p ws $(SERVICE).wsdl
 	javac ws/*.java client/*.java
-	cp ws/deploy.wsdd backup.wsdd
 	sed -i '' -e 's/ws\.$(MAIN_CLASS)SoapBindingImpl/$(SERVICE).$(MAIN_CLASS)/' ws/deploy.wsdd
 	sed -i '' -e 's/type="java:ws./type="java:$(SERVICE)./' ws/deploy.wsdd
 	jar cf $(SERVICE).jar $(SERVICE)/*.class

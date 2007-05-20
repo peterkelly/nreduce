@@ -35,6 +35,7 @@ elcgen *gen2;
    expressions. Need to fix the tokenizer/parser */
 /* FIXME: use an autoconf script to set YYLEX_DESTROY where appropriate - currently
    it does not get set at all */
+/* FIXME: apparently we're supposed to free the strings returned form xmlGetProp() */
 
 int parse_firstline = 0;
 expression *parse_expr = NULL;
@@ -57,6 +58,7 @@ void compile_expression(expression *expr);
 
 static int option_indent = 0;
 static int option_strip = 0;
+static xmlDocPtr parse_doc = NULL; /* FIXME: make this non-global */
 
 void check_attr(const char *value, const char *name)
 {
@@ -681,16 +683,15 @@ void compile_expression(expression *expr)
   }
 }
 
-void compile_expr_string(xmlNodePtr n, const char *str)
+expression *parse_string(xmlNodePtr n, const char *str)
 {
   YY_BUFFER_STATE bufstate;
   int r;
+  expression *expr;
   parse_node = n;
   parse_firstline = n->line;
   parse_expr = NULL;
   lex_lineno = 0;
-
-/*   printf("// parsing string: %s\n",str); */
 
   bufstate = yy_scan_string(str);
   yy_switch_to_buffer(bufstate);
@@ -708,11 +709,58 @@ void compile_expr_string(xmlNodePtr n, const char *str)
   }
 
   assert(parse_expr);
-  compile_expression(parse_expr);
-  free_expression(parse_expr);
+  expr = parse_expr;
   parse_expr = NULL;
 
-/*   printf("(cons (xml:mktext \"???\") nil)"); */
+  return expr;
+}
+
+void compile_expr_string(xmlNodePtr n, const char *str)
+{
+  expression *expr = parse_string(n,str);
+  compile_expression(expr);
+  free_expression(expr);
+}
+
+void compile_avt_component(expression *expr)
+{
+  if (XPATH_STRING_LITERAL == expr->type) {
+    char *esc = escape(expr->str);
+    printf("\"%s\"",esc);
+    free(esc);
+  }
+  else {
+    printf("(xslt:consimple ");
+    compile_expression(expr);
+    printf(")");
+  }
+}
+
+void compile_avt(xmlNodePtr n, const char *str)
+{
+  char *tmp = (char*)malloc(strlen(str)+3);
+  expression *expr;
+  int count = 0;
+  sprintf(tmp,"}%s{",str);
+
+  expr = parse_string(n,tmp);
+
+  while (XPATH_AVT_COMPONENT == expr->type) {
+    printf("(append ");
+    compile_avt_component(expr->left);
+
+    count++;
+    expr = expr->right;
+  }
+
+  compile_avt_component(expr);
+
+  while (0 < count--)
+    printf(")");
+
+
+  free_expression(expr);
+  free(tmp);
 }
 
 void compile_attributes(xmlNodePtr n)
@@ -721,17 +769,19 @@ void compile_attributes(xmlNodePtr n)
   int count = 0;
 
   for (attr = n->properties; attr; attr = attr->next) {
-    xmlNodePtr child;
+    char *value;
     if (attr->ns)
-      printf("(cons (xml:mkattr \"%s\" \"%s\" \"%s\" \"",
+      printf("(cons (xml:mkattr \"%s\" \"%s\" \"%s\" ",
              attr->ns->href,attr->ns->prefix,attr->name);
     else
-      printf("(cons (xml:mkattr nil nil \"%s\" \"",attr->name);
+      printf("(cons (xml:mkattr nil nil \"%s\" ",attr->name);
 
-    for (child = attr->children; child; child = child->next)
-      if (XML_TEXT_NODE == child->type)
-        printf("%s",child->content);
-    printf("\")\n");
+    value = xmlNodeListGetString(parse_doc,attr->children,1);
+    printf("//xxx value: %s\n",value);
+    compile_avt(n,value);
+    free(value);
+
+    printf(")\n");
 
     count++;
   }
@@ -873,6 +923,50 @@ void compile_instruction(xmlNodePtr n)
 
         while (0 < count--)
           printf(")");
+      }
+      else if (!xmlStrcmp(n->name,"element")) {
+	/* FIXME: complete this, and handle namespaces properly */
+        char *name = xmlGetProp(n,"name");
+        check_attr(name,"name");
+
+        printf("\n// element %s\n",name);
+
+	printf("(letrec\n");
+
+	printf("attrs = (xslt:get_attributes content)\n");
+	printf("namespaces = (xslt:get_namespaces content)\n");
+	printf("children = (xslt:concomplex (xslt:get_children content))\n");
+	printf("name = ");
+	compile_avt(n,name);
+	//	printf("\"%s\"",name);
+	printf("elem = (xml:mkelem nil nil name attrs namespaces children)\n");
+	printf("content =\n");
+	compile_sequence(n->children);
+	printf("\nin\n(cons elem nil))");
+      }
+      else if (!xmlStrcmp(n->name,"attribute")) {
+	/* FIXME: handle namespaces properly */
+        char *name = xmlGetProp(n,"name");
+        char *select = xmlGetProp(n,"select");
+        check_attr(name,"name");
+
+	printf("\n// attribute %s\n",name);
+	printf("(cons (xml:mkattr ");
+	printf(" nil "); // nsuri
+	printf(" nil "); // nsprefix
+
+        // localname
+	compile_avt(n,name);
+
+        // value
+	printf("(xslt:consimple ");
+        if (select)
+          compile_expr_string(n,select);
+        else
+	  compile_sequence(n->children);
+	printf(")");
+
+	printf(") nil)");
       }
       else {
         fprintf(stderr,"Unsupported XSLT instruction: %s\n",n->name);
@@ -1119,6 +1213,7 @@ int main(int argc, char **argv)
   printf("import xslt\n");
   printf("FILENAME = \"%s\"\n",sourcefile);
 
+  parse_doc = doc;
   root = xmlDocGetRootElement(doc);
   process_root(root);
 

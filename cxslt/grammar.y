@@ -134,6 +134,7 @@ extern xmlNodePtr parse_node;
 
 %token <string> NCNAME
 %token <string> STRING_LITERAL
+%token <string> AVT_LITERAL
 %token <inumber> INTEGER_LITERAL
 %token <number> DECIMAL_LITERAL
 %token <number> DOUBLE_LITERAL
@@ -141,6 +142,8 @@ extern xmlNodePtr parse_node;
 %type <qn> QName
 
 %type <expr> Top
+%type <expr> AVTLiteral
+%type <expr> TopExprs
 %type <expr> XPathExpr
 %type <expr> XPathExprSingle
 %type <expr> XPathForExpr
@@ -214,32 +217,22 @@ extern xmlNodePtr parse_node;
 
 %%
 
+AVTLiteral:
+  AVT_LITERAL                     { $$ = new_expression(XPATH_STRING_LITERAL);
+                                    $$->str = $1; }
+;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+TopExprs:
+  AVTLiteral                      { $$ = $1; }
+| AVTLiteral TopExprs             { $$ = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
+| AVTLiteral XPathExpr TopExprs   { expression *e = new_expression2(XPATH_AVT_COMPONENT,$2,$3);
+                                    $$ = new_expression2(XPATH_AVT_COMPONENT,$1,e); }
+;
 
 Top:
-  XPathExpr { parse_expr = $1; }
+  XPathExpr                       { parse_expr = $1; }
+| XPathExpr TopExprs              { parse_expr = $1; }
+| TopExprs                        { parse_expr = $1; }
 ;
 
 XPathExpr:
