@@ -606,8 +606,7 @@ void compile_expression(expression *expr)
       printf("(xml:node_attributes citem)");
       break;
     case AXIS_NAMESPACE:
-      fprintf(stderr,"Namespace axis is not supported\n");
-      exit(1);
+      printf("(xml:node_namespaces citem)");
       break;
     default:
       assert(!"unsupported axis");
@@ -646,6 +645,9 @@ void compile_expression(expression *expr)
 
       if (!strcmp(expr->qn.localpart,"string") && (0 == nargs)) {
         printf("(xslt:fn_string0 citem)");
+      }
+      else if (!strcmp(expr->qn.localpart,"string-length") && (0 == nargs)) {
+        printf("(xslt:fn_string-length0 citem)");
       }
       else if (!strcmp(expr->qn.localpart,"position")) {
         printf("(cons (xml:mknumber cpos) nil)");
@@ -952,7 +954,7 @@ void compile_instruction(xmlNodePtr n)
 
       if (n->ns) {
         printf("elem = (xml:mkelem \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
-               n->ns->href,n->ns->prefix,n->name);
+                n->ns->href,n->ns->prefix,n->name);
       }
       else {
         printf("elem = (xml:mkelem nil nil \"%s\" attrs namespaces children)\n",n->name);
@@ -971,7 +973,8 @@ void compile_instruction(xmlNodePtr n)
     break;
   }
   case XML_COMMENT_NODE: {
-    printf("???comment\n");
+/*     printf("???comment\n"); */
+    printf("nil");
     break;
   }
   default:
@@ -1005,6 +1008,7 @@ void compile_sequence(xmlNodePtr first)
   for (child = first; child; child = child->next) {
     if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
         !xmlStrcmp(child->name,"variable")) {
+      /* FIXME: support top-level variables as well */
       char *name = get_required_attr(child,"name");
       char *select = xmlGetProp(child,"select");
       char *ident;

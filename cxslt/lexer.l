@@ -54,7 +54,7 @@ LETTER     [a-zA-Z]
 INTEGER {DIGITS}
 DECIMAL (\.{DIGITS}|{DIGITS}\.[0-9]*)
 DOUBLE  (\.{DIGITS}|{DIGITS}(\.[0-9]*)?[eE][+-]?{DIGITS})
-NCNAME ([a-zA-Z0-9]|_)([a-zA-Z0-9]|\.|-|_)*
+NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 
 %%
 

@@ -241,7 +241,9 @@ atomize1 x =
           (xml:mkuntyped (textcontent (xml:node_children x)))
           (if (= (xml:item_type x) xml:TYPE_DOCUMENT)
             (xml:mkuntyped (textcontent (xml:node_children x)))
-            (error (append "FIXME(atomize):" (numtostring (xml:item_type x))))))))))
+	    (if (= (xml:item_type x) xml:TYPE_NAMESPACE)
+		(xml:mkuntyped (xml:namespace_nsuri x))
+	      (error (append "FIXME(atomize):" (numtostring (xml:item_type x)))))))))))
 
 textcontent lst =
 (if lst
@@ -527,10 +529,13 @@ fn_doc url =
      in
       (cons (xml:parsexml 1 data) nil))))
 
-fn_string0 node =
+node_to_string node =
 (if (isatomic node)
-  (cons (xml:mkstring (atom_to_string node)) nil)
-  (cons (xml:mkstring (dm_string_value node)) nil))
+  (xml:string_value (atom_to_string node))
+  (dm_string_value node))
+
+fn_string0 node =
+(cons (xml:mkstring (node_to_string node)) nil)
 
 fn_string arg0 =
 (if arg0
@@ -540,7 +545,17 @@ fn_string arg0 =
   (error "string: argument is an empty list"))
 
 
-fn_node_name0 node =
+fn_string-length0 node =
+(cons (xml:mknumber (len (node_to_string node))) nil)
+
+fn_string-length arg0 =
+(if arg0
+  (if (tail arg0)
+    (error "string-length: argument is a list of length > 1")
+    (fn_string-length0 (head arg0)))
+  (cons (xml:mknumber 0) nil))
+
+fn_node-name0 node =
 (if (= (xml:item_type node) xml:TYPE_ELEMENT)
   (cons (xml:mkqname (xml:elem_nsuri node) (xml:elem_nsprefix node) (xml:elem_localname node)) nil)
   nil)
@@ -549,7 +564,7 @@ fn_node-name arg0 =
 (if arg0
   (if (tail arg0)
     (error "node-name: argument is a list of length > 1")
-    (fn_node_name0 (head arg0)))
+    (fn_node-name0 (head arg0)))
   (error "node-name: argument is an empty list"))
 
 fn_sum1 lst =
