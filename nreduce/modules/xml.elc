@@ -26,10 +26,6 @@ TYPE_DOCUMENT   = 10
 
 TYPE_ERROR      = 11
 
-// FIXME
-xNODE_NAMES = "ELEMENT", "TEXT", "COMMENT", "ATTRIBUTE", "NAMESPACE", "DOCUMENT", "STRING",
-"BOOLEAN", "NUMBER", "QNAME", "UNTYPED_ATOMIC", "ERROR", nil
-
 TOKEN_STARTELEM = 0
 TOKEN_ENDELEM = 1
 TOKEN_TEXT = 2
@@ -38,6 +34,94 @@ TOKEN_ATTRVALUE = 4
 TOKEN_COMMENT = 5
 
 TOKEN_NAMES = "STARTELEM", "ENDELEM", "TEXT", "ATTRNAME", "ATTRVALUE", "COMMENT", nil
+
+//==================================================================================================
+// Items
+
+/*
+
+Field usage:
+
+String      type value
+Boolean     type value
+Number      type value
+QName       type                        nsuri nsprefix localname
+Untyped     type value
+            
+Element     type       parent prev next nsuri nsprefix localname attributes namespaces children
+Text        type value parent prev next
+Comment     type value parent prev next
+Attribute   type value                  nsuri nsprefix localname
+Namespace   type                        nsuri nsprefix
+Document    type                                                                       children
+
+*/
+
+mkatom type value =
+(cons type (cons value nil))
+
+mkitem type value parent prev next nsuri nsprefix localname attributes namespaces children =
+(cons type (cons value
+(cons parent (cons prev (cons next
+(cons nsuri (cons nsprefix (cons localname
+(cons attributes (cons namespaces (cons children nil)))))))))))
+
+item_type x = (head x)
+item_value x = (item 1 x)
+
+item_parent x = (item 2 x)
+item_prev x = (item 3 x)
+item_next x = (item 4 x)
+
+item_nsuri x = (item 5 x)
+item_nsprefix x = (item 6 x)
+item_localname x = (item 7 x)
+
+item_attributes x = (item 8 x)
+item_namespaces x = (item 9 x)
+item_children x = (item 10 x)
+
+mkstring str =
+(mkatom TYPE_STRING str)
+
+mkuntyped val =
+(mkatom UNTYPED_ATOMIC val)
+
+mknumber num =
+(mkatom TYPE_NUMBER num)
+
+mkbool b =
+(mkatom TYPE_BOOLEAN b)
+
+mkelem2 nsuri nsprefix localname attributes namespaces children parent prev next =
+(mkitem TYPE_ELEMENT nil parent prev next nsuri nsprefix localname attributes namespaces children)
+
+mkelem nsuri nsprefix localname attributes namespaces children =
+(mkelem2 nsuri nsprefix localname attributes namespaces children nil nil nil)
+
+mktext2 value parent prev next =
+(mkitem TYPE_TEXT value parent prev next nil nil nil nil nil nil)
+
+mktext value =
+(mktext2 value nil nil nil)
+
+mkcomment2 value parent prev next =
+(mkitem TYPE_COMMENT value parent prev next nil nil nil nil nil nil)
+
+mkcomment value =
+(mkcomment2 value nil nil nil)
+
+mkattr nsuri nsprefix localname value =
+(mkitem TYPE_ATTRIBUTE value nil nil nil nsuri nsprefix localname nil nil nil)
+
+mknamespace nsuri nsprefix =
+(mkitem TYPE_NAMESPACE nil nil nil nil nsuri nsprefix nil nil nil nil)
+
+mkdoc children =
+(mkitem TYPE_DOCUMENT nil nil nil nil nil nil nil nil nil children)
+
+mkqname nsuri nsprefix localname =
+(mkitem TYPE_QNAME nil nil nil nil nsuri nsprefix localname nil nil nil)
 
 //==================================================================================================
 // xml:tokenize stream
@@ -312,12 +396,12 @@ add_whitespace1 depth lst needindent haveindent =
    in
     (if (= type TYPE_ELEMENT)
       (letrec
-        nsuri = (elem_nsuri this)
-        nsprefix = (elem_nsprefix this)
-        localname = (elem_localname this)
-        attributes = (elem_attributes this)
-        namespaces = (elem_namespaces this)
-        children = (elem_children this)
+        nsuri = (item_nsuri this)
+        nsprefix = (item_nsprefix this)
+        localname = (item_localname this)
+        attributes = (item_attributes this)
+        namespaces = (item_namespaces this)
+        children = (item_children this)
        in
         (maybe_indent depth needindent haveindent
           (cons
@@ -328,7 +412,7 @@ add_whitespace1 depth lst needindent haveindent =
             (add_whitespace1 depth rest 1 0))))
       (if (= type TYPE_TEXT)
         (letrec
-          str = (text_content this)
+          str = (item_value this)
           newhave = (count_indent str haveindent)
           nws = (isnonws str)
          in
@@ -344,7 +428,7 @@ add_whitespace1 depth lst needindent haveindent =
               (add_whitespace1 depth rest nil 0)))
           (if (= type TYPE_DOCUMENT)
             (letrec
-              children = (doc_children this)
+              children = (item_children this)
              in
               (cons
                 (mkdoc (add_whitespace1 depth children 1 0))
@@ -631,191 +715,7 @@ skip_level tokens level =
 
 //==================================================================================================
 
-string_value str = (tail str)
-untyped_value untyped = (tail untyped)
-number_value num = (tail num)
-bool_value bool = (tail bool)
-qname_nsuri qname = (item 1 qname)
-qname_nsprefix qname = (item 2 qname)
-qname_localname qname = (item 3 qname)
-
-mkstring str =
-(cons TYPE_STRING str)
-
-mknumber num =
-(cons TYPE_NUMBER num)
-
-mkuntyped val =
-(cons UNTYPED_ATOMIC val)
-
-mkbool b =
-(cons TYPE_BOOLEAN b)
-
-mkqname nsuri nsprefix localname =
-(cons TYPE_QNAME
-  (cons nsuri
-    (cons nsprefix
-      (cons localname
-        nil))))
-
-item_type item = (head item)
-
-
-elem_nsuri elem = (item 1 elem)
-elem_nsprefix elem = (item 2 elem)
-elem_localname elem = (item 3 elem)
-elem_attributes elem = (item 4 elem)
-elem_namespaces elem = (item 5 elem)
-elem_children elem = (item 6 elem)
-elem_parent elem = (item 7 elem)
-elem_prev elem = (item 8 elem)
-elem_next elem = (item 9 elem)
-
-// these three are for elements and attributes only
-node_nsuri node = (item 1 node)
-node_nsprefix node = (item 2 node)
-node_localname node = (item 3 node)
-
-
-mkelem2 nsuri nsprefix localname attributes namespaces children parent prev next =
-(cons TYPE_ELEMENT
-  (cons nsuri
-    (cons nsprefix
-      (cons localname
-        (cons attributes
-          (cons namespaces
-            (cons children
-              (cons parent
-                (cons prev
-                  (cons next nil))))))))))
-
-mkelem nsuri nsprefix localname attributes namespaces children =
-(mkelem2 nsuri nsprefix localname attributes namespaces children nil nil nil)
-
-mkdoc children = (cons TYPE_DOCUMENT children)
-
-doc_children doc = (tail doc)
-
-mkattr nsuri nsprefix localname value =
-(cons TYPE_ATTRIBUTE
-  (cons nsuri
-    (cons nsprefix
-      (cons localname
-        (cons value nil)))))
-
-attr_nsuri attr = (item 1 attr)
-attr_nsprefix attr = (item 2 attr)
-attr_localname attr = (item 3 attr)
-attr_value attr = (item 4 attr)
-
-mknamespace nsuri nsprefix =
-(cons TYPE_NAMESPACE
-  (cons nsuri
-    (cons nsprefix nil)))
-
-namespace_nsuri ns = (item 1 ns)
-namespace_nsprefix ns = (item 2 ns)
-
-mktext2 value parent prev next =
-(cons TYPE_TEXT
-  (cons value
-    (cons parent
-      (cons prev
-        (cons next nil)))))
-
-mktext value =
-(mktext2 value nil nil nil)
-
-text_content text = (item 1 text)
-text_parent text = (item 2 text)
-text_prev text = (item 3 text)
-text_next text = (item 4 text)
-
-mkcomment2 value parent prev next =
-(cons TYPE_COMMENT
-  (cons value
-    (cons parent
-      (cons prev
-        (cons next nil)))))
-
-mkcomment value =
-(mkcomment2 value nil nil nil)
-
-comment_content comment = (item 1 comment)
-comment_parent comment = (item 2 comment)
-comment_prev comment = (item 3 comment)
-comment_next comment = (item 4 comment)
-
-node_children node =
-(if (= (item_type node) TYPE_ELEMENT)
-  (elem_children node)
-  (if (= (item_type node) TYPE_DOCUMENT)
-    (doc_children node)
-    nil))
-
-
-
-
-
 // Navigation
-
-node_prev node =
-(letrec
-  type = (item_type node)
- in
-  (if (= type TYPE_ELEMENT)
-    (elem_prev node)
-    (if (= type TYPE_TEXT)
-      (text_prev node)
-      (if (= type TYPE_COMMENT)
-        (comment_prev node)
-        nil))))
-
-node_next node =
-(letrec
-  type = (item_type node)
- in
-  (if (= type TYPE_ELEMENT)
-    (elem_next node)
-    (if (= type TYPE_TEXT)
-      (text_next node)
-      (if (= type TYPE_COMMENT)
-        (comment_next node)
-        nil))))
-
-node_parent node =
-(letrec
-  type = (item_type node)
- in
-  (if (= type TYPE_ELEMENT)
-    (elem_parent node)
-    (if (= type TYPE_TEXT)
-      (text_parent node)
-      (if (= type TYPE_COMMENT)
-        (comment_parent node)
-        nil))))
-
-
-
-
-
-
-
-
-
-
-
-
-
-node_attributes node =
-(if (= (item_type node) TYPE_ELEMENT)
-  (elem_attributes node)
-  nil)
-
-node_namespaces node =
-(if (= (item_type node) TYPE_ELEMENT)
-  (elem_namespaces node)
-  nil)
 
 getnsprefix1 str start !count =
 (if str
@@ -842,21 +742,21 @@ get_attribute1 nsuri localname attrs =
    in
     (if
       (and
-        (streq (attr_nsuri attr) nsuri)
-        (streq (attr_localname attr) localname))
-      (attr_value attr)
+        (streq (item_nsuri attr) nsuri)
+        (streq (item_localname attr) localname))
+      (item_value attr)
       (get_attribute1 nsuri localname (tail attrs))))
   nil)
 
 get_attribute nsuri localname elem =
-(get_attribute1 nsuri localname (elem_attributes elem))
+(get_attribute1 nsuri localname (item_attributes elem))
 
 ns_lookup1 nsprefix lst =
 (if lst
   (letrec
     ns = (head lst)
-    value = (namespace_nsuri ns)
-    prefix = (namespace_nsprefix ns)
+    value = (item_nsuri ns)
+    prefix = (item_nsprefix ns)
    in
     (if (streq prefix nsprefix)
       value
@@ -886,16 +786,16 @@ print_attrs lst next =
 (if lst
   (letrec
     attr = (head lst)
-    nsuri = (attr_nsuri attr)
-    nsprefix = (attr_nsprefix attr)
-    localname = (attr_localname attr)
+    nsuri = (item_nsuri attr)
+    nsprefix = (item_nsprefix attr)
+    localname = (item_localname attr)
     qname = (if nsprefix (append nsprefix (cons ':' localname)) localname)
     //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
    in
     (append " "
       (append qname
         (append "=\""
-          (append (attr_value attr)
+          (append (item_value attr)
             (append "\"" (print_attrs (tail lst) next)))))))
   next)
 
@@ -903,8 +803,8 @@ print_namespaces lst next =
 (if lst
   (letrec
     cur = (head lst)
-    nsuri = (namespace_nsuri cur)
-    nsprefix = (namespace_nsprefix cur)
+    nsuri = (item_nsuri cur)
+    nsprefix = (item_nsprefix cur)
    in
     (append (if nsprefix " xmlns:" " xmlns")
       (append nsprefix
@@ -921,12 +821,12 @@ print_nodes lst next =
    in
     (if (= (item_type node) TYPE_ELEMENT)
       (letrec
-        nsuri = (elem_nsuri node)
-        nsprefix = (elem_nsprefix node)
-        localname = (elem_localname node)
-        attributes = (elem_attributes node)
-        namespaces = (elem_namespaces node)
-        children = (elem_children node)
+        nsuri = (item_nsuri node)
+        nsprefix = (item_nsprefix node)
+        localname = (item_localname node)
+        attributes = (item_attributes node)
+        namespaces = (item_namespaces node)
+        children = (item_children node)
         qname = (if nsprefix (append nsprefix (cons ':' localname)) localname)
         //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
        in
@@ -948,11 +848,11 @@ print_nodes lst next =
                 (print_attrs attributes
                   (append "/>" (print_nodes rest next))))))))
       (if (= (item_type node) TYPE_TEXT)
-        (append (text_content node) (print_nodes rest next))
+        (append (item_value node) (print_nodes rest next))
         (if (= (item_type node) TYPE_COMMENT)
-          (append "<!--" (append (comment_content node) (append "-->" (print_nodes rest next))))
+          (append "<!--" (append (item_value node) (append "-->" (print_nodes rest next))))
           (if (= (item_type node) TYPE_DOCUMENT)
-            (print_nodes (node_children node) (print_nodes rest next))
+            (print_nodes (item_children node) (print_nodes rest next))
             (append "OTHER: " (append (numtostring (item_type node)) (print_nodes rest next))))))))
   next)
 
@@ -969,12 +869,12 @@ stripspaces lst parent prev =
       (letrec
         elem =
         (mkelem2
-          (elem_nsuri cur)
-          (elem_nsprefix cur)
-          (elem_localname cur)
-          (elem_attributes cur)
-          (elem_namespaces cur)
-          (stripspaces (elem_children cur) elem nil)
+          (item_nsuri cur)
+          (item_nsprefix cur)
+          (item_localname cur)
+          (item_attributes cur)
+          (item_namespaces cur)
+          (stripspaces (item_children cur) elem nil)
           parent
           prev
           next)
@@ -983,9 +883,9 @@ stripspaces lst parent prev =
        in
         (cons elem next))
       (if (= type TYPE_TEXT)
-        (if (isnonws (text_content cur))
+        (if (isnonws (item_value cur))
           (letrec
-            content = (text_content cur)
+            content = (item_value cur)
             text = (mktext2 content parent prev next)
             next = (stripspaces rest parent text)
            in
@@ -993,14 +893,14 @@ stripspaces lst parent prev =
           (stripspaces rest parent prev))
         (if (= type TYPE_COMMENT)
           (letrec
-            content = (comment_content cur)
+            content = (item_value cur)
             comment = (mkcomment2 content parent prev next)
             next = (stripspaces rest parent comment)
            in
             (cons comment next))
           (if (= type TYPE_DOCUMENT)
             (letrec
-              doc = (mkdoc (stripspaces (doc_children cur) doc nil))
+              doc = (mkdoc (stripspaces (item_children cur) doc nil))
              in
               (cons doc nil))
             (cons cur (stripspaces rest parent cur)))))))

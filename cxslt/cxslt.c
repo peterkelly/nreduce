@@ -383,19 +383,19 @@ void compile_ws_call(elcgen *gen, expression *expr)
   printf("request = (xslt:output 1 requestxml)");
   printf("response = (xslt:post \"%s\" request)",service_url);
   printf("responsedoc = (xml:parsexml 1 response)");
-  printf("topelems = (xml:node_children responsedoc)");
+  printf("topelems = (xml:item_children responsedoc)");
 
   printf("bodies = (xslt:apmap3 (!citem.!cpos.!csize.\n");
   printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml:node_children citem))",SOAPENV_NAMESPACE,"Body");
+	 "(xml:item_children citem))",SOAPENV_NAMESPACE,"Body");
   printf(") topelems)");
 
   printf("respelems = (xslt:apmap3 (!citem.!cpos.!csize.\n");
   printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml:node_children citem))",outelem.uri,outelem.localpart);
+	 "(xml:item_children citem))",outelem.uri,outelem.localpart);
   printf(") bodies)");
 
-  printf("returns = (xslt:apmap3 (!citem.!cpos.!csize.(xml:node_children citem)) respelems)");
+  printf("returns = (xslt:apmap3 (!citem.!cpos.!csize.(xml:item_children citem)) respelems)");
 
   printf("in returns)");
 
@@ -573,7 +573,7 @@ void compile_expression(expression *expr)
       printf("(cons citem nil)");
       break;
     case AXIS_CHILD:
-      printf("(xml:node_children citem)");
+      printf("(xml:item_children citem)");
       break;
     case AXIS_DESCENDANT:
       printf("(xslt:node_descendants citem)");
@@ -603,10 +603,10 @@ void compile_expression(expression *expr)
       printf("(xslt:node_following citem)");
       break;
     case AXIS_ATTRIBUTE:
-      printf("(xml:node_attributes citem)");
+      printf("(xml:item_attributes citem)");
       break;
     case AXIS_NAMESPACE:
-      printf("(xml:node_namespaces citem)");
+      printf("(xml:item_namespaces citem)");
       break;
     default:
       assert(!"unsupported axis");
