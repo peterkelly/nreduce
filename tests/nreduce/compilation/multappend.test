@@ -1,0 +1,15 @@
+Tests for a bug that used to occur in the append optimiser where two variables
+were being allocated with the name "first" (after renaming).
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main =
+(append (if 1 "yes" "no")
+(append ", next "
+(append (if 2 "on" "off")
+"\n")))
+==================================== OUTPUT ====================================
+yes, next on
+================================== RETURN CODE =================================
+0

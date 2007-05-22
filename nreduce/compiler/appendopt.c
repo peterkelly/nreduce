@@ -239,6 +239,7 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
         snode *falseappend = snode_new(a->sl.fileno,a->sl.lineno);
         snode *truesym = snode_new(a->sl.fileno,a->sl.lineno);
         snode *falsesym = snode_new(a->sl.fileno,a->sl.lineno);
+	char *firstsym = next_var(src,"first");
 
         /* true branch */
 
@@ -249,7 +250,7 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
         if (SNODE_SYMBOL == second->type)
           truesym->name = strdup(second->name);
         else
-          truesym->name = strdup("first");
+          truesym->name = strdup(firstsym);
 
         trueap1->type = SNODE_APPLICATION;
         trueap1->left = trueappend;
@@ -268,7 +269,7 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
         if (SNODE_SYMBOL == second->type)
           falsesym->name = strdup(second->name);
         else
-          falsesym->name = strdup("first");
+          falsesym->name = strdup(firstsym);
 
         falseap1->type = SNODE_APPLICATION;
         falseap1->left = falseappend;
@@ -290,13 +291,14 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
           s->type = SNODE_LETREC;
           s->body = first;
           s->bindings = (letrec*)calloc(1,sizeof(letrec));
-          s->bindings->name = strdup("first");
+          s->bindings->name = strdup(firstsym);
           s->bindings->value = second;
         }
         *changed = 1;
 
         free(app2);
         free(appendref);
+	free(firstsym);
       }
       else if ((SNODE_SCREF == a->type) && strcmp(a->sc->name,"append")) {
         if (!a->sc->doesappend) {
