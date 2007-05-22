@@ -93,11 +93,8 @@ mknumber num =
 mkbool b =
 (mkatom TYPE_BOOLEAN b)
 
-mkelem2 nsuri nsprefix localname attributes namespaces children parent prev next =
+mkelem parent prev next nsuri nsprefix localname attributes namespaces children =
 (mkitem TYPE_ELEMENT nil parent prev next nsuri nsprefix localname attributes namespaces children)
-
-mkelem nsuri nsprefix localname attributes namespaces children =
-(mkelem2 nsuri nsprefix localname attributes namespaces children nil nil nil)
 
 mktext2 value parent prev next =
 (mkitem TYPE_TEXT value parent prev next nil nil nil nil nil nil)
@@ -405,7 +402,7 @@ add_whitespace1 depth lst needindent haveindent =
        in
         (maybe_indent depth needindent haveindent
           (cons
-            (mkelem nsuri nsprefix localname attributes namespaces
+            (mkelem nil nil nil nsuri nsprefix localname attributes namespaces
               (if children
                 (add_whitespace1 (+ depth 1) children 1 0)
                 nil))
@@ -559,7 +556,7 @@ parse1 tokens namespaces parent prev !depth =
         nsprefix = (getnsprefix qname)
         nsuri = (ns_lookup nsprefix augnamespaces)
         localname = (getlocalname qname)
-        elem = (mkelem2 nsuri nsprefix localname attributes newnamespaces children parent prev next)
+        elem = (mkelem parent prev next nsuri nsprefix localname attributes newnamespaces children)
         next = (parse1 remainingtokens namespaces parent elem depth)
        in
         (cons elem next))
@@ -868,16 +865,16 @@ stripspaces lst parent prev =
     (if (= type TYPE_ELEMENT)
       (letrec
         elem =
-        (mkelem2
+        (mkelem
+          parent
+          prev
+          next
           (item_nsuri cur)
           (item_nsprefix cur)
           (item_localname cur)
           (item_attributes cur)
           (item_namespaces cur)
-          (stripspaces (item_children cur) elem nil)
-          parent
-          prev
-          next)
+          (stripspaces (item_children cur) elem nil))
         next =
         (stripspaces rest parent elem)
        in

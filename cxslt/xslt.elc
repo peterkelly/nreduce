@@ -435,6 +435,17 @@ ebv seq =
         nil)))
     nil)))
 
+predicate_match cpos seq =
+(if seq
+  (if (not (tail seq))
+    (letrec
+      x = (head seq)
+     in
+      (if (= (xml:item_type x) xml:TYPE_NUMBER)
+        (= cpos (xml:item_value x))
+        (ebv seq)))
+    (ebv seq))
+  (ebv seq))
 
 tostring item =
 (letrec

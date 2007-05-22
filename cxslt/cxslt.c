@@ -354,12 +354,12 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
 
   printf("(letrec requestxml = ");
-  printf("(cons (xml:mkelem \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
+  printf("(cons (xml:mkelem nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
   printf("(cons (xml:mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
 
-  printf("(cons (xml:mkelem \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
+  printf("(cons (xml:mkelem nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
 
-  printf("(cons (xml:mkelem \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
+  printf("(cons (xml:mkelem nil nil nil \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
 	 inelem.uri,inelem.localpart,inelem.uri);
 
 
@@ -367,7 +367,7 @@ void compile_ws_call(elcgen *gen, expression *expr)
   l = inargs;
   for (p = expr->left; p; p = p->right) {
     assert(XPATH_ACTUAL_PARAM == p->type);
-    printf("(cons (xml:mkelem \"%s\" nil \"%s\" nil nil ",
+    printf("(cons (xml:mkelem nil nil nil \"%s\" nil \"%s\" nil nil ",
 	   inelem.uri,(char*)l->data);
     printf("(xslt:concomplex (xslt:get_children ");
     compile_expression(p->left);
@@ -493,7 +493,7 @@ void compile_expression(expression *expr)
     break;
   }
   case XPATH_FILTER:
-    printf("(xslt:filter3\n(!citem.!cpos.!csize.xslt:ebv ");
+    printf("(xslt:filter3\n(!citem.!cpos.!csize.xslt:predicate_match cpos ");
     compile_expression(expr->right);
     printf(") ");
     compile_expression(expr->left);
@@ -903,7 +903,7 @@ void compile_instruction(xmlNodePtr n)
 	printf("name = ");
 	compile_avt(n,name);
 	//	printf("\"%s\"",name);
-	printf("elem = (xml:mkelem nil nil name attrs namespaces children)\n");
+	printf("elem = (xml:mkelem nil nil nil nil nil name attrs namespaces children)\n");
 	printf("content =\n");
 	compile_sequence(n->children);
 	printf("\nin\n(cons elem nil))");
@@ -953,11 +953,11 @@ void compile_instruction(xmlNodePtr n)
       printf("children = (xslt:concomplex (xslt:get_children content))\n");
 
       if (n->ns) {
-        printf("elem = (xml:mkelem \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
+        printf("elem = (xml:mkelem nil nil nil \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
                 n->ns->href,n->ns->prefix,n->name);
       }
       else {
-        printf("elem = (xml:mkelem nil nil \"%s\" attrs namespaces children)\n",n->name);
+        printf("elem = (xml:mkelem nil nil nil nil nil \"%s\" attrs namespaces children)\n",n->name);
       }
       printf("content =\n");
       compile_sequence(n->children);
