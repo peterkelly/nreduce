@@ -12,16 +12,16 @@ main =
   (xml:mkdoc
     (cons
       // <people xmlns:gender="urn:test:gender" xmlns:individual="http://test.com/ns/individuals">
-      (xml:mkelem nil nil "people" nil
+      (xml:mkelem nil nil nil nil nil "people" nil
         (cons (xml:mknamespace GENDER_NS "gender")
           (cons (xml:mknamespace INDIVIDUAL_NS "individual")
             nil))
         (cons
           // <gender:men>
-          (xml:mkelem GENDER_NS "gender" "men" nil nil
+          (xml:mkelem nil nil nil GENDER_NS "gender" "men" nil nil
             (cons
               // <individual:person name="Fred" age="20" occupation="Plumber"/>
-              (xml:mkelem INDIVIDUAL_NS "individual" "person"
+              (xml:mkelem nil nil nil INDIVIDUAL_NS "individual" "person"
                 (cons (xml:mkattr nil nil "name" "Fred")
                   (cons (xml:mkattr nil nil "age" "20")
                     (cons (xml:mkattr nil nil "occupation" "Plumber")
@@ -29,7 +29,7 @@ main =
                 nil nil)
               (cons
                 // <individual:person name="Joe" age="38" occupation="Builder"/>
-                (xml:mkelem INDIVIDUAL_NS "individual" "person"
+                (xml:mkelem nil nil nil INDIVIDUAL_NS "individual" "person"
                   (cons (xml:mkattr nil nil "name" "Joe")
                     (cons (xml:mkattr nil nil "age" "38")
                       (cons (xml:mkattr nil nil "occupation" "Builder")
@@ -37,7 +37,7 @@ main =
                   nil nil)
                 (cons
                   // <individual:person name="Peter" age="27" occupation="Student"/>
-                  (xml:mkelem INDIVIDUAL_NS "individual" "person"
+                  (xml:mkelem nil nil nil INDIVIDUAL_NS "individual" "person"
                     (cons (xml:mkattr nil nil "name" "Peter")
                       (cons (xml:mkattr nil nil "age" "27")
                         (cons (xml:mkattr nil nil "occupation" "Student")
@@ -46,10 +46,10 @@ main =
                   nil))))
           (cons
             // <gender:women>
-            (xml:mkelem GENDER_NS "gender" "women" nil nil
+            (xml:mkelem nil nil nil GENDER_NS "gender" "women" nil nil
               (cons
                 // <individual:person name="Susie" age="31" occupation="Painter"/>
-                (xml:mkelem INDIVIDUAL_NS "individual" "person"
+                (xml:mkelem nil nil nil INDIVIDUAL_NS "individual" "person"
                   (cons (xml:mkattr nil nil "name" "Susie")
                     (cons (xml:mkattr nil nil "age" "31")
                       (cons (xml:mkattr nil nil "occupation" "Painter")
@@ -57,7 +57,7 @@ main =
                   nil nil)
                 (cons
                   // <individual:person name="Christine" age="44" occupation="Accountant"/>
-                  (xml:mkelem INDIVIDUAL_NS "individual" "person"
+                  (xml:mkelem nil nil nil INDIVIDUAL_NS "individual" "person"
                     (cons (xml:mkattr nil nil "name" "Christine")
                       (cons (xml:mkattr nil nil "age" "44")
                         (cons (xml:mkattr nil nil "occupation" "Accountant")

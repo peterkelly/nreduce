@@ -287,12 +287,11 @@ void format_double(char *str, int size, double d)
   else if (isinf(d) && (0.0 > d)) {
     snprintf(str,size,"-INF");
   }
-  else if (d == (double)((int)(d))) {
-    int i = (int)d;
-    if (getsignbit(d) && (0.0 == d))
+  else if (d == floor(d)) {
+    if ((0.0 == d) && (getsignbit(d) && (0.0 == d)))
       snprintf(str,size,"-0");
     else
-      snprintf(str,size,"%d",i);
+      snprintf(str,size,"%.0f",d);
   }
   else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
     int ipart = (int)d;

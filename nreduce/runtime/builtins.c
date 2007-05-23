@@ -1507,6 +1507,14 @@ static void b_getoutput(task *tsk, pntr *argstack)
     argstack[0] = tsk->globnilpntr;
 }
 
+static void b_genid(task *tsk, pntr *argstack)
+{
+  double id;
+  id = tsk->nextid++;
+  id += ((double)(tsk->tid+1))*pow(2,32);
+  setnumber(&argstack[0],id);
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1592,6 +1600,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 /* Other */
 { "error1",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error1         },
 { "getoutput",      1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_getoutput      },
+{ "genid",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE, IMPURE, b_genid          },
 
 };
 

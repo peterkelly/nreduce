@@ -117,8 +117,9 @@
 /* Other */
 #define B_ERROR          52
 #define B_GETOUTPUT      53
+#define B_GENID          54
 
-#define NUM_BUILTINS     54
+#define NUM_BUILTINS     55
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -544,6 +545,7 @@ typedef struct task {
   pntrset *partial_applied;
   struct timeval nextfish;
   struct timeval nextgc;
+  unsigned int nextid;
 
   /* native execution */
   void **instraddrs;
