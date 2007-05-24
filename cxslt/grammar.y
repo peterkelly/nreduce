@@ -423,8 +423,8 @@ XPathRelativePathExpr:
 ;
 
 XPathStepExpr:
-  XPathForwardAxisStep            { $$ = $1; }
-| XPathReverseAxisStep            { $$ = $1; }
+  XPathForwardAxisStep            { $$ = new_expression2(XPATH_FORWARD_AXIS_STEP,$1,NULL); }
+| XPathReverseAxisStep            { $$ = new_expression2(XPATH_REVERSE_AXIS_STEP,$1,NULL); }
 | XPathFilterExpr                 { $$ = $1; }
 ;
 

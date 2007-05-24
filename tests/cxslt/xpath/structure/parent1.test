@@ -1,0 +1,57 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<aaa>
+  <bbb>
+    <ccc/>
+    <ddd>
+      <eee/>
+      <fff/>
+      <ggg/>
+      <hhh/>
+    </ddd>
+  </bbb>
+</aaa>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="self::node()//self::element()">
+	<element name="{node-name(.)}">
+	  <xsl:if test="parent::element()">
+	    <xsl:attribute name="parent" select="node-name(parent::element())"/>
+	  </xsl:if>
+	  <xsl:if test="preceding-sibling::element()">
+	    <xsl:attribute name="prev" select="node-name(preceding-sibling::element()[1])"/>
+	  </xsl:if>
+	  <xsl:if test="following-sibling::element()">
+	    <xsl:attribute name="next" select="node-name(following-sibling::element()[1])"/>
+	  </xsl:if>
+	</element>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <element name="aaa"/>
+   <element name="bbb" parent="aaa"/>
+   <element name="ccc" parent="bbb" next="ddd"/>
+   <element name="ddd" parent="bbb" prev="ccc"/>
+   <element name="eee" parent="ddd" next="fff"/>
+   <element name="fff" parent="ddd" prev="eee" next="ggg"/>
+   <element name="ggg" parent="ddd" prev="fff" next="hhh"/>
+   <element name="hhh" parent="ddd" prev="ggg"/>
+</result>
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,119 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<content>
+  <aaa>
+    <bbb>
+      <ccc>
+	<ddd>
+	  <eee>
+	    <fff/>
+	  </eee>
+	</ddd>
+      </ccc>
+    </bbb>
+  </aaa>
+</content>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+
+    <result>
+      <one>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content//fff/ancestor-or-self::element()">
+	  <xsl:element name="{node-name(.)}"/>
+	</xsl:for-each>
+      </one>
+      <two>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content//fff">
+	  <xsl:for-each select="ancestor-or-self::element()">
+	    <xsl:element name="{node-name(.)}">
+	      <xsl:attribute name="position" select="position()"/>
+	    </xsl:element>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </two>
+      <three>
+	<!-- position() is being called from the inner focus of another step - in this
+	     case it refers to the position starting from the closes preceding element
+             going upwards to the last -->
+	<xsl:for-each select="content//fff">
+	  <xsl:variable name="f" select="."/>
+	  <xsl:for-each select="ancestor-or-self::element()/position()">
+	    <xsl:variable name="pos" select="."/>
+	    <xsl:for-each select="$f/ancestor-or-self::element()[$pos]">
+	      <xsl:element name="{node-name(.)}">
+		<xsl:attribute name="position" select="$pos"/>
+	      </xsl:element>
+	    </xsl:for-each>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </three>
+      <four>
+	<!-- position() is being called form the inner focus of another step, due to its
+	     use inside a predicate. Same situation as above - 1 is closest. -->
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[1])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[2])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[3])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[4])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[5])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[6])}"/>
+	<xsl:element name="{node-name(content//fff/ancestor-or-self::element()[7])}"/>
+      </four>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <one>
+      <content/>
+      <aaa/>
+      <bbb/>
+      <ccc/>
+      <ddd/>
+      <eee/>
+      <fff/>
+   </one>
+   <two>
+      <content position="1"/>
+      <aaa position="2"/>
+      <bbb position="3"/>
+      <ccc position="4"/>
+      <ddd position="5"/>
+      <eee position="6"/>
+      <fff position="7"/>
+   </two>
+   <three>
+      <fff position="1"/>
+      <eee position="2"/>
+      <ddd position="3"/>
+      <ccc position="4"/>
+      <bbb position="5"/>
+      <aaa position="6"/>
+      <content position="7"/>
+   </three>
+   <four>
+      <fff/>
+      <eee/>
+      <ddd/>
+      <ccc/>
+      <bbb/>
+      <aaa/>
+      <content/>
+   </four>
+</result>
+================================== RETURN CODE =================================
+0

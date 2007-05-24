@@ -1,0 +1,106 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<content>
+  <aaa/>
+  <bbb/>
+  <ccc/>
+  <ddd/>
+  <eee/>
+  <fff/>
+</content>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+
+    <result>
+      <one>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content/fff/preceding-sibling::element()">
+	  <xsl:element name="{node-name(.)}"/>
+	</xsl:for-each>
+      </one>
+      <two>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content">
+	  <xsl:for-each select="fff">
+	    <xsl:for-each select="preceding-sibling::element()">
+	      <xsl:element name="{node-name(.)}">
+		<xsl:attribute name="position" select="position()"/>
+	      </xsl:element>
+	    </xsl:for-each>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </two>
+      <three>
+	<!-- position() is being called from the inner focus of another step - in this
+	     case it refers to the position starting from the closes preceding element
+             going upwards to the last -->
+	<xsl:for-each select="content/fff">
+	  <xsl:variable name="f" select="."/>
+	  <xsl:for-each select="preceding-sibling::element()/position()">
+	    <xsl:variable name="pos" select="."/>
+	    <xsl:for-each select="$f/preceding-sibling::element()[$pos]">
+	      <xsl:element name="{node-name(.)}">
+		<xsl:attribute name="position" select="$pos"/>
+	      </xsl:element>
+	    </xsl:for-each>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </three>
+      <four>
+	<!-- position() is being called form the inner focus of another step, due to its
+	     use inside a predicate. Same situation as above - 1 is closest. -->
+	<xsl:sequence select="content/fff/preceding-sibling::element()[1]"/>
+	<xsl:sequence select="content/fff/preceding-sibling::element()[2]"/>
+	<xsl:sequence select="content/fff/preceding-sibling::element()[3]"/>
+	<xsl:sequence select="content/fff/preceding-sibling::element()[4]"/>
+	<xsl:sequence select="content/fff/preceding-sibling::element()[5]"/>
+      </four>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <one>
+      <aaa/>
+      <bbb/>
+      <ccc/>
+      <ddd/>
+      <eee/>
+   </one>
+   <two>
+      <aaa position="1"/>
+      <bbb position="2"/>
+      <ccc position="3"/>
+      <ddd position="4"/>
+      <eee position="5"/>
+   </two>
+   <three>
+      <eee position="1"/>
+      <ddd position="2"/>
+      <ccc position="3"/>
+      <bbb position="4"/>
+      <aaa position="5"/>
+   </three>
+   <four>
+      <eee/>
+      <ddd/>
+      <ccc/>
+      <bbb/>
+      <aaa/>
+   </four>
+</result>
+================================== RETURN CODE =================================
+0

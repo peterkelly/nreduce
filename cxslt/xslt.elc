@@ -549,6 +549,14 @@ node_to_string node =
 fn_string0 node =
 (cons (xml:mkstring (node_to_string node)) nil)
 
+// FIXME: temp
+fn_show-id lst =
+(map (!node.(xml:mknumber (xml:item_id node))) lst)
+
+// FIXME: temp
+fn_show-index lst =
+(map (!node.(xml:mknumber (xml:item_index node))) lst)
+
 fn_string arg0 =
 (if arg0
   (if (tail arg0)
@@ -785,3 +793,97 @@ post3 url content version status reason headers body =
      (append "HTTP error "
 	     (append (numtostring status) (append ": " (append url (append "\n" body))))))
     body))
+
+
+
+
+reparent lst parent prev =
+(if lst
+  (letrec
+    cur = (head lst)
+    rest = (tail lst)
+    type = (xml:item_type cur)
+   in
+    (if (= type xml:TYPE_ELEMENT)
+      (letrec
+        elem =
+        (xml:mkelem
+          nil
+          parent
+          prev
+          next
+          (xml:item_nsuri cur)
+          (xml:item_nsprefix cur)
+          (xml:item_localname cur)
+          (xml:item_attributes cur)
+          (xml:item_namespaces cur)
+          (reparent (xml:item_children cur) elem nil))
+        next =
+        (reparent rest parent elem)
+       in
+        (cons elem next))
+      (if (= type xml:TYPE_TEXT)
+        (letrec
+          content = (xml:item_value cur)
+          text = (xml:mktext2 content parent prev next)
+          next = (reparent rest parent text)
+         in
+          (cons text next))
+        (if (= type xml:TYPE_COMMENT)
+          (letrec
+            content = (xml:item_value cur)
+            comment = (xml:mkcomment2 content parent prev next)
+            next = (reparent rest parent comment)
+           in
+            (cons comment next))
+          (if (= type xml:TYPE_DOCUMENT)
+            (letrec
+              doc = (xml:mkdoc (reparent (xml:item_children cur) doc nil))
+             in
+              (cons doc nil))
+            (cons cur (reparent rest parent cur)))))))
+  nil)
+
+
+
+/* FIXME: need to remove duplicate nodes in the result sequence */
+path_result lst =
+(if lst
+  (if (isatomic (head lst))
+    (check_atomic lst)
+    (docorder_sort (check_node lst)))
+  nil)
+
+check_atomic lst =
+(if lst
+  (if (isatomic (head lst))
+    (cons (head lst) (check_atomic (tail lst)))
+    (error "XPTY0018: sequence contains both atomic values and nodes"))
+  nil)
+
+check_node lst =
+(if lst
+  (if (isatomic (head lst))
+    (error "XPTY0018: sequence contains both atomic values and nodes")
+    (cons (head lst) (check_node (tail lst))))
+  nil)
+
+docorder_sort lst =
+(if lst
+  (letrec
+    pivot = (head lst)
+   in
+    (docorder_sort2 pivot (tail lst) nil nil))
+  nil)
+
+/* FIXME: need to check that both nodes are in the same tree */
+docorder_sort2 pivot lst before after =
+(if lst
+  (letrec
+    item = (head lst)
+    rest = (tail lst)
+   in
+    (if (< (xml:item_index item) (xml:item_index pivot))
+      (docorder_sort2 pivot rest (cons item before) after)
+      (docorder_sort2 pivot rest before (cons item after))))
+  (append (docorder_sort before) (cons pivot (docorder_sort after))))

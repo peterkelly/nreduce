@@ -60,26 +60,43 @@ Document    type                                                                
 mkatom type value =
 (cons type (cons value nil))
 
-mkitem type value parent prev next nsuri nsprefix localname attributes namespaces children =
+/*
+mkitem type value root parent prev next nsuri nsprefix localname attributes namespaces children =
 (cons type (cons value
+(cons root
 (cons parent (cons prev (cons next
 (cons nsuri (cons nsprefix (cons localname
-(cons attributes (cons namespaces (cons children nil)))))))))))
+(cons attributes (cons namespaces (cons children
+(cons (genid nil) nil)))))))))))))
+*/
 
-item_type x = (head x)
-item_value x = (item 1 x)
+mkitem type value root parent prev next nsuri nsprefix localname attributes namespaces children =
+(cons type (cons value
+(cons root
+(cons parent (cons prev (cons next
+(cons nsuri (cons nsprefix (cons localname
+(cons attributes (cons namespaces (cons children
+(cons (genid nil) (cons (compute_index prev parent) nil))))))))))))))
 
-item_parent x = (item 2 x)
-item_prev x = (item 3 x)
-item_next x = (item 4 x)
+item_type x       = (head x)
+item_value x      = (item 1 x)
 
-item_nsuri x = (item 5 x)
-item_nsprefix x = (item 6 x)
-item_localname x = (item 7 x)
+item_root x       = (item 2 x)
 
-item_attributes x = (item 8 x)
-item_namespaces x = (item 9 x)
-item_children x = (item 10 x)
+item_parent x     = (item 3 x)
+item_prev x       = (item 4 x)
+item_next x       = (item 5 x)
+
+item_nsuri x      = (item 6 x)
+item_nsprefix x   = (item 7 x)
+item_localname x  = (item 8 x)
+
+item_attributes x = (item 9 x)
+item_namespaces x = (item 10 x)
+item_children x   = (item 11 x)
+
+item_id x         = (item 12 x)
+item_index x      = (item 13 x)
 
 mkstring str =
 (mkatom TYPE_STRING str)
@@ -93,32 +110,59 @@ mknumber num =
 mkbool b =
 (mkatom TYPE_BOOLEAN b)
 
-mkelem parent prev next nsuri nsprefix localname attributes namespaces children =
-(mkitem TYPE_ELEMENT nil parent prev next nsuri nsprefix localname attributes namespaces children)
+mkelem root parent prev next nsuri nsprefix localname attributes namespaces children =
+(mkitem TYPE_ELEMENT nil root parent prev next nsuri nsprefix localname attributes namespaces children)
 
 mktext2 value parent prev next =
-(mkitem TYPE_TEXT value parent prev next nil nil nil nil nil nil)
+(mkitem TYPE_TEXT value nil parent prev next nil nil nil nil nil nil)
 
 mktext value =
 (mktext2 value nil nil nil)
 
 mkcomment2 value parent prev next =
-(mkitem TYPE_COMMENT value parent prev next nil nil nil nil nil nil)
+(mkitem TYPE_COMMENT value nil parent prev next nil nil nil nil nil nil)
 
 mkcomment value =
 (mkcomment2 value nil nil nil)
 
-mkattr nsuri nsprefix localname value =
-(mkitem TYPE_ATTRIBUTE value nil nil nil nsuri nsprefix localname nil nil nil)
+mkattr root parent prev next nsuri nsprefix localname value =
+(mkitem TYPE_ATTRIBUTE value root parent prev next nsuri nsprefix localname nil nil nil)
 
 mknamespace nsuri nsprefix =
-(mkitem TYPE_NAMESPACE nil nil nil nil nsuri nsprefix nil nil nil nil)
+(mkitem TYPE_NAMESPACE nil nil nil nil nil nsuri nsprefix nil nil nil nil)
 
 mkdoc children =
-(mkitem TYPE_DOCUMENT nil nil nil nil nil nil nil nil nil children)
+(mkitem TYPE_DOCUMENT nil nil nil nil nil nil nil nil nil nil children)
 
 mkqname nsuri nsprefix localname =
-(mkitem TYPE_QNAME nil nil nil nil nsuri nsprefix localname nil nil nil)
+(mkitem TYPE_QNAME nil nil nil nil nil nsuri nsprefix localname nil nil nil)
+
+/* FIXME: this should take attributes (and namespaces?) into account, because these are part
+   of the document order */
+compute_index prev parent =
+(letrec
+
+  last = (!lst.
+    (if lst
+      (if (tail lst)
+        (last (tail lst))
+        (head lst))
+      nil))
+
+  last_descendant = (!node.
+    (letrec
+      children = (xml:item_children node)
+      lastchild = (last children)
+     in
+      (if lastchild
+        (last_descendant lastchild)
+        (+ 1 (item_index node)))))
+ in
+  (if prev
+    (last_descendant prev)
+    (if parent
+      (+ 1 (item_index parent))
+      0)))
 
 //==================================================================================================
 // xml:tokenize stream
@@ -402,7 +446,7 @@ add_whitespace1 depth lst needindent haveindent =
        in
         (maybe_indent depth needindent haveindent
           (cons
-            (mkelem nil nil nil nsuri nsprefix localname attributes namespaces
+            (mkelem nil nil nil nil nsuri nsprefix localname attributes namespaces
               (if children
                 (add_whitespace1 (+ depth 1) children 1 0)
                 nil))
@@ -530,12 +574,12 @@ in
 
 parse tokens =
 (letrec
-  children = (parse1 tokens nil doc nil 0)
+  children = (parse1 tokens nil doc doc nil 0)
   doc = (mkdoc children)
  in
   (cons doc nil))
 
-parse1 tokens namespaces parent prev !depth =
+parse1 tokens namespaces root parent prev !depth =
 (if (not tokens)
   (if (> depth 1)
     (error "XML parse error: missing close tag at end of input")
@@ -548,16 +592,16 @@ parse1 tokens namespaces parent prev !depth =
     (if (= tag TOKEN_STARTELEM)
       (letrec
         augnamespaces = (cons newnamespaces namespaces)
-        children = (skip_attrs rest augnamespaces elem (+ depth 1))
-        attributes = (parse_attrs rest augnamespaces)
+        children = (skip_attrs rest augnamespaces root elem (+ depth 1))
+        attributes = (parse_attrs rest augnamespaces root parent prev)
         newnamespaces = (parse_namespaces rest)
         remainingtokens = (skip_level rest 0)
         qname = (tail cur)
         nsprefix = (getnsprefix qname)
         nsuri = (ns_lookup nsprefix augnamespaces)
         localname = (getlocalname qname)
-        elem = (mkelem parent prev next nsuri nsprefix localname attributes newnamespaces children)
-        next = (parse1 remainingtokens namespaces parent elem depth)
+        elem = (mkelem root parent prev next nsuri nsprefix localname attributes newnamespaces children)
+        next = (parse1 remainingtokens namespaces root parent elem depth)
        in
         (cons elem next))
       (if (= tag TOKEN_ENDELEM)
@@ -567,19 +611,19 @@ parse1 tokens namespaces parent prev !depth =
           (if (= tag TOKEN_TEXT)
             (letrec
               text = (mktext2 (tail cur) parent prev next)
-              next = (parse1 rest namespaces parent text depth)
+              next = (parse1 rest namespaces root parent text depth)
              in
               (cons text next))
             (if (= tag TOKEN_COMMENT)
               (letrec
                 comment = (mkcomment2 (tail cur) parent prev next)
-                next = (parse1 rest namespaces parent comment depth)
+                next = (parse1 rest namespaces root parent comment depth)
                in
                 (cons comment next))
-              (parse1 rest namespaces parent nil depth))))))))
+              (parse1 rest namespaces root parent nil depth))))))))
 
 //==================================================================================================
-// xml:skip_attrs tokens namespaces depth
+// xml:skip_attrs tokens namespaces root depth
 //
 // Skip past the ATTRNAME and ATTRVALUE tokens in a token stream.
 //
@@ -588,7 +632,7 @@ parse1 tokens namespaces parent prev !depth =
 // element will appear after the attributes. Thus, to get to the portion of the token stream
 // representing the children of a node, we simply need to skip past these.
 //==================================================================================================
-skip_attrs tokens namespaces parent !depth =
+skip_attrs tokens namespaces root parent !depth =
 (if (not tokens)
   nil
   (letrec
@@ -597,8 +641,8 @@ skip_attrs tokens namespaces parent !depth =
     tag = (head cur)
    in
     (if (or (= tag TOKEN_ATTRNAME) (= tag TOKEN_ATTRVALUE))
-      (skip_attrs rest namespaces parent depth)
-      (parse1 tokens namespaces parent nil depth))))
+      (skip_attrs rest namespaces root parent depth)
+      (parse1 tokens namespaces root parent nil depth))))
 
 //==================================================================================================
 // xml:parse_namespaces tokens
@@ -655,7 +699,7 @@ parse_namespaces tokens =
 // prefix, localname, and value. The returned list of nodes is used as the attributes property of
 // an element.
 //==================================================================================================
-parse_attrs tokens namespaces =
+parse_attrs tokens namespaces root parent prev =
 (if (not tokens)
   nil
   (letrec
@@ -671,17 +715,18 @@ parse_attrs tokens namespaces =
         nsprefix = (getnsprefix qname)
         nsuri = (ns_lookup nsprefix namespaces)
         localname = (getlocalname qname)
-
+	attr = (mkattr root parent prev next nsuri nsprefix localname value)
+	next = (parse_attrs rest2 namespaces root parent attr)
        in
         // Check if it's a namespace attribute; if so, skip this one
         (if (streq nsprefix "xmlns")
-          (parse_attrs rest2 namespaces)
+          (parse_attrs rest2 namespaces root parent prev)
           (if (and (not nsprefix) (streq localname "xmlns"))
-            (parse_attrs rest2 namespaces)
+            (parse_attrs rest2 namespaces root parent prev)
             // It's a normal attribute; add it to the list
             (cons
-              (mkattr nsuri nsprefix localname value)
-              (parse_attrs rest2 namespaces)))))
+              attr
+              next))))
       nil)))
 
 //==================================================================================================
@@ -866,6 +911,7 @@ stripspaces lst parent prev =
       (letrec
         elem =
         (mkelem
+          nil
           parent
           prev
           next

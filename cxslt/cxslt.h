@@ -108,6 +108,8 @@ void fatal(const char *format, ...);
 #define XPATH_NAME_TEST                   59
 
 #define XPATH_AVT_COMPONENT               60
+#define XPATH_FORWARD_AXIS_STEP           61
+#define XPATH_REVERSE_AXIS_STEP           62
 
 #define AXIS_INVALID                      0
 #define AXIS_CHILD                        1

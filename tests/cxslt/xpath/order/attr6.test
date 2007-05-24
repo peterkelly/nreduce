@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<data aaa="AAA" bbb="BBB" ccc="CCC" ddd="DDD" eee="EEE"/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="./(data/@ccc,data/@eee,data/@aaa,data/@ddd,data/@bbb)">
+	<element>
+	  <xsl:sequence select="."/>
+	</element>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <element aaa="AAA"/>
+   <element bbb="BBB"/>
+   <element ccc="CCC"/>
+   <element ddd="DDD"/>
+   <element eee="EEE"/>
+</result>
+================================== RETURN CODE =================================
+0

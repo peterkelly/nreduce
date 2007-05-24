@@ -354,12 +354,12 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
 
   printf("(letrec requestxml = ");
-  printf("(cons (xml:mkelem nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
+  printf("(cons (xml:mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
   printf("(cons (xml:mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
 
-  printf("(cons (xml:mkelem nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
+  printf("(cons (xml:mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
 
-  printf("(cons (xml:mkelem nil nil nil \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
+  printf("(cons (xml:mkelem nil nil nil nil \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
 	 inelem.uri,inelem.localpart,inelem.uri);
 
 
@@ -367,7 +367,7 @@ void compile_ws_call(elcgen *gen, expression *expr)
   l = inargs;
   for (p = expr->left; p; p = p->right) {
     assert(XPATH_ACTUAL_PARAM == p->type);
-    printf("(cons (xml:mkelem nil nil nil \"%s\" nil \"%s\" nil nil ",
+    printf("(cons (xml:mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
 	   inelem.uri,(char*)l->data);
     printf("(xslt:concomplex (xslt:get_children ");
     compile_expression(p->left);
@@ -500,14 +500,21 @@ void compile_expression(expression *expr)
     printf(")");
     break;
   case XPATH_STEP:
-    /* FIXME: the resulting set should only contain one instance of each node; need to
-       somehow filter out duplicates */
     printf("\n// step\n");
-/*     Note: node sequences are handled differently from atomic value sequences... (?) */
-/*     see XPath 2.0 section 3.2 */
+
+    printf("(xslt:path_result ");
     printf("(xslt:apmap3 (!citem.!cpos.!csize.\n");
     compile_expression(expr->right);
     printf(") ");
+    compile_expression(expr->left);
+    printf(")");
+    printf(")");
+    break;
+  case XPATH_FORWARD_AXIS_STEP:
+    compile_expression(expr->left);
+    break;
+  case XPATH_REVERSE_AXIS_STEP:
+    printf("(reverse ");
     compile_expression(expr->left);
     printf(")");
     break;
@@ -585,19 +592,19 @@ void compile_expression(expression *expr)
       printf("(xslt:node_parent_list citem)");
       break;
     case AXIS_ANCESTOR:
-      printf("(reverse (xslt:node_ancestors citem))");
+      printf("(xslt:node_ancestors citem)");
       break;
     case AXIS_ANCESTOR_OR_SELF:
-      printf("(reverse (xslt:node_ancestors_or_self citem))");
+      printf("(xslt:node_ancestors_or_self citem)");
       break;
     case AXIS_PRECEDING_SIBLING:
-      printf("(reverse (xslt:node_preceding_siblings citem))");
+      printf("(xslt:node_preceding_siblings citem)");
       break;
     case AXIS_FOLLOWING_SIBLING:
       printf("(xslt:node_following_siblings citem)");
       break;
     case AXIS_PRECEDING:
-      printf("(reverse (xslt:node_preceding citem))");
+      printf("(xslt:node_preceding citem)");
       break;
     case AXIS_FOLLOWING:
       printf("(xslt:node_following citem)");
@@ -761,10 +768,10 @@ void compile_attributes(xmlNodePtr n)
   for (attr = n->properties; attr; attr = attr->next) {
     char *value;
     if (attr->ns)
-      printf("(cons (xml:mkattr \"%s\" \"%s\" \"%s\" ",
+      printf("(cons (xml:mkattr nil nil nil nil \"%s\" \"%s\" \"%s\" ",
              attr->ns->href,attr->ns->prefix,attr->name);
     else
-      printf("(cons (xml:mkattr nil nil \"%s\" ",attr->name);
+      printf("(cons (xml:mkattr nil nil nil nil nil nil \"%s\" ",attr->name);
 
     value = xmlNodeListGetString(parse_doc,attr->children,1);
     printf("//xxx value: %s\n",value);
@@ -899,11 +906,12 @@ void compile_instruction(xmlNodePtr n)
 
 	printf("attrs = (xslt:get_attributes content)\n");
 	printf("namespaces = (xslt:get_namespaces content)\n");
-	printf("children = (xslt:concomplex (xslt:get_children content))\n");
+	printf("children2 = (xslt:concomplex (xslt:get_children content))\n");
+	printf("children = (xslt:reparent children2 elem nil)\n");
 	printf("name = ");
 	compile_avt(n,name);
 	//	printf("\"%s\"",name);
-	printf("elem = (xml:mkelem nil nil nil nil nil name attrs namespaces children)\n");
+	printf("elem = (xml:mkelem nil nil nil nil nil nil name attrs namespaces children)\n");
 	printf("content =\n");
 	compile_sequence(n->children);
 	printf("\nin\n(cons elem nil))");
@@ -915,7 +923,7 @@ void compile_instruction(xmlNodePtr n)
         char *select = xmlGetProp(n,"select");
 
 	printf("\n// attribute %s\n",name);
-	printf("(cons (xml:mkattr ");
+	printf("(cons (xml:mkattr nil nil nil nil ");
 	printf(" nil "); // nsuri
 	printf(" nil "); // nsprefix
 
@@ -950,14 +958,15 @@ void compile_instruction(xmlNodePtr n)
       compile_namespaces(n);
       printf(" (xslt:get_namespaces content))\n");
 
-      printf("children = (xslt:concomplex (xslt:get_children content))\n");
+      printf("children2 = (xslt:concomplex (xslt:get_children content))\n");
+      printf("children = (xslt:reparent children2 elem nil)\n");
 
       if (n->ns) {
-        printf("elem = (xml:mkelem nil nil nil \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
+        printf("elem = (xml:mkelem nil nil nil nil \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
                 n->ns->href,n->ns->prefix,n->name);
       }
       else {
-        printf("elem = (xml:mkelem nil nil nil nil nil \"%s\" attrs namespaces children)\n",n->name);
+        printf("elem = (xml:mkelem nil nil nil nil nil nil \"%s\" attrs namespaces children)\n",n->name);
       }
       printf("content =\n");
       compile_sequence(n->children);

@@ -1,0 +1,108 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<content>
+  <aaa/>
+  <bbb/>
+  <ccc>
+    <ddd>
+      <eee/>
+      <fff/>
+      <ggg/>
+      <hhh/>
+    </ddd>
+  </ccc>
+</content>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+
+    <result>
+      <one>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content//hhh/preceding::element()">
+	  <xsl:element name="{node-name(.)}"/>
+	</xsl:for-each>
+      </one>
+      <two>
+	<!-- Step expression - results should be returned in document order -->
+	<xsl:for-each select="content//hhh">
+	  <xsl:for-each select="preceding::element()">
+	    <xsl:element name="{node-name(.)}">
+	      <xsl:attribute name="position" select="position()"/>
+	    </xsl:element>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </two>
+      <three>
+	<!-- position() is being called from the inner focus of another step - in this
+	     case it refers to the position starting from the closes preceding element
+             going upwards to the last -->
+	<xsl:for-each select="content//hhh">
+	  <xsl:variable name="f" select="."/>
+	  <xsl:for-each select="preceding::element()/position()">
+	    <xsl:variable name="pos" select="."/>
+	    <xsl:for-each select="$f/preceding::element()[$pos]">
+	      <xsl:element name="{node-name(.)}">
+		<xsl:attribute name="position" select="$pos"/>
+	      </xsl:element>
+	    </xsl:for-each>
+	  </xsl:for-each>
+	</xsl:for-each>
+      </three>
+      <four>
+	<!-- position() is being called form the inner focus of another step, due to its
+	     use inside a predicate. Same situation as above - 1 is closest. -->
+	<xsl:element name="{node-name(content//hhh/preceding::element()[1])}"/>
+	<xsl:element name="{node-name(content//hhh/preceding::element()[2])}"/>
+	<xsl:element name="{node-name(content//hhh/preceding::element()[3])}"/>
+	<xsl:element name="{node-name(content//hhh/preceding::element()[4])}"/>
+	<xsl:element name="{node-name(content//hhh/preceding::element()[5])}"/>
+      </four>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <one>
+      <aaa/>
+      <bbb/>
+      <eee/>
+      <fff/>
+      <ggg/>
+   </one>
+   <two>
+      <aaa position="1"/>
+      <bbb position="2"/>
+      <eee position="3"/>
+      <fff position="4"/>
+      <ggg position="5"/>
+   </two>
+   <three>
+      <ggg position="1"/>
+      <fff position="2"/>
+      <eee position="3"/>
+      <bbb position="4"/>
+      <aaa position="5"/>
+   </three>
+   <four>
+      <ggg/>
+      <fff/>
+      <eee/>
+      <bbb/>
+      <aaa/>
+   </four>
+</result>
+================================== RETURN CODE =================================
+0
