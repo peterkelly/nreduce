@@ -1,0 +1,395 @@
+#LyX 1.4.4 created this file. For more info see http://www.lyx.org/
+\lyxformat 245
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage{hyperref}
+\hypersetup{
+   bookmarksnumbered=true,
+   bookmarksopen=true,
+   bookmarksopenlevel=0,
+   colorlinks=true,
+   linkcolor=black,
+   citecolor=black
+}
+\end_preamble
+\language english
+\inputencoding auto
+\fontscheme times
+\graphics default
+\paperfontsize 12
+\spacing single
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\end_header
+
+\begin_body
+
+\begin_layout Section
+Document order
+\end_layout
+
+\begin_layout Standard
+XPath defines the concept of 
+\emph on
+document order
+\emph default
+, which is the order that nodes appear in the serialised version of an XML
+ tree.
+ It corresponds to a pre-order traversal of the tree; parents appear before
+ their children, and all the descendents of a node appear before that node's
+ next sibling.
+ Document order is often used to sort node sequences that are returned by
+ certain types of expressions.
+\end_layout
+
+\begin_layout Standard
+In an acyclic tree, references only go from parents to their children.
+ Given a node, it possible only to navigate within the subtree rooted at
+ that node, and not to the node's siblings or ancestors.
+ If a set of result nodes needs to be sorted in document order, it is necessary
+ to know the relative positions of two nodes.
+ In this scenario, backward navigation is impossible, so the only way to
+ compare the positions of two nodes would be to record their positions at
+ creation time.
+\end_layout
+
+\begin_layout Standard
+In a strict languge, assigning a node's position when it is created would
+ enforce a serial construction of the tree.
+ This is because in order to determine the index to use for each new node,
+ it would be necessary to have assigned the index to the previous node.
+ In a lazy language however, we can create the node with the position set
+ to a suspended evaluation of a function that can subsequently be called
+ to compute the position.
+ Only when the index field is accessed will the value be computed, and this
+ can be done by looking at the previous node, obtaining its index, and adding
+ 1.
+\end_layout
+
+\begin_layout Subsection
+Places where document order is used
+\end_layout
+
+\begin_layout Subsubsection
+Axis steps
+\end_layout
+
+\begin_layout Standard
+An AxisStep is one of the two types of step expressions (the other being
+ a FilterExpr), and is in the form 
+\emph on
+axis
+\emph default
+::
+\emph on
+nodetest
+\emph default
+ with optional predicates.
+ The sequence of nodes returned from an AxisStep is always in document order,
+ regardless of which direction that step takes.
+\end_layout
+
+\begin_layout Standard
+Because AxisSteps always select nodes in an existing tree, it is not necessary
+ to use a sorting algorithm, but instead just to return the sequence either
+ directly or reversed dependong on the axis direction.
+ Forward axes, such as 
+\family typewriter
+following-sibling
+\family default
+ and 
+\family typewriter
+descendant
+\family default
+, simply return the nodes in the same order as they were encountered in
+ the document.
+ Reverse axes, such as 
+\family typewriter
+preceding-sibling
+\family default
+ and 
+\family typewriter
+ancestor
+\family default
+, must have their resulting node sequences reversed.
+\end_layout
+
+\begin_layout Standard
+When evaluating a predicate that is part of an AxisStep, the item positions
+ are computed based on the axis direction.
+ For example, 
+\family typewriter
+ancestor::node()[1]
+\family default
+ returns the context node's parent, even though the first item in the step
+ expression 
+\family typewriter
+ancestor::node()
+\family default
+ is the root of the tree.
+ The reversal of the sequence happens 
+\emph on
+after
+\emph default
+ predicates have been evaluated.
+\end_layout
+
+\begin_layout Subsubsection
+Path expressions
+\end_layout
+
+\begin_layout Standard
+Evaluation of an expression of the form 
+\begin_inset Formula $e_{1}/e_{2}$
+\end_inset
+
+ is perfomed by first evaluating 
+\begin_inset Formula $e_{1}$
+\end_inset
+
+ and then for each item in the result sequence, evaluating 
+\begin_inset Formula $e_{2}$
+\end_inset
+
+ with the context item and position set appropriately.
+ The sequences returned by all the different evaluations of 
+\begin_inset Formula $e_{2}$
+\end_inset
+
+ are concatenated together.
+ The result must contain all atomic items or all nodes, and in the latter
+ case, the nodes are sorted in document order and with duplicates removed.
+\end_layout
+
+\begin_layout Standard
+This is illustrated by the following example in the spec:
+\end_layout
+
+\begin_layout Quote
+
+\emph on
+If E is any expression that returns a sequence of nodes, then the expression
+ E/.
+ returns the same nodes in document order, with duplicates eliminated based
+ on node identity.
+ 
+\emph default
+(section 3.2.4)
+\end_layout
+
+\begin_layout Standard
+It is necessary to inspect the sequence to determine if it contains atomic
+ types or nodes.
+ If it contains both, an error must be raised (of type XPTY0018).
+\end_layout
+
+\begin_layout Section
+Backward references
+\end_layout
+
+\begin_layout Standard
+Some of the axes in XPath necessitate the ability to navigate to parts of
+ the tree that are not descendants of the current node.
+ These include following and preceding siblings, as well as ancestors.
+ To support these axes, we cannot simply represent the tree in an acyclic
+ manner.
+ Instead, for each node, we must maintain three links: next, previous, and
+ parent.
+\end_layout
+
+\begin_layout Standard
+An implication of this representation is that garbage collection can effectively
+ only operate on whole trees.
+ If the program has a reference to just a single leaf node, then through
+ that it also has a reference to all of its ancestors, and all of their
+ descendants.
+ While an acyclic representation would permit the portion of the tree outside
+ the reference node's subtree to be collected, this cannot be done while
+ links upwards in the tree are maintained.
+\end_layout
+
+\begin_layout Standard
+It has been shown 
+\begin_inset LatexCommand \cite{Olteanu02}
+
+\end_inset
+
+ that some types of XPath queries can be transformed to remove backward
+ axes.
+ However, it is not possible to completely remove all possibility of needing
+ to reference a nodes ancestors, because of the existence of the root()
+ function.
+ As long as this can be used, it is always necessary to keep a direct or
+ indirect reference from each node to the root, thus eliminating the possibility
+ of garbage collecting the rest of the tree outside the referenced subtrees
+ of it.
+\end_layout
+
+\begin_layout Standard
+One possibility for maintaining the ability to garbage collect portions
+ of trees is to analyse the XSLT and XPath trees is an pre-processing phase
+ during compilation, to determine if any constructs are used which require
+ the ability to look backwards.
+ This could enable the partial collection to occur if only a restricted
+ version of the language was used, so that programmers can have this ability
+ if they need it and are willing to put up with these restrictions.
+ Such a mechanism should preferably provide some way of indicating whether
+ or not backward references were avoided during compilation, so that a programme
+r wishing to avoid keeping whole documents in memory could do so.
+\end_layout
+
+\begin_layout Standard
+However, such a situation is only likely to be important for streaming processin
+g, where a very large XML document needs to be processed without keeping
+ all parsed nodes in memory for the entire duration.
+ Given that this is not an absolute requirement for our test scenarios,
+ and the fact that other XSLT implementations don't provide this feature
+ anyway, we chose not to support this case.
+ All documents created by the parser and XSLT instructions thus use a cyclic
+ representation.
+\end_layout
+
+\begin_layout Section
+Node identity
+\end_layout
+
+\begin_layout Standard
+There are two main ways of storing data within a program: values and objects.
+ A value is simply a collection of data, including simple values like numbers,
+ and more complex structures like tuples and lists.
+ An object is like a value in that it also contains data, but the difference
+ is it has an 
+\emph on
+identity
+\emph default
+.
+ Two values with the same data are considered the same; two objects with
+ the same data are different, because they have a different identity.
+\end_layout
+
+\begin_layout Standard
+Programming languages differ in how they represent certain types.
+ Strings and lists are values in some languages, while in others they are
+ objects.
+ Different operators for comparison by identity and comparison by value
+ are often provided, such as == and equals() in Java.
+ String comparison is often a source of confusion for beginning programmers
+ learning a language like C or Java for the first time, because the two
+ operators can produce different results.
+\end_layout
+
+\begin_layout Standard
+Nodes in an XML tree, as used by XSLT and XPath, are objects.
+ They have identity and can be compared as such.
+ Two identical XML trees parsed from separate file, or returned from different
+ parser invocations on the same file, are considered different.
+ To perform a value comparison on two XML trees it would be necessary to
+ do a full traversal of both trees, to determine if any components of the
+ structures differ.
+\end_layout
+
+\begin_layout Subsection
+Identity comparison operator
+\end_layout
+
+\begin_layout Standard
+Currently, nreduce does not support an identity comparison operator.
+ This would be straightforward to implement for the case of a single task
+ with a local heap, however there may be issues relating to the distributed
+ heap.
+ This is primarily because it it maybe possible for local copies of a data
+ structure to be made after a transfer to another heap, in which case the
+ identity of the copy would be different from that of the source.
+ We need to make sure that when a replica of an object is created, it is
+ able to be matched back to its original.
+\end_layout
+
+\begin_layout Standard
+One problem with exposing the identity of cells to ELC programs is that
+ of array conversion.
+ When a set of linked cons cells is converted into an array, the first cell
+ is converted into an array wrapper cell.
+ Subsequent cons cells used to be changed to indirection cells pointing
+ into the new array, but this was disabled due to the execution engine relying
+ on the fact that once a cell is not an indirection, it will never become
+ an indirection.
+ Thus, when a linked list is converted to an array, the identity of all
+ but the first reference will change.
+ References that pointed part-way into the list will still point to the
+ old cons cells, and subsequently created references pointing into a position
+ in the new array will have a different identity to their old counterparts.
+\end_layout
+
+\begin_layout Standard
+A possible solution to this would be to change the type of all of the converted
+ cons cells to array wrapper, and have them point to the array.
+ This would require a reference count on the array object to track how many
+ wrappers refer to it, because currently the array object is freed when
+ the (single) wrapper cell becomes dereferenced and is freed.
+ When performing an identity comparison, it would be necessary to add an
+ additional check for the case where both operands are array wrappers, and
+ then compare the pointers to the array object rather than the cells themselves.
+\end_layout
+
+\begin_layout Subsection
+Using value comparisons
+\end_layout
+
+\begin_layout Standard
+The other approach to enabling node identity comparisons is to implement
+ it within ELC code, rather than adding an identity comparison function
+ at the level of the virtual machine.
+ Each time a node is created, it is given a unique identifier.
+ A subsequent identity comparison of two nodes then consists of a value
+ comparison of their identifiers.
+ This meets the goal of being able to do identity comparison of nodes, without
+ having expose the concept of cell identity to ELC code.
+\end_layout
+
+\begin_layout Standard
+In order to generate unique identifiers, it is necessary to use an impure
+ function which has the side effect of marking that identifier as used,
+ so that it cannot be assigned again.
+ This can be achieved simply by adding 
+\emph on
+next identifier
+\emph default
+ field to the task, and incrementing this each time a new one is allocated.
+ The double precision floating point format used for number representation
+ can store a very large range of integers, so we can safely assume that
+ identifiers will not by recycled in any practical situation.
+ In the case of parallel execution, each task should allocate numbers from
+ a different range; this can be done by adding a sufficiently large multiple
+ of the task id to each generated identifier.
+\end_layout
+
+\begin_layout Standard
+\begin_inset LatexCommand \bibtex[plain]{/Users/peter/Project/grid}
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
