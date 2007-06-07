@@ -271,26 +271,28 @@ void loop(host *hosts, int nhosts)
 
 int getload()
 {
-  static int oldtotal = -1;
-  static int oldidle = -1;
+  static unsigned long long int oldtotal = 0;
+  static unsigned long long int oldidle = 0;
 
   FILE *f;
   int count;
-  int user = 0;
-  int nice = 0;
-  int system = 0;
-  int idle = 0;
-  int iowait = 0;
-  int irq = 0;
-  int softirq = 0;
-  int total;
-  int totaldiff;
-  int idlediff;
+  unsigned long long int user = 0;
+  unsigned long long int nice = 0;
+  unsigned long long int system = 0;
+  unsigned long long int idle = 0;
+  unsigned long long int iowait = 0;
+  unsigned long long int irq = 0;
+  unsigned long long int softirq = 0;
+  unsigned long long int total;
+  unsigned long long int totaldiff;
+  unsigned long long int idlediff;
+  unsigned long long int res;
 
   if (NULL == (f = fopen("/proc/stat","r")))
     return -1;
 
-  count = fscanf(f,"cpu %d %d %d %d %d %d %d",&user,&nice,&system,&idle,&iowait,&irq,&softirq);
+  count = fscanf(f,"cpu %llu %llu %llu %llu %llu %llu %llu",
+                 &user,&nice,&system,&idle,&iowait,&irq,&softirq);
   fclose(f);
 
   if ((4 != count) && (7 != count))
@@ -313,7 +315,8 @@ int getload()
   if (0 == totaldiff)
     return -1;
 
-  return 100-100*idlediff/totaldiff;
+  res = 100-100*idlediff/totaldiff;
+  return (int)res;
 }
 
 void slave()
@@ -352,6 +355,8 @@ int main(int argc, char **argv)
     return 0;
   }
 
+  data = read_hosts(argv[1]);
+
   if (NULL == (logfile = fopen(LOGFILENAME,"w"))) {
     perror(LOGFILENAME);
     return -1;
@@ -378,7 +383,6 @@ int main(int argc, char **argv)
 
   refresh();
 
-  data = read_hosts(argv[1]);
   nhosts = parse_hosts(data,&hosts);
   login_hosts(hosts,nhosts,argv[0]);
   loop(hosts,nhosts);
