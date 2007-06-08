@@ -113,6 +113,8 @@ const char *msg_names[MSG_COUNT] = {
   "STARTGC",
   "STARTGC_RESPONSE",
   "STARTDISTGCACK",
+  "GET_TASKS",
+  "GET_TASKS_RESPONSE",
 };
 
 endpoint *find_endpoint(node *n, int localid)

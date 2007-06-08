@@ -92,7 +92,10 @@
 #define MSG_STARTGC_RESPONSE    57
 #define MSG_STARTDISTGCACK      58
 
-#define MSG_COUNT               59
+#define MSG_GET_TASKS           59
+#define MSG_GET_TASKS_RESPONSE  60
+
+#define MSG_COUNT               61
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];
@@ -203,5 +206,14 @@ typedef struct {
   int gciter;
   int counts[0];
 } update_msg;
+
+typedef struct {
+  endpointid sender;
+} get_tasks_msg;
+
+typedef struct {
+  int count;
+  endpointid tasks[0];
+} get_tasks_response_msg;
 
 #endif

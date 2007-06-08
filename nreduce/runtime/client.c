@@ -432,6 +432,59 @@ static list *find_nodes(node *n, endpointid initial, int want)
   return fsd.nodes;
 }
 
+typedef struct {
+  list *chordids;
+} find_tasks_data;
+
+static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
+{
+  find_tasks_data *ftd = (find_tasks_data*)arg;
+  list *l;
+  int nmanagers = list_count(ftd->chordids);
+  int done = 0;
+
+  for (l = ftd->chordids; l; l = l->next) {
+    get_tasks_msg gtm;
+    endpointid managerid = *(endpointid*)l->data;
+    managerid.localid = MANAGER_ID;
+    gtm.sender = endpt->epid;
+    node_send(n,endpt->epid.localid,managerid,MSG_GET_TASKS,&gtm,sizeof(gtm));
+  }
+
+  while (done < nmanagers) {
+    message *msg = endpoint_next_message(endpt,-1);
+    switch (msg->hdr.tag) {
+    case MSG_GET_TASKS_RESPONSE: {
+      int i;
+      endpointid_str str;
+      get_tasks_response_msg *gtrm = (get_tasks_response_msg*)msg->data;
+      assert(sizeof(get_tasks_response_msg) <= msg->hdr.size);
+      assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->hdr.size);
+      for (i = 0; i < gtrm->count; gtrm++) {
+        print_endpointid(str,gtrm->tasks[i]);
+        printf("Task: %s\n",str);
+      }
+      done++;
+      break;
+    }
+    default:
+      fatal("Invalid message: %d",msg->hdr.tag);
+      break;
+    }
+    message_free(msg);
+  }
+}
+
+static void find_tasks(node *n, list *chordids)
+{
+  pthread_t thread;
+  find_tasks_data ftd;
+  ftd.chordids = chordids;
+  node_add_thread(n,0,TEST_ENDPOINT,0,find_tasks_thread,&ftd,&thread);
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+}
+
 int do_client(char *initial_str, int argc, char **argv)
 {
   node *n;
@@ -461,6 +514,11 @@ int do_client(char *initial_str, int argc, char **argv)
 
   if (!strcmp(cmd,"findall")) {
     list *nodes = find_nodes(n,initial,0);
+    list_free(nodes,free);
+  }
+  else if (!strcmp(cmd,"findtasks")) {
+    list *nodes = find_nodes(n,initial,0);
+    find_tasks(n,nodes);
     list_free(nodes,free);
   }
   else if (!strcmp(cmd,"run")) {

@@ -411,6 +411,35 @@ static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid
   node_send(n,endpt->epid.localid,source,MSG_STARTGC_RESPONSE,NULL,0);
 }
 
+static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
+{
+  get_tasks_response_msg *gtrm;
+  int msize;
+  int count = 0;
+  int i = 0;
+  endpoint *ep;
+
+  lock_node(n);
+  for (ep = n->endpoints.first; ep; ep = ep->next) {
+    if (TASK_ENDPOINT == ep->type)
+      count++;
+  }
+
+  msize = sizeof(get_tasks_response_msg)+count*sizeof(endpointid);
+  gtrm = (get_tasks_response_msg*)calloc(1,msize);
+  gtrm->count = count;
+
+  for (ep = n->endpoints.first; ep; ep = ep->next) {
+    if (TASK_ENDPOINT == ep->type) {
+      gtrm->tasks[i++] = ep->epid;
+    }
+  }
+  unlock_node(n);
+
+  node_send(n,endpt->epid.localid,m->sender,MSG_GET_TASKS_RESPONSE,gtrm,msize);
+  free(gtrm);
+}
+
 static void manager_thread(node *n, endpoint *endpt, void *arg)
 {
   message *msg;
@@ -565,6 +594,10 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     case MSG_STARTGC:
       assert(sizeof(startgc_msg) <= msg->hdr.size);
       manager_startgc(n,endpt,(startgc_msg*)msg->data,msg->hdr.source);
+      break;
+    case MSG_GET_TASKS:
+      assert(sizeof(get_tasks_msg) == msg->hdr.size);
+      manager_get_tasks(n,endpt,(get_tasks_msg*)msg->data);
       break;
     default:
       fatal("manager: unexpected message %s",msg_names[msg->hdr.tag]);
