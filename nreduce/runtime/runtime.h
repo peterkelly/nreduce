@@ -527,7 +527,6 @@ typedef struct task {
 
   int haveidmap;
   int started;
-  int partial;
 
   pntr trace_root;
   source *trace_src;
@@ -535,14 +534,6 @@ typedef struct task {
   char *trace_dir;
   int trace_type;
   int tracing;
-  scomb *partial_sc;
-  pntr partial_scp;
-  pntr partial_root;
-  int partial_size;
-  pntrset *partial_tmp1;
-  pntrset *partial_tmp2;
-  pntrset *partial_sel;
-  pntrset *partial_applied;
   struct timeval nextfish;
   struct timeval nextgc;
   unsigned int nextid;
@@ -683,16 +674,9 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 /* reduction */
 
-pntr makescref(task *tsk, scomb *sc, int skip);
 pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
 void run_reduction(source *src, char *trace_dir, int trace_type);
-
-/* partial evaluation */
-
-int apply_rules(task *tsk, pntr p);
-snode *run_partial(source *src, scomb *sc, char *trace_dir, int trace_type);
-void debug_partial(source *src, const char *name, char *trace_dir, int trace_type);
 
 /* console */
 

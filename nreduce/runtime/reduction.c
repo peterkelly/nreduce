@@ -35,13 +35,12 @@
 #include <stdarg.h>
 #include <math.h>
 
-pntr makescref(task *tsk, scomb *sc, int skip)
+static pntr makescref(task *tsk, scomb *sc)
 {
   cell *c = alloc_cell(tsk);
   pntr p;
   c->type = CELL_SCREF;
   make_pntr(c->field1,sc);
-  set_pntrdouble(c->field2,(double)skip);
   make_pntr(p,c);
   return p;
 }
@@ -107,18 +106,7 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
     make_pntr(p,dest);
     return p;
   case SNODE_SCREF: {
-    int skip = 0;
-    if (tsk->partial) {
-      if ((0 < source->sc->nargs) && (0 < source->sc->used) && strcmp(source->sc->name,"map"))
-        skip = 1;
-      if (sc == source->sc)
-        skip = 1;
-      if (!strcmp(source->sc->name,"append"))
-        skip = 1;
-      source->sc->used++;
-    }
-
-    return makescref(tsk,source->sc,skip);
+    return makescref(tsk,source->sc);
   }
   case SNODE_NIL:
     return tsk->globnilpntr;
@@ -210,7 +198,6 @@ void reduce(task *tsk, pntrstack *s)
       pntr dest;
       pntr res;
       scomb *sc = (scomb*)get_pntr(get_pntr(target)->field1);
-      int skip = (int)pntrdouble(get_pntr(target)->field2);
 
       /* If there are not enough arguments to the supercombinator, we cannot instantiate it.
          The expression is in WHNF, so we can return. */
@@ -230,17 +217,6 @@ void reduce(task *tsk, pntrstack *s)
         arg = pntrstack_at(s,i-1);
         assert(CELL_APPLICATION == pntrtype(arg));
         s->data[i] = get_pntr(arg)->field2;
-      }
-
-      if (tsk->partial && skip) {
-        trace_step(tsk,redex,1,"Not instantiating supercombinator %s more than once",sc->name);
-
-        /* reduce the args */
-        for (i = 0; i < sc->nargs; i++)
-          reduce_single(tsk,s,s->data[s->count-1-i]);
-
-        s->count = oldtop;
-        return;
       }
 
       assert((CELL_APPLICATION == pntrtype(dest)) ||
@@ -268,35 +244,6 @@ void reduce(task *tsk, pntrstack *s)
         exit(1);
       }
 
-      if (tsk->partial) {
-        if (CELL_CONS == pntrtype(target)) {
-          cell *c = get_pntr(target);
-          pntr tail = c->field2; /* must grab these now in case it becomes an array */
-          pntr head = c->field1;
-          reduce_single(tsk,s,tail); /* reduce first; array optimization more likely */
-          reduce_single(tsk,s,head);
-        }
-        else if (CELL_AREF == pntrtype(target)) {
-          carray *arr = aref_array(target);
-          int index = aref_index(target);
-          pntr tail = arr->tail;
-
-          if (sizeof(pntr) == arr->elemsize) {
-            /* Note that we take a copy of the contents of the array in case it's modified
-               during the reduction (e.g. converted to a string) */
-            pntr *elements = (pntr*)malloc((arr->size-index)*sizeof(pntr));
-            int count = arr->size-index;
-            int i;
-            memcpy(elements,&((pntr*)arr->elements)[index],(arr->size-index)*sizeof(pntr));
-            for (i = 0; i < count; i++)
-              reduce_single(tsk,s,elements[i]);
-            free(elements);
-          }
-
-          reduce_single(tsk,s,tail);
-        }
-      }
-
       s->count = oldtop;
       return;
     case CELL_SYMBOL:
@@ -319,18 +266,9 @@ void reduce(task *tsk, pntrstack *s)
       strictargs = builtin_info[bif].nstrict;
 
       if (s->count-1 < reqargs + oldtop) {
-        if (tsk->partial) {
-          trace_step(tsk,redex,1,"Built-in %s has insufficient arguments; irreducible",
-                     builtin_info[bif].name);
-          /* TODO: maybe reduce the args that we do have? */
-          s->count = oldtop;
-          return;
-        }
-        else {
-          fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
-                  builtin_info[bif].name,reqargs,s->count-1-oldtop);
-          exit(1);
-        }
+        fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
+                builtin_info[bif].name,reqargs,s->count-1-oldtop);
+        exit(1);
       }
 
       /* Replace application cells on stack with the corresponding arguments */
@@ -361,43 +299,21 @@ void reduce(task *tsk, pntrstack *s)
         }
       }
 
-      if (tsk->partial && ((strictok < strictargs) || !builtin_info[bif].pure)) {
-        trace_step(tsk,redex,1,"Found application of %s to be irreducible",builtin_info[bif].name);
+      trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
+      builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
+      if (tsk->error)
+        fatal("%s",tsk->error);
+      s->count -= (reqargs-1);
 
-        for (i = strictargs; i < reqargs; i++) {
-          reduce_single(tsk,s,s->data[s->count-1-i]);
-        }
+      /* UPDATE */
 
-        s->count = oldtop;
-        return;
-      }
-      else {
-        trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
-        builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
-        if (tsk->error) {
-          if (tsk->partial) {
-            trace_step(tsk,redex,1,"%s gave error; leaving unreduced",builtin_info[bif].name);
-            free(tsk->error);
-            tsk->error = NULL;
-            s->count = oldtop;
-            return;
-          }
-          else {
-            fatal("%s",tsk->error);
-          }
-        }
-        s->count -= (reqargs-1);
+      s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-        /* UPDATE */
+      free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
+      get_pntr(s->data[s->count-2])->type = CELL_IND;
+      get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 
-        s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
-
-        free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
-        get_pntr(s->data[s->count-2])->type = CELL_IND;
-        get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
-
-        s->count--;
-      }
+      s->count--;
       break;
     }
     default:
@@ -477,7 +393,7 @@ void run_reduction(source *src, char *trace_dir, int trace_type)
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
 
-  rootp = makescref(tsk,mainsc,0);
+  rootp = makescref(tsk,mainsc);
 
   if (trace_dir) {
     tsk->tracing = 1;

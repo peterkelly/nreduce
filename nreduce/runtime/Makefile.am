@@ -13,7 +13,6 @@ libruntime_la_SOURCES = worker.c \
 	manager.c \
 	client.c \
 	graph.c \
-	partial.c \
 	tosyntax.c \
 	trace.c \
 	node.c \

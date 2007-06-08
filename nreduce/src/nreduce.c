@@ -55,7 +55,6 @@ int max_array_size = (1 << 18);
 
 struct arguments {
   int compileinfo;
-  int nopartial;
   int nosink;
   int bytecode;
   char *filename;
@@ -63,7 +62,6 @@ struct arguments {
   int lambdadebug;
   int reorderdebug;
   int appendoptdebug;
-  char *partial;
   int worker;
   char *trace;
   int trace_type;
@@ -85,13 +83,12 @@ static void usage()
 "\n"
 "  -h, --help               Help (this message)\n"
 "  -c, --compile-stages     Print debug info about each compilation stage\n"
-"  -n, --no-partial         Disable partial evaluation/letrec sinking\n"
+"  -n, --no-sinking         Disable letrec sinking\n"
 "  -t, --trace DIR          Reduction engine: Print trace data to stdout and DIR\n"
 "  -T, --Trace DIR          Same as -t but uses \"landscape\" mode\n"
 "  -e, --engine ENGINE      Use execution engine:\n"
 "                           (r)educer|(i)nterpreter|(n)ative\n"
 "                           (default: interpreter)\n"
-"  -a, --partial-eval SCOMB Perform partial evaluation of a supercombinator\n"
 "  -w, --worker             Run as worker\n"
 "  -p, --port PORT          Worker mode: listen on the specified port\n"
 "  -i, --initial HOST:PORT  Worker/client mode: initial node to connect to\n"
@@ -140,8 +137,7 @@ void parse_args(int argc, char **argv)
     else if (!strcmp(argv[i],"-c") || !strcmp(argv[i],"--compile-stages")) {
       args.compileinfo = 1;
     }
-    else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--no-partial")) {
-      args.nopartial = 1;
+    else if (!strcmp(argv[i],"-n") || !strcmp(argv[i],"--no-sinking")) {
       args.nosink = 1;
     }
     else if (!strcmp(argv[i],"-g") || !strcmp(argv[i],"--just-bytecode")) {
@@ -163,11 +159,6 @@ void parse_args(int argc, char **argv)
     }
     else if (!strcmp(argv[i],"--appopt-debug")) {
       args.appendoptdebug = 1;
-    }
-    else if (!strcmp(argv[i],"-a") || !strcmp(argv[i],"--partial-eval")) {
-      if (++i >= argc)
-        usage();
-      args.partial = argv[i];
     }
     else if (!strcmp(argv[i],"-w") || !strcmp(argv[i],"--worker")) {
       args.worker = 1;
@@ -340,14 +331,8 @@ int main(int argc, char **argv)
     sigaction(SIGFPE,&act,NULL);
   }
 
-/*   if (NULL != getenv("DISABLE_PARTIAL_EVAL")) */
-/*     args.nopartial = 1; */
-
   if (getenv("MAX_ARRAY_SIZE"))
     max_array_size = atoi(getenv("MAX_ARRAY_SIZE"));
-
-  /* TEMP: disable partial evaluation */
-  args.nopartial = 1;
 
   compileinfo = args.compileinfo;
 
@@ -376,8 +361,7 @@ int main(int argc, char **argv)
 /*   if (compileinfo) */
 /*     print_scombs1(src); */
 
-  if (0 != source_process(src,args.partial || args.lambdadebug,
-                          args.nopartial,
+  if (0 != source_process(src,args.lambdadebug,
                           args.nosink,
                           args.reorderdebug,
                           args.appendoptdebug))
@@ -389,10 +373,7 @@ int main(int argc, char **argv)
     exit(0);
   }
 
-  if (NULL != args.partial) {
-    debug_partial(src,args.partial,args.trace,args.trace_type);
-  }
-  else if (ENGINE_REDUCER == engine_type) {
+  if (ENGINE_REDUCER == engine_type) {
     run_reduction(src,args.trace,args.trace_type);
   }
   else {

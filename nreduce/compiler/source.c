@@ -300,8 +300,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, int stopafterlambda, int nopartial, int nosink, int disstrict,
-                   int appendoptdebug)
+int source_process(source *src, int stopafterlambda, int nosink, int disstrict, int appendoptdebug)
 {
   int sccount;
   int scno;
@@ -347,30 +346,6 @@ int source_process(source *src, int stopafterlambda, int nopartial, int nosink, 
 
   compile_stage(src,"Inlining"); /* inlining.c */
   inlining(src);
-
-/*   if (args.lambdadebug) { */
-/*     print_scombs1(src); */
-/*     exit(0); */
-/*   } */
-
-  if (!nopartial) {
-    compile_stage(src,"Partial evaluation"); /* partial.c */
-    for (scno = 0; scno < sccount; scno++) {
-      scomb *sc = array_item(src->scombs,scno,scomb*);
-      char *filename;
-      snode *s;
-
-      assert(0 <= sc->sl.fileno);
-      assert(array_count(src->parsedfiles) > sc->sl.fileno);
-      filename = array_item(src->parsedfiles,sc->sl.fileno,char*);
-
-      if (!is_from_prelude(src,sc) && strcmp(sc->name,"main")) {
-        s = run_partial(src,sc,NULL,0);
-        snode_free(sc->body);
-        sc->body = s;
-      }
-    }
-  }
 
   if (!nosink) {
     compile_stage(src,"Letrec sinking"); /* sinking.c */

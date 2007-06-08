@@ -455,9 +455,6 @@ void mark_roots(task *tsk, short bit)
   if (tsk->tracing)
     mark(tsk,tsk->trace_root,bit);
 
-  if (tsk->partial)
-    mark(tsk,tsk->partial_scp,bit);
-
   if (tsk->out_so)
     mark(tsk,tsk->out_so->p,bit);
 
