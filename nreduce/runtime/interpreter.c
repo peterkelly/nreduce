@@ -904,9 +904,7 @@ static void interpreter_markroots(task *tsk)
     assert(0 == array_count(tsk->distmarks[pid]));
   tsk->inmark = 1;
 
-  tsk->memdebug = 1;
   mark_roots(tsk,FLAG_DMB);
-  tsk->memdebug = 0;
 
   /* mark any in-flight gaddrs that refer to remote objects */
   for (l = tsk->inflight; l; l = l->next) {
@@ -994,7 +992,6 @@ static void interpreter_sweep(task *tsk, message *msg)
   rd = read_start(msg->data,msg->hdr.size);
 
   /* do sweep */
-  tsk->memdebug = 1;
   node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_SWEEPACK,NULL,0);
 
   clear_marks(tsk,FLAG_MARKED);
@@ -1003,7 +1000,6 @@ static void interpreter_sweep(task *tsk, message *msg)
   sweep(tsk,0);
   clear_marks(tsk,FLAG_NEW);
 
-  tsk->memdebug = 0;
   tsk->indistgc = 0;
   #ifdef DISTGC_DEBUG
   fprintf(tsk->output,"Completed distributed garbage collection: %d cells remaining\n",
@@ -1825,7 +1821,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
   tsk->n = n;
   tsk->endpt = endpt;
-  tsk->thread = pthread_self();
   pthread_setspecific(task_key,tsk);
 
   write(tsk->threadrunningfds[1],&semdata,1);
@@ -1847,6 +1842,15 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->rtemp = NULL;
   tsk->runptr = &runnable;
 
+  if (0 == tsk->tid) {
+    frame *initial = frame_new(tsk,1);
+    initial->instr = bc_instructions(tsk->bcdata);
+    initial->c = alloc_cell(tsk);
+    initial->c->type = CELL_FRAME;
+    make_pntr(initial->c->field1,initial);
+    run_frame(tsk,initial);
+  }
+
   if (ENGINE_NATIVE == engine_type) {
     struct timeval start;
     struct timeval end;
@@ -1863,7 +1867,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       pthread_create(&sigthread,NULL,signal_thread,tsk);
     }
 
-    pthread_kill(tsk->thread,SIGUSR1);
+    pthread_kill(pthread_self(),SIGUSR1);
     tsk->usr1setup = 1;
     ((native_fun*)tsk->code)();;
     array_free(cpucode);

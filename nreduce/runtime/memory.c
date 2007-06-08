@@ -442,8 +442,6 @@ void mark_roots(task *tsk, short bit)
   global *glo;
   frameblock *fb;
 
-  tsk->memdebug = 0;
-
   for (i = 0; i < tsk->nstrings; i++)
     mark(tsk,tsk->strings[i],bit);
 
@@ -472,10 +470,6 @@ void mark_roots(task *tsk, short bit)
     if ((0 <= addr->lid) && (addr->tid == tsk->tid)) {
       glo = addrhash_lookup(tsk,*addr);
       assert(glo);
-      if (tsk->memdebug) {
-        fprintf(tsk->output,"root: inflight local ref %d@%d\n",
-                addr->lid,addr->tid);
-      }
       mark_global(tsk,glo,bit);
     }
   }
@@ -487,10 +481,6 @@ void mark_roots(task *tsk, short bit)
       if ((0 <= addr.lid) && (addr.tid == tsk->tid)) {
         glo = addrhash_lookup(tsk,addr);
         assert(glo);
-        if (tsk->memdebug) {
-          fprintf(tsk->output,"root: inflight local ref %d@%d\n",
-                  addr.lid,addr.tid);
-        }
         mark_global(tsk,glo,bit);
       }
     }

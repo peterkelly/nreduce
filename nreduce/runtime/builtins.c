@@ -1039,7 +1039,6 @@ static int suspend_current_frame(task *tsk, frame *f)
 {
   int count = tsk->iocount;
   int ioid;
-  assert(SAFE_TO_ACCESS_TASK(tsk));
   assert(f == *tsk->runptr);
 
   /* Allocate ioid */

@@ -388,7 +388,11 @@ void run_reduction(source *src, char *trace_dir, int trace_type)
 {
   scomb *mainsc;
   pntr rootp;
-  task *tsk = task_new(0,0,NULL,0,NULL);
+  socketid out_sockid;
+  task *tsk;
+
+  memset(&out_sockid,0,sizeof(out_sockid));
+  tsk = task_new(0,0,NULL,0,NULL,out_sockid,NULL);
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");

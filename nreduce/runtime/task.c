@@ -339,7 +339,6 @@ void set_error(task *tsk, const char *format, ...)
     instr = f->instr-1;
     tsk->errorsl.fileno = instr->fileno;
     tsk->errorsl.lineno = instr->lineno;
-    tsk->haveerror = 1;
 
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
     tsk->endpt->rc = 1;
@@ -415,7 +414,8 @@ void dump_globals(task *tsk)
   }
 }
 
-task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
+               socketid out_sockid, endpointid *epid)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
@@ -424,10 +424,15 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   const funinfo *finfo;
   int fno;
   int cur;
+  int maxstack = 0;
+
+  if (epid)
+    memset(epid,0,sizeof(*epid));
 
   tsk->n = n;
   tsk->runptr = &tsk->rtemp;
   tsk->freeptr = (cell*)1;
+  tsk->output = stdout;
 
   if (0 > pipe(tsk->startfds))
     fatal("pipe: %s",strerror(errno));
@@ -465,9 +470,8 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
   bch = (bcheader*)tsk->bcdata;
   finfo = bc_funinfo(tsk->bcdata);
   for (fno = 0; fno < bch->nfunctions; fno++)
-    if (tsk->maxstack < finfo[fno].stacksize)
-      tsk->maxstack = finfo[fno].stacksize;
-
+    if (maxstack < finfo[fno].stacksize)
+      maxstack = finfo[fno].stacksize;
 
   tsk->bcaddr_to_fno = (int*)malloc(bch->nops*sizeof(int));
   for (i = 0; i < bch->nops; i++)
@@ -481,7 +485,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
     tsk->bcaddr_to_fno[i] = cur;
   }
 
-  tsk->framesize = sizeof(frame)+tsk->maxstack*sizeof(pntr);
+  tsk->framesize = sizeof(frame)+maxstack*sizeof(pntr);
   tsk->framesperblock = FRAMEBLOCK_SIZE/tsk->framesize;
 
   assert(NULL == tsk->strings);
@@ -511,9 +515,20 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n)
     tsk->distmarks[i] = array_new(sizeof(gaddr),0);
   }
 
+  tsk->out_sockid = out_sockid;
+  if (!socketid_isnull(&tsk->out_sockid)) {
+    cell *c;
+    sysobject *so = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
+    so->hostname = strdup("client");
+    so->port = -1;
+    so->sockid = tsk->out_sockid;
+    so->connected = 1;
+    tsk->out_so = so;
+  }
+
   if (n) {
     char semdata = 0;
-    node_add_thread(n,0,TASK_ENDPOINT,0,interpreter_thread,tsk,NULL);
+    *epid = node_add_thread(n,0,TASK_ENDPOINT,0,interpreter_thread,tsk,NULL);
     read(tsk->threadrunningfds[0],&semdata,1);
     close(tsk->threadrunningfds[0]);
     close(tsk->threadrunningfds[1]);

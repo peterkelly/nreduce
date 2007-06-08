@@ -86,7 +86,7 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
       if (TASK_ENDPOINT == endpt->type) {
         task *tsk = (task*)endpt->data;
         array_printf(out,"%-7d %-3d %-9d %-6d %-12d\n",
-                tsk->endpt->epid.localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
+                     endpt->epid.localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
       }
     }
     unlock_node(n);

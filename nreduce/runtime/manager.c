@@ -189,25 +189,6 @@ static listener *get_listener(node *n, socketid id)
   return NULL;
 }
 
-static task *add_task(node *n, int pid, int groupsize, const char *bcdata, int bcsize)
-{
-  task *tsk = task_new(pid,groupsize,bcdata,bcsize,n);
-
-  tsk->commdata = n;
-  tsk->output = stdout;
-
-  if ((0 == pid) && (NULL != bcdata)) {
-    frame *initial = frame_new(tsk,1);
-    initial->instr = bc_instructions(tsk->bcdata);
-    initial->c = alloc_cell(tsk);
-    initial->c->type = CELL_FRAME;
-    make_pntr(initial->c->field1,initial);
-    run_frame(tsk,initial);
-  }
-
-  return tsk;
-}
-
 static void listen_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {
@@ -440,6 +421,16 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
   free(gtrm);
 }
 
+static task *find_task(node *n, int localid)
+{
+  endpoint *endpt = find_endpoint(n,localid);
+  if (NULL == endpt)
+    return NULL;
+  if (TASK_ENDPOINT != endpt->type)
+    fatal("Request for endpoint %d that is not a task",localid);
+  return (task*)endpt->data;
+}
+
 static void manager_thread(node *n, endpoint *endpt, void *arg)
 {
   message *msg;
@@ -450,7 +441,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     switch (msg->hdr.tag) {
     case MSG_NEWTASK: {
       newtask_msg *ntmsg;
-      task *newtsk;
+      endpointid epid;
       if (sizeof(newtask_msg) > msg->hdr.size)
         fatal("NEWTASK: invalid message size");
       ntmsg = (newtask_msg*)msg->data;
@@ -460,21 +451,11 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       node_log(n,LOG_INFO,"NEWTASK pid = %d, groupsize = %d, bcsize = %d",
                ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
-      newtsk = add_task(n,ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize);
-      newtsk->out_sockid = ntmsg->out_sockid;
-
-      if (!socketid_isnull(&newtsk->out_sockid)) {
-        cell *c;
-        sysobject *so = new_sysobject(newtsk,SYSOBJECT_CONNECTION,&c);
-        so->hostname = strdup("client");
-        so->port = -1;
-        so->sockid = newtsk->out_sockid;
-        so->connected = 1;
-        newtsk->out_so = so;
-      }
+      task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,n,
+               ntmsg->out_sockid,&epid);
 
       node_send(n,endpt->epid.localid,msg->hdr.source,MSG_NEWTASKRESP,
-                &newtsk->endpt->epid.localid,sizeof(int));
+                &epid.localid,sizeof(int));
       break;
     }
     case MSG_INITTASK: {

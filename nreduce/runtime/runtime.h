@@ -200,12 +200,6 @@ pntr resolve_pntr(pntr p);
 
 #define check_global(_g) (assert(!(_g)->freed))
 
-/* FIXME: remove */
-typedef struct group {
-  struct task **procs;
-  int nprocs;
-} group;
-
 typedef struct waitqueue {
   struct frame *frames;
   list *fetchers;
@@ -419,88 +413,61 @@ typedef struct frameblock {
   char mem[FRAMEBLOCK_SIZE];
 } frameblock;
 
-#define SAFE_TO_ACCESS_TASK(_tsk) pthread_equal(pthread_self(),(_tsk)->thread)
-
 typedef struct ioframe {
   frame *f;
   int freelnk;
 } ioframe;
 
 typedef struct task {
-  int memdebug;
+
+  /* general */
+  FILE *output; /* FIXME: this doesn't make sense in a distributed environment */
+  procstats stats;
 
   /* bytecode */
   char *bcdata;
   int bcsize;
-  int maxstack;
   int *bcaddr_to_fno;
 
   /* communication */
-  group *grp;
   int tid;
   int groupsize;
+  node *n;
+  socketid out_sockid;
+  sysobject *out_so;
+  endpoint *endpt;
+  endpointid *idmap;
+
+  /* distributed memory management */
+  global **pntrhash;
+  global **addrhash;
   int ackmsgsize;
   int naddrsread;
   array *ackmsg;
   array **distmarks;
-  node *n;
-  socketid out_sockid;
-  sysobject *out_so;
   endpointid gc;
   int gciter;
+  array **inflight_addrs;
+  array **unack_msg_acount;
 
+  /* I/O requests */
   int ioalloc;
   int iocount;
   ioframe *ioframes;
   int iofree;
-
-  endpoint *endpt;
-  int startfds[2];
-  int threadrunningfds[2]; /* FIXME: temp */
   int netpending;
 
-  pthread_t thread;
-
-  /* globals */
-  global **pntrhash;
-  global **addrhash;
-
   /* runtime info */
-  int usr1setup;
   int done;
   frame **runptr;
   frame *rtemp;
-  int interrupted;
-  int nextentryid;
-  int nextblackholeid;
   int nextlid;
   int *gcsent;
   list *inflight;
   char *error;
   sourceloc errorsl;
   frame *freeframe;
-  int newfish;
-
-  gaddr **infaddrs;
-  int *infcount;
-  int *infalloc;
-  int haveerror;
-  int havefpe;
-  jmp_buf jbuf;
-
-  /* Each element of inflight_addrs is an array containing the addresses that have been sent
-     to a particular task but not yet acknowledged. */
-  array **inflight_addrs;
-
-  /* Each element of unack_msg_acount is an array containing the number of addresses in each
-     outstanding message to a particular task. An outstanding message is a message containing
-     addresses that has been sent but not yet acknowledged. */
-  array **unack_msg_acount;
-
-  /* For each unacknowledged message, the number of addresses that were in that message */
-  int **unackaddrs;
-  int *unackcount;
-  int *unackalloc;
+  unsigned int nextid;
 
   /* memory */
   block *blocks;
@@ -511,32 +478,27 @@ typedef struct task {
   pntr *strings;
   int nstrings;
   pntrstack *streamstack;
+  pntrstack *markstack;
   int indistgc;
   int inmark;
-  pntrstack *markstack;
   int alloc_bytes;
   int framesize;
   int framesperblock;
 
-  /* general */
-  FILE *output;
-  procstats stats;
-
-  void *commdata;
-  endpointid *idmap;
-
+  /* startup info (used by manager) */
   int haveidmap;
   int started;
+  int startfds[2];
+  int threadrunningfds[2];
 
-  pntr trace_root;
-  source *trace_src;
-  int trace_steps;
-  char *trace_dir;
-  int trace_type;
-  int tracing;
+  /* runtime execution info (used by interpreter and native) */
   struct timeval nextfish;
   struct timeval nextgc;
-  unsigned int nextid;
+  int newfish;
+  int usr1setup;
+
+  /* interpreter */
+  jmp_buf jbuf;
 
   /* native execution */
   void **instraddrs;
@@ -548,16 +510,24 @@ typedef struct task {
   void *trap_addr;
   void *caperror_addr;
   void *argerror_addr;
-
   void *normal_esp;
   int native_finished;
-  int swapped;
   unsigned char bcbackup[2][5];
   int trap_pending;
   int trap_bcaddr;
+
+  /* tracing */
+  pntr trace_root;
+  source *trace_src;
+  int trace_steps;
+  char *trace_dir;
+  int trace_type;
+  int tracing;
+
 } task;
 
-task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n);
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
+               socketid out_sockid, endpointid *epid);
 void task_free(task *tsk);
 void print_profile(task *tsk);
 
@@ -678,10 +648,6 @@ pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
 void run_reduction(source *src, char *trace_dir, int trace_type);
 
-/* console */
-
-void console(task *tsk);
-
 /* builtin */
 
 void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
@@ -701,7 +667,6 @@ endpoint *find_endpoint(node *n, int localid);
 int standalone(const char *bcdata, int bcsize);
 int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
-task *find_task(node *n, int localid);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);
 
 /* cell */

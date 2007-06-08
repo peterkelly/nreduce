@@ -126,23 +126,12 @@ endpoint *find_endpoint(node *n, int localid)
   return endpt;
 }
 
-task *find_task(node *n, int localid)
-{
-  endpoint *endpt = find_endpoint(n,localid);
-  if (NULL == endpt)
-    return NULL;
-  if (TASK_ENDPOINT != endpt->type)
-    fatal("Request for endpoint %d that is not a task",localid);
-  return (task*)endpt->data;
-}
-
 void socket_send(task *tsk, int destid, int tag, char *data, int size)
 {
-  node *n = (node*)tsk->commdata;
   #ifdef MSG_DEBUG
   msg_print(tsk,destid,tag,data,size);
   #endif
-  node_send(n,tsk->endpt->epid.localid,tsk->idmap[destid],tag,data,size);
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[destid],tag,data,size);
 }
 
 static void worker_callback(struct node *n, void *data, int event,
