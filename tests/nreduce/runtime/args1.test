@@ -1,0 +1,26 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l one two three
+===================================== FILE =====================================
+test.l
+printlist lst n =
+(if lst
+  (append (numtostring n)
+    (append ": "
+      (append (head lst)
+        (append "\n" (printlist (tail lst) (+ n 1))))))
+  nil)
+
+main args =
+(append "Arguments:\n"
+  (append "total = "
+    (append (numtostring (len args))
+      (append "\n"
+        (printlist args 0)))))
+==================================== OUTPUT ====================================
+Arguments:
+total = 3
+0: one
+1: two
+2: three
+================================== RETURN CODE =================================
+0
