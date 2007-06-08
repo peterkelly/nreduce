@@ -401,11 +401,14 @@ void print_scomb_code(source *src, FILE *f, scomb *sc)
   col += fprintf(f,"%s ",scname);
   free(scname);
   for (i = 0; i < sc->nargs; i++) {
-    if (sc->strictin) {
-      if (sc->strictin[i])
-        col += fprintf(f,"!");
+    const char *argname = real_varname(src,sc->argnames[i]);
+    if (strcmp(argname,"__args")) {
+      if (sc->strictin) {
+        if (sc->strictin[i])
+          col += fprintf(f,"!");
+      }
+      col += fprintf(f,"%s ",argname);
     }
-    col += fprintf(f,"%s ",real_varname(src,sc->argnames[i]));
   }
   col += fprintf(f,"= ");
   print_codef2(src,f,sc->body,col);

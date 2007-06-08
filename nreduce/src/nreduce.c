@@ -222,7 +222,7 @@ static int client_mode()
     return -1;
   }
 
-  r = do_client(args.client,array_count(args.extra),(char**)args.extra->data);
+  r = do_client(args.client,array_count(args.extra),(const char**)args.extra->data);
   array_free(args.extra);
   return r;
 }
@@ -345,11 +345,10 @@ int main(int argc, char **argv)
   if (args.worker)
     return worker_mode();
 
-  if (1 != array_count(args.extra))
+  if (1 > array_count(args.extra))
     usage();
-
   args.filename = array_item(args.extra,0,char*);
-  array_free(args.extra);
+  array_remove_items(args.extra,1);
 
   src = source_new();
 
@@ -374,7 +373,7 @@ int main(int argc, char **argv)
   }
 
   if (ENGINE_REDUCER == engine_type) {
-    run_reduction(src,args.trace,args.trace_type);
+    run_reduction(src,args.trace,args.trace_type,args.extra);
   }
   else {
     if (0 != source_compile(src,&bcdata,&bcsize))
@@ -393,11 +392,12 @@ int main(int argc, char **argv)
     }
 
     debug_stage("Execution");
-    r = standalone(bcdata,bcsize);
+    r = standalone(bcdata,bcsize,array_count(args.extra),(const char**)args.extra->data);
     free(bcdata);
   }
 
   source_free(src);
+  array_free(args.extra);
 
   return r;
 }

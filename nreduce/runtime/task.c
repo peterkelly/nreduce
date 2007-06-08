@@ -414,7 +414,7 @@ void dump_globals(task *tsk)
   }
 }
 
-task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
                socketid out_sockid, endpointid *epid)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
@@ -425,6 +425,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
   int fno;
   int cur;
   int maxstack = 0;
+  int argc = array_count(args);
 
   if (epid)
     memset(epid,0,sizeof(*epid));
@@ -460,6 +461,17 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
 
   tsk->tid = tid;
   tsk->groupsize = groupsize;
+
+  tsk->argsp = tsk->globnilpntr;
+  if (0 < argc) {
+    carray *arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
+    make_pntr(tsk->argsp,arr->wrapper);
+    for (i = 0; i < argc; i++) {
+      pntr p = string_to_array(tsk,array_item(args,i,char*));
+      carray_append(tsk,&arr,&p,1,sizeof(pntr));
+    }
+  }
+
   if (NULL == bcdata)
     return tsk; /* no bytecode; we must be using the reduction engine */
 

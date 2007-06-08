@@ -147,9 +147,14 @@ static int check_for_main(source *src)
     if (!strcmp(sc->name,"main")) {
       gotmain = 1;
 
-      if (0 != sc->nargs) {
-        fprintf(stderr,"Supercombinator \"main\" must have 0 arguments\n");
+      if (2 <= sc->nargs) {
+        fprintf(stderr,"Supercombinator \"main\" must take either 0 or 1 arguments\n");
         return -1;
+      }
+      else if (0 == sc->nargs) {
+        sc->nargs = 1;
+        sc->argnames = (char**)realloc(sc->argnames,sizeof(char*));
+        sc->argnames[0] = strdup("__args");
       }
     }
   }

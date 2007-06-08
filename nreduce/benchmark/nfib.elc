@@ -13,4 +13,7 @@ loop n max =
     (append "\n"
             (loop (+ n 1) max)))))))
 
-main = (loop 0 32)
+main args =
+(if args
+  (loop 0 (stringtonum (head args)))
+  "Please specify maximum value\n")

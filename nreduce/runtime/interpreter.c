@@ -1845,6 +1845,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   if (0 == tsk->tid) {
     frame *initial = frame_new(tsk,1);
     initial->instr = bc_instructions(tsk->bcdata);
+    assert(1 == initial->instr->expcount);
+    initial->data[0] = tsk->argsp;
+    tsk->argsp = tsk->globnilpntr;
     initial->c = alloc_cell(tsk);
     initial->c->type = CELL_FRAME;
     make_pntr(initial->c->field1,initial);

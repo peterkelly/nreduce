@@ -25,8 +25,8 @@ parlist lst =
 spark val =
 (seq (sparklist val) val)
 
-__start =
-(printer (getoutput nil) main)
+__start args =
+(printer (getoutput nil) (main args))
 
 streamfd fd =
 (readchunk fd (streamfd fd))

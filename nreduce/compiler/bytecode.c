@@ -1326,8 +1326,9 @@ static void compile_prologue(compilation *comp, source *src)
   assert(startsc);
 
   comp->si = stackinfo_new(NULL);
+  pushstatus(comp->si,STATUS_UNKNOWN);
   BEGIN(startsc->sl);
-  MKFRAME(startsc->sl,startsc->index+NUM_BUILTINS,0);
+  MKFRAME(startsc->sl,startsc->index+NUM_BUILTINS,1);
   SPARK(startsc->sl,0);
   EVAL(startsc->sl,0);
   END(startsc->sl);

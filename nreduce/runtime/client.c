@@ -58,6 +58,8 @@ typedef struct launcher {
   endpointid *endpointids;
   int *localids;
   socketid out_sockid;
+  int argc;
+  char **argv;
 } launcher;
 
 static int get_responses(node *n, launcher *lr, int tag,
@@ -113,23 +115,44 @@ static int get_responses(node *n, launcher *lr, int tag,
   return 0;
 }
 
-static void launcher_free(launcher *sa)
+static void launcher_free(launcher *lr)
 {
-  free(sa->endpointids);
-  free(sa->localids);
-  free(sa->bcdata);
-  free(sa->managerids);
-  free(sa);
+  int i;
+  for (i = 0; i < lr->argc; i++)
+    free(lr->argv[i]);
+  free(lr->argv);
+  free(lr->endpointids);
+  free(lr->localids);
+  free(lr->bcdata);
+  free(lr->managerids);
+  free(lr);
 }
 
 static void send_newtask(launcher *lr)
 {
   int ntsize = sizeof(newtask_msg)+lr->bcsize;
-  newtask_msg *ntmsg = (newtask_msg*)calloc(1,ntsize);
+  newtask_msg *ntmsg;
   int i;
+  char *pos;
+
+  for (i = 0; i < lr->argc; i++)
+    ntsize += strlen(lr->argv[i])+1;
+
+  ntmsg = (newtask_msg*)calloc(1,ntsize);
   ntmsg->groupsize = lr->count;
+  ntmsg->argc = lr->argc;
   ntmsg->bcsize = lr->bcsize;
   memcpy(&ntmsg->bcdata,lr->bcdata,lr->bcsize);
+
+  pos = ((char*)ntmsg)+sizeof(newtask_msg)+lr->bcsize;
+  for (i = 0; i < lr->argc; i++) {
+    memcpy(pos,lr->argv[i],strlen(lr->argv[i]));
+    pos += strlen(lr->argv[i]);
+    *pos = '\0';
+    pos++;
+  }
+  assert(pos == ((char*)ntmsg)+ntsize);
+
   ntmsg->out_sockid = lr->out_sockid;
   for (i = 0; i < lr->count; i++) {
     ntmsg->tid = i;
@@ -247,14 +270,20 @@ static void launcher_thread(node *n, endpoint *endpt, void *arg)
 }
 
 void start_launcher(node *n, const char *bcdata, int bcsize,
-                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid)
+                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid,
+                    int argc, const char **argv)
 {
   launcher *lr = (launcher*)calloc(1,sizeof(launcher));
+  int i;
   lr->n = n;
   lr->bcsize = bcsize;
   lr->bcdata = malloc(bcsize);
   lr->count = count;
   lr->managerids = malloc(count*sizeof(endpointid));
+  lr->argc = argc;
+  lr->argv = (char**)malloc(argc*sizeof(char*));
+  for (i = 0; i < argc; i++)
+    lr->argv[i] = strdup(argv[i]);
   memcpy(lr->managerids,managerids,count*sizeof(endpointid));
   memcpy(lr->bcdata,bcdata,bcsize);
   lr->out_sockid = out_sockid;
@@ -262,7 +291,8 @@ void start_launcher(node *n, const char *bcdata, int bcsize,
   node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,threadp);
 }
 
-static int client_run(node *n, list *nodes, const char *filename, socketid out_sockid)
+static int client_run(node *n, list *nodes, const char *filename, socketid out_sockid,
+                      int argc, const char **argv)
 {
   int bcsize;
   char *bcdata;
@@ -290,7 +320,7 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
   source_free(src);
 
   node_log(n,LOG_INFO,"Compiled");
-  start_launcher(n,bcdata,bcsize,managerids,count,&thread,out_sockid);
+  start_launcher(n,bcdata,bcsize,managerids,count,&thread,out_sockid,argc,argv);
 
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
@@ -485,11 +515,11 @@ static void find_tasks(node *n, list *chordids)
     fatal("pthread_join: %s",strerror(errno));
 }
 
-int do_client(char *initial_str, int argc, char **argv)
+int do_client(char *initial_str, int argc, const char **argv)
 {
   node *n;
   int r = 0;
-  char *cmd;
+  const char *cmd;
   endpointid initial;
 
   n = node_new(LOG_WARNING);
@@ -528,13 +558,13 @@ int do_client(char *initial_str, int argc, char **argv)
     }
     else {
       int want = atoi(argv[1]);
-      char *program = argv[2];
+      const char *program = argv[2];
       list *nodes = find_nodes(n,initial,want);
       pthread_t thread;
       socketid out_sockid;
       out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,NULL,&thread);
       out_sockid.sid = 1;
-      if (0 != client_run(n,nodes,program,out_sockid))
+      if (0 != client_run(n,nodes,program,out_sockid,argc-3,((const char**)argv)+3))
         exit(1);
       list_free(nodes,free);
 

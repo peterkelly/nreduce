@@ -423,6 +423,7 @@ typedef struct task {
   /* general */
   FILE *output; /* FIXME: this doesn't make sense in a distributed environment */
   procstats stats;
+  pntr argsp;
 
   /* bytecode */
   char *bcdata;
@@ -526,7 +527,7 @@ typedef struct task {
 
 } task;
 
-task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, node *n,
+task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
                socketid out_sockid, endpointid *epid);
 void task_free(task *tsk);
 void print_profile(task *tsk);
@@ -576,8 +577,9 @@ void set_error(task *tsk, const char *format, ...);
 /* client */
 
 void start_launcher(node *n, const char *bcdata, int bcsize,
-                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid);
-int do_client(char *initial_str, int argc, char **argv);
+                    endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid,
+                    int argc, const char **argv);
+int do_client(char *initial_str, int argc, const char **argv);
 
 /* data */
 
@@ -646,7 +648,7 @@ void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 pntr instantiate_scomb(task *tsk, pntrstack *s, scomb *sc);
 void reduce(task *h, pntrstack *s);
-void run_reduction(source *src, char *trace_dir, int trace_type);
+void run_reduction(source *src, char *trace_dir, int trace_type, array *args);
 
 /* builtin */
 
@@ -664,7 +666,7 @@ int array_to_string(pntr refpntr, char **str);
 /* worker */
 
 endpoint *find_endpoint(node *n, int localid);
-int standalone(const char *bcdata, int bcsize);
+int standalone(const char *bcdata, int bcsize, int argc, const char **argv);
 int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
 void socket_send(task *tsk, int destid, int tag, char *data, int size);

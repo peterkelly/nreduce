@@ -384,20 +384,26 @@ static void stream(task *tsk, pntr lst)
   tsk->streamstack = NULL;
 }
 
-void run_reduction(source *src, char *trace_dir, int trace_type)
+void run_reduction(source *src, char *trace_dir, int trace_type, array *args)
 {
   scomb *mainsc;
+  cell *app;
   pntr rootp;
   socketid out_sockid;
   task *tsk;
 
   memset(&out_sockid,0,sizeof(out_sockid));
-  tsk = task_new(0,0,NULL,0,NULL,out_sockid,NULL);
+  tsk = task_new(0,0,NULL,0,args,NULL,out_sockid,NULL);
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
 
-  rootp = makescref(tsk,mainsc);
+  app = alloc_cell(tsk);
+  app->type = CELL_APPLICATION;
+  app->field1 = makescref(tsk,mainsc);
+  app->field2 = tsk->argsp;
+  make_pntr(rootp,app);
+  tsk->argsp = tsk->globnilpntr;
 
   if (trace_dir) {
     tsk->tracing = 1;

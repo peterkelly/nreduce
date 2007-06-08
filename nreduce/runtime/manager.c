@@ -442,20 +442,35 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     case MSG_NEWTASK: {
       newtask_msg *ntmsg;
       endpointid epid;
+      array *args = array_new(sizeof(char*),0);
+      char *str;
+      char *start;
       if (sizeof(newtask_msg) > msg->hdr.size)
         fatal("NEWTASK: invalid message size");
       ntmsg = (newtask_msg*)msg->data;
       if (sizeof(newtask_msg)+ntmsg->bcsize > msg->hdr.size)
         fatal("NEWTASK: invalid bytecode size");
 
+      str = ((char*)msg->data)+sizeof(newtask_msg)+ntmsg->bcsize;
+      start = str;
+      while (str < ((char*)msg->data)+msg->hdr.size) {
+        if ('\0' == *str) {
+          array_append(args,&start,sizeof(char*));
+          start = str+1;
+        }
+        str++;
+      }
+      assert(array_count(args) == ntmsg->argc);
+
       node_log(n,LOG_INFO,"NEWTASK pid = %d, groupsize = %d, bcsize = %d",
                ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
-      task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,n,
+      task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,args,n,
                ntmsg->out_sockid,&epid);
 
       node_send(n,endpt->epid.localid,msg->hdr.source,MSG_NEWTASKRESP,
                 &epid.localid,sizeof(int));
+      array_free(args);
       break;
     }
     case MSG_INITTASK: {

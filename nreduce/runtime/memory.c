@@ -445,6 +445,8 @@ void mark_roots(task *tsk, short bit)
   for (i = 0; i < tsk->nstrings; i++)
     mark(tsk,tsk->strings[i],bit);
 
+  mark(tsk,tsk->argsp,bit);
+
   if (tsk->streamstack) {
     for (i = 0; i < tsk->streamstack->count; i++)
       mark(tsk,tsk->streamstack->data[i],bit);

@@ -225,7 +225,7 @@ static node *worker_startup(int loglevel, int port)
   return n;
 }
 
-int standalone(const char *bcdata, int bcsize)
+int standalone(const char *bcdata, int bcsize, int argc, const char **argv)
 {
   endpointid managerid;
   socketid out_sockid;
@@ -241,7 +241,7 @@ int standalone(const char *bcdata, int bcsize)
   managerid.port = n->listenport;
   managerid.localid = MANAGER_ID;
   memset(&out_sockid,0,sizeof(out_sockid));
-  start_launcher(n,bcdata,bcsize,&managerid,1,NULL,out_sockid);
+  start_launcher(n,bcdata,bcsize,&managerid,1,NULL,out_sockid,argc,argv);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
