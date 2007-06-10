@@ -494,6 +494,8 @@ XPathNameTest:
                                     $$->qn = $1; }
 | XPathWildcard                   { $$ = new_expression(XPATH_NAME_TEST);
                                     $$->qn = $1; }
+| ITEM                            { $$ = new_expression(XPATH_NAME_TEST);
+                                    $$->qn.localpart = strdup("item"); }
 ;
 
 XPathWildcard:
