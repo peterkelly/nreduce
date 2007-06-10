@@ -354,12 +354,12 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
 
   printf("(letrec requestxml = ");
-  printf("(cons (xml:mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
-  printf("(cons (xml:mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
+  printf("(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
+  printf("(cons (xml::mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
 
-  printf("(cons (xml:mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
+  printf("(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
 
-  printf("(cons (xml:mkelem nil nil nil nil \"%s\" nil \"%s\" nil (cons (xml:mknamespace \"%s\" nil) nil) ",
+  printf("(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil (cons (xml::mknamespace \"%s\" nil) nil) ",
 	 inelem.uri,inelem.localpart,inelem.uri);
 
 
@@ -367,9 +367,9 @@ void compile_ws_call(elcgen *gen, expression *expr)
   l = inargs;
   for (p = expr->left; p; p = p->right) {
     assert(XPATH_ACTUAL_PARAM == p->type);
-    printf("(cons (xml:mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
+    printf("(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
 	   inelem.uri,(char*)l->data);
-    printf("(xslt:concomplex (xslt:get_children ");
+    printf("(xslt::concomplex (xslt::get_children ");
     compile_expression(p->left);
     printf("))) ");
     l = l->next;
@@ -380,22 +380,22 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
   printf(") nil)");
   printf(") nil)) nil)");
-  printf("request = (xslt:output 1 requestxml)");
-  printf("response = (xslt:post \"%s\" request)",service_url);
-  printf("responsedoc = (xml:parsexml 1 response)");
-  printf("topelems = (xml:item_children responsedoc)");
+  printf("request = (xslt::output 1 requestxml)");
+  printf("response = (xslt::post \"%s\" request)",service_url);
+  printf("responsedoc = (xml::parsexml 1 response)");
+  printf("topelems = (xml::item_children responsedoc)");
 
-  printf("bodies = (xslt:apmap3 (!citem.!cpos.!csize.\n");
-  printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml:item_children citem))",SOAPENV_NAMESPACE,"Body");
+  printf("bodies = (xslt::apmap3 (!citem.!cpos.!csize.\n");
+  printf("(filter (xslt::name_test xml::TYPE_ELEMENT \"%s\" \"%s\") "
+	 "(xml::item_children citem))",SOAPENV_NAMESPACE,"Body");
   printf(") topelems)");
 
-  printf("respelems = (xslt:apmap3 (!citem.!cpos.!csize.\n");
-  printf("(filter (xslt:name_test xml:TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml:item_children citem))",outelem.uri,outelem.localpart);
+  printf("respelems = (xslt::apmap3 (!citem.!cpos.!csize.\n");
+  printf("(filter (xslt::name_test xml::TYPE_ELEMENT \"%s\" \"%s\") "
+	 "(xml::item_children citem))",outelem.uri,outelem.localpart);
   printf(") bodies)");
 
-  printf("returns = (xslt:apmap3 (!citem.!cpos.!csize.(xml:item_children citem)) respelems)");
+  printf("returns = (xslt::apmap3 (!citem.!cpos.!csize.(xml::item_children citem)) respelems)");
 
   printf("in returns)");
 
@@ -416,46 +416,46 @@ void compile_expression(expression *expr)
   case XPATH_OR:         compile_binary(expr,"or");                   break; /* FIXME: test */
   case XPATH_AND:        compile_binary(expr,"and");                  break; /* FIXME: test */
 
-  case XPATH_VALUE_EQ:   compile_binary(expr,"xslt:value_eq");        break;
-  case XPATH_VALUE_NE:   compile_binary(expr,"xslt:value_ne");        break;
-  case XPATH_VALUE_LT:   compile_binary(expr,"xslt:value_lt");        break;
-  case XPATH_VALUE_LE:   compile_binary(expr,"xslt:value_le");        break;
-  case XPATH_VALUE_GT:   compile_binary(expr,"xslt:value_gt");        break;
-  case XPATH_VALUE_GE:   compile_binary(expr,"xslt:value_ge");        break;
+  case XPATH_VALUE_EQ:   compile_binary(expr,"xslt::value_eq");        break;
+  case XPATH_VALUE_NE:   compile_binary(expr,"xslt::value_ne");        break;
+  case XPATH_VALUE_LT:   compile_binary(expr,"xslt::value_lt");        break;
+  case XPATH_VALUE_LE:   compile_binary(expr,"xslt::value_le");        break;
+  case XPATH_VALUE_GT:   compile_binary(expr,"xslt::value_gt");        break;
+  case XPATH_VALUE_GE:   compile_binary(expr,"xslt::value_ge");        break;
 
-  case XPATH_GENERAL_EQ: compile_binary(expr,"xslt:general_eq");      break;
-  case XPATH_GENERAL_NE: compile_binary(expr,"xslt:general_ne");      break;
-  case XPATH_GENERAL_LT: compile_binary(expr,"xslt:general_lt");      break;
-  case XPATH_GENERAL_LE: compile_binary(expr,"xslt:general_le");      break;
-  case XPATH_GENERAL_GT: compile_binary(expr,"xslt:general_gt");      break;
-  case XPATH_GENERAL_GE: compile_binary(expr,"xslt:general_ge");      break;
-  case XPATH_ADD:        compile_binary(expr,"xslt:add");             break;
-  case XPATH_SUBTRACT:   compile_binary(expr,"xslt:subtract");        break;
-  case XPATH_MULTIPLY:   compile_binary(expr,"xslt:multiply");        break;
-  case XPATH_DIVIDE:     compile_binary(expr,"xslt:divide");          break;
-  case XPATH_IDIVIDE:    compile_binary(expr,"xslt:idivide");         break; /* FIXME: test */
-  case XPATH_MOD:        compile_binary(expr,"xslt:mod");             break;
+  case XPATH_GENERAL_EQ: compile_binary(expr,"xslt::general_eq");      break;
+  case XPATH_GENERAL_NE: compile_binary(expr,"xslt::general_ne");      break;
+  case XPATH_GENERAL_LT: compile_binary(expr,"xslt::general_lt");      break;
+  case XPATH_GENERAL_LE: compile_binary(expr,"xslt::general_le");      break;
+  case XPATH_GENERAL_GT: compile_binary(expr,"xslt::general_gt");      break;
+  case XPATH_GENERAL_GE: compile_binary(expr,"xslt::general_ge");      break;
+  case XPATH_ADD:        compile_binary(expr,"xslt::add");             break;
+  case XPATH_SUBTRACT:   compile_binary(expr,"xslt::subtract");        break;
+  case XPATH_MULTIPLY:   compile_binary(expr,"xslt::multiply");        break;
+  case XPATH_DIVIDE:     compile_binary(expr,"xslt::divide");          break;
+  case XPATH_IDIVIDE:    compile_binary(expr,"xslt::idivide");         break; /* FIXME: test */
+  case XPATH_MOD:        compile_binary(expr,"xslt::mod");             break;
   case XPATH_INTEGER_LITERAL:
-    printf("(cons (xml:mknumber %f) nil)",expr->num);
+    printf("(cons (xml::mknumber %f) nil)",expr->num);
     break;
   case XPATH_DECIMAL_LITERAL:
-    printf("(cons (xml:mknumber %f) nil)",expr->num);
+    printf("(cons (xml::mknumber %f) nil)",expr->num);
     break;
   case XPATH_DOUBLE_LITERAL:
-    printf("(cons (xml:mknumber %f) nil)",expr->num);
+    printf("(cons (xml::mknumber %f) nil)",expr->num);
     break;
   case XPATH_STRING_LITERAL: {
     char *esc = escape(expr->str);
-    printf("(cons (xml:mkstring \"%s\") nil)",esc);
+    printf("(cons (xml::mkstring \"%s\") nil)",esc);
     free(esc);
     break;
   }
   case XPATH_TO: {
-    printf("(xslt:range\n");
-    printf("(xslt:getnumber ");
+    printf("(xslt::range\n");
+    printf("(xslt::getnumber ");
     compile_expression(expr->left);
     printf(")\n");
-    printf("(xslt:getnumber ");
+    printf("(xslt::getnumber ");
     compile_expression(expr->right);
     printf("))");
     break;
@@ -471,12 +471,12 @@ void compile_expression(expression *expr)
     printf("(cons citem nil)");
     break;
   case XPATH_UNARY_MINUS:
-    printf("(xslt:uminus ");
+    printf("(xslt::uminus ");
     compile_expression(expr->left);
     printf(")");
     break;
   case XPATH_UNARY_PLUS:
-    printf("(xslt:uplus ");
+    printf("(xslt::uplus ");
     compile_expression(expr->left);
     printf(")");
     break;
@@ -493,7 +493,7 @@ void compile_expression(expression *expr)
     break;
   }
   case XPATH_FILTER:
-    printf("(xslt:filter3\n(!citem.!cpos.!csize.xslt:predicate_match cpos ");
+    printf("(xslt::filter3\n(!citem.!cpos.!csize.xslt::predicate_match cpos ");
     compile_expression(expr->right);
     printf(") ");
     compile_expression(expr->left);
@@ -502,8 +502,8 @@ void compile_expression(expression *expr)
   case XPATH_STEP:
     printf("\n// step\n");
 
-    printf("(xslt:path_result ");
-    printf("(xslt:apmap3 (!citem.!cpos.!csize.\n");
+    printf("(xslt::path_result ");
+    printf("(xslt::apmap3 (!citem.!cpos.!csize.\n");
     compile_expression(expr->right);
     printf(") ");
     compile_expression(expr->left);
@@ -525,13 +525,13 @@ void compile_expression(expression *expr)
     if (XPATH_KIND_TEST == expr->type) {
       switch (expr->kind) {
       case KIND_DOCUMENT:
-        printf("(xslt:type_test xml:TYPE_DOCUMENT)");
+        printf("(xslt::type_test xml::TYPE_DOCUMENT)");
         break;
       case KIND_ELEMENT:
-        printf("(xslt:type_test xml:TYPE_ELEMENT)");
+        printf("(xslt::type_test xml::TYPE_ELEMENT)");
         break;
       case KIND_ATTRIBUTE:
-        printf("(xslt:type_test xml:TYPE_ATTRIBUTE)");
+        printf("(xslt::type_test xml::TYPE_ATTRIBUTE)");
         break;
       case KIND_SCHEMA_ELEMENT:
         fprintf(stderr,"Schema element tests not supported\n");
@@ -545,13 +545,13 @@ void compile_expression(expression *expr)
         fprintf(stderr,"Processing instruction tests not supported\n");
         break;
       case KIND_COMMENT:
-        printf("(xslt:type_test xml:TYPE_COMMENT)");
+        printf("(xslt::type_test xml::TYPE_COMMENT)");
         break;
       case KIND_TEXT:
-        printf("(xslt:type_test xml:TYPE_TEXT)");
+        printf("(xslt::type_test xml::TYPE_TEXT)");
         break;
       case KIND_ANY:
-        printf("xslt:any_test");
+        printf("xslt::any_test");
         break;
       default:
         abort();
@@ -560,16 +560,16 @@ void compile_expression(expression *expr)
     else {
       char *nsuri = expr->qn.uri ? escape(expr->qn.uri) : NULL;
       char *localname = expr->qn.localpart ? escape(expr->qn.localpart) : NULL;
-      char *type = (AXIS_ATTRIBUTE == expr->axis) ? "xml:TYPE_ATTRIBUTE" : "xml:TYPE_ELEMENT";
+      char *type = (AXIS_ATTRIBUTE == expr->axis) ? "xml::TYPE_ATTRIBUTE" : "xml::TYPE_ELEMENT";
 
       if (nsuri && localname)
-        printf("(xslt:name_test %s \"%s\" \"%s\")",type,nsuri,localname);
+        printf("(xslt::name_test %s \"%s\" \"%s\")",type,nsuri,localname);
       else if (localname)
-        printf("(xslt:wildcard_uri_test %s \"%s\")",type,localname);
+        printf("(xslt::wildcard_uri_test %s \"%s\")",type,localname);
       else if (nsuri)
-        printf("(xslt:wildcard_localname_test %s \"%s\")",type,nsuri);
+        printf("(xslt::wildcard_localname_test %s \"%s\")",type,nsuri);
       else
-        printf("(xslt:type_test %s)",type);
+        printf("(xslt::type_test %s)",type);
       free(nsuri);
       free(localname);
     }
@@ -580,40 +580,40 @@ void compile_expression(expression *expr)
       printf("(cons citem nil)");
       break;
     case AXIS_CHILD:
-      printf("(xml:item_children citem)");
+      printf("(xml::item_children citem)");
       break;
     case AXIS_DESCENDANT:
-      printf("(xslt:node_descendants citem)");
+      printf("(xslt::node_descendants citem)");
       break;
     case AXIS_DESCENDANT_OR_SELF:
-      printf("(cons citem (xslt:node_descendants citem))");
+      printf("(cons citem (xslt::node_descendants citem))");
       break;
     case AXIS_PARENT:
-      printf("(xslt:node_parent_list citem)");
+      printf("(xslt::node_parent_list citem)");
       break;
     case AXIS_ANCESTOR:
-      printf("(xslt:node_ancestors citem)");
+      printf("(xslt::node_ancestors citem)");
       break;
     case AXIS_ANCESTOR_OR_SELF:
-      printf("(xslt:node_ancestors_or_self citem)");
+      printf("(xslt::node_ancestors_or_self citem)");
       break;
     case AXIS_PRECEDING_SIBLING:
-      printf("(xslt:node_preceding_siblings citem)");
+      printf("(xslt::node_preceding_siblings citem)");
       break;
     case AXIS_FOLLOWING_SIBLING:
-      printf("(xslt:node_following_siblings citem)");
+      printf("(xslt::node_following_siblings citem)");
       break;
     case AXIS_PRECEDING:
-      printf("(xslt:node_preceding citem)");
+      printf("(xslt::node_preceding citem)");
       break;
     case AXIS_FOLLOWING:
-      printf("(xslt:node_following citem)");
+      printf("(xslt::node_following citem)");
       break;
     case AXIS_ATTRIBUTE:
-      printf("(xml:item_attributes citem)");
+      printf("(xml::item_attributes citem)");
       break;
     case AXIS_NAMESPACE:
-      printf("(xml:item_namespaces citem)");
+      printf("(xml::item_namespaces citem)");
       break;
     default:
       assert(!"unsupported axis");
@@ -651,19 +651,26 @@ void compile_expression(expression *expr)
         nargs++;
 
       if (!strcmp(expr->qn.localpart,"string") && (0 == nargs)) {
-        printf("(xslt:fn_string0 citem)");
+        printf("(xslt::fn_string0 citem)");
       }
       else if (!strcmp(expr->qn.localpart,"string-length") && (0 == nargs)) {
-        printf("(xslt:fn_string-length0 citem)");
+        printf("(xslt::fn_string_length0 citem)");
       }
       else if (!strcmp(expr->qn.localpart,"position")) {
-        printf("(cons (xml:mknumber cpos) nil)");
+        printf("(cons (xml::mknumber cpos) nil)");
       }
       else if (!strcmp(expr->qn.localpart,"last")) {
-        printf("(cons (xml:mknumber csize) nil)");
+        printf("(cons (xml::mknumber csize) nil)");
       }
       else {
-        printf("(xslt:fn_%s",expr->qn.localpart);
+        char *funname = strdup(expr->qn.localpart);
+        char *c;
+
+        for (c = funname; '\0' != *c; c++)
+          if ('-' == *c)
+            *c = '_';
+
+        printf("(xslt::fn_%s",funname);
 
         for (p = expr->left; p; p = p->right) {
           assert(XPATH_ACTUAL_PARAM == p->type);
@@ -671,6 +678,7 @@ void compile_expression(expression *expr)
           compile_expression(p->left);
         }
         printf(")");
+        free(funname);
       }
     }
     break;
@@ -727,7 +735,7 @@ void compile_avt_component(expression *expr)
     free(esc);
   }
   else {
-    printf("(xslt:consimple ");
+    printf("(xslt::consimple ");
     compile_expression(expr);
     printf(")");
   }
@@ -768,10 +776,10 @@ void compile_attributes(xmlNodePtr n)
   for (attr = n->properties; attr; attr = attr->next) {
     char *value;
     if (attr->ns)
-      printf("(cons (xml:mkattr nil nil nil nil \"%s\" \"%s\" \"%s\" ",
+      printf("(cons (xml::mkattr nil nil nil nil \"%s\" \"%s\" \"%s\" ",
              attr->ns->href,attr->ns->prefix,attr->name);
     else
-      printf("(cons (xml:mkattr nil nil nil nil nil nil \"%s\" ",attr->name);
+      printf("(cons (xml::mkattr nil nil nil nil nil nil \"%s\" ",attr->name);
 
     value = xmlNodeListGetString(parse_doc,attr->children,1);
     printf("//xxx value: %s\n",value);
@@ -792,7 +800,7 @@ void compile_namespaces(xmlNodePtr n)
   xmlNsPtr ns;
   int count = 0;
   for (ns = n->nsDef; ns; ns = ns->next) {
-    printf("(cons (xml:mknamespace \"%s\" \"%s\")\n",ns->href,ns->prefix);
+    printf("(cons (xml::mknamespace \"%s\" \"%s\")\n",ns->href,ns->prefix);
     count++;
   }
   printf("nil");
@@ -816,7 +824,7 @@ void compile_instruction(xmlNodePtr n)
       else if (!xmlStrcmp(n->name,"value-of")) {
         char *select = xmlGetProp(n,"select");
 	printf("\n// value-of %s\n",select);
-	printf("(cons (xml:mktext (xslt:consimple ");
+	printf("(cons (xml::mktext (xslt::consimple ");
         if (select)
           compile_expr_string(n,select);
         else
@@ -827,7 +835,7 @@ void compile_instruction(xmlNodePtr n)
       else if (!xmlStrcmp(n->name,"text")) {
 	char *str = xmlNodeListGetString(parse_doc,n->children,1);
 	char *esc = escape(str);
-        printf("(cons (xml:mktext \"%s\") nil)",esc);
+        printf("(cons (xml::mktext \"%s\") nil)",esc);
         free(esc);
         free(str);
       }
@@ -840,7 +848,7 @@ void compile_instruction(xmlNodePtr n)
         compile_expr_string(n,select);
         printf("\nin\n");
 
-        printf("(xslt:apmap3 (!citem.!cpos.!csize.\n");
+        printf("(xslt::apmap3 (!citem.!cpos.!csize.\n");
         compile_sequence(n->children);
         printf(")\n");
 
@@ -851,7 +859,7 @@ void compile_instruction(xmlNodePtr n)
         char *test = get_required_attr(n,"test");
         printf("\n// if %s\n",test);
         printf("(if\n");
-        printf("(xslt:ebv\n");
+        printf("(xslt::ebv\n");
         compile_expr_string(n,test);
         printf(")\n");
         compile_sequence(n->children);
@@ -872,7 +880,7 @@ void compile_instruction(xmlNodePtr n)
 
             printf("\n// when %s\n",test);
 
-            printf("(if (xslt:ebv ");
+            printf("(if (xslt::ebv ");
             compile_expr_string(child,test);
             printf(") ");
             compile_sequence(child->children);
@@ -904,14 +912,14 @@ void compile_instruction(xmlNodePtr n)
 
 	printf("(letrec\n");
 
-	printf("attrs = (xslt:get_attributes content)\n");
-	printf("namespaces = (xslt:get_namespaces content)\n");
-	printf("children2 = (xslt:concomplex (xslt:get_children content))\n");
-	printf("children = (xslt:reparent children2 elem nil)\n");
+	printf("attrs = (xslt::get_attributes content)\n");
+	printf("namespaces = (xslt::get_namespaces content)\n");
+	printf("children2 = (xslt::concomplex (xslt::get_children content))\n");
+	printf("children = (xslt::reparent children2 elem nil)\n");
 	printf("name = ");
 	compile_avt(n,name);
 	//	printf("\"%s\"",name);
-	printf("elem = (xml:mkelem nil nil nil nil nil nil name attrs namespaces children)\n");
+	printf("elem = (xml::mkelem nil nil nil nil nil nil name attrs namespaces children)\n");
 	printf("content =\n");
 	compile_sequence(n->children);
 	printf("\nin\n(cons elem nil))");
@@ -923,7 +931,7 @@ void compile_instruction(xmlNodePtr n)
         char *select = xmlGetProp(n,"select");
 
 	printf("\n// attribute %s\n",name);
-	printf("(cons (xml:mkattr nil nil nil nil ");
+	printf("(cons (xml::mkattr nil nil nil nil ");
 	printf(" nil "); // nsuri
 	printf(" nil "); // nsprefix
 
@@ -931,7 +939,7 @@ void compile_instruction(xmlNodePtr n)
 	compile_avt(n,name);
 
         // value
-	printf("(xslt:consimple ");
+	printf("(xslt::consimple ");
         if (select)
           compile_expr_string(n,select);
         else
@@ -952,21 +960,21 @@ void compile_instruction(xmlNodePtr n)
 
       printf("attrs = (append ");
       compile_attributes(n);
-      printf(" (xslt:get_attributes content))\n");
+      printf(" (xslt::get_attributes content))\n");
 
       printf("namespaces = (append ");
       compile_namespaces(n);
-      printf(" (xslt:get_namespaces content))\n");
+      printf(" (xslt::get_namespaces content))\n");
 
-      printf("children2 = (xslt:concomplex (xslt:get_children content))\n");
-      printf("children = (xslt:reparent children2 elem nil)\n");
+      printf("children2 = (xslt::concomplex (xslt::get_children content))\n");
+      printf("children = (xslt::reparent children2 elem nil)\n");
 
       if (n->ns) {
-        printf("elem = (xml:mkelem nil nil nil nil \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
+        printf("elem = (xml::mkelem nil nil nil nil \"%s\" \"%s\" \"%s\" attrs namespaces children)\n",
                 n->ns->href,n->ns->prefix,n->name);
       }
       else {
-        printf("elem = (xml:mkelem nil nil nil nil nil nil \"%s\" attrs namespaces children)\n",n->name);
+        printf("elem = (xml::mkelem nil nil nil nil nil nil \"%s\" attrs namespaces children)\n",n->name);
       }
       printf("content =\n");
       compile_sequence(n->children);
@@ -977,7 +985,7 @@ void compile_instruction(xmlNodePtr n)
   }
   case XML_TEXT_NODE: {
     char *esc = escape((const char*)n->content);
-    printf("(cons (xml:mktext \"%s\") nil)",esc);
+    printf("(cons (xml::mktext \"%s\") nil)",esc);
     free(esc);
     break;
   }
@@ -1031,7 +1039,7 @@ void compile_sequence(xmlNodePtr first)
 	compile_expr_string(child,select);
       }
       else {
-	printf("(cons (xml:mkdoc ");
+	printf("(cons (xml::mkdoc ");
 	compile_sequence(child->children);
 	printf(") nil)");
       }
@@ -1189,7 +1197,7 @@ int main(int argc, char **argv)
 
   printf("STRIPALL = %s\n",option_strip ? "1" : "nil");
   printf("INDENT = %s\n",option_indent ? "1" : "nil");
-  printf("main = (xslt:output INDENT (cons (xml:mkdoc (xslt:concomplex (top (xml:parsexml "
+  printf("main = (xslt::output INDENT (cons (xml::mkdoc (xslt::concomplex (top (xml::parsexml "
          "STRIPALL (readb FILENAME)) 1 1))) nil))\n");
 
   xmlFreeDoc(doc);
