@@ -25,7 +25,7 @@ calcforce i bodies =
     (letrec
       dx = (- (item i bodies) (item (- i 1) bodies))
      in
-      (/ -1 (* dx dx)))
+      (/ (- 0 1) (* dx dx)))
     0)
   f2 =
   (if (< i (- N 1))

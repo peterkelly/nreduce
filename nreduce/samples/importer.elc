@@ -9,4 +9,4 @@ flatten lst =
     nil)
 
 main =
-(flatten (map importee:f (cons 1 (cons 2 (cons 3 nil)))))
+(flatten (map importee::f (cons 1 (cons 2 (cons 3 nil)))))

@@ -131,6 +131,12 @@ int add_parsedfile(source *src, const char *filename);
 void print_sourceloc(source *src, FILE *f, sourceloc sl);
 
 char *make_varname(const char *want);
+int create_scomb(source *src, const char *modname, char *name, list *argnames,
+                 snode *body, int fileno, int lineno);
+snode *makesym(int fileno, int lineno, const char *name);
+snode *makeapp(int fileno, int lineno, const char *name, ...);
+snode *makeoneletrec(int fileno, int lineno, const char *name, snode *value, snode *body);
+snode *makeforeach(int fileno, int lineno, char *varname, snode *list, snode *body);
 
 /* resolve */
 

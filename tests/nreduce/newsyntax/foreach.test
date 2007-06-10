@@ -1,9 +1,15 @@
 =================================== PROGRAM ====================================
-nreduce runtests.tmp/test.l
+nreduce runtests.tmp/test.sp
 ===================================== FILE =====================================
-test.l
-main = (append (numtostring (/ 0 (- 0 1))) "\n")
+test.sp
+function main(args)
+{
+  foreach m (["one","two","three"])
+    "Item: ".m."\n";
+}
 ==================================== OUTPUT ====================================
--0
+Item: one
+Item: two
+Item: three
 ================================== RETURN CODE =================================
 0

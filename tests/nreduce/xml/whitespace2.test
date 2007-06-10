@@ -24,8 +24,8 @@ test.elc
 import xml
 
 main =
-(xml:printxml 1
-  (xml:parsexml nil (readb "runtests.tmp/people.xml")))
+(xml::printxml 1
+  (xml::parsexml nil (readb "runtests.tmp/people.xml")))
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
 <people>

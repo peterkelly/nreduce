@@ -1,7 +1,7 @@
 import util
 
 //==================================================================================================
-// http:get url
+// http::get url
 //
 // Retrives the contents of the specified URL. The return value is a data stream containing the
 // data received from the connection. This is lazily evaluated and the data will only be read from
@@ -12,24 +12,24 @@ import util
 // other than OK (200) is received, an error will be signaled.
 //==================================================================================================
 
-get url = (http:parse_url url (get2 url))
+get url = (http::parse_url url (get2 url))
 
 get2 url scheme host port path =
 (letrec
   request = (appendn 5 "GET " path " HTTP/1.1\r\nHost: " host "\r\nConnection: close\r\n\r\n")
   stream = (connect host (stringtonum port) request)
  in
-  (http:parse_response stream (get3 url)))
+  (http::parse_response stream (get3 url)))
 
 get3 url version status reason headers body =
 (if (= status 302)
-  (get (http:get_header "location" headers))
+  (get (http::get_header "location" headers))
   (if (!= status 200)
     (error (append "HTTP error " (append (numtostring status) (append ": " url))))
     body))
 
 //==================================================================================================
-// http:parse_url str fun
+// http::parse_url str fun
 //
 // Parses str as a URL and extracts four components: scheme, host, port, and path. fun must be
 // a function of four arguments; this will be invoked when parsing has completed, with the URL
@@ -71,13 +71,13 @@ pu_port1 scheme host str start !count =
 pu_path scheme host port path fun = (fun scheme host port path)
 
 //==================================================================================================
-// http:parse_request stream fun
+// http::parse_request stream fun
 //
 // Parses a HTTP request received from a client. The stream is the raw data received over the
 // connection. fun must be a function of 5 arguments: method uri version headers body; when the
 // request parsing is complete it will be passed the relevant components of the response.
 //
-// This function uses http:parse_message to do most of the work, and them extracts the method, URI,
+// This function uses http::parse_message to do most of the work, and them extracts the method, URI,
 // and HTTP version.
 //==================================================================================================
 
@@ -86,18 +86,18 @@ parse_request stream =
 
 got_request startline headers body fun =
 (letrec
-  parts = (util:tokens startline)
+  parts = (util::tokens startline)
  in
   (fun (item 0 parts) (item 1 parts) (item 2 parts) headers body))
 
 //==================================================================================================
-// http:parse_response stream fun
+// http::parse_response stream fun
 //
 // Parses a HTTP response received from a server. The stream is the raw data received over the
 // connection. fun must be a function of 5 arguments: version status reason headers body; when the
 // response parsing is complete it will be passed the relevant components of the response.
 //
-// This function uses http:parse_message to do most of the work, and them extracts the HTTP version,
+// This function uses http::parse_message to do most of the work, and them extracts the HTTP version,
 // status code, and reason from the status line. Bug: only the first word of the reason field is
 // passed. You should use the status code instead.
 //==================================================================================================
@@ -107,12 +107,12 @@ parse_response stream =
 
 got_response startline headers body fun =
 (letrec
-  parts = (util:tokens startline)
+  parts = (util::tokens startline)
  in
   (fun (item 0 parts) (stringtonum (item 1 parts)) (item 2 parts) headers body))
 
 //==================================================================================================
-// http:parse_message stream fun
+// http::parse_message stream fun
 //
 // Parses a data stream containing a HTTP message, which may be either a request sent by a client,
 // or a response sent back by a server. Both have the same general format: a start line, followed
@@ -122,7 +122,7 @@ got_response startline headers body fun =
 // is parsed, fun will be invoked, and the three different components of the message will be passed
 // as arguments. The start line is a string, which must be parsed by the caller to extract the
 // appropriate components for a request or response. headers is a list of (name,value) pairs; the
-// http:get_header function can be used to access a specific header. The *decoded* body is passed
+// http::get_header function can be used to access a specific header. The *decoded* body is passed
 // to the function, so e.g. if the "chunked" transfer encoding was specified in the headers then
 // this function will handle the decodeing.
 //
@@ -155,12 +155,12 @@ parse_message2 startline headers s start !count =
 got_message startline hdrlines body fun =
 (letrec
   headers = (parse_headers (reverse hdrlines))
-  chunked = (streq (util:lcase (http:get_header "transfer-encoding" headers)) "chunked")
+  chunked = (streq (util::lcase (http::get_header "transfer-encoding" headers)) "chunked")
  in
   (fun startline headers (if chunked (dechunk body) body)))
 
 //==================================================================================================
-// http:parse_headers lines
+// http::parse_headers lines
 //
 // Parse the headers contained within a HTTP message. lines is a list of lines that contain the
 // headers. The function returns a list of (name,value) pairs, with the names converted to lower
@@ -178,7 +178,7 @@ parse_headers lines =
 phname line start !count rest =
 (if line
   (if (= (head line) ':')
-    (phvaluestart (util:lcase (prefix count start)) (tail line) rest)
+    (phvaluestart (util::lcase (prefix count start)) (tail line) rest)
     (phname (tail line) start (+ count 1) rest))
   nil)
 
@@ -195,7 +195,7 @@ phvalue name got line start count rest =
   (cons (cons name (append got line)) (parse_headers rest)))
 
 //==================================================================================================
-// http:get_header name lst
+// http::get_header name lst
 //
 // Retrieves the value of a named header from a set of headers obtained from a HTTP message. The
 // name argument must be in lower-case; since all the header names are converted to lower-case
@@ -213,14 +213,14 @@ get_header name lst =
   nil)
 
 //==================================================================================================
-// http:dechunk stream
+// http::dechunk stream
 //
 // Decodes a data stream which is encoded using the "chunked" HTTP transfer-encoding scheme. This
 // scheme represents data as a series of chunks, each of which consists a length and body. It is
 // used when the server wants to send data incremenetally and does not initially know what the
 // length of the response will be.
 //
-// This function is called by http:parse_message if the Transfer-Encoding header is set to "chunked"
+// This function is called by http::parse_message if the Transfer-Encoding header is set to "chunked"
 //==================================================================================================
 
 dechunk stream =
@@ -229,7 +229,7 @@ dechunk stream =
 dechunk_len stream start !count =
 (if (= (head stream) '\r')
   (letrec
-    chunklen = (util:parsehex (prefix count start))
+    chunklen = (util::parsehex (prefix count start))
     chunkdata = (tail (tail stream))
     next = (skip (+ chunklen 2) chunkdata)
    in

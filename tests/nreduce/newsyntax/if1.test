@@ -1,9 +1,26 @@
 =================================== PROGRAM ====================================
-nreduce runtests.tmp/test.l
+nreduce runtests.tmp/test.sp
 ===================================== FILE =====================================
-test.l
-main = (append (numtostring (/ 0 (- 0 1))) "\n")
+test.sp
+function main()
+{
+  foreach i ([1,2,3]) {
+    "i = ".numtostring(i)."\n";
+    if (i > 1)
+      if (i > 2)
+        "three\n";
+      else
+        "two\n";
+    else
+      "one\n";
+  }
+}
 ==================================== OUTPUT ====================================
--0
+i = 1
+one
+i = 2
+two
+i = 3
+three
 ================================== RETURN CODE =================================
 0

@@ -151,7 +151,7 @@ compute_index prev parent =
 
   last_descendant = (!node.
     (letrec
-      children = (xml:item_children node)
+      children = (item_children node)
       lastchild = (last children)
      in
       (if lastchild
@@ -165,7 +165,7 @@ compute_index prev parent =
       0)))
 
 //==================================================================================================
-// xml:tokenize stream
+// xml::tokenize stream
 //
 // This function is used internally by the XML parser. It takes a stream of data representing an
 // XML document, and converts it into a list of tokens. Each token is a cons pair with the head
@@ -382,7 +382,7 @@ tokenize_value_sq !stream !start !count =
 isspace c = (or (= c ' ') (or (= c '\r') (= c '\n')))
 
 //==================================================================================================
-// xml:print_tokens tokens
+// xml::print_tokens tokens
 //
 // Debugging function for printing out the result of the tokenization process
 //==================================================================================================
@@ -408,7 +408,7 @@ print_token val =
   nil)
 
 //==================================================================================================
-// xml:add_whitespace nodes
+// xml::add_whitespace nodes
 //
 // Produces a new copy of an XML element tree that contains whitespace added for indenting
 // purposes. The whitespace is in the form of new text nodes containing a newline and some spaces.
@@ -480,7 +480,7 @@ add_whitespace1 depth lst needindent haveindent =
     nil))
 
 //==================================================================================================
-// xml:count_indent
+// xml::count_indent
 //
 // Count the number of indentation characters present in a string. A set of indentation characters
 // consists of a newline followed by one or more spaces. If a non-whitespace character is found,
@@ -502,7 +502,7 @@ count_indent str haveindent =
   haveindent)
 
 //==================================================================================================
-// xml:isnonws str
+// xml::isnonws str
 //
 // Determines if a string contains any non-whitespace characters
 //==================================================================================================
@@ -515,7 +515,7 @@ isnonws str =
   nil)
 
 //==================================================================================================
-// xml:maybe_indent depth needindent haveindent rest
+// xml::maybe_indent depth needindent haveindent rest
 //
 // This function is used by add_whitespace
 //
@@ -534,7 +534,7 @@ maybe_indent depth needindent haveindent rest =
   rest)
 
 //==================================================================================================
-// xml:spaces n
+// xml::spaces n
 //
 // Returns a string consisting of n spaces
 //==================================================================================================
@@ -545,12 +545,12 @@ in
 (prefix n bulkspaces))
 
 //==================================================================================================
-// xml:parse tokens
+// xml::parse tokens
 //
 // Construct an XML node tree from a stream of input tokens
 //
 // This function implements the second half of the logic necessary to create an XML structure from
-// a data stream. The function xml:tokenizer must be called to create the token stream, and the
+// a data stream. The function xml::tokenizer must be called to create the token stream, and the
 // result passed to this function.
 //
 // The parser starts off by traversing through the list of tokens. When it encounters a
@@ -623,7 +623,7 @@ parse1 tokens namespaces root parent prev !depth =
               (parse1 rest namespaces root parent nil depth))))))))
 
 //==================================================================================================
-// xml:skip_attrs tokens namespaces root depth
+// xml::skip_attrs tokens namespaces root depth
 //
 // Skip past the ATTRNAME and ATTRVALUE tokens in a token stream.
 //
@@ -645,7 +645,7 @@ skip_attrs tokens namespaces root parent !depth =
       (parse1 tokens namespaces root parent nil depth))))
 
 //==================================================================================================
-// xml:parse_namespaces tokens
+// xml::parse_namespaces tokens
 //
 // Constructs a list of namespace mappings based on a set of ATTRNAME and ATTRVALUE tokens.
 //
@@ -686,7 +686,7 @@ parse_namespaces tokens =
       nil)))
 
 //==================================================================================================
-// xml:parse_attrs tokens namespaces
+// xml::parse_attrs tokens namespaces
 //
 // Constructs a list of XML attribute nodes corresponding to the ATTRNAME and ATTRVALUE tokens
 // found in a token stream.
@@ -730,7 +730,7 @@ parse_attrs tokens namespaces root parent prev =
       nil)))
 
 //==================================================================================================
-// xml:skip_level tokens level
+// xml::skip_level tokens level
 //
 // Skip past the portion of a token stream that contains the tokens for children of a node.
 //

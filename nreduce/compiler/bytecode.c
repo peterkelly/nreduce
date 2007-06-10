@@ -839,8 +839,8 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
   print_comp2(src,comp,"R",c,n,"");
   switch (c->type) {
   case SNODE_APPLICATION: {
-    stack *args = stack_new();
-    stack *argstrict = stack_new();
+    stack *args;
+    stack *argstrict;
     snode *app;
     int m;
 
@@ -849,6 +849,9 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
       RETURN(c->sl);
       return;
     }
+
+    args = stack_new();
+    argstrict = stack_new();
 
     for (app = c; SNODE_APPLICATION == app->type; app = app->left) {
       stack_push(args,app->right);

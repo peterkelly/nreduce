@@ -44,10 +44,10 @@ DIGITS                  {DIGIT}+
 HEXDIGIT                [0-9a-fA-F]
 HEXDIGITS               {HEXDIGIT}+
 
-INTEGER                  \-?{DIGITS}
-HEX                      \-?0[xX]{HEXDIGIT}+
-DOUBLE                   \-?{DIGITS}\.{DIGITS}
-IDCHAR                   [a-zA-Z_\-?:]
+INTEGER                  {DIGITS}
+HEX                      0[xX]{HEXDIGIT}+
+DOUBLE                   {DIGITS}\.{DIGITS}
+IDCHAR                   [a-zA-Z_?:]
 IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 CHAR                     \'.\'
 
@@ -88,49 +88,67 @@ CHAR                     \'.\'
 <string>\\(.|\n)         { array_append(lexstring,&yytext[1],1); }
 <string>[^\\\n\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
 
-{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
-{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
-                           if ('\0' != *endptr)
-                             return -1;
-                           return INTEGER; }
 "letrec"                 { return LETREC; }
 "in"                     { return IN; }
+"lambda"                 { return LAMBDAWORD; }
 "!"                      { return LAMBDA; }
 "nil"                    { return NIL; }
 "import"                 { return IMPORT; }
 "."                      { return '.'; }
-"("                      { return LBRACE; }
-")"                      { return RBRACE; }
-"{"                      { return LBRACE; }
-"}"                      { return RBRACE; }
+"("                      { return '('; }
+")"                      { return ')'; }
+"{"                      { return '{'; }
+"}"                      { return '}'; }
 ","                      { return ','; }
-"+"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"-"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"*"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"/"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"%"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"="                      { return EQUALS; }
-"!="                     { yylval.s = strdup(yytext); return SYMBOL; }
-"<"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"<="                     { yylval.s = strdup(yytext); return SYMBOL; }
-">"                      { yylval.s = strdup(yytext); return SYMBOL; }
-">="                     { yylval.s = strdup(yytext); return SYMBOL; }
-"<<"                     { yylval.s = strdup(yytext); return SYMBOL; }
-">>"                     { yylval.s = strdup(yytext); return SYMBOL; }
-"&"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"|"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"^"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"~"                      { yylval.s = strdup(yytext); return SYMBOL; }
-"'\\\"'"                  { yylval.d = (double)'\"'; return DOUBLE; }
-"'\\\''"                  { yylval.d = (double)'\''; return DOUBLE; }
+";"                      { return ';'; }
+
+"+"                      { return '+'; }
+"-"                      { return '-'; }
+"*"                      { return '*'; }
+"/"                      { return '/'; }
+"%"                      { return '%'; }
+
+"="                      { return '='; }
+"=="                     { return EQ; }
+"!="                     { return NE; }
+"<"                      { return '<'; }
+"<="                     { return LE; }
+">"                      { return '>'; }
+">="                     { return GE; }
+
+"<<"                     { return SHL; }
+">>"                     { return SHR; }
+"&"                      { return '&'; }
+"|"                      { return '|'; }
+"^"                      { return '^'; }
+"~"                      { return '~'; }
+
+"&&"                     { return CONDAND; }
+"||"                     { return CONDOR; }
+"?"                      { return '?'; }
+":"                      { return ':'; }
+"["                      { return '['; }
+"]"                      { return ']'; }
+"'\\\"'"                 { yylval.d = (double)'\"'; return DOUBLE; }
+"'\\\''"                 { yylval.d = (double)'\''; return DOUBLE; }
 "'\\n'"                  { yylval.d = (double)'\n'; return DOUBLE; }
 "'\\t'"                  { yylval.d = (double)'\t'; return DOUBLE; }
 "'\\r'"                  { yylval.d = (double)'\r'; return DOUBLE; }
 "'\\b'"                  { yylval.d = (double)'\b'; return DOUBLE; }
 "'\\g'"                  { yylval.d = (double)'\f'; return DOUBLE; }
+"function"               { return FUNCTION; }
+"let"                    { return LET; }
+"if"                     { return IF; }
+"else"                   { return ELSE; }
+"foreach"                { return FOREACH; }
 {IDENT}                  { yylval.s = strdup(yytext); return SYMBOL; }
 {CHAR}                   { yylval.d = (double)yytext[1]; return DOUBLE; }
 {HEX}                    { yylval.i = strtol(yytext,NULL,0); return INTEGER; }
+{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
+{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
+                           if ('\0' != *endptr)
+                             return -1;
+                           return INTEGER; }
 
 (" "|\n|\t)+             { char *c;
                            for (c = yytext; *c; c++)

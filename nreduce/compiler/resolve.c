@@ -60,9 +60,9 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
       int bif;
       char *scname;
 
-      if (modname && (NULL == strchr(sym,':'))) {
-        scname = (char*)malloc(strlen(modname)+1+strlen(sym)+1);
-        sprintf(scname,"%s:%s",modname,sym);
+      if (modname && (NULL == strstr(sym,"::"))) {
+        scname = (char*)malloc(strlen(modname)+2+strlen(sym)+1);
+        sprintf(scname,"%s::%s",modname,sym);
         sc = get_scomb(src,scname);
         free(scname);
       }

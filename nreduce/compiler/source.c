@@ -454,3 +454,127 @@ char *make_varname(const char *want)
   }
   return name;
 }
+
+int create_scomb(source *src, const char *modname, char *name, list *argnames,
+                 snode *body, int fileno, int lineno)
+{
+  list *l;
+  int argno = 0;
+  scomb *sc;
+  char *scname;
+
+  if (0 < strlen(modname)) {
+    scname = (char*)malloc(strlen(modname)+2+
+                           strlen(name)+1);
+    sprintf(scname,"%s::%s",modname,name);
+  }
+  else {
+    scname = strdup(name);
+  }
+
+  if (NULL != get_scomb(src,scname)) {
+    sourceloc sl;
+    sl.fileno = fileno;
+    sl.lineno = lineno;
+    print_sourceloc(src,stderr,sl);
+    fprintf(stderr,"Duplicate supercombinator: %s\n",name);
+    free(scname);
+    return -1;
+  }
+
+  sc = add_scomb(src,scname);
+  sc->sl.fileno = fileno;
+  sc->sl.lineno = lineno;
+  sc->nargs = list_count(argnames);
+  sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
+  sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+  if (0 < strlen(modname))
+    sc->modname = strdup(modname);
+  for (l = argnames; l; l = l->next) {
+    char *argname = (char*)l->data;
+    if ('!' == argname[0]) {
+      argname++;
+      sc->strictin[argno] = 1;
+    }
+    sc->argnames[argno++] = strdup(argname);
+  }
+  free(scname);
+  sc->body = body;
+  return 0;
+}
+
+snode *makesym(int fileno, int lineno, const char *name)
+{
+  snode *sym = snode_new(fileno,lineno);
+  sym->type = SNODE_SYMBOL;
+  sym->name = strdup(name);
+  return sym;
+}
+
+snode *makeapp(int fileno, int lineno, const char *name, ...)
+{
+  va_list ap;
+  snode *n = snode_new(fileno,lineno);
+  n->type = SNODE_SYMBOL;
+  n->name = strdup(name);
+
+  va_start(ap,name);
+  while (1) {
+    snode *app;
+    snode *arg = va_arg(ap,snode*);
+    if (NULL == arg)
+      break;
+    app = snode_new(fileno,lineno);
+    app->type = SNODE_APPLICATION;
+    app->left = n;
+    app->right = arg;
+    n = app;
+  }
+  va_end(ap);
+
+  return n;
+}
+
+snode *makeoneletrec(int fileno, int lineno, const char *name, snode *value, snode *body)
+{
+  letrec *rec = (letrec*)calloc(1,sizeof(letrec));
+  rec->name = strdup(name);
+  rec->value = value;
+
+  snode *n = snode_new(fileno,lineno);
+  n->type = SNODE_LETREC;
+  n->bindings = rec;
+  n->body = body;
+
+  return n;
+}
+
+snode *makeforeach(int fileno, int lineno, char *varname, snode *list, snode *body)
+{
+  char *fefun = make_varname("fefun");
+  char *lstvar = make_varname("lst");
+
+  snode *nil;
+  snode *call;
+
+  snode *headcall = makeapp(fileno,lineno,"head",makesym(fileno,lineno,lstvar),NULL);
+  snode *tailcall = makeapp(fileno,lineno,"tail",makesym(fileno,lineno,lstvar),NULL);
+  snode *selfcall = makeapp(fileno,lineno,fefun,tailcall,NULL);
+  snode *inletrec = makeoneletrec(fileno,lineno,varname,headcall,body);
+  snode *append = makeapp(fileno,lineno,"append",inletrec,selfcall,NULL);
+  snode *lambda = snode_new(fileno,lineno);
+  snode *res;
+  lambda->type = SNODE_LAMBDA;
+  lambda->name = strdup(lstvar);
+
+  nil = snode_new(fileno,lineno);
+  nil->type = SNODE_NIL;
+  lambda->body = makeapp(fileno,lineno,"if",makesym(fileno,lineno,lstvar),append,nil,NULL);
+
+  call = makeapp(fileno,lineno,fefun,list,NULL);
+  res = makeoneletrec(fileno,lineno,fefun,lambda,call);
+
+  free(fefun);
+  free(lstvar);
+  return res;
+}

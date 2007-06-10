@@ -1,5 +1,5 @@
 //==================================================================================================
-// util:lcase str
+// util::lcase str
 //
 // Converts the string str to lowercase
 //==================================================================================================
@@ -14,7 +14,7 @@ lcase str =
   nil)
 
 //==================================================================================================
-// util:parsehex str
+// util::parsehex str
 //
 // Interprets str as a number represented in hexadecimal format. Digits in the range A-F can be in
 // either lower or opper case. The string must contain *only* hex digits (i.e. not start with "0x").
@@ -38,7 +38,7 @@ parsehex1 str !num =
   num)
 
 //==================================================================================================
-// util:tokens stream
+// util::tokens stream
 //
 // Converts a string containing space-separated tokens into a list of tokens.
 //==================================================================================================
