@@ -47,7 +47,7 @@ tokens stream = (tokens_skip stream)
 
 tokens_parse stream start count =
 (if stream
-  (if (= (head stream) ' ')
+  (if (== (head stream) ' ')
     (cons (prefix count start) (tokens_skip (tail stream)))
     (tokens_parse (tail stream) start (+ count 1)))
   (if (> count 0)
@@ -56,7 +56,7 @@ tokens_parse stream start count =
 
 tokens_skip stream =
 (if stream
-  (if (= (head stream) ' ')
+  (if (== (head stream) ' ')
     (tokens_skip (tail stream))
     (tokens_parse stream stream 0))
   nil)

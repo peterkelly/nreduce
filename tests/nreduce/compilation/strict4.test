@@ -9,13 +9,13 @@ nreduce -n -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo a b c d e f g h i j k l =
-  (if (= b c)
+  (if (== b c)
       (+ (* d e) (* f g))
       (+ (* e g) (* h i)))
 
 main = nil
 ==================================== OUTPUT ====================================
-foo a !b !c d !e f !g h i j k l = (if (= b c) 
+foo a !b !c d !e f !g h i j k l = (if (== b c) 
                                       (+ (* d e) (* f g)) 
                                       (+ (* e g) (* h i)))
 main = nil

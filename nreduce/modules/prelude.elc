@@ -107,7 +107,7 @@ append a b =
   b)
 
 appendn n a b =
-(if (= n 2)
+(if (== n 2)
   (append a b)
   (appendn (- n 1) (append a b)))
 
@@ -128,12 +128,12 @@ forcelist lst =
 (seq (forcelist1 lst) lst)
 
 listn n a =
-(if (= n 1)
+(if (== n 1)
   (cons a nil)
   (consn n (cons a nil)))
 
 consn n a b =
-(if (= n 2)
+(if (== n 2)
   (append1 a b)
   (consn (- n 1) (append1 a b)))
 
@@ -148,7 +148,7 @@ strcmp a b =
 strcmpcons a b =
 (if a
   (if b
-    (if (= (head a) (head b))
+    (if (== (head a) (head b))
       (strcmp (tail a) (tail b))
       (- (head a) (head b)))
     1)
@@ -157,7 +157,7 @@ strcmpcons a b =
     0))
 
 
-streq a b = (= (strcmp a b) 0)
+streq a b = (== (strcmp a b) 0)
 
 map f lst =
 (if lst

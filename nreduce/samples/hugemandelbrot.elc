@@ -1,5 +1,5 @@
 mandel Zr Zi Cr Ci iterations res =
-  (if (= res iterations)
+  (if (== res iterations)
       res
       (letrec newZr = (+ (- (* Zr Zr) (* Zi Zi)) Cr)
               newZi = (+ (* 2.0 (* Zr Zi)) Ci)

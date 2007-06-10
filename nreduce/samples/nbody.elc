@@ -48,7 +48,7 @@ updateNN i bodies =
   nil)
 
 updateNNloop i bodies =
-(if (= i T)
+(if (== i T)
   "end\n"
   (letrec
     dist = (averageDistance 0 bodies 0)

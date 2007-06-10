@@ -18,7 +18,7 @@ printlens lst n =
 
 
 loop n =
-(if (= n 0)
+(if (== n 0)
     nil
 (letrec
 //   data = (connect "localhost" 80 "GET /libc-2.3.6.so HTTP/1.0\r\n\r\n")

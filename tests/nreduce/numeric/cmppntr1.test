@@ -3,8 +3,8 @@ nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 main =
-(if (= 2 nil) "yes" "no")
+(if (== 2 nil) "yes" "no")
 ==================================== OUTPUT ====================================
-runtests.tmp/test.l:2: =: incompatible arguments: (NUMBER,NIL)
+runtests.tmp/test.l:2: ==: incompatible arguments: (NUMBER,NIL)
 ================================== RETURN CODE =================================
 1

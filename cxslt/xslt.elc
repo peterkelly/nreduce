@@ -14,26 +14,26 @@ get_children lst =
 (if lst
   (if
     (or
-      (= (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
-      (= (xml::item_type (head lst)) xml::TYPE_NAMESPACE))
+      (== (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
+      (== (xml::item_type (head lst)) xml::TYPE_NAMESPACE))
     (get_children (tail lst))
     lst)
   nil)
 
 get_attributes lst =
 (if lst
-  (if (= (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
+  (if (== (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
     (cons (head lst) (get_attributes (tail lst)))
-    (if (= (xml::item_type (head lst)) xml::TYPE_NAMESPACE)
+    (if (== (xml::item_type (head lst)) xml::TYPE_NAMESPACE)
       (get_attributes (tail lst))
       nil))
   nil)
 
 get_namespaces lst =
 (if lst
-  (if (= (xml::item_type (head lst)) xml::TYPE_NAMESPACE)
+  (if (== (xml::item_type (head lst)) xml::TYPE_NAMESPACE)
     (cons (head lst) (get_namespaces (tail lst)))
-    (if (= (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
+    (if (== (xml::item_type (head lst)) xml::TYPE_ATTRIBUTE)
       (get_namespaces (tail lst))
       nil))
   nil)
@@ -43,7 +43,7 @@ get_namespaces lst =
 
 // Value comparison
 
-value_eq x y = (if (and x y) (cons (xml::mkbool (= (value_cmp x y) 0)) nil) nil)
+value_eq x y = (if (and x y) (cons (xml::mkbool (== (value_cmp x y) 0)) nil) nil)
 value_ne x y = (if (and x y) (cons (xml::mkbool (!= (value_cmp x y) 0)) nil) nil)
 value_lt x y = (if (and x y) (cons (xml::mkbool (< (value_cmp x y) 0)) nil) nil)
 value_le x y = (if (and x y) (cons (xml::mkbool (<= (value_cmp x y) 0)) nil) nil)
@@ -59,14 +59,14 @@ base_cmp x y =
 (letrec
   tx1 = (xml::item_type x)
   ty1 = (xml::item_type y)
-  tx = (if (= tx1 xml::UNTYPED_ATOMIC) xml::TYPE_STRING tx1)
-  ty = (if (= ty1 xml::UNTYPED_ATOMIC) xml::TYPE_STRING ty1)
+  tx = (if (== tx1 xml::UNTYPED_ATOMIC) xml::TYPE_STRING tx1)
+  ty = (if (== ty1 xml::UNTYPED_ATOMIC) xml::TYPE_STRING ty1)
  in
-  (if (and (= tx xml::TYPE_NUMBER) (= ty xml::TYPE_NUMBER))
+  (if (and (== tx xml::TYPE_NUMBER) (== ty xml::TYPE_NUMBER))
     (- (xml::item_value x) (xml::item_value y))
-    (if (and (= tx xml::TYPE_STRING) (= ty xml::TYPE_STRING))
+    (if (and (== tx xml::TYPE_STRING) (== ty xml::TYPE_STRING))
       (strcmp (xml::item_value x) (xml::item_value y))
-      (if (and (= tx xml::TYPE_BOOLEAN) (= ty xml::TYPE_BOOLEAN))
+      (if (and (== tx xml::TYPE_BOOLEAN) (== ty xml::TYPE_BOOLEAN))
         (boolcmp (xml::item_value x) (xml::item_value y))
         (error "XPTY0004: invalid types in comparison")))))
 
@@ -79,7 +79,7 @@ boolcmp x y =
 
 // General comparison
 
-general_eq x y = (cons (xml::mkbool (general_cmp1 = x y y)) nil)
+general_eq x y = (cons (xml::mkbool (general_cmp1 == x y y)) nil)
 general_ne x y = (cons (xml::mkbool (general_cmp1 != x y y)) nil)
 general_lt x y = (cons (xml::mkbool (general_cmp1 < x y y)) nil)
 general_le x y = (cons (xml::mkbool (general_cmp1 <= x y y)) nil)
@@ -103,27 +103,27 @@ gen_base_cmp x y =
   tx = (xml::item_type x)
   ty = (xml::item_type y)
  in
-  (if (= tx xml::TYPE_NUMBER)
-    (if (= ty xml::TYPE_NUMBER) // a
+  (if (== tx xml::TYPE_NUMBER)
+    (if (== ty xml::TYPE_NUMBER) // a
       (- (xml::item_value x) (xml::item_value y))
-      (if (= ty xml::UNTYPED_ATOMIC) // a
+      (if (== ty xml::UNTYPED_ATOMIC) // a
         (- (xml::item_value x) (stringtonum (xml::item_value y)))
         (error "FORG0001: invalid types in comparison")))
 
 
-    (if (= tx xml::TYPE_STRING)
-      (if (= ty xml::TYPE_STRING) // b
+    (if (== tx xml::TYPE_STRING)
+      (if (== ty xml::TYPE_STRING) // b
         (strcmp (xml::item_value x) (xml::item_value y))
-        (if (= ty xml::UNTYPED_ATOMIC) // b
+        (if (== ty xml::UNTYPED_ATOMIC) // b
           (strcmp (xml::item_value x) (xml::item_value y))
           (error "FORG0001: invalid types in comparison")))
 
-      (if (= tx xml::UNTYPED_ATOMIC)
-        (if (= ty xml::TYPE_NUMBER) // a
+      (if (== tx xml::UNTYPED_ATOMIC)
+        (if (== ty xml::TYPE_NUMBER) // a
           (- (stringtonum (xml::item_value x)) (xml::item_value y))
-          (if (= ty xml::TYPE_STRING) // b
+          (if (== ty xml::TYPE_STRING) // b
             (strcmp (xml::item_value x) (xml::item_value y))
-            (if (= ty xml::UNTYPED_ATOMIC) // b
+            (if (== ty xml::UNTYPED_ATOMIC) // b
               (strcmp (xml::item_value x) (xml::item_value y))
               (error "FORG0001: invalid types in comparison"))))
 
@@ -157,9 +157,9 @@ tonumber item =
 (letrec
   type = (xml::item_type item)
  in
-  (if (= type xml::TYPE_NUMBER)
+  (if (== type xml::TYPE_NUMBER)
     (xml::item_value item)
-    (if (= type xml::UNTYPED_ATOMIC)
+    (if (== type xml::UNTYPED_ATOMIC)
       (stringtonum (xml::item_value item))
       (error "FORG0001: non-numeric value passed to arithmetic operator"))))
 
@@ -167,7 +167,7 @@ uminus x = (if (not x)
               nil
           (if (tail x)
               (error "XPTY0004")
-          (if (= (xml::item_type (head x)) xml::TYPE_NUMBER)
+          (if (== (xml::item_type (head x)) xml::TYPE_NUMBER)
               (cons (xml::mknumber (- 0 (xml::item_value (head x)))) nil)
               (error "FORG0001"))))
 
@@ -175,7 +175,7 @@ uplus x = (if (not x)
               nil
           (if (tail x)
               (error "XPTY0004")
-          (if (= (xml::item_type (head x)) xml::TYPE_NUMBER)
+          (if (== (xml::item_type (head x)) xml::TYPE_NUMBER)
               (cons (xml::mknumber (xml::item_value (head x))) nil)
               (error "FORG0001"))))
 
@@ -183,24 +183,24 @@ uplus x = (if (not x)
 // Node tests
 
 name_test type nsuri localname node =
-(if (= (xml::item_type node) type)
+(if (== (xml::item_type node) type)
   (if (streq (xml::item_nsuri node) nsuri)
     (streq (xml::item_localname node) localname)
     nil)
   nil)
 
 wildcard_uri_test type localname node =
-(if (= (xml::item_type node) type)
+(if (== (xml::item_type node) type)
   (streq (xml::item_localname node) localname)
   nil)
 
 wildcard_localname_test type nsuri node =
-(if (= (xml::item_type node) type)
+(if (== (xml::item_type node) type)
   (streq (xml::item_nsuri node) nsuri)
   nil)
 
 type_test type node =
-(= (xml::item_type node) type)
+(== (xml::item_type node) type)
 
 any_test node = 1
 
@@ -211,13 +211,13 @@ dm_string_value node =
 (letrec
   type = (xml::item_type node)
  in
-  (if (= type xml::TYPE_TEXT)
+  (if (== type xml::TYPE_TEXT)
     (xml::item_value node) // content
-    (if (= type xml::TYPE_COMMENT)
+    (if (== type xml::TYPE_COMMENT)
       (xml::item_value node) // content
-      (if (= type xml::TYPE_NAMESPACE)
+      (if (== type xml::TYPE_NAMESPACE)
         (xml::item_nsuri node) // uri
-        (if (= type xml::TYPE_ATTRIBUTE)
+        (if (== type xml::TYPE_ATTRIBUTE)
           (xml::item_value node) // value
           // else: element or document
           (textcontent (xml::item_children node)))))))
@@ -231,17 +231,17 @@ atomize lst =
 atomize1 x =
 (if (isatomic x)
   x
-  (if (= (xml::item_type x) xml::TYPE_TEXT)
+  (if (== (xml::item_type x) xml::TYPE_TEXT)
     (xml::mkuntyped (xml::item_value x))
-    (if (= (xml::item_type x) xml::TYPE_COMMENT)
+    (if (== (xml::item_type x) xml::TYPE_COMMENT)
       (xml::mkuntyped (xml::item_value x))
-      (if (= (xml::item_type x) xml::TYPE_ATTRIBUTE)
+      (if (== (xml::item_type x) xml::TYPE_ATTRIBUTE)
         (xml::mkuntyped (xml::item_value x))
-        (if (= (xml::item_type x) xml::TYPE_ELEMENT)
+        (if (== (xml::item_type x) xml::TYPE_ELEMENT)
           (xml::mkuntyped (textcontent (xml::item_children x)))
-          (if (= (xml::item_type x) xml::TYPE_DOCUMENT)
+          (if (== (xml::item_type x) xml::TYPE_DOCUMENT)
             (xml::mkuntyped (textcontent (xml::item_children x)))
-	    (if (= (xml::item_type x) xml::TYPE_NAMESPACE)
+	    (if (== (xml::item_type x) xml::TYPE_NAMESPACE)
 		(xml::mkuntyped (xml::item_nsuri x))
 	      (error (append "FIXME(atomize):" (numtostring (xml::item_type x)))))))))))
 
@@ -252,11 +252,11 @@ textcontent lst =
        rest = (tail lst)
        type = (xml::item_type cur)
      in
-       (if (= type xml::TYPE_TEXT)
+       (if (== type xml::TYPE_TEXT)
            (append (xml::item_value cur) (textcontent rest))
-       (if (= type xml::TYPE_ELEMENT)
+       (if (== type xml::TYPE_ELEMENT)
            (append (textcontent (xml::item_children cur)) (textcontent rest))
-       (if (= type xml::TYPE_DOCUMENT)
+       (if (== type xml::TYPE_DOCUMENT)
            (append (textcontent (xml::item_children cur)) (textcontent rest))
            (textcontent rest)))))
     nil)
@@ -276,13 +276,13 @@ atom_to_string x =
 (letrec
   type = (xml::item_type x)
  in
-  (if (= type xml::TYPE_NUMBER)
+  (if (== type xml::TYPE_NUMBER)
     (xml::mkstring (numtostring (xml::item_value x)))
-    (if (= type xml::TYPE_BOOLEAN)
+    (if (== type xml::TYPE_BOOLEAN)
       (if (xml::item_value x)
         (xml::mkstring "true")
         (xml::mkstring "false"))
-      (if (= type xml::TYPE_QNAME)
+      (if (== type xml::TYPE_QNAME)
         (letrec
           nsprefix = (xml::item_nsprefix x)
           localname = (xml::item_localname x)
@@ -290,9 +290,9 @@ atom_to_string x =
           (if nsprefix
             (xml::mkstring (append nsprefix (cons ':' localname)))
             (xml::mkstring localname)))
-        (if (= type xml::UNTYPED_ATOMIC)
+        (if (== type xml::UNTYPED_ATOMIC)
           (xml::mkstring (xml::item_value x))
-          (if (= type xml::TYPE_STRING)
+          (if (== type xml::TYPE_STRING)
             x
             (error (append "atom_to_string: invalid type "
                       (append (numtostring type) "\n")))))))))
@@ -305,28 +305,28 @@ normalize2 lst =
 
 getstrings lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_STRING)
+    (if (== (xml::item_type (head lst)) xml::TYPE_STRING)
         (append " " (append (xml::item_value (head lst)) (getstrings (tail lst))))
         nil)
     lst)
 
 skipstrings lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_STRING)
+    (if (== (xml::item_type (head lst)) xml::TYPE_STRING)
         (skipstrings (tail lst))
         lst)
     lst)
 
 normalize3 lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_STRING)
+    (if (== (xml::item_type (head lst)) xml::TYPE_STRING)
         (cons (xml::mkstring (append (xml::item_value (head lst)) (getstrings (tail lst))))
               (normalize3 (skipstrings lst)))
         (cons (head lst) (normalize3 (tail lst))))
     nil)
 
 normalize4 lst =
-(map (!x.if (= (xml::item_type x) xml::TYPE_STRING)
+(map (!x.if (== (xml::item_type x) xml::TYPE_STRING)
             (xml::mktext (xml::item_value x))
             x)
      lst)
@@ -336,21 +336,21 @@ normalize5 lst = lst
 
 gettexts lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_TEXT)
+    (if (== (xml::item_type (head lst)) xml::TYPE_TEXT)
         (append " " (append (xml::item_value (head lst)) (gettexts (tail lst))))
         nil)
     lst)
 
 skiptexts lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_TEXT)
+    (if (== (xml::item_type (head lst)) xml::TYPE_TEXT)
         (skiptexts (tail lst))
         lst)
     nil)
 
 normalize6 lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_TEXT)
+    (if (== (xml::item_type (head lst)) xml::TYPE_TEXT)
         (if (xml::item_value (head lst))
             (cons (xml::mktext (append (xml::item_value (head lst)) (gettexts (tail lst))))
                   (normalize6 (skiptexts lst)))
@@ -407,17 +407,17 @@ filter3a f lst !pos !total =
     nil)
 
 isnode x =
-(or (= (xml::item_type x) xml::TYPE_ELEMENT)
-(or (= (xml::item_type x) xml::TYPE_TEXT)
-(or (= (xml::item_type x) xml::TYPE_ATTRIBUTE)
-(or (= (xml::item_type x) xml::TYPE_COMMENT)
-    (= (xml::item_type x) xml::TYPE_DOCUMENT)))))
+(or (== (xml::item_type x) xml::TYPE_ELEMENT)
+(or (== (xml::item_type x) xml::TYPE_TEXT)
+(or (== (xml::item_type x) xml::TYPE_ATTRIBUTE)
+(or (== (xml::item_type x) xml::TYPE_COMMENT)
+    (== (xml::item_type x) xml::TYPE_DOCUMENT)))))
 
 issingle seq = (if seq (not (tail seq)) nil)
 
-isboolean x = (= (xml::item_type x) xml::TYPE_BOOLEAN)
-isstring x = (= (xml::item_type x) xml::TYPE_STRING)
-isnumber x = (= (xml::item_type x) xml::TYPE_NUMBER)
+isboolean x = (== (xml::item_type x) xml::TYPE_BOOLEAN)
+isstring x = (== (xml::item_type x) xml::TYPE_STRING)
+isnumber x = (== (xml::item_type x) xml::TYPE_NUMBER)
 
 // XPath 2.0 2.4.3 - Effective Boolean Value
 ebv seq =
@@ -441,8 +441,8 @@ predicate_match cpos seq =
     (letrec
       x = (head seq)
      in
-      (if (= (xml::item_type x) xml::TYPE_NUMBER)
-        (= cpos (xml::item_value x))
+      (if (== (xml::item_type x) xml::TYPE_NUMBER)
+        (== cpos (xml::item_value x))
         (ebv seq)))
     (ebv seq))
   (ebv seq))
@@ -451,9 +451,9 @@ tostring item =
 (letrec
   type = (xml::item_type item)
  in
-  (if (= type xml::TYPE_STRING)
+  (if (== type xml::TYPE_STRING)
     (xml::item_value item)
-    (if (= type xml::UNTYPED_ATOMIC)
+    (if (== type xml::UNTYPED_ATOMIC)
       (xml::item_value item)
       (error "Can't convert value to string"))))
 
@@ -468,7 +468,7 @@ tostring item =
 // Discard zero-length txt nodes
 consimple1 lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_TEXT)
+    (if (== (xml::item_type (head lst)) xml::TYPE_TEXT)
         (if (xml::item_value (head lst)) // string value is non-nil (i.e. non-zero length)
             (cons (head lst) (consimple1 (tail lst))) // keep it
             (consimple1 (tail lst))) // discard it
@@ -490,9 +490,9 @@ consimple5 lst = (normalize3 lst)
 
 mergestrings lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_STRING)
+    (if (== (xml::item_type (head lst)) xml::TYPE_STRING)
         (append (xml::item_value (head lst)) (mergestrings (tail lst)))
-    (if (= (xml::item_type (head lst)) xml::TYPE_TEXT)
+    (if (== (xml::item_type (head lst)) xml::TYPE_TEXT)
         (append (xml::item_value (head lst)) (mergestrings (tail lst)))
         (error "mergestrings: sequence contains non-string type")))
     nil)
@@ -510,7 +510,7 @@ concomplex2 lst = (map (!x.if (isatomic x) (atom_to_string x) x) lst)
 // space (#x20) used as a separator between successive strings.
 concomplex3 lst =
 (if lst
-    (if (= (xml::item_type (head lst)) xml::TYPE_STRING)
+    (if (== (xml::item_type (head lst)) xml::TYPE_STRING)
         (cons (xml::mktext (append (xml::item_value (head lst)) (getstrings (tail lst))))
               (concomplex3 (skipstrings lst)))
         (cons (head lst) (concomplex3 (tail lst))))
@@ -576,7 +576,7 @@ fn_string_length arg0 =
   (cons (xml::mknumber 0) nil))
 
 fn_node_name0 node =
-(if (= (xml::item_type node) xml::TYPE_ELEMENT)
+(if (== (xml::item_type node) xml::TYPE_ELEMENT)
   (cons (xml::mkqname (xml::item_nsuri node) (xml::item_nsprefix node) (xml::item_localname node)) nil)
   nil)
 
@@ -633,9 +633,9 @@ node_parent_list node =
 (letrec
   type = (xml::item_type node)
   parent =
-  (if (= type xml::TYPE_ELEMENT)
+  (if (== type xml::TYPE_ELEMENT)
     (xml::item_parent node)
-    (if (= type xml::TYPE_TEXT)
+    (if (== type xml::TYPE_TEXT)
       (xml::item_parent node)
       nil))
  in
@@ -644,7 +644,7 @@ node_parent_list node =
     nil))
 
 node_ancestors node =
-(if (= (xml::item_type node) xml::TYPE_ELEMENT)
+(if (== (xml::item_type node) xml::TYPE_ELEMENT)
   (letrec
     parent = (xml::item_parent node)
    in
@@ -674,9 +674,9 @@ node_descendants node =
     (letrec
       type = (xml::item_type node)
      in
-      (if (= type xml::TYPE_ELEMENT)
+      (if (== type xml::TYPE_ELEMENT)
         (node_desc_list (xml::item_children node) next)
-        (if (= type xml::TYPE_DOCUMENT)
+        (if (== type xml::TYPE_DOCUMENT)
           (node_desc_list (xml::item_children node) next)
           next))))
 
@@ -786,7 +786,7 @@ post2 url content scheme host port path =
   (http::parse_response stream (post3 url content)))
 
 post3 url content version status reason headers body =
-(if (= status 302)
+(if (== status 302)
   (post (http::get_header "location" headers) content)
   (if (!= status 200)
     (error
@@ -804,7 +804,7 @@ reparent lst parent prev =
     rest = (tail lst)
     type = (xml::item_type cur)
    in
-    (if (= type xml::TYPE_ELEMENT)
+    (if (== type xml::TYPE_ELEMENT)
       (letrec
         elem =
         (xml::mkelem
@@ -822,21 +822,21 @@ reparent lst parent prev =
         (reparent rest parent elem)
        in
         (cons elem next))
-      (if (= type xml::TYPE_TEXT)
+      (if (== type xml::TYPE_TEXT)
         (letrec
           content = (xml::item_value cur)
           text = (xml::mktext2 content parent prev next)
           next = (reparent rest parent text)
          in
           (cons text next))
-        (if (= type xml::TYPE_COMMENT)
+        (if (== type xml::TYPE_COMMENT)
           (letrec
             content = (xml::item_value cur)
             comment = (xml::mkcomment2 content parent prev next)
             next = (reparent rest parent comment)
            in
             (cons comment next))
-          (if (= type xml::TYPE_DOCUMENT)
+          (if (== type xml::TYPE_DOCUMENT)
             (letrec
               doc = (xml::mkdoc (reparent (xml::item_children cur) doc nil))
              in

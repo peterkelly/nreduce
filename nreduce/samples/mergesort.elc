@@ -4,7 +4,7 @@ read_lines1 stream start !count =
     c = (head stream)
     rest = (tail stream)
    in
-    (if (= c '\n')
+    (if (== c '\n')
       (cons
         (prefix count start)
         (read_lines1 rest rest 0))

@@ -1,10 +1,10 @@
 for min max f = (map f (range min max))
 
-range min max = (if (= min max) (cons min nil) (cons min (range (+ min 1) max)))
+range min max = (if (== min max) (cons min nil) (cons min (range (+ min 1) max)))
 
 creategrid rows cols = (map (!n.map (!n.0) (range 1 rows)) (range 1 cols))
 
-printcell cell = (if (= cell 1) "##" "--")
+printcell cell = (if (== cell 1) "##" "--")
 
 printrow row = (if row (append (printcell (head row)) (printrow (tail row))) (append "\n" nil))
 printgrid grid = (if grid (append (printrow (head grid)) (printgrid (tail grid))) nil)
@@ -35,9 +35,9 @@ dolife grid =
                 (letrec curvalue = (gcell grid row col)
                         count    = (sumnb grid row col)
                  in
-                     (if (and (= curvalue 0) (= count 3))
+                     (if (and (== curvalue 0) (== count 3))
                          1
-                     (if (and (= curvalue 1) (or (= count 2) (= count 3)))
+                     (if (and (== curvalue 1) (or (== count 2) (== count 3)))
                          1
                          0))))))))
 sumnb g row col =

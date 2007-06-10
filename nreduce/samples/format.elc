@@ -7,7 +7,7 @@ format str = (format1 str str 0 nil)
 
 format1 str start count got =
 (if str
-  (if (and (= (head str) '%') (tail str))
+  (if (and (== (head str) '%') (tail str))
     (letrec
       got2 =
       (if (> count 0)
@@ -17,9 +17,9 @@ format1 str start count got =
       spec = (head str2)
       rest = (tail str2)
      in
-      (if (= (head (tail str)) 's')
+      (if (== (head (tail str)) 's')
         (!item.format1 rest rest 0 (cons item got2))
-        (if (= spec 'd')
+        (if (== spec 'd')
           (!item.format1 rest rest 0 (cons (numtostring item) got2))
           (format1 rest rest 0 (cons "%" got2)))))
     (format1 (tail str) start (+ count 1) got))

@@ -1532,7 +1532,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "%",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_mod            },
 
 /* Numeric comparison */
-{ "=",              2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_eq             },
+{ "==",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_eq             },
 { "!=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_ne             },
 { "<",              2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_lt             },
 { "<=",             2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_le             },

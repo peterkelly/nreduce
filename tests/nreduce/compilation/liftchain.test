@@ -10,30 +10,30 @@ nreduce -l runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo a b c d e = (letrec 
-                   f = (!y.if (= y 0) a (g (- y 1)))
-                   g = (!z.if (= z 0) b (h (- z 1)))
-                   h = (!z.if (= z 0) c (i (- z 1)))
-                   i = (!z.if (= z 0) d (j (- z 1)))
-                   j = (!z.if (= z 0) e (f (- z 1)))
+                   f = (!y.if (== y 0) a (g (- y 1)))
+                   g = (!z.if (== z 0) b (h (- z 1)))
+                   h = (!z.if (== z 0) c (i (- z 1)))
+                   i = (!z.if (== z 0) d (j (- z 1)))
+                   j = (!z.if (== z 0) e (f (- z 1)))
                  in
                    (f 200))
 main = (foo 5 6 7 8 9)
 ==================================== OUTPUT ====================================
 foo a b c d e = (f e d c b a 200)
 main = (foo 5 6 7 8 9)
-f e d c b a y = (if (= y 0) 
+f e d c b a y = (if (== y 0) 
                     a 
                     (g a e d c b (- y 1)))
-g a e d c b z = (if (= z 0) 
+g a e d c b z = (if (== z 0) 
                     b 
                     (h b a e d c (- z 1)))
-h b a e d c z = (if (= z 0) 
+h b a e d c z = (if (== z 0) 
                     c 
                     (i c b a e d (- z 1)))
-i c b a e d z = (if (= z 0) 
+i c b a e d z = (if (== z 0) 
                     d 
                     (j d c b a e (- z 1)))
-j d c b a e z = (if (= z 0) 
+j d c b a e z = (if (== z 0) 
                     e 
                     (f e d c b a (- z 1)))
 ================================== RETURN CODE =================================

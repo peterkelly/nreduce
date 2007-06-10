@@ -17,7 +17,7 @@ showcomp op opstr num =
   nil)
 
 main =
-(append (showcomp = "=" 1)
+(append (showcomp == "=" 1)
 (append (showcomp != "!=" 1)
 (append (showcomp < "<" 1)
 (append (showcomp <= "<=" 1)

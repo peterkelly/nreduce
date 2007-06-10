@@ -1,6 +1,6 @@
 parse stream start count =
 (if stream
-    (if (or (= (head stream) '\n') (= (head stream) '\r'))
+    (if (or (== (head stream) '\n') (== (head stream) '\r'))
         (if (> count 0)
             (cons (prefix count start)
                   (parse (tail stream) (tail stream) 0))

@@ -160,7 +160,7 @@ SingleExpr:
 | '/'                             { $$ = makesym(yyfileno,@$.first_line,"/"); }
 | '%'                             { $$ = makesym(yyfileno,@$.first_line,"%"); }
 
-| '='                             { $$ = makesym(yyfileno,@$.first_line,"="); }
+| EQ                              { $$ = makesym(yyfileno,@$.first_line,"=="); }
 | NE                              { $$ = makesym(yyfileno,@$.first_line,"!="); }
 | '<'                             { $$ = makesym(yyfileno,@$.first_line,"<"); }
 | LE                              { $$ = makesym(yyfileno,@$.first_line,"<="); }
@@ -397,7 +397,7 @@ RelationalExpression:
 EqualityExpression:
   RelationalExpression            { $$ = $1; }
 | EqualityExpression EQ RelationalExpression
-                                  { $$ = makeapp(yyfileno,@$.first_line,"=",$1,$3,NULL); }
+                                  { $$ = makeapp(yyfileno,@$.first_line,"==",$1,$3,NULL); }
 | EqualityExpression NE RelationalExpression
                                   { $$ = makeapp(yyfileno,@$.first_line,"!=",$1,$3,NULL); }
 ;
