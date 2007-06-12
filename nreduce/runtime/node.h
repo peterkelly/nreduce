@@ -113,8 +113,7 @@ typedef struct endpoint {
   endpointid epid;
   messagelist mailbox;
   int checkmsg;
-  int *interruptptr;
-  int tempinterrupt;
+  int interrupt;
   struct endpoint *prev;
   struct endpoint *next;
   struct node *n;

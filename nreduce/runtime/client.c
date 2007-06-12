@@ -199,7 +199,6 @@ static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)
   }
   else {
     assert(MSG_STARTGC_RESPONSE == msg->hdr.tag);
-    printf("garbage collector started\n");
   }
   message_free(msg);
 }
@@ -389,6 +388,7 @@ typedef struct {
   endpointid first;
   int want;
   list *nodes;
+  int print;
 } find_nodes_data;
 
 static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
@@ -428,7 +428,8 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
         endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
         memcpy(copy,&m->cn.epid,sizeof(endpointid));
         list_push(&fsd->nodes,copy);
-        printf("%d ("EPID_FORMAT")\n",m->cn.id,EPID_ARGS(m->cn.epid));
+        if (fsd->print)
+          printf("%d ("EPID_FORMAT")\n",m->cn.id,EPID_ARGS(m->cn.epid));
         if ((0 < fsd->want) && (list_count(fsd->nodes) >= fsd->want))
           done = 1;
         else
@@ -449,13 +450,14 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
   }
 }
 
-static list *find_nodes(node *n, endpointid initial, int want)
+static list *find_nodes(node *n, endpointid initial, int want, int print)
 {
   pthread_t thread;
   find_nodes_data fsd;
   memset(&fsd,0,sizeof(fsd));
   fsd.initial = initial;
   fsd.want = want;
+  fsd.print = print;
   node_add_thread(n,0,TEST_ENDPOINT,0,find_nodes_thread,&fsd,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
@@ -543,11 +545,11 @@ int do_client(char *initial_str, int argc, const char **argv)
   cmd = argv[0];
 
   if (!strcmp(cmd,"findall")) {
-    list *nodes = find_nodes(n,initial,0);
+    list *nodes = find_nodes(n,initial,0,1);
     list_free(nodes,free);
   }
   else if (!strcmp(cmd,"findtasks")) {
-    list *nodes = find_nodes(n,initial,0);
+    list *nodes = find_nodes(n,initial,0,1);
     find_tasks(n,nodes);
     list_free(nodes,free);
   }
@@ -559,7 +561,7 @@ int do_client(char *initial_str, int argc, const char **argv)
     else {
       int want = atoi(argv[1]);
       const char *program = argv[2];
-      list *nodes = find_nodes(n,initial,want);
+      list *nodes = find_nodes(n,initial,want,0);
       pthread_t thread;
       socketid out_sockid;
       out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,NULL,&thread);

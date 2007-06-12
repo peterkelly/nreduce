@@ -126,14 +126,6 @@ endpoint *find_endpoint(node *n, int localid)
   return endpt;
 }
 
-void socket_send(task *tsk, int destid, int tag, char *data, int size)
-{
-  #ifdef MSG_DEBUG
-  msg_print(tsk,destid,tag,data,size);
-  #endif
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[destid],tag,data,size);
-}
-
 static void worker_callback(struct node *n, void *data, int event,
                             connection *conn, endpoint *endpt)
 {

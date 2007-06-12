@@ -38,349 +38,241 @@
 #include <math.h>
 #include <errno.h>
 
-reader read_start(const char *data, int size)
+reader read_start(task *tsk, const char *data, int size)
 {
   reader rd;
+  rd.tsk = tsk;
   rd.data = data;
   rd.size = size;
   rd.pos = 0;
   return rd;
 }
 
-static int read_bytes(reader *rd, void *data, int count)
+static void read_bytes(reader *rd, void *data, int count)
 {
-  if (rd->pos+count > rd->size)
-    return READER_INCOMPLETE_DATA;
+  assert(rd->pos+count <= rd->size);
   memcpy(data,&rd->data[rd->pos],count);
   rd->pos += count;
-  return READER_OK;
 }
 
-static int read_check_tag(reader *rd, int tag)
+static void read_check_tag(reader *rd, int tag)
 {
   int got;
-  CHECK_READ(read_bytes(rd,&got,sizeof(int)));
-  if (got != tag)
-    return READER_INCORRECT_TYPE;
-  return READER_OK;
+  read_bytes(rd,&got,sizeof(int));
+  assert(got == tag);
 }
 
-static int read_tagged_bytes(reader *rd, int tag, void *data, int count)
+static void read_tagged_bytes(reader *rd, int tag, void *data, int count)
 {
-  CHECK_READ(read_check_tag(rd,tag));
-  return read_bytes(rd,data,count);
+  read_check_tag(rd,tag);
+  read_bytes(rd,data,count);
 }
 
-int read_char(reader *rd, char *c)
+void read_char(reader *rd, char *c)
 {
-  return read_tagged_bytes(rd,CHAR_TAG,c,sizeof(char));
+  read_tagged_bytes(rd,CHAR_TAG,c,sizeof(char));
 }
 
-int read_int(reader *rd, int *i)
+void read_int(reader *rd, int *i)
 {
-  return read_tagged_bytes(rd,INT_TAG,i,sizeof(int));
+  read_tagged_bytes(rd,INT_TAG,i,sizeof(int));
 }
 
-int read_double(reader *rd, double *d)
+void read_double(reader *rd, double *d)
 {
-  return read_tagged_bytes(rd,DOUBLE_TAG,d,sizeof(double));
+  read_tagged_bytes(rd,DOUBLE_TAG,d,sizeof(double));
 }
 
-int read_string(reader *rd, char **s)
+void read_string(reader *rd, char **s)
 {
   int len;
-  CHECK_READ(read_check_tag(rd,STRING_TAG));
-  CHECK_READ(read_bytes(rd,&len,sizeof(int)));
-  if (rd->pos+len > rd->size)
-    return READER_INVALID_DATA;
+  read_check_tag(rd,STRING_TAG);
+  read_bytes(rd,&len,sizeof(int));
+  assert(rd->pos+len <= rd->size);
   *s = (char*)malloc(len+1);
   memcpy(*s,&rd->data[rd->pos],len);
   (*s)[len] = '\0';
   rd->pos += len;
-  return READER_OK;
 }
 
-int read_binary(reader *rd, void **b, int *len)
+void read_binary(reader *rd, char *b, int len)
 {
-  CHECK_READ(read_check_tag(rd,BINARY_TAG));
-  CHECK_READ(read_bytes(rd,len,sizeof(int)));
-  if (rd->pos+*len > rd->size)
-    return READER_INVALID_DATA;
-  *b = malloc(*len);
-  memcpy(*b,&rd->data[rd->pos],*len);
-  rd->pos += *len;
-  return READER_OK;
+  int blen;
+  read_check_tag(rd,BINARY_TAG);
+  read_bytes(rd,&blen,sizeof(int));
+  assert(blen == len);
+  assert(rd->pos+len <= rd->size);
+  memcpy(b,&rd->data[rd->pos],len);
+  rd->pos += len;
 }
 
-int read_gaddr_noack(reader *rd, gaddr *a)
+void read_gaddr(reader *rd, gaddr *a)
 {
-  CHECK_READ(read_check_tag(rd,GADDR_TAG));
-  CHECK_READ(read_bytes(rd,&a->tid,sizeof(int)));
-  CHECK_READ(read_bytes(rd,&a->lid,sizeof(int)));
-  return READER_OK;
+  read_check_tag(rd,GADDR_TAG);
+  read_bytes(rd,&a->tid,sizeof(int));
+  read_bytes(rd,&a->lid,sizeof(int));
+  if ((-1 != a->tid) || (-1 != a->lid))
+    rd->tsk->naddrsread++;
 }
 
-int read_gaddr(reader *rd, task *tsk, gaddr *a)
-{
-  assert(tsk->ackmsg);
-  CHECK_READ(read_gaddr_noack(rd,a));
-  if ((-1 != a->tid) || (-1 != a->lid)) {
-    write_gaddr_noack(tsk->ackmsg,*a);
-    tsk->naddrsread++;
-  }
-  return READER_OK;
-}
-
-int read_pntr(reader *rd, task *tsk, pntr *pout, int observe)
+void read_pntr(reader *rd, pntr *pout)
 {
   /* TODO: determine if this refers to an object we already have a copy of, and return
      that object instead. (see Trinder96 2.3.2) */
-  gaddr addr;
+  task *tsk = rd->tsk;
   int type;
-  CHECK_READ(read_check_tag(rd,PNTR_TAG));
-  CHECK_READ(read_format(rd,tsk,observe,"ai",&addr,&type));
+  read_check_tag(rd,PNTR_TAG);
+  read_int(rd,&type);
 
-  switch (type) {
-  case CELL_IND:
-    /* shouldn't receive an IND cell */
-    return READER_INCORRECT_CONTENTS;
-  case CELL_AREF:
-    /* shouldn't receive an AREF cell (yet...) */
-    return READER_INCORRECT_CONTENTS;
-  case CELL_CONS: {
-    cell *c;
-    pntr head;
-    pntr tail;
-
-    CHECK_READ(read_format(rd,tsk,observe,"pp",&head,&tail));
-
-    c = alloc_cell(tsk);
-    c->type = CELL_CONS;
-    c->field1 = head;
-    c->field2 = tail;
-    make_pntr(*pout,c);
-    break;
-  }
-  case CELL_REMOTEREF:
-    *pout = global_lookup(tsk,addr,NULL_PNTR);
-    break;
-  case CELL_HOLE:
-    fatal("shouldn't receive HOLE");
-    break;
-  case CELL_FRAME: {
-    frame *fr = frame_new(tsk,1);
-    int i;
-    int count;
-    int address;
-
-    fr->c = alloc_cell(tsk);
-    fr->c->type = CELL_FRAME;
-    make_pntr(fr->c->field1,fr);
-    make_pntr(*pout,fr->c);
-
-    CHECK_READ(read_format(rd,tsk,observe,"i",&address));
-    fr->instr = bc_instructions(tsk->bcdata)+address;
-
-    count = fr->instr->expcount;
-    for (i = 0; i < count; i++)
-      CHECK_READ(read_pntr(rd,tsk,&fr->data[i],observe));
-    break;
-  }
-  case CELL_CAP: {
-    cap *cp = cap_alloc(tsk,1,0,0);
-    cell *capcell;
-    int i;
-
-    capcell = alloc_cell(tsk);
-    capcell->type = CELL_CAP;
-    make_pntr(capcell->field1,cp);
-    make_pntr(*pout,capcell);
-
-    CHECK_READ(read_format(rd,tsk,observe,"iiiiii",&cp->arity,&cp->address,&cp->fno,
-                           &cp->sl.fileno,&cp->sl.lineno,&cp->count));
-
-    if (MAX_CAP_SIZE <= cp->count)
-      return READER_INCORRECT_CONTENTS;
-
-    cp->data = (pntr*)calloc(cp->count,sizeof(pntr));
-    for (i = 0; i < cp->count; i++)
-      CHECK_READ(read_pntr(rd,tsk,&cp->data[i],observe));
-    break;
-  }
-  case CELL_NIL:
-    *pout = tsk->globnilpntr;
-    break;
-  case CELL_NUMBER: {
+  if (CELL_NUMBER == type) {
     double d;
-    CHECK_READ(read_double(rd,&d));
+    read_double(rd,&d);
     set_pntrdouble(*pout,d);
     assert(!is_pntr(*pout));
-    break;
   }
-  case CELL_SYSOBJECT:
-    /* FIXME: these should't migrate... how to handle them? */
-    abort();
-    break;
-  default:
-    return READER_INCORRECT_CONTENTS;
+  else if (CELL_NIL == type) {
+    *pout = tsk->globnilpntr;
   }
-
-  return READER_OK;
-}
-
-int read_vformat(reader *rd, task *tsk, int observe, const char *fmt, va_list ap)
-{
-  int r = READER_OK;
-  void **allocs = (void**)calloc(strlen(fmt),sizeof(void*));
-  int done = 0;
-
-  assert(tsk->ackmsg);
-
-  for (; *fmt && (READER_OK == r); fmt++) {
-    switch (*fmt) {
-    case 'c':
-      r = read_char(rd,va_arg(ap,char*));
-      break;
-    case 'i':
-      r = read_int(rd,va_arg(ap,int*));
-      break;
-    case 'd':
-      r = read_double(rd,va_arg(ap,double*));
-      break;
-    case 's': {
-      char **sptr = va_arg(ap,char**);
-      r = read_string(rd,sptr);
-      if (READER_OK == r)
-        allocs[done] = *sptr;
-      break;
-    }
-    case 'b': {
-      void **bptr = va_arg(ap,void**);
-      int *lenptr = va_arg(ap,int*);
-      r = read_binary(rd,bptr,lenptr);
-      if (READER_OK == r)
-        allocs[done] = *bptr;
-      break;
-    }
-    case 'a':
-      r = read_gaddr(rd,tsk,va_arg(ap,gaddr*));
-      break;
-    case 'p':
-      r = read_pntr(rd,tsk,(va_arg(ap,pntr*)),observe);
-      break;
-    case 'r': {
-      pntr *p = (va_arg(ap,pntr*));
-      r = read_pntr(rd,tsk,p,observe);
-      if ((READER_OK == r) && (CELL_REMOTEREF != pntrtype(*p)))
-        r = READER_INCORRECT_CONTENTS;
-      break;
-    }
-    case '.':
-      r = read_end(rd);
-      break;
-    default:
-      fatal("invalid read format character");
-    }
-    if (READER_OK == r)
-      done++;
+  else if (CELL_REMOTEREF == type) {
+    gaddr addr;
+    read_gaddr(rd,&addr);
+    *pout = global_lookup(tsk,addr,NULL_PNTR);
   }
+  else {
+    gaddr addr;
+    read_gaddr(rd,&addr);
 
-  if (READER_OK != r) {
-    printf("INVALID DATA -- FREEING STRINGS\n");
-    for (done--; 0 <= done; done--)
-      free(allocs[done]);
-  }
-  free(allocs);
-  return r;
-}
-
-int read_format(reader *rd, task *tsk, int observe, const char *fmt, ...)
-{
-  int r;
-  va_list ap;
-  va_start(ap,fmt);
-  r = read_vformat(rd,tsk,observe,fmt,ap);
-  va_end(ap);
-  return r;
-}
-
-int print_data(task *tsk, const char *data, int size)
-{
-  FILE *f = tsk->output;
-  reader rd = read_start(data,size);
-  int r;
-  int count = 0;
-
-  assert(NULL == tsk->ackmsg);
-  assert(0 == tsk->ackmsgsize);
-  assert(0 == tsk->naddrsread);
-  tsk->ackmsg = write_start();
-
-  while (rd.pos < rd.size) {
-    int tag;
-    if (0 < count++)
-      fprintf(f," ");
-    if (READER_OK != (r = read_bytes(&rd,&tag,sizeof(int))))
-      return r;
-    rd.pos -= sizeof(int);
-    switch (tag) {
-    case CHAR_TAG: {
-      char c;
-      CHECK_READ(read_char(&rd,&c));
-      fprintf(f,"%d",c);
-      break;
-    }
-    case INT_TAG: {
+    switch (type) {
+    case CELL_AREF: {
+      int index;
+      int elemsize;
+      int size;
+      carray *carr;
       int i;
-      CHECK_READ(read_int(&rd,&i));
-      fprintf(f,"%d",i);
+
+      read_int(rd,&index);
+      read_int(rd,&elemsize);
+      read_int(rd,&size);
+
+      assert((1 == elemsize) || (sizeof(pntr) == elemsize));
+      assert(MAX_ARRAY_SIZE >= size);
+      assert(index < size);
+
+      carr = carray_new(tsk,elemsize,size,NULL,NULL);
+      carr->size = size;
+      assert(carr->alloc == size);
+      if (1 == elemsize)
+        read_binary(rd,carr->elements,size);
+      else
+        for (i = 0; i < size; i++)
+          read_pntr(rd,&((pntr*)carr->elements)[i]);
+      read_pntr(rd,&carr->tail);
+      make_aref_pntr(*pout,carr->wrapper,index);
       break;
     }
-    case DOUBLE_TAG: {
-      double d;
-      CHECK_READ(read_double(&rd,&d));
-      fprintf(f,"%f",d);
+    case CELL_CONS: {
+      cell *c;
+      pntr head;
+      pntr tail;
+
+      read_pntr(rd,&head);
+      read_pntr(rd,&tail);
+
+      c = alloc_cell(tsk);
+      c->type = CELL_CONS;
+      c->field1 = head;
+      c->field2 = tail;
+      make_pntr(*pout,c);
       break;
     }
-    case STRING_TAG: {
-      char *str;
-      CHECK_READ(read_string(&rd,&str));
-      fprintf(f,"\"%s\"",str);
-      free(str);
+    case CELL_FRAME: {
+      frame *fr = frame_new(tsk,1);
+      int i;
+      int count;
+      int address;
+
+      fr->c = alloc_cell(tsk);
+      fr->c->type = CELL_FRAME;
+      make_pntr(fr->c->field1,fr);
+      make_pntr(*pout,fr->c);
+
+      read_int(rd,&address);
+      fr->instr = bc_instructions(tsk->bcdata)+address;
+
+      count = fr->instr->expcount;
+      for (i = 0; i < count; i++)
+        read_pntr(rd,&fr->data[i]);
       break;
     }
-    case GADDR_TAG: {
-      gaddr a;
-      CHECK_READ(read_gaddr(&rd,tsk,&a));
-      fprintf(f,"%d@%d",a.lid,a.tid);
+    case CELL_CAP: {
+      cap *cp = cap_alloc(tsk,1,0,0);
+      cell *capcell;
+      int i;
+
+      capcell = alloc_cell(tsk);
+      capcell->type = CELL_CAP;
+      make_pntr(capcell->field1,cp);
+      make_pntr(*pout,capcell);
+
+      read_int(rd,&cp->arity);
+      read_int(rd,&cp->address);
+      read_int(rd,&cp->fno);
+      read_int(rd,&cp->sl.fileno);
+      read_int(rd,&cp->sl.lineno);
+      read_int(rd,&cp->count);
+
+      assert(MAX_CAP_SIZE > cp->count);
+
+      cp->data = (pntr*)calloc(cp->count,sizeof(pntr));
+      for (i = 0; i < cp->count; i++)
+        read_pntr(rd,&cp->data[i]);
       break;
     }
-    case PNTR_TAG: {
-      pntr p;
-      CHECK_READ(read_format(&rd,tsk,1,"p",&p));
-      fprintf(f,"#");
-      print_pntr(f,p);
+    case CELL_SYSOBJECT:
+      /* FIXME: these should't migrate... how to handle them? */
+      fatal("FIXME: can't receive sysobject");
       break;
-    }
     default:
-      fprintf(f,"Unknown type: %d\n",tag);
-      return READER_INCORRECT_TYPE;
+      fatal("read_pntr: got unexpected cell type %d",type);
     }
+
+    if (NULL == addrhash_lookup(tsk,addr)) {
+/*       printf("%d: read_pntr: Storing %s with addr %d.%d", */
+/*              tsk->tid,cell_types[type],addr.tid,addr.lid); */
+      add_global(tsk,addr,*pout);
+    }
+    else {
+/*       printf("%d: read_pntr: Received %s that I already have",tsk->tid,cell_types[type]); */
+    }
+
+    /*
+    if (CELL_AREF == type) {
+      carray *carr = aref_array(*pout);
+      int index = aref_index(*pout);
+      if (1 == carr->elemsize) {
+        printf("(index %d, %d chars)",index,carr->size);
+      }
+      else {
+        pntr *elements = (pntr*)carr->elements;
+        int values = 0;
+        int i;
+        for (i = 0; i < carr->size; i++) {
+          pntr val = resolve_pntr(elements[i]);
+          if (CELL_REMOTEREF != pntrtype(val))
+            values++;
+        }
+        printf("(index %d %d/%d values)",index,values,carr->size);
+      }
+    }
+
+    printf("\n");
+    */
   }
-
-  write_end(tsk->ackmsg); /* don't want to send acks in this case */
-  tsk->ackmsg = NULL;
-  tsk->naddrsread = 0;
-  tsk->ackmsgsize = 0;
-
-  return READER_OK;
 }
 
-int read_end(reader *rd)
+void read_end(reader *rd)
 {
-  if (rd->size > rd->pos)
-    return READER_EXTRA_DATA;
-  return 0;
+  assert(rd->size == rd->pos);
 }
 
 array *write_start(void)
@@ -426,137 +318,110 @@ void write_binary(array *wr, const void *b, int len)
   array_append(wr,b,len);
 }
 
-void write_gaddr_noack(array *wr, gaddr a)
+void write_gaddr(array *wr, task *tsk, gaddr a)
 {
   write_tag(wr,GADDR_TAG);
   array_append(wr,&a.tid,sizeof(int));
   array_append(wr,&a.lid,sizeof(int));
-}
-
-void write_gaddr(array *wr, task *tsk, gaddr a)
-{
   add_gaddr(&tsk->inflight,a);
-  write_gaddr_noack(wr,a);
 }
 
 void write_ref(array *arr, task *tsk, pntr p)
 {
-  write_tag(arr,PNTR_TAG);
-  if (is_pntr(p)) {
-    global *glo = make_global(tsk,p);
-    write_format(arr,tsk,"ai",glo->addr,CELL_REMOTEREF);
-  }
-  else {
-    gaddr addr;
-    addr.tid = -1;
-    addr.lid = -1;
-    write_format(arr,tsk,"aid",addr,CELL_NUMBER,p);
-  }
+  write_pntr(arr,tsk,p,1);
 }
 
-void write_pntr(array *arr, task *tsk, pntr p)
+void write_pntr(array *arr, task *tsk, pntr p, int refonly)
 {
-  gaddr addr;
-  addr.tid = -1;
-  addr.lid = -1;
-
-  if (CELL_IND == pntrtype(p)) {
-    write_pntr(arr,tsk,get_pntr(p)->field1);
-    return;
-  }
-
-  if (CELL_REMOTEREF == pntrtype(p)) {
-    global *glo = (global*)get_pntr(get_pntr(p)->field1);
-    if (0 <= glo->addr.lid) {
-      write_tag(arr,PNTR_TAG);
-      write_format(arr,tsk,"ai",glo->addr,CELL_REMOTEREF);
-    }
-    else {
-      /* FIXME: how to deal with this case? */
-      /* Want to make another ref which points to this */
-      abort();
-      write_ref(arr,tsk,p);
-    }
-    return;
-  }
-
-  if (CELL_NUMBER != pntrtype(p))
-    addr = global_addressof(tsk,p);
-
-
+  p = resolve_pntr(p);
   write_tag(arr,PNTR_TAG);
 
-  if (CELL_AREF == pntrtype(p)) {
-    cell *c = get_pntr(p);
-    cell *arrholder = get_pntr(c->field1);
-    carray *carr = aref_array(p);
-    int index = aref_index(p);
-
-    assert(sizeof(pntr) == carr->elemsize); /* FIXME: remove this restriction */
-
-    if (index+1 < carr->size) {
-      pntr p;
-      make_aref_pntr(p,arrholder,index+1);
-      write_format(arr,tsk,"airr",addr,CELL_CONS,
-                   ((pntr*)carr->elements)[index],p);
-    }
-    else {
-      write_format(arr,tsk,"airr",addr,CELL_CONS,
-                   ((pntr*)carr->elements)[index],carr->tail);
-    }
-    return;
-  }
-
-  write_format(arr,tsk,"ai",addr,pntrtype(p));
-  switch (pntrtype(p)) {
-  case CELL_CONS: {
-    write_ref(arr,tsk,get_pntr(p)->field1);
-    write_ref(arr,tsk,get_pntr(p)->field2);
-    break;
-  }
-  case CELL_HOLE:
-    write_ref(arr,tsk,p);
-    break;
-  case CELL_FRAME: {
-    frame *f = (frame*)get_pntr(get_pntr(p)->field1);
-    int i;
-    int count = f->instr->expcount;
-    int address = f->instr-bc_instructions(tsk->bcdata);
-
-    /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref */
-    assert(STATE_NEW == f->state);
-
-    write_format(arr,tsk,"i",address);
-    for (i = 0; i < count; i++) {
-      pntr arg = resolve_pntr(f->data[i]);
-      if ((CELL_NUMBER == pntrtype(arg)) || (CELL_NIL == pntrtype(arg)))
-        write_pntr(arr,tsk,f->data[i]);
-      else
-        write_ref(arr,tsk,f->data[i]);
-    }
-    break;
-  }
-  case CELL_CAP: {
-    cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
-    int i;
-    write_format(arr,tsk,"iiiiii",cp->arity,cp->address,cp->fno,
-                 cp->sl.fileno,cp->sl.lineno,cp->count);
-    for (i = 0; i < cp->count; i++)
-      write_ref(arr,tsk,cp->data[i]);
-    break;
-  }
-  case CELL_NIL:
-    break;
-  case CELL_NUMBER:
+  if (CELL_NUMBER == pntrtype(p)) {
+    write_int(arr,CELL_NUMBER);
     write_double(arr,pntrdouble(p));
-    break;
-  case CELL_SYSOBJECT:
-    /* FIXME: these should't migrate... how to handle them? */
-    abort();
-    break;
-  default:
-    abort();
-    break;
+  }
+  else if (CELL_NIL == pntrtype(p)) {
+    write_int(arr,CELL_NIL);
+  }
+  else if ((CELL_REMOTEREF == pntrtype(p)) && (0 <= pglobal(p)->addr.lid)) {
+    write_int(arr,CELL_REMOTEREF);
+    write_gaddr(arr,tsk,pglobal(p)->addr);
+  }
+  else if ((CELL_REMOTEREF == pntrtype(p)) ||
+           (CELL_HOLE == pntrtype(p)) || /* FIXME: should attach waiter instead? */
+           refonly) {
+    global *glo = make_global(tsk,p);
+    write_int(arr,CELL_REMOTEREF);
+    write_gaddr(arr,tsk,glo->addr);
+  }
+  else {
+    gaddr addr = global_addressof(tsk,p);
+    write_int(arr,pntrtype(p));
+    write_gaddr(arr,tsk,addr);
+
+    switch (pntrtype(p)) {
+    case CELL_AREF: {
+      carray *carr = aref_array(p);
+      int index = aref_index(p);
+      int i;
+
+      assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
+      assert(MAX_ARRAY_SIZE >= carr->size);
+      assert(index < carr->size);
+
+      write_int(arr,index);
+      write_int(arr,carr->elemsize);
+      write_int(arr,carr->size);
+
+      if (1 == carr->elemsize)
+        write_binary(arr,carr->elements,carr->size);
+      else
+        for (i = 0; i < carr->size; i++)
+          write_ref(arr,tsk,((pntr*)carr->elements)[i]);
+      write_ref(arr,tsk,carr->tail);
+      break;
+    }
+    case CELL_CONS: {
+      write_ref(arr,tsk,get_pntr(p)->field1);
+      write_ref(arr,tsk,get_pntr(p)->field2);
+      break;
+    }
+    case CELL_FRAME: {
+      frame *f = (frame*)get_pntr(get_pntr(p)->field1);
+      int i;
+      int count = f->instr->expcount;
+      int address = f->instr-bc_instructions(tsk->bcdata);
+
+      /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref (and
+         add waiter?) */
+      assert(STATE_NEW == f->state);
+
+      write_int(arr,address);
+      for (i = 0; i < count; i++)
+        write_ref(arr,tsk,f->data[i]);
+      break;
+    }
+    case CELL_CAP: {
+      cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
+      int i;
+      write_int(arr,cp->arity);
+      write_int(arr,cp->address);
+      write_int(arr,cp->fno);
+      write_int(arr,cp->sl.fileno);
+      write_int(arr,cp->sl.lineno);
+      write_int(arr,cp->count);
+      for (i = 0; i < cp->count; i++)
+        write_ref(arr,tsk,cp->data[i]);
+      break;
+    }
+    case CELL_SYSOBJECT:
+      /* FIXME: these should't migrate... how to handle them? */
+      fatal("FIXME: can't send sysobject");
+      break;
+    default:
+      fatal("write: invalid pntr type %d",pntrtype(p));
+      break;
+    }
   }
 }
 
@@ -586,7 +451,7 @@ void write_vformat(array *wr, task *tsk, const char *fmt, va_list ap)
       write_gaddr(wr,tsk,va_arg(ap,gaddr));
       break;
     case 'p':
-      write_pntr(wr,tsk,va_arg(ap,pntr));
+      write_pntr(wr,tsk,va_arg(ap,pntr),0);
       break;
     case 'r':
       write_ref(wr,tsk,va_arg(ap,pntr));
@@ -610,17 +475,6 @@ void write_end(array *wr)
   array_free(wr);
 }
 
-void msg_print(task *tsk, int dest, int tag, const char *data, int size)
-{
-  reader rd = read_start(data,size);
-  int r;
-
-  fprintf(tsk->output,"%d <= %s ",dest,msg_names[tag]);
-  r = print_data(tsk,data+rd.pos,size-rd.pos);
-  assert(READER_OK == r);
-  fprintf(tsk->output,"\n");
-}
-
 void msg_send(task *tsk, int dest, int tag, char *data, int size)
 {
   if (NULL != tsk->inflight) {
@@ -636,7 +490,7 @@ void msg_send(task *tsk, int dest, int tag, char *data, int size)
     tsk->inflight = NULL;
   }
 
-  socket_send(tsk,dest,tag,data,size);
+  node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[dest],tag,data,size);
 }
 
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)

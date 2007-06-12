@@ -155,16 +155,6 @@ static void dispatch_event(node *n, int event, connection *conn, endpoint *endpt
   }
 }
 
-static void report_error(node *n, const char *format, ...)
-{
-  va_list ap;
-  fprintf(n->logfile,"ERROR: ");
-  va_start(ap,format);
-  vfprintf(n->logfile,format,ap);
-  va_end(ap);
-  fprintf(n->logfile,"\n");
-}
-
 static void got_message(node *n, const msgheader *hdr, const void *data)
 {
   endpoint *endpt;
@@ -190,8 +180,8 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
       /* don't need to do anything in this case */
     }
     else {
-      report_error(n,"Message %s received for unknown endpoint %d (source %s)",
-                   msg_names[hdr->tag],hdr->destlocalid,source);
+/*       node_log(n,LOG_WARNING,"Message %s received for unknown endpoint %d (source %s)", */
+/*                msg_names[hdr->tag],hdr->destlocalid,source); */
     }
     return;
   }
@@ -205,6 +195,7 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
 
 static void remove_connection(node *n, connection *conn)
 {
+  assert(NODE_ALREADY_LOCKED(n));
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
   if (conn->isconsole)
     close_console(n,conn);
@@ -453,7 +444,11 @@ static void handle_read(node *n, connection *conn)
     else
       node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
     dispatch_event(n,EVENT_DATA_READFINISHED,conn,NULL);
-    if (conn->isconsole)
+
+    /* Don't close "regular" connections (socket streams accessible to ELC programs) here
+       because we may still need to send more data. In other cases, if the console client or
+       another node disconnects, we are done with the connection. */
+    if (!conn->isreg)
       done_writing(n,conn);
     done_reading(n,conn);
     return;
@@ -590,7 +585,7 @@ static void *ioloop(void *arg)
 
       /* Note: it is possible that we did not find any data waiting to be written at this point,
          but some will become avaliable either just after we release the lock, or while the select
-         is actually blocked. socket_send() writes a single byte of data to the node's ioready pipe,
+         is actually blocked. node_notify() writes a single byte of data to the node's ioready pipe,
          which will cause the select to be woken, and we will look around again to write the
          data. */
     }
@@ -599,8 +594,12 @@ static void *ioloop(void *arg)
     s = select(highest+1,&readfds,&writefds,NULL,NULL);
     lock_mutex(&n->lock);
 
-    if (0 > s)
-      fatal("select: %s",strerror(errno));
+    if (0 > s) {
+      /* Ignore bad file descriptor error. It is possible (and legitimate) that a connection
+         could be closed by another thread while we are waiting in the select loop. */
+      if (EBADF != errno)
+        fatal("select: %s",strerror(errno));
+    }
 
     pthread_cond_broadcast(&n->cond);
 
@@ -892,6 +891,7 @@ void node_remove_listener(node *n, listener *l)
   }
 
   llist_remove(&n->listeners,l);
+  node_notify(n);
 
   unlock_node(n);
 
@@ -1232,7 +1232,6 @@ endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
   endpt->epid = epid;
   endpt->type = type;
   endpt->data = arg;
-  endpt->interruptptr = &endpt->tempinterrupt;
   endpt->n = n;
   endpt->fun = fun;
   dispatch_event(n,EVENT_ENDPOINT_ADDITION,NULL,endpt);
@@ -1315,8 +1314,7 @@ void endpoint_unlink(endpoint *endpt, endpointid to)
 
 void endpoint_interrupt(endpoint *endpt) /* Can be called from native code */
 {
-  if (endpt->interruptptr)
-    *endpt->interruptptr = 1;
+  endpt->interrupt = 1;
   if (endpt->signal)
     pthread_kill(endpt->thread,SIGUSR1);
 }

@@ -499,7 +499,7 @@ static void chord_endpoint_exit(chord *crd, endpoint_exit_msg *m)
       CHORD_DEBUG("successor %d failed! no spare successors!",crd->fingers[1].id);
       /* If we get here, we can no longer be part of the network, and must rejoin */
       printf("*********** #%d IS OUT OF NETWORK ************\n",crd->self.id);
-      abort();
+      exit(1);
     }
   }
 

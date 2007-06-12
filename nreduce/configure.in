@@ -17,6 +17,7 @@ AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 AC_CHECK_LIB(m,sqrt)
 AC_CHECK_FUNCS(feenableexcept)
+AC_CHECK_HEADERS(execinfo.h)
 #AC_CHECK_MEMBER(mcontext_t.gregs,AC_DEFINE(HAVE_MCONTEXT_GREGS),,[#include <ucontext.h>])
 #AC_CHECK_MEMBERS(mcontext_t.gregs,,,[INCLUDES="#include <ucontext.h>"])
 ucontext_includes="\

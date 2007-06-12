@@ -70,6 +70,12 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
     printf("gc_thread: idmap[%d] = "EPID_FORMAT"\n",i,EPID_ARGS(ga->idmap[i]));
   #endif
 
+  /* FIXME: the tasks should also link to the garbage collector */
+  lock_node(n);
+  for (i = 0; i < ga->ntasks; i++)
+    endpoint_link(endpt,ga->idmap[i]);
+  unlock_node(n);
+
   while (!done) {
     message *msg = endpoint_next_message(endpt,ingc ? -1 : DISTGC_DELAY);
     if (NULL == msg) {
@@ -156,6 +162,9 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       }
       break;
     }
+    case MSG_ENDPOINT_EXIT:
+      done = 1;
+      break;
     case MSG_KILL:
       done = 1;
       break;

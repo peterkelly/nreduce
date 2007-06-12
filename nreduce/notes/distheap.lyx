@@ -1,0 +1,220 @@
+#LyX 1.4.4 created this file. For more info see http://www.lyx.org/
+\lyxformat 245
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage{hyperref}
+\hypersetup{
+   bookmarksnumbered=true,
+   bookmarksopen=true,
+   bookmarksopenlevel=0,
+   colorlinks=true,
+   linkcolor=black,
+   citecolor=black
+}
+\end_preamble
+\language english
+\inputencoding auto
+\fontscheme times
+\graphics default
+\paperfontsize 12
+\spacing single
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Distributed heap management
+\end_layout
+
+\begin_layout Section
+In-flight addresses
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement H
+wide false
+sideways false
+status open
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="4" columns="2">
+<features>
+<column alignment="left" valignment="top" leftline="true" width="1.5in">
+<column alignment="left" valignment="top" leftline="true" rightline="true" width="4.5in">
+<row topline="true" bottomline="true">
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\series bold
+Field
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+
+\series bold
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row topline="true">
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+gaddr[][]
+\end_layout
+
+\begin_layout Standard
+inflight_addresses
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+An array of address lists, with each array element containing the in-flight
+ addresses for a particular destination
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row topline="true">
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+int[]
+\end_layout
+
+\begin_layout Standard
+unack_msg_count
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+An array of count lists, with each array element containing the address
+ counts for the oustanding messages to a particular destination
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row topline="true" bottomline="true">
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+gaddr[]
+\end_layout
+
+\begin_layout Standard
+inflight
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Standard
+The list of addresses that have been written to the current message buffer,
+ but not yet sent.
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Caption
+Task fields relating to in-flight addresses
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+A task maintains two data structures for each other task it can send messages
+ to.
+ The first is the in-flight address list, containing all of the global addresses
+ that have been sent to the remote task but the local task has not received
+ an acknowlegement for.
+ This list contains one entry per address.
+ The second is the unacknowleged message count, which contains the number
+ of addresses in each outstanding message.
+ This list contains one entry per message that has been sent to the destination
+ but not yet acknowleged.
+\end_layout
+
+\begin_layout Standard
+When a message is being constructed prior to its transmission, the task
+ keeps track of a list of in-flight addresses that are part of the message.
+ Every time a new address is written to the message buffer, it is also added
+ to the list.
+ When the message is finally sent, each address is added to the in-flight
+ address list associated with the destination, and the count of addresses
+ in the message is added to the unacknowledged message count list for the
+ destination.
+\end_layout
+
+\begin_layout Standard
+Upon receipt of the message, the destination sends back an acknowlegement
+ to the sender, which looks up the count in the first element of its unacknowled
+ged message count list, and remove this number of messages from its in-flight
+ list.
+ The acknowledgement contains the address count and original message tag,
+ which are used for sanity checking purposes.
+ Acknowledgements are always sent in the order that the corresponding messages
+ were received, and the communications layer guarantees they are delivered
+ in the correct order.
+\end_layout
+
+\end_body
+\end_document

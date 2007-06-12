@@ -728,7 +728,7 @@ void asm_check_runnable(task *tsk, x86_assembly *as)
 
 void asm_check_collect_needed(task *tsk, x86_assembly *as)
 {
-  // if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr) {
+  // if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt) {
   //   endpoint_interrupt(tsk->endpt);
   // }
   int Laftermemcheck = as->labels++;

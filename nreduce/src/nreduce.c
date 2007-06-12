@@ -268,8 +268,7 @@ static void sigsegv(int sig)
   char *str = "Segmentation fault\n";
   write(STDERR_FILENO,str,strlen(str));
   show_backtrace();
-  signal(sig,SIG_DFL);
-  kill(getpid(),sig);
+  exit(1);
 }
 
 int main(int argc, char **argv)

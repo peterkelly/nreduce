@@ -118,8 +118,9 @@
 #define B_ERROR          52
 #define B_GETOUTPUT      53
 #define B_GENID          54
+#define B_EXIT           55
 
-#define NUM_BUILTINS     55
+#define NUM_BUILTINS     56
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -442,9 +443,7 @@ typedef struct task {
   /* distributed memory management */
   global **pntrhash;
   global **addrhash;
-  int ackmsgsize;
   int naddrsread;
-  array *ackmsg;
   array **distmarks;
   endpointid gc;
   int gciter;
@@ -584,17 +583,11 @@ int do_client(char *initial_str, int argc, const char **argv);
 /* data */
 
 typedef struct reader {
+  task *tsk;
   const char *data;
   int size;
   int pos;
 } reader;
-
-#define READER_OK                  0
-#define READER_INCOMPLETE_DATA    -1
-#define READER_INVALID_DATA       -2
-#define READER_INCORRECT_TYPE     -3
-#define READER_EXTRA_DATA         -4
-#define READER_INCORRECT_CONTENTS -5
 
 #define CHAR_TAG   0x44912234
 #define INT_TAG    0xA492BC09
@@ -603,26 +596,16 @@ typedef struct reader {
 #define BINARY_TAG 0x559204A3
 #define GADDR_TAG  0x85113B1C
 #define PNTR_TAG   0xE901FA12
-#define REF_TAG    PNTR_TAG
 
-//#define CHECK_READ(_x) { int _r; if (READER_OK != (_r = (_x))) return _r; }
-#define CHECK_READ(_x) { int _r; if (READER_OK != (_r = (_x))) { abort(); return _r; } }
-//#define CHECK_EXPR(_x) { if (!(_x)) { abort(); return READER_INCORRECT_CONTENTS; } }
-#define CHECK_EXPR(_x) { assert(_x); }
-
-reader read_start(const char *data, int size);
-int read_char(reader *rd, char *c);
-int read_int(reader *rd, int *i);
-int read_double(reader *rd, double *d);
-int read_string(reader *rd, char **s);
-int read_binary(reader *rd, void **b, int *len);
-int read_gaddr_noack(reader *rd, gaddr *a);
-int read_gaddr(reader *rd, task *tsk, gaddr *a);
-int read_pntr(reader *rd, task *tsk, pntr *pout, int observe);
-int read_vformat(reader *rd, task *tsk, int observe, const char *fmt, va_list ap);
-int read_format(reader *rd, task *tsk, int observe, const char *fmt, ...);
-int read_end(reader *rd);
-int print_data(task *tsk, const char *data, int size);
+reader read_start(task *tsk, const char *data, int size);
+void read_char(reader *rd, char *c);
+void read_int(reader *rd, int *i);
+void read_double(reader *rd, double *d);
+void read_string(reader *rd, char **s);
+void read_binary(reader *rd, char *b, int len);
+void read_gaddr(reader *rd, gaddr *a);
+void read_pntr(reader *rd, pntr *pout);
+void read_end(reader *rd);
 
 array *write_start(void);
 void write_tag(array *wr, int tag);
@@ -631,18 +614,15 @@ void write_int(array *wr, int i);
 void write_double(array *wr, double d);
 void write_string(array *wr, char *s);
 void write_binary(array *wr, const void *b, int len);
-void write_gaddr_noack(array *wr, gaddr a);
 void write_gaddr(array *wr, task *tsk, gaddr a);
 void write_ref(array *arr, task *tsk, pntr p);
-void write_pntr(array *arr, task *tsk, pntr p);
+void write_pntr(array *arr, task *tsk, pntr p, int refonly);
 void write_vformat(array *wr, task *tsk, const char *fmt, va_list ap);
 void write_format(array *wr, task *tsk, const char *fmt, ...);
 void write_end(array *wr);
 
 void msg_send(task *tsk, int dest, int tag, char *data, int size);
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...);
-
-void msg_print(task *tsk, int dest, int tag, const char *data, int size);
 
 /* reduction */
 
@@ -669,7 +649,6 @@ endpoint *find_endpoint(node *n, int localid);
 int standalone(const char *bcdata, int bcsize, int argc, const char **argv);
 int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
-void socket_send(task *tsk, int destid, int tag, char *data, int size);
 
 /* cell */
 

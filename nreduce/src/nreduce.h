@@ -46,7 +46,6 @@
 /* #define EXECUTION_TRACE */
 /* #define PROFILING */
 /* #define PAREXEC_DEBUG */
-/* #define MSG_DEBUG */
 /* #define CONTINUOUS_DISTGC */
 /* #define DISTGC_DEBUG */
 /* #define SHOW_FRAME_COMPLETION */

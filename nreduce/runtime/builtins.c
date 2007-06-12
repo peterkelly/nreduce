@@ -224,7 +224,7 @@ static void b_bitop(task *tsk, pntr *argstack, int bif)
   case B_BITAND:  setnumber(&argstack[0],(double)(a & b));   break;
   case B_BITOR:   setnumber(&argstack[0],(double)(a | b));   break;
   case B_BITXOR:  setnumber(&argstack[0],(double)(a ^ b));   break;
-  default:        abort();       break;
+  default:        fatal("Invalid bit operation %d",bif);     break;
   }
 }
 
@@ -383,7 +383,7 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
   assert(dsize == (*arr)->elemsize); /* sanity check */
 
   tsk->alloc_bytes += totalcount*dsize;
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
     endpoint_interrupt(tsk->endpt);
 
   while (1) {
@@ -1514,6 +1514,13 @@ static void b_genid(task *tsk, pntr *argstack)
   setnumber(&argstack[0],id);
 }
 
+static void b_exit(task *tsk, pntr *argstack)
+{
+  tsk->done = 1;
+  argstack[0] = tsk->globnilpntr;
+  endpoint_interrupt(tsk->endpt);
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1600,6 +1607,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "error1",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error1         },
 { "getoutput",      1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_getoutput      },
 { "genid",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE, IMPURE, b_genid          },
+{ "exit",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_exit           },
 
 };
 

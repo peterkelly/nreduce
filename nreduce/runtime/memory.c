@@ -140,6 +140,9 @@ static void mark_frame(task *tsk, frame *f, short bit)
       mark(tsk,f->data[i],bit);
     }
   }
+  /* FIXME: do we need to mark the objects on the wait queue here? The frames should be
+     ok, since they should already be in the runnable set. But the fetchers might need
+     to be marked */
 }
 
 static void mark_cap(task *tsk, cap *c, short bit)
@@ -252,7 +255,7 @@ static void mark(task *tsk, pntr p, short bit)
     case CELL_SYMBOL:
       break;
     default:
-      abort();
+      fatal("Invalid pntr type %d",pntrtype(p));
       break;
     }
   }
@@ -284,7 +287,7 @@ cell *alloc_cell(task *tsk)
   #ifdef PROFILING
   tsk->stats.cell_allocs++;
   #endif
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
     endpoint_interrupt(tsk->endpt);
   return v;
 }
@@ -342,8 +345,9 @@ static void free_sysobject(task *tsk, sysobject *so)
   case SYSOBJECT_CONNECTION: {
     delete_connection_msg dcm;
     dcm.sockid = so->sockid;
-    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_CONNECTION,
-              &dcm,sizeof(dcm));
+    if (!socketid_isnull(&so->sockid))
+      node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_CONNECTION,
+                &dcm,sizeof(dcm));
     if (!tsk->done) {
       assert(0 == so->frameids[CONNECT_FRAMEADDR]);
       assert(0 == so->frameids[READ_FRAMEADDR]);
@@ -358,13 +362,14 @@ static void free_sysobject(task *tsk, sysobject *so)
   case SYSOBJECT_LISTENER: {
     delete_listener_msg dlm;
     dlm.sockid = so->sockid;
-    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_LISTENER,
-              &dlm,sizeof(dlm));
+    if (!socketid_isnull(&so->sockid))
+      node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_LISTENER,
+                &dlm,sizeof(dlm));
     free(so->hostname);
     break;
   }
   default:
-    abort();
+    fatal("Invalid sysobject type %d",so->type);
     break;
   }
   free(so);
@@ -689,7 +694,7 @@ frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
   if (addalloc)
     tsk->alloc_bytes += tsk->framesize;
 
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt && tsk->endpt->interruptptr)
+  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
     endpoint_interrupt(tsk->endpt);
 
   f = tsk->freeframe;
