@@ -69,7 +69,7 @@ static int get_responses(node *n, launcher *lr, int tag,
   int allresponses;
   int i;
   do {
-    message *msg = endpoint_next_message(lr->endpt,-1);
+    message *msg = endpoint_receive(lr->endpt,-1);
     int sender = -1;
 
     if (MSG_KILL == msg->hdr.tag) {
@@ -156,7 +156,7 @@ static void send_newtask(launcher *lr)
   ntmsg->out_sockid = lr->out_sockid;
   for (i = 0; i < lr->count; i++) {
     ntmsg->tid = i;
-    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
+    endpoint_send(lr->endpt,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);
   }
   free(ntmsg);
 }
@@ -170,7 +170,7 @@ static void send_inittask(launcher *lr)
   memcpy(initmsg->idmap,lr->endpointids,lr->count*sizeof(endpointid));
   for (i = 0; i < lr->count; i++) {
     initmsg->localid = lr->endpointids[i].localid;
-    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+    endpoint_send(lr->endpt,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
   }
   free(initmsg);
 }
@@ -179,8 +179,7 @@ static void send_starttask(launcher *lr)
 {
   int i;
   for (i = 0; i < lr->count; i++)
-    node_send(lr->n,lr->endpt->epid.localid,lr->managerids[i],MSG_STARTTASK,
-              &lr->localids[i],sizeof(int));
+    endpoint_send(lr->endpt,lr->managerids[i],MSG_STARTTASK,&lr->localids[i],sizeof(int));
 }
 
 static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)
@@ -190,10 +189,10 @@ static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)
   startgc_msg *sgcm = (startgc_msg*)calloc(1,msglen);
   sgcm->count = lr->count;
   memcpy(sgcm->idmap,lr->endpointids,lr->count*sizeof(endpointid));
-  node_send(n,endpt->epid.localid,lr->managerids[0],MSG_STARTGC,sgcm,msglen);
+  endpoint_send(endpt,lr->managerids[0],MSG_STARTGC,sgcm,msglen);
   free(sgcm);
 
-  msg = endpoint_next_message(endpt,-1);
+  msg = endpoint_receive(endpt,-1);
   if (MSG_KILL == msg->hdr.tag) {
     lr->cancel = 1;
   }
@@ -330,25 +329,29 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
 }
 
 /* FIXME: make sure that when the task has an error, the message is sent back to the client */
-static void output_thread(node *n, endpoint *endpt, void *arg)
+void output_thread(node *n, endpoint *endpt, void *arg)
 {
+  output_arg *oa = (output_arg*)arg;
   int done = 0;
+  oa->rc = 0;
   while (!done) {
-    message *msg = endpoint_next_message(endpt,-1);
+    message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
     case MSG_WRITE: {
-      char *tmp;
       write_response_msg wrm;
       write_msg *m = (write_msg*)msg->data;
       assert(sizeof(write_msg) <= msg->hdr.size);
-      tmp = malloc(m->len+1);
-      memcpy(tmp,m->data,m->len);
-      tmp[m->len] = '\0';
-      printf("%s",tmp);
-      free(tmp);
-
+      fwrite(m->data,1,m->len,stdout);
       wrm.ioid = m->ioid;
-      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+      endpoint_send(endpt,msg->hdr.source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+      break;
+    }
+    case MSG_REPORT_ERROR: {
+      report_error_msg *m = (report_error_msg*)msg->data;
+      assert(sizeof(report_error_msg) <= msg->hdr.size);
+      fwrite(m->data,1,m->len,stderr);
+      fprintf(stderr,"\n");
+      oa->rc = m->rc;
       break;
     }
     case MSG_FINWRITE: {
@@ -356,8 +359,7 @@ static void output_thread(node *n, endpoint *endpt, void *arg)
       finwrite_msg *m = (finwrite_msg*)msg->data;
       assert(sizeof(finwrite_msg) == msg->hdr.size);
       frm.ioid = m->ioid;
-      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_FINWRITE_RESPONSE,
-                &frm,sizeof(frm));
+      endpoint_send(endpt,msg->hdr.source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
       break;
     }
     case MSG_DELETE_CONNECTION:
@@ -374,12 +376,35 @@ static void output_thread(node *n, endpoint *endpt, void *arg)
   }
 }
 
-static void client_callback(struct node *n, void *data, int event,
-                            connection *conn, endpoint *endpt)
+static void connection_thread(node *n, endpoint *endpt, void *arg)
 {
-  if (EVENT_CONN_FAILED == event) {
-    fprintf(stderr,"Connection to %s:%d failed\n",conn->hostname,conn->port);
-    exit(1);
+  int done = 0;
+  endpointid *destid = (endpointid*)arg;
+  lock_node(n);
+  endpoint_link(endpt,*destid);
+  unlock_node(n);
+  while (!done) {
+    message *msg = endpoint_receive(endpt,-1);
+    switch (msg->hdr.tag) {
+    case MSG_ENDPOINT_EXIT: {
+      endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
+      unsigned char *c;
+      int port;
+      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      c = (unsigned char*)&m->epid.ip;
+      port = m->epid.port;
+      fprintf(stderr,"Connection to %u.%u.%u.%u:%u failed\n",c[0],c[1],c[2],c[3],port);
+      exit(1);
+      break;
+    }
+    case MSG_KILL:
+      done = 1;
+      break;
+    default:
+      fatal("invalid message: %d",msg->hdr.tag);
+      break;
+    }
+    message_free(msg);
   }
 }
 
@@ -406,15 +431,15 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
   fsm.hops = 0;
   fsm.payload = 0;
 
-  node_send(n,endpt->epid.localid,fsd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
+  endpoint_send(endpt,fsd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
 
   while (!done) {
-    message *msg = endpoint_next_message(endpt,-1);
+    message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
     case MSG_GOT_SUCCESSOR: {
       got_successor_msg *m = (got_successor_msg*)msg->data;
       assert(sizeof(got_successor_msg) == msg->hdr.size);
-      node_send(n,endpt->epid.localid,m->successor.epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
+      endpoint_send(endpt,m->successor.epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
       break;
     }
     case MSG_REPLY_TABLE: {
@@ -433,7 +458,7 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
         if ((0 < fsd->want) && (list_count(fsd->nodes) >= fsd->want))
           done = 1;
         else
-          node_send(n,endpt->epid.localid,m->fingers[1].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
+          endpoint_send(endpt,m->fingers[1].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
       }
 
       if (0 == fsd->first.localid)
@@ -480,11 +505,11 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
     endpointid managerid = *(endpointid*)l->data;
     managerid.localid = MANAGER_ID;
     gtm.sender = endpt->epid;
-    node_send(n,endpt->epid.localid,managerid,MSG_GET_TASKS,&gtm,sizeof(gtm));
+    endpoint_send(endpt,managerid,MSG_GET_TASKS,&gtm,sizeof(gtm));
   }
 
   while (done < nmanagers) {
-    message *msg = endpoint_next_message(endpt,-1);
+    message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
     case MSG_GET_TASKS_RESPONSE: {
       int i;
@@ -526,9 +551,7 @@ int do_client(char *initial_str, int argc, const char **argv)
 
   n = node_new(LOG_WARNING);
 
-  node_add_callback(n,client_callback,NULL);
-
-  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1,NULL,NULL,0)) {
+  if (NULL == node_listen(n,n->listenip,0,0,NULL,0,1,NULL,NULL,0)) {
     node_free(n);
     return -1;
   }
@@ -537,6 +560,8 @@ int do_client(char *initial_str, int argc, const char **argv)
 
   if (0 > string_to_mainchordid(n,initial_str,&initial))
     exit(1);
+
+  node_add_thread(n,0,TEST_ENDPOINT,0,connection_thread,&initial,NULL);
 
   if (1 > argc) {
     fprintf(stderr,"Please specify a command\n");
@@ -564,8 +589,10 @@ int do_client(char *initial_str, int argc, const char **argv)
       list *nodes = find_nodes(n,initial,want,0);
       pthread_t thread;
       socketid out_sockid;
-      out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,NULL,&thread);
-      out_sockid.sid = 1;
+      output_arg oa;
+      memset(&oa,0,sizeof(oa));
+      out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,&oa,&thread);
+      out_sockid.sid = 2;
       if (0 != client_run(n,nodes,program,out_sockid,argc-3,((const char**)argv)+3))
         exit(1);
       list_free(nodes,free);
@@ -573,7 +600,7 @@ int do_client(char *initial_str, int argc, const char **argv)
       if (0 != pthread_join(thread,NULL))
         fatal("pthread_join: %s",strerror(errno));
 
-/*       printf("Program launched: %s\n",program); */
+      r = oa.rc;
     }
   }
   else {
@@ -581,16 +608,13 @@ int do_client(char *initial_str, int argc, const char **argv)
     exit(1);
   }
 
-  lock_node(n);
-  node_shutdown_locked(n);
-  unlock_node(n);
+  node_shutdown(n);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 
   node_close_endpoints(n);
   node_close_connections(n);
-  node_remove_callback(n,client_callback,NULL);
   node_free(n);
 
   return r;

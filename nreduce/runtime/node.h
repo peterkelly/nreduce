@@ -162,7 +162,6 @@ typedef struct connection {
   int outgoing;
   int donewelcome;
   int donehandshake;
-  int isconsole;
   int isreg;
   int finwrite;
   int collected;
@@ -174,7 +173,6 @@ typedef struct connection {
   int canread;
   int canwrite;
 
-  endpointid console_epid;
   endpointid owner;
 
   struct connection *prev;
@@ -187,33 +185,18 @@ typedef struct connectionlist {
   connection *last;
 } connectionlist;
 
-typedef void (*node_callbackfun)(struct node *n, void *data, int event,
-                                 connection *conn, endpoint *endpt);
-
-typedef struct node_callback {
-  node_callbackfun fun;
-  void *data;
-  struct node_callback *prev;
-  struct node_callback *next;
-} node_callback;
-
-typedef struct node_callbacklist {
-  node_callback *first;
-  node_callback *last;
-} node_callbacklist;
-
 typedef struct listener {
   socketid sockid;
   in_addr_t ip;
   int port;
   int fd;
-  node_callbackfun callback;
   void *data;
   int dontaccept;
   int accept_frameid;
   struct listener *prev;
   struct listener *next;
   endpointid owner;
+  int notify;
 } listener;
 
 typedef struct listenerlist {
@@ -229,7 +212,6 @@ typedef struct node {
   connectionlist connections;
   listenerlist listeners;
   listener *mainl;
-  node_callbacklist callbacks;
   in_addr_t listenip;
   unsigned short listenport;
   unsigned int nextlocalid;
@@ -248,22 +230,6 @@ typedef struct node {
   endpointid managerid;
 } node;
 
-#define EVENT_NONE                  0
-#define EVENT_CONN_ESTABLISHED      1
-#define EVENT_CONN_FAILED           2
-#define EVENT_CONN_ACCEPTED         3
-#define EVENT_CONN_CLOSED           4
-#define EVENT_CONN_IOERROR          5
-#define EVENT_HANDSHAKE_DONE        6
-#define EVENT_HANDSHAKE_FAILED      7
-#define EVENT_DATA_READ             8
-#define EVENT_DATA_READFINISHED     9
-#define EVENT_DATA_WRITTEN          10
-#define EVENT_ENDPOINT_ADDITION     11
-#define EVENT_ENDPOINT_REMOVAL      12
-#define EVENT_SHUTDOWN              13
-#define EVENT_COUNT                 15
-
 /* node */
 
 #define lock_node(_n) { lock_mutex(&(_n)->lock);
@@ -275,35 +241,27 @@ int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
 node *node_new(int loglevel);
 void node_free(node *n);
 void node_log(node *n, int level, const char *format, ...);
-listener *node_listen(node *n, in_addr_t ip, int port, node_callbackfun callback, void *data,
+listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
                       int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen);
-void node_add_callback(node *n, node_callbackfun fun, void *data);
-void node_remove_callback(node *n, node_callbackfun fun, void *data);
+endpoint *find_endpoint(node *n, int localid);
 void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen);
-void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-                      int tag, const void *data, int size);
-void node_send(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-               int tag, const void *data, int size);
-void node_waitclose_locked(node *n, int localid);
-void node_shutdown_locked(node *n);
+void node_shutdown(node *n);
 void node_notify(node *n);
-void connection_printf(connection *conn, const char *format, ...);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 
-endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
-                                  endpoint_threadfun fun, void *arg, pthread_t *threadp);
 endpointid node_add_thread(node *n, int localid, int type, int stacksize,
                            endpoint_threadfun fun, void *arg, pthread_t *threadp);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 void endpoint_interrupt(endpoint *endpt);
-message *endpoint_next_message(endpoint *endpt, int delayms);
+void endpoint_send(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
+message *endpoint_receive(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 int endpointid_isnull(const endpointid *epid);
 void print_endpointid(endpointid_str str, endpointid epid);
@@ -313,34 +271,16 @@ void message_free(message *msg);
 int socketid_equals(const socketid *a, const socketid *b);
 int socketid_isnull(const socketid *a);
 
-/* console2 */
+/* console */
 
-void console_process_received(node *n, connection *conn);
-void start_console(node *n, connection *conn);
-void close_console(node *n, connection *conn);
+void console_thread(node *n, endpoint *endpt, void *arg);
 
 /* manager */
-
-typedef struct newtask_msg {
-  int tid;
-  int groupsize;
-  int bcsize;
-  socketid out_sockid;
-  int argc;
-  char bcdata[0];
-} newtask_msg;
-
-typedef struct inittask_msg {
-  int localid;
-  int count;
-  endpointid idmap[0];
-} inittask_msg;
 
 void start_manager(node *n);
 
 #ifndef NODE_C
 extern const char *log_levels[LOG_COUNT];
-extern const char *event_types[EVENT_COUNT];
 #endif
 
 #endif

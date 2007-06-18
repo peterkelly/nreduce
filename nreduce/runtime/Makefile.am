@@ -6,7 +6,7 @@ libruntime_la_SOURCES = worker.c \
 	builtins.c \
 	memory.c \
 	data.c \
-	console2.c \
+	console.c \
 	interpreter.c \
 	reduction.c \
 	manager.c \

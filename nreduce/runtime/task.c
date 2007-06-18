@@ -527,16 +527,13 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
     tsk->distmarks[i] = array_new(sizeof(gaddr),0);
   }
 
+  assert(!socketid_isnull(&out_sockid));
   tsk->out_sockid = out_sockid;
-  if (!socketid_isnull(&tsk->out_sockid)) {
-    cell *c;
-    sysobject *so = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
-    so->hostname = strdup("client");
-    so->port = -1;
-    so->sockid = tsk->out_sockid;
-    so->connected = 1;
-    tsk->out_so = so;
-  }
+  tsk->out_so = new_sysobject(tsk,SYSOBJECT_CONNECTION);
+  tsk->out_so->hostname = strdup("client");
+  tsk->out_so->port = -1;
+  tsk->out_so->sockid = tsk->out_sockid;
+  tsk->out_so->connected = 1;
 
   if (n) {
     char semdata = 0;

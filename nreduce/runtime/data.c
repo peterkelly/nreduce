@@ -490,7 +490,7 @@ void msg_send(task *tsk, int dest, int tag, char *data, int size)
     tsk->inflight = NULL;
   }
 
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->idmap[dest],tag,data,size);
+  endpoint_send(tsk->endpt,tsk->idmap[dest],tag,data,size);
 }
 
 void msg_fsend(task *tsk, int dest, int tag, const char *fmt, ...)

@@ -854,7 +854,6 @@ static void b_openfd(task *tsk, pntr *argstack)
   int fd;
   int badtype;
   sysobject *so;
-  cell *c;
 
   if (0 <= (badtype = array_to_string(filenamepntr,&filename))) {
     set_error(tsk,"openfd: filename is not a string (contains non-char: %s)",cell_types[badtype]);
@@ -867,9 +866,9 @@ static void b_openfd(task *tsk, pntr *argstack)
     return;
   }
 
-  so = new_sysobject(tsk,SYSOBJECT_FILE,&c);
+  so = new_sysobject(tsk,SYSOBJECT_FILE);
   so->fd = fd;
-  make_pntr(argstack[0],c);
+  make_pntr(argstack[0],so->c);
 
   free(filename);
 }
@@ -1085,7 +1084,6 @@ static void b_opencon(task *tsk, pntr *argstack)
     int badtype;
     char *hostname;
     sysobject *so;
-    cell *c;
     connect_msg cm;
 
     CHECK_ARG(1,CELL_NUMBER);
@@ -1098,12 +1096,12 @@ static void b_opencon(task *tsk, pntr *argstack)
     }
 
     /* Create sysobject cell */
-    so = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
+    so = new_sysobject(tsk,SYSOBJECT_CONNECTION);
     so->hostname = strdup(hostname);
     so->port = port;
     so->len = 0;
 
-    make_pntr(argstack[2],c);
+    make_pntr(argstack[2],so->c);
 
     node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Initiated connection",hostname,port);
 
@@ -1113,7 +1111,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     cm.owner = tsk->endpt->epid;
     cm.ioid = suspend_current_frame(tsk,*tsk->runptr);
     so->frameids[CONNECT_FRAMEADDR] = cm.ioid;
-    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_CONNECT,&cm,sizeof(cm));
+    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_CONNECT,&cm,sizeof(cm));
 
     free(hostname);
   }
@@ -1167,13 +1165,13 @@ Normal operation
 Error occurs during read
 1-3: as above
 4. Connection has error or is closed by peer
-5. Workers sends CONNECTION_EVENT message with event either CONN_IOERROR or CONN_CLOSED
-6. Task handles CONNECTION_EVENT, marks so as closed, sets error = 1 or 0, unblocks frame
+5. Workers sends CONNECTION_CLOSED message with event either CONN_IOERROR or CONN_CLOSED
+6. Task handles CONNECTION_CLOSED, marks so as closed, sets error = 1 or 0, unblocks frame
 7. b_readcon() invoked again with curf->resume == 1, reports error or close condition to caller
 
 Error occurs before call to read
-1. Workers sends CONNECTION_EVENT message with event either CONN_IOERROR or CONN_CLOSED
-2. Task handles CONNECTION_EVENT, marks so as closed, sets error = 1 or 0,
+1. Workers sends CONNECTION_CLOSED message with event either CONN_IOERROR or CONN_CLOSED
+2. Task handles CONNECTION_CLOSED, marks so as closed, sets error = 1 or 0,
 3. b_readcon() called, detects so->closed, reports error or close condition to caller
 
 */
@@ -1208,7 +1206,7 @@ static void b_readcon(task *tsk, pntr *argstack)
     rm.ioid = suspend_current_frame(tsk,*tsk->runptr);
     assert(0 == so->frameids[READ_FRAMEADDR]);
     so->frameids[READ_FRAMEADDR] = rm.ioid;
-    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_READ,&rm,sizeof(rm));
+    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_READ,&rm,sizeof(rm));
     node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
   }
   else {
@@ -1242,7 +1240,6 @@ static void b_startlisten(task *tsk, pntr *argstack)
     int port;
     int badtype;
     sysobject *so;
-    cell *c;
     in_addr_t ip = INADDR_ANY;
     listen_msg lm;
 
@@ -1262,13 +1259,13 @@ static void b_startlisten(task *tsk, pntr *argstack)
     }
 
     /* Create sysobject cell */
-    so = new_sysobject(tsk,SYSOBJECT_LISTENER,&c);
+    so = new_sysobject(tsk,SYSOBJECT_LISTENER);
     so->hostname = strdup(hostname);
     so->port = port;
     so->tsk = tsk;
 
-    make_pntr(argstack[0],c);
-    make_pntr(argstack[1],c);
+    make_pntr(argstack[0],so->c);
+    make_pntr(argstack[1],so->c);
 
     lm.ip = ip;
     lm.port = port;
@@ -1276,7 +1273,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
     lm.ioid = suspend_current_frame(tsk,curf);
     so->frameids[LISTEN_FRAMEADDR] = lm.ioid;
 
-    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_LISTEN,&lm,sizeof(lm));
+    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_LISTEN,&lm,sizeof(lm));
 
     free(hostname);
   }
@@ -1309,7 +1306,7 @@ static void b_accept(task *tsk, pntr *argstack)
     am.ioid = suspend_current_frame(tsk,curf);
     assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
     so->frameids[ACCEPT_FRAMEADDR] = am.ioid;
-    node_send(tsk->n,tsk->endpt->epid.localid,tsk->n->managerid,MSG_ACCEPT,&am,sizeof(am));
+    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_ACCEPT,&am,sizeof(am));
   }
   else {
     curf->resume = 0;
@@ -1347,16 +1344,6 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   cell *c;
   sysobject *so;
 
-  if (CELL_NIL == pntrtype(destpntr)) {
-    /* Write to task output file handle */
-    if (tsk->output) {
-      fwrite(data,1,len,tsk->output);
-      fflush(tsk->output);
-    }
-    argstack[0] = tsk->globnilpntr;
-    return;
-  }
-
   c = (cell*)get_pntr(destpntr);
   so = (sysobject*)get_pntr(c->field1);
   if (SYSOBJECT_CONNECTION != so->type) {
@@ -1374,6 +1361,17 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
     return;
   }
 
+  if (1 == so->sockid.sid) {
+    /* sid can only have the value 1 in standalone mode; we can take a shortcut here and write
+       the data directly to the task's output stream */
+    if (tsk->output) {
+      fwrite(data,1,len,tsk->output);
+      fflush(tsk->output);
+    }
+    argstack[0] = tsk->globnilpntr;
+    return;
+  }
+
   if (curf->resume) {
     argstack[0] = tsk->globnilpntr; /* normal return */
     curf->resume = 0;
@@ -1387,7 +1385,7 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
     assert(0 == so->frameids[WRITE_FRAMEADDR]);
     so->frameids[WRITE_FRAMEADDR] = wm->ioid;
     memcpy(wm->data,data,len);
-    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_WRITE,wm,msglen);
+    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_WRITE,wm,msglen);
     free(wm);
   }
 }
@@ -1399,8 +1397,7 @@ static void b_print(task *tsk, pntr *argstack)
   char c;
 
   CHECK_ARG(0,CELL_NUMBER);
-  if (CELL_NIL != pntrtype(destpntr))
-    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
+  CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
 
   d = pntrdouble(argstack[0]);
   if ((d == floor(d)) && (0 < d) && (128 > d))
@@ -1421,8 +1418,7 @@ static void b_printarray(task *tsk, pntr *argstack)
 
   CHECK_ARG(0,CELL_AREF);
   CHECK_ARG(1,CELL_NUMBER);
-  if (CELL_NIL != pntrtype(destpntr))
-    CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION);
+  CHECK_SYSOBJECT_ARG(2,SYSOBJECT_CONNECTION);
 
   n = (int)pntrdouble(npntr);
 
@@ -1459,7 +1455,7 @@ static void b_printend(task *tsk, pntr *argstack)
     assert(0 == so->frameids[FINWRITE_FRAMEADDR]);
     so->frameids[FINWRITE_FRAMEADDR] = fwm.ioid;
 
-    node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
   }
   else {
     curf->resume = 0;
@@ -1500,10 +1496,8 @@ static void b_error1(task *tsk, pntr *argstack)
 
 static void b_getoutput(task *tsk, pntr *argstack)
 {
-  if (tsk->out_so)
-    argstack[0] = tsk->out_so->p;
-  else
-    argstack[0] = tsk->globnilpntr;
+  assert(tsk->out_so);
+  argstack[0] = tsk->out_so->p;
 }
 
 static void b_genid(task *tsk, pntr *argstack)

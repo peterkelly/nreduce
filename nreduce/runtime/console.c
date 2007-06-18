@@ -39,11 +39,12 @@
 #include <errno.h>
 #include <unistd.h>
 
-typedef struct console2 {
+typedef struct console {
   node *n;
   endpoint *endpt;
   pthread_t thread;
-} console2;
+  socketid sockid;
+} console;
 
 static int process_cmd(node *n, int argc, char **argv, array *out)
 {
@@ -53,23 +54,12 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
   if (!strcmp(argv[0],"connections") || !strcmp(argv[0],"c")) {
     connection *c2;
     lock_node(n);
-    array_printf(out,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Console?");
+    array_printf(out,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Regular?");
     array_printf(out,"%-30s %-6s %-6s %-8s\n","--------","----","------","--------");
     for (c2 = n->connections.first; c2; c2 = c2->next)
       array_printf(out,"%-30s %-6d %-6d %-8s\n",
               c2->hostname,c2->port,c2->sock,
-              c2->isconsole ? "Yes" : "No");
-    unlock_node(n);
-  }
-  else if (!strcmp(argv[0],"open") || !strcmp(argv[0],"o")) {
-    char *colon;
-    if ((2 > argc) || (NULL == (colon = strchr(argv[1],':')))) {
-      array_printf(out,"Usage: open hostname:port\n");
-      return 0;
-    }
-    *colon = '\0';
-    lock_node(n);
-    node_connect_locked(n,argv[1],INADDR_ANY,atoi(colon+1),1,NULL,0);
+              c2->isreg ? "Yes" : "No");
     unlock_node(n);
   }
   else if (!strcmp(argv[0],"exit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"quit")) {
@@ -97,14 +87,11 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
     return 0;
   }
   else if (!strcmp(argv[0],"shutdown") || !strcmp(argv[0],"s")) {
-    lock_node(n);
-    node_shutdown_locked(n);
-    unlock_node(n);
+    node_shutdown(n);
     return 0;
   }
   else if (!strcmp(argv[0],"help")) {
     array_printf(out,"connections   [c] - List all open connections\n");
-    array_printf(out,"open          [o] - Open new connection\n");
     array_printf(out,"tasks         [t] - List tasks\n");
     array_printf(out,"kill          [k] - Kill a task\n");
     array_printf(out,"shutdown      [s] - Shut down VM\n");
@@ -116,124 +103,114 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
   return 0;
 }
 
-static void conn_disconnect(connection *conn)
-{
-  done_reading(conn->n,conn);
-  conn->finwrite = 1;
-  node_notify(conn->n);
-}
-
-static void process_line(node *n, endpoint *endpt, console2 *csl, const char *line)
+static int process_line(node *n, endpoint *endpt, console *csl, const char *line)
 {
   int argc;
   char **argv;
   array *out = array_new(1,0);
   int doclose;
-  connection *conn;
 
   parse_cmdline(line,&argc,&argv);
   doclose = process_cmd(n,argc,argv,out);
   array_printf(out,"\n> ");
   free_args(argc,argv);
 
-  lock_node(n);
-
-  for (conn = n->connections.first; conn; conn = conn->next) {
-    if (!endpointid_equals(&conn->console_epid,&endpt->epid))
-      continue;
-
-    if (doclose) {
-      array_printf(out,"Disconnecting\n");
-      array_append(conn->sendbuf,out->data,out->nbytes);
-      conn_disconnect(conn);
-    }
-    else {
-      array_append(conn->sendbuf,out->data,out->nbytes);
-      node_notify(n);
-    }
+  if (!doclose) {
+    int len = out->nbytes;
+    int msglen = sizeof(write_msg)+len;
+    write_msg *wm = (write_msg*)malloc(msglen);
+    wm->sockid = csl->sockid;
+    wm->ioid = 1;
+    wm->len = len;
+    memcpy(wm->data,out->data,len);
+    endpoint_send(endpt,csl->sockid.managerid,MSG_WRITE,wm,msglen);
+    free(wm);
   }
-
-  unlock_node(n);
   array_free(out);
+  return doclose;
 }
 
-void console_process_received(node *n, connection *conn)
+void console_thread(node *n, endpoint *endpt, void *arg)
 {
-  int start = 0;
-  int c = 0;
-
-  while (c < conn->recvbuf->nbytes) {
-
-    if (4 == conn->recvbuf->data[c]) { /* CTRL-D */
-      printf("Got CTRL-D from %s\n",conn->hostname);
-      array_printf(conn->sendbuf,"Disconnecting\n");
-      node_notify(conn->n);
-      conn_disconnect(conn);
-      break;
-    }
-
-    if ('\n' == conn->recvbuf->data[c]) {
-      conn->recvbuf->data[c] = '\0';
-      node_send_locked(n,conn->console_epid.localid,conn->console_epid,
-                       MSG_CONSOLE_LINE,&conn->recvbuf->data[start],c+1-start);
-      c++;
-      start = c;
-    }
-    else {
-      c++;
-    }
-  }
-
-  array_remove_data(conn->recvbuf,start);
-}
-
-static void console_thread(node *n, endpoint *endpt, void *arg)
-{
-  console2 *csl = (console2*)arg;
+  console *csl = (console*)calloc(1,sizeof(console));
   message *msg;
-  connection *conn;
   int done = 0;
+  array *input = array_new(1,0);
 
   csl->endpt = endpt;
+  csl->sockid = *(socketid*)arg;
+  free(arg);
 
   while (!done) {
-    msg = endpoint_next_message(csl->endpt,-1);
+    msg = endpoint_receive(csl->endpt,-1);
     switch (msg->hdr.tag) {
-    case MSG_CONSOLE_LINE:
-      process_line(n,endpt,csl,msg->data);
+    case MSG_READ_RESPONSE: {
+      read_response_msg *m = (read_response_msg*)msg->data;
+      int start = 0;
+      int c = 0;
+      int doclose = 0;
+
+      assert(sizeof(read_response_msg) <= msg->hdr.size);
+
+      array_append(input,m->data,m->len);
+
+      while ((c < input->nbytes) && !doclose) {
+        if (4 == input->data[c]) { /* CTRL-D */
+          doclose = 1;
+          break;
+        }
+        if ('\n' == input->data[c]) {
+          input->data[c] = '\0';
+          if ((start < c) && ('\r' == input->data[c-1]))
+            input->data[c-1] = '\0';
+          doclose = process_line(n,endpt,csl,&input->data[start]);
+          c++;
+          start = c;
+        }
+        else {
+          c++;
+        }
+      }
+
+      array_remove_data(input,start);
+
+      if (doclose) {
+        finwrite_msg fwm;
+        fwm.sockid = csl->sockid;
+        fwm.ioid = 1;
+        endpoint_send(endpt,csl->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+        done = 1;
+      }
+      else if (0 == m->len) {
+        done = 1;
+      }
+      else {
+        read_msg rm;
+        rm.sockid = csl->sockid;
+        rm.ioid = 1;
+        endpoint_send(endpt,csl->sockid.managerid,MSG_READ,&rm,sizeof(rm));
+      }
       break;
+    }
+    case MSG_CONNECTION_CLOSED:
+      done = 1;
+      break;
+    case MSG_WRITE_RESPONSE:
+      break;
+    case MSG_CONSOLE_DATA: {
+      break;
+    }
     case MSG_KILL:
       node_log(n,LOG_INFO,"Console received KILL");
       done = 1;
+      break;
+    default:
+      fatal("console: unexpected message %s",msg_names[msg->hdr.tag]);
       break;
     }
     message_free(msg);
   }
 
-  /* De-associate the endpointid with the connection */
-  lock_node(n);
-  for (conn = n->connections.first; conn; conn = conn->next) {
-    if (!endpointid_equals(&conn->console_epid,&csl->endpt->epid))
-      continue;
-    conn->isconsole = 0;
-    memset(&conn->console_epid,0,sizeof(conn->console_epid));
-  }
-  unlock_node(n);
-
+  free(input);
   free(csl);
-}
-
-void start_console(node *n, connection *conn)
-{
-  console2 *csl = (console2*)calloc(1,sizeof(console2));
-  conn->isconsole = 1;
-  csl->n = n;
-  conn->console_epid = node_add_thread_locked(n,0,CONSOLE_ENDPOINT,0,console_thread,csl,NULL);
-}
-
-void close_console(node *n, connection *conn)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_send_locked(n,conn->console_epid.localid,conn->console_epid,
-                   MSG_KILL,NULL,0);
 }

@@ -90,7 +90,7 @@ void array_vprintf(array *arr, const char *format, va_list ap)
     r = vsnprintf(&arr->data[arr->nbytes],arr->alloc-arr->nbytes,format,ap);
     va_end(tmp);
 
-    if ((0 > r) || (r > arr->alloc-arr->nbytes)) {
+    if ((0 > r) || (r >= arr->alloc-arr->nbytes)) {
       arr->alloc *= 2;
       arr->data = realloc(arr->data,arr->alloc);
     }

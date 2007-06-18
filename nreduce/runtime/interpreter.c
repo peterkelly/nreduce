@@ -172,8 +172,26 @@ static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
 
 void handle_error(task *tsk)
 {
-  print_task_sourceloc(tsk,stderr,tsk->errorsl);
-  fprintf(stderr,"%s\n",tsk->error);
+  array *buf = array_new(1,0);
+  report_error_msg *rem;
+  int len;
+  int msglen;
+
+  if (0 <= tsk->errorsl.fileno)
+    array_printf(buf,"%s:%d: ",bc_string(tsk->bcdata,tsk->errorsl.fileno),tsk->errorsl.lineno);
+  array_printf(buf,"%s",tsk->error);
+
+  len = buf->nbytes;
+  msglen = sizeof(report_error_msg)+len;
+  rem = (report_error_msg*)malloc(msglen);
+  rem->sockid = tsk->out_so->sockid;
+  rem->rc = 1;
+  rem->len = len;
+  memcpy(rem->data,buf->data,len);
+  endpoint_send(tsk->endpt,tsk->out_so->sockid.managerid,MSG_REPORT_ERROR,rem,msglen);
+  free(rem);
+  array_free(buf);
+
   tsk->endpt->interrupt = 1;
   tsk->done = 1;
 }
@@ -290,7 +308,7 @@ static void send_update(task *tsk)
   um->gciter = tsk->gciter;
   memcpy(um->counts,tsk->gcsent,tsk->groupsize*sizeof(int));
 
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_UPDATE,um,msglen);
+  endpoint_send(tsk->endpt,tsk->gc,MSG_UPDATE,um,msglen);
   for (i = 0; i < tsk->groupsize; i++)
     tsk->gcsent[i] = 0;
   free(um);
@@ -396,14 +414,13 @@ static void interpreter_accept_response(task *tsk, accept_response_msg *m)
   frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
   sysobject *so = get_frame_sysobject(f2);
   sysobject *connso;
-  cell *c;
   assert(B_ACCEPT == f2->instr->arg0);
   assert(SYSOBJECT_LISTENER == so->type);
 
   assert(m->ioid == so->frameids[ACCEPT_FRAMEADDR]);
   so->frameids[ACCEPT_FRAMEADDR] = 0;
 
-  connso = new_sysobject(tsk,SYSOBJECT_CONNECTION,&c);
+  connso = new_sysobject(tsk,SYSOBJECT_CONNECTION);
   connso->hostname = strdup(m->hostname);
   connso->port = m->port;
   connso->connected = 1;
@@ -420,22 +437,20 @@ static void interpreter_connect_response(task *tsk, connect_response_msg *m)
   assert(SYSOBJECT_CONNECTION == so->type);
 
   assert(B_OPENCON == f2->instr->arg0);
-  assert((EVENT_CONN_ESTABLISHED == m->event) || (EVENT_CONN_FAILED == m->event));
-
   assert(m->ioid == so->frameids[CONNECT_FRAMEADDR]);
   so->frameids[CONNECT_FRAMEADDR] = 0;
 
-  if (EVENT_CONN_ESTABLISHED == m->event) {
-    so->connected = 1;
-  }
-  else {
+  if (m->error) {
     so->closed = 1;
     so->error = 1;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
   }
+  else {
+    so->connected = 1;
+  }
 
   assert(0 == so->sockid.sid);
-  assert(!socketid_isnull(&m->sockid) || (EVENT_CONN_FAILED == m->event));
+  assert(!socketid_isnull(&m->sockid) || m->error);
   so->sockid = m->sockid;
 }
 
@@ -446,22 +461,14 @@ static void interpreter_read_response(task *tsk, read_response_msg *m)
   assert(SYSOBJECT_CONNECTION == so->type);
 
   assert(B_READCON == f2->instr->arg0);
-  assert((EVENT_DATA_READ == m->event) || (EVENT_DATA_READFINISHED == m->event));
   assert(0 == so->len);
 
   assert(m->ioid == so->frameids[READ_FRAMEADDR]);
   so->frameids[READ_FRAMEADDR] = 0;
 
-  if (EVENT_DATA_READ == m->event) {
-    assert(NULL == so->buf);
-    assert(0 == so->len);
-    so->len = m->len;
-    so->buf = (char*)malloc(m->len);
-    memcpy(so->buf,m->data,m->len);
-  }
-  else {
-    assert(0 == m->len);
-  }
+  so->len = m->len;
+  so->buf = (char*)malloc(m->len);
+  memcpy(so->buf,m->data,m->len);
 }
 
 static void interpreter_write_response(task *tsk, write_response_msg *m)
@@ -491,7 +498,7 @@ static void interpreter_connection_event(task *tsk, connection_event_msg *m)
   sysobject *so = find_sysobject(tsk,&m->sockid);
   if (NULL != so) {
     so->closed = 1;
-    so->error = (EVENT_CONN_IOERROR == m->event);
+    so->error = m->error;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
 
     if (0 != so->frameids[READ_FRAMEADDR])
@@ -859,7 +866,7 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
   tsk->gciter = m->gciter;
   clear_marks(tsk,FLAG_DMB);
 
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_STARTDISTGCACK,NULL,0);
+  endpoint_send(tsk->endpt,tsk->gc,MSG_STARTDISTGCACK,NULL,0);
 
   #ifdef DISTGC_DEBUG
   fprintf(tsk->output,"Started distributed garbage collection\n");
@@ -973,7 +980,7 @@ static void interpreter_sweep(task *tsk, message *msg)
   rd = read_start(tsk,msg->data,msg->hdr.size);
 
   /* do sweep */
-  node_send(tsk->n,tsk->endpt->epid.localid,tsk->gc,MSG_SWEEPACK,NULL,0);
+  endpoint_send(tsk->endpt,tsk->gc,MSG_SWEEPACK,NULL,0);
 
   clear_marks(tsk,FLAG_MARKED);
   mark_roots(tsk,FLAG_MARKED);
@@ -1052,7 +1059,7 @@ static void handle_message(task *tsk, message *msg)
     assert(sizeof(finwrite_response_msg) == msg->hdr.size);
     interpreter_finwrite_response(tsk,(finwrite_response_msg*)msg->data);
     break;
-  case MSG_CONNECTION_EVENT:
+  case MSG_CONNECTION_CLOSED:
     assert(sizeof(connection_event_msg) == msg->hdr.size);
     interpreter_connection_event(tsk,(connection_event_msg*)msg->data);
     break;
@@ -1123,7 +1130,7 @@ int handle_interrupt(task *tsk)
     tsk->nextgc = timeval_addms(now,GC_DELAY);
   }
 
-  if (NULL != (msg = endpoint_next_message(tsk->endpt,0))) {
+  if (NULL != (msg = endpoint_receive(tsk->endpt,0))) {
     handle_message(tsk,msg);
     endpoint_interrupt(tsk->endpt); /* may be another one */
   }
@@ -1179,7 +1186,7 @@ int handle_interrupt(task *tsk)
       endpoint_interrupt(tsk->endpt); /* may be another one */
     }
 
-    msg = endpoint_next_message(tsk->endpt,FISH_DELAY_MS);
+    msg = endpoint_receive(tsk->endpt,FISH_DELAY_MS);
 
     #ifdef PARALLELISM_DEBUG
     if (0 > from)

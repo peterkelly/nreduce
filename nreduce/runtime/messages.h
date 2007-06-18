@@ -52,7 +52,7 @@
 #define MSG_LINK                22
 #define MSG_UNLINK              23
 
-#define MSG_CONSOLE_LINE        24
+#define MSG_CONSOLE_DATA        24
 
 #define MSG_FIND_SUCCESSOR      25
 #define MSG_GOT_SUCCESSOR       26
@@ -83,7 +83,7 @@
 #define MSG_CONNECT_RESPONSE    49
 #define MSG_READ_RESPONSE       50
 #define MSG_WRITE_RESPONSE      51
-#define MSG_CONNECTION_EVENT    52
+#define MSG_CONNECTION_CLOSED   52
 #define MSG_FINWRITE_RESPONSE   53
 #define MSG_DELETE_CONNECTION   54
 #define MSG_DELETE_LISTENER     55
@@ -95,11 +95,28 @@
 #define MSG_GET_TASKS           59
 #define MSG_GET_TASKS_RESPONSE  60
 
-#define MSG_COUNT               61
+#define MSG_REPORT_ERROR        61
+
+#define MSG_COUNT               62
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];
 #endif
+
+typedef struct newtask_msg {
+  int tid;
+  int groupsize;
+  int bcsize;
+  socketid out_sockid;
+  int argc;
+  char bcdata[0];
+} newtask_msg;
+
+typedef struct inittask_msg {
+  int localid;
+  int count;
+  endpointid idmap[0];
+} inittask_msg;
 
 typedef struct {
   endpointid epid;
@@ -138,6 +155,13 @@ typedef struct {
 
 typedef struct {
   socketid sockid;
+  int rc;
+  int len;
+  char data[0];
+} report_error_msg;
+
+typedef struct {
+  socketid sockid;
   int ioid;
 } finwrite_msg;
 
@@ -157,14 +181,13 @@ typedef struct {
 
 typedef struct {
   int ioid;
-  int event;
   socketid sockid;
+  int error;
   char errmsg[ERRMSG_MAX+1];
 } connect_response_msg;
 
 typedef struct {
   int ioid;
-  int event;
   socketid sockid;
   int len;
   char data[0];
@@ -180,7 +203,7 @@ typedef struct {
 
 typedef struct {
   socketid sockid;
-  int event;
+  int error;
   char errmsg[ERRMSG_MAX+1];
 } connection_event_msg;
 

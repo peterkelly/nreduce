@@ -77,7 +77,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
   unlock_node(n);
 
   while (!done) {
-    message *msg = endpoint_next_message(endpt,ingc ? -1 : DISTGC_DELAY);
+    message *msg = endpoint_receive(endpt,ingc ? -1 : DISTGC_DELAY);
     if (NULL == msg) {
       startdistgc_msg sm;
       sm.gc = endpt->epid;
@@ -89,7 +89,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       ingc = 1;
 
       for (i = 0; i < ga->ntasks; i++)
-        node_send(n,endpt->epid.localid,ga->idmap[i],MSG_STARTDISTGC,&sm,sizeof(sm));
+        endpoint_send(endpt,ga->idmap[i],MSG_STARTDISTGC,&sm,sizeof(sm));
       rem_startacks = ga->ntasks;
 
       continue;
@@ -107,7 +107,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
         memset(count,0,ga->ntasks*sizeof(int));
 
         for (i = 0; i < ga->ntasks; i++) {
-          node_send(n,endpt->epid.localid,ga->idmap[i],MSG_MARKROOTS,NULL,0);
+          endpoint_send(endpt,ga->idmap[i],MSG_MARKROOTS,NULL,0);
           count[i]++;
         }
       }
@@ -140,7 +140,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
         printf("Mark done\n");
         #endif
         for (i = 0; i < ga->ntasks; i++)
-          node_send(n,endpt->epid.localid,ga->idmap[i],MSG_SWEEP,NULL,0);
+          endpoint_send(endpt,ga->idmap[i],MSG_SWEEP,NULL,0);
         rem_sweepacks = ga->ntasks;
       }
       break;
@@ -198,42 +198,12 @@ static listener *get_listener(node *n, socketid id)
   return NULL;
 }
 
-static void listen_callback(struct node *n, void *data, int event,
-                            connection *conn, endpoint *endpt)
-{
-  if (EVENT_CONN_ACCEPTED == event) {
-    listener *l = conn->l;
-    accept_response_msg arm;
-    assert(!socketid_isnull(&l->sockid));
-    assert(!endpointid_isnull(&l->owner));
-
-    conn->dontread = 1;
-    conn->owner = l->owner;
-    conn->isreg = 1;
-
-    /* send message */
-    assert(0 != l->accept_frameid);
-    arm.ioid = l->accept_frameid;
-    arm.sockid = conn->sockid;
-    snprintf(arm.hostname,HOSTNAME_MAX,"%s",conn->hostname);
-    arm.hostname[HOSTNAME_MAX] = '\0';
-    arm.port = conn->port;
-
-    node_send_locked(n,MANAGER_ID,l->owner,MSG_ACCEPT_RESPONSE,&arm,sizeof(arm));
-
-    l->accept_frameid = 0;
-    assert(!l->dontaccept);
-    l->dontaccept = 1;
-    node_notify(n);
-  }
-}
-
 static void manager_listen(node *n, endpoint *endpt, listen_msg *m, endpointid source)
 {
   listener *l;
   listen_response_msg lrm;
 
-  l = node_listen(n,m->ip,m->port,listen_callback,NULL,1,0,&m->owner,lrm.errmsg,ERRMSG_MAX);
+  l = node_listen(n,m->ip,m->port,1,NULL,1,0,&m->owner,lrm.errmsg,ERRMSG_MAX);
   lrm.errmsg[ERRMSG_MAX] = '\0';
 
   lrm.ioid = m->ioid;
@@ -246,7 +216,7 @@ static void manager_listen(node *n, endpoint *endpt, listen_msg *m, endpointid s
     memset(&lrm.sockid,0,sizeof(socketid));
   }
 
-  node_send(n,MANAGER_ID,source,MSG_LISTEN_RESPONSE,&lrm,sizeof(lrm));
+  endpoint_send(endpt,source,MSG_LISTEN_RESPONSE,&lrm,sizeof(lrm));
 }
 
 static void manager_accept(node *n, endpoint *endpt, accept_msg *m, endpointid source)
@@ -271,21 +241,21 @@ static void manager_connect(node *n, endpoint *endpt, connect_msg *m, endpointid
 
   lock_node(n);
   conn = node_connect_locked(n,m->hostname,INADDR_ANY,m->port,0,crm.errmsg,ERRMSG_MAX);
-  crm.errmsg[ERRMSG_MAX] = '\0';
-  if (NULL == conn) {
-    crm.ioid = m->ioid;
-    crm.event = EVENT_CONN_FAILED;
-    memset(&crm.sockid,0,sizeof(crm.sockid));
-
-    node_send_locked(n,MANAGER_ID,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
-  }
-  else {
+  if (conn) {
     assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
     conn->frameids[CONNECT_FRAMEADDR] = m->ioid;
     conn->dontread = 1;
     conn->owner = m->owner;
   }
   unlock_node(n);
+
+  if (NULL == conn) {
+    crm.errmsg[ERRMSG_MAX] = '\0';
+    crm.ioid = m->ioid;
+    crm.error = 1;
+    memset(&crm.sockid,0,sizeof(crm.sockid));
+    endpoint_send(endpt,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
+  }
 }
 
 static void manager_read(node *n, endpoint *endpt, read_msg *m)
@@ -294,7 +264,7 @@ static void manager_read(node *n, endpoint *endpt, read_msg *m)
 
   lock_node(n);
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
-     receive a CONNECTION_EVENT MESSAGE */
+     receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = get_connection(n,m->sockid))) {
     assert(conn->canread);
     assert(!conn->collected);
@@ -311,11 +281,12 @@ static void manager_read(node *n, endpoint *endpt, read_msg *m)
 static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid source)
 {
   connection *conn;
+  int spaceleft = 0;
 
   lock_node(n);
 
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
-     receive a CONNECTION_EVENT MESSAGE */
+     receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = get_connection(n,m->sockid))) {
     assert(!conn->collected);
 
@@ -326,40 +297,45 @@ static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid sou
     /* The calling frame will block when it sends us the WRITE message. If the write buffer
        still has room left for more data, wake it up immediately. Otherwise, keep it blocked
        until some of the data has been written. */
-    if (IOSIZE > conn->sendbuf->nbytes) {
-      write_response_msg wrm;
-      wrm.ioid = m->ioid;
-
-      node_send_locked(n,MANAGER_ID,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
-    }
-    else {
+    if (IOSIZE > conn->sendbuf->nbytes)
+      spaceleft = 1;
+    else
       conn->frameids[WRITE_FRAMEADDR] = m->ioid;
-    }
 
     node_notify(n);
   }
   unlock_node(n);
+
+  if (spaceleft) {
+    write_response_msg wrm;
+    wrm.ioid = m->ioid;
+    endpoint_send(endpt,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+  }
 }
 
 static void manager_finwrite(node *n, endpoint *endpt, finwrite_msg *m, endpointid source)
 {
   connection *conn;
 
-  lock_node(n);
+  /* FIXME: if a task has an error and it has connections open, make sure that all of the
+     connections get closed anyway, since it won't send a FINWRITE message */
 
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
-     receive a CONNECTION_EVENT MESSAGE */
-  if (NULL != (conn = get_connection(n,m->sockid))) {
-    finwrite_response_msg frm;
+     receive a CONNECTION_CLOSED MESSAGE */
+  lock_node(n);
+  conn = get_connection(n,m->sockid);
+  if (conn) {
     assert(!conn->collected);
     conn->finwrite = 1;
     node_notify(n);
-
-    frm.ioid = m->ioid;
-
-    node_send_locked(n,MANAGER_ID,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
   }
   unlock_node(n);
+
+  if (conn) {
+    finwrite_response_msg frm;
+    frm.ioid = m->ioid;
+    endpoint_send(endpt,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
+  }
 }
 
 static void manager_delete_connection(node *n, endpoint *endpt,
@@ -398,7 +374,7 @@ static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid
   ga->ntasks = m->count;
   memcpy(ga->idmap,m->idmap,m->count*sizeof(endpointid));
   node_add_thread(n,0,TEST_ENDPOINT,0,gc_thread,ga,NULL);
-  node_send(n,endpt->epid.localid,source,MSG_STARTGC_RESPONSE,NULL,0);
+  endpoint_send(endpt,source,MSG_STARTGC_RESPONSE,NULL,0);
 }
 
 static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
@@ -426,7 +402,7 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
   }
   unlock_node(n);
 
-  node_send(n,endpt->epid.localid,m->sender,MSG_GET_TASKS_RESPONSE,gtrm,msize);
+  endpoint_send(endpt,m->sender,MSG_GET_TASKS_RESPONSE,gtrm,msize);
   free(gtrm);
 }
 
@@ -446,7 +422,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
   int done = 0;
 
   while (!done) {
-    msg = endpoint_next_message(endpt,-1);
+    msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
     case MSG_NEWTASK: {
       newtask_msg *ntmsg;
@@ -477,7 +453,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,args,n,
                ntmsg->out_sockid,&epid);
 
-      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_NEWTASKRESP,
+      endpoint_send(endpt,msg->hdr.source,MSG_NEWTASKRESP,
                 &epid.localid,sizeof(int));
       array_free(args);
       break;
@@ -521,7 +497,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
         node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %s",i,str);
       }
 
-      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+      endpoint_send(endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
       break;
     }
     case MSG_STARTTASK: {
@@ -551,7 +527,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       newtsk->started = 1;
       unlock_node(n);
 
-      node_send(n,endpt->epid.localid,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+      endpoint_send(endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
       break;
     }
     case MSG_START_CHORD: {

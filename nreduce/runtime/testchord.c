@@ -67,10 +67,10 @@ static void debug_control_thread(node *n, endpoint *endpt, void *arg)
   int indebug = 0;
 
   while (!done) {
-    msg = endpoint_next_message(endpt,indebug ? -1 : DEBUG_DELAY);
+    msg = endpoint_receive(endpt,indebug ? -1 : DEBUG_DELAY);
     if (NULL == msg) {
       assert(!indebug);
-      node_send(n,endpt->epid.localid,dbc->epid,MSG_DEBUG_START,&endpt->epid,sizeof(endpointid));
+      endpoint_send(endpt,dbc->epid,MSG_DEBUG_START,&endpt->epid,sizeof(endpointid));
       indebug = 1;
     }
     else {
@@ -104,10 +104,10 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
   scm.initial = initial;
   scm.caller = endpt->epid;
   scm.stabilize_delay = STABILIZE_DELAY;
-  node_send(n,endpt->epid.localid,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
+  endpoint_send(endpt,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
 
   while (!done) {
-    message *msg = endpoint_next_message(endpt,20000);
+    message *msg = endpoint_receive(endpt,20000);
     if (!msg) {
       fatal("Timeout waiting for CHORD_STARTED message");
     }
@@ -192,7 +192,7 @@ typedef struct {
 static void check_abort(check *chk)
 {
   if (chk->indebug) {
-    node_send(chk->n,chk->endpt->epid.localid,chk->caller,MSG_DEBUG_DONE,NULL,0);
+    endpoint_send(chk->endpt,chk->caller,MSG_DEBUG_DONE,NULL,0);
     chk->indebug = 0;
   }
 }
@@ -203,7 +203,7 @@ static void add_node(node *n, endpoint *endpt, endpointid managerid, endpointid 
   scm.initial = initial;
   scm.caller = endpt->epid;
   scm.stabilize_delay = STABILIZE_DELAY;
-  node_send(n,endpt->epid.localid,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
+  endpoint_send(endpt,managerid,MSG_START_CHORD,&scm,sizeof(start_chord_msg));
 }
 
 static void check_debug_start(check *chk, endpointid *caller)
@@ -259,7 +259,7 @@ static void check_debug_start(check *chk, endpointid *caller)
       }
 
       for (i = 0; i < KILL_COUNT; i++) {
-        node_send(chk->n,chk->endpt->epid.localid,chk->nodes[killindices[i]].epid,MSG_KILL,NULL,0);
+        endpoint_send(chk->endpt,chk->nodes[killindices[i]].epid,MSG_KILL,NULL,0);
       }
 
       free(killindices);
@@ -272,7 +272,7 @@ static void check_debug_start(check *chk, endpointid *caller)
     get_table_msg gtm;
     gtm.sender = chk->endpt->epid;
     gettimeofday(&chk->node_start,NULL);
-    node_send(chk->n,chk->endpt->epid.localid,chk->nodes[0].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
+    endpoint_send(chk->endpt,chk->nodes[0].epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
   }
 }
 
@@ -294,7 +294,7 @@ static void check_check_next(check *chk)
 
       gfm.sender = chk->endpt->epid;
       gettimeofday(&chk->node_start,NULL);
-      node_send(chk->n,chk->endpt->epid.localid,chk->nodes[chk->cur_node].epid,MSG_GET_TABLE,
+      endpoint_send(chk->endpt,chk->nodes[chk->cur_node].epid,MSG_GET_TABLE,
                 &gfm,sizeof(get_table_msg));
     }
     else {
@@ -321,7 +321,7 @@ static void check_check_next(check *chk)
              100.0*chk->incorrect_succlist/(double)(NSUCCESSORS*chk->ncount),
              chk->ncount,
              chk->iterations);
-      node_send(chk->n,chk->endpt->epid.localid,chk->caller,MSG_DEBUG_DONE,NULL,0);
+      endpoint_send(chk->endpt,chk->caller,MSG_DEBUG_DONE,NULL,0);
       chk->indebug = 0;
       chk->iterations++;
     }
@@ -333,7 +333,7 @@ static void check_check_next(check *chk)
     fsm.sender = chk->endpt->epid;
     fsm.hops = 0;
     fsm.payload = 0;
-    node_send(chk->n,chk->endpt->epid.localid,chk->nodes[chk->cur_node].epid,
+    endpoint_send(chk->endpt,chk->nodes[chk->cur_node].epid,
               MSG_FIND_SUCCESSOR,&fsm,sizeof(find_successor_msg));
     chk->lookup_id = id;
   }
@@ -469,7 +469,7 @@ static void check_loop(node *n, endpoint *endpt, chordnode *nodes, int ncount2,
   chk->nmanagers = nmanagers;
 
   while (!done) {
-    message *msg = endpoint_next_message(endpt,6000);
+    message *msg = endpoint_receive(endpt,6000);
     if (NULL == msg) {
       printf("debug_loop: timeout: node %d, lookup %d\n",chk->cur_node,chk->cur_lookup);
       abort();
@@ -655,7 +655,7 @@ void run_chordtest(int argc, char **argv)
 {
   node *n = node_new(LOG_ERROR);
 
-  if (NULL == node_listen(n,n->listenip,0,NULL,NULL,0,1,NULL,NULL,0))
+  if (NULL == node_listen(n,n->listenip,0,0,NULL,0,1,NULL,NULL,0))
     exit(1);
 
   start_manager(n);

@@ -608,17 +608,13 @@ void native_sigsegv(int sig, siginfo_t *ino, void *uc1)
 
 void native_arg_error(task *tsk)
 {
-  if (tsk->error) {
-    print_task_sourceloc(tsk,stderr,tsk->errorsl);
-    fprintf(stderr,"%s\n",tsk->error);
-  }
-  else {
-    fprintf(stderr,"unknown error\n");
-  }
+  tsk->native_finished = 1;
+  handle_error(tsk);
 }
 
 void native_cap_error(task *tsk, pntr cappntr)
 {
+  tsk->native_finished = 1;
   cap_error(tsk,cappntr);
   handle_error(tsk);
 }

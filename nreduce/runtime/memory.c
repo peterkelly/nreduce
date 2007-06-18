@@ -292,14 +292,14 @@ cell *alloc_cell(task *tsk)
   return v;
 }
 
-sysobject *new_sysobject(task *tsk, int type, cell **c)
+sysobject *new_sysobject(task *tsk, int type)
 {
   sysobject *so = (sysobject*)calloc(1,sizeof(sysobject));
   so->type = type;
-  (*c) = so->c = alloc_cell(tsk);
+  so->c = alloc_cell(tsk);
   make_pntr(so->p,so->c);
-  (*c)->type = CELL_SYSOBJECT;
-  make_pntr((*c)->field1,so);
+  so->c->type = CELL_SYSOBJECT;
+  make_pntr(so->c->field1,so);
   return so;
 }
 
@@ -346,8 +346,7 @@ static void free_sysobject(task *tsk, sysobject *so)
     delete_connection_msg dcm;
     dcm.sockid = so->sockid;
     if (!socketid_isnull(&so->sockid))
-      node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_CONNECTION,
-                &dcm,sizeof(dcm));
+      endpoint_send(tsk->endpt,so->sockid.managerid,MSG_DELETE_CONNECTION,&dcm,sizeof(dcm));
     if (!tsk->done) {
       assert(0 == so->frameids[CONNECT_FRAMEADDR]);
       assert(0 == so->frameids[READ_FRAMEADDR]);
@@ -363,8 +362,7 @@ static void free_sysobject(task *tsk, sysobject *so)
     delete_listener_msg dlm;
     dlm.sockid = so->sockid;
     if (!socketid_isnull(&so->sockid))
-      node_send(tsk->n,tsk->endpt->epid.localid,so->sockid.managerid,MSG_DELETE_LISTENER,
-                &dlm,sizeof(dlm));
+      endpoint_send(tsk->endpt,so->sockid.managerid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
     free(so->hostname);
     break;
   }

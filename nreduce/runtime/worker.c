@@ -78,7 +78,7 @@ const char *msg_names[MSG_COUNT] = {
   "ENDPOINT_EXIT",
   "LINK",
   "UNLINK",
-  "CONSOLE_LINE",
+  "CONSOLE_DATA",
   "FIND_SUCCESSOR",
   "GOT_SUCCESSOR",
   "GET_SUCCLIST",
@@ -106,7 +106,7 @@ const char *msg_names[MSG_COUNT] = {
   "CONNECT_RESPONSE",
   "READ_RESPONSE",
   "WRITE_RESPONSE",
-  "CONNECTION_EVENT",
+  "CONNECTION_CLOSED",
   "FINWRITE_RESPONSE",
   "DELETE_CONNECTION",
   "DELETE_LISTENER",
@@ -115,99 +115,19 @@ const char *msg_names[MSG_COUNT] = {
   "STARTDISTGCACK",
   "GET_TASKS",
   "GET_TASKS_RESPONSE",
+  "REPORT_ERROR",
 };
-
-endpoint *find_endpoint(node *n, int localid)
-{
-  endpoint *endpt;
-  for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
-    if (endpt->epid.localid == localid)
-      break;
-  return endpt;
-}
-
-static void worker_callback(struct node *n, void *data, int event,
-                            connection *conn, endpoint *endpt)
-{
-  if (conn && (0 < conn->frameids[CONNECT_FRAMEADDR]) &&
-      ((EVENT_CONN_ESTABLISHED == event) ||
-       (EVENT_CONN_FAILED == event)) ) {
-    connect_response_msg crm;
-
-    crm.ioid = conn->frameids[CONNECT_FRAMEADDR];
-    crm.event = event;
-    if (EVENT_CONN_ESTABLISHED == event)
-      crm.sockid = conn->sockid;
-    else
-      memset(&crm.sockid,0,sizeof(crm.sockid));
-    memcpy(crm.errmsg,conn->errmsg,sizeof(crm.errmsg));
-
-    conn->frameids[CONNECT_FRAMEADDR] = 0;
-
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
-  }
-
-  if (conn && (0 < conn->frameids[READ_FRAMEADDR]) &&
-      ((EVENT_DATA_READ == event) ||
-       (EVENT_DATA_READFINISHED == event))) {
-
-
-    int rrmlen = sizeof(read_response_msg)+conn->recvbuf->nbytes;
-    read_response_msg *rrm = (read_response_msg*)malloc(rrmlen);
-
-    rrm->ioid = conn->frameids[READ_FRAMEADDR];
-    rrm->event = event;
-    rrm->sockid = conn->sockid;
-    rrm->len = conn->recvbuf->nbytes;
-    memcpy(rrm->data,conn->recvbuf->data,conn->recvbuf->nbytes);
-
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_READ_RESPONSE,rrm,rrmlen);
-
-    conn->frameids[READ_FRAMEADDR] = 0;
-    conn->recvbuf->nbytes = 0;
-    conn->dontread = 1;
-    free(rrm);
-  }
-
-  if (conn && (0 != conn->owner.localid) &&
-      ((EVENT_CONN_IOERROR == event) || (EVENT_CONN_CLOSED == event))) {
-    connection_event_msg cem;
-    cem.sockid = conn->sockid;
-    cem.event = event;
-    memcpy(cem.errmsg,conn->errmsg,sizeof(cem.errmsg));
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECTION_EVENT,&cem,sizeof(cem));
-  }
-
-  if (conn && (0 < conn->frameids[WRITE_FRAMEADDR]) &&
-      (EVENT_DATA_WRITTEN == event) && (IOSIZE > conn->sendbuf->nbytes)) {
-    write_response_msg wrm;
-    wrm.ioid = conn->frameids[WRITE_FRAMEADDR];
-    conn->frameids[WRITE_FRAMEADDR] = 0;
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
-  }
-}
-
-static void standalone_callback(struct node *n, void *data, int event,
-                                connection *conn, endpoint *endpt)
-{
-  if ((EVENT_ENDPOINT_REMOVAL == event) && (TASK_ENDPOINT == endpt->type)) {
-    int *rc = (int*)data;
-    *rc = endpt->rc;
-    node_shutdown_locked(n);
-  }
-}
 
 static node *worker_startup(int loglevel, int port)
 {
   node *n = node_new(loglevel);
   unsigned char *ipbytes;
 
-  if (NULL == node_listen(n,n->listenip,port,NULL,NULL,0,1,NULL,NULL,0)) {
+  if (NULL == node_listen(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0)) {
     node_free(n);
     return NULL;
   }
 
-  node_add_callback(n,worker_callback,NULL);
   start_manager(n);
   node_start_iothread(n);
 
@@ -222,25 +142,33 @@ int standalone(const char *bcdata, int bcsize, int argc, const char **argv)
   endpointid managerid;
   socketid out_sockid;
   node *n;
-  int rc = 0;
+  pthread_t thread;
+  output_arg oa;
 
   if (NULL == (n = worker_startup(LOG_ERROR,0)))
     return -1;
 
-  node_add_callback(n,standalone_callback,&rc);
-
   managerid.ip = n->listenip;
   managerid.port = n->listenport;
   managerid.localid = MANAGER_ID;
-  memset(&out_sockid,0,sizeof(out_sockid));
+
+  memset(&oa,0,sizeof(oa));
+  out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,&oa,&thread);
+  out_sockid.sid = 1;
+
   start_launcher(n,bcdata,bcsize,&managerid,1,NULL,out_sockid,argc,argv);
+
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+
+  node_shutdown(n);
 
   if (0 != pthread_join(n->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   node_close_endpoints(n);
   node_close_connections(n);
   node_free(n);
-  return rc;
+  return oa.rc;
 }
 
 int string_to_mainchordid(node *n, const char *str, endpointid *out)

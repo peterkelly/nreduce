@@ -95,13 +95,13 @@ static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
   endpoint_link(endpt,stb->chord_epid);
   unlock_node(n);
 
-  node_send(n,endpt->epid.localid,stb->chord_epid,MSG_STABILIZE,NULL,0);
+  endpoint_send(endpt,stb->chord_epid,MSG_STABILIZE,NULL,0);
 
   while (!done) {
     int delay = stb->stabilize_delay/2 + rand()%stb->stabilize_delay;
-    msg = endpoint_next_message(endpt,delay);
+    msg = endpoint_receive(endpt,delay);
     if (NULL == msg) {
-      node_send(n,endpt->epid.localid,stb->chord_epid,MSG_STABILIZE,NULL,0);
+      endpoint_send(endpt,stb->chord_epid,MSG_STABILIZE,NULL,0);
     }
     else {
       switch (msg->hdr.tag) {
@@ -280,14 +280,12 @@ static void chord_notify_joined(chord *crd, chordnode newnode)
   if (0 != crd->caller.localid) {
     joined_msg jm;
     jm.cn = crd->self;
-    node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_JOINED,&jm,sizeof(jm));
+    endpoint_send(crd->endpt,crd->caller,MSG_JOINED,&jm,sizeof(jm));
   }
 }
 
 static void chord_join(chord *crd)
 {
-  node *n = crd->n;
-
   assert((MBITS+1)*sizeof(chordnode) == sizeof(crd->fingers));
   assert((NSUCCESSORS+1)*sizeof(chordnode) == sizeof(crd->successors));
 
@@ -305,7 +303,7 @@ static void chord_join(chord *crd)
     fsm.sender = crd->self.epid;
     fsm.hops = 0;
     fsm.payload = 1;
-    node_send(n,crd->self.epid.localid,crd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
+    endpoint_send(crd->endpt,crd->initial,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
   }
 }
 
@@ -320,20 +318,20 @@ static void chord_find_successor(chord *crd, find_successor_msg *m)
       insert_msg im;
       im.predecessor = crd->self.epid;
       im.successor = successor;
-      node_send(crd->n,crd->self.epid.localid,m->sender,MSG_INSERT,&im,sizeof(im));
+      endpoint_send(crd->endpt,m->sender,MSG_INSERT,&im,sizeof(im));
     }
     else {
       got_successor_msg gsm;
       gsm.successor = successor;
       gsm.hops = m->hops;
       gsm.payload = m->payload;
-      node_send(crd->n,crd->self.epid.localid,m->sender,MSG_GOT_SUCCESSOR,&gsm,sizeof(gsm));
+      endpoint_send(crd->endpt,m->sender,MSG_GOT_SUCCESSOR,&gsm,sizeof(gsm));
     }
   }
   else {
     chordnode closest = closest_preceding_finger(crd,m->id);
     m->hops++;
-    node_send(crd->n,crd->self.epid.localid,closest.epid,MSG_FIND_SUCCESSOR,m,sizeof(*m));
+    endpoint_send(crd->endpt,closest.epid,MSG_FIND_SUCCESSOR,m,sizeof(*m));
   }
 }
 
@@ -355,7 +353,7 @@ static void duplicate_detected(chord *crd, chordnode existing)
     id_changed_msg idcm;
     idcm.cn = crd->self;
     idcm.oldid = oldid;
-    node_send(crd->n,crd->endpt->epid.localid,crd->caller,MSG_ID_CHANGED,&idcm,sizeof(idcm));
+    endpoint_send(crd->endpt,crd->caller,MSG_ID_CHANGED,&idcm,sizeof(idcm));
   }
 
   chord_join(crd);
@@ -375,7 +373,7 @@ static void chord_insert(chord *crd, insert_msg *m)
     set_successor(crd,m->successor);
     snm.new_successor = crd->self;
     snm.old_successor = m->successor;
-    node_send(crd->n,crd->self.epid.localid,m->predecessor,MSG_SET_NEXT,&snm,sizeof(snm));
+    endpoint_send(crd->endpt,m->predecessor,MSG_SET_NEXT,&snm,sizeof(snm));
   }
 }
 
@@ -403,7 +401,7 @@ static void chord_set_next(chord *crd, set_next_msg *m)
       im.successor = m->old_successor;
     }
 
-    node_send(crd->n,crd->self.epid.localid,m->new_successor.epid,MSG_INSERT,&im,sizeof(im));
+    endpoint_send(crd->endpt,m->new_successor.epid,MSG_INSERT,&im,sizeof(im));
   }
   else {
     /* Successor pointers match; accept the new node into the network */
@@ -426,7 +424,7 @@ static void chord_get_succlist(chord *crd, get_succlist_msg *m)
   for (i = 2; i <= NSUCCESSORS; i++)
     rsm.successors[i] = crd->successors[i-1];
 
-  node_send(crd->n,crd->self.epid.localid,m->sender,MSG_REPLY_SUCCLIST,&rsm,sizeof(rsm));
+  endpoint_send(crd->endpt,m->sender,MSG_REPLY_SUCCLIST,&rsm,sizeof(rsm));
 }
 
 static void chord_reply_succlist(chord *crd, reply_succlist_msg *m)
@@ -457,7 +455,7 @@ static void chord_stabilize(chord *crd)
     return; /* still joining */
 
   gsm.sender = crd->self.epid;
-  node_send(crd->n,crd->self.epid.localid,successor.epid,MSG_GET_SUCCLIST,&gsm,sizeof(gsm));
+  endpoint_send(crd->endpt,successor.epid,MSG_GET_SUCCLIST,&gsm,sizeof(gsm));
 
   /* Update a random finger */
   int k;
@@ -467,7 +465,7 @@ static void chord_stabilize(chord *crd)
   fsm.sender = crd->self.epid;
   fsm.hops = 0;
   fsm.payload = k;
-  node_send(crd->n,crd->self.epid.localid,crd->self.epid,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
+  endpoint_send(crd->endpt,crd->self.epid,MSG_FIND_SUCCESSOR,&fsm,sizeof(fsm));
 }
 
 static void chord_get_table(chord *crd, get_table_msg *m)
@@ -478,7 +476,7 @@ static void chord_get_table(chord *crd, get_table_msg *m)
   memcpy(&rtm.fingers,&crd->fingers,sizeof(crd->fingers));
   memcpy(&rtm.successors,&crd->successors,sizeof(crd->successors));
   rtm.linksok = check_links(crd);
-  node_send(crd->n,crd->self.epid.localid,m->sender,MSG_REPLY_TABLE,&rtm,sizeof(rtm));
+  endpoint_send(crd->endpt,m->sender,MSG_REPLY_TABLE,&rtm,sizeof(rtm));
 }
 
 static void chord_endpoint_exit(chord *crd, endpoint_exit_msg *m)
@@ -528,7 +526,7 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   if (0 != crd->caller.localid) {
     chord_started_msg csm;
     csm.cn = crd->self;
-    node_send(n,crd->self.epid.localid,crd->caller,MSG_CHORD_STARTED,&csm,sizeof(csm));
+    endpoint_send(crd->endpt,crd->caller,MSG_CHORD_STARTED,&csm,sizeof(csm));
   }
 
   start_stabilizer(n,crd->self.epid,crd->stabilize_delay);
@@ -536,7 +534,7 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
   chord_join(crd);
 
   while (!done) {
-    msg = endpoint_next_message(endpt,-1);
+    msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
     case MSG_FIND_SUCCESSOR:
       assert(sizeof(find_successor_msg) == msg->hdr.size);

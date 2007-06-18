@@ -575,9 +575,14 @@ void set_error(task *tsk, const char *format, ...);
 
 /* client */
 
+typedef struct {
+  int rc;
+} output_arg;
+
 void start_launcher(node *n, const char *bcdata, int bcsize,
                     endpointid *managerids, int count, pthread_t *threadp, socketid out_sockid,
                     int argc, const char **argv);
+void output_thread(node *n, endpoint *endpt, void *arg);
 int do_client(char *initial_str, int argc, const char **argv);
 
 /* data */
@@ -645,7 +650,6 @@ int array_to_string(pntr refpntr, char **str);
 
 /* worker */
 
-endpoint *find_endpoint(node *n, int localid);
 int standalone(const char *bcdata, int bcsize, int argc, const char **argv);
 int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
@@ -653,7 +657,7 @@ int worker(int port, const char *initial_str);
 /* cell */
 
 cell *alloc_cell(task *tsk);
-sysobject *new_sysobject(task *tsk, int type, cell **c);
+sysobject *new_sysobject(task *tsk, int type);
 sysobject *find_sysobject(task *tsk, const socketid *sockid);
 void free_global(task *tsk, global *glo);
 void free_cell_fields(task *tsk, cell *v);
