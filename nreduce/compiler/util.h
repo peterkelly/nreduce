@@ -24,7 +24,9 @@
 #define _UTIL_H
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <pthread.h>
+#include <sys/time.h>
 
 typedef struct list list;
 struct list {

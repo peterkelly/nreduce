@@ -653,13 +653,9 @@ static int read_managers(node *n, const char *nodesfile, endpointid **outids, in
 
 void run_chordtest(int argc, char **argv)
 {
-  node *n = node_new(LOG_ERROR);
-
-  if (NULL == node_listen(n,n->listenip,0,0,NULL,0,1,NULL,NULL,0))
+  node *n = node_start(LOG_ERROR,0);
+  if (NULL == n)
     exit(1);
-
-  start_manager(n);
-  node_start_iothread(n);
 
   if (0 == argc) {
     /* Standalone mode; run the test locally */
@@ -679,9 +675,5 @@ void run_chordtest(int argc, char **argv)
     free(managerids);
   }
 
-  if (0 != pthread_join(n->iothread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  node_close_endpoints(n);
-  node_close_connections(n);
-  node_free(n);
+  node_run(n);
 }

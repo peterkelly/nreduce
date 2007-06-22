@@ -1,4 +1,4 @@
-SUBDIRS = modules compiler runtime . src
+SUBDIRS = modules compiler runtime . src exp
 AUTOMAKE_OPTIONS = foreign
 lib_LTLIBRARIES = libnreduce.la
 libnreduce_la_SOURCES =

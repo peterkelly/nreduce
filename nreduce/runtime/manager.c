@@ -266,7 +266,8 @@ static void manager_read(node *n, endpoint *endpt, read_msg *m)
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
      receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = get_connection(n,m->sockid))) {
-    assert(conn->canread);
+    if (!conn->canread)
+      fatal("READ request for socket that has finished reading");
     assert(!conn->collected);
     assert(conn->dontread);
     assert(0 == conn->frameids[READ_FRAMEADDR]);
@@ -278,6 +279,14 @@ static void manager_read(node *n, endpoint *endpt, read_msg *m)
   unlock_node(n);
 }
 
+/* FIXME: we should allow multiple WRITE messages to be sent without the caller having to first
+   process the WRITE_RESPONSE. This is useful for things like the echo test, where if it supplies
+   an ioid (which is irrelevant in this case) greater than 0, we can sometimes get crashes.
+
+   Ideally we should just remove the whole ioid thing altogether, and send the sockid back
+   in the WRITE_RESPONSE message instead of the ioid. The code in builtins.c should be
+   modified to associate a {sockid,operation} combination with a suspended frame, instead of an
+   ioid. */
 static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid source)
 {
   connection *conn;
@@ -297,7 +306,7 @@ static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid sou
     /* The calling frame will block when it sends us the WRITE message. If the write buffer
        still has room left for more data, wake it up immediately. Otherwise, keep it blocked
        until some of the data has been written. */
-    if (IOSIZE > conn->sendbuf->nbytes)
+    if (n->iosize > conn->sendbuf->nbytes)
       spaceleft = 1;
     else
       conn->frameids[WRITE_FRAMEADDR] = m->ioid;

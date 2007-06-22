@@ -29,7 +29,7 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
-#define IOSIZE 65536
+#define DEFAULT_IOSIZE 65536
 
 #define HOSTNAME_MAX 256
 #define ERRMSG_MAX 256
@@ -228,6 +228,9 @@ typedef struct node {
   pthread_cond_t closecond;
   pthread_mutex_t liblock;
   endpointid managerid;
+  int iosize;
+  int total_sent;
+  int total_received;
 } node;
 
 /* node */
@@ -238,8 +241,8 @@ typedef struct node {
 char *lookup_hostname(node *n, in_addr_t addr);
 int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
 
-node *node_new(int loglevel);
-void node_free(node *n);
+node *node_start(int loglevel, int port);
+void node_run(node *n);
 void node_log(node *n, int level, const char *format, ...);
 listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
                       int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen);

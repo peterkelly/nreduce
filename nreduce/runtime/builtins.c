@@ -878,7 +878,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
   pntr sopntr = argstack[1];
   pntr nextpntr = argstack[0];
   int r;
-  char buf[IOSIZE];
+  char buf[DEFAULT_IOSIZE];
   sysobject *so;
   cell *c;
   int doclose = 0;
@@ -887,7 +887,7 @@ static void b_readchunk(task *tsk, pntr *argstack)
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
-  r = read(so->fd,buf,IOSIZE);
+  r = read(so->fd,buf,DEFAULT_IOSIZE);
   if (0 == r) {
     argstack[0] = tsk->globnilpntr;
     doclose = 1;

@@ -544,19 +544,12 @@ static void find_tasks(node *n, list *chordids)
 
 int do_client(char *initial_str, int argc, const char **argv)
 {
-  node *n;
   int r = 0;
   const char *cmd;
   endpointid initial;
-
-  n = node_new(LOG_WARNING);
-
-  if (NULL == node_listen(n,n->listenip,0,0,NULL,0,1,NULL,NULL,0)) {
-    node_free(n);
+  node *n = node_start(LOG_WARNING,0);
+  if (NULL == n)
     return -1;
-  }
-
-  node_start_iothread(n);
 
   if (0 > string_to_mainchordid(n,initial_str,&initial))
     exit(1);
@@ -610,12 +603,7 @@ int do_client(char *initial_str, int argc, const char **argv)
 
   node_shutdown(n);
 
-  if (0 != pthread_join(n->iothread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-
-  node_close_endpoints(n);
-  node_close_connections(n);
-  node_free(n);
+  node_run(n);
 
   return r;
 }

@@ -218,7 +218,7 @@ static void notify_closed(node *n, connection *conn, int error)
 
 static void notify_write(node *n, connection *conn)
 {
-  if ((0 < conn->frameids[WRITE_FRAMEADDR]) && (IOSIZE > conn->sendbuf->nbytes)) {
+  if ((0 < conn->frameids[WRITE_FRAMEADDR]) && (n->iosize > conn->sendbuf->nbytes)) {
     write_response_msg wrm;
     wrm.ioid = conn->frameids[WRITE_FRAMEADDR];
     conn->frameids[WRITE_FRAMEADDR] = 0;
@@ -256,6 +256,8 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
     }
     return;
   }
+
+  n->total_received++;
 
   newmsg = (message*)calloc(1,sizeof(message));
   newmsg->hdr = *hdr;
@@ -398,8 +400,8 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
   conn->n = n;
 /*   conn->readfd = -1; */
   conn->port = -1;
-  conn->recvbuf = array_new(1,IOSIZE*2);
-  conn->sendbuf = array_new(1,IOSIZE*2);
+  conn->recvbuf = array_new(1,n->iosize*2);
+  conn->sendbuf = array_new(1,n->iosize*2);
   conn->canread = 1;
   conn->canwrite = 1;
   if (l == n->mainl)
@@ -495,10 +497,10 @@ static void handle_read(node *n, connection *conn)
 
   assert(conn->canread);
 
-  array_mkroom(conn->recvbuf,IOSIZE);
+  array_mkroom(conn->recvbuf,n->iosize);
   r = TEMP_FAILURE_RETRY(read(conn->sock,
                               &buf->data[buf->nbytes],
-                              IOSIZE));
+                              n->iosize));
 
   if (0 > r) {
     node_log(n,LOG_WARNING,"read() from %s:%d failed: %s",
@@ -763,6 +765,7 @@ node *node_new(int loglevel)
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = FIRST_ID;
   n->nextsid = 2;
+  n->iosize = DEFAULT_IOSIZE;
 
   determine_ip(n);
 
@@ -806,6 +809,29 @@ void node_free(node *n)
   close(n->ioready_readfd);
   close(n->ioready_writefd);
   free(n);
+}
+
+node *node_start(int loglevel, int port)
+{
+  node *n = node_new(loglevel);
+
+  if (NULL == node_listen(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0)) {
+    node_free(n);
+    return NULL;
+  }
+
+  start_manager(n);
+  node_start_iothread(n);
+  return n;
+}
+
+void node_run(node *n)
+{
+  if (0 != pthread_join(n->iothread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  node_close_endpoints(n);
+  node_close_connections(n);
+  node_free(n);
 }
 
 void node_log(node *n, int level, const char *format, ...)
@@ -1121,6 +1147,8 @@ static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid des
   assert(n->listenport == n->mainl->port);
   assert(INADDR_ANY != destendpointid.ip);
   assert(0 < destendpointid.port);
+
+  n->total_sent++;
 
   memset(&hdr,0,sizeof(msgheader));
   hdr.source.ip = n->listenip;

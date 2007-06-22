@@ -120,20 +120,13 @@ const char *msg_names[MSG_COUNT] = {
 
 static node *worker_startup(int loglevel, int port)
 {
-  node *n = node_new(loglevel);
-  unsigned char *ipbytes;
-
-  if (NULL == node_listen(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0)) {
-    node_free(n);
-    return NULL;
+  node *n = node_start(loglevel,port);
+  if (n) {
+    unsigned char *ipbytes;
+    ipbytes = (unsigned char*)&n->listenip;
+    node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
+             getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
   }
-
-  start_manager(n);
-  node_start_iothread(n);
-
-  ipbytes = (unsigned char*)&n->listenip;
-  node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
-           getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
   return n;
 }
 
@@ -163,11 +156,7 @@ int standalone(const char *bcdata, int bcsize, int argc, const char **argv)
 
   node_shutdown(n);
 
-  if (0 != pthread_join(n->iothread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  node_close_endpoints(n);
-  node_close_connections(n);
-  node_free(n);
+  node_run(n);
   return oa.rc;
 }
 
@@ -217,10 +206,6 @@ int worker(int port, const char *initial_str)
   memset(&caller,0,sizeof(endpointid));
   start_chord(n,MAIN_CHORD_ID,initial,caller,WORKER_STABILIZE_DELAY);
 
-  if (0 != pthread_join(n->iothread,NULL))
-    fatal("pthread_join: %s",strerror(errno));
-  node_close_endpoints(n);
-  node_close_connections(n);
-  node_free(n);
+  node_run(n);
   return 0;
 }
