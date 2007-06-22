@@ -422,7 +422,6 @@ typedef struct ioframe {
 typedef struct task {
 
   /* general */
-  FILE *output; /* FIXME: this doesn't make sense in a distributed environment */
   procstats stats;
   pntr argsp;
 
@@ -662,10 +661,8 @@ sysobject *find_sysobject(task *tsk, const socketid *sockid);
 void free_global(task *tsk, global *glo);
 void free_cell_fields(task *tsk, cell *v);
 
-int count_alive(task *tsk);
 void clear_marks(task *tsk, short bit);
 void mark_roots(task *tsk, short bit);
-void print_cells(task *tsk);
 void sweep(task *tsk, int all);
 void mark_global(task *tsk, global *glo, short bit);
 void local_collect(task *tsk);
@@ -688,15 +685,9 @@ frame *frame_new(task *tsk, int addalloc);
 cap *cap_alloc(task *tsk, int arity, int address, int fno);
 void cap_dealloc(cap *c);
 
-void print_pntr(FILE *f, pntr p);
-
-void dump_info(task *tsk);
-void dump_globals(task *tsk);
-
 /* interpreter */
 
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
-void print_stack(FILE *f, pntr *stk, int size, int dir);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
 void cap_error(task *tsk, pntr cappntr);

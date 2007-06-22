@@ -45,9 +45,6 @@
 #include <time.h>
 #include <signal.h>
 
-/* #define PARALLELISM_DEBUG */
-/* #define FETCH_DEBUG */
-
 #define FISH_DELAY_MS 250
 #define GC_DELAY 2500
 #define NSPARKS_REQUESTED 50
@@ -99,41 +96,6 @@ inline void op_eval(task *tsk, frame *runnable, const instruction *instr)
 inline void op_call(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
 
-void print_stack(FILE *f, pntr *stk, int size, int dir)
-{
-  int i;
-
-  if (dir)
-    i = size-1;
-  else
-    i = 0;
-
-
-  while (1) {
-    pntr p;
-    int pos = dir ? (size-1-i) : i;
-
-    if (dir && i < 0)
-      break;
-
-    if (!dir && (i >= size))
-      break;
-
-    p = resolve_pntr(stk[i]);
-    if (CELL_IND == pntrtype(stk[i]))
-      fprintf(f,"%2d: [i] %12s ",pos,snode_types[pntrtype(p)]);
-    else
-      fprintf(f,"%2d:     %12s ",pos,snode_types[pntrtype(p)]);
-    print_pntr(f,p);
-    fprintf(f,"\n");
-
-    if (dir)
-      i--;
-    else
-      i++;
-  }
-}
-
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl)
 {
   if (0 <= sl.fileno)
@@ -164,6 +126,8 @@ void cap_error(task *tsk, pntr cappntr)
 static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
 {
   sourceloc sl;
+  /* FIXME: this should use the normal set_error() mechanism so it works when a client is
+     running remotely - the error message should be sent over the network */
   sl.fileno = op->fileno;
   sl.lineno = op->lineno;
   print_task_sourceloc(tsk,stderr,sl);
@@ -219,7 +183,6 @@ void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
     for (l = wq->fetchers; l; l = l->next) {
       gaddr *ft = (gaddr*)l->data;
       assert(CELL_FRAME != pntrtype(obj));
-      /*     fprintf(tsk->output,"1: responding with %s\n",cell_types[pntrtype(obj)]); */
       msg_fsend(tsk,ft->tid,MSG_RESPOND,"pa",obj,*ft);
     }
     list_free(wq->fetchers,free);
@@ -229,15 +192,6 @@ void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
 
 void frame_return(task *tsk, frame *curf, pntr val)
 {
-  #ifdef SHOW_FRAME_COMPLETION
-  if (0 <= tsk->tid) {
-    int valtype = pntrtype(val);
-    fprintf(tsk->output,"FRAME(%d) completed; result is a %s\n",
-            frame_fno(tsk,curf),cell_types[valtype]);
-  }
-  #endif
-
-
   assert(!is_nullpntr(val));
   if (curf->c) {
     assert(NULL == curf->retp);
@@ -283,10 +237,6 @@ static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 
   /* Transfer the frame to the destination, and tell it to notfy us of the global address it
      assigns to the frame (which we'll store in newref) */
-  #ifdef PAREXEC_DEBUG
-/*   fprintf(tsk->output,"Scheduling frame %s on task %d, newrefaddr = %d@%d\n", */
-/*           function_name(tsk->gp,f->fno),desttsk,newrefaddr.lid,newrefaddr.tid); */
-  #endif
   write_format(msg,tsk,"pa",glo->p,refglo->addr);
 
   f->c->type = CELL_REMOTEREF;
@@ -563,10 +513,6 @@ static void interpreter_fish(task *tsk, message *msg)
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
   write_end(newmsg);
 
-  #ifdef PARALLELISM_DEBUG
-  /*     fprintf(tsk->output,"received FISH from task %d; scheduled %d\n",reqtsk,scheduled); */
-  #endif
-
   if (!scheduled && (0 < (age)--)) {
     int dest;
 
@@ -609,30 +555,17 @@ static void interpreter_fetch(task *tsk, message *msg)
   assert(storeaddr.tid == from);
   obj = global_lookup_existing(tsk,objaddr);
 
-  if (is_nullpntr(obj)) {
-    fprintf(tsk->output,"Request for deleted global %d@%d, from task %d\n",
-            objaddr.lid,objaddr.tid,from);
-  }
+  if (is_nullpntr(obj))
+    fatal("Request for deleted global %d@%d, from task %d",objaddr.lid,objaddr.tid,from);
 
   assert(!is_nullpntr(obj)); /* we should only be asked for a cell we actually have */
   obj = resolve_pntr(obj);
 
-  #ifdef FETCH_DEBUG
-  fprintf(tsk->output,"received FETCH %d@%d -> %d@%d",
-          objaddr.lid,objaddr.tid,storeaddr.lid,storeaddr.tid);
-  #endif
-
   if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
-    #ifdef FETCH_DEBUG
-    fprintf(tsk->output,": case 1\n");
-    #endif
     add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
   }
   else if ((CELL_FRAME == pntrtype(obj)) &&
            ((STATE_RUNNING == pframe(obj)->state) || (STATE_BLOCKED == pframe(obj)->state))) {
-    #ifdef FETCH_DEBUG
-    fprintf(tsk->output,": case 2\n");
-    #endif
     add_gaddr(&pframe(obj)->wq.fetchers,storeaddr);
   }
   else if ((CELL_FRAME == pntrtype(obj)) &&
@@ -643,9 +576,6 @@ static void interpreter_fetch(task *tsk, message *msg)
     global *glo;
     pntr fcp;
 
-    #ifdef FETCH_DEBUG
-    fprintf(tsk->output,": case 3\n");
-    #endif
     /* Remove the frame from the sparked queue */
     unspark_frame(tsk,f);
 
@@ -669,14 +599,6 @@ static void interpreter_fetch(task *tsk, message *msg)
     frame_free(tsk,f);
   }
   else {
-    #ifdef PAREXEC_DEBUG
-    fprintf(tsk->output,
-            "Responding to fetch: val %s, req task %d, storeaddr = %d@%d, objaddr = %d@%d\n",
-            cell_types[pntrtype(obj)],from,storeaddr.lid,storeaddr.tid,objaddr.lid,objaddr.tid);
-    #endif
-    #ifdef FETCH_DEBUG
-    fprintf(tsk->output,": case 4\n");
-    #endif
     msg_fsend(tsk,from,MSG_RESPOND,"pa",obj,storeaddr);
   }
 }
@@ -704,10 +626,8 @@ static void interpreter_respond(task *tsk, message *msg)
   ref = global_lookup_existing(tsk,storeaddr);
 
   assert(storeaddr.tid == tsk->tid);
-  if (is_nullpntr(ref)) {
-    fprintf(tsk->output,"Respond tried to store in deleted global %d@%d\n",
-            storeaddr.lid,storeaddr.tid);
-  }
+  if (is_nullpntr(ref))
+    fatal("Respond tried to store in deleted global %d@%d",storeaddr.lid,storeaddr.tid);
   assert(!is_nullpntr(ref));
   assert(CELL_REMOTEREF == pntrtype(ref));
 
@@ -765,12 +685,8 @@ static void interpreter_schedule(task *tsk, message *msg)
   msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
   write_end(urmsg);
 
-  fprintf(tsk->output,"Got %d new frames\n",count);
+  printf("Got %d new frames\n",count);
   tsk->newfish = 1;
-
-  #ifdef PARALLELISM_DEBUG
-  fprintf(tsk->output,"done processing SCHEDULE: count = %d\n",count);
-  #endif
 }
 
 static void interpreter_updateref(task *tsk, message *msg)
@@ -834,10 +750,8 @@ static void interpreter_ack(task *tsk, message *msg)
   read_int(&rd,&fromtype);
   assert(0 < naddrs);
 
-  if (count > array_count(tsk->unack_msg_acount[from])) {
-    fprintf(tsk->output,"ACK: count = %d, array count = %d\n",
-            count,array_count(tsk->unack_msg_acount[from]));
-  }
+  if (count > array_count(tsk->unack_msg_acount[from]))
+    fatal("ACK: count = %d, array count = %d",count,array_count(tsk->unack_msg_acount[from]));
 
   assert(count <= array_count(tsk->unack_msg_acount[from]));
 
@@ -867,10 +781,6 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
   clear_marks(tsk,FLAG_DMB);
 
   endpoint_send(tsk->endpt,tsk->gc,MSG_STARTDISTGCACK,NULL,0);
-
-  #ifdef DISTGC_DEBUG
-  fprintf(tsk->output,"Started distributed garbage collection\n");
-  #endif
 }
 
 static void interpreter_markroots(task *tsk)
@@ -956,10 +866,8 @@ static void interpreter_markentry(task *tsk, message *msg)
     read_gaddr(&rd,&addr);
     assert(addr.tid == tsk->tid);
     glo = addrhash_lookup(tsk,addr);
-    if (!glo) {
-      fprintf(tsk->output,"Marking request for deleted global %d@%d\n",
-              addr.lid,addr.tid);
-    }
+    if (!glo)
+      fatal("Marking request for deleted global %d@%d",addr.lid,addr.tid);
     assert(glo);
     mark_global(tsk,glo,FLAG_DMB);
     tsk->gcsent[tsk->tid]--;
@@ -989,21 +897,11 @@ static void interpreter_sweep(task *tsk, message *msg)
   clear_marks(tsk,FLAG_NEW);
 
   tsk->indistgc = 0;
-  #ifdef DISTGC_DEBUG
-  fprintf(tsk->output,"Completed distributed garbage collection: %d cells remaining\n",
-          count_alive(tsk));
-  #endif
 }
 
 static void handle_message(task *tsk, message *msg)
 {
   switch (msg->hdr.tag) {
-  case MSG_DONE:
-    fprintf(tsk->output,"%d: done\n",tsk->tid);
-    /* FIXME: check this works! */
-    /* FIXME: do we need to signal another interrupt? */
-    tsk->done = 1;
-    break;
   case MSG_FISH:
     interpreter_fish(tsk,msg);
     break;
@@ -1084,19 +982,6 @@ static void handle_message(task *tsk, message *msg)
   message_free(msg);
 }
 
-#ifdef PARALLELISM_DEBUG
-static int frameq_count(frameq *fq)
-{
-  int count = 0;
-  frame *f = fq->first;
-  while (f) {
-    count++;
-    f = f->next;
-  }
-  return count;
-}
-#endif
-
 /* Note: handle_interrupt() should never change the frame at the head of the runnable queue
    unless the queue is empty. This is because when handle_trap() returns, it will go back to
    an EIP which is within the code for the current frame. If the current frame changes, EBP
@@ -1158,9 +1043,6 @@ int handle_interrupt(task *tsk)
 
     if ((tsk->newfish || (0 >= diffms)) && (1 < tsk->groupsize)) {
       int dest;
-      #ifdef PARALLELISM_DEBUG
-      fprintf(tsk->output,"sending FISH; outstanding fetches = %d\n",tsk->stats.fetches);
-      #endif
 
       /* avoid sending another until after the sleep period */
 
@@ -1187,11 +1069,6 @@ int handle_interrupt(task *tsk)
     }
 
     msg = endpoint_receive(tsk->endpt,FISH_DELAY_MS);
-
-    #ifdef PARALLELISM_DEBUG
-    if (0 > from)
-      fprintf(tsk->output,"%d: no runnable; slept; fetches = %d\n",tsk->tid,tsk->stats.fetches);
-    #endif
 
     if (NULL != msg)
       handle_message(tsk,msg);
@@ -1596,11 +1473,6 @@ inline void op_eval(task *tsk, frame *runnable, const instruction *instr)
       assert(refglo->addr.tid == tsk->tid);
       msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
 
-      #ifdef FETCH_DEBUG
-      fprintf(tsk->output,"sent FETCH %d@%d -> %d@%d\n",
-              target->addr.lid,target->addr.tid,refglo->addr.lid,refglo->addr.tid);
-      #endif
-
       tsk->stats.fetches++;
       target->fetching = 1;
     }
@@ -1869,14 +1741,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
       instr = runnable->instr;
       runnable->instr++;
-
-#ifdef EXECUTION_TRACE
-      if (compileinfo) {
-        /*       print_ginstr(tsk->output,gp,runnable->address,instr); */
-        fprintf(tsk->output,"%-6d %s\n",instr-program_ops,opcodes[instr->opcode]);
-        /*       print_stack(tsk->output,runnable->data,instr->expcount,0); */
-      }
-#endif
 
 #ifdef PROFILING 
       tsk->stats.ninstrs++;

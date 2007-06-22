@@ -43,13 +43,8 @@
 
 /* #define DEBUG_BYTECODE_COMPILATION */
 /* #define SHOW_SUBSTITUTED_NAMES */
-/* #define EXECUTION_TRACE */
 /* #define PROFILING */
-/* #define PAREXEC_DEBUG */
 /* #define CONTINUOUS_DISTGC */
-/* #define DISTGC_DEBUG */
-/* #define SHOW_FRAME_COMPLETION */
-/* #define COLLECTION_DEBUG */
 /* #define DISABLE_ARRAYS */
 
 // Misc

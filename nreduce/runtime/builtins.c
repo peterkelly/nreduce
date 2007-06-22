@@ -274,17 +274,12 @@ static void b_par(task *tsk, pntr *argstack)
   if (CELL_FRAME == pntrtype(p)) {
     frame *f = (frame*)get_pntr(get_pntr(p)->field1);
     spark_frame(tsk,f);
-/*     fprintf(tsk->output,"sparking\n"); */
-  }
-  else {
-/*     fprintf(tsk->output,"not sparking - it's a %s\n",cell_types[pntrtype(p)]); */
   }
 }
 
 static void b_head(task *tsk, pntr *argstack);
 static void b_parhead(task *tsk, pntr *argstack)
 {
-/*   fprintf(tsk->output,"b_parhead: first arg is a %s\n",cell_types[pntrtype(argstack[1])]); */
   b_head(tsk,&argstack[1]);
   b_par(tsk,argstack);
 }
@@ -1364,10 +1359,7 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   if (1 == so->sockid.sid) {
     /* sid can only have the value 1 in standalone mode; we can take a shortcut here and write
        the data directly to the task's output stream */
-    if (tsk->output) {
-      fwrite(data,1,len,tsk->output);
-      fflush(tsk->output);
-    }
+    fwrite(data,1,len,stdout);
     argstack[0] = tsk->globnilpntr;
     return;
   }
@@ -1463,6 +1455,7 @@ static void b_printend(task *tsk, pntr *argstack)
   }
 }
 
+/* FIXME: this should use write_data */
 static void b_echo1(task *tsk, pntr *argstack)
 {
   char *str;
@@ -1473,7 +1466,7 @@ static void b_echo1(task *tsk, pntr *argstack)
     return;
   }
 
-  fprintf(tsk->output,"%s",str);
+  printf("%s",str);
   free(str);
   argstack[0] = tsk->globnilpntr;
 }

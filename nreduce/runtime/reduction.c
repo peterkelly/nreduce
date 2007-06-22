@@ -238,9 +238,7 @@ void reduce(task *tsk, pntrstack *s)
          If there are one or more arguments "applied" to this value then it's considered an
          error, e.g. caused by an attempt to pass more arguments to a function than it requires. */
       if (1 < s->count-oldtop) {
-        printf("Attempt to apply %d arguments to a value: ",s->count-oldtop-1);
-        print_pntr(stdout,target);
-        printf("\n");
+        printf("Attempt to apply %d arguments to a value\n",s->count-oldtop-1);
         exit(1);
       }
 

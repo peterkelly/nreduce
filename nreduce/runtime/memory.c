@@ -407,18 +407,6 @@ void free_cell_fields(task *tsk, cell *v)
   }
 }
 
-int count_alive(task *tsk)
-{
-  block *bl;
-  int i;
-  int alive = 0;
-  for (bl = tsk->blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      if (CELL_EMPTY != bl->values[i].type)
-        alive++;
-  return alive;
-}
-
 void clear_marks(task *tsk, short bit)
 {
   block *bl;
@@ -499,23 +487,6 @@ void mark_roots(task *tsk, short bit)
         mark_global(tsk,glo,FLAG_MARKED);
 }
 
-void print_cells(task *tsk)
-{
-  block *bl;
-  int i;
-  for (bl = tsk->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      if (CELL_EMPTY != bl->values[i].type) {
-        pntr p;
-        make_pntr(p,&bl->values[i]);
-        fprintf(tsk->output,"remaining: ");
-        print_pntr(tsk->output,p);
-        fprintf(tsk->output,"\n");
-      }
-    }
-  }
-}
-
 void sweep(task *tsk, int all)
 {
   block *bl;
@@ -562,9 +533,6 @@ void sweep(task *tsk, int all)
       }
 
       if (!needed) {
-        #ifdef COLLECTION_DEBUG
-        fprintf(tsk->output,"removing garbage global %d@%d\n",glo->addr.lid,glo->addr.tid);
-        #endif
         *gptr = (*gptr)->pntrnext;
 
         addrhash_remove(tsk,glo);
@@ -626,10 +594,6 @@ void local_collect(task *tsk)
 
   /* sweep */
   sweep(tsk,0);
-
-  #ifdef COLLECTION_DEBUG
-  fprintf(tsk->output,"local_collect() finished: %d cells remaining\n",count_alive(tsk));
-  #endif
 }
 
 void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners)
@@ -795,51 +759,3 @@ void pntrstack_grow(int *alloc, pntr **data, int size)
     *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
   }
 }
-
-void print_pntr(FILE *f, pntr p)
-{
-  p = resolve_pntr(p);
-  switch (pntrtype(p)) {
-  case CELL_NUMBER:
-    print_double(f,pntrdouble(p));
-    break;
-  case CELL_NIL:
-    fprintf(f,"nil");
-    break;
-  case CELL_SCREF: {
-    scomb *sc = (scomb*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"%s",sc->name);
-    break;
-  }
-  case CELL_FRAME: {
-    fprintf(f,"frame");
-    break;
-  }
-  case CELL_REMOTEREF: {
-    global *glo = (global*)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"%d@%d",glo->addr.lid,glo->addr.tid);
-    break;
-  }
-  case CELL_IND: {
-    fprintf(f,"(%s ",cell_types[pntrtype(p)]);
-    print_pntr(f,get_pntr(p)->field1);
-    fprintf(f,")");
-    break;
-  }
-  case CELL_APPLICATION: {
-    print_pntr(f,get_pntr(p)->field1);
-    fprintf(f," ");
-    print_pntr(f,get_pntr(p)->field2);
-    break;
-  }
-  case CELL_BUILTIN: {
-    int bif = (int)get_pntr(get_pntr(p)->field1);
-    fprintf(f,"%s",builtin_info[bif].name);
-    break;
-  }
-  default:
-    fprintf(f,"(%s)",cell_types[pntrtype(p)]);
-    break;
-  }
-}
-

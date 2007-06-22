@@ -211,15 +211,13 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
       *l = (*l)->next;
       free(old->data);
       free(old);
-/*       fprintf(tsk->output,"removed gaddr %d@%d\n",addr.lid,addr.tid); */
       return;
     }
     else {
       l = &((*l)->next);
     }
   }
-  fprintf(tsk->output,"gaddr %d@%d not found\n",addr.lid,addr.tid);
-  fatal("gaddr not found");
+  fatal("gaddr %d@%d not found",addr.lid,addr.tid);
 }
 
 void transfer_waiters(waitqueue *from, waitqueue *to)
@@ -345,75 +343,6 @@ void set_error(task *tsk, const char *format, ...)
   }
 }
 
-void dump_info(task *tsk)
-{
-  block *bl;
-  int i;
-  frame *f;
-
-  fprintf(tsk->output,"Frames with things waiting on them:\n");
-  fprintf(tsk->output,"%-12s %-20s %-12s %-12s\n","frame*","function","frames","fetchers");
-  fprintf(tsk->output,"%-12s %-20s %-12s %-12s\n","------","--------","------","--------");
-
-  for (bl = tsk->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      cell *c = &bl->values[i];
-      if (CELL_FRAME == c->type) {
-        f = (frame*)get_pntr(c->field1);
-        if (f->wq.frames || f->wq.fetchers) {
-          const char *fname = bc_function_name(tsk->bcdata,frame_fno(tsk,f));
-          int nfetchers = list_count(f->wq.fetchers);
-          int nframes = 0;
-          frame *f2;
-
-          for (f2 = f->wq.frames; f2; f2 = f2->waitlnk)
-            nframes++;
-
-          fprintf(tsk->output,"%-12p %-20s %-12d %-12d\n",
-                  f,fname,nframes,nfetchers);
-        }
-      }
-    }
-  }
-
-  fprintf(tsk->output,"\n");
-  fprintf(tsk->output,"Runnable queue:\n");
-  fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
-          "frame*","function","frames","fetchers","state");
-  fprintf(tsk->output,"%-12s %-20s %-12s %-12s %-16s\n",
-          "------","--------","------","--------","-------------");
-  for (f = *tsk->runptr; f; f = f->rnext) {
-    const char *fname = bc_function_name(tsk->bcdata,frame_fno(tsk,f));
-    int nfetchers = list_count(f->wq.fetchers);
-    int nframes = 0;
-    frame *f2;
-
-    for (f2 = f->wq.frames; f2; f2 = f2->waitlnk)
-      nframes++;
-
-    fprintf(tsk->output,"%-12p %-20s %-12d %-12d %-16s\n",
-            f,fname,nframes,nfetchers,frame_states[f->state]);
-  }
-
-}
-
-void dump_globals(task *tsk)
-{
-  int h;
-  global *glo;
-
-  fprintf(tsk->output,"\n");
-  fprintf(tsk->output,"%-9s %-12s %-12s\n","Address","Type","Cell");
-  fprintf(tsk->output,"%-9s %-12s %-12s\n","-------","----","----");
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext) {
-      fprintf(tsk->output,"%4d@%-4d %-12s %-12p\n",
-              glo->addr.lid,glo->addr.tid,cell_types[pntrtype(glo->p)],
-              is_pntr(glo->p) ? get_pntr(glo->p) : NULL);
-    }
-  }
-}
-
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
                socketid out_sockid, endpointid *epid)
 {
@@ -433,7 +362,6 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   tsk->n = n;
   tsk->runptr = &tsk->rtemp;
   tsk->freeptr = (cell*)1;
-  tsk->output = stdout;
 
   if (0 > pipe(tsk->startfds))
     fatal("pipe: %s",strerror(errno));
