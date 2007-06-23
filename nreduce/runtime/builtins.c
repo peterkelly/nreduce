@@ -1455,22 +1455,6 @@ static void b_printend(task *tsk, pntr *argstack)
   }
 }
 
-/* FIXME: this should use write_data */
-static void b_echo1(task *tsk, pntr *argstack)
-{
-  char *str;
-  int badtype;
-
-  if (0 <= (badtype = array_to_string(argstack[0],&str))) {
-    set_error(tsk,"echo: argument is not a string (contains non-char: %s)",cell_types[badtype]);
-    return;
-  }
-
-  printf("%s",str);
-  free(str);
-  argstack[0] = tsk->globnilpntr;
-}
-
 static void b_error1(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
@@ -1588,7 +1572,6 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "print",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_print          },
 { "printarray",     3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printarray     },
 { "printend",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printend       },
-{ "echo1",          1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_echo1          },
 
 /* Other */
 { "error1",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error1         },

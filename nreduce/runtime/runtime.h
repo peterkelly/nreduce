@@ -112,15 +112,14 @@
 #define B_PRINT          48
 #define B_PRINTARRAY     49
 #define B_PRINTEND       50
-#define B_ECHO           51
 
 /* Other */
-#define B_ERROR          52
-#define B_GETOUTPUT      53
-#define B_GENID          54
-#define B_EXIT           55
+#define B_ERROR          51
+#define B_GETOUTPUT      52
+#define B_GENID          53
+#define B_EXIT           54
 
-#define NUM_BUILTINS     56
+#define NUM_BUILTINS     55
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

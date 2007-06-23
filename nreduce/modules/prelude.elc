@@ -181,7 +181,12 @@ reverse lst =
 (reverse1 lst nil)
 
 echo str =
-(echo1 (forcelist str))
+(letrec
+  dest = (getoutput nil)
+  lst = (forcelist str)
+  partlen = (len lst)
+ in
+  (printarray dest partlen lst))
 
 stringtonum str =
 (stringtonum1 (forcelist str))
