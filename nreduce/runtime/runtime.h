@@ -260,7 +260,8 @@ typedef struct carray {
   pntr tail;
   cell *wrapper;
   int nchars;
-  char elements[]; /* FIXME: align this on an 8-byte boundary */
+  int pad;
+  char elements[];
 } carray;
 
 typedef struct pntrstack {

@@ -295,6 +295,7 @@ int main(int argc, char **argv)
   assert(0 == ((int)&((frameblock*)0)->mem)%8);
   assert(0 == sizeof(cell)%8);
   assert(0 == ((int)&((block*)0)->values)%8);
+  assert(0 == ((int)&((carray*)0)->elements)%8);
 
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
