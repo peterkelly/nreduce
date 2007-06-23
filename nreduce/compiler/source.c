@@ -153,8 +153,12 @@ static int check_for_main(source *src)
       }
       else if (0 == sc->nargs) {
         sc->nargs = 1;
-        sc->argnames = (char**)realloc(sc->argnames,sizeof(char*));
+        free(sc->argnames);
+        free(sc->strictin);
+        sc->argnames = (char**)malloc(sizeof(char*));
         sc->argnames[0] = strdup("__args");
+        sc->strictin = (int*)malloc(sizeof(int));
+        sc->strictin[0] = 0;
       }
     }
   }

@@ -876,7 +876,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   const instruction *instr;
   int addr;
   bcheader *bch = (bcheader*)bcdata;
-  int *tempaddrs = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
+  int *tempaddrs = (int*)calloc(bch->nops,sizeof(int));
   int Lfinished = as->labels++;
   int Ltrap = as->labels++;
   int Lcaperror = as->labels++;
@@ -885,8 +885,8 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   int *instrlabels;
   int i;
   int *bplabels[2];
-  bplabels[0] = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
-  bplabels[1] = (int*)calloc(bch->nops,sizeof(int)); // FIXME: free these
+  bplabels[0] = (int*)calloc(bch->nops,sizeof(int));
+  bplabels[1] = (int*)calloc(bch->nops,sizeof(int));
   tsk->instraddrs = (void**)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[0] = (unsigned char**)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[1] = (unsigned char**)calloc(bch->nops,sizeof(int));
@@ -1747,6 +1747,9 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   tsk->codesize = cpucode->nbytes;
 
 /*   dump_asm(tsk,"output.s",cpucode); */
+  free(tempaddrs);
+  free(bplabels[0]);
+  free(bplabels[1]);
   free(instrlabels);
   x86_assembly_free(as);
 }
