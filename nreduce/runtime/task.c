@@ -220,22 +220,6 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
   fatal("gaddr %d@%d not found",addr.lid,addr.tid);
 }
 
-void transfer_waiters(waitqueue *from, waitqueue *to)
-{
-  frame **ptr = &to->frames;
-  list **lptr;
-  while (*ptr)
-    ptr = &(*ptr)->waitlnk;
-  *ptr = from->frames;
-  from->frames = NULL;
-
-  lptr = &to->fetchers;
-  while (*lptr)
-    lptr = &(*lptr)->next;
-  *lptr = from->fetchers;
-  from->fetchers = NULL;
-}
-
 void spark_frame(task *tsk, frame *f)
 {
   if (STATE_NEW == f->state)

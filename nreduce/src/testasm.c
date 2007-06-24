@@ -414,13 +414,6 @@ void testasm(array *cpucode)
   I_JMP(absmem(12));
   I_JMP(absmem(123456789));
 
-/*   I1(X86_JZ,imm(12)); */
-/*   I1(X86_JG,imm(12)); */
-/*   I1(X86_JGE,imm(12)); */
-/*   I1(X86_JL,imm(12)); */
-/*   I1(X86_JLE,imm(12)); */
-  /* FIXME: tests for jb and friends */
-
   I_RET();
 
   I_CALL(reg(EAX));

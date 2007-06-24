@@ -1126,24 +1126,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
   assert(CELL_IND != pntrtype(p));
 
   if (instr->arg0) {
-    if (CELL_FRAME == pntrtype(p)) {
-      /* FIXME: this code cannot be reached, because an EVAL is always placed before it
-         (to avoid the argument to DO being an IND cell). Either remove the EVAL and do a
-         resolve above, or get rid of this code (and transfer_waiters(), since this is
-         the only place it is called). */
-      frame *newf = (frame*)get_pntr(get_pntr(p)->field1);
-      pntr val;
-
-      /* Deactivate the current frame */
-      transfer_waiters(&f2->wq,&newf->wq);
-      assert(newf->c);
-      make_pntr(val,newf->c);
-      frame_return(tsk,f2,val);
-
-      /* Run the new frame */
-      run_frame(tsk,newf);
-      return;
-    }
+    assert(CELL_FRAME != pntrtype(p));
 
     if (CELL_CAP != pntrtype(p)) {
       frame_return(tsk,f2,p);

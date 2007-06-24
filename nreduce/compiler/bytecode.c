@@ -589,7 +589,6 @@ static void domkframe(source *src, compilation *comp, sourceloc sl, int fno, int
 static void C(source *src, compilation *comp, snode *c, pmap *p, int n);
 static void E(source *src, compilation *comp, snode *c, pmap *p, int n);
 
-/* FIXME: Separate the relevant stuff out into Xr, for consistency with the compilation rules? */
 static void Cletrec(source *src, compilation *comp, snode *c, int n, pmap *p, int strictcontext)
 {
   letrec *rec;
@@ -755,9 +754,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       }
       else {
         MKCAP(app->sl,fno,m);
-        SPARK(app->sl,0); /* FIXME: is this necessary? Won't it just do nothing, since the cell
-                            will be a CAP node? Clarify this also in the bytecode compilation
-                            section in thesis. */
+        SPARK(app->sl,0);
       }
     }
     break;
@@ -777,8 +774,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
     break;
   default:
     C(src,comp,c,p,n);
-    SPARK(c->sl,0); /* FIXME: this shouldn't be necessary. Check if it's really ok to remove it,
-                      and ensure it's consistent with what you've got in the compilation schemes. */
+    SPARK(c->sl,0);
     break;
   }
   comp->cdepth--;
@@ -1035,7 +1031,7 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
   }
   case SNODE_BUILTIN:
   case SNODE_SCREF:   if (0 == function_nargs(src,snode_fno(c)))
-                       MKFRAME(c->sl,snode_fno(c),0); /* FIXME: it's a constant; just call C? */
+                       MKFRAME(c->sl,snode_fno(c),0);
                      else
                        MKCAP(c->sl,snode_fno(c),0);
                      break;
@@ -1164,8 +1160,6 @@ static void peephole(compilation *comp, int start)
   comp->instructions->nbytes = count*sizeof(instruction);
 }
 
-/* FIXME: could probably remove the GLOBSTART instruction, since the information it contains can
-   now be obtained from the function table. */
 static void F(source *src, compilation *comp, int fno, scomb *sc)
 {
   int i;

@@ -328,7 +328,6 @@ static int client_run(node *n, list *nodes, const char *filename, socketid out_s
   return 0;
 }
 
-/* FIXME: make sure that when the task has an error, the message is sent back to the client */
 void output_thread(node *n, endpoint *endpt, void *arg)
 {
   output_arg *oa = (output_arg*)arg;
