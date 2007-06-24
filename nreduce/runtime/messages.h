@@ -96,8 +96,10 @@
 #define MSG_GET_TASKS_RESPONSE  60
 
 #define MSG_REPORT_ERROR        61
+#define MSG_PING                62
+#define MSG_PONG                63
 
-#define MSG_COUNT               62
+#define MSG_COUNT               64
 
 #ifndef WORKER_C
 extern const char *msg_names[MSG_COUNT];

@@ -116,6 +116,8 @@ const char *msg_names[MSG_COUNT] = {
   "GET_TASKS",
   "GET_TASKS_RESPONSE",
   "REPORT_ERROR",
+  "PING",
+  "PONG",
 };
 
 static node *worker_startup(int loglevel, int port)

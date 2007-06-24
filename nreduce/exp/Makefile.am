@@ -1,1 +1,1 @@
-SUBDIRS = sockmsg
+SUBDIRS = sockmsg pingpong
