@@ -1,0 +1,256 @@
+# iteration 0 val 512.000000 real 21948 user 538 sys 2812 cs 3227764
+# iteration 0 val 1024.000000 real 12816 user 464 sys 2216 cs 1728935
+# iteration 0 val 1536.000000 real 8961 user 254 sys 1523 cs 1165180
+# iteration 0 val 2048.000000 real 7111 user 316 sys 1643 cs 887435
+# iteration 0 val 2560.000000 real 5911 user 181 sys 1152 cs 723575
+# iteration 0 val 3072.000000 real 5096 user 131 sys 968 cs 611170
+# iteration 0 val 3584.000000 real 4602 user 94 sys 663 cs 532339
+# iteration 0 val 4096.000000 real 4160 user 97 sys 855 cs 454598
+# iteration 0 val 4608.000000 real 3969 user 105 sys 962 cs 427609
+# iteration 0 val 5120.000000 real 3728 user 96 sys 868 cs 388338
+# iteration 0 val 5632.000000 real 3497 user 91 sys 904 cs 360462
+# iteration 0 val 6144.000000 real 3312 user 72 sys 738 cs 326031
+# iteration 0 val 6656.000000 real 3110 user 87 sys 835 cs 313113
+# iteration 0 val 7168.000000 real 3065 user 85 sys 805 cs 292375
+# iteration 0 val 7680.000000 real 3003 user 69 sys 797 cs 278218
+# iteration 0 val 8192.000000 real 2901 user 74 sys 687 cs 251524
+# iteration 0 val 8704.000000 real 2777 user 72 sys 706 cs 251405
+# iteration 0 val 9216.000000 real 2739 user 59 sys 689 cs 238488
+# iteration 0 val 9728.000000 real 2694 user 69 sys 774 cs 231345
+# iteration 0 val 10240.000000 real 2658 user 73 sys 665 cs 216242
+# iteration 0 val 10752.000000 real 2577 user 63 sys 758 cs 214683
+# iteration 0 val 11264.000000 real 2543 user 64 sys 698 cs 205841
+# iteration 0 val 11776.000000 real 2467 user 45 sys 673 cs 200647
+# iteration 0 val 12288.000000 real 2437 user 74 sys 682 cs 183355
+# iteration 0 val 12800.000000 real 2467 user 62 sys 629 cs 188752
+# iteration 0 val 13312.000000 real 2416 user 53 sys 554 cs 182117
+# iteration 0 val 13824.000000 real 2407 user 58 sys 674 cs 178523
+# iteration 0 val 14336.000000 real 2394 user 46 sys 627 cs 168955
+# iteration 0 val 14848.000000 real 2357 user 66 sys 705 cs 169965
+# iteration 0 val 15360.000000 real 2335 user 53 sys 573 cs 164185
+# iteration 0 val 15872.000000 real 2311 user 49 sys 626 cs 162103
+# iteration 0 val 16384.000000 real 2302 user 65 sys 738 cs 148872
+# iteration 0 val 16896.000000 real 2611 user 73 sys 737 cs 168644
+# iteration 0 val 17408.000000 real 2545 user 72 sys 748 cs 164558
+# iteration 0 val 17920.000000 real 2604 user 55 sys 735 cs 162859
+# iteration 0 val 18432.000000 real 2597 user 72 sys 724 cs 155966
+# iteration 0 val 18944.000000 real 2484 user 65 sys 768 cs 157186
+# iteration 0 val 19456.000000 real 2568 user 58 sys 716 cs 153244
+# iteration 0 val 19968.000000 real 2507 user 63 sys 701 cs 152343
+# iteration 0 val 20480.000000 real 2465 user 55 sys 734 cs 141698
+# iteration 0 val 20992.000000 real 2570 user 49 sys 711 cs 147743
+# iteration 0 val 21504.000000 real 2667 user 70 sys 770 cs 144332
+# iteration 0 val 22016.000000 real 2415 user 48 sys 566 cs 143559
+# iteration 0 val 22528.000000 real 2424 user 72 sys 641 cs 137695
+# iteration 0 val 23040.000000 real 2560 user 72 sys 719 cs 139973
+# iteration 0 val 23552.000000 real 2503 user 78 sys 833 cs 137011
+# iteration 0 val 24064.000000 real 2452 user 73 sys 817 cs 136259
+# iteration 0 val 24576.000000 real 2388 user 65 sys 710 cs 128251
+# iteration 0 val 25088.000000 real 2462 user 61 sys 895 cs 132956
+# iteration 0 val 25600.000000 real 2434 user 57 sys 898 cs 131169
+# iteration 0 val 26112.000000 real 2493 user 61 sys 694 cs 129818
+# iteration 0 val 26624.000000 real 2512 user 45 sys 577 cs 126133
+# iteration 0 val 27136.000000 real 2399 user 50 sys 710 cs 127218
+# iteration 0 val 27648.000000 real 2601 user 70 sys 697 cs 124752
+# iteration 0 val 28160.000000 real 2446 user 55 sys 610 cs 124453
+# iteration 0 val 28672.000000 real 2411 user 54 sys 664 cs 117736
+# iteration 0 val 29184.000000 real 2480 user 69 sys 744 cs 122080
+# iteration 0 val 29696.000000 real 2617 user 65 sys 752 cs 120587
+# iteration 0 val 30208.000000 real 2454 user 68 sys 790 cs 119568
+# iteration 0 val 30720.000000 real 2671 user 85 sys 686 cs 115905
+# iteration 0 val 31232.000000 real 2514 user 85 sys 817 cs 117376
+# iteration 0 val 31744.000000 real 2505 user 76 sys 768 cs 116144
+# iteration 0 val 32256.000000 real 2476 user 76 sys 788 cs 115913
+# iteration 0 val 32768.000000 real 2535 user 67 sys 746 cs 108801
+# iteration 1 val 512.000000 real 24029 user 615 sys 3296 cs 3365892
+# iteration 1 val 1024.000000 real 12835 user 166 sys 883 cs 1707443
+# iteration 1 val 1536.000000 real 9011 user 257 sys 1474 cs 1166414
+# iteration 1 val 2048.000000 real 6987 user 200 sys 1045 cs 868958
+# iteration 1 val 2560.000000 real 5927 user 193 sys 1215 cs 727269
+# iteration 1 val 3072.000000 real 5193 user 129 sys 914 cs 607693
+# iteration 1 val 3584.000000 real 4679 user 124 sys 1035 cs 535161
+# iteration 1 val 4096.000000 real 4201 user 104 sys 838 cs 455522
+# iteration 1 val 4608.000000 real 4001 user 93 sys 861 cs 426537
+# iteration 1 val 5120.000000 real 3681 user 88 sys 823 cs 387550
+# iteration 1 val 5632.000000 real 3503 user 112 sys 791 cs 360424
+# iteration 1 val 6144.000000 real 3359 user 76 sys 749 cs 329042
+# iteration 1 val 6656.000000 real 3176 user 76 sys 677 cs 311905
+# iteration 1 val 7168.000000 real 3008 user 78 sys 693 cs 291235
+# iteration 1 val 7680.000000 real 2968 user 64 sys 778 cs 278225
+# iteration 1 val 8192.000000 real 2842 user 84 sys 743 cs 251544
+# iteration 1 val 8704.000000 real 2860 user 68 sys 720 cs 251412
+# iteration 1 val 9216.000000 real 2742 user 59 sys 721 cs 239575
+# iteration 1 val 9728.000000 real 2709 user 50 sys 461 cs 231026
+# iteration 1 val 10240.000000 real 2676 user 65 sys 682 cs 215726
+# iteration 1 val 10752.000000 real 2716 user 57 sys 802 cs 214669
+# iteration 1 val 11264.000000 real 2643 user 65 sys 657 cs 205688
+# iteration 1 val 11776.000000 real 2485 user 73 sys 628 cs 200579
+# iteration 1 val 12288.000000 real 2449 user 73 sys 707 cs 183312
+# iteration 1 val 12800.000000 real 2509 user 54 sys 614 cs 188592
+# iteration 1 val 13312.000000 real 2506 user 54 sys 690 cs 182160
+# iteration 1 val 13824.000000 real 2367 user 50 sys 598 cs 178523
+# iteration 1 val 14336.000000 real 2444 user 79 sys 613 cs 168580
+# iteration 1 val 14848.000000 real 2380 user 61 sys 525 cs 170285
+# iteration 1 val 15360.000000 real 2413 user 69 sys 724 cs 164104
+# iteration 1 val 15872.000000 real 2250 user 37 sys 521 cs 162195
+# iteration 1 val 16384.000000 real 2246 user 52 sys 570 cs 148532
+# iteration 1 val 16896.000000 real 2548 user 55 sys 726 cs 168924
+# iteration 1 val 17408.000000 real 2595 user 67 sys 757 cs 164373
+# iteration 1 val 17920.000000 real 2528 user 70 sys 728 cs 163055
+# iteration 1 val 18432.000000 real 2481 user 57 sys 622 cs 155844
+# iteration 1 val 18944.000000 real 2420 user 79 sys 690 cs 157030
+# iteration 1 val 19456.000000 real 2501 user 56 sys 688 cs 152924
+# iteration 1 val 19968.000000 real 2466 user 53 sys 723 cs 151768
+# iteration 1 val 20480.000000 real 2392 user 65 sys 684 cs 141584
+# iteration 1 val 20992.000000 real 2493 user 55 sys 576 cs 147600
+# iteration 1 val 21504.000000 real 2461 user 55 sys 601 cs 144344
+# iteration 1 val 22016.000000 real 2518 user 59 sys 735 cs 143662
+# iteration 1 val 22528.000000 real 2465 user 58 sys 695 cs 137833
+# iteration 1 val 23040.000000 real 2501 user 79 sys 776 cs 140050
+# iteration 1 val 23552.000000 real 2555 user 79 sys 810 cs 137066
+# iteration 1 val 24064.000000 real 2492 user 92 sys 899 cs 136382
+# iteration 1 val 24576.000000 real 2347 user 61 sys 649 cs 128049
+# iteration 1 val 25088.000000 real 2407 user 87 sys 802 cs 133145
+# iteration 1 val 25600.000000 real 2443 user 78 sys 833 cs 130917
+# iteration 1 val 26112.000000 real 2576 user 47 sys 703 cs 130552
+# iteration 1 val 26624.000000 real 2437 user 51 sys 671 cs 126014
+# iteration 1 val 27136.000000 real 2371 user 55 sys 699 cs 127096
+# iteration 1 val 27648.000000 real 2426 user 57 sys 696 cs 124731
+# iteration 1 val 28160.000000 real 2389 user 49 sys 592 cs 124877
+# iteration 1 val 28672.000000 real 2508 user 56 sys 690 cs 117657
+# iteration 1 val 29184.000000 real 2439 user 54 sys 768 cs 122461
+# iteration 1 val 29696.000000 real 2502 user 63 sys 752 cs 120228
+# iteration 1 val 30208.000000 real 2434 user 61 sys 781 cs 119962
+# iteration 1 val 30720.000000 real 2408 user 56 sys 701 cs 115935
+# iteration 1 val 31232.000000 real 2506 user 66 sys 782 cs 117619
+# iteration 1 val 31744.000000 real 2463 user 60 sys 804 cs 116361
+# iteration 1 val 32256.000000 real 2456 user 63 sys 814 cs 115935
+# iteration 1 val 32768.000000 real 2419 user 67 sys 736 cs 108928
+# iteration 2 val 512.000000 real 23953 user 680 sys 3340 cs 3366693
+# iteration 2 val 1024.000000 real 12819 user 224 sys 1137 cs 1711672
+# iteration 2 val 1536.000000 real 8931 user 248 sys 1457 cs 1163982
+# iteration 2 val 2048.000000 real 6991 user 211 sys 1072 cs 869739
+# iteration 2 val 2560.000000 real 5929 user 193 sys 1190 cs 723927
+# iteration 2 val 3072.000000 real 5153 user 131 sys 896 cs 606969
+# iteration 2 val 3584.000000 real 4699 user 123 sys 910 cs 533660
+# iteration 2 val 4096.000000 real 4192 user 103 sys 888 cs 455138
+# iteration 2 val 4608.000000 real 4032 user 86 sys 982 cs 427009
+# iteration 2 val 5120.000000 real 3682 user 101 sys 848 cs 387961
+# iteration 2 val 5632.000000 real 3451 user 99 sys 847 cs 360467
+# iteration 2 val 6144.000000 real 3278 user 90 sys 710 cs 328964
+# iteration 2 val 6656.000000 real 3171 user 91 sys 760 cs 312866
+# iteration 2 val 7168.000000 real 3058 user 80 sys 771 cs 291819
+# iteration 2 val 7680.000000 real 2960 user 89 sys 759 cs 277978
+# iteration 2 val 8192.000000 real 2843 user 67 sys 748 cs 251468
+# iteration 2 val 8704.000000 real 2787 user 46 sys 726 cs 251868
+# iteration 2 val 9216.000000 real 2716 user 58 sys 701 cs 238607
+# iteration 2 val 9728.000000 real 2727 user 61 sys 538 cs 230433
+# iteration 2 val 10240.000000 real 2647 user 57 sys 664 cs 217718
+# iteration 2 val 10752.000000 real 2528 user 66 sys 737 cs 214366
+# iteration 2 val 11264.000000 real 2613 user 68 sys 754 cs 205795
+# iteration 2 val 11776.000000 real 2489 user 61 sys 655 cs 200552
+# iteration 2 val 12288.000000 real 2506 user 61 sys 624 cs 183178
+# iteration 2 val 12800.000000 real 2447 user 51 sys 657 cs 188386
+# iteration 2 val 13312.000000 real 2462 user 54 sys 593 cs 182035
+# iteration 2 val 13824.000000 real 2427 user 65 sys 635 cs 178231
+# iteration 2 val 14336.000000 real 2324 user 57 sys 540 cs 168480
+# iteration 2 val 14848.000000 real 2285 user 43 sys 568 cs 169320
+# iteration 2 val 15360.000000 real 2431 user 63 sys 799 cs 164377
+# iteration 2 val 15872.000000 real 2460 user 61 sys 776 cs 162778
+# iteration 2 val 16384.000000 real 2282 user 79 sys 694 cs 148629
+# iteration 2 val 16896.000000 real 2551 user 60 sys 740 cs 168779
+# iteration 2 val 17408.000000 real 2437 user 57 sys 782 cs 132382
+# iteration 2 val 17920.000000 real 2471 user 54 sys 767 cs 162852
+# iteration 2 val 18432.000000 real 2462 user 57 sys 723 cs 156084
+# iteration 2 val 18944.000000 real 2549 user 65 sys 736 cs 157239
+# iteration 2 val 19456.000000 real 2522 user 54 sys 690 cs 153360
+# iteration 2 val 19968.000000 real 2422 user 62 sys 675 cs 152011
+# iteration 2 val 20480.000000 real 2653 user 65 sys 733 cs 141572
+# iteration 2 val 20992.000000 real 2496 user 52 sys 518 cs 147585
+# iteration 2 val 21504.000000 real 2541 user 54 sys 739 cs 144279
+# iteration 2 val 22016.000000 real 2440 user 58 sys 675 cs 143592
+# iteration 2 val 22528.000000 real 2445 user 77 sys 695 cs 137866
+# iteration 2 val 23040.000000 real 2459 user 67 sys 747 cs 140143
+# iteration 2 val 23552.000000 real 2483 user 72 sys 847 cs 137038
+# iteration 2 val 24064.000000 real 2466 user 56 sys 893 cs 136273
+# iteration 2 val 24576.000000 real 2443 user 64 sys 911 cs 128278
+# iteration 2 val 25088.000000 real 2443 user 79 sys 853 cs 132997
+# iteration 2 val 25600.000000 real 2532 user 63 sys 796 cs 131040
+# iteration 2 val 26112.000000 real 2348 user 62 sys 799 cs 109072
+# iteration 2 val 26624.000000 real 2510 user 49 sys 587 cs 126131
+# iteration 2 val 27136.000000 real 2458 user 55 sys 694 cs 126545
+# iteration 2 val 27648.000000 real 2453 user 47 sys 657 cs 103240
+# iteration 2 val 28160.000000 real 2511 user 50 sys 649 cs 124693
+# iteration 2 val 28672.000000 real 2466 user 44 sys 662 cs 116817
+# iteration 2 val 29184.000000 real 2395 user 53 sys 685 cs 122171
+# iteration 2 val 29696.000000 real 2501 user 67 sys 761 cs 119989
+# iteration 2 val 30208.000000 real 2425 user 56 sys 729 cs 119354
+# iteration 2 val 30720.000000 real 2427 user 56 sys 655 cs 116165
+# iteration 2 val 31232.000000 real 2460 user 59 sys 776 cs 117575
+# iteration 2 val 31744.000000 real 2534 user 72 sys 744 cs 115618
+# iteration 2 val 32256.000000 real 2488 user 77 sys 728 cs 116021
+# iteration 2 val 32768.000000 real 2434 user 57 sys 748 cs 109031
+512.000 23.310 0.611 3.149 3320116.333
+1024.000 12.823 0.285 1.412 1716016.667
+1536.000 8.968 0.253 1.485 1165192.000
+2048.000 7.030 0.242 1.253 875377.333
+2560.000 5.922 0.189 1.186 724923.667
+3072.000 5.147 0.130 0.926 608610.667
+3584.000 4.660 0.114 0.869 533720.000
+4096.000 4.184 0.101 0.860 455086.000
+4608.000 4.001 0.095 0.935 427051.667
+5120.000 3.697 0.095 0.846 387949.667
+5632.000 3.484 0.101 0.847 360451.000
+6144.000 3.316 0.079 0.732 328012.333
+6656.000 3.152 0.085 0.757 312628.000
+7168.000 3.044 0.081 0.756 291809.667
+7680.000 2.977 0.074 0.778 278140.333
+8192.000 2.862 0.075 0.726 251512.000
+8704.000 2.808 0.062 0.717 251561.667
+9216.000 2.732 0.059 0.704 238890.000
+9728.000 2.710 0.060 0.591 230934.667
+10240.000 2.660 0.065 0.670 216562.000
+10752.000 2.607 0.062 0.766 214572.667
+11264.000 2.600 0.066 0.703 205774.667
+11776.000 2.480 0.060 0.652 200592.667
+12288.000 2.464 0.069 0.671 183281.667
+12800.000 2.474 0.056 0.633 188576.667
+13312.000 2.461 0.054 0.612 182104.000
+13824.000 2.400 0.058 0.636 178425.667
+14336.000 2.387 0.061 0.593 168671.667
+14848.000 2.341 0.057 0.599 169856.667
+15360.000 2.393 0.062 0.699 164222.000
+15872.000 2.340 0.049 0.641 162358.667
+16384.000 2.277 0.065 0.667 148677.667
+16896.000 2.570 0.063 0.734 168782.333
+17408.000 2.526 0.065 0.762 153771.000
+17920.000 2.534 0.060 0.743 162922.000
+18432.000 2.513 0.062 0.690 155964.667
+18944.000 2.484 0.070 0.731 157151.667
+19456.000 2.530 0.056 0.698 153176.000
+19968.000 2.465 0.059 0.700 152040.667
+20480.000 2.503 0.062 0.717 141618.000
+20992.000 2.520 0.052 0.602 147642.667
+21504.000 2.556 0.060 0.703 144318.333
+22016.000 2.458 0.055 0.659 143604.333
+22528.000 2.445 0.069 0.677 137798.000
+23040.000 2.507 0.073 0.747 140055.333
+23552.000 2.514 0.076 0.830 137038.333
+24064.000 2.470 0.074 0.870 136304.667
+24576.000 2.393 0.063 0.757 128192.667
+25088.000 2.437 0.076 0.850 133032.667
+25600.000 2.470 0.066 0.842 131042.000
+26112.000 2.472 0.057 0.732 123147.333
+26624.000 2.486 0.048 0.612 126092.667
+27136.000 2.409 0.053 0.701 126953.000
+27648.000 2.493 0.058 0.683 117574.333
+28160.000 2.449 0.051 0.617 124674.333
+28672.000 2.462 0.051 0.672 117403.333
+29184.000 2.438 0.059 0.732 122237.333
+29696.000 2.540 0.065 0.755 120268.000
+30208.000 2.438 0.062 0.767 119628.000
+30720.000 2.502 0.066 0.681 116001.667
+31232.000 2.493 0.070 0.792 117523.333
+31744.000 2.501 0.069 0.772 116041.000
+32256.000 2.473 0.072 0.777 115956.333
+32768.000 2.463 0.064 0.743 108920.000
