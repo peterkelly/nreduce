@@ -91,10 +91,7 @@ static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
   message *msg;
   int done = 0;
 
-  lock_node(n);
   endpoint_link(endpt,stb->chord_epid);
-  unlock_node(n);
-
   endpoint_send(endpt,stb->chord_epid,MSG_STABILIZE,NULL,0);
 
   while (!done) {
@@ -244,14 +241,11 @@ static void set_noderef(chord *crd, chordnode *ptr, chordnode cn)
   if (!chordnode_isnull(cn))
     newinst = count_instances(crd,cn.epid);
 
-  lock_node(crd->n);
   if (1 == oldinst)
     endpoint_unlink(crd->endpt,ptr->epid);
   *ptr = cn;
   if ((0 == newinst) && !chordnode_isnull(cn))
     endpoint_link(crd->endpt,cn.epid);
-
-  unlock_node(crd->n);
 }
 
 static void set_finger(chord *crd, int i, chordnode newfinger)

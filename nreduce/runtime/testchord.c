@@ -115,11 +115,7 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
     case MSG_CHORD_STARTED: {
       chord_started_msg *m = (chord_started_msg*)msg->data;
       assert(sizeof(chord_started_msg) == msg->hdr.size);
-
-      lock_node(n);
       endpoint_link(endpt,m->cn.epid);
-      unlock_node(n);
-
       cn = m->cn;
       done = 1;
       break;
@@ -416,13 +412,8 @@ static void check_chord_started(check *chk, chord_started_msg *m)
   chk->nodes[chk->ncount] = m->cn;
   chk->ncount++;
   qsort(chk->nodes,chk->ncount,sizeof(chordnode),chordnode_cmp);
-
-  lock_node(chk->n);
   endpoint_link(chk->endpt,m->cn.epid);
-  unlock_node(chk->n);
-
   printf("chk chord_started %d: now have %d nodes\n",m->cn.id,chk->ncount);
-
   check_abort(chk);
 }
 

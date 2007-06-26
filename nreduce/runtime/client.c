@@ -379,9 +379,7 @@ static void connection_thread(node *n, endpoint *endpt, void *arg)
 {
   int done = 0;
   endpointid *destid = (endpointid*)arg;
-  lock_node(n);
   endpoint_link(endpt,*destid);
-  unlock_node(n);
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {

@@ -1361,7 +1361,7 @@ static int endpoint_has_link(endpoint *endpt, endpointid epid)
   return 0;
 }
 
-void endpoint_link(endpoint *endpt, endpointid to)
+void endpoint_link_locked(endpoint *endpt, endpointid to)
 {
   endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
   assert(NODE_ALREADY_LOCKED(endpt->n));
@@ -1385,11 +1385,25 @@ static void endpoint_list_remove(list **lptr, endpointid to)
   }
 }
 
-void endpoint_unlink(endpoint *endpt, endpointid to)
+void endpoint_unlink_locked(endpoint *endpt, endpointid to)
 {
   assert(NODE_ALREADY_LOCKED(endpt->n));
   endpoint_list_remove(&endpt->outlinks,to);
   node_send_locked(endpt->n,endpt->epid.localid,to,MSG_UNLINK,&endpt->epid,sizeof(endpointid));
+}
+
+void endpoint_link(endpoint *endpt, endpointid to)
+{
+  lock_node(endpt->n);
+  endpoint_link_locked(endpt,to);
+  unlock_node(endpt->n);
+}
+
+void endpoint_unlink(endpoint *endpt, endpointid to)
+{
+  lock_node(endpt->n);
+  endpoint_unlink_locked(endpt,to);
+  unlock_node(endpt->n);
 }
 
 void endpoint_interrupt(endpoint *endpt) /* Can be called from native code */

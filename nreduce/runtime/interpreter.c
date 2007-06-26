@@ -765,7 +765,11 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
 /*   printf("tsk->indistgc = %d\n",tsk->indistgc); */
   assert(!tsk->indistgc);
   tsk->indistgc = 1;
-  tsk->gc = m->gc;
+  assert(endpointid_isnull(&tsk->gc) || endpointid_equals(&tsk->gc,&m->gc));
+  if (endpointid_isnull(&tsk->gc)) {
+    tsk->gc = m->gc;
+    endpoint_link(tsk->endpt,tsk->gc);
+  }
   tsk->gciter = m->gciter;
   clear_marks(tsk,FLAG_DMB);
 
@@ -1638,6 +1642,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->endpt = endpt;
   tsk->endpt->interrupt = 1;
   pthread_setspecific(task_key,tsk);
+  endpoint_link(endpt,tsk->out_sockid.managerid);
 
   write(tsk->threadrunningfds[1],&semdata,1);
 

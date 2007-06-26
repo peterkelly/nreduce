@@ -254,6 +254,8 @@ endpointid node_add_thread(node *n, const char *type, endpoint_threadfun fun, vo
                            pthread_t *threadp);
 endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, void *arg,
                             pthread_t *threadp, int localid, int stacksize);
+void endpoint_link_locked(endpoint *endpt, endpointid to);
+void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 void endpoint_interrupt(endpoint *endpt);

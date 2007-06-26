@@ -51,7 +51,6 @@ typedef struct {
   endpointid idmap[0];
 } gcarg;
 
-/* FIXME: get this to exit when the process completes */
 static void gc_thread(node *n, endpoint *endpt, void *arg)
 {
   gcarg *ga = (gcarg*)arg;
@@ -70,11 +69,8 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
     printf("gc_thread: idmap[%d] = "EPID_FORMAT"\n",i,EPID_ARGS(ga->idmap[i]));
   #endif
 
-  /* FIXME: the tasks should also link to the garbage collector */
-  lock_node(n);
   for (i = 0; i < ga->ntasks; i++)
     endpoint_link(endpt,ga->idmap[i]);
-  unlock_node(n);
 
   while (!done) {
     message *msg = endpoint_receive(endpt,ingc ? -1 : DISTGC_DELAY);
@@ -494,7 +490,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
 
       for (i = 0; i < newtsk->groupsize; i++)
         if (!endpointid_equals(&newtsk->endpt->epid,&initmsg->idmap[i]))
-          endpoint_link(newtsk->endpt,initmsg->idmap[i]);
+          endpoint_link_locked(newtsk->endpt,initmsg->idmap[i]);
 
       unlock_node(n);
 
