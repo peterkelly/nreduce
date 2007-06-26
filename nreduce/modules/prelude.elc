@@ -57,8 +57,8 @@ acceptloop handler so =
   (seq connso
     (cons instream (acceptloop handler so))))
 
-listen host port handler =
-(acceptloop handler (startlisten (forcelist host) port))
+listen port handler =
+(acceptloop handler (startlisten port))
 
 readdir filename =
 (readdir1 (forcelist filename))

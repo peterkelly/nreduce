@@ -69,7 +69,7 @@ xmain =
  in
    con)
 
-ymain = (seq (listen "0.0.0.0" 1234 process) nil)
+ymain = (seq (listen 1234 process) nil)
 
 
 
@@ -86,7 +86,7 @@ showdata connections n =
 
 zmain =
 (letrec
-   connections = (listen "0.0.0.0" 1234 process)
+   connections = (listen 1234 process)
  in
    (showdata connections 0))
 
@@ -99,4 +99,4 @@ parconnections lst =
     (par (head lst) (parconnections (tail lst)))
     nil)
 
-main = (parconnections (listen "0.0.0.0" 1234 process))
+main = (parconnections (listen 1234 process))

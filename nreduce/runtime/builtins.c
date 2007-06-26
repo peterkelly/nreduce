@@ -1223,17 +1223,13 @@ static void b_readcon(task *tsk, pntr *argstack)
   }
 }
 
-/* FIXME: remove the IP address parameter to listen... it's a bit pointless for our case */
 static void b_startlisten(task *tsk, pntr *argstack)
 {
   frame *curf = *tsk->runptr;
 
   if (0 == curf->resume) {
-    pntr hostnamepntr = argstack[1];
     pntr portpntr = argstack[0];
-    char *hostname;
     int port;
-    int badtype;
     sysobject *so;
     in_addr_t ip = INADDR_ANY;
     listen_msg lm;
@@ -1241,26 +1237,13 @@ static void b_startlisten(task *tsk, pntr *argstack)
     CHECK_ARG(0,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
 
-    if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
-      set_error(tsk,"startlisten: hostname is not a string (contains non-char: %s)",
-                cell_types[badtype]);
-      return;
-    }
-
-    if (0 > lookup_address(tsk->n,hostname,&ip,NULL)) {
-      set_error(tsk,"startlisten: could not resolve hostname %s",hostname);
-      free(hostname);
-      return;
-    }
-
     /* Create sysobject cell */
     so = new_sysobject(tsk,SYSOBJECT_LISTENER);
-    so->hostname = strdup(hostname);
+    so->hostname = strdup("0.0.0.0");
     so->port = port;
     so->tsk = tsk;
 
     make_pntr(argstack[0],so->c);
-    make_pntr(argstack[1],so->c);
 
     lm.ip = ip;
     lm.port = port;
@@ -1269,13 +1252,11 @@ static void b_startlisten(task *tsk, pntr *argstack)
     so->frameids[LISTEN_FRAMEADDR] = lm.ioid;
 
     endpoint_send(tsk->endpt,tsk->n->managerid,MSG_LISTEN,&lm,sizeof(lm));
-
-    free(hostname);
   }
   else {
     sysobject *so;
-    CHECK_SYSOBJECT_ARG(1,SYSOBJECT_LISTENER);
-    so = psysobject(argstack[1]);
+    CHECK_SYSOBJECT_ARG(0,SYSOBJECT_LISTENER);
+    so = psysobject(argstack[0]);
     curf->resume = 0;
     if (so->error) {
       set_error(tsk,"startlisten: %s",so->errmsg);
@@ -1564,7 +1545,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 /* Networking */
 { "opencon",        3, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_opencon        },
 { "readcon",        2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_readcon        },
-{ "startlisten",    2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_startlisten    },
+{ "startlisten",    1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_startlisten    },
 { "accept",         2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_accept         },
 
 /* Terminal and network output */

@@ -59,4 +59,4 @@ handler stream =
 (if stream (http::parse_request stream process) nil)
 
 main =
-(parlist (listen "0.0.0.0" 1234 handler))
+(parlist (listen 1234 handler))
