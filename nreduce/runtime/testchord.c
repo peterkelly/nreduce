@@ -544,7 +544,7 @@ static void testchord_thread(node *n, endpoint *endpt, void *arg)
 
   dbc.n = n;
   dbc.epid = endpt->epid;
-  node_add_thread(n,0,DBC_ENDPOINT,0,debug_control_thread,&dbc,NULL);
+  node_add_thread(n,"debug_control",debug_control_thread,&dbc,NULL);
 
   check_loop(n,endpt,nodes,ncount,start,NODE_COUNT,tca->managerids,tca->nmanagers);
 }
@@ -555,7 +555,7 @@ static void testchord(node *n, endpointid *managerids, int nmanagers)
   testchord_arg *tca = (testchord_arg*)calloc(1,sizeof(testchord_arg));
   tca->managerids = managerids;
   tca->nmanagers = nmanagers;
-  node_add_thread(n,0,TEST_ENDPOINT,0,testchord_thread,tca,&thread);
+  node_add_thread(n,"testchord",testchord_thread,tca,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 }

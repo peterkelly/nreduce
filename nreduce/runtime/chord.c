@@ -131,7 +131,7 @@ static void start_stabilizer(node *n, endpointid chord_epid, int stabilize_delay
   stb->n = n;
   stb->chord_epid = chord_epid;
   stb->stabilize_delay = stabilize_delay;
-  node_add_thread(n,0,STABILIZER_ENDPOINT,0,stabilizer_thread,stb,NULL);
+  node_add_thread(n,"stabilizer",stabilizer_thread,stb,NULL);
 }
 
 typedef struct {
@@ -593,5 +593,5 @@ void start_chord(node *n, int localid, endpointid initial, endpointid caller, in
   crd->initial = initial;
   crd->caller = caller;
   crd->stabilize_delay = stabilize_delay;
-  node_add_thread(n,localid,CHORD_ENDPOINT,32768,chord_thread,crd,NULL);
+  node_add_thread2(n,"chord",chord_thread,crd,NULL,localid,32768);
 }

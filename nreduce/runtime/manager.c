@@ -382,7 +382,7 @@ static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid
   gcarg *ga = (gcarg*)calloc(1,sizeof(gcarg)+m->count*sizeof(endpointid));
   ga->ntasks = m->count;
   memcpy(ga->idmap,m->idmap,m->count*sizeof(endpointid));
-  node_add_thread(n,0,TEST_ENDPOINT,0,gc_thread,ga,NULL);
+  node_add_thread(n,"gc",gc_thread,ga,NULL);
   endpoint_send(endpt,source,MSG_STARTGC_RESPONSE,NULL,0);
 }
 
@@ -396,7 +396,7 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
 
   lock_node(n);
   for (ep = n->endpoints.first; ep; ep = ep->next) {
-    if (TASK_ENDPOINT == ep->type)
+    if (!strcmp(ep->type,"task"))
       count++;
   }
 
@@ -405,9 +405,8 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
   gtrm->count = count;
 
   for (ep = n->endpoints.first; ep; ep = ep->next) {
-    if (TASK_ENDPOINT == ep->type) {
+    if (!strcmp(ep->type,"task"))
       gtrm->tasks[i++] = ep->epid;
-    }
   }
   unlock_node(n);
 
@@ -420,7 +419,7 @@ static task *find_task(node *n, int localid)
   endpoint *endpt = find_endpoint(n,localid);
   if (NULL == endpt)
     return NULL;
-  if (TASK_ENDPOINT != endpt->type)
+  if (strcmp(endpt->type,"task"))
     fatal("Request for endpoint %d that is not a task",localid);
   return (task*)endpt->data;
 }
@@ -599,5 +598,5 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
 
 void start_manager(node *n)
 {
-  node_add_thread(n,MANAGER_ID,MANAGER_ENDPOINT,0,manager_thread,NULL,NULL);
+  node_add_thread2(n,"manager",manager_thread,NULL,NULL,MANAGER_ID,0);
 }

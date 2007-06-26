@@ -146,7 +146,7 @@ int main(int argc, char **argv)
   n->iosize = bufsize;
   if (NULL == n)
     exit(1);
-  node_add_thread(n,0,TEST_ENDPOINT,0,echo_thread,&port,NULL);
+  node_add_thread(n,"echo",echo_thread,&port,NULL);
   node_run(n);
 
   return 0;

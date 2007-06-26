@@ -148,7 +148,7 @@ int standalone(const char *bcdata, int bcsize, int argc, const char **argv)
   managerid.localid = MANAGER_ID;
 
   memset(&oa,0,sizeof(oa));
-  out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,&oa,&thread);
+  out_sockid.managerid = node_add_thread(n,"output",output_thread,&oa,&thread);
   out_sockid.sid = 1;
 
   start_launcher(n,bcdata,bcsize,&managerid,1,NULL,out_sockid,argc,argv);

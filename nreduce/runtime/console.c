@@ -73,12 +73,22 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
                  "%-7s %-3s %-9s %-6s %-10s\n","-------","---","---------","------","------------");
     lock_node(n);
     for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      if (TASK_ENDPOINT == endpt->type) {
+      if (!strcmp(endpt->type,"task")) {
         task *tsk = (task*)endpt->data;
         array_printf(out,"%-7d %-3d %-9d %-6d %-12d\n",
                      endpt->epid.localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
       }
     }
+    unlock_node(n);
+    return 0;
+  }
+  else if (!strcmp(argv[0],"threads") || !strcmp(argv[0],"h")) {
+    endpoint *endpt;
+    array_printf(out,"%-7s %-4s\n","localid","type");
+    array_printf(out,"%-7s %-4s\n","-------","----");
+    lock_node(n);
+    for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
+      array_printf(out,"%-7d %s\n",endpt->epid.localid,endpt->type);
     unlock_node(n);
     return 0;
   }
@@ -93,6 +103,7 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
   else if (!strcmp(argv[0],"help")) {
     array_printf(out,"connections   [c] - List all open connections\n");
     array_printf(out,"tasks         [t] - List tasks\n");
+    array_printf(out,"threads       [h] - List threads\n");
     array_printf(out,"kill          [k] - Kill a task\n");
     array_printf(out,"shutdown      [s] - Shut down VM\n");
     array_printf(out,"help          [h] - Print this message\n");

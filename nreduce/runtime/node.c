@@ -72,8 +72,9 @@ const char *log_levels[LOG_COUNT] = {
 static void endpoint_add_message(endpoint *endpt, message *msg);
 static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                              int tag, const void *data, int size);
-static endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
-                                         endpoint_threadfun fun, void *arg, pthread_t *threadp);
+static endpointid node_add_thread_locked(node *n, const char *type,
+                                         endpoint_threadfun fun, void *arg, pthread_t *threadp,
+                                         int localid, int stacksize);
 
 static int set_non_blocking(int fd)
 {
@@ -284,7 +285,7 @@ static void start_console(node *n, connection *conn)
   conn->isreg = 1;
   conn->frameids[READ_FRAMEADDR] = 1;
   memcpy(sockid,&conn->sockid,sizeof(socketid));
-  conn->owner = node_add_thread_locked(n,0,CONSOLE_ENDPOINT,0,console_thread,sockid,NULL);
+  conn->owner = node_add_thread_locked(n,"console",console_thread,sockid,NULL,0,0);
 }
 
 static void process_received(node *n, connection *conn)
@@ -1255,13 +1256,15 @@ static void *endpoint_thread(void *data)
   list_free(endpt->outlinks,free);
   destroy_mutex(&endpt->mailbox.lock);
   pthread_cond_destroy(&endpt->mailbox.cond);
+  free(endpt->type);
   free(endpt);
   unlock_node(n);
   return NULL;
 }
 
-static endpointid node_add_thread_locked(node *n, int localid, int type, int stacksize,
-                                         endpoint_threadfun fun, void *arg, pthread_t *threadp)
+static endpointid node_add_thread_locked(node *n, const char *type,
+                                         endpoint_threadfun fun, void *arg, pthread_t *threadp,
+                                         int localid, int stacksize)
 {
   pthread_t thread;
   pthread_attr_t attr;
@@ -1289,7 +1292,7 @@ static endpointid node_add_thread_locked(node *n, int localid, int type, int sta
   init_mutex(&endpt->mailbox.lock);
   pthread_cond_init(&endpt->mailbox.cond,NULL);
   endpt->epid = epid;
-  endpt->type = type;
+  endpt->type = strdup(type);
   endpt->data = arg;
   endpt->n = n;
   endpt->fun = fun;
@@ -1319,12 +1322,22 @@ static endpointid node_add_thread_locked(node *n, int localid, int type, int sta
   return epid;
 }
 
-endpointid node_add_thread(node *n, int localid, int type, int stacksize,
-                           endpoint_threadfun fun, void *arg, pthread_t *threadp)
+endpointid node_add_thread(node *n, const char *type, endpoint_threadfun fun, void *arg,
+                           pthread_t *threadp)
 {
   endpointid epid;
   lock_node(n);
-  epid = node_add_thread_locked(n,localid,type,stacksize,fun,arg,threadp);
+  epid = node_add_thread_locked(n,type,fun,arg,threadp,0,0);
+  unlock_node(n);
+  return epid;
+}
+
+endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, void *arg,
+                            pthread_t *threadp, int localid, int stacksize)
+{
+  endpointid epid;
+  lock_node(n);
+  epid = node_add_thread_locked(n,type,fun,arg,threadp,localid,stacksize);
   unlock_node(n);
   return epid;
 }

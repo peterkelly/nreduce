@@ -90,10 +90,10 @@ int main(int argc, char **argv)
   n = node_start(LOG_ERROR,0);
   if (NULL == n)
     exit(1);
-  pa.pongid = node_add_thread(n,0,TEST_ENDPOINT,0,pong_thread,NULL,NULL);
+  pa.pongid = node_add_thread(n,"pong",pong_thread,NULL,NULL);
   pa.size = size;
   pa.npings = msgcount/2;
-  node_add_thread(n,0,TEST_ENDPOINT,0,ping_thread,&pa,&thread);
+  node_add_thread(n,"ping",ping_thread,&pa,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   node_shutdown(n);

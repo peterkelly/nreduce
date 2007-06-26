@@ -286,7 +286,7 @@ void start_launcher(node *n, const char *bcdata, int bcsize,
   memcpy(lr->bcdata,bcdata,bcsize);
   lr->out_sockid = out_sockid;
 
-  node_add_thread(n,0,LAUNCHER_ENDPOINT,0,launcher_thread,lr,threadp);
+  node_add_thread(n,"launcher",launcher_thread,lr,threadp);
 }
 
 static int client_run(node *n, list *nodes, const char *filename, socketid out_sockid,
@@ -482,7 +482,7 @@ static list *find_nodes(node *n, endpointid initial, int want, int print)
   fsd.initial = initial;
   fsd.want = want;
   fsd.print = print;
-  node_add_thread(n,0,TEST_ENDPOINT,0,find_nodes_thread,&fsd,&thread);
+  node_add_thread(n,"find_nodes",find_nodes_thread,&fsd,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   return fsd.nodes;
@@ -536,7 +536,7 @@ static void find_tasks(node *n, list *chordids)
   pthread_t thread;
   find_tasks_data ftd;
   ftd.chordids = chordids;
-  node_add_thread(n,0,TEST_ENDPOINT,0,find_tasks_thread,&ftd,&thread);
+  node_add_thread(n,"find_tasks",find_tasks_thread,&ftd,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 }
@@ -553,7 +553,7 @@ int do_client(char *initial_str, int argc, const char **argv)
   if (0 > string_to_mainchordid(n,initial_str,&initial))
     exit(1);
 
-  node_add_thread(n,0,TEST_ENDPOINT,0,connection_thread,&initial,NULL);
+  node_add_thread(n,"connection",connection_thread,&initial,NULL);
 
   if (1 > argc) {
     fprintf(stderr,"Please specify a command\n");
@@ -583,7 +583,7 @@ int do_client(char *initial_str, int argc, const char **argv)
       socketid out_sockid;
       output_arg oa;
       memset(&oa,0,sizeof(oa));
-      out_sockid.managerid = node_add_thread(n,0,TEST_ENDPOINT,0,output_thread,&oa,&thread);
+      out_sockid.managerid = node_add_thread(n,"output",output_thread,&oa,&thread);
       out_sockid.sid = 2;
       if (0 != client_run(n,nodes,program,out_sockid,argc-3,((const char**)argv)+3))
         exit(1);

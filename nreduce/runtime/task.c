@@ -449,7 +449,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
 
   if (n) {
     char semdata = 0;
-    *epid = node_add_thread(n,0,TASK_ENDPOINT,0,interpreter_thread,tsk,NULL);
+    *epid = node_add_thread(n,"task",interpreter_thread,tsk,NULL);
     read(tsk->threadrunningfds[0],&semdata,1);
     close(tsk->threadrunningfds[0]);
     close(tsk->threadrunningfds[1]);

@@ -95,15 +95,6 @@ typedef struct messagelist {
   pthread_cond_t cond;
 } messagelist;
 
-#define TASK_ENDPOINT        1
-#define MANAGER_ENDPOINT     2
-#define LAUNCHER_ENDPOINT    3
-#define CONSOLE_ENDPOINT     4
-#define CHORD_ENDPOINT       5
-#define STABILIZER_ENDPOINT  6
-#define TEST_ENDPOINT        7
-#define DBC_ENDPOINT         8
-
 struct endpoint;
 struct node;
 
@@ -117,7 +108,7 @@ typedef struct endpoint {
   struct endpoint *prev;
   struct endpoint *next;
   struct node *n;
-  int type;
+  char *type;
   void *data;
   int closed;
   list *inlinks;
@@ -258,8 +249,10 @@ void node_notify(node *n);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 
-endpointid node_add_thread(node *n, int localid, int type, int stacksize,
-                           endpoint_threadfun fun, void *arg, pthread_t *threadp);
+endpointid node_add_thread(node *n, const char *type, endpoint_threadfun fun, void *arg,
+                           pthread_t *threadp);
+endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, void *arg,
+                            pthread_t *threadp, int localid, int stacksize);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 void endpoint_interrupt(endpoint *endpt);
