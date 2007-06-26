@@ -271,7 +271,7 @@ static void remove_connection(node *n, connection *conn)
 {
   assert(NODE_ALREADY_LOCKED(n));
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
-  close(conn->sock);
+  list_push(&n->toclose,(void*)conn->sock);
   llist_remove(&n->connections,conn);
   free(conn->hostname);
   array_free(conn->recvbuf);
@@ -714,6 +714,16 @@ static void *ioloop(void *arg)
       if (FD_ISSET(l->fd,&readfds))
         handle_new_connection(n,l);
     }
+
+    /* Handle pending close requests - this is done here to avoid closing an fd while select()
+      is looking at it */
+    while (n->toclose) {
+      int fd = (int)n->toclose->data;
+      list *next = n->toclose->next;
+      close(fd);
+      free(n->toclose);
+      n->toclose = next;
+    }
   }
   unlock_mutex(&n->lock);
   return NULL;
@@ -798,8 +808,11 @@ node *node_new(int loglevel)
 
 void node_free(node *n)
 {
-  if (n->mainl)
+  if (n->mainl) {
+    lock_node(n);
     node_remove_listener(n,n->mainl);
+    unlock_node(n);
+  }
   assert(NULL == n->endpoints.first);
   assert(NULL == n->listeners.first);
 
@@ -954,9 +967,7 @@ endpoint *find_endpoint(node *n, int localid)
 void node_remove_listener(node *n, listener *l)
 {
   connection *conn;
-
-  lock_node(n);
-
+  assert(NODE_ALREADY_LOCKED(n));
   conn = n->connections.first;
   while (conn) {
     connection *next = conn->next;
@@ -970,9 +981,7 @@ void node_remove_listener(node *n, listener *l)
   llist_remove(&n->listeners,l);
   node_notify(n);
 
-  unlock_node(n);
-
-  close(l->fd);
+  list_push(&n->toclose,(void*)l->fd);
   free(l);
 }
 

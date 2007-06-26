@@ -222,6 +222,7 @@ typedef struct node {
   int iosize;
   int total_sent;
   int total_received;
+  list *toclose;
 } node;
 
 /* node */

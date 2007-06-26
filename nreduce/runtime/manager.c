@@ -371,10 +371,9 @@ static void manager_delete_listener(node *n, endpoint *endpt,
 
   lock_node(n);
   l = get_listener(n,m->sockid);
-  unlock_node(n);
-
   if (NULL != l)
     node_remove_listener(n,l);
+  unlock_node(n);
 }
 
 static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid source)

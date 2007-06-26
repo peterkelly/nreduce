@@ -67,5 +67,5 @@ function handler(stream)
 
 function main()
 {
-  parlist(listen("0.0.0.0",1234,handler));
+  parlist(listen(1234,handler));
 }

@@ -46,7 +46,7 @@ typedef struct console {
   socketid sockid;
 } console;
 
-static int process_cmd(node *n, int argc, char **argv, array *out)
+static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *out)
 {
   assert(NODE_UNLOCKED(n));
   if (0 == argc)
@@ -62,8 +62,21 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
               c2->isreg ? "Yes" : "No");
     unlock_node(n);
   }
-  else if (!strcmp(argv[0],"exit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"quit")) {
-    return 1;
+  else if (!strcmp(argv[0],"listeners") || !strcmp(argv[0],"l")) {
+    listener *l;
+    array_printf(out,"%-7s %-4s %-20s\n","sid    ","port","owner");
+    array_printf(out,"%-7s %-4s %-20s\n","-------","----","--------------------");
+    lock_node(n);
+    for (l = n->listeners.first; l; l = l->next) {
+      endpointid_str owner;
+      if (endpointid_isnull(&l->owner))
+        sprintf(owner,"(none)");
+      else
+        print_endpointid(owner,l->owner);
+      array_printf(out,"%-7d %-4d %-20s\n",l->sockid.sid,l->port,owner);
+    }
+    unlock_node(n);
+    return 0;
   }
   else if (!strcmp(argv[0],"tasks") || !strcmp(argv[0],"t")) {
     endpoint *endpt;
@@ -82,7 +95,7 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
     unlock_node(n);
     return 0;
   }
-  else if (!strcmp(argv[0],"threads") || !strcmp(argv[0],"h")) {
+  else if (!strcmp(argv[0],"threads") || !strcmp(argv[0],"r")) {
     endpoint *endpt;
     array_printf(out,"%-7s %-4s\n","localid","type");
     array_printf(out,"%-7s %-4s\n","-------","----");
@@ -92,21 +105,37 @@ static int process_cmd(node *n, int argc, char **argv, array *out)
     unlock_node(n);
     return 0;
   }
-  else if (!strcmp(argv[0],"kill") || !strcmp(argv[0],"kill")) {
-    array_printf(out,"Not yet implemented\n");
+  else if (!strcmp(argv[0],"kill") || !strcmp(argv[0],"k")) {
+    if (2 > argc)  {
+      array_printf(out,"Please specify a task to kill\n");
+    }
+    else {
+      endpointid destid;
+      destid.ip = n->listenip;
+      destid.port = n->listenport;
+      destid.localid = atoi(argv[1]);
+      printf("killing %d\n",destid.localid);
+      endpoint_send(endpt,destid,MSG_KILL,NULL,0);
+      printf("after killing %d\n",destid.localid);
+    }
     return 0;
+  }
+  else if (!strcmp(argv[0],"quit") || !strcmp(argv[0],"q") || !strcmp(argv[0],"exit")) {
+    return 1;
   }
   else if (!strcmp(argv[0],"shutdown") || !strcmp(argv[0],"s")) {
     node_shutdown(n);
     return 0;
   }
-  else if (!strcmp(argv[0],"help")) {
-    array_printf(out,"connections   [c] - List all open connections\n");
-    array_printf(out,"tasks         [t] - List tasks\n");
-    array_printf(out,"threads       [h] - List threads\n");
-    array_printf(out,"kill          [k] - Kill a task\n");
-    array_printf(out,"shutdown      [s] - Shut down VM\n");
-    array_printf(out,"help          [h] - Print this message\n");
+  else if (!strcmp(argv[0],"help") || !strcmp(argv[0],"h") || !strcmp(argv[0],"?")) {
+    array_printf(out,"connections       [c] - List all open connections\n");
+    array_printf(out,"listeners         [l] - List all listening sockets\n");
+    array_printf(out,"tasks             [t] - List tasks\n");
+    array_printf(out,"threads           [r] - List threads\n");
+    array_printf(out,"kill              [k] - Kill a task\n");
+    array_printf(out,"quit (or exit)    [q] - Disconnect from debug console\n");
+    array_printf(out,"shutdown          [s] - Shut down VM\n");
+    array_printf(out,"help              [h] - Print this message\n");
   }
   else {
     array_printf(out,"Unknown command. Type \"help\" to list available commands.\n");
@@ -122,7 +151,7 @@ static int process_line(node *n, endpoint *endpt, console *csl, const char *line
   int doclose;
 
   parse_cmdline(line,&argc,&argv);
-  doclose = process_cmd(n,argc,argv,out);
+  doclose = process_cmd(n,endpt,argc,argv,out);
   array_printf(out,"\n> ");
   free_args(argc,argv);
 
