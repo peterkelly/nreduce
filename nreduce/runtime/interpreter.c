@@ -955,7 +955,6 @@ static void handle_message(task *tsk, message *msg)
     interpreter_connection_event(tsk,(connection_event_msg*)msg->data);
     break;
   case MSG_KILL:
-    /* FIXME: ensure that when a task is killed, all connections that is has open are closed. */
     node_log(tsk->n,LOG_INFO,"task: received KILL");
     tsk->done = 1;
     break;

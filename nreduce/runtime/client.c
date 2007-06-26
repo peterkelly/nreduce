@@ -168,6 +168,12 @@ static void send_inittask(launcher *lr)
   int i;
   initmsg->count = lr->count;
   memcpy(initmsg->idmap,lr->endpointids,lr->count*sizeof(endpointid));
+
+  /* send to output thread */
+  initmsg->localid = 0;
+  endpoint_send(lr->endpt,lr->out_sockid.managerid,MSG_INITTASK,(char*)initmsg,initsize);
+
+  /* send to managers */
   for (i = 0; i < lr->count; i++) {
     initmsg->localid = lr->endpointids[i].localid;
     endpoint_send(lr->endpt,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
@@ -359,6 +365,23 @@ void output_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(finwrite_msg) == msg->hdr.size);
       frm.ioid = m->ioid;
       endpoint_send(endpt,msg->hdr.source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
+      break;
+    }
+    case MSG_INITTASK: {
+      inittask_msg *initmsg = (inittask_msg*)msg->data;
+      int i;
+      assert(sizeof(inittask_msg) <= msg->hdr.size);
+      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->hdr.size);
+      for (i = 0; i < initmsg->count; i++)
+        endpoint_link(endpt,initmsg->idmap[i]);
+      break;
+    }
+    case MSG_ENDPOINT_EXIT: {
+      endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
+      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      fprintf(stderr,"Unexpected task exit: "EPID_FORMAT"\n",EPID_ARGS(m->epid));
+      oa->rc = 1;
+      done = 1;
       break;
     }
     case MSG_DELETE_CONNECTION:

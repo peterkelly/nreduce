@@ -199,6 +199,8 @@ static void manager_listen(node *n, endpoint *endpt, listen_msg *m, endpointid s
   listener *l;
   listen_response_msg lrm;
 
+  endpoint_link(endpt,m->owner);
+
   l = node_listen(n,m->ip,m->port,1,NULL,1,0,&m->owner,lrm.errmsg,ERRMSG_MAX);
   lrm.errmsg[ERRMSG_MAX] = '\0';
 
@@ -234,6 +236,8 @@ static void manager_connect(node *n, endpoint *endpt, connect_msg *m, endpointid
 {
   connection *conn;
   connect_response_msg crm;
+
+  endpoint_link(endpt,m->owner);
 
   lock_node(n);
   conn = node_connect_locked(n,m->hostname,INADDR_ANY,m->port,0,crm.errmsg,ERRMSG_MAX);
@@ -321,9 +325,6 @@ static void manager_write(node *n, endpoint *endpt, write_msg *m, endpointid sou
 static void manager_finwrite(node *n, endpoint *endpt, finwrite_msg *m, endpointid source)
 {
   connection *conn;
-
-  /* FIXME: if a task has an error and it has connections open, make sure that all of the
-     connections get closed anyway, since it won't send a FINWRITE message */
 
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
      receive a CONNECTION_CLOSED MESSAGE */
@@ -531,6 +532,12 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       unlock_node(n);
 
       endpoint_send(endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+      break;
+    }
+    case MSG_ENDPOINT_EXIT: {
+      endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
+      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      node_handle_endpoint_exit(n,m->epid);
       break;
     }
     case MSG_START_CHORD: {

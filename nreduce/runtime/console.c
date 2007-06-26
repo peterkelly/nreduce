@@ -54,12 +54,20 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
   if (!strcmp(argv[0],"connections") || !strcmp(argv[0],"c")) {
     connection *c2;
     lock_node(n);
-    array_printf(out,"%-30s %-6s %-6s %-8s\n","Hostname","Port","Socket","Regular?");
-    array_printf(out,"%-30s %-6s %-6s %-8s\n","--------","----","------","--------");
-    for (c2 = n->connections.first; c2; c2 = c2->next)
-      array_printf(out,"%-30s %-6d %-6d %-8s\n",
-              c2->hostname,c2->port,c2->sock,
-              c2->isreg ? "Yes" : "No");
+    array_printf(out,"%-30s %-6s %-6s %-8s %-20s\n",
+                 "Hostname","Port","Socket","Regular?","Owner");
+    array_printf(out,"%-30s %-6s %-6s %-8s %-20s\n",
+                 "--------","----","------","--------","--------------------");
+    for (c2 = n->connections.first; c2; c2 = c2->next) {
+      endpointid_str owner;
+      if (endpointid_isnull(&c2->owner))
+        sprintf(owner,"(none)");
+      else
+        print_endpointid(owner,c2->owner);
+      array_printf(out,"%-30s %-6d %-6d %-8s %-20s\n",
+                   c2->hostname,c2->port,c2->sock,
+                   c2->isreg ? "Yes" : "No",owner);
+    }
     unlock_node(n);
   }
   else if (!strcmp(argv[0],"listeners") || !strcmp(argv[0],"l")) {

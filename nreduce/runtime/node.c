@@ -282,10 +282,13 @@ static void remove_connection(node *n, connection *conn)
 static void start_console(node *n, connection *conn)
 {
   socketid *sockid = (socketid*)malloc(sizeof(socketid));
+  endpoint *mgrendpt;
   conn->isreg = 1;
   conn->frameids[READ_FRAMEADDR] = 1;
   memcpy(sockid,&conn->sockid,sizeof(socketid));
   conn->owner = node_add_thread_locked(n,"console",console_thread,sockid,NULL,0,0);
+  if (NULL != (mgrendpt = find_endpoint(n,MANAGER_ID)))
+    endpoint_link_locked(mgrendpt,conn->owner);
 }
 
 static void process_received(node *n, connection *conn)
@@ -1147,6 +1150,33 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   return conn;
 }
 
+void node_handle_endpoint_exit(node *n, endpointid epid)
+{
+  connection *conn;
+  listener *l;
+
+  lock_node(n);
+
+  conn = n->connections.first;
+  while (conn) {
+    connection *next = conn->next;
+    /* no need to notify here; since the owner has exited */
+    if (!endpointid_isnull(&conn->owner) && endpointid_equals(&conn->owner,&epid))
+      remove_connection(n,conn);
+    conn = next;
+  }
+
+  l = n->listeners.first;
+  while (l) {
+    listener *next = l->next;
+    if (!endpointid_isnull(&l->owner) && endpointid_equals(&l->owner,&epid))
+      node_remove_listener(n,l);
+    l = next;
+  }
+
+  unlock_node(n);
+}
+
 static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                              int tag, const void *data, int size)
 {
@@ -1365,7 +1395,8 @@ void endpoint_link_locked(endpoint *endpt, endpointid to)
 {
   endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
   assert(NODE_ALREADY_LOCKED(endpt->n));
-  assert(!endpoint_has_link(endpt,to));
+  if (endpoint_has_link(endpt,to))
+    return;
   memcpy(copy,&to,sizeof(endpointid));
   list_push(&endpt->outlinks,copy);
   node_send_locked(endpt->n,endpt->epid.localid,to,MSG_LINK,&endpt->epid,sizeof(endpointid));

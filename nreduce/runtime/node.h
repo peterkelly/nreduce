@@ -245,6 +245,7 @@ void node_close_endpoints(node *n);
 void node_close_connections(node *n);
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen);
+void node_handle_endpoint_exit(node *n, endpointid epid);
 void node_shutdown(node *n);
 void node_notify(node *n);
 void done_writing(node *n, connection *conn);

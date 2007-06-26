@@ -244,7 +244,7 @@ static void set_noderef(chord *crd, chordnode *ptr, chordnode cn)
   if (1 == oldinst)
     endpoint_unlink(crd->endpt,ptr->epid);
   *ptr = cn;
-  if ((0 == newinst) && !chordnode_isnull(cn))
+  if (!chordnode_isnull(cn))
     endpoint_link(crd->endpt,cn.epid);
 }
 
