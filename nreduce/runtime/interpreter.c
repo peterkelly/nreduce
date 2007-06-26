@@ -123,17 +123,6 @@ void cap_error(task *tsk, pntr cappntr)
   }
 }
 
-static void constant_app_error(task *tsk, pntr cappntr, const instruction *op)
-{
-  sourceloc sl;
-  /* FIXME: this should use the normal set_error() mechanism so it works when a client is
-     running remotely - the error message should be sent over the network */
-  sl.fileno = op->fileno;
-  sl.lineno = op->lineno;
-  print_task_sourceloc(tsk,stderr,sl);
-  fprintf(stderr,CONSTANT_APP_MSG"\n");
-}
-
 void handle_error(task *tsk)
 {
   array *buf = array_new(1,0);
@@ -1135,10 +1124,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
   }
 
   if (CELL_CAP != pntrtype(p)) {
-    /* FIXME: test this with native code */
-    constant_app_error(tsk,p,instr);
-    endpoint_interrupt(tsk->endpt);
-    tsk->done = 1;
+    set_error(tsk,"%s",CONSTANT_APP_MSG);
     return;
   }
   capholder = (cell*)get_pntr(p);
