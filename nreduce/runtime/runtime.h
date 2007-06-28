@@ -479,6 +479,7 @@ typedef struct task {
   pntrstack *streamstack;
   pntrstack *markstack;
   int indistgc;
+  int newcellflags;
   int inmark;
   int alloc_bytes;
   int framesize;
@@ -553,6 +554,7 @@ void remove_gaddr(task *tsk, list **l, gaddr addr);
 void spark_frame(task *tsk, frame *f);
 void unspark_frame(task *tsk, frame *f);
 void run_frame(task *tsk, frame *f);
+void run_frame_toend(task *tsk, frame *f);
 
 void check_runnable(task *tsk);
 void block_frame(task *tsk, frame *f);
@@ -686,6 +688,8 @@ void cap_dealloc(cap *c);
 
 /* interpreter */
 
+void eval_remoteref(task *tsk, frame *f2, pntr p);
+void resume_fetchers(task *tsk, waitqueue *wq, pntr obj);
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);

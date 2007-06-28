@@ -156,27 +156,31 @@ static void add_waiter_frame(waitqueue *wq, frame *f)
   wq->frames = f;
 }
 
-void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
+void resume_fetchers(task *tsk, waitqueue *wq, pntr obj)
+{
+  list *l;
+  obj = resolve_pntr(obj);
+  for (l = wq->fetchers; l; l = l->next) {
+    gaddr *ft = (gaddr*)l->data;
+    assert(CELL_FRAME != pntrtype(obj));
+    msg_fsend(tsk,ft->tid,MSG_RESPOND,"pa",obj,*ft);
+  }
+  list_free(wq->fetchers,free);
+  wq->fetchers = NULL;
+}
+
+void resume_waiters(task *tsk, waitqueue *wq, pntr obj) /* Can be called from native code */
 {
   while (wq->frames) {
     frame *f = wq->frames;
     wq->frames = f->waitlnk;
     f->waitglo = NULL;
     f->waitlnk = NULL;
-    unblock_frame(tsk,f);
+    unblock_frame_toend(tsk,f);
   }
 
-  if (wq->fetchers) {
-    list *l;
-    obj = resolve_pntr(obj);
-    for (l = wq->fetchers; l; l = l->next) {
-      gaddr *ft = (gaddr*)l->data;
-      assert(CELL_FRAME != pntrtype(obj));
-      msg_fsend(tsk,ft->tid,MSG_RESPOND,"pa",obj,*ft);
-    }
-    list_free(wq->fetchers,free);
-    wq->fetchers = NULL;
-  }
+  if (wq->fetchers)
+    resume_fetchers(tsk,wq,obj);
 }
 
 void frame_return(task *tsk, frame *curf, pntr val)
@@ -634,8 +638,7 @@ static void interpreter_respond(task *tsk, message *msg)
   resume_waiters(tsk,&objglo->wq,obj);
 
   if (CELL_FRAME == pntrtype(obj))
-    run_frame(tsk,pframe(obj)); /* FIXME: will break native code - see comment
-				   in handle_interrupt() */
+    run_frame_toend(tsk,pframe(obj));
   tsk->stats.fetches--;
 }
 
@@ -664,7 +667,7 @@ static void interpreter_schedule(task *tsk, message *msg)
     frameglo = make_global(tsk,framep);
     write_format(urmsg,tsk,"aa",tellsrc,frameglo->addr);
 
-    run_frame(tsk,pframe(framep));
+    run_frame_toend(tsk,pframe(framep));
 
     count++;
   }
@@ -765,6 +768,7 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
 /*   printf("tsk->indistgc = %d\n",tsk->indistgc); */
   assert(!tsk->indistgc);
   tsk->indistgc = 1;
+  tsk->newcellflags |= FLAG_NEW;
   assert(endpointid_isnull(&tsk->gc) || endpointid_equals(&tsk->gc,&m->gc));
   if (endpointid_isnull(&tsk->gc)) {
     tsk->gc = m->gc;
@@ -890,6 +894,7 @@ static void interpreter_sweep(task *tsk, message *msg)
   clear_marks(tsk,FLAG_NEW);
 
   tsk->indistgc = 0;
+  tsk->newcellflags &= ~FLAG_NEW;
 }
 
 static void handle_message(task *tsk, message *msg)
@@ -1418,6 +1423,26 @@ inline void op_error(task *tsk, frame *runnable, const instruction *instr)
   handle_error(tsk);
 }
 
+void eval_remoteref(task *tsk, frame *f2, pntr px) /* Can be called from native code */
+{
+  global *target = (global*)get_pntr(get_pntr(px)->field1);
+  assert(target->addr.tid != tsk->tid);
+
+  if (!target->fetching && (0 <= target->addr.lid)) {
+    global *refglo = make_global(tsk,px);
+    assert(refglo->addr.tid == tsk->tid);
+    msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
+
+    tsk->stats.fetches++;
+    target->fetching = 1;
+  }
+  f2->waitglo = target;
+  add_waiter_frame(&target->wq,f2);
+  f2->instr--;
+  block_frame(tsk,f2);
+  check_runnable(tsk);
+}
+
 inline void op_eval(task *tsk, frame *runnable, const instruction *instr)
 {
   pntr p;
@@ -1436,23 +1461,7 @@ inline void op_eval(task *tsk, frame *runnable, const instruction *instr)
     return;
   }
   else if (CELL_REMOTEREF == pntrtype(p)) {
-    global *target = (global*)get_pntr(get_pntr(p)->field1);
-    frame *f2 = runnable;
-    assert(target->addr.tid != tsk->tid);
-
-    if (!target->fetching && (0 <= target->addr.lid)) {
-      global *refglo = make_global(tsk,p);
-      assert(refglo->addr.tid == tsk->tid);
-      msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
-
-      tsk->stats.fetches++;
-      target->fetching = 1;
-    }
-    f2->waitglo = target;
-    add_waiter_frame(&target->wq,f2);
-    f2->instr--;
-    block_frame(tsk,f2);
-    check_runnable(tsk);
+    eval_remoteref(tsk,runnable,p);
     return;
   }
 }

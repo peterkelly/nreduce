@@ -281,7 +281,7 @@ cell *alloc_cell(task *tsk)
     tsk->freeptr = &bl->values[0];
   }
   v = tsk->freeptr;
-  v->flags = tsk->indistgc ? FLAG_NEW : 0;
+  v->flags = tsk->newcellflags;
   tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
   tsk->alloc_bytes += sizeof(cell);
   #ifdef PROFILING

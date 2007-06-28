@@ -430,7 +430,7 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   if (!tsk->usr1setup)
     return;
 
-  if (tsk->trap_pending || tsk->native_finished)
+  if (tsk->trap_pending || tsk->native_finished || tsk->done)
     return;
 
   if (0 == stackoffset) { /* Native code */
@@ -480,12 +480,6 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
  * when the thread exits the signal handler it will jump to the assembler code generated for the
  * interrupt handler. We save the old value of the EIP register in tsk->interrupt_return_eip, so
  * that the thread can jump back to the original position after the interrupt has been dealt with.
- *
- * FIXME: should we block SIGUSR1 when inside native_sigtrap() and native_sigfpe()?
- *
- * FIXME: now that this is no longer a signal handler, we could possibly just call
- *        handle_interrupt() directly from here. Need to be careful about honouring
- *        tsk->interrupt_again.
  */
 void handle_trap(task *tsk, void *eip)
 {
@@ -504,7 +498,7 @@ void handle_trap(task *tsk, void *eip)
 
   assert(((void*)eip == tsk->bpaddrs[0][bcaddr]) ||
          ((void*)eip == tsk->bpaddrs[1][bcaddr]));
-  assert(eip >= tsk->instraddrs[bcaddr]);
+  assert((eip >= tsk->instraddrs[bcaddr]) || (0 == bcaddr));
   assert((bcaddr == bch->nops-1) ||
          (eip <= tsk->instraddrs[bcaddr+1]));
 
@@ -655,6 +649,11 @@ void runnable_owner_native_code(task *tsk, x86_assembly *as)
   I_MOV(absmem((int)tsk->runptr),imm(1));
 }
 
+void swap_in_error(task *tsk)
+{
+  fatal("swap_in: no runnable frames, and trap not (correctly) set");
+}
+
 /* Update the native code EIP for the current runnable list head */
 void swap_in(task *tsk, x86_assembly *as, int lab)
 {
@@ -663,6 +662,7 @@ void swap_in(task *tsk, x86_assembly *as, int lab)
   int Ljump = as->labels++;
 
   int Lcheck = as->labels++;
+  int Lhavetrap = as->labels++;
   LABEL(Lcheck);
   /* Compute the address of the next instruction */
 
@@ -670,6 +670,17 @@ void swap_in(task *tsk, x86_assembly *as, int lab)
   I_JNE(label(Lnotnull));
 
   /* If we get here, we should have had an interrupt, and the jump target should be a breakpoint */
+  I_CMP(absmem((int)&tsk->trap_pending),imm(0));
+  I_JNE(label(Lhavetrap));
+
+  BEGIN_CALL(4);
+  I_PUSH(imm((int)tsk));
+  I_MOV(reg(EAX),imm((int)swap_in_error));
+  I_CALL(reg(EAX));
+  I_ADD(reg(ESP),imm(4));
+  END_CALL;
+
+  LABEL(Lhavetrap);
   I_MOV(reg(EAX),label(Lcheck));
   I_ADD(reg(EAX),absmem((int)&tsk->code));
   I_JMP(label(Ljump));
@@ -879,6 +890,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   int *tempaddrs = (int*)calloc(bch->nops,sizeof(int));
   int Lfinished = as->labels++;
   int Ltrap = as->labels++;
+  int Lstillactive = as->labels++;
   int Lcaperror = as->labels++;
   int Largerror = as->labels++;
   int Lbcend = as->labels++;
@@ -907,7 +919,12 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   I_MOV(reg(EBP),absmem((int)tsk->runptr));
   I_MOV(absmem((int)tsk->runptr),imm(1));
 
-  swap_in(tsk,as,0); /* initialize EBP and jump to first instruction */
+  asm_check_runnable(tsk,as);
+  assert(OP_BEGIN == program_ops[0].opcode);
+  swap_in(tsk,as,bplabels[1][0]); /* initialize EBP and jump to first instruction */
+  I_NOP(); /* pad to 5 bytes between labels */
+  I_NOP();
+  I_NOP();
 
   // EBP: always points to current frame
 
@@ -1043,6 +1060,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
         int Lwhile = as->labels++;
         int Ldone = as->labels++;
+        int Lresumedfetchers = as->labels++;
         LABEL(Lwhile);
         {
           I_MOV(reg(EBX),regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES));
@@ -1066,7 +1084,22 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
         LABEL(Ldone);
 
-        /* FIXME: resume fetchers */
+        /* resume fetchers */
+        I_CMP(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS),imm(0));
+        I_JZ(label(Lresumedfetchers));
+
+        BEGIN_CALL(16);
+        I_PUSH(regmem(EDI,FRAME_DATA+8*(instr->expcount-1)+4));
+        I_PUSH(regmem(EDI,FRAME_DATA+8*(instr->expcount-1)));
+        I_LEA(reg(EAX),regmem(EDI,FRAME_WQ));
+        I_PUSH(reg(EAX));
+        I_PUSH(imm((int)tsk));
+        I_MOV(reg(EAX),imm((int)resume_fetchers));
+        I_CALL(reg(EAX));
+        I_ADD(reg(ESP),imm(16));
+        END_CALL;
+
+        LABEL(Lresumedfetchers);
       }
 
       // check_runnable()
@@ -1075,21 +1108,6 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       // frame_free()
       {
-        int Ldonefetchers = as->labels++;
-        // if (_f->wq.fetchers)
-        //   list_free(_f->wq.fetchers,free);
-        I_CMP(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS),imm(0));
-        I_JZ(label(Ldonefetchers));
-
-        BEGIN_CALL(8);
-        I_PUSH(imm((int)free));
-        I_PUSH(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS));
-        I_MOV(reg(EAX),imm((int)list_free)); /* FIXME: test this code branch (parallel only) */
-        I_CALL(reg(EAX));
-        I_ADD(reg(ESP),imm(8));
-        END_CALL;
-
-        LABEL(Ldonefetchers);
         // _f->freelnk = tsk->freeframe;
         I_MOV(reg(EAX),absmem((int)&tsk->freeframe));
         I_MOV(regmem(EDI,FRAME_FREELNK),reg(EAX));
@@ -1133,7 +1151,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       I_MOV(reg(EBX),regmem(EAX,CELL_TYPE));
 
       /* CAP - report error */
-      I_CMP(reg(EBX),imm(CELL_CAP)); // FIXME: problem if signal is received here
+      I_CMP(reg(EBX),imm(CELL_CAP));
       I_JNE(label(Lnotcap));
 
       I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
@@ -1230,10 +1248,9 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       // v = tsk->freeptr;
       I_MOV(reg(ESI),absmem((int)&tsk->freeptr));
 
-      // v->flags = tsk->indistgc ? FLAG_NEW : 0;
-      /* FIXME: set the flags properly. They get overwritten when we set the cell type; need
-         to write the 16 bit parts of the value separately, or do a combined MOV with the
-         both high and low values set appropriately */
+      // v->flags = tsk->newcellflags;
+      I_MOV(reg(EAX),absmem((int)&tsk->newcellflags));
+      I_MOV(regmem(ESI,CELL_FLAGS),reg(EAX));
 
       // tsk->freeptr = (cell*)get_pntr(v->field1);
       I_MOV(reg(EAX),regmem(ESI,CELL_FIELD1));
@@ -1241,9 +1258,6 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       LABEL(Lcellallocated);
 
       // newfholder->type = CELL_FRAME;
-      /* FIXME: we need to make this a 16-bit move, because the current version overwrites
-         the flags field (copying all 32 bits). This is only strictly necessary for parallel
-         mode since in standalone mode the flags are initialised to 0 anyway */
       I_MOV(regmem(ESI,CELL_TYPE),imm(CELL_FRAME));
 
       // make_pntr(newfholder->field1,newf);
@@ -1396,13 +1410,15 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
     #ifdef NATIVE_EVAL
     case OP_EVAL: {
       int Ldone = as->labels++;
+      int Lswapin = as->labels++;
+      int Lcheckref = as->labels++;
       int pos = instr->arg0;
 
       // RUNNABLE->data[INSTR->arg0] = resolve_pntr(RUNNABLE->data[INSTR->arg0]);
       asm_resolve_stack_pntr(tsk,as,pos); // uses EAX, EBX, ECX, ECX
       // now EBX == type, EAX == cell pointer (if not number)
       I_CMP(reg(EBX),imm(CELL_FRAME));
-      I_JNE(label(Ldone));
+      I_JNE(label(Lcheckref));
 
       /* If we get here, the cell is a frame */
 
@@ -1448,13 +1464,36 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
       // check_runnable(tsk);
       asm_check_runnable(tsk,as);
+      I_JMP(label(Lswapin));
 
+      LABEL(Lcheckref);
+      I_CMP(reg(EBX),imm(CELL_REMOTEREF));
+      I_JNE(label(Ldone));
+
+      I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
+      I_MOV(reg(EDI),reg(EBP));
+
+      runnable_owner_task(tsk,as);
+
+      BEGIN_CALL(16);
+      I_PUSH(regmem(EDI,FRAME_DATA+8*pos+4));
+      I_PUSH(regmem(EDI,FRAME_DATA+8*pos));
+      I_PUSH(reg(EDI));
+      I_PUSH(imm((int)tsk));
+      I_MOV(reg(EAX),imm((int)eval_remoteref));
+      I_CALL(reg(EAX));
+      I_ADD(reg(ESP),imm(16));
+      END_CALL;
+
+      runnable_owner_native_code(tsk,as);
+      asm_check_runnable(tsk,as);
+
+      LABEL(Lswapin);
       swap_in(tsk,as,bplabels[0][addr]);
       I_NOP(); /* pad to 5 bytes between labels */
       I_NOP();
       I_NOP();
 
-      /* FIXME: handle remote references */
       LABEL(Ldone);
       LABEL(bplabels[1][addr]);
       break;
@@ -1676,6 +1715,17 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   I_ADD(reg(ESP),imm(8));
   END_CALL;
 
+  I_CMP(absmem((int)&tsk->done),imm(0));
+  I_JZ(label(Lstillactive));
+
+  I_POPAD();
+  runnable_owner_native_code(tsk,as);
+  I_POPF();
+  I_ADD(reg(ESP),imm(4));
+  I_JMP(label(Lbcend));
+
+  LABEL(Lstillactive);
+
   I_POPAD();
   runnable_owner_native_code(tsk,as);
   I_POPF();
@@ -1727,7 +1777,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 
     if (0 == addr) {
       for (i = last; i < cpuaddr; i++)
-        tsk->cpu_to_bcaddr[i] = bch->nops-1; /* INVALID instruction */
+        tsk->cpu_to_bcaddr[i] = 0;
     }
     else {
       for (i = last; i < cpuaddr; i++)

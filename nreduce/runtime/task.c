@@ -250,6 +250,24 @@ void run_frame(task *tsk, frame *f)
   }
 }
 
+void run_frame_toend(task *tsk, frame *f)
+{
+  if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
+    frame **fp = tsk->runptr;
+    while (*fp)
+      fp = &((*fp)->rnext);
+    *fp = f;
+
+    f->rnext = NULL;
+    f->state = STATE_RUNNING;
+
+    #ifdef PROFILING
+    if (0 <= frame_fno(tsk,f))
+      tsk->stats.funcalls[frame_fno(tsk,f)]++;
+    #endif
+  }
+}
+
 void check_runnable(task *tsk)
 {
   assert((void*)1 != *tsk->runptr);
