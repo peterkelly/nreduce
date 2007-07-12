@@ -1473,6 +1473,13 @@ static void b_exit(task *tsk, pntr *argstack)
   endpoint_interrupt(tsk->endpt);
 }
 
+static void b_abs(task *tsk, pntr *argstack)
+{
+  CHECK_ARG(0,CELL_NUMBER);
+  setnumber(&argstack[0],fabs(pntrdouble(argstack[0])));
+}
+
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1559,6 +1566,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "getoutput",      1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_getoutput      },
 { "genid",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE, IMPURE, b_genid          },
 { "exit",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_exit           },
+
+{ "abs",            1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_abs            },
 
 };
 

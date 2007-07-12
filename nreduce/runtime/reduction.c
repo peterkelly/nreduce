@@ -168,8 +168,6 @@ void reduce(task *tsk, pntrstack *s)
     int oldtop = s->count;
     pntr target;
 
-    tsk->stats.nreductions++;
-
     if (tsk->alloc_bytes > COLLECT_THRESHOLD)
       local_collect(tsk);
 

@@ -639,7 +639,6 @@ static void interpreter_respond(task *tsk, message *msg)
 
   if (CELL_FRAME == pntrtype(obj))
     run_frame_toend(tsk,pframe(obj));
-  tsk->stats.fetches--;
 }
 
 static void interpreter_schedule(task *tsk, message *msg)
@@ -1433,7 +1432,6 @@ void eval_remoteref(task *tsk, frame *f2, pntr px) /* Can be called from native 
     assert(refglo->addr.tid == tsk->tid);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
 
-    tsk->stats.fetches++;
     target->fetching = 1;
   }
   f2->waitglo = target;

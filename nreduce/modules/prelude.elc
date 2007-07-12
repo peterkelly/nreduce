@@ -180,13 +180,21 @@ reverse1 lst rev =
 reverse lst =
 (reverse1 lst nil)
 
-echo str =
-(letrec
-  dest = (getoutput nil)
-  lst = (forcelist str)
-  partlen = (len lst)
- in
-  (printarray dest partlen lst))
+
+echo2 dest partlen lst =
+(echo1 dest (arrayskip partlen lst))
+
+echo1 dest lst =
+(if lst
+  (letrec
+    partlen = (nchars lst)
+   in
+    (if partlen
+      (seq (printarray dest partlen lst) (echo2 dest partlen lst))
+      (seq (print dest (head lst)) (echo1 dest (tail lst)))))
+  nil)
+
+echo str = (echo1 (getoutput nil) (forcelist str))
 
 stringtonum str =
 (stringtonum1 (forcelist str))

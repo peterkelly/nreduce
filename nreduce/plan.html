@@ -34,20 +34,20 @@
           new process</li>
       <li class="done">Automatically spark expressions passed as strict arguments (currently parallel execution
           relies on user code explicitly calling spark)</li>
-      <li>Parallel execution: make more robust, and thoroughly test</li>
+      <li class="done">Parallel execution: make more robust, and thoroughly test</li>
       <li class="done">Invoke the distributed garbage collector automatically where appropriate, instead of
           manually (as it currently has to be done)</li>
       <li class="done">Add support for socket connections</li>
       <li class="ignore">Add the ability to write to files</li>
       <li class="done">Support multiple concurrent tasks running on a node</li>
-      <li class="partial">Test for robustness as nodes join/leave the system at runtime</li>
-      <li>Transfer arrays properly between nodes, instead of passing them as cons lists</li>
-      <li>Write a tool to monitor a set of running nodes</li>
+      <li class="done">Test for robustness as nodes join/leave the system at runtime</li>
+      <li class="done">Transfer arrays properly between nodes, instead of passing them as cons lists</li>
+      <li class="ignore">Write a tool to monitor a set of running nodes</li>
     </ul>
 
     XSLT compiler and runtime support
     <ul>
-      <li>Complete main XSLT and XPath constructs (excluding reverse axes)</li>
+      <li class="partial">Complete main XSLT and XPath constructs (excluding reverse axes)</li>
       <li class="ignore">
         Implement rules from the paper
         <a href="http://www.pms.ifi.lmu.de/publikationen/PMS-FB/PMS-FB-2002-4.pdf">
@@ -58,9 +58,9 @@
       </li>
       <li class="done">HTTP client</li>
       <li class="done">HTTP server</li>
-      <li>Support for accessing web services</li>
+      <li class="partial">Support for accessing web services</li>
       <li>Support for exposing an XSLT program as a web service</li>
-      <li>Integrate gridxslt and nreduce code trees</li>
+      <li class="partial">Integrate gridxslt and nreduce code trees</li>
     </ul>
 
     Evaluation
@@ -102,7 +102,9 @@
     Papers to write
     <ul>
       <li class="partial">Efficient array/string storage</li>
-      <li>nreduce overview</li>
+      <li class="done">nreduce overview</li>
+      <li class="parital">Messaging layer</li>
+      <li>Chord optimisations</li>
     </ul>
 
     Thesis

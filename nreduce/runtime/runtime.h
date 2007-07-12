@@ -119,7 +119,9 @@
 #define B_GENID          53
 #define B_EXIT           54
 
-#define NUM_BUILTINS     55
+#define B_ABS            55
+
+#define NUM_BUILTINS     56
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -346,14 +348,6 @@ typedef struct frameq {
 typedef struct procstats {
   int *usage;
   int ninstrs;
-  int nreductions;
-  int fetches;
-
-  /* Communication */
-  int *sendcount;
-  int *sendbytes;
-  int *recvcount;
-  int *recvbytes;
 
   /* Memory allocation */
   int cell_allocs;

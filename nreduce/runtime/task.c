@@ -442,10 +442,6 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   tsk->stats.frames = (int*)calloc(bch->nfunctions,sizeof(int));
   tsk->stats.caps = (int*)calloc(bch->nfunctions,sizeof(int));
   tsk->stats.usage = (int*)calloc(bch->nops,sizeof(int));
-  tsk->stats.sendcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  tsk->stats.sendbytes = (int*)calloc(MSG_COUNT,sizeof(int));
-  tsk->stats.recvcount = (int*)calloc(MSG_COUNT,sizeof(int));
-  tsk->stats.recvbytes = (int*)calloc(MSG_COUNT,sizeof(int));
   tsk->gcsent = (int*)calloc(tsk->groupsize,sizeof(int));
   tsk->distmarks = (array**)calloc(tsk->groupsize,sizeof(array*));
 
@@ -518,10 +514,6 @@ void task_free(task *tsk)
   }
 
   free(tsk->strings);
-  free(tsk->stats.sendcount);
-  free(tsk->stats.sendbytes);
-  free(tsk->stats.recvcount);
-  free(tsk->stats.recvbytes);
   free(tsk->stats.funcalls);
   free(tsk->stats.frames);
   free(tsk->stats.caps);
