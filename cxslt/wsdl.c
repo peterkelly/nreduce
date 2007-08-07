@@ -31,9 +31,9 @@
 static int is_element(xmlNodePtr n, const char *ns, const char *name)
 {
   return ((XML_ELEMENT_NODE == n->type) &&
-	  (NULL != n->ns) &&
-	  !xmlStrcmp(n->ns->href,ns) &&
-	  !xmlStrcmp(n->name,name));
+          (NULL != n->ns) &&
+          !xmlStrcmp(n->ns->href,ns) &&
+          !xmlStrcmp(n->name,name));
 }
 
 static int is_wsdl_element(xmlNodePtr n, const char *name)
@@ -81,12 +81,12 @@ xmlNodePtr wsdl_get_object(wsdlfile *wf, const char *type, const char *name)
   for (c = wf->root->children; c; c = c->next) {
     if (is_wsdl_element(c,type)) {
       if (NULL == name) {
-	return c;
+        return c;
       }
       else {
-	char *nameattr = xmlGetProp(c,"name");
-	if (nameattr && !xmlStrcmp(nameattr,name))
-	  return c;
+        char *nameattr = xmlGetProp(c,"name");
+        if (nameattr && !xmlStrcmp(nameattr,name))
+          return c;
       }
     }
   }
@@ -105,11 +105,11 @@ char *wsdl_get_url(wsdlfile *wf)
     if (is_wsdl_element(port,"port")) {
       xmlNodePtr address;
       for (address = port->children; address; address = address->next) {
-	if (is_wsdlsoap_element(address,"address")) {
-	  char *location = xmlGetProp(address,"location");
-	  if (location)
-	    return location;
-	}
+        if (is_wsdlsoap_element(address,"address")) {
+          char *location = xmlGetProp(address,"location");
+          if (location)
+            return location;
+        }
       }
     }
   }
@@ -128,7 +128,7 @@ static qname get_part_element(wsdlfile *wf, xmlNodePtr message, const char *msgn
       char *element = xmlGetProp(part,"element");
 
       if (NULL == element)
-	return empty;
+        return empty;
 
       return string_to_qname(element,part);
     }
@@ -157,7 +157,7 @@ static xmlNodePtr get_element(wsdlfile *wf, const char *elemname)
     if (is_element(element,XMLSCHEMA_NAMESPACE,"element")) {
       char *name = xmlGetProp(element,"name");
       if (!strcmp(name,elemname))
-	return element;
+        return element;
     }
   }
 
@@ -187,7 +187,7 @@ static list *get_element_args(wsdlfile *wf, xmlNodePtr elem)
     if (is_element(arg,XMLSCHEMA_NAMESPACE,"element")) {
       char *name = xmlGetProp(arg,"name");
       if (name)
-	list_append(&args,strdup(name));
+        list_append(&args,strdup(name));
     }
   }
 
@@ -195,8 +195,8 @@ static list *get_element_args(wsdlfile *wf, xmlNodePtr elem)
 }
 
 void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
-				 qname *inqn, qname *outqn,
-				 list **inargs, list **outargs)
+                                 qname *inqn, qname *outqn,
+                                 list **inargs, list **outargs)
 {
   xmlNodePtr portType = wsdl_get_object(wf,"portType",NULL);
   xmlNodePtr operation;
@@ -223,39 +223,39 @@ void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
       xmlNodePtr outpelem;
 
       if ((NULL == name) || strcmp(name,opname))
-	continue;
+        continue;
 
       for (message = operation->children; message; message = message->next) {
-	if (is_wsdl_element(message,"input"))
-	  inmsgname = xmlGetProp(message,"name");
-	if (is_wsdl_element(message,"output"))
-	  outmsgname = xmlGetProp(message,"name");
+        if (is_wsdl_element(message,"input"))
+          inmsgname = xmlGetProp(message,"name");
+        if (is_wsdl_element(message,"output"))
+          outmsgname = xmlGetProp(message,"name");
       }
       if (NULL == inmsgname)
-	fatal("%s: operation \"%s\" has no input message",wf->filename,opname);
+        fatal("%s: operation \"%s\" has no input message",wf->filename,opname);
       if (NULL == outmsgname)
-	fatal("%s: operation \"%s\" has no output message",wf->filename,opname);
+        fatal("%s: operation \"%s\" has no output message",wf->filename,opname);
 
       inmsgname = strdup(inmsgname);
       outmsgname = strdup(outmsgname);
 
       if (NULL == (inpmessage = wsdl_get_object(wf,"message",inmsgname)))
-	fatal("%s: no such message \"%s\"",wf->filename,inmsgname);
+        fatal("%s: no such message \"%s\"",wf->filename,inmsgname);
       if (NULL == (outpmessage = wsdl_get_object(wf,"message",outmsgname)))
-	fatal("%s: no such message \"%s\"",wf->filename,outmsgname);
+        fatal("%s: no such message \"%s\"",wf->filename,outmsgname);
 
       inpelemname = get_part_element(wf,inpmessage,inmsgname);
       outpelemname = get_part_element(wf,outpmessage,outmsgname);
 
       if (NULL == inpelemname.localpart)
-	fatal("%s: no element specified in message \"%s\"",wf->filename,inmsgname);
+        fatal("%s: no element specified in message \"%s\"",wf->filename,inmsgname);
       if (NULL == outpelemname.localpart)
-	fatal("%s: no element specified in message \"%s\"",wf->filename,outmsgname);
+        fatal("%s: no element specified in message \"%s\"",wf->filename,outmsgname);
 
       if (NULL == (inpelem = get_element(wf,inpelemname.localpart)))
-	fatal("%s: no such element \"%s\"",wf->filename,inpelemname.localpart);
+        fatal("%s: no such element \"%s\"",wf->filename,inpelemname.localpart);
       if (NULL == (outpelem = get_element(wf,outpelemname.localpart)))
-	fatal("%s: no such element \"%s\"",wf->filename,outpelemname.localpart);
+        fatal("%s: no such element \"%s\"",wf->filename,outpelemname.localpart);
 
       *inqn = inpelemname;
       *outqn = outpelemname;

@@ -158,7 +158,7 @@ op_fun *op_handlers[OP_COUNT] = {
 
 #define STACK_PADDING(argbytes) (STACK_ALIGNMENT-((NATIVE_ESP_OFFSET+(argbytes))%STACK_ALIGNMENT))
 
-#define BEGIN_CALL(argbytes) {		     \
+#define BEGIN_CALL(argbytes) {               \
   int Ltemp = as->labels++;                  \
   int Ltempend = as->labels++;               \
   int _addstack = STACK_PADDING(argbytes);   \

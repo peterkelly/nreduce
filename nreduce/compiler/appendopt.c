@@ -239,7 +239,7 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
         snode *falseappend = snode_new(a->sl.fileno,a->sl.lineno);
         snode *truesym = snode_new(a->sl.fileno,a->sl.lineno);
         snode *falsesym = snode_new(a->sl.fileno,a->sl.lineno);
-	char *firstsym = next_var(src,"first");
+        char *firstsym = next_var(src,"first");
 
         /* true branch */
 
@@ -298,7 +298,7 @@ static void appreplace_r(source *src, snode *s, int lappend, int *changed)
 
         free(app2);
         free(appendref);
-	free(firstsym);
+        free(firstsym);
       }
       else if ((SNODE_SCREF == a->type) && strcmp(a->sc->name,"append")) {
         if (!a->sc->doesappend) {

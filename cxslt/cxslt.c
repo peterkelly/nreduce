@@ -267,19 +267,19 @@ int have_user_function(elcgen *gen, qname qn)
   int have = 0;
   for (c = gen->toplevel->children; c; c = c->next) {
     if (c->ns &&
-	!xmlStrcmp(c->ns->href,XSLT_NAMESPACE) &&
-	!xmlStrcmp(c->name,"function")) {
+        !xmlStrcmp(c->ns->href,XSLT_NAMESPACE) &&
+        !xmlStrcmp(c->name,"function")) {
       char *name = get_required_attr(c,"name");
       qname funqn = string_to_qname(name,c);
 
       if (!strcmp(funqn.uri,qn.uri) && !strcmp(funqn.localpart,qn.localpart))
-	have = 1;
+        have = 1;
 
       free_qname(funqn);
       free(name);
 
       if (have)
-	return 1;
+        return 1;
     }
   }
   return 0;
@@ -350,7 +350,7 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
   if (supplied != expected)
     fatal("Incorrect # args for web service call %s: expected %d, got %d\n",
-	  expr->qn.localpart,expected,supplied);
+          expr->qn.localpart,expected,supplied);
 
 
   printf("(letrec requestxml = ");
@@ -360,7 +360,7 @@ void compile_ws_call(elcgen *gen, expression *expr)
   printf("(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
 
   printf("(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil (cons (xml::mknamespace \"%s\" nil) nil) ",
-	 inelem.uri,inelem.localpart,inelem.uri);
+         inelem.uri,inelem.localpart,inelem.uri);
 
 
   //printf("nil");
@@ -368,7 +368,7 @@ void compile_ws_call(elcgen *gen, expression *expr)
   for (p = expr->left; p; p = p->right) {
     assert(XPATH_ACTUAL_PARAM == p->type);
     printf("(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
-	   inelem.uri,(char*)l->data);
+           inelem.uri,(char*)l->data);
     printf("(xslt::concomplex (xslt::get_children ");
     compile_expression(p->left);
     printf("))) ");
@@ -387,12 +387,12 @@ void compile_ws_call(elcgen *gen, expression *expr)
 
   printf("bodies = (xslt::apmap3 (!citem.!cpos.!csize.\n");
   printf("(filter (xslt::name_test xml::TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml::item_children citem))",SOAPENV_NAMESPACE,"Body");
+         "(xml::item_children citem))",SOAPENV_NAMESPACE,"Body");
   printf(") topelems)");
 
   printf("respelems = (xslt::apmap3 (!citem.!cpos.!csize.\n");
   printf("(filter (xslt::name_test xml::TYPE_ELEMENT \"%s\" \"%s\") "
-	 "(xml::item_children citem))",outelem.uri,outelem.localpart);
+         "(xml::item_children citem))",outelem.uri,outelem.localpart);
   printf(") bodies)");
 
   printf("returns = (xslt::apmap3 (!citem.!cpos.!csize.(xml::item_children citem)) respelems)");
@@ -627,20 +627,20 @@ void compile_expression(expression *expr)
     if (strcmp(expr->qn.prefix,"")) {
 
       if (have_user_function(gen2,expr->qn)) {
-	char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
-	expression *p;
-	printf("(%s",ident);
+        char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
+        expression *p;
+        printf("(%s",ident);
 
-	for (p = expr->left; p; p = p->right) {
-	  assert(XPATH_ACTUAL_PARAM == p->type);
-	  printf(" ");
-	  compile_expression(p->left);
-	}
-	printf(")");
-	free(ident);
+        for (p = expr->left; p; p = p->right) {
+          assert(XPATH_ACTUAL_PARAM == p->type);
+          printf(" ");
+          compile_expression(p->left);
+        }
+        printf(")");
+        free(ident);
       }
       else {
-	compile_ws_call(gen2,expr);
+        compile_ws_call(gen2,expr);
       }
     }
     else {
@@ -819,22 +819,22 @@ void compile_instruction(xmlNodePtr n)
 
         printf("\n// sequence %s\n",select);
         compile_expr_string(n,select);
-	free(select);
+        free(select);
       }
       else if (!xmlStrcmp(n->name,"value-of")) {
         char *select = xmlGetProp(n,"select");
-	printf("\n// value-of %s\n",select);
-	printf("(cons (xml::mktext (xslt::consimple ");
+        printf("\n// value-of %s\n",select);
+        printf("(cons (xml::mktext (xslt::consimple ");
         if (select)
           compile_expr_string(n,select);
         else
-	  compile_sequence(n->children);
-	printf(")) nil)\n");
-	free(select);
+          compile_sequence(n->children);
+        printf(")) nil)\n");
+        free(select);
       }
       else if (!xmlStrcmp(n->name,"text")) {
-	char *str = xmlNodeListGetString(parse_doc,n->children,1);
-	char *esc = escape(str);
+        char *str = xmlNodeListGetString(parse_doc,n->children,1);
+        char *esc = escape(str);
         printf("(cons (xml::mktext \"%s\") nil)",esc);
         free(esc);
         free(str);
@@ -853,7 +853,7 @@ void compile_instruction(xmlNodePtr n)
         printf(")\n");
 
         printf("select))\n");
-	free(select);
+        free(select);
       }
       else if (!xmlStrcmp(n->name,"if")) {
         char *test = get_required_attr(n,"test");
@@ -864,7 +864,7 @@ void compile_instruction(xmlNodePtr n)
         printf(")\n");
         compile_sequence(n->children);
         printf("\nnil)");
-	free(test);
+        free(test);
       }
       else if (!xmlStrcmp(n->name,"choose")) {
         xmlNodePtr child;
@@ -885,7 +885,7 @@ void compile_instruction(xmlNodePtr n)
             printf(") ");
             compile_sequence(child->children);
             printf(" ");
-	    free(test);
+            free(test);
             count++;
           }
           else if (child->ns && !xmlStrcmp(child->ns->href,XSLT_NAMESPACE) &&
@@ -905,50 +905,50 @@ void compile_instruction(xmlNodePtr n)
           printf(")");
       }
       else if (!xmlStrcmp(n->name,"element")) {
-	/* FIXME: complete this, and handle namespaces properly */
+        /* FIXME: complete this, and handle namespaces properly */
         char *name = get_required_attr(n,"name");
 
         printf("\n// element %s\n",name);
 
-	printf("(letrec\n");
+        printf("(letrec\n");
 
-	printf("attrs = (xslt::get_attributes content)\n");
-	printf("namespaces = (xslt::get_namespaces content)\n");
-	printf("children2 = (xslt::concomplex (xslt::get_children content))\n");
-	printf("children = (xslt::reparent children2 elem nil)\n");
-	printf("name = ");
-	compile_avt(n,name);
-	//	printf("\"%s\"",name);
-	printf("elem = (xml::mkelem nil nil nil nil nil nil name attrs namespaces children)\n");
-	printf("content =\n");
-	compile_sequence(n->children);
-	printf("\nin\n(cons elem nil))");
-	free(name);
+        printf("attrs = (xslt::get_attributes content)\n");
+        printf("namespaces = (xslt::get_namespaces content)\n");
+        printf("children2 = (xslt::concomplex (xslt::get_children content))\n");
+        printf("children = (xslt::reparent children2 elem nil)\n");
+        printf("name = ");
+        compile_avt(n,name);
+        // printf("\"%s\"",name);
+        printf("elem = (xml::mkelem nil nil nil nil nil nil name attrs namespaces children)\n");
+        printf("content =\n");
+        compile_sequence(n->children);
+        printf("\nin\n(cons elem nil))");
+        free(name);
       }
       else if (!xmlStrcmp(n->name,"attribute")) {
-	/* FIXME: handle namespaces properly */
+        /* FIXME: handle namespaces properly */
         char *name = get_required_attr(n,"name");
         char *select = xmlGetProp(n,"select");
 
-	printf("\n// attribute %s\n",name);
-	printf("(cons (xml::mkattr nil nil nil nil ");
-	printf(" nil "); // nsuri
-	printf(" nil "); // nsprefix
+        printf("\n// attribute %s\n",name);
+        printf("(cons (xml::mkattr nil nil nil nil ");
+        printf(" nil "); // nsuri
+        printf(" nil "); // nsprefix
 
         // localname
-	compile_avt(n,name);
+        compile_avt(n,name);
 
         // value
-	printf("(xslt::consimple ");
+        printf("(xslt::consimple ");
         if (select)
           compile_expr_string(n,select);
         else
-	  compile_sequence(n->children);
-	printf(")");
+          compile_sequence(n->children);
+        printf(")");
 
-	printf(") nil)");
-	free(name);
-	free(select);
+        printf(") nil)");
+        free(name);
+        free(select);
       }
       else {
         fprintf(stderr,"Unsupported XSLT instruction: %s\n",n->name);
@@ -1036,12 +1036,12 @@ void compile_sequence(xmlNodePtr first)
 
       printf("(letrec %s = ",ident);
       if (select) {
-	compile_expr_string(child,select);
+        compile_expr_string(child,select);
       }
       else {
-	printf("(cons (xml::mkdoc ");
-	compile_sequence(child->children);
-	printf(") nil)");
+        printf("(cons (xml::mkdoc ");
+        compile_sequence(child->children);
+        printf(") nil)");
       }
       printf(" in ");
 
@@ -1095,12 +1095,12 @@ void compile_function(xmlNodePtr child)
           !xmlStrcmp(pn->name,"param")) {
         char *pname = get_required_attr(pn,"name");
         char *pn_ident;
-	qname pqn = string_to_qname(pname,pn);
+        qname pqn = string_to_qname(pname,pn);
         pn_ident = nsname_to_ident(pqn.uri,pqn.localpart);
         printf(" %s",pn_ident);
-	free_qname(pqn);
+        free_qname(pqn);
         free(pn_ident);
-	free(pname);
+        free(pname);
       }
       else {
         break;

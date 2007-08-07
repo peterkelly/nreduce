@@ -203,7 +203,7 @@ wsdlfile *process_wsdl(elcgen *gen, const char *filename);
 xmlNodePtr wsdl_get_object(wsdlfile *wf, const char *type, const char *name);
 char *wsdl_get_url(wsdlfile *wf);
 void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
-				 qname *inqn, qname *outqn,
-				 list **inargs, list **outargs);
+                                 qname *inqn, qname *outqn,
+                                 list **inargs, list **outargs);
 
 #endif
