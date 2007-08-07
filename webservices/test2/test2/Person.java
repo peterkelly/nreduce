@@ -14,38 +14,38 @@ public class Person implements Serializable
 
     public Person(String name, int age, String occupation)
     {
-	this.name = name;
-	this.age = age;
-	this.occupation = occupation;
+        this.name = name;
+        this.age = age;
+        this.occupation = occupation;
     }
 
     public String getName()
     {
-	return name;
+        return name;
     }
 
     public int getAge()
     {
-	return age;
+        return age;
     }
 
     public String getOccupation()
     {
-	return occupation;
+        return occupation;
     }
 
     public void setName(String name)
     {
-	this.name = name;
+        this.name = name;
     }
 
     public void setAge(int age)
     {
-	this.age = age;
+        this.age = age;
     }
 
     public void setOccupation(String occupation)
     {
-	this.occupation = occupation;
+        this.occupation = occupation;
     }
 }
