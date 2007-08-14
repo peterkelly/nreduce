@@ -1,5 +1,5 @@
 /*
- * This file is part of the GridXSLT project
+ * This file is part of the nreduce project
  * Copyright (C) 2007 Peter Kelly (pmk@cs.adelaide.edu.au)
  *
  * This library is free software; you can redistribute it and/or
