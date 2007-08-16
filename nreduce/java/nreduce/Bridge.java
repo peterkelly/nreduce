@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Set;
 import java.util.Iterator;
+import java.util.TreeSet;
 
 public class Bridge
 {
@@ -260,7 +261,8 @@ public class Bridge
 
     protected void doobjects(String[] args, PrintWriter writer)
     {
-        Set<Integer> keys = objects.keySet();
+        // we use TreeSet to ensure the keys are sorted
+        Set<Integer> keys = new TreeSet(objects.keySet());
         Iterator<Integer> iter = keys.iterator();
         while (iter.hasNext()) {
             Integer id = iter.next();
