@@ -1,7 +1,7 @@
 createmany n =
 (if (== n 0)
   nil
-  (seq (jnew "jbridge.Test" nil)
+  (seq (jnew "nreduce.Test" nil)
   (seq (echo (append "Created " (append (numtostring n) "\n")))
        (createmany (- n 1)))))
 

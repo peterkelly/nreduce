@@ -390,7 +390,6 @@ static void manager_delete_listener(node *n, endpoint *endpt,
 
 static void send_java_commands(node *n, manager *mgr, endpoint *endpt)
 {
-  /* FIXME: handle the case where the connection has been dropped */
   if (0 < mgr->jsendbuf->nbytes) {
     char *data = mgr->jsendbuf->data;
     int len = mgr->jsendbuf->nbytes;
@@ -399,18 +398,26 @@ static void send_java_commands(node *n, manager *mgr, endpoint *endpt)
   }
 }
 
+static void send_java_errors(node *n, manager *mgr, endpoint *endpt)
+{
+  list *l;
+  for (l = mgr->jcmds; l; l = l->next) {
+    javacmd *jc = l->data;
+    send_jcmd_response(endpt,jc->epid,jc->ioid,1,NULL,0);
+  }
+  list_free(mgr->jcmds,free);
+  mgr->jcmds = NULL;
+  mgr->jconnected = 0;
+  mgr->jconnecting = 0;
+}
+
 /* for notifying of connection to JVM */
 static void manager_connect_response(node *n, manager *mgr, endpoint *endpt, connect_response_msg *m)
 {
   mgr->jconnecting = 0;
 
   if (m->error) {
-    list *l;
-    for (l = mgr->jcmds; l; l = l->next) {
-      javacmd *jc = l->data;
-      send_jcmd_response(endpt,jc->epid,jc->ioid,1,NULL,0);
-    }
-    list_free(mgr->jcmds,free);
+    send_java_errors(n,mgr,endpt);
   }
   else {
     mgr->jcon = m->sockid;
@@ -420,10 +427,23 @@ static void manager_connect_response(node *n, manager *mgr, endpoint *endpt, con
   }
 }
 
+/* for notifying of error communicating with JVM */
+static void manager_connection_closed(node *n, manager *mgr, endpoint *endpt,
+                                      connection_event_msg *m)
+{
+  send_java_errors(n,mgr,endpt);
+}
+
 static void manager_read_response(node *n, manager *mgr, endpoint *endpt, read_response_msg *m)
 {
   int start = 0;
   int pos = 0;
+
+  if (0 == m->len) {
+    send_java_errors(n,mgr,endpt);
+    return;
+  }
+
   array_append(mgr->jresponse,m->data,m->len);
   while (pos < mgr->jresponse->nbytes) {
     if ('\n' == mgr->jresponse->data[pos]) {
@@ -471,6 +491,7 @@ static void manager_jcmd(node *n, manager *mgr, endpoint *endpt, message *msg)
     cm.owner = endpt->epid;
     cm.ioid = 1;
     endpoint_send(endpt,endpt->epid,MSG_CONNECT,&cm,sizeof(cm));
+    mgr->jconnecting = 1;
     return;
   }
 
@@ -696,7 +717,10 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(connect_response_msg) == msg->hdr.size);
       manager_connect_response(n,&mgr,endpt,(connect_response_msg*)msg->data);
       break;
-      /* FIXME: also need to support CONNECTION_CLOSED */
+    case MSG_CONNECTION_CLOSED:
+      assert(sizeof(connection_event_msg) == msg->hdr.size);
+      manager_connection_closed(n,&mgr,endpt,(connection_event_msg*)msg->data);
+      break;
     case MSG_READ_RESPONSE:
       assert(sizeof(read_response_msg) <= msg->hdr.size);
       manager_read_response(n,&mgr,endpt,(read_response_msg*)msg->data);
