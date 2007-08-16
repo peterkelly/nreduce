@@ -1,0 +1,65 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/sendfile.elc localhost 2001 runtests.tmp/calls
+===================================== FILE =====================================
+sendfile.elc
+main args =
+(letrec
+  host = (item 0 args)
+  port = (stringtonum (item 1 args))
+  file = (readb (item 2 args))
+in
+  (connect host port file))
+===================================== FILE =====================================
+calls
+new nreduce.Test 1
+new nreduce.Test 2
+new nreduce.Test 3
+objects
+release @2
+objects
+release @3
+objects
+release @1
+objects
+new nreduce.Test 4
+new nreduce.Test 5
+new nreduce.Test 6
+new nreduce.Test 7
+new nreduce.Test 8
+release @12
+release @5 @6 @7
+objects
+release @4 @8
+objects
+exit
+==================================== OUTPUT ====================================
+@1
+@2
+@3
+2      nreduce.Test
+1      nreduce.Test
+3      nreduce.Test
+-
+released 1 objects
+1      nreduce.Test
+3      nreduce.Test
+-
+released 1 objects
+1      nreduce.Test
+-
+released 1 objects
+-
+@4
+@5
+@6
+@7
+@8
+error: no such object @12
+released 3 objects
+4      nreduce.Test
+8      nreduce.Test
+-
+released 2 objects
+-
+================================== RETURN CODE =================================
+0

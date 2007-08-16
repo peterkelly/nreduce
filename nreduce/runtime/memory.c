@@ -64,6 +64,7 @@ const char *sysobject_types[SYSOBJECT_COUNT] = {
   "FILE",
   "CONNECTION",
   "LISTENER",
+  "JAVA",
 };
 
 const char *frame_states[5] = {
@@ -82,31 +83,6 @@ pntr resolve_pntr(pntr p)
   return p;
 }
 #endif
-
-cell *pntrcell(pntr p)
-{
-  return (cell*)get_pntr(p);
-}
-
-global *pntrglobal(pntr p)
-{
-  return (global*)get_pntr(p);
-}
-
-frame *pntrframe(pntr p)
-{
-  return (frame*)get_pntr(p);
-}
-
-sysobject *pntrso(pntr p)
-{
-  return (sysobject*)get_pntr(p);
-}
-
-const char *pntrtypename(pntr p)
-{
-  return cell_types[pntrtype(p)];
-}
 
 static void mark(task *tsk, pntr p, short bit);
 static void mark_frame(task *tsk, frame *f, short bit);
@@ -364,6 +340,14 @@ static void free_sysobject(task *tsk, sysobject *so)
     if (!socketid_isnull(&so->sockid))
       endpoint_send(tsk->endpt,so->sockid.managerid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
     free(so->hostname);
+    break;
+  }
+  case SYSOBJECT_JAVA: {
+    /* This could be improved by releasing all garbage java objects in a single message */
+    array *arr = array_new(1,0);
+    array_printf(arr,"release @%d",so->jid.jid);
+    send_jcmd(tsk->endpt,1,1,arr->data,arr->nbytes);
+    array_free(arr);
     break;
   }
   default:

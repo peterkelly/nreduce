@@ -1,0 +1,14 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   tok = (jnew "java.util.StringTokenizer" (cons "This is a test" (cons " " nil)))
+   count = (jcall tok "countTokens" nil)
+ in
+   (append "count = " (append (numtostring count) "\n")))
+==================================== OUTPUT ====================================
+count = 4
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,18 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   test = (jnew "nreduce.Test" nil)
+ in
+  (append "value = " (append (numtostring (jcall test "getValue" nil))
+  (seq (jcall test "adjustValue" (cons 1 nil))
+  (seq (jcall test "adjustValue" (cons (- 0 5) nil))
+  (append "\nvalue = " (append (numtostring (jcall test "getValue" nil))
+          "\n")))))))
+==================================== OUTPUT ====================================
+value = 0
+value = -4
+================================== RETURN CODE =================================
+0

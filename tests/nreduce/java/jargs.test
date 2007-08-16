@@ -1,0 +1,16 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   one = (jnew "nreduce.Test" (cons 4 nil))
+   two = (jnew "nreduce.Test" (cons 5 nil))
+   both = (jcall "nreduce.Test" "combine" (cons one (cons two nil)))
+   value = (jcall both "getValue" nil)
+ in
+   (append "value = " (append (numtostring value) "\n")))
+==================================== OUTPUT ====================================
+value = 9
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,14 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   res = (jcall "nreduce.Test" "sayHello" (cons "slash\\squote\'dquote\"newline\nend" nil))
+ in
+   (append "result = \"" (append res "\"\n")))
+==================================== OUTPUT ====================================
+result = "Hello slash\squote'dquote"newline
+end"
+================================== RETURN CODE =================================
+0

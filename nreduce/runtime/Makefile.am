@@ -18,7 +18,8 @@ libruntime_la_SOURCES = worker.c \
 	chord.c \
 	testchord.c \
 	assembler.c \
-	native.c
+	native.c \
+	messages.c
 
 INCLUDES = -I@top_srcdir@
 CLEANFILES = *.da *.bb *.bbg *.gcov

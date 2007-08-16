@@ -1,0 +1,27 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   arr = (jnew "java.util.ArrayList" nil)
+   size = (jcall arr "size" nil)
+   item0 = (jcall arr "get" (cons 0 nil))
+   item1 = (jcall arr "get" (cons 1 nil))
+   item2 = (jcall arr "get" (cons 2 nil))
+  in
+   (seq (jcall arr "add" (cons 5 nil))
+   (seq (jcall arr "add" (cons 6 nil))
+   (seq (jcall arr "add" (cons 7 nil))
+   (append "size = " (append (numtostring size)
+   (append "\nitem 0 = " (append (numtostring item0)
+   (append "\nitem 1 = " (append (numtostring item1)
+   (append "\nitem 2 = " (append (numtostring item2)
+           "\n"))))))))))))
+==================================== OUTPUT ====================================
+size = 3
+item 0 = 5
+item 1 = 6
+item 2 = 7
+================================== RETURN CODE =================================
+0

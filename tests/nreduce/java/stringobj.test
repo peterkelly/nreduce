@@ -1,0 +1,14 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   value = (jnew "java.lang.String" (cons "Hello World" nil))
+   str = (jcall value "toString" nil)
+ in
+   (append "value = \"" (append str "\"\n")))
+==================================== OUTPUT ====================================
+value = "Hello World"
+================================== RETURN CODE =================================
+0

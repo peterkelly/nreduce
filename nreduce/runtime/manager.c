@@ -46,7 +46,22 @@
 #define DISTGC_DELAY 3000
 //#define DEBUG_DISTGC
 
-typedef struct {
+typedef struct javacmd {
+  int ioid;
+  int oneway;
+  endpointid epid;
+} javacmd;
+
+typedef struct manager {
+  int jconnected;
+  int jconnecting;
+  array *jsendbuf;
+  list *jcmds;
+  socketid jcon;
+  array *jresponse;
+} manager;
+
+typedef struct gcarg {
   int ntasks;
   endpointid idmap[0];
 } gcarg;
@@ -373,6 +388,96 @@ static void manager_delete_listener(node *n, endpoint *endpt,
   unlock_node(n);
 }
 
+static void send_java_commands(node *n, manager *mgr, endpoint *endpt)
+{
+  /* FIXME: handle the case where the connection has been dropped */
+  if (0 < mgr->jsendbuf->nbytes) {
+    char *data = mgr->jsendbuf->data;
+    int len = mgr->jsendbuf->nbytes;
+    send_write(endpt,mgr->jcon.managerid,mgr->jcon,1,data,len);
+    mgr->jsendbuf->nbytes = 0;
+  }
+}
+
+/* for notifying of connection to JVM */
+static void manager_connect_response(node *n, manager *mgr, endpoint *endpt, connect_response_msg *m)
+{
+  mgr->jconnecting = 0;
+
+  if (m->error) {
+    list *l;
+    for (l = mgr->jcmds; l; l = l->next) {
+      javacmd *jc = l->data;
+      send_jcmd_response(endpt,jc->epid,jc->ioid,1,NULL,0);
+    }
+    list_free(mgr->jcmds,free);
+  }
+  else {
+    mgr->jcon = m->sockid;
+    mgr->jconnected = 1;
+    send_java_commands(n,mgr,endpt);
+    send_read(endpt,endpt->epid,mgr->jcon,1);
+  }
+}
+
+static void manager_read_response(node *n, manager *mgr, endpoint *endpt, read_response_msg *m)
+{
+  int start = 0;
+  int pos = 0;
+  array_append(mgr->jresponse,m->data,m->len);
+  while (pos < mgr->jresponse->nbytes) {
+    if ('\n' == mgr->jresponse->data[pos]) {
+      int len = pos-start;
+      list *old = mgr->jcmds;
+      javacmd *jc;
+      assert(mgr->jcmds);
+      jc = mgr->jcmds->data;
+      if (!jc->oneway)
+        send_jcmd_response(endpt,jc->epid,jc->ioid,0,&mgr->jresponse->data[start],len);
+      mgr->jcmds = mgr->jcmds->next;
+      free(jc);
+      free(old);
+
+      start = pos+1;
+    }
+    pos++;
+  }
+  array_remove_data(mgr->jresponse,start);
+  send_read(endpt,endpt->epid,mgr->jcon,1);
+}
+
+static void manager_jcmd(node *n, manager *mgr, endpoint *endpt, message *msg)
+{
+  jcmd_msg *m;
+  javacmd *jc;
+  char newline = '\n';
+  assert(sizeof(jcmd_msg) <= msg->hdr.size);
+  m = (jcmd_msg*)msg->data;
+  assert(msg->hdr.size == sizeof(jcmd_msg)+m->cmdlen);
+
+  array_append(mgr->jsendbuf,m->cmd,m->cmdlen);
+  array_append(mgr->jsendbuf,&newline,1);
+
+  jc = (javacmd*)calloc(sizeof(javacmd),1);
+  jc->ioid = m->ioid;
+  jc->oneway = m->oneway;
+  jc->epid = msg->hdr.source;
+  list_append(&mgr->jcmds,jc);
+
+  if (!mgr->jconnected && !mgr->jconnecting) {
+    connect_msg cm;
+    snprintf(cm.hostname,HOSTNAME_MAX,"127.0.0.1");
+    cm.port = JBRIDGE_PORT; /* FIXME: make this configurable */
+    cm.owner = endpt->epid;
+    cm.ioid = 1;
+    endpoint_send(endpt,endpt->epid,MSG_CONNECT,&cm,sizeof(cm));
+    return;
+  }
+
+  if (mgr->jconnected)
+    send_java_commands(n,mgr,endpt);
+}
+
 static void manager_startgc(node *n, endpoint *endpt, startgc_msg *m, endpointid source)
 {
   gcarg *ga = (gcarg*)calloc(1,sizeof(gcarg)+m->count*sizeof(endpointid));
@@ -424,6 +529,11 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
 {
   message *msg;
   int done = 0;
+  manager mgr;
+
+  memset(&mgr,0,sizeof(mgr));
+  mgr.jresponse = array_new(1,0);
+  mgr.jsendbuf = array_new(1,0);
 
   while (!done) {
     msg = endpoint_receive(endpt,-1);
@@ -582,6 +692,21 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(delete_listener_msg) == msg->hdr.size);
       manager_delete_listener(n,endpt,(delete_listener_msg*)msg->data,msg->hdr.source);
       break;
+    case MSG_CONNECT_RESPONSE:
+      assert(sizeof(connect_response_msg) == msg->hdr.size);
+      manager_connect_response(n,&mgr,endpt,(connect_response_msg*)msg->data);
+      break;
+      /* FIXME: also need to support CONNECTION_CLOSED */
+    case MSG_READ_RESPONSE:
+      assert(sizeof(read_response_msg) <= msg->hdr.size);
+      manager_read_response(n,&mgr,endpt,(read_response_msg*)msg->data);
+      break;
+    case MSG_WRITE_RESPONSE:
+      /* ignore */
+      break;
+    case MSG_JCMD:
+      manager_jcmd(n,&mgr,endpt,msg);
+      break;
     case MSG_STARTGC:
       assert(sizeof(startgc_msg) <= msg->hdr.size);
       manager_startgc(n,endpt,(startgc_msg*)msg->data,msg->hdr.source);
@@ -596,6 +721,9 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
     }
     message_free(msg);
   }
+
+  array_free(mgr.jresponse);
+  array_free(mgr.jsendbuf);
 }
 
 void start_manager(node *n)

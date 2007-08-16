@@ -379,6 +379,85 @@ void print_double_escaped(FILE *f, const char *str)
   }
 }
 
+char *unescape(char *chars)
+{
+  int len = strlen(chars);
+  char *unescaped = (char*)malloc(len+1);
+  int from = 0;
+  int to = 0;
+  while (from < len) {
+    if ('\\' == chars[from]) {
+      from++;
+      switch (chars[from]) {
+      case 'b': unescaped[to++] = '\b'; break;
+      case 't': unescaped[to++] = '\t'; break;
+      case 'n': unescaped[to++] = '\n'; break;
+      case 'f': unescaped[to++] = '\f'; break;
+      case 'r': unescaped[to++] = '\r'; break;
+      case '"': unescaped[to++] = '\"'; break;
+      case '\'': unescaped[to++] = '\''; break;
+      case '\\': unescaped[to++] = '\\'; break;
+      }
+      from++;
+    }
+    else {
+      unescaped[to++] = chars[from++];
+    }
+  }
+  unescaped[to] = '\0';
+  return unescaped;
+}
+
+char *escape(char *chars)
+{
+  int len = strlen(chars);
+  char *escaped = (char*)malloc(len*2+1);
+  int from = 0;
+  int to = 0;
+  while (from < len) {
+    switch (chars[from]) {
+    case '\b':
+      escaped[to++] = '\\';
+      escaped[to++] = 'b';
+      break;
+    case '\t':
+      escaped[to++] = '\\';
+      escaped[to++] = 't';
+      break;
+    case '\n':
+      escaped[to++] = '\\';
+      escaped[to++] = 'n';
+      break;
+    case '\f':
+      escaped[to++] = '\\';
+      escaped[to++] = 'f';
+      break;
+    case '\r':
+      escaped[to++] = '\\';
+      escaped[to++] = 'r';
+      break;
+    case '\"':
+      escaped[to++] = '\\';
+      escaped[to++] = '"';
+      break;
+    case '\'':
+      escaped[to++] = '\\';
+      escaped[to++] = '\'';
+      break;
+    case '\\':
+      escaped[to++] = '\\';
+      escaped[to++] = '\\';
+      break;
+    default:
+      escaped[to++] = chars[from];
+      break;
+    }
+    from++;
+  }
+  escaped[to] = '\0';
+  return escaped;
+}
+
 void print_hex(FILE *f, int c)
 {
   if (0xA > c)
@@ -431,6 +510,27 @@ void print_bin_rev(FILE *f, void *ptr, int nbytes)
     fprintf(f,"       ");
   }
   fprintf(f,"\n");
+}
+
+char *mkstring(const char *data, int len)
+{
+  char *str = (char*)malloc(len+1);
+  memcpy(str,data,len);
+  str[len] = '\0';
+  return str;
+}
+
+char *substring(const char *str, int begin, int end)
+{
+  int len = strlen(str);
+  char *sub;
+  assert(begin <= len);
+  assert(end <= len);
+  assert(begin <= end);
+  sub = malloc(end-begin+1);
+  memcpy(sub,&str[begin],end-begin);
+  sub[end-begin] = '\0';
+  return sub;
 }
 
 struct timeval timeval_diff(struct timeval from, struct timeval to)

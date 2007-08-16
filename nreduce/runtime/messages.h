@@ -99,11 +99,16 @@
 #define MSG_PING                62
 #define MSG_PONG                63
 
-#define MSG_COUNT               64
+#define MSG_JCMD                64
+#define MSG_JCMD_RESPONSE       65
 
-#ifndef WORKER_C
+#define MSG_COUNT               66
+
+#ifndef MESSAGES_C
 extern const char *msg_names[MSG_COUNT];
 #endif
+
+/* FIXME: all these structures should have the __packed__ attribute */
 
 typedef struct newtask_msg {
   int tid;
@@ -148,12 +153,17 @@ typedef struct {
   int ioid;
 } read_msg;
 
+void send_read(endpoint *endpt, endpointid epid, socketid sid, int ioid);
+
 typedef struct {
   socketid sockid;
   int ioid;
   int len;
   char data[0];
 } write_msg;
+
+void send_write(endpoint *endpt, endpointid epid, socketid sockid, int ioid,
+                const char *data, int len);
 
 typedef struct {
   socketid sockid;
@@ -240,5 +250,24 @@ typedef struct {
   int count;
   endpointid tasks[0];
 } get_tasks_response_msg;
+
+typedef struct {
+  int ioid;
+  int oneway;
+  int cmdlen;
+  char cmd[0];
+} jcmd_msg;
+
+void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen);
+
+typedef struct {
+  int ioid;
+  int error;
+  int len;
+  char data[0];
+} jcmd_response_msg;
+
+void send_jcmd_response(endpoint *endpt, endpointid epid, int ioid, int error,
+                         const char *data, int len);
 
 #endif

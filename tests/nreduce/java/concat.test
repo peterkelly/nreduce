@@ -1,0 +1,13 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.elc
+===================================== FILE =====================================
+test.elc
+main =
+(letrec
+   res = (jcall "nreduce.Test" "concat" (cons "Hello " (cons "World" nil)))
+ in
+   (append "result = \"" (append res "\"\n")))
+==================================== OUTPUT ====================================
+result = "Hello World"
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,9 @@
+createmany n =
+(if (== n 0)
+  nil
+  (seq (jnew "jbridge.Test" nil)
+  (seq (echo (append "Created " (append (numtostring n) "\n")))
+       (createmany (- n 1)))))
+
+main =
+(createmany 100000)

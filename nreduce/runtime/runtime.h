@@ -120,8 +120,11 @@
 #define B_EXIT           54
 
 #define B_ABS            55
+#define B_JNEW           56
+#define B_JCALL          57
+#define B_ISCONS         58
 
-#define NUM_BUILTINS     56
+#define NUM_BUILTINS     59
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
@@ -231,7 +234,8 @@ typedef struct builtin {
 #define SYSOBJECT_FILE           0
 #define SYSOBJECT_CONNECTION     1
 #define SYSOBJECT_LISTENER       2
-#define SYSOBJECT_COUNT          3
+#define SYSOBJECT_JAVA           3
+#define SYSOBJECT_COUNT          4
 
 typedef struct sysobject {
   int type;
@@ -248,6 +252,7 @@ typedef struct sysobject {
   struct sysobject *newso;
   struct task *tsk;
   socketid sockid;
+  javaid jid;
   cell *c;
   pntr p;
   int newclosed;
@@ -565,7 +570,7 @@ void unblock_frame_toend(task *tsk, frame *f);
 }
 int frame_fno(task *tsk, frame *f);
 
-void set_error(task *tsk, const char *format, ...);
+int set_error(task *tsk, const char *format, ...);
 
 /* client */
 
@@ -694,12 +699,6 @@ void interpreter_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void interpreter_thread(node *n, endpoint *endpt, void *arg);
 
 /* memory */
-
-cell *pntrcell(pntr p);
-global *pntrglobal(pntr p);
-frame *pntrframe(pntr p);
-sysobject *pntrso(pntr p);
-const char *pntrtypename(pntr p);
 
 pntrstack *pntrstack_new(void);
 void pntrstack_push(pntrstack *s, pntr p);

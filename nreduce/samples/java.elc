@@ -1,0 +1,6 @@
+main =
+(letrec
+   tok = (jnew "java.util.StringTokenizer" (cons "This is a test" (cons " " nil)))
+   count = (jcall tok "countTokens" nil)
+ in
+   (append "count = " (append (numtostring count) "\n")))

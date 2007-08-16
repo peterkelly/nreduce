@@ -16,7 +16,7 @@ static void send_accept(endpoint *endpt, socketid listen_sockid)
   endpoint_send(endpt,endpt->n->managerid,MSG_ACCEPT,&am,sizeof(am));
 }
 
-static void send_read(endpoint *endpt, socketid sockid)
+static void send_read2(endpoint *endpt, socketid sockid)
 {
   read_msg rm;
   rm.sockid = sockid;
@@ -24,7 +24,7 @@ static void send_read(endpoint *endpt, socketid sockid)
   endpoint_send(endpt,sockid.managerid,MSG_READ,&rm,sizeof(rm));
 }
 
-static void send_write(endpoint *endpt, socketid sockid, const char *data, int len)
+static void send_write2(endpoint *endpt, socketid sockid, const char *data, int len)
 {
   int msglen = sizeof(write_msg)+len;
   write_msg *wm = (write_msg*)malloc(msglen);
@@ -89,7 +89,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(accept_response_msg) == msg->hdr.size);
       printf("got connection from %s\n",arm->hostname);
       send_accept(endpt,listen_sockid);
-      send_read(endpt,arm->sockid);
+      send_read2(endpt,arm->sockid);
       break;
     }
     case MSG_READ_RESPONSE: {
@@ -97,8 +97,8 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(read_response_msg) <= msg->hdr.size);
 /*       printf("read %d bytes\n",rrm->len); */
       if (0 < rrm->len) {
-        send_read(endpt,rrm->sockid);
-        send_write(endpt,rrm->sockid,rrm->data,rrm->len);
+        send_read2(endpt,rrm->sockid);
+        send_write2(endpt,rrm->sockid,rrm->data,rrm->len);
       }
       else {
         send_finwrite(endpt,rrm->sockid);

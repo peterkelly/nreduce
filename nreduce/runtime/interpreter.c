@@ -305,6 +305,7 @@ static frame *retrieve_blocked_frame(task *tsk, int ioid)
   assert(ioid < tsk->iocount);
   assert(tsk->ioframes[ioid].f);
   f = tsk->ioframes[ioid].f;
+  assert(f);
   tsk->ioframes[ioid].f = NULL;
   tsk->ioframes[ioid].freelnk = tsk->iofree;
   tsk->iofree = ioid;
@@ -325,7 +326,9 @@ static sysobject *get_frame_sysobject(frame *f)
          (B_PRINTARRAY == f->instr->arg0) ||
          (B_PRINTEND == f->instr->arg0) ||
          (B_ACCEPT == f->instr->arg0) ||
-         (B_STARTLISTEN == f->instr->arg0));
+         (B_STARTLISTEN == f->instr->arg0) ||
+         (B_JCALL == f->instr->arg0) ||
+         (B_JNEW == f->instr->arg0));
   assert(1 <= f->instr->expcount);
   objp = f->data[f->instr->expcount-1];
   assert(CELL_SYSOBJECT == pntrtype(objp));
@@ -448,6 +451,83 @@ static void interpreter_connection_event(task *tsk, connection_event_msg *m)
       retrieve_blocked_frame(tsk,so->frameids[READ_FRAMEADDR]);
     if (0 != so->frameids[WRITE_FRAMEADDR])
       retrieve_blocked_frame(tsk,so->frameids[WRITE_FRAMEADDR]);
+  }
+}
+
+static pntr decode_java_response(task *tsk, const char *str, endpointid source)
+{
+  int len = strlen(str);
+  if ((2 <= len) && ('"' == str[0]) && ('"' == str[len-1])) {
+    char *sub = substring(str,1,len-1);
+    char *unescaped = unescape(sub);
+    pntr p = string_to_array(tsk,unescaped);
+    free(unescaped);
+    free(sub);
+    return p;
+  }
+  else if (!strcmp(str,"nil")) {
+    return tsk->globnilpntr;
+  }
+  else if (!strcmp(str,"false")) {
+    return tsk->globnilpntr;
+  }
+  else if (!strcmp(str,"true")) {
+    return tsk->globtruepntr;
+  }
+  else if ((1 < len) && ('@' == str[0])) {
+    int id = atoi(str+1);
+    sysobject *so = new_sysobject(tsk,SYSOBJECT_JAVA);
+    pntr p;
+    so->jid.managerid = source;
+    so->jid.jid = id;
+    make_pntr(p,so->c);
+    return p;
+  }
+  else if (!strncmp(str,"error: ",7)) {
+    set_error(tsk,"jcall: %s",&str[7]);
+    return tsk->globnilpntr;
+  }
+  else {
+    char *end = NULL;
+    double d = strtod(str,&end);
+    if (('\0' != *str) && ('\0' == *end)) {
+      pntr p;
+      set_pntrdouble(p,d);
+      return p;
+    }
+    else {
+      set_error(tsk,"jcall: invalid response");
+      return tsk->globnilpntr;
+    }
+  }
+}
+
+static void interpreter_jcmd_response(task *tsk, jcmd_response_msg *m, endpointid source)
+{
+  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
+  pntr obj;
+
+  if (m->error) {
+    if (NULL == tsk->error)
+      set_error(tsk,"jcall: connection to JVM failed");
+    obj = tsk->globnilpntr;
+  }
+  else {
+    char *str = mkstring(m->data,m->len);
+    obj = decode_java_response(tsk,str,source);
+    free(str);
+  }
+
+  if (NULL == tsk->error) {
+    assert((B_JCALL == f2->instr->arg0) || (B_JNEW == f2->instr->arg0));
+    if (B_JCALL == f2->instr->arg0) {
+      assert(3 <= f2->instr->expcount);
+      f2->data[f2->instr->expcount-3] = obj;
+    }
+    else {
+      assert(2 <= f2->instr->expcount);
+      f2->data[f2->instr->expcount-2] = obj;
+    }
   }
 }
 
@@ -957,6 +1037,10 @@ static void handle_message(task *tsk, message *msg)
   case MSG_CONNECTION_CLOSED:
     assert(sizeof(connection_event_msg) == msg->hdr.size);
     interpreter_connection_event(tsk,(connection_event_msg*)msg->data);
+    break;
+  case MSG_JCMD_RESPONSE:
+    assert(sizeof(jcmd_response_msg) <= msg->hdr.size);
+    interpreter_jcmd_response(tsk,(jcmd_response_msg*)msg->data,msg->hdr.source);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");

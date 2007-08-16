@@ -338,6 +338,7 @@ void output_thread(node *n, endpoint *endpt, void *arg)
 {
   output_arg *oa = (output_arg*)arg;
   int done = 0;
+  int conn_deleted = 0;
   oa->rc = 0;
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
@@ -379,13 +380,15 @@ void output_thread(node *n, endpoint *endpt, void *arg)
     case MSG_ENDPOINT_EXIT: {
       endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
       assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
-      fprintf(stderr,"Unexpected task exit: "EPID_FORMAT"\n",EPID_ARGS(m->epid));
-      oa->rc = 1;
+      if (!conn_deleted) {
+        fprintf(stderr,"Unexpected task exit: "EPID_FORMAT"\n",EPID_ARGS(m->epid));
+        oa->rc = 1;
+      }
       done = 1;
       break;
     }
     case MSG_DELETE_CONNECTION:
-      done = 1;
+      conn_deleted = 1;
       break;
     case MSG_KILL:
       done = 1;

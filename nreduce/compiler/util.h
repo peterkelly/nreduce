@@ -122,10 +122,14 @@ void format_double(char *str, int size, double d);
 void print_double(FILE *f, double d);
 void print_escaped(FILE *f, const char *str);
 void print_double_escaped(FILE *f, const char *str);
+char *unescape(char *chars);
+char *escape(char *chars);
 void print_hex(FILE *f, int c);
 void print_hexbyte(FILE *f, unsigned char val);
 void print_bin(FILE *f, void *ptr, int nbytes);
 void print_bin_rev(FILE *f, void *ptr, int nbytes);
+char *mkstring(const char *data, int len);
+char *substring(const char *str, int begin, int end);
 
 struct timeval timeval_diff(struct timeval from, struct timeval to);
 int timeval_diffms(struct timeval from, struct timeval to);

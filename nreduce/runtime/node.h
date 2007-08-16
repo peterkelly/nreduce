@@ -50,7 +50,8 @@
 #define MAIN_CHORD_ID   2
 #define FIRST_ID        3
 
-#define WORKER_PORT 2000
+#define WORKER_PORT     2000
+#define JBRIDGE_PORT    2001
 
 struct node;
 struct listener;
@@ -136,6 +137,11 @@ typedef struct {
   endpointid managerid;
   unsigned int sid;
 } socketid;
+
+typedef struct {
+  endpointid managerid;
+  unsigned int jid;
+} javaid;
 
 typedef struct connection {
   socketid sockid;

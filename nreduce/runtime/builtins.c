@@ -340,7 +340,7 @@ int pntr_is_char(pntr p)
 static void convert_to_string(task *tsk, carray *arr)
 {
   pntr *elemp = (pntr*)arr->elements;
-  char *charp = (char*)arr->elements;
+  unsigned char *charp = (unsigned char*)arr->elements;
   int i;
 
   assert(sizeof(pntr) == arr->elemsize);
@@ -398,7 +398,8 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
       #endif
     }
 
-    memmove(((char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,data,count*(*arr)->elemsize);
+    memmove(((unsigned char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,
+            data,count*(*arr)->elemsize);
     (*arr)->size += count;
 
     data += count;
@@ -542,7 +543,7 @@ int array_to_string(pntr refpntr, char **str)
       int index = aref_index(p);
 
       if (1 == arr->elemsize) {
-        array_append(buf,&((char*)arr->elements)[index],arr->size-index);
+        array_append(buf,&((unsigned char*)arr->elements)[index],arr->size-index);
       }
       else {
         pntr *pelements = (pntr*)arr->elements;
@@ -583,6 +584,66 @@ int array_to_string(pntr refpntr, char **str)
   return badtype;
 }
 
+int flatten_list(pntr refpntr, pntr **data)
+{
+  pntr p = refpntr;
+  array *buf = array_new(sizeof(pntr),0);
+  int badtype = -1;
+
+  *data = NULL;
+
+  while (0 > badtype) {
+
+    if (CELL_CONS == pntrtype(p)) {
+      cell *c = get_pntr(p);
+      pntr head = resolve_pntr(c->field1);
+      pntr tail = resolve_pntr(c->field2);
+      array_append(buf,&head,sizeof(pntr));
+      p = tail;
+    }
+    else if (CELL_AREF == pntrtype(p)) {
+      carray *arr = aref_array(p);
+      int index = aref_index(p);
+      int i;
+
+      if (1 == arr->elemsize) {
+        for (i = index; i < arr->size; i++) {
+          double d = (double)(((unsigned char*)arr->elements)[i]);
+          pntr p;
+          set_pntrdouble(p,d);
+          array_append(buf,&p,sizeof(pntr));
+        }
+      }
+      else {
+        pntr *pelements = (pntr*)arr->elements;
+        for (i = index; i < arr->size; i++)
+          pelements[i] = resolve_pntr(pelements[i]);
+        array_append(buf,&pelements[index],(arr->size-index)*sizeof(pntr));
+      }
+      p = resolve_pntr(arr->tail);
+    }
+    else if (CELL_NIL == pntrtype(p)) {
+      break;
+    }
+    else {
+      badtype = pntrtype(p);
+      break;
+    }
+  }
+
+  if (0 <= badtype) {
+    *data = NULL;
+    array_free(buf);
+    return -1;
+  }
+  else {
+    int size = array_count(buf);
+    *data = (pntr*)buf->data;
+    free(buf);
+    return size;
+  }
+}
+
 static void b_cons(task *tsk, pntr *argstack)
 {
   pntr head = argstack[1];
@@ -611,7 +672,7 @@ static void b_head(task *tsk, pntr *argstack)
     if (sizeof(pntr) == arr->elemsize)
       argstack[0] = ((pntr*)arr->elements)[index];
     else if (1 == arr->elemsize)
-      set_pntrdouble(argstack[0],(double)(((char*)arr->elements)[index]));
+      set_pntrdouble(argstack[0],(double)(((unsigned char*)arr->elements)[index]));
     else
       set_error(tsk,"head: invalid array size");
   }
@@ -1479,6 +1540,142 @@ static void b_abs(task *tsk, pntr *argstack)
   setnumber(&argstack[0],fabs(pntrdouble(argstack[0])));
 }
 
+static int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **methodname)
+{
+  if (0 <= array_to_string(method,methodname))
+    return set_error(tsk,"jcall: method is not a string");
+
+  if ((CELL_SYSOBJECT == pntrtype(obj)) && (SYSOBJECT_JAVA == psysobject(obj)->type)) {
+    char *str = malloc(100);
+    sprintf(str,"@%d",psysobject(obj)->jid.jid);
+    *targetname = str;
+  }
+  else if ((CELL_AREF == pntrtype(obj)) || (CELL_CONS == pntrtype(obj))) {
+    if (0 <= array_to_string(obj,targetname))
+      return set_error(tsk,"jcall: class name is not a string");
+  }
+  else {
+    return set_error(tsk,"jcall: first arg must be a java object or class name");
+  }
+  return 1;
+}
+
+static int serialise_arg(task *tsk, array *arr, int argno, pntr val)
+{
+  char *str;
+  char *escaped;
+  sysobject *so;
+  switch (pntrtype(val)) {
+  case CELL_NUMBER:
+    array_printf(arr," %f",pntrdouble(val));
+    return 1;
+  case CELL_CONS:
+  case CELL_AREF:
+    if (0 > array_to_string(val,&str)) {
+      escaped = escape(str);
+      array_printf(arr," \"%s\"",escaped);
+      free(escaped);
+      free(str);
+      return 1;
+    }
+    break;
+  case CELL_NIL:
+    array_printf(arr," nil");
+    return 1;
+  case CELL_SYSOBJECT:
+    so = psysobject(val);
+    if (SYSOBJECT_JAVA == so->type) {
+      array_printf(arr," @%d",so->jid.jid);
+      return 1;
+    }
+    break;
+  }
+  return set_error(tsk,"jcall: argument %d invalid (%s)",argno,cell_types[pntrtype(val)]);
+}
+
+static int serialise_args(task *tsk, pntr args, array *arr)
+{
+  pntr *argvalues = NULL;
+  int nargs;
+  int i;
+
+  if (0 > (nargs = flatten_list(args,&argvalues)))
+    return set_error(tsk,"jcall: args is not a valid list");
+
+  for (i = 0; i < nargs; i++)
+    if (!serialise_arg(tsk,arr,i,argvalues[i]))
+      break;
+
+  free(argvalues);
+  return (i == nargs);
+}
+
+static void b_jnew(task *tsk, pntr *argstack)
+{
+  pntr classn = argstack[1];
+  pntr args = argstack[0];
+  frame *curf = *tsk->runptr;
+
+  if (0 == curf->resume) {
+    char *classname = NULL;
+
+    if (0 <= array_to_string(classn,&classname)) {
+      set_error(tsk,"jnew: class name is not a string");
+    }
+    else {
+      array *arr = array_new(1,0);
+      array_printf(arr,"new %s",classname);
+
+      if (serialise_args(tsk,args,arr)) {
+        int ioid = suspend_current_frame(tsk,curf);
+        send_jcmd(tsk->endpt,ioid,0,arr->data,arr->nbytes);
+      }
+      array_free(arr);
+    }
+
+    free(classname);
+  }
+  else {
+    curf->resume = 0;
+  }
+}
+
+static void b_jcall(task *tsk, pntr *argstack)
+{
+  pntr target = argstack[2];
+  pntr method = argstack[1];
+  pntr args = argstack[0];
+  frame *curf = *tsk->runptr;
+
+  if (0 == curf->resume) {
+    char *methodname = NULL;
+    char *targetname = NULL;
+
+    if (get_callinfo(tsk,target,method,&targetname,&methodname)) {
+      array *arr = array_new(1,0);
+      array_printf(arr,"call %s %s",targetname,methodname);
+
+      if (serialise_args(tsk,args,arr)) {
+        int ioid = suspend_current_frame(tsk,curf);
+        send_jcmd(tsk->endpt,ioid,0,arr->data,arr->nbytes);
+      }
+      array_free(arr);
+    }
+
+    free(methodname);
+    free(targetname);
+  }
+  else {
+    curf->resume = 0;
+  }
+}
+
+static void b_iscons(task *tsk, pntr *argstack)
+{
+  setbool(tsk,&argstack[0],
+          (CELL_CONS == pntrtype(argstack[0])) ||
+          (CELL_AREF == pntrtype(argstack[0])));
+}
 
 int get_builtin(const char *name)
 {
@@ -1568,6 +1765,9 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "exit",           1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_exit           },
 
 { "abs",            1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_abs            },
+{ "_jnew",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_jnew           },
+{ "_jcall",         3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_jcall          },
+{ "iscons",         1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_iscons         },
 
 };
 

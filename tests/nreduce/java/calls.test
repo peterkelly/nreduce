@@ -1,0 +1,67 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/sendfile.elc localhost 2001 runtests.tmp/calls
+===================================== FILE =====================================
+sendfile.elc
+main args =
+(letrec
+  host = (item 0 args)
+  port = (stringtonum (item 1 args))
+  file = (readb (item 2 args))
+in
+  (connect host port file))
+===================================== FILE =====================================
+calls
+call nreduce.Test sayHello "slash\\squote\'dquote\"newline\nend"
+call nreduce.Test byteadd 4 5
+call nreduce.Test shortadd 4 5
+call nreduce.Test intadd 4 5
+call nreduce.Test longadd 4 5
+call nreduce.Test floatadd 4 5
+call nreduce.Test doubleadd 4 5
+call nreduce.Test isPositive 5
+call nreduce.Test isPositive -5
+call nreduce.Test not nil
+call nreduce.Test not 4
+call nreduce.Test not "test"
+call nreduce.Test voidMethod
+call nreduce.Test createObject "foo"
+call nreduce.Test createObject "bar"
+call nreduce.Test createObject "baz"
+new java.util.ArrayList
+call @4 add 5
+call @4 add 6
+call @4 add 7
+call @4 size
+call @4 get 3
+call @4 get 2
+call @4 get 1
+call @4 get 0
+exit
+==================================== OUTPUT ====================================
+"Hello slash\\squote\'dquote\"newline\nend"
+9
+9
+9
+9
+9.0
+9.0
+true
+false
+true
+false
+false
+nil
+@1
+@2
+@3
+@4
+true
+true
+true
+3
+error: java.lang.IndexOutOfBoundsException
+7.0
+6.0
+5.0
+================================== RETURN CODE =================================
+0

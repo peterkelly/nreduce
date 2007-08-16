@@ -201,3 +201,12 @@ stringtonum str =
 
 error str =
 (error1 (forcelist str))
+
+jnew class args = (_jnew (forcelist class) (forcelist2 args))
+
+forcelist2 lst = (forcelist (map (!x.if (iscons x) (forcelist x) x) lst))
+
+jcall obj method args =
+(_jcall (if (iscons obj) (forcelist obj) obj)
+        (forcelist method)
+        (forcelist2 args))

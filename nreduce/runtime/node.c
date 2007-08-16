@@ -1279,9 +1279,12 @@ static void *endpoint_thread(void *data)
 
   /* Remove the endpoint */
   lock_node(n);
-  for (l = endpt->inlinks; l; l = l->next)
-    node_send_locked(n,endpt->epid.localid,*(endpointid*)l->data,MSG_ENDPOINT_EXIT,
-                     &endpt->epid,sizeof(endpointid));
+  for (l = endpt->inlinks; l; l = l->next) {
+    endpointid link = *(endpointid*)l->data;
+    if (!endpointid_equals(&endpt->epid,&link))
+      node_send_locked(n,endpt->epid.localid,link,MSG_ENDPOINT_EXIT,
+                       &endpt->epid,sizeof(endpointid));
+  }
   llist_remove(&n->endpoints,endpt);
   pthread_cond_broadcast(&n->closecond);
 
@@ -1425,6 +1428,7 @@ void endpoint_unlink_locked(endpoint *endpt, endpointid to)
 
 void endpoint_link(endpoint *endpt, endpointid to)
 {
+  assert(!endpointid_isnull(&to));
   lock_node(endpt->n);
   endpoint_link_locked(endpt,to);
   unlock_node(endpt->n);
@@ -1449,6 +1453,7 @@ static void endpoint_add_message(endpoint *endpt, message *msg)
   assert(NODE_ALREADY_LOCKED(endpt->n));
   if (MSG_LINK == msg->hdr.tag) {
     assert(sizeof(endpointid) == msg->hdr.size);
+    assert(!endpointid_isnull((endpointid*)msg->data));
     list_push(&endpt->inlinks,(endpointid*)msg->data);
     free(msg);
   }

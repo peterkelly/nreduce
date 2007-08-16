@@ -315,7 +315,7 @@ int frame_fno(task *tsk, frame *f)
   return tsk->bcaddr_to_fno[bcaddr];
 }
 
-void set_error(task *tsk, const char *format, ...)
+int set_error(task *tsk, const char *format, ...)
 {
   va_list ap;
   int len;
@@ -343,6 +343,7 @@ void set_error(task *tsk, const char *format, ...)
     (*tsk->runptr)->instr = bc_instructions(tsk->bcdata)+((bcheader*)tsk->bcdata)->erroraddr;
     tsk->endpt->rc = 1;
   }
+  return 0;
 }
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
