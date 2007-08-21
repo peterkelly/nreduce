@@ -1140,7 +1140,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     int badtype;
     char *hostname;
     sysobject *so;
-    connect_msg cm;
+    int ioid;
 
     CHECK_ARG(1,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
@@ -1161,13 +1161,9 @@ static void b_opencon(task *tsk, pntr *argstack)
 
     node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Initiated connection",hostname,port);
 
-    snprintf(cm.hostname,HOSTNAME_MAX,"%s",hostname);
-    cm.hostname[HOSTNAME_MAX] = '\0';
-    cm.port = port;
-    cm.owner = tsk->endpt->epid;
-    cm.ioid = suspend_current_frame(tsk,*tsk->runptr);
-    so->frameids[CONNECT_FRAMEADDR] = cm.ioid;
-    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_CONNECT,&cm,sizeof(cm));
+    ioid = suspend_current_frame(tsk,*tsk->runptr);
+    send_connect(tsk->endpt,tsk->n->managerid,hostname,port,tsk->endpt->epid,ioid);
+    so->frameids[CONNECT_FRAMEADDR] = ioid;
 
     free(hostname);
   }
@@ -1257,12 +1253,12 @@ static void b_readcon(task *tsk, pntr *argstack)
   }
 
   if (0 == curf->resume) {
-    read_msg rm;
-    rm.sockid = so->sockid;
-    rm.ioid = suspend_current_frame(tsk,*tsk->runptr);
+    int ioid = suspend_current_frame(tsk,*tsk->runptr);
+    send_read(tsk->endpt,so->sockid,ioid);
+
     assert(0 == so->frameids[READ_FRAMEADDR]);
-    so->frameids[READ_FRAMEADDR] = rm.ioid;
-    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_READ,&rm,sizeof(rm));
+    so->frameids[READ_FRAMEADDR] = ioid;
+
     node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
   }
   else {
@@ -1293,7 +1289,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
     int port;
     sysobject *so;
     in_addr_t ip = INADDR_ANY;
-    listen_msg lm;
+    int ioid;
 
     CHECK_ARG(0,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
@@ -1306,13 +1302,10 @@ static void b_startlisten(task *tsk, pntr *argstack)
 
     make_pntr(argstack[0],so->c);
 
-    lm.ip = ip;
-    lm.port = port;
-    lm.owner = tsk->endpt->epid;
-    lm.ioid = suspend_current_frame(tsk,curf);
-    so->frameids[LISTEN_FRAMEADDR] = lm.ioid;
+    ioid = suspend_current_frame(tsk,curf);
+    send_listen(tsk->endpt,tsk->n->managerid,ip,port,tsk->endpt->epid,ioid);
+    so->frameids[LISTEN_FRAMEADDR] = ioid;
 
-    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_LISTEN,&lm,sizeof(lm));
   }
   else {
     sysobject *so;
@@ -1338,12 +1331,10 @@ static void b_accept(task *tsk, pntr *argstack)
   so = psysobject(sopntr);
 
   if (0 == curf->resume) {
-    accept_msg am;
-    am.sockid = so->sockid;
-    am.ioid = suspend_current_frame(tsk,curf);
+    int ioid = suspend_current_frame(tsk,curf);
+    send_accept(tsk->endpt,so->sockid,ioid);
     assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
-    so->frameids[ACCEPT_FRAMEADDR] = am.ioid;
-    endpoint_send(tsk->endpt,tsk->n->managerid,MSG_ACCEPT,&am,sizeof(am));
+    so->frameids[ACCEPT_FRAMEADDR] = ioid;
   }
   else {
     curf->resume = 0;
@@ -1411,16 +1402,10 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
     curf->resume = 0;
   }
   else {
-    int msglen = sizeof(write_msg)+len;
-    write_msg *wm = (write_msg*)malloc(msglen);
-    wm->sockid = so->sockid;
-    wm->ioid = suspend_current_frame(tsk,curf);
-    wm->len = len;
+    int ioid = suspend_current_frame(tsk,curf);
+    send_write(tsk->endpt,so->sockid,ioid,data,len);
     assert(0 == so->frameids[WRITE_FRAMEADDR]);
-    so->frameids[WRITE_FRAMEADDR] = wm->ioid;
-    memcpy(wm->data,data,len);
-    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_WRITE,wm,msglen);
-    free(wm);
+    so->frameids[WRITE_FRAMEADDR] = ioid;
   }
 }
 
@@ -1478,18 +1463,16 @@ static void b_printend(task *tsk, pntr *argstack)
     return;
   if (0 == curf->resume) {
     sysobject *so;
-    finwrite_msg fwm;
+    int ioid;
 
     CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION);
     so = psysobject(argstack[0]);
     assert(so->connected);
 
-    fwm.sockid = so->sockid;
-    fwm.ioid = suspend_current_frame(tsk,curf);
+    ioid = suspend_current_frame(tsk,curf);
+    send_finwrite(tsk->endpt,so->sockid,ioid);
     assert(0 == so->frameids[FINWRITE_FRAMEADDR]);
-    so->frameids[FINWRITE_FRAMEADDR] = fwm.ioid;
-
-    endpoint_send(tsk->endpt,so->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+    so->frameids[FINWRITE_FRAMEADDR] = ioid;
   }
   else {
     curf->resume = 0;

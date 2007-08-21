@@ -100,16 +100,45 @@ const char *msg_names[MSG_COUNT] = {
   "JCMD_RESPONSE",
 };
 
-void send_read(endpoint *endpt, endpointid epid, socketid sid, int ioid)
+void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
+                 endpointid owner, int ioid)
+{
+  listen_msg lm;
+  lm.ip = ip;
+  lm.port = port;
+  lm.owner = owner;
+  lm.ioid = ioid;
+  endpoint_send(endpt,epid,MSG_LISTEN,&lm,sizeof(lm));
+}
+
+void send_accept(endpoint *endpt, socketid sockid, int ioid)
+{
+  accept_msg am;
+  am.sockid = sockid;
+  am.ioid = ioid;
+  endpoint_send(endpt,endpt->n->managerid,MSG_ACCEPT,&am,sizeof(am));
+}
+
+void send_connect(endpoint *endpt, endpointid epid,
+                  const char *hostname, int port, endpointid owner, int ioid)
+{
+  connect_msg cm;
+  snprintf(cm.hostname,HOSTNAME_MAX,hostname);
+  cm.port = port;
+  cm.owner = owner;
+  cm.ioid = ioid;
+  endpoint_send(endpt,epid,MSG_CONNECT,&cm,sizeof(cm));
+}
+
+void send_read(endpoint *endpt, socketid sid, int ioid)
 {
   read_msg rm;
   rm.sockid = sid;
   rm.ioid = ioid;
-  endpoint_send(endpt,epid,MSG_READ,&rm,sizeof(rm));
+  endpoint_send(endpt,sid.managerid,MSG_READ,&rm,sizeof(rm));
 }
 
-void send_write(endpoint *endpt, endpointid epid, socketid sockid, int ioid,
-                const char *data, int len)
+void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len)
 {
   int msglen = sizeof(write_msg)+len;
   write_msg *wm = (write_msg*)malloc(msglen);
@@ -117,8 +146,33 @@ void send_write(endpoint *endpt, endpointid epid, socketid sockid, int ioid,
   wm->ioid = ioid;
   wm->len = len;
   memcpy(wm->data,data,len);
-  endpoint_send(endpt,epid,MSG_WRITE,wm,msglen);
+  endpoint_send(endpt,sockid.managerid,MSG_WRITE,wm,msglen);
   free(wm);
+}
+
+void send_finwrite(endpoint *endpt, socketid sockid, int ioid)
+{
+  finwrite_msg fwm;
+
+  fwm.sockid = sockid;
+  fwm.ioid = ioid;
+
+  endpoint_send(endpt,sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+}
+
+void send_delete_connection(endpoint *endpt, socketid sockid)
+{
+  delete_connection_msg dcm;
+  dcm.sockid = sockid;
+  endpoint_send(endpt,sockid.managerid,MSG_DELETE_CONNECTION,&dcm,sizeof(dcm));
+}
+
+void send_delete_listener(endpoint *endpt, socketid sockid)
+{
+  delete_listener_msg dlm;
+  dlm.sockid = sockid;
+  if (!socketid_isnull(&sockid))
+    endpoint_send(endpt,sockid.managerid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
 }
 
 void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen)

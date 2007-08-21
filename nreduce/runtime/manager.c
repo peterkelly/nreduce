@@ -393,7 +393,7 @@ static void send_java_commands(node *n, manager *mgr, endpoint *endpt)
   if (0 < mgr->jsendbuf->nbytes) {
     char *data = mgr->jsendbuf->data;
     int len = mgr->jsendbuf->nbytes;
-    send_write(endpt,mgr->jcon.managerid,mgr->jcon,1,data,len);
+    send_write(endpt,mgr->jcon,1,data,len);
     mgr->jsendbuf->nbytes = 0;
   }
 }
@@ -423,7 +423,7 @@ static void manager_connect_response(node *n, manager *mgr, endpoint *endpt, con
     mgr->jcon = m->sockid;
     mgr->jconnected = 1;
     send_java_commands(n,mgr,endpt);
-    send_read(endpt,endpt->epid,mgr->jcon,1);
+    send_read(endpt,mgr->jcon,1);
   }
 }
 
@@ -463,7 +463,7 @@ static void manager_read_response(node *n, manager *mgr, endpoint *endpt, read_r
     pos++;
   }
   array_remove_data(mgr->jresponse,start);
-  send_read(endpt,endpt->epid,mgr->jcon,1);
+  send_read(endpt,mgr->jcon,1);
 }
 
 static void manager_jcmd(node *n, manager *mgr, endpoint *endpt, message *msg)
@@ -485,12 +485,7 @@ static void manager_jcmd(node *n, manager *mgr, endpoint *endpt, message *msg)
   list_append(&mgr->jcmds,jc);
 
   if (!mgr->jconnected && !mgr->jconnecting) {
-    connect_msg cm;
-    snprintf(cm.hostname,HOSTNAME_MAX,"127.0.0.1");
-    cm.port = JBRIDGE_PORT; /* FIXME: make this configurable */
-    cm.owner = endpt->epid;
-    cm.ioid = 1;
-    endpoint_send(endpt,endpt->epid,MSG_CONNECT,&cm,sizeof(cm));
+    send_connect(endpt,endpt->epid,"127.0.0.1",JBRIDGE_PORT,endpt->epid,1);
     mgr->jconnecting = 1;
     return;
   }

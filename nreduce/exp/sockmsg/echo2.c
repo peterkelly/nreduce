@@ -8,64 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void send_accept(endpoint *endpt, socketid listen_sockid)
-{
-  accept_msg am;
-  am.sockid = listen_sockid;
-  am.ioid = 1;
-  endpoint_send(endpt,endpt->n->managerid,MSG_ACCEPT,&am,sizeof(am));
-}
-
-static void send_read2(endpoint *endpt, socketid sockid)
-{
-  read_msg rm;
-  rm.sockid = sockid;
-  rm.ioid = 1;
-  endpoint_send(endpt,sockid.managerid,MSG_READ,&rm,sizeof(rm));
-}
-
-static void send_write2(endpoint *endpt, socketid sockid, const char *data, int len)
-{
-  int msglen = sizeof(write_msg)+len;
-  write_msg *wm = (write_msg*)malloc(msglen);
-  wm->sockid = sockid;
-  /* FIXME: it should be ok to set this to anything, but currently it is not... see comment
-     in manager_write(). When that problem is fixed this can be set to 1 (not that it matters for
-     this case, but it should at least be accepted). Actually the ioid field shouldn't be needed
-     at all once sockids are used to correlate I/O requests (the only exception begin connect) */
-  wm->ioid = 0;
-  wm->len = len;
-  memcpy(wm->data,data,len);
-  endpoint_send(endpt,sockid.managerid,MSG_WRITE,wm,msglen);
-  free(wm);
-}
-
-static void send_finwrite(endpoint *endpt, socketid sockid)
-{
-  finwrite_msg fwm;
-
-  fwm.sockid = sockid;
-  fwm.ioid = 1;
-
-  endpoint_send(endpt,sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
-}
-
 static void echo_thread(node *n, endpoint *endpt, void *arg)
 {
   int done = 0;
   int port = *(int*)arg;
-  listen_msg lm;
   socketid listen_sockid;
 
   memset(&listen_sockid,0,sizeof(listen_sockid));
 
-  lm.ip = INADDR_ANY;
-  lm.port = port;
-  lm.owner = endpt->epid;
-  lm.ioid = 1;
-
-  endpoint_send(endpt,n->managerid,MSG_LISTEN,&lm,sizeof(lm));
-
+  send_listen(endpt,n->managerid,INADDR_ANY,port,endpt->epid,1);
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
@@ -80,7 +31,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
         printf("listen succeeded\n");
         printf("ready\n");
         listen_sockid = lrm->sockid;
-        send_accept(endpt,listen_sockid);
+        send_accept(endpt,listen_sockid,1);
       }
       break;
     }
@@ -88,8 +39,8 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       accept_response_msg *arm = (accept_response_msg*)msg->data;
       assert(sizeof(accept_response_msg) == msg->hdr.size);
       printf("got connection from %s\n",arm->hostname);
-      send_accept(endpt,listen_sockid);
-      send_read2(endpt,arm->sockid);
+      send_accept(endpt,listen_sockid,1);
+      send_read(endpt,arm->sockid,1);
       break;
     }
     case MSG_READ_RESPONSE: {
@@ -97,11 +48,16 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       assert(sizeof(read_response_msg) <= msg->hdr.size);
 /*       printf("read %d bytes\n",rrm->len); */
       if (0 < rrm->len) {
-        send_read2(endpt,rrm->sockid);
-        send_write2(endpt,rrm->sockid,rrm->data,rrm->len);
+        send_read(endpt,rrm->sockid,1);
+        /* FIXME: it should be ok to set the ioid to anything, but currently it is not... see
+           comment in manager_write(). When that problem is fixed this can be set to 1 (not that
+           it matters for this case, but it should at least be accepted). Actually the ioid field
+           shouldn't be needed at all once sockids are used to correlate I/O requests (the only
+           exception begin connect) */
+        send_write(endpt,rrm->sockid,0,rrm->data,rrm->len);
       }
       else {
-        send_finwrite(endpt,rrm->sockid);
+        send_finwrite(endpt,rrm->sockid,1);
       }
       break;
     }
@@ -111,7 +67,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       break;
     case MSG_CONNECTION_CLOSED:
       lock_node(n);
-      printf("Connection coded: total sent = %d, total received = %d\n",
+      printf("Connection closed: total sent = %d, total received = %d\n",
              n->total_sent,n->total_received);
       unlock_node(n);
       break;

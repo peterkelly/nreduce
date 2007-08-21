@@ -319,10 +319,8 @@ static void free_sysobject(task *tsk, sysobject *so)
     close(so->fd);
     break;
   case SYSOBJECT_CONNECTION: {
-    delete_connection_msg dcm;
-    dcm.sockid = so->sockid;
     if (!socketid_isnull(&so->sockid))
-      endpoint_send(tsk->endpt,so->sockid.managerid,MSG_DELETE_CONNECTION,&dcm,sizeof(dcm));
+      send_delete_connection(tsk->endpt,so->sockid);
     if (!tsk->done) {
       assert(0 == so->frameids[CONNECT_FRAMEADDR]);
       assert(0 == so->frameids[READ_FRAMEADDR]);
@@ -335,10 +333,8 @@ static void free_sysobject(task *tsk, sysobject *so)
     break;
   }
   case SYSOBJECT_LISTENER: {
-    delete_listener_msg dlm;
-    dlm.sockid = so->sockid;
     if (!socketid_isnull(&so->sockid))
-      endpoint_send(tsk->endpt,so->sockid.managerid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
+      send_delete_listener(tsk->endpt,so->sockid);
     free(so->hostname);
     break;
   }

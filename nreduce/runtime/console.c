@@ -163,17 +163,8 @@ static int process_line(node *n, endpoint *endpt, console *csl, const char *line
   array_printf(out,"\n> ");
   free_args(argc,argv);
 
-  if (!doclose) {
-    int len = out->nbytes;
-    int msglen = sizeof(write_msg)+len;
-    write_msg *wm = (write_msg*)malloc(msglen);
-    wm->sockid = csl->sockid;
-    wm->ioid = 1;
-    wm->len = len;
-    memcpy(wm->data,out->data,len);
-    endpoint_send(endpt,csl->sockid.managerid,MSG_WRITE,wm,msglen);
-    free(wm);
-  }
+  if (!doclose)
+    send_write(endpt,csl->sockid,1,out->data,out->nbytes);
   array_free(out);
   return doclose;
 }
@@ -223,20 +214,14 @@ void console_thread(node *n, endpoint *endpt, void *arg)
       array_remove_data(input,start);
 
       if (doclose) {
-        finwrite_msg fwm;
-        fwm.sockid = csl->sockid;
-        fwm.ioid = 1;
-        endpoint_send(endpt,csl->sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+        send_finwrite(endpt,csl->sockid,1);
         done = 1;
       }
       else if (0 == m->len) {
         done = 1;
       }
       else {
-        read_msg rm;
-        rm.sockid = csl->sockid;
-        rm.ioid = 1;
-        endpoint_send(endpt,csl->sockid.managerid,MSG_READ,&rm,sizeof(rm));
+        send_read(endpt,csl->sockid,1);
       }
       break;
     }

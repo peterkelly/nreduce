@@ -51,7 +51,7 @@
 #define FIRST_ID        3
 
 #define WORKER_PORT     2000
-#define JBRIDGE_PORT    2001
+#define JBRIDGE_PORT    2001 /* FIXME: make this configurable */
 
 struct node;
 struct listener;

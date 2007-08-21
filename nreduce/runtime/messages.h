@@ -136,10 +136,15 @@ typedef struct {
   int ioid;
 } listen_msg;
 
+void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
+                 endpointid owner, int ioid);
+
 typedef struct {
   socketid sockid;
   int ioid;
 } accept_msg;
+
+void send_accept(endpoint *endpt, socketid sockid, int ioid);
 
 typedef struct {
   char hostname[HOSTNAME_MAX+1];
@@ -148,12 +153,15 @@ typedef struct {
   int ioid;
 } connect_msg;
 
+void send_connect(endpoint *endpt, endpointid epid,
+                  const char *hostname, int port, endpointid owner, int ioid);
+
 typedef struct {
   socketid sockid;
   int ioid;
 } read_msg;
 
-void send_read(endpoint *endpt, endpointid epid, socketid sid, int ioid);
+void send_read(endpoint *endpt, socketid sid, int ioid);
 
 typedef struct {
   socketid sockid;
@@ -162,8 +170,7 @@ typedef struct {
   char data[0];
 } write_msg;
 
-void send_write(endpoint *endpt, endpointid epid, socketid sockid, int ioid,
-                const char *data, int len);
+void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);
 
 typedef struct {
   socketid sockid;
@@ -176,6 +183,8 @@ typedef struct {
   socketid sockid;
   int ioid;
 } finwrite_msg;
+
+void send_finwrite(endpoint *endpt, socketid sockid, int ioid);
 
 typedef struct {
   int ioid;
@@ -223,9 +232,13 @@ typedef struct {
   socketid sockid;
 } delete_connection_msg;
 
+void send_delete_connection(endpoint *endpt, socketid sockid);
+
 typedef struct {
   socketid sockid;
 } delete_listener_msg;
+
+void send_delete_listener(endpoint *endpt, socketid sockid);
 
 typedef struct {
   int count;
