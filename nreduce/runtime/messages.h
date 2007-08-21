@@ -108,8 +108,6 @@
 extern const char *msg_names[MSG_COUNT];
 #endif
 
-/* FIXME: all these structures should have the __packed__ attribute */
-
 typedef struct newtask_msg {
   int tid;
   int groupsize;
@@ -117,24 +115,24 @@ typedef struct newtask_msg {
   socketid out_sockid;
   int argc;
   char bcdata[0];
-} newtask_msg;
+} __attribute__ ((__packed__)) newtask_msg;
 
 typedef struct inittask_msg {
   int localid;
   int count;
   endpointid idmap[0];
-} inittask_msg;
+} __attribute__ ((__packed__)) inittask_msg;
 
 typedef struct {
   endpointid epid;
-} endpoint_exit_msg;
+} __attribute__ ((__packed__)) endpoint_exit_msg;
 
 typedef struct {
   in_addr_t ip;
   int port;
   endpointid owner;
   int ioid;
-} listen_msg;
+} __attribute__ ((__packed__)) listen_msg;
 
 void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
                  endpointid owner, int ioid);
@@ -142,7 +140,7 @@ void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
 typedef struct {
   socketid sockid;
   int ioid;
-} accept_msg;
+} __attribute__ ((__packed__)) accept_msg;
 
 void send_accept(endpoint *endpt, socketid sockid, int ioid);
 
@@ -151,7 +149,7 @@ typedef struct {
   int port;
   endpointid owner;
   int ioid;
-} connect_msg;
+} __attribute__ ((__packed__)) connect_msg;
 
 void send_connect(endpoint *endpt, endpointid epid,
                   const char *hostname, int port, endpointid owner, int ioid);
@@ -159,7 +157,7 @@ void send_connect(endpoint *endpt, endpointid epid,
 typedef struct {
   socketid sockid;
   int ioid;
-} read_msg;
+} __attribute__ ((__packed__)) read_msg;
 
 void send_read(endpoint *endpt, socketid sid, int ioid);
 
@@ -168,7 +166,7 @@ typedef struct {
   int ioid;
   int len;
   char data[0];
-} write_msg;
+} __attribute__ ((__packed__)) write_msg;
 
 void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);
 
@@ -177,12 +175,12 @@ typedef struct {
   int rc;
   int len;
   char data[0];
-} report_error_msg;
+} __attribute__ ((__packed__)) report_error_msg;
 
 typedef struct {
   socketid sockid;
   int ioid;
-} finwrite_msg;
+} __attribute__ ((__packed__)) finwrite_msg;
 
 void send_finwrite(endpoint *endpt, socketid sockid, int ioid);
 
@@ -191,85 +189,85 @@ typedef struct {
   int error;
   char errmsg[ERRMSG_MAX+1];
   socketid sockid;
-} listen_response_msg;
+} __attribute__ ((__packed__)) listen_response_msg;
 
 typedef struct {
   int ioid;
   socketid sockid;
   char hostname[HOSTNAME_MAX+1];
   int port;
-} accept_response_msg;
+} __attribute__ ((__packed__)) accept_response_msg;
 
 typedef struct {
   int ioid;
   socketid sockid;
   int error;
   char errmsg[ERRMSG_MAX+1];
-} connect_response_msg;
+} __attribute__ ((__packed__)) connect_response_msg;
 
 typedef struct {
   int ioid;
   socketid sockid;
   int len;
   char data[0];
-} read_response_msg;
+} __attribute__ ((__packed__)) read_response_msg;
 
 typedef struct {
   int ioid;
-} write_response_msg;
+} __attribute__ ((__packed__)) write_response_msg;
 
 typedef struct {
   int ioid;
-} finwrite_response_msg;
+} __attribute__ ((__packed__)) finwrite_response_msg;
 
 typedef struct {
   socketid sockid;
   int error;
   char errmsg[ERRMSG_MAX+1];
-} connection_event_msg;
+} __attribute__ ((__packed__)) connection_event_msg;
 
 typedef struct {
   socketid sockid;
-} delete_connection_msg;
+} __attribute__ ((__packed__)) delete_connection_msg;
 
 void send_delete_connection(endpoint *endpt, socketid sockid);
 
 typedef struct {
   socketid sockid;
-} delete_listener_msg;
+} __attribute__ ((__packed__)) delete_listener_msg;
 
 void send_delete_listener(endpoint *endpt, socketid sockid);
 
 typedef struct {
   int count;
   endpointid idmap[0];
-} startgc_msg;
+} __attribute__ ((__packed__)) startgc_msg;
 
 typedef struct {
   endpointid gc;
   int gciter;
-} startdistgc_msg;
+} __attribute__ ((__packed__)) startdistgc_msg;
 
 typedef struct {
   int gciter;
   int counts[0];
-} update_msg;
+} __attribute__ ((__packed__)) update_msg;
 
 typedef struct {
   endpointid sender;
-} get_tasks_msg;
+} __attribute__ ((__packed__)) get_tasks_msg;
 
 typedef struct {
   int count;
   endpointid tasks[0];
-} get_tasks_response_msg;
+} __attribute__ ((__packed__)) get_tasks_response_msg;
 
 typedef struct {
   int ioid;
   int oneway;
   int cmdlen;
   char cmd[0];
-} jcmd_msg;
+} __attribute__ ((__packed__)) jcmd_msg;
 
 void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen);
 
@@ -278,7 +276,7 @@ typedef struct {
   int error;
   int len;
   char data[0];
-} jcmd_response_msg;
+} __attribute__ ((__packed__)) jcmd_response_msg;
 
 void send_jcmd_response(endpoint *endpt, endpointid epid, int ioid, int error,
                          const char *data, int len);
