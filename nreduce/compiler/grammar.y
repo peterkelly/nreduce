@@ -28,7 +28,6 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
-#include "util.h"
 #include <string.h>
 #include <stdlib.h>
 
