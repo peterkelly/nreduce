@@ -27,7 +27,7 @@
 #include <stdarg.h>
 #include <sys/time.h>
 #include <time.h>
-#include "compiler/util.h"
+#include "network/util.h"
 
 #ifdef WIN32
 #define YY_NO_UNISTD_H
@@ -52,7 +52,6 @@
 #define BLOCK_SIZE 102400
 #define FRAMEBLOCK_SIZE 1048576
 #define COLLECT_THRESHOLD 8192000
-#define STACK_LIMIT 10240
 #define GLOBAL_HASH_SIZE 256
 #define PROFILE_FILENAME "profile.out"
 

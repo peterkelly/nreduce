@@ -24,7 +24,6 @@
 #define _NODE_H
 
 #include "src/nreduce.h"
-#include "compiler/util.h"
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -36,8 +35,6 @@
 
 //#define DEBUG_SHORT_KEEPALIVE
 
-#define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
-
 #define LOG_NONE        0
 #define LOG_ERROR       1
 #define LOG_WARNING     2
@@ -48,15 +45,16 @@
 
 #define MANAGER_ID      1
 #define MAIN_CHORD_ID   2
-#define FIRST_ID        3
+#define JAVA_ID         3
+#define FIRST_ID        4
 
 #define WORKER_PORT     2000
 #define JBRIDGE_PORT    2001 /* FIXME: make this configurable */
 
 struct node;
+struct connection;
 struct listener;
-struct task;
-struct gaddr;
+struct endpoint;
 
 #define EPID_FORMAT "%u.%u.%u.%u:%u/%u"
 #define EPID_ARGS(epid) \
@@ -96,10 +94,9 @@ typedef struct messagelist {
   pthread_cond_t cond;
 } messagelist;
 
-struct endpoint;
-struct node;
-
 typedef void (*endpoint_threadfun)(struct node *n, struct endpoint *endpt, void *arg);
+typedef int (*mgr_extfun)(struct node *n, struct endpoint *endpt, message *msg,
+                          int final, void *arg);
 
 typedef struct endpoint {
   endpointid epid;
@@ -143,72 +140,21 @@ typedef struct {
   unsigned int jid;
 } javaid;
 
-typedef struct connection {
-  socketid sockid;
-  char *hostname;
-  in_addr_t ip;
-  int port;
-  int sock;
-  struct listener *l;
-  struct node *n;
-
-  int connected;
-  array *recvbuf;
-  array *sendbuf;
-
-  int outgoing;
-  int donewelcome;
-  int donehandshake;
-  int isreg;
-  int finwrite;
-  int collected;
-  void *data;
-  int frameids[FRAMEADDR_COUNT];
-  int dontread;
-  int totalread;
-
-  int canread;
-  int canwrite;
-
-  endpointid owner;
-
-  struct connection *prev;
-  struct connection *next;
-  char errmsg[ERRMSG_MAX+1];
-} connection;
-
 typedef struct connectionlist {
-  connection *first;
-  connection *last;
+  struct connection *first;
+  struct connection *last;
 } connectionlist;
 
-typedef struct listener {
-  socketid sockid;
-  in_addr_t ip;
-  int port;
-  int fd;
-  void *data;
-  int dontaccept;
-  int accept_frameid;
-  struct listener *prev;
-  struct listener *next;
-  endpointid owner;
-  int notify;
-} listener;
-
 typedef struct listenerlist {
-  listener *first;
-  listener *last;
+  struct listener *first;
+  struct listener *last;
 } listenerlist;
-
-#define NODE_ALREADY_LOCKED(_n) check_mutex_locked(&(_n)->lock)
-#define NODE_UNLOCKED(_n) check_mutex_unlocked(&(_n)->lock)
 
 typedef struct node {
   endpointlist endpoints;
   connectionlist connections;
   listenerlist listeners;
-  listener *mainl;
+  struct listener *mainl;
   in_addr_t listenip;
   unsigned short listenport;
   unsigned int nextlocalid;
@@ -226,8 +172,6 @@ typedef struct node {
   pthread_mutex_t liblock;
   endpointid managerid;
   int iosize;
-  int total_sent;
-  int total_received;
   list *toclose;
 } node;
 
@@ -239,28 +183,17 @@ typedef struct node {
 char *lookup_hostname(node *n, in_addr_t addr);
 int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
 
-node *node_start(int loglevel, int port);
+node *node_start(int loglevel, int port, mgr_extfun ext, void *extarg);
 void node_run(node *n);
 void node_log(node *n, int level, const char *format, ...);
-listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
-                      int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen);
 endpoint *find_endpoint(node *n, int localid);
-void node_remove_listener(node *n, listener *l);
-void node_start_iothread(node *n);
-void node_close_endpoints(node *n);
-void node_close_connections(node *n);
-connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
-                                int port, int othernode, char *errmsg, int errlen);
-void node_handle_endpoint_exit(node *n, endpointid epid);
 void node_shutdown(node *n);
-void node_notify(node *n);
-void done_writing(node *n, connection *conn);
-void done_reading(node *n, connection *conn);
 
 endpointid node_add_thread(node *n, const char *type, endpoint_threadfun fun, void *arg,
                            pthread_t *threadp);
 endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, void *arg,
                             pthread_t *threadp, int localid, int stacksize);
+void node_stats(node *n, int *regconnections, int *listeners);
 void endpoint_link_locked(endpoint *endpt, endpointid to);
 void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_link(endpoint *endpt, endpointid to);
@@ -276,14 +209,6 @@ void message_free(message *msg);
 
 int socketid_equals(const socketid *a, const socketid *b);
 int socketid_isnull(const socketid *a);
-
-/* console */
-
-void console_thread(node *n, endpoint *endpt, void *arg);
-
-/* manager */
-
-void start_manager(node *n);
 
 #ifndef NODE_C
 extern const char *log_levels[LOG_COUNT];

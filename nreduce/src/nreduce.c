@@ -28,7 +28,7 @@
 #include "compiler/bytecode.h"
 #include "nreduce.h"
 #include "runtime/runtime.h"
-#include "runtime/node.h"
+#include "network/node.h"
 #include "runtime/chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -197,13 +197,6 @@ void parse_args(int argc, char **argv)
       array_append(args.extra,&argv[i],sizeof(char*));
     }
   }
-}
-
-void get_progname(const char *cmd)
-{
-  char *cwd = getcwd_alloc();
-  printf("cwd = \"%s\"\n",cwd);
-  printf("cmd = \"%s\"\n",cmd);
 }
 
 static int chordtest_mode()

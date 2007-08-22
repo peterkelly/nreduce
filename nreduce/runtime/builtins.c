@@ -29,10 +29,10 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "compiler/bytecode.h"
-#include "compiler/util.h"
+#include "network/util.h"
 #include "runtime.h"
-#include "node.h"
-#include "messages.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1521,76 +1521,6 @@ static void b_abs(task *tsk, pntr *argstack)
 {
   CHECK_ARG(0,CELL_NUMBER);
   setnumber(&argstack[0],fabs(pntrdouble(argstack[0])));
-}
-
-static int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **methodname)
-{
-  if (0 <= array_to_string(method,methodname))
-    return set_error(tsk,"jcall: method is not a string");
-
-  if ((CELL_SYSOBJECT == pntrtype(obj)) && (SYSOBJECT_JAVA == psysobject(obj)->type)) {
-    char *str = malloc(100);
-    sprintf(str,"@%d",psysobject(obj)->jid.jid);
-    *targetname = str;
-  }
-  else if ((CELL_AREF == pntrtype(obj)) || (CELL_CONS == pntrtype(obj))) {
-    if (0 <= array_to_string(obj,targetname))
-      return set_error(tsk,"jcall: class name is not a string");
-  }
-  else {
-    return set_error(tsk,"jcall: first arg must be a java object or class name");
-  }
-  return 1;
-}
-
-static int serialise_arg(task *tsk, array *arr, int argno, pntr val)
-{
-  char *str;
-  char *escaped;
-  sysobject *so;
-  switch (pntrtype(val)) {
-  case CELL_NUMBER:
-    array_printf(arr," %f",pntrdouble(val));
-    return 1;
-  case CELL_CONS:
-  case CELL_AREF:
-    if (0 > array_to_string(val,&str)) {
-      escaped = escape(str);
-      array_printf(arr," \"%s\"",escaped);
-      free(escaped);
-      free(str);
-      return 1;
-    }
-    break;
-  case CELL_NIL:
-    array_printf(arr," nil");
-    return 1;
-  case CELL_SYSOBJECT:
-    so = psysobject(val);
-    if (SYSOBJECT_JAVA == so->type) {
-      array_printf(arr," @%d",so->jid.jid);
-      return 1;
-    }
-    break;
-  }
-  return set_error(tsk,"jcall: argument %d invalid (%s)",argno,cell_types[pntrtype(val)]);
-}
-
-static int serialise_args(task *tsk, pntr args, array *arr)
-{
-  pntr *argvalues = NULL;
-  int nargs;
-  int i;
-
-  if (0 > (nargs = flatten_list(args,&argvalues)))
-    return set_error(tsk,"jcall: args is not a valid list");
-
-  for (i = 0; i < nargs; i++)
-    if (!serialise_arg(tsk,arr,i,argvalues[i]))
-      break;
-
-  free(argvalues);
-  return (i == nargs);
 }
 
 static void b_jnew(task *tsk, pntr *argstack)

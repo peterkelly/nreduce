@@ -20,7 +20,7 @@
  *
  */
 
-#include "node.h"
+#include "network/node.h"
 
 #define MBITS 8
 #define KEYSPACE (1 << MBITS)

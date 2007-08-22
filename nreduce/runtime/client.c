@@ -27,8 +27,8 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "node.h"
-#include "messages.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -570,7 +570,7 @@ int do_client(char *initial_str, int argc, const char **argv)
   int r = 0;
   const char *cmd;
   endpointid initial;
-  node *n = node_start(LOG_WARNING,0);
+  node *n = node_start(LOG_WARNING,0,NULL,NULL);
   if (NULL == n)
     return -1;
 

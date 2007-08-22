@@ -29,8 +29,8 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "node.h"
-#include "messages.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -55,12 +55,13 @@
 
 static node *worker_startup(int loglevel, int port)
 {
-  node *n = node_start(loglevel,port);
+  node *n = node_start(loglevel,port,taskman_handle,NULL);
   if (n) {
     unsigned char *ipbytes;
     ipbytes = (unsigned char*)&n->listenip;
     node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
              getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
+    node_add_thread2(n,"java",java_thread,NULL,NULL,JAVA_ID,0);
   }
   return n;
 }

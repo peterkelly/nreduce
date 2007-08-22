@@ -183,7 +183,6 @@ void rename_variables(source *src, scomb *sc);
 
 /* debug */
 
-void fatal(const char *format, ...);
 int debug(int depth, const char *format, ...);
 void debug_stage(const char *name);
 int count_args(snode *c);

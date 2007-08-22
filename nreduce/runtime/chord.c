@@ -27,8 +27,8 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "node.h"
-#include "messages.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>

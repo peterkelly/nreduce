@@ -24,11 +24,10 @@
 #include "config.h"
 #endif
 
-#include "compiler/bytecode.h"
 #include "src/nreduce.h"
-#include "runtime.h"
 #include "node.h"
 #include "messages.h"
+#include "netprivate.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -86,6 +85,8 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
     unlock_node(n);
     return 0;
   }
+  /* FIXME: enable this again? (this command maybe isn't that useful anyway) */
+#if 0
   else if (!strcmp(argv[0],"tasks") || !strcmp(argv[0],"t")) {
     endpoint *endpt;
     array_printf(out,
@@ -103,6 +104,7 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
     unlock_node(n);
     return 0;
   }
+#endif
   else if (!strcmp(argv[0],"threads") || !strcmp(argv[0],"r")) {
     endpoint *endpt;
     array_printf(out,"%-7s %-4s\n","localid","type");
@@ -138,7 +140,8 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
   else if (!strcmp(argv[0],"help") || !strcmp(argv[0],"h") || !strcmp(argv[0],"?")) {
     array_printf(out,"connections       [c] - List all open connections\n");
     array_printf(out,"listeners         [l] - List all listening sockets\n");
-    array_printf(out,"tasks             [t] - List tasks\n");
+    /* FIXME: see above */
+/*     array_printf(out,"tasks             [t] - List tasks\n"); */
     array_printf(out,"threads           [r] - List threads\n");
     array_printf(out,"kill              [k] - Kill a task\n");
     array_printf(out,"quit (or exit)    [q] - Disconnect from debug console\n");

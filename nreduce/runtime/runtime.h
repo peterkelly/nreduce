@@ -26,7 +26,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "compiler/bytecode.h"
-#include "node.h"
+#include "network/node.h"
 #include <stdio.h>
 #include <sys/time.h>
 #include <netdb.h>
@@ -34,6 +34,9 @@
 #include <assert.h>
 #include <setjmp.h>
 #include <signal.h>
+
+struct task;
+struct gaddr;
 
 #define ENGINE_INTERPRETER 0
 #define ENGINE_NATIVE      1
@@ -646,6 +649,7 @@ pntr data_to_list(task *tsk, const char *data, int size, pntr tail);
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
 int array_to_string(pntr refpntr, char **str);
+int flatten_list(pntr refpntr, pntr **data);
 
 /* worker */
 
@@ -746,6 +750,17 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1);
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void native_sigsegv(int sig, siginfo_t *ino, void *uc1);
 void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk);
+
+/* taskman */
+
+int taskman_handle(node *n, endpoint *endpt, message *msg, int final, void *arg);
+
+/* java */
+
+int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **methodname);
+int serialise_args(task *tsk, pntr args, array *arr);
+pntr decode_java_response(task *tsk, const char *str, endpointid source);
+void java_thread(node *n, endpoint *endpt, void *arg);
 
 #ifndef BUILTINS_C
 extern const builtin builtin_info[NUM_BUILTINS];

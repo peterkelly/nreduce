@@ -27,7 +27,7 @@
 #endif
 
 #include "src/nreduce.h"
-#include "bytecode.h"
+#include "util.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -42,6 +42,17 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fenv.h>
+
+void fatal(const char *format, ...)
+{
+  va_list ap;
+  fprintf(stderr,"fatal error: ");
+  va_start(ap,format);
+  vfprintf(stderr,format,ap);
+  va_end(ap);
+  fprintf(stderr,"\n");
+  abort();
+}
 
 array *array_new(int elemsize, int initroom)
 {
@@ -458,60 +469,6 @@ char *escape(char *chars)
   return escaped;
 }
 
-void print_hex(FILE *f, int c)
-{
-  if (0xA > c)
-    fprintf(f,"%c",'0'+c);
-  else
-    fprintf(f,"%c",'A'+(c-0xA));
-}
-
-void print_hexbyte(FILE *f, unsigned char val)
-{
-  unsigned char hi = (unsigned char)((val & 0xF0) >> 4);
-  unsigned char lo = (unsigned char)(val & 0x0F);
-  print_hex(f,hi);
-  print_hex(f,lo);
-}
-
-void print_bin(FILE *f, void *ptr, int nbytes)
-{
-  int i;
-  unsigned char *data = (unsigned char*)ptr;
-  fprintf(f,"   ");
-  for (i = 0; i < nbytes; i++) {
-    int bit;
-    for (bit = 7; 0 <= bit; bit--)
-      fprintf(f,"%c",(data[i] & (0x1 << bit)) ? '1' : '0');
-    fprintf(f," ");
-  }
-  fprintf(f,"\n0x ");
-  for (i = 0; i < nbytes; i++) {
-    print_hexbyte(f,data[i]);
-    fprintf(f,"       ");
-  }
-  fprintf(f,"\n");
-}
-
-void print_bin_rev(FILE *f, void *ptr, int nbytes)
-{
-  int i;
-  unsigned char *data = (unsigned char*)ptr;
-  fprintf(f,"   ");
-  for (i = nbytes-1; 0 <= i; i--) {
-    int bit;
-    for (bit = 7; 0 <= bit; bit--)
-      fprintf(f,"%c",(data[i] & (0x1 << bit)) ? '1' : '0');
-    fprintf(f," ");
-  }
-  fprintf(f,"\n0x ");
-  for (i = nbytes-1; 0 <= i; i--) {
-    print_hexbyte(f,data[i]);
-    fprintf(f,"       ");
-  }
-  fprintf(f,"\n");
-}
-
 char *mkstring(const char *data, int len)
 {
   char *str = (char*)malloc(len+1);
@@ -572,25 +529,6 @@ int hash(const void *mem, int size)
   if (0 > h)
     h += GLOBAL_HASH_SIZE;
   return h;
-}
-
-char *getcwd_alloc()
-{
-  int buflen = 128;
-  char *buf = (char*)malloc(buflen);
-  char *cwd;
-
-  while ((NULL == (cwd = getcwd(buf,buflen))) && (ERANGE == errno)) {
-    buflen *= 2;
-    buf = (char*)realloc(buf,buflen);
-  }
-
-  if (NULL == cwd) {
-    free(buf);
-    return NULL;
-  }
-
-  return cwd;
 }
 
 void parse_cmdline(const char *line, int *argc, char ***argv)

@@ -30,7 +30,7 @@
 #include "compiler/bytecode.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
-#include "messages.h"
+#include "network/messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -580,8 +580,6 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, i
 {
   block *bl;
   int i;
-  connection *conn;
-  listener *l;
 
   *cells = 0;
   *bytes = 0;
@@ -589,16 +587,7 @@ void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, i
   *listeners = 0;
   *alloc = 0;
 
-  lock_node(tsk->n);
-  for (conn = tsk->n->connections.first; conn; conn = conn->next) {
-    if (conn->isreg)
-      (*connections)++;
-  }
-  for (l = tsk->n->listeners.first; l; l = l->next) {
-    if (l != tsk->n->mainl)
-      (*listeners)++;
-  }
-  unlock_node(tsk->n);
+  node_stats(tsk->n,connections,listeners);
 
   for (bl = tsk->blocks; bl; bl = bl->next) {
     for (i = 0; i < BLOCK_SIZE; i++) {

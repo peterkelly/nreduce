@@ -2,9 +2,9 @@
 #include "config.h"
 #endif
 
-#include "compiler/util.h"
-#include "runtime/node.h"
-#include "runtime/messages.h"
+#include "network/util.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -87,7 +87,7 @@ int main(int argc, char **argv)
   msgcount = atoi(argv[1]);
   size = atoi(argv[2]);
 
-  n = node_start(LOG_ERROR,0);
+  n = node_start(LOG_ERROR,0,NULL,NULL);
   if (NULL == n)
     exit(1);
   pa.pongid = node_add_thread(n,"pong",pong_thread,NULL,NULL);

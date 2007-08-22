@@ -27,8 +27,8 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "runtime.h"
-#include "node.h"
-#include "messages.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -644,7 +644,7 @@ static int read_managers(node *n, const char *nodesfile, endpointid **outids, in
 
 void run_chordtest(int argc, char **argv)
 {
-  node *n = node_start(LOG_ERROR,0);
+  node *n = node_start(LOG_ERROR,0,NULL,NULL);
   if (NULL == n)
     exit(1);
 

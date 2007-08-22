@@ -26,6 +26,8 @@
 
 #define NODE_C
 
+#define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
+
 #ifndef TEMP_FAILURE_RETRY
 # define TEMP_FAILURE_RETRY(expression) \
   (__extension__                                                              \
@@ -35,11 +37,10 @@
        __result; }))
 #endif
 
-#include "compiler/bytecode.h"
 #include "src/nreduce.h"
-#include "runtime.h"
 #include "node.h"
 #include "messages.h"
+#include "netprivate.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -257,8 +258,6 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
     }
     return;
   }
-
-  n->total_received++;
 
   newmsg = (message*)calloc(1,sizeof(message));
   newmsg->hdr = *hdr;
@@ -538,6 +537,7 @@ static void handle_read(node *n, connection *conn)
   process_received(n,conn);
 }
 
+/* FIXME: should use re-entrant functions here */
 char *lookup_hostname(node *n, in_addr_t addr)
 {
   struct hostent *he;
@@ -828,7 +828,7 @@ void node_free(node *n)
   free(n);
 }
 
-node *node_start(int loglevel, int port)
+node *node_start(int loglevel, int port, mgr_extfun ext, void *extarg)
 {
   node *n = node_new(loglevel);
 
@@ -837,7 +837,7 @@ node *node_start(int loglevel, int port)
     return NULL;
   }
 
-  start_manager(n);
+  start_manager(n,ext,extarg);
   node_start_iothread(n);
   return n;
 }
@@ -1188,8 +1188,6 @@ static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid des
   assert(INADDR_ANY != destendpointid.ip);
   assert(0 < destendpointid.port);
 
-  n->total_sent++;
-
   memset(&hdr,0,sizeof(msgheader));
   hdr.source.ip = n->listenip;
   hdr.source.port = n->listenport;
@@ -1382,6 +1380,22 @@ endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, v
   epid = node_add_thread_locked(n,type,fun,arg,threadp,localid,stacksize);
   unlock_node(n);
   return epid;
+}
+
+void node_stats(node *n, int *regconnections, int *listeners)
+{
+  connection *conn;
+  listener *l;
+  lock_node(n);
+  for (conn = n->connections.first; conn; conn = conn->next) {
+    if (conn->isreg)
+      (*regconnections)++;
+  }
+  for (l = n->listeners.first; l; l = l->next) {
+    if (l != n->mainl)
+      (*listeners)++;
+  }
+  unlock_node(n);
 }
 
 static int endpoint_has_link(endpoint *endpt, endpointid epid)

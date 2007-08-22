@@ -28,6 +28,8 @@
 #include <pthread.h>
 #include <sys/time.h>
 
+#define STACK_LIMIT 10240
+
 typedef struct list list;
 struct list {
   void *data;
@@ -46,6 +48,8 @@ typedef struct stack {
   int count;
   void **data;
 } stack;
+
+void fatal(const char *format, ...);
 
 array *array_new(int elemsize, int initroom);
 int array_equals(array *a, array *b);
@@ -124,10 +128,6 @@ void print_escaped(FILE *f, const char *str);
 void print_double_escaped(FILE *f, const char *str);
 char *unescape(char *chars);
 char *escape(char *chars);
-void print_hex(FILE *f, int c);
-void print_hexbyte(FILE *f, unsigned char val);
-void print_bin(FILE *f, void *ptr, int nbytes);
-void print_bin_rev(FILE *f, void *ptr, int nbytes);
 char *mkstring(const char *data, int len);
 char *substring(const char *str, int begin, int end);
 
@@ -136,7 +136,6 @@ int timeval_diffms(struct timeval from, struct timeval to);
 struct timeval timeval_addms(struct timeval t, int ms);
 
 int hash(const void *mem, int size);
-char *getcwd_alloc();
 
 void parse_cmdline(const char *line, int *argc, char ***argv);
 void free_args(int argc, char **argv);

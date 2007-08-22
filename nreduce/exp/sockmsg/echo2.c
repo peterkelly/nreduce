@@ -2,11 +2,12 @@
 #include "config.h"
 #endif
 
-#include "compiler/util.h"
-#include "runtime/node.h"
-#include "runtime/messages.h"
+#include "network/util.h"
+#include "network/node.h"
+#include "network/messages.h"
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static void echo_thread(node *n, endpoint *endpt, void *arg)
 {
@@ -66,10 +67,6 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       /* ignore */
       break;
     case MSG_CONNECTION_CLOSED:
-      lock_node(n);
-      printf("Connection closed: total sent = %d, total received = %d\n",
-             n->total_sent,n->total_received);
-      unlock_node(n);
       break;
     case MSG_KILL:
       done = 1;
@@ -98,7 +95,7 @@ int main(int argc, char **argv)
   port = atoi(argv[1]);
   bufsize = atoi(argv[2]);
 
-  n = node_start(LOG_ERROR,0);
+  n = node_start(LOG_ERROR,0,NULL,NULL);
   n->iosize = bufsize;
   if (NULL == n)
     exit(1);

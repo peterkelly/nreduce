@@ -30,7 +30,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime.h"
-#include "messages.h"
+#include "network/messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -451,54 +451,6 @@ static void interpreter_connection_event(task *tsk, connection_event_msg *m)
       retrieve_blocked_frame(tsk,so->frameids[READ_FRAMEADDR]);
     if (0 != so->frameids[WRITE_FRAMEADDR])
       retrieve_blocked_frame(tsk,so->frameids[WRITE_FRAMEADDR]);
-  }
-}
-
-static pntr decode_java_response(task *tsk, const char *str, endpointid source)
-{
-  int len = strlen(str);
-  if ((2 <= len) && ('"' == str[0]) && ('"' == str[len-1])) {
-    char *sub = substring(str,1,len-1);
-    char *unescaped = unescape(sub);
-    pntr p = string_to_array(tsk,unescaped);
-    free(unescaped);
-    free(sub);
-    return p;
-  }
-  else if (!strcmp(str,"nil")) {
-    return tsk->globnilpntr;
-  }
-  else if (!strcmp(str,"false")) {
-    return tsk->globnilpntr;
-  }
-  else if (!strcmp(str,"true")) {
-    return tsk->globtruepntr;
-  }
-  else if ((1 < len) && ('@' == str[0])) {
-    int id = atoi(str+1);
-    sysobject *so = new_sysobject(tsk,SYSOBJECT_JAVA);
-    pntr p;
-    so->jid.managerid = source;
-    so->jid.jid = id;
-    make_pntr(p,so->c);
-    return p;
-  }
-  else if (!strncmp(str,"error: ",7)) {
-    set_error(tsk,"jcall: %s",&str[7]);
-    return tsk->globnilpntr;
-  }
-  else {
-    char *end = NULL;
-    double d = strtod(str,&end);
-    if (('\0' != *str) && ('\0' == *end)) {
-      pntr p;
-      set_pntrdouble(p,d);
-      return p;
-    }
-    else {
-      set_error(tsk,"jcall: invalid response");
-      return tsk->globnilpntr;
-    }
   }
 }
 

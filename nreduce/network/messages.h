@@ -23,7 +23,7 @@
 #ifndef _MESSAGES_H
 #define _MESSAGES_H
 
-#include "runtime.h"
+#include "node.h"
 
 #define MSG_DONE                0
 #define MSG_FISH                1

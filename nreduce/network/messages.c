@@ -177,13 +177,14 @@ void send_delete_listener(endpoint *endpt, socketid sockid)
 
 void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen)
 {
+  endpointid javaid = { ip: endpt->n->listenip, port: endpt->n->listenport, localid: JAVA_ID };
   int msglen = sizeof(jcmd_msg)+cmdlen;
   jcmd_msg *jcm = (jcmd_msg*)calloc(msglen,1);
   jcm->ioid = ioid;
   jcm->oneway = oneway;
   jcm->cmdlen = cmdlen;
   memcpy(&jcm->cmd,data,cmdlen);
-  endpoint_send(endpt,endpt->n->managerid,MSG_JCMD,jcm,msglen);
+  endpoint_send(endpt,javaid,MSG_JCMD,jcm,msglen);
   free(jcm);
 }
 
