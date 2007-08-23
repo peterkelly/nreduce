@@ -46,7 +46,13 @@ qsort cmp lst =
 
 main =
 (letrec
-  strings = (read_lines (readb "strings"))
+  strings = (cons "Elephant"
+            (cons "Door"
+            (cons "Banana"
+            (cons "Abacus"
+            (cons "Castle"
+            (cons "Gasp"
+            (cons "Friend" nil)))))))
   sorted = (qsort strcmp strings)
  in
   (printstrings sorted))

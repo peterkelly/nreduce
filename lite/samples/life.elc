@@ -64,4 +64,4 @@ loop iter grid =
                            (loop (- iter 1) (dolife grid)))
                 nil)
 
-main = (loop 50 (makegrid start 40 40))
+main = (loop 30 (makegrid start 20 20))

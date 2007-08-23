@@ -117,12 +117,11 @@ void snode_free(snode *c);
 void free_letrec(letrec *rec);
 
 int is_from_prelude(source *src, scomb *sc);
-void compile_stage(source *src, const char *name);
 source *source_new();
 int source_parse_string(source *src, const char *str, const char *filename, const char *modname);
 int source_parse_file(source *src, const char *filename, const char *modname);
 void add_import(source *src, const char *name);
-int source_process(source *src, int stopafterlambda, int nosink, int disstrict, int appendoptdebug);
+int source_process(source *src);
 int source_compile(source *src, char **bcdata, int *bcsize);
 void source_free(source *src);
 
@@ -134,78 +133,25 @@ char *make_varname(const char *want);
 int create_scomb(source *src, const char *modname, char *name, list *argnames,
                  snode *body, int fileno, int lineno);
 snode *makesym(int fileno, int lineno, const char *name);
-snode *makeapp(int fileno, int lineno, const char *name, ...);
-snode *makeoneletrec(int fileno, int lineno, const char *name, snode *value, snode *body);
-snode *makeforeach(int fileno, int lineno, char *varname, snode *list, snode *body);
 
 /* resolve */
 
 void resolve_refs(source *src, scomb *sc, list **unbound);
 
-/* reorder */
-
-void reorder_letrecs(snode *c);
-
-/* sinking */
-
-void remove_wrappers(snode *s);
-void sink_letrecs(source *src, snode *s);
-
 /* super */
 
-scomb *get_scomb_index(source *src, int index);
 scomb *get_scomb(source *src, const char *name);
-int get_scomb_var(scomb *sc, const char *name);
 scomb *add_scomb(source *src, const char *name1);
 void scomb_free(scomb *sc);
-void schash_rebuild(source *src);
-int schash_check(source *src);
 
 /* lifting */
 
 void lift(source *src, scomb *sc);
-void applift(source *src, scomb *sc);
-void nonstrict_lift(source *src, scomb *sc);
-
-/* inlining */
-
-void inlining(source *src);
-
-/* appendopt */
-
-snode *snode_copy(snode *s);
-void appendopt(source *src);
 
 /* renaming */
 
 char *next_var(source *src, const char *oldname);
 void rename_variables(source *src, scomb *sc);
-
-/* debug */
-
-int debug(int depth, const char *format, ...);
-void debug_stage(const char *name);
-int count_args(snode *c);
-snode *get_arg(snode *c, int argno);
-void print(snode *c);
-void print_codef2(source *src, FILE *f, snode *c, int pos);
-void print_codef(source *src, FILE *f, snode *c, int needbr);
-void print_code(source *src, snode *c);
-void print_scomb_code(source *src, FILE *f, scomb *sc);
-void print_scombs1(source *src);
-void print_scombs2(source *src);
-const char *real_varname(source *src, const char *sym);
-char *real_scname(source *src, const char *sym);
-
-/* strictness */
-
-void check_strictness(scomb *sc, int *changed);
-void dump_strictinfo(source *src);
-void strictness_analysis(source *src);
-
-#ifndef DEBUG_C
-extern int compileinfo;
-#endif
 
 #ifndef SOURCE_C
 extern const char *snode_types[SNODE_COUNT];

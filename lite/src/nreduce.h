@@ -27,38 +27,15 @@
 #include <stdarg.h>
 #include <sys/time.h>
 #include <time.h>
-#include "network/util.h"
+#include "compiler/util.h"
 
-#ifdef WIN32
-#define YY_NO_UNISTD_H
-#include <float.h>
-#define isnan _isnan
-#define isinf(__x) (!_finite(__x))
-#define NO_STATEMENT_EXPRS
-#else
-#define TIMING
-#endif
-
-//#define NDEBUG
-
-/* #define DEBUG_BYTECODE_COMPILATION */
-/* #define SHOW_SUBSTITUTED_NAMES */
-/* #define PROFILING */
-/* #define CONTINUOUS_DISTGC */
-/* #define DISABLE_ARRAYS */
-
-// Misc
-
+#define ERRMSG_MAX 256
 #define BLOCK_SIZE 102400
-#define FRAMEBLOCK_SIZE 1048576
 #define COLLECT_THRESHOLD 8192000
 #define GLOBAL_HASH_SIZE 256
-#define PROFILE_FILENAME "profile.out"
 
 #define FLAG_MARKED         0x1
 #define FLAG_NEW            0x2
-#define FLAG_DMB            0x4
 #define FLAG_PINNED         0x8
-#define FLAG_REDUCED       0x10
 
 #endif /* _NREDUCE_H */

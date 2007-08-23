@@ -1,20 +1,14 @@
 noinst_LTLIBRARIES = libcompiler.la
 noinst_PROGRAMS = 
-noinst_HEADERS = source.h bytecode.h
+noinst_HEADERS = source.h
 BUILT_SOURCES = grammar.tab.c lexer.yy.c
-EXTRA_DIST = grammar.y lexer.l grammar.tab.h
-libcompiler_la_SOURCES = strictness.c \
-	super.c \
+EXTRA_DIST = grammar.y lexer.l grammar.tab.h util.h
+libcompiler_la_SOURCES = super.c \
 	lifting.c \
-	inlining.c \
-	appendopt.c \
 	renaming.c \
 	resolve.c \
-	reorder.c \
-	sinking.c \
 	source.c \
-	bytecode.c \
-	debug.c \
+	util.c \
 	grammar.tab.c \
 	lexer.yy.c
 INCLUDES = -I@top_srcdir@

@@ -27,7 +27,6 @@
 #define SOURCE_C
 
 #include "source.h"
-#include "bytecode.h"
 #include "src/nreduce.h"
 #include "grammar.tab.h"
 #include "runtime/runtime.h"
@@ -280,15 +279,6 @@ int is_from_prelude(source *src, scomb *sc)
                   MODULE_FILENAME_PREFIX"prelude.elc"));
 }
 
-void compile_stage(source *src, const char *name)
-{
-  static int stageno = 0;
-  assert(schash_check(src));
-  if ((0 < stageno++) && compileinfo)
-    print_scombs1(src);
-  debug_stage(name);
-}
-
 int handle_unbound(source *src, list *unbound)
 {
   list *l;
@@ -309,7 +299,7 @@ int handle_unbound(source *src, list *unbound)
     return -1;
 }
 
-int source_process(source *src, int stopafterlambda, int nosink, int disstrict, int appendoptdebug)
+int source_process(source *src)
 {
   int sccount;
   int scno;
@@ -323,13 +313,13 @@ int source_process(source *src, int stopafterlambda, int nosink, int disstrict, 
 
   sccount = array_count(src->scombs);
 
-  compile_stage(src,"Variable renaming"); /* renaming.c */
+  /* Compile stage: Variable renaming */
   for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     rename_variables(src,sc);
   }
 
-  compile_stage(src,"Symbol resolution"); /* resolve.c */
+  /* Compile stage: Symbol resolution */
   for (scno = 0; scno < sccount; scno++) {
     scomb *sc = array_item(src->scombs,scno,scomb*);
     resolve_refs(src,sc,&unbound);
@@ -338,61 +328,10 @@ int source_process(source *src, int stopafterlambda, int nosink, int disstrict, 
   if (0 != handle_unbound(src,unbound))
     return -1;
 
-  compile_stage(src,"Lambda lifting"); /* lifting.c */
+  /* Compile stage: Lambda lifting */
   for (scno = 0; scno < sccount; scno++)
     lift(src,array_item(src->scombs,scno,scomb*));
   sccount = array_count(src->scombs); /* lift() may have added some */
-
-  /* Run with -a or -l; don't go any further */
-  if (stopafterlambda)
-    return 0;
-
-  compile_stage(src,"Append optimisation"); /* appendopt.c */
-  appendopt(src);
-  sccount = array_count(src->scombs); /* appendopt() may have added some */
-  if (appendoptdebug)
-    return 0;
-
-  compile_stage(src,"Inlining"); /* inlining.c */
-  inlining(src);
-
-  if (!nosink) {
-    compile_stage(src,"Letrec sinking"); /* sinking.c */
-    for (scno = 0; scno < sccount; scno++)
-      sink_letrecs(src,array_item(src->scombs,scno,scomb*)->body);
-  }
-
-  compile_stage(src,"Application lifting"); /* lifting.c */
-  for (scno = 0; scno < sccount; scno++)
-    applift(src,array_item(src->scombs,scno,scomb*));
-  sccount = array_count(src->scombs); /* applift() may have added some */
-
-  compile_stage(src,"Letrec reordering"); /* reorder.c */
-  for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    reorder_letrecs(sc->body);
-  }
-
-  if (disstrict)
-    return 0;
-
-  compile_stage(src,"Strictness analysis");
-  strictness_analysis(src);
-
-  compile_stage(src,"Non-strict expression lifting");
-  for (scno = 0; scno < sccount; scno++)
-    nonstrict_lift(src,array_item(src->scombs,scno,scomb*));
-
-  return 0;
-}
-
-int source_compile(source *src, char **bcdata, int *bcsize)
-{
-  compile_stage(src,"Bytecode compilation");
-  compile(src,bcdata,bcsize);
-
-  if (compileinfo)
-    bc_print(*bcdata,stdout,src,1,NULL);
 
   return 0;
 }
@@ -513,72 +452,4 @@ snode *makesym(int fileno, int lineno, const char *name)
   sym->type = SNODE_SYMBOL;
   sym->name = strdup(name);
   return sym;
-}
-
-snode *makeapp(int fileno, int lineno, const char *name, ...)
-{
-  va_list ap;
-  snode *n = snode_new(fileno,lineno);
-  n->type = SNODE_SYMBOL;
-  n->name = strdup(name);
-
-  va_start(ap,name);
-  while (1) {
-    snode *app;
-    snode *arg = va_arg(ap,snode*);
-    if (NULL == arg)
-      break;
-    app = snode_new(fileno,lineno);
-    app->type = SNODE_APPLICATION;
-    app->left = n;
-    app->right = arg;
-    n = app;
-  }
-  va_end(ap);
-
-  return n;
-}
-
-snode *makeoneletrec(int fileno, int lineno, const char *name, snode *value, snode *body)
-{
-  letrec *rec = (letrec*)calloc(1,sizeof(letrec));
-  rec->name = strdup(name);
-  rec->value = value;
-
-  snode *n = snode_new(fileno,lineno);
-  n->type = SNODE_LETREC;
-  n->bindings = rec;
-  n->body = body;
-
-  return n;
-}
-
-snode *makeforeach(int fileno, int lineno, char *varname, snode *list, snode *body)
-{
-  char *fefun = make_varname("fefun");
-  char *lstvar = make_varname("lst");
-
-  snode *nil;
-  snode *call;
-
-  snode *headcall = makeapp(fileno,lineno,"head",makesym(fileno,lineno,lstvar),NULL);
-  snode *tailcall = makeapp(fileno,lineno,"tail",makesym(fileno,lineno,lstvar),NULL);
-  snode *selfcall = makeapp(fileno,lineno,fefun,tailcall,NULL);
-  snode *inletrec = makeoneletrec(fileno,lineno,varname,headcall,body);
-  snode *append = makeapp(fileno,lineno,"append",inletrec,selfcall,NULL);
-  snode *lambda = snode_new(fileno,lineno);
-  snode *res;
-  lambda->type = SNODE_LAMBDA;
-  lambda->name = strdup(lstvar);
-
-  nil = snode_new(fileno,lineno);
-  nil->type = SNODE_NIL;
-  lambda->body = makeapp(fileno,lineno,"if",makesym(fileno,lineno,lstvar),append,nil,NULL);
-
-  call = makeapp(fileno,lineno,fefun,list,NULL);
-  res = makeoneletrec(fileno,lineno,fefun,lambda,call);
-
-  free(fefun);
-  free(lstvar);
-  return res;
 }

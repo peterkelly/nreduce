@@ -155,13 +155,6 @@ void reduce(task *tsk, pntrstack *s)
 {
   int reductions = 0;
   pntr redex = s->data[s->count-1];
-  if (CELL_NUMBER != pntrtype(redex)) {
-    if (get_pntr(redex)->flags & FLAG_REDUCED)
-      return;
-    get_pntr(redex)->flags |= FLAG_REDUCED;
-  }
-
-  assert(tsk);
 
   /* REPEAT */
   while (1) {
@@ -176,14 +169,11 @@ void reduce(task *tsk, pntrstack *s)
 
     target = resolve_pntr(redex);
 
-    trace_step(tsk,target,0,"Performing reduction");
-
     /* 1. Unwind the spine until something other than an application node is encountered. */
     pntrstack_push(s,target);
 
     while (CELL_APPLICATION == pntrtype(target)) {
       target = resolve_pntr(get_pntr(target)->field1);
-      trace_step(tsk,target,0,"Unwound spine");
       pntrstack_push(s,target);
     }
 
@@ -220,7 +210,6 @@ void reduce(task *tsk, pntrstack *s)
       assert((CELL_APPLICATION == pntrtype(dest)) ||
              (CELL_SCREF == pntrtype(dest)));
 
-      trace_step(tsk,redex,1,"Instantiating supercombinator %s",sc->name);
       res = instantiate_scomb(tsk,s,sc);
       get_pntr(dest)->type = CELL_IND;
       get_pntr(dest)->field1 = res;
@@ -229,7 +218,6 @@ void reduce(task *tsk, pntrstack *s)
       continue;
     }
     case CELL_CONS:
-    case CELL_AREF:
     case CELL_NIL:
     case CELL_NUMBER:
       /* The item at the tip of the spine is a value; this means the expression is in WHNF.
@@ -240,9 +228,6 @@ void reduce(task *tsk, pntrstack *s)
         exit(1);
       }
 
-      s->count = oldtop;
-      return;
-    case CELL_SYMBOL:
       s->count = oldtop;
       return;
       /* b. A built-in function. Check the number of arguments available. If there are too few
@@ -283,19 +268,17 @@ void reduce(task *tsk, pntrstack *s)
       for (i = 0; i < strictargs; i++)
         s->data[s->count-1-i] = resolve_pntr(s->data[s->count-1-i]);
 
-      /* Are any strict arguments a SYMBOL? */
+      /* Are any strict arguments not yet reduced? */
       for (i = 0; i < strictargs; i++) {
         pntr argval = resolve_pntr(s->data[s->count-1-i]);
-        if ((CELL_SYMBOL != pntrtype(argval)) && (CELL_APPLICATION != pntrtype(argval))) {
+        if (CELL_APPLICATION != pntrtype(argval)) {
           strictok++;
         }
         else {
-          trace_step(tsk,argval,0,"Found argument to be irreducible");
           break;
         }
       }
 
-      trace_step(tsk,redex,1,"Executing built-in function %s",builtin_info[bif].name);
       builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);
       if (tsk->error)
         fatal("%s",tsk->error);
@@ -305,7 +288,6 @@ void reduce(task *tsk, pntrstack *s)
 
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
       get_pntr(s->data[s->count-2])->type = CELL_IND;
       get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
 
@@ -351,26 +333,6 @@ static void stream(task *tsk, pntr lst)
       fprintf(stderr,"Too many arguments applied to function\n");
       exit(1);
     }
-    else if (CELL_AREF == pntrtype(p)) {
-      carray *arr = aref_array(p);
-      int index = aref_index(p);
-      pntrstack_push(tsk->streamstack,arr->tail);
-      if (1 == arr->elemsize) {
-        char *str = (char*)malloc(arr->size-index+1);
-        memcpy(str,&((char*)arr->elements)[index],arr->size-index);
-        str[arr->size-index] = '\0';
-        printf("%s",str);
-        free(str);
-      }
-      else if (sizeof(pntr) == arr->elemsize) {
-        int i;
-        for (i = arr->size-1; i >= index; i--)
-          pntrstack_push(tsk->streamstack,((pntr*)arr->elements)[i]);
-      }
-      else {
-        fatal("invalid array size");
-      }
-    }
     else {
       fprintf(stderr,"Bad cell type returned to printing mechanism: %s\n",cell_types[pntrtype(p)]);
       exit(1);
@@ -380,41 +342,24 @@ static void stream(task *tsk, pntr lst)
   tsk->streamstack = NULL;
 }
 
-void run_reduction(source *src, char *trace_dir, int trace_type, array *args)
+void run_reduction(source *src)
 {
   scomb *mainsc;
   cell *app;
   pntr rootp;
-  socketid out_sockid;
   task *tsk;
 
-  memset(&out_sockid,0,sizeof(out_sockid));
-  tsk = task_new(0,0,NULL,0,args,NULL,out_sockid,NULL);
+  tsk = task_new(0,0,NULL,0);
 
-  debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");
 
   app = alloc_cell(tsk);
   app->type = CELL_APPLICATION;
   app->field1 = makescref(tsk,mainsc);
-  app->field2 = tsk->argsp;
+  app->field2 = tsk->globnilpntr;
   make_pntr(rootp,app);
-  tsk->argsp = tsk->globnilpntr;
-
-  if (trace_dir) {
-    tsk->tracing = 1;
-    tsk->trace_src = src;
-    tsk->trace_root = rootp;
-    tsk->trace_dir = trace_dir;
-    tsk->trace_type = trace_type;
-  }
 
   stream(tsk,rootp);
-
-  if (trace_dir)
-    trace_step(tsk,rootp,0,"Done");
-
-  printf("\n");
 
   task_free(tsk);
 }

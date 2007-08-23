@@ -1,4 +1,0 @@
-#!/bin/bash
-src/testasm
-gcc -c nreduce.s
-objdump -D nreduce.o

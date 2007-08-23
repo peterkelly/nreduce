@@ -1,78 +1,6 @@
-printer1 dest partlen lst =
-(printer dest (arrayskip partlen lst))
-
-printer dest lst =
-(if lst
-  (letrec
-    partlen = (nchars lst)
-   in
-    (if partlen
-      (seq (printarray dest partlen lst) (printer1 dest partlen lst))
-      (seq (print dest (head lst)) (printer dest (tail lst)))))
-  (printend dest))
-
-sparklist lst =
-(if lst
-  (parhead lst (sparklist (tail lst)))
-  nil)
-
-parlist lst =
-(if lst
-  (seq (par (head lst) nil)
-    (parlist (tail lst)))
-  nil)
-
-spark val =
-(seq (sparklist val) val)
-
-__start args =
-(seq (printer (getoutput nil) (main args)) (exit nil))
-
-streamfd fd =
-(readchunk fd (streamfd fd))
-
-readb filename =
-(streamfd (openfd (forcelist filename)))
-
-exists path =
-(fexists (forcelist path))
-
-isdir path =
-(fisdir (forcelist path))
-
-streamcon so =
-(readcon so (streamcon so))
-
-connect host port out =
-(letrec
-  con = (opencon (forcelist host) port (printer con out))
- in
-  (streamcon con))
-
-acceptloop handler so =
-(letrec
-  connso = (accept so (printer connso (handler instream)))
- instream = (streamcon connso)
- in
-  (seq connso
-    (cons instream (acceptloop handler so))))
-
-listen port handler =
-(acceptloop handler (startlisten port))
-
-readdir filename =
-(readdir1 (forcelist filename))
-
-stdin =
-(streamfd 0)
-
-readt filename =
-(readb filename)
-
 len1 !total lst =
 (if lst
-  (letrec partlen = (arraysize lst) in
-    (len1 (+ total partlen) (arrayskip partlen lst)))
+  (len1 (+ total 1) (tail lst))
   total)
 
 len lst =
@@ -81,29 +9,21 @@ len lst =
 skip n lst =
 (if (<= n 0)
   lst
-  (letrec partlen = (arraysize lst) in
-    (if (< n partlen)
-      (arrayskip n lst)
-      (skip (- n partlen) (arrayskip partlen lst)))))
+  (skip (- n 1) (tail lst)))
 
 item n lst = (head (skip n lst))
 
 prefix n lst =
 (if (<= n 0)
   nil
-  (letrec partlen = (arraysize lst) in
-    (if (<= n partlen)
-      (arrayprefix n lst nil)
-      (arrayprefix partlen lst
-        (prefix (- n partlen) (arrayskip partlen lst))))))
+  (cons (head lst) (prefix (- n 1) (tail lst))))
 
 sub !start !count lst =
 (prefix count (skip start lst))
 
 append a b =
 (if a
-  (letrec partlen = (arraysize a) in
-    (arrayprefix partlen a (append (arrayskip partlen a) b)))
+  (cons (head a) (append (tail a) b))
   b)
 
 appendn n a b =
@@ -116,12 +36,7 @@ append1 a b =
 
 forcelist1 lst =
 (if lst
-  (letrec
-    partlen = (nchars lst)
-   in
-    (if partlen
-      (forcelist1 (arrayskip partlen lst))
-      (seq (head lst) (forcelist1 (tail lst)))))
+  (seq (head lst) (forcelist1 (tail lst)))
   nil)
 
 forcelist lst =
@@ -138,12 +53,7 @@ consn n a b =
   (consn (- n 1) (append1 a b)))
 
 strcmp a b =
-(letrec
-  res = (arraystrcmp a b)
- in
-  (if res
-    res
-    (strcmpcons a b)))
+(strcmpcons a b)
 
 strcmpcons a b =
 (if a
@@ -181,32 +91,8 @@ reverse lst =
 (reverse1 lst nil)
 
 
-echo2 dest partlen lst =
-(echo1 dest (arrayskip partlen lst))
-
-echo1 dest lst =
-(if lst
-  (letrec
-    partlen = (nchars lst)
-   in
-    (if partlen
-      (seq (printarray dest partlen lst) (echo2 dest partlen lst))
-      (seq (print dest (head lst)) (echo1 dest (tail lst)))))
-  nil)
-
-echo str = (echo1 (getoutput nil) (forcelist str))
-
 stringtonum str =
 (stringtonum1 (forcelist str))
 
 error str =
 (error1 (forcelist str))
-
-jnew class args = (_jnew (forcelist class) (forcelist2 args))
-
-forcelist2 lst = (forcelist (map (!x.if (iscons x) (forcelist x) x) lst))
-
-jcall obj method args =
-(_jcall (if (iscons obj) (forcelist obj) obj)
-        (forcelist method)
-        (forcelist2 args))

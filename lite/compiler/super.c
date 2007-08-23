@@ -37,11 +37,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-scomb *get_scomb_index(source *src, int index)
-{
-  return array_item(src->scombs,index,scomb*);
-}
-
 scomb *get_scomb(source *src, const char *name)
 {
   int h = hash(name,strlen(name));
@@ -49,15 +44,6 @@ scomb *get_scomb(source *src, const char *name)
   while (sc && strcmp(sc->name,name))
     sc = sc->hashnext;
   return sc;
-}
-
-int get_scomb_var(scomb *sc, const char *name)
-{
-  int i;
-  for (i = 0; i < sc->nargs; i++)
-    if (sc->argnames[i] && !strcmp(sc->argnames[i],name))
-      return i;
-  return -1;
 }
 
 scomb *add_scomb(source *src, const char *name1)
@@ -111,51 +97,4 @@ void scomb_free(scomb *sc)
 
   free(sc->strictin);
   free(sc);
-}
-
-void schash_rebuild(source *src)
-{
-  int sccount = array_count(src->scombs);
-  int scno;
-
-  /* Clear hash data */
-  memset(&src->schash,0,GLOBAL_HASH_SIZE*sizeof(scomb*));
-  for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    sc->hashnext = 0;
-  }
-
-  /* Rebuild hash table */
-  for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    int h = hash(sc->name,strlen(sc->name));
-    sc->hashnext = src->schash[h];
-    src->schash[h] = sc;
-  }
-}
-
-int schash_check(source *src)
-{
-  int sccount = array_count(src->scombs);
-  int scno;
-  int h;
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    scomb *sc;
-    for (sc = src->schash[h]; sc; sc = sc->hashnext)
-      if (hash(sc->name,strlen(sc->name)) != h)
-        return 0;
-  }
-
-  for (scno = 0; scno < sccount; scno++) {
-    scomb *sc = array_item(src->scombs,scno,scomb*);
-    scomb *s2;
-    int found = 0;
-    h = hash(sc->name,strlen(sc->name));
-    for (s2 = src->schash[h]; s2; s2 = s2->hashnext)
-      if (s2 == sc)
-        found = 1;
-    if (!found)
-      return 0;
-  }
-  return 1;
 }
