@@ -1,0 +1,7 @@
+#!/bin/bash
+
+
+for filename in output.0 output.1 output.2 output.3; do
+  i="0"
+  echo "" > $filename
+done

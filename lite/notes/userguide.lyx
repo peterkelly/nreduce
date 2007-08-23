@@ -1,0 +1,1894 @@
+#LyX 1.5.0rc2 created this file. For more info see http://www.lyx.org/
+\lyxformat 276
+\begin_document
+\begin_header
+\textclass article
+\language english
+\inputencoding auto
+\font_roman times
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\paperfontsize 12
+\spacing single
+\papersize default
+\use_geometry true
+\use_amsmath 1
+\use_esint 0
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\author "Peter Kelly" pmk@cs.adelaide.edu.au
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Nreduce User's Guide
+\end_layout
+
+\begin_layout Author
+Peter Kelly
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+Nreduce is a virtual machine designed for distributed execution of functional
+ programs across a set of computers.
+ It supports multi-tasking, lazy evaluation, and automatic parallelisation
+ of code.
+ Programs are written in a small, pure functional language known as 
+\emph on
+extended lambda calculus
+\emph default
+ (ELC), and are compiled into bytecode and executed in an interpreted manner.
+ The virtual machine is able to communicate with instances of itself running
+ on other computers, to transparently split up the program into separate
+ threads and distribute the work among machines.
+\end_layout
+
+\begin_layout Standard
+ELC is designed for simplicity, and includes only a minimal set of features.
+ The programming model includes only a small number of data types and library
+ functions.
+ It is intended as an intermediate language into which other more complex
+ languages can be compiled, however it is possible to code directly in the
+ language.
+\end_layout
+
+\begin_layout Standard
+This guide is intended as a brief introduction to the nreduce virtual machine
+ and ELC language to demonstrate the features supported.
+ If you have worked with other functional languages, you will notice many
+ similarities.
+\end_layout
+
+\begin_layout Section
+Getting started
+\end_layout
+
+\begin_layout Standard
+We'll begin by diving straight into code and write a 
+\begin_inset Quotes eld
+\end_inset
+
+Hello World
+\begin_inset Quotes erd
+\end_inset
+
+ program.
+ This is done by defining a function 
+\family typewriter
+main
+\family default
+, with no arguments, which returns a string:
+\end_layout
+
+\begin_layout LyX-Code
+main = "Hello World
+\backslash
+n"
+\end_layout
+
+\begin_layout Standard
+To run this, save the code in a file hello.elc and run it as follows:
+\end_layout
+
+\begin_layout LyX-Code
+# nreduce hello.elc
+\end_layout
+
+\begin_layout LyX-Code
+Hello World
+\end_layout
+
+\begin_layout Subsection
+Functions and expressions
+\end_layout
+
+\begin_layout Standard
+All ELC programs consist of a list of function definitions, with the same
+ form as above.
+ On the left hand side of the = symbol is the function name followed by
+ a list of arguments, and on the right hand side is the expression that
+ corresponds to the function body.
+ There is no such thing as a 
+\begin_inset Quotes eld
+\end_inset
+
+statement
+\begin_inset Quotes erd
+\end_inset
+
+ in ELC; everything is an expression.
+ Both functions and expressions are 
+\emph on
+side-effect free
+\emph default
+ - that is, they are not allowed to modify any data, but only compute a
+ value.
+\end_layout
+
+\begin_layout Standard
+The above function had only a single constant value as its body.
+ Normally though, an expression will be more complex, and involve a set
+ of 
+\emph on
+function applications
+\emph default
+.
+ These serve the same purpose as function calls and control flow statements
+ in other languages.
+ A function application is written in the form 
+\family typewriter
+(f a b c)
+\family default
+, where the first item is the function to be called, followed by its arguments.
+ For example, we can use the 
+\family typewriter
+append
+\family default
+ function to concatenate two strings; the following code gives the same
+ result as the previous version above:
+\end_layout
+
+\begin_layout LyX-Code
+main = (append "Hello " "World
+\backslash
+n")
+\end_layout
+
+\begin_layout Standard
+As a more complex example, we will write a program that contains two functions.
+ The first one, 
+\family typewriter
+fac
+\family default
+, computes the factorial of a given number.
+ It uses several nested functions to perform the calculation: 
+\family typewriter
+if
+\family default
+, 
+\family typewriter
+=
+\family default
+, 
+\family typewriter
+*
+\family default
+, 
+\family typewriter
+-
+\family default
+, as well as a recursive call to itself.
+ The second function, 
+\family typewriter
+main
+\family default
+, makes a call to 
+\family typewriter
+fac
+\family default
+ with the value 5, converts the result to a string, and then constructs
+ the output to print to the terminal:
+\end_layout
+
+\begin_layout LyX-Code
+fac n = (if (= n 1)
+\end_layout
+
+\begin_layout LyX-Code
+            1
+\end_layout
+
+\begin_layout LyX-Code
+            (* n (fac (- n 1))))
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main = (append "result = "
+\end_layout
+
+\begin_layout LyX-Code
+       (append (numtostring (fac 5)) "
+\backslash
+n"))
+\end_layout
+
+\begin_layout Standard
+This can be run in the same way as the previous program:
+\end_layout
+
+\begin_layout LyX-Code
+# nreduce fac.elc
+\end_layout
+
+\begin_layout LyX-Code
+result = 120
+\end_layout
+
+\begin_layout Standard
+In ELC, even mathematical operations and control flow constructs are functions.
+ For example, 
+\family typewriter
+if
+\family default
+ takes three arguments specifying the conditional, the true branch, and
+ the false branch.
+ All function calls are executed using 
+\emph on
+lazy evaluation
+\emph default
+, which means that expressions passed in as arguments to a function only
+ get evaluated if and when their values are actually needed.
+ This is different to most other languages, which evaluate all of the arguments
+ before calling the function.
+ Using 
+\family typewriter
+if
+\family default
+ as a function, as we do above, would not work in these languages, because
+ the false branch would cause the program to go into an infinite loop.
+ Here though, the first argument to 
+\family typewriter
+if
+\family default
+ always gets evaluated, but then only the second or third argument are evaluated
+ depending on the result of the condition.
+\end_layout
+
+\begin_layout Subsection
+Lists and strings
+\end_layout
+
+\begin_layout Standard
+Lists are supported using similar mechanisms to other functional languages,
+ and that is through the use of 
+\emph on
+cons cells
+\emph default
+.
+ A cons cell contains two parts: a 
+\emph on
+head
+\emph default
+ and a 
+\emph on
+tail
+\emph default
+, and a list consists of a sequence of cons cells linked together through
+ their tail values.
+ The head part points to a value at that position in the list, and the tail
+ points to another cons cell, or the special value 
+\emph on
+nil
+\emph default
+, to indicate the end of a list.
+\end_layout
+
+\begin_layout Standard
+A cons cell can be constructed using the 
+\family typewriter
+cons
+\family default
+ function; multiple calls to this can be used to construct a list of as
+ many items as you want.
+ The following code produces a list containing the numbers 1, 2, and 3:
+\end_layout
+
+\begin_layout LyX-Code
+(cons 1 (cons 2 (cons 3 nil)))
+\end_layout
+
+\begin_layout Standard
+The functions 
+\family typewriter
+head
+\family default
+ and 
+\family typewriter
+tail
+\family default
+ can be used to extract the components of the list, for example:
+\end_layout
+
+\begin_layout LyX-Code
+(head (cons 1 (cons 2 nil)))    is equal to 1
+\end_layout
+
+\begin_layout LyX-Code
+(tail (cons 1 (cons 2 nil)))    is equal to (cons 2 nil)
+\end_layout
+
+\begin_layout Standard
+Strings are simply lists of numbers, each of which represents a character
+ code.
+ Calling 
+\family typewriter
+head
+\family default
+ on a string will return number corresponding to the first character.
+ The following program will thus print the number 116:
+\end_layout
+
+\begin_layout LyX-Code
+main = (numtostring (head "test")) 
+\end_layout
+
+\begin_layout Standard
+Similarly, calling tail on a string will return the second cons cell in
+ the list, which is equivalent to the portion of the string after the first
+ character.
+ The following program will print the string 
+\begin_inset Quotes eld
+\end_inset
+
+est
+\begin_inset Quotes erd
+\end_inset
+
+:
+\end_layout
+
+\begin_layout LyX-Code
+main = (tail "test")
+\end_layout
+
+\begin_layout Standard
+Lists can be traversed using a recursive function which examines each element
+ in turn.
+ The reference to the cons cell can be passed as the conditional to the
+ 
+\family typewriter
+if
+\family default
+ function, which treats nil as false and any non-nil value as true.
+ This allows you to determine whether or not it is at the end of the list.
+ As an example the 
+\family typewriter
+uppercase
+\family default
+ function in the program below takes a string of lowercase characters and
+ returns a string containing the uppercase versions:
+\end_layout
+
+\begin_layout LyX-Code
+uppercase lst = (if lst
+\end_layout
+
+\begin_layout LyX-Code
+                    (cons (- (head lst) 32)
+\end_layout
+
+\begin_layout LyX-Code
+                          (uppercase (tail lst)))
+\end_layout
+
+\begin_layout LyX-Code
+                    nil)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main = (append (uppercase "test") "
+\backslash
+n")
+\end_layout
+
+\begin_layout Standard
+Running this program gives the following output:
+\end_layout
+
+\begin_layout LyX-Code
+# nreduce uppercase.elc
+\end_layout
+
+\begin_layout LyX-Code
+TEST
+\end_layout
+
+\begin_layout Standard
+Numerous library functions are provided to access and manipulate lists,
+ such as the 
+\family typewriter
+append
+\family default
+ function that we have already seen.
+ These functions are described further in Section 
+\begin_inset LatexCommand ref
+reference "sec:library"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Letrec expressions
+\end_layout
+
+\begin_layout Subsection
+Lambda abstractions
+\end_layout
+
+\begin_layout Subsection
+\begin_inset LatexCommand label
+name "sub:networking"
+
+\end_inset
+
+Networking
+\end_layout
+
+\begin_layout Standard
+Because nreduce is designed for building distributed applications, networking
+ support is tightly integrated with the execution environment.
+ Two primitives are provided for communicating over a network; 
+\family typewriter
+\series bold
+connect
+\family default
+\series default
+, which allows your program to act as a client and connect to a remote server,
+ and 
+\family typewriter
+\series bold
+listen
+\family default
+\series default
+, which you can use to act as a server and receive connections from remote
+ clients.
+ In both cases, network connections are represented as data streams that
+ can be read from lazily.
+ You can treat them just as you would a string or any other list of numbers.
+\end_layout
+
+\begin_layout Standard
+The 
+\family typewriter
+\series bold
+connect
+\family default
+\series default
+ function takes three arguments: the host name and port of the machine you
+ want to connect to, and the data to be sent to the server.
+ For example, to connect to the server 
+\family typewriter
+google.com
+\family default
+ and issue a HTTP request, you could use the code shown below.
+ This program will print out all of the data received over the connection,
+ including the HTTP headers sent by the server.
+\end_layout
+
+\begin_layout LyX-Code
+main = (connect "google.com" 80
+\end_layout
+
+\begin_layout LyX-Code
+                "GET / HTTP/1.0
+\backslash
+r
+\backslash
+n
+\backslash
+r
+\backslash
+n")
+\end_layout
+
+\begin_layout Standard
+As an example of how you could process this as a list, the code below counts
+ the number of bytes received over the connection.
+ Of course you could also use the built-in 
+\family typewriter
+\series bold
+len
+\family default
+\series default
+ function instead of 
+\family typewriter
+countbytes
+\family default
+.
+\end_layout
+
+\begin_layout LyX-Code
+countbytes n lst = (if lst
+\end_layout
+
+\begin_layout LyX-Code
+                       (countbytes (+ n 1) (tail lst))
+\end_layout
+
+\begin_layout LyX-Code
+                       n)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main = (append "#bytes ="
+\end_layout
+
+\begin_layout LyX-Code
+       (append (numtostring
+\end_layout
+
+\begin_layout LyX-Code
+                 (countbytes 0
+\end_layout
+
+\begin_layout LyX-Code
+                   (connect "google.com" 80
+\end_layout
+
+\begin_layout LyX-Code
+                            "GET / HTTP/1.0
+\backslash
+r
+\backslash
+n
+\backslash
+r
+\backslash
+n")))
+\end_layout
+
+\begin_layout LyX-Code
+               "
+\backslash
+n"))
+\end_layout
+
+\begin_layout Standard
+The 
+\family typewriter
+\series bold
+listen
+\family default
+\series default
+ function also takes three arguments, but works slightly differently.
+ The first two arguments are the host name and port to listen on.
+ The host name must be one of the interfaces on the local machine; usually
+ this will be given as 0.0.0.0 to listen on all interfaces.
+ The third parameter is a 
+\emph on
+handler function
+\emph default
+, which will be used to process each connection received from a client.
+\end_layout
+
+\begin_layout Standard
+The handler function takes one argument, which is the data stream (list
+ of bytes) received from the client.
+ The result of the handler must also be a list, and the contents of this
+ list will be written out to the client.
+ The program below implements a simple 
+\begin_inset Quotes eld
+\end_inset
+
+echo
+\begin_inset Quotes erd
+\end_inset
+
+ server, which simply sends back all the data received from a client:
+\end_layout
+
+\begin_layout LyX-Code
+handler data = data
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main = (parlist (listen "0.0.0.0" 1234 handler))
+\end_layout
+
+\begin_layout Standard
+One issue that arises with using this technique to implement a server is
+ that in order to handle multiple clients simultaneously, we must ensure
+ that the program demands the results of all open connections so that evaluation
+ of each handler can start as soon as the connection is received.
+ The 
+\family typewriter
+\series bold
+listen
+\family default
+\series default
+ function returns a list of streams corresponding to the connections that
+ clients have made, and each stream is the data that has been received from
+ that client.
+ Because of lazy evaluation, if we were to traverse this list element by
+ element, only one connection could be active at a time, since the later
+ ones will not be accepted until the program tries to access the corresponding
+ data streams.
+\end_layout
+
+\begin_layout Standard
+To get around this problem, we have to 
+\begin_inset Quotes eld
+\end_inset
+
+cheat
+\begin_inset Quotes erd
+\end_inset
+
+ by using the 
+\family typewriter
+\series bold
+parlist
+\family default
+\series default
+ function.
+ This tells the runtime system to start evaluating all elements of the list
+ in parallel.
+ When the server accepts a new connection, it is added to the end of the
+ list, and 
+\family typewriter
+\series bold
+parlist
+\family default
+\series default
+ will pick this up and force evaluation of the handler.
+ 
+\family typewriter
+\series bold
+parlist
+\family default
+\series default
+ is an 
+\begin_inset Quotes eld
+\end_inset
+
+impure
+\begin_inset Quotes erd
+\end_inset
+
+ function in that it goes against the ideals of implicit parallelism, but
+ there are a small number of cases (such as this one) where it is necessary
+ in order to achieve the desired affect.
+ In general, it is better to avoid this and write your code in a purely
+ data-oriented style.
+\end_layout
+
+\begin_layout Standard
+Servers written in this manner can automatically handle multiple connections,
+ without any further effort on your part.
+ Each client will have its own copy of the handler function running, and
+ they will all be executed concurrently.
+ An individual instance of the handler will block if there is no data available
+ from the corresponding client, but others can continue if they have data
+ available.
+ This concurrency, and the management of multiple open connections, is all
+ handled by the underlying execution and is invisible to you.
+\end_layout
+
+\begin_layout Standard
+A more complex example server is shown below.
+ It parses the input received from each client, and for each line, sends
+ a response of the form 
+\begin_inset Quotes eld
+\end_inset
+
+You sent: 
+\emph on
+line
+\emph default
+
+\begin_inset Quotes erd
+\end_inset
+
+, where 
+\emph on
+line
+\emph default
+ is the corresponding line of text that was received.
+ This also demonstrates the use of a curried function as the third argument,
+ in this case the partial application of 
+\family typewriter
+handler
+\family default
+ to the argument 
+\family typewriter
+"You sent: "
+\family default
+, which is equivalent to a function of one argument.
+\end_layout
+
+\begin_layout LyX-Code
+process str lst line count =
+\end_layout
+
+\begin_layout LyX-Code
+(if lst
+\end_layout
+
+\begin_layout LyX-Code
+    (if (or (= (head lst) '
+\backslash
+r') (= (head lst) '
+\backslash
+n'))
+\end_layout
+
+\begin_layout LyX-Code
+        (if (> count 0)
+\end_layout
+
+\begin_layout LyX-Code
+            (append str
+\end_layout
+
+\begin_layout LyX-Code
+              (append (prefix count line)
+\end_layout
+
+\begin_layout LyX-Code
+              (append "
+\backslash
+n" (handler str (tail lst)))))
+\end_layout
+
+\begin_layout LyX-Code
+            (handler str (tail lst)))
+\end_layout
+
+\begin_layout LyX-Code
+        (process str (tail lst) line (+ count 1)))
+\end_layout
+
+\begin_layout LyX-Code
+    nil)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+handler str lst =
+\end_layout
+
+\begin_layout LyX-Code
+(process str lst lst 0)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main =
+\end_layout
+
+\begin_layout LyX-Code
+(parlist (listen "0.0.0.0" 1234 (handler "You sent: ")))
+\end_layout
+
+\begin_layout Standard
+A similar mechanism for sending output based on the data that has been received
+ can be applied to outgoing connections.
+ The following program implements a client that connects to a remote server,
+ sends the string 
+\family typewriter
+"Hello
+\backslash
+r
+\backslash
+n"
+\family default
+, and then echos back all of the data it receives from the server, in addition
+ to printing it out to the terminal:
+\end_layout
+
+\begin_layout LyX-Code
+main = (letrec
+\end_layout
+
+\begin_layout LyX-Code
+          instream = (connect "localhost" 3000 outstream)
+\end_layout
+
+\begin_layout LyX-Code
+          outstream = (append "Hello
+\backslash
+r
+\backslash
+n" instream)
+\end_layout
+
+\begin_layout LyX-Code
+        in
+\end_layout
+
+\begin_layout LyX-Code
+          instream)
+\end_layout
+
+\begin_layout Standard
+It is also possible to combine the use of incoming connections with outgoing
+ connections.
+ This program implements a simple TCP proxy which redirects all connections
+ on port 80 of the local machine through to Google:
+\end_layout
+
+\begin_layout LyX-Code
+handler data = (connect "google.com" 80 data)
+\end_layout
+
+\begin_layout LyX-Code
+ 
+\end_layout
+
+\begin_layout LyX-Code
+main = (parlist (listen "0.0.0.0" 80 handler))
+\end_layout
+
+\begin_layout Standard
+This could obviously be modified to perform some intermediate processing
+ of the data, such as collecting statistics about search queries, or reformattin
+g the results page.
+ As with the previous server program, multiple connections are automatically
+ supported without you having to do anything special.
+\end_layout
+
+\begin_layout Subsection
+A note on performance
+\end_layout
+
+\begin_layout Standard
+If you thought that representing large volumes of binary data as linked
+ lists of floating point numbers was a bad idea, you'd be right.
+ Nreduce contains optimisations which actually allow it to represent strings
+ as well as data read from network connections or files as binary arrays,
+ while providing the illusion to your program that they are the same thing
+ as lists of cons cells.
+ Additionally, the runtime system automatically converts linked lists of
+ cons cells into arrays in the background while the program is running,
+ and if all elements of a list are character codes in the range 0-255, then
+ only one byte per element is needed.
+\end_layout
+
+\begin_layout Standard
+The built-in list handling functions such as 
+\family typewriter
+\series bold
+len
+\family default
+\series default
+, 
+\family typewriter
+\series bold
+item
+\family default
+\series default
+, 
+\family typewriter
+\series bold
+prefix
+\family default
+\series default
+, and 
+\family typewriter
+\series bold
+append
+\family default
+\series default
+ know about the different underlying list storage formats and deal with
+ them efficiently.
+ For example, a call to 
+\family typewriter
+\series bold
+len
+\family default
+\series default
+ or 
+\family typewriter
+\series bold
+item
+\family default
+\series default
+ on a list that is actually stored as an array is an O(1) operation, whereas
+ a linked list would require an O(n) traversal to do the same thing.
+ 
+\family typewriter
+\series bold
+append
+\family default
+\series default
+ is able to do a direct binary copy of the data if it finds that both arguments
+ are arrays, otherwise it will do a normal list traversal.
+\end_layout
+
+\begin_layout Standard
+You should use these functions wherever possible for performing list operations,
+ however you can still traverse the list directly using 
+\family typewriter
+\series bold
+head
+\family default
+\series default
+ and 
+\family typewriter
+\series bold
+tail
+\family default
+\series default
+ if you need to.
+ The parsing code in the 
+\family typewriter
+process
+\family default
+ function in Section 
+\begin_inset LatexCommand ref
+reference "sub:networking"
+
+\end_inset
+
+, for example, uses 
+\family typewriter
+\series bold
+head
+\family default
+\series default
+ and 
+\family typewriter
+\series bold
+tail
+\family default
+\series default
+ to 
+\emph on
+examine
+\emph default
+ the list, but uses 
+\family typewriter
+\series bold
+prefix
+\family default
+\series default
+ to actually extract the string.
+ This is because 
+\family typewriter
+\series bold
+prefix
+\family default
+\series default
+ will do a single binary copy of the input data and produce an array, whereas
+ creating individual cons cells would be much more expensive and result
+ at least initially in a linked list.
+\end_layout
+
+\begin_layout Standard
+You shouldn't have to worry about any of this, however.
+ The runtime system hides the way in which it is representing a list, and
+ your program can't tell the difference.
+ Just ensure that you make use of the provided library functions, so your
+ program is able to take advantage of these optimisations.
+\end_layout
+
+\begin_layout Section
+\begin_inset LatexCommand label
+name "sec:library"
+
+\end_inset
+
+Library functions
+\end_layout
+
+\begin_layout Subsection
+Logical operations
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+if
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+conditional
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+truebranch
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+falsebranch
+\end_layout
+
+\begin_layout Standard
+The expression passed as 
+\family typewriter
+\emph on
+conditional
+\family default
+\emph default
+ is first evaluated, and then depending on its value, either 
+\family typewriter
+\emph on
+truebranch
+\family default
+\emph default
+ or 
+\family typewriter
+\emph on
+falsebranch
+\family default
+\emph default
+ is evaluated and returned as the result of the function.
+ A conditional expression that evaluates to nil will be treated as false;
+ anything other than nil is considered true.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+and
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+a
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+b
+\end_layout
+
+\begin_layout Standard
+Arguments 
+\family typewriter
+\emph on
+a
+\family default
+\emph default
+ and 
+\family typewriter
+\emph on
+b
+\family default
+\emph default
+ are evaluated, and if they are both non-nil (true), then a non-nil value
+ will be returned.
+ If either of the arguments evaluate to nil (false), then this function
+ also returns nil.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+or
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+a
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+b
+\end_layout
+
+\begin_layout Standard
+Arguments 
+\family typewriter
+\emph on
+a
+\family default
+\emph default
+ and 
+\family typewriter
+\emph on
+b
+\family default
+\emph default
+ are evaluated, and if one or both of them are non-nil (true), then a non-nil
+ value will be returned.
+ If both arguments evaluate to nil (false), then this function also returns
+ nil.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+not
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+a
+\end_layout
+
+\begin_layout Standard
+Argument 
+\family typewriter
+\emph on
+a
+\family default
+\emph default
+ is evaluated.
+ If the result is non-nil (true), then nil will be returned.
+ If the result is nil (false), then a non-nil value will be returned.
+\end_layout
+
+\begin_layout Subsection
+Numbers
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
++
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+-
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+*
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+/
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+%
+\end_layout
+
+\begin_layout Standard
+These act in the same way as their C counterparts.
+ Both arguments are numbers, as is the result.
+ All numbers in ELC are stored in double precision floating point format,
+ so there is no need to convert between different numeric types.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+=
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+!=
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+<
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+<=
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+>
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+>=
+\end_layout
+
+\begin_layout Standard
+Numeric comparison operators.
+ Both arguments must be numbers.
+ The result is nil (false) if the comparison fails, and non-nil (true) if
+ the comparison success.
+ Note that these functions can only be used on numbers - they will not work
+ for string comparison.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+<<
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+>>
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+&
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+|
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+^
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\series bold
+~
+\end_layout
+
+\begin_layout Standard
+Bit-wise operations.
+ Both arguments and the result are numbers.
+ These are integer operations; any other number that is passed in will first
+ be cast to integer before performing the operations.
+ The value returned is the result of the operation converted back into a
+ double.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+sqrt
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\end_layout
+
+\begin_layout Standard
+Returns the square root of the number 
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+floor
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\end_layout
+
+\begin_layout Standard
+Returns the value 
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+ rounded down to the nearest integer.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+ceil
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\end_layout
+
+\begin_layout Standard
+Returns the value 
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+ rounded up to the nearest integer.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+numtostring
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\end_layout
+
+\begin_layout Standard
+Converts the number 
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+ into a string.
+\end_layout
+
+\begin_layout Subsection
+Lists
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+cons
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+h
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+t
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+head
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+c
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+tail
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+c
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+len
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+item
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+skip
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+prefix
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+n
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+sub
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+start
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+count
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+append
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+first
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+second
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+map
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+f
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+Creates a new list containing the results of applying the function 
+\family typewriter
+\emph on
+f
+\family default
+\emph default
+ to each element in 
+\family typewriter
+lst
+\family default
+.
+ The resulting list is evaluated lazily, so the application of 
+\family typewriter
+f
+\family default
+ to each element will only occur when the corresponding element in the returned
+ list is accessed.
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+filter
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+f
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+lst
+\end_layout
+
+\begin_layout Standard
+Creates a new list containing the elements of 
+\family typewriter
+\emph on
+lst
+\family default
+\emph default
+ for which applying 
+\family typewriter
+\emph on
+f
+\family default
+\emph default
+ to the element returns a non-nil (true) value.
+ The resulting list is evaluated lazily, so the filter test will only be
+ performed when the corresponding element in the returned list is accessed.
+\end_layout
+
+\begin_layout Subsection
+Filesystem access
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+readb
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+path
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+exists
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+path
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+isdir
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+path
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+readdir
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+path
+\end_layout
+
+\begin_layout Subsection
+Networking
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+connect
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+host
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+port
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+output
+\end_layout
+
+\begin_layout Standard
+
+\family typewriter
+\series bold
+listen
+\family default
+\series default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+host
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+port
+\family default
+\emph default
+\InsetSpace ~
+\InsetSpace ~
+
+\family typewriter
+\emph on
+handler
+\end_layout
+
+\end_body
+\end_document

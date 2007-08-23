@@ -1,0 +1,62 @@
+import http
+
+httpheader =
+(appendn 4
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: text/plain; charset=UTF-8\r\n"
+    "Connection: close\r\n"
+    "\r\n")
+
+print_dirs lst =
+(if lst
+    (if (streq (item 1 (head lst)) "directory")
+        (appendn 6
+            "<li><a href=\""
+            (head (head lst))
+            "/\">"
+            (head (head lst))
+            "</a></li>\n"
+            (print_dirs (tail lst)))
+        (print_dirs (tail lst)))
+    nil)
+
+print_files lst =
+(if lst
+    (if (streq (item 1 (head lst)) "file")
+        (appendn 8
+            "<li><a href=\""
+            (head (head lst))
+            "\">"
+            (head (head lst))
+            "</a> "
+            (numtostring (item 2 (head lst)))
+            "</li>\n"
+            (print_files (tail lst)))
+        (print_files (tail lst)))
+    nil)
+
+handle_dir uri =
+(appendn 11 "HTTP/1.1 200 OK\r\n"
+    "Content-Type: text/html; charset=UTF-8\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "<html><body><h1>Contents of "
+    uri
+    "</h1>Directories<ul>"
+    (print_dirs (readdir uri))
+    "</ul>Files<ul>"
+    (print_files (readdir uri))
+    "</ul>End</body>")
+
+process method uri version headers body =
+(if (not (exists uri))
+    (append httpheader (append "File " (append uri " does not exist")))
+    (if (isdir uri)
+        (handle_dir uri)
+        (append httpheader (readb uri))))
+
+handler stream =
+(if stream (http::parse_request stream process) nil)
+
+main =
+(parlist (listen 1234 handler))

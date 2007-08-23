@@ -1,0 +1,6 @@
+#!/bin/bash
+for i in green1 green2 green3 green4 green5; do
+  echo "Connections for $i"
+  echo "connections" | nc $i 2000 | grep green | grep -vF -- '-1'
+  echo
+done

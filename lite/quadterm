@@ -1,0 +1,6 @@
+#!/bin/bash
+TAIL=~/dev/tools/nobuftail
+xterm -sb -fn 6x10 -fg black -bg white -geometry 90x32+140+20 -e $TAIL output.0 &
+xterm -sb -fn 6x10 -fg black -bg white -geometry 90x32+710+20 -e $TAIL output.1 &
+xterm -sb -fn 6x10 -fg black -bg white -geometry 90x32+140+370 -e $TAIL output.2 &
+xterm -sb -fn 6x10 -fg black -bg white -geometry 90x32+710+370 -e $TAIL output.3 &

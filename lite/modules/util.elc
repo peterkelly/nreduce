@@ -1,0 +1,62 @@
+//==================================================================================================
+// util::lcase str
+//
+// Converts the string str to lowercase
+//==================================================================================================
+
+lcase str =
+(if str
+  (letrec
+    c = (head str) in
+    (if (and (>= c 'A') (<= c 'Z'))
+      (cons (+ c 32) (lcase (tail str)))
+      (cons c (lcase (tail str)))))
+  nil)
+
+//==================================================================================================
+// util::parsehex str
+//
+// Interprets str as a number represented in hexadecimal format. Digits in the range A-F can be in
+// either lower or opper case. The string must contain *only* hex digits (i.e. not start with "0x").
+// If parsing is successful, returns the value. If an invalid character is encountered, returns nil.
+//==================================================================================================
+
+parsehex str = (parsehex1 str 0)
+
+parsehex1 str !num =
+(if str
+  (letrec
+    c = (head str)
+   in
+    (if (and (>= c '0') (<= c '9'))
+      (parsehex1 (tail str) (+ (* num 16) (- c 48)))
+      (if (and (>= c 'a') (<= c 'f'))
+        (parsehex1 (tail str) (+ (* num 16) (- c 87)))
+        (if (and (>= c 'A') (<= c 'F'))
+          (parsehex1 (tail str) (+ (* num 16) (- c 55)))
+          nil))))
+  num)
+
+//==================================================================================================
+// util::tokens stream
+//
+// Converts a string containing space-separated tokens into a list of tokens.
+//==================================================================================================
+
+tokens stream = (tokens_skip stream)
+
+tokens_parse stream start count =
+(if stream
+  (if (== (head stream) ' ')
+    (cons (prefix count start) (tokens_skip (tail stream)))
+    (tokens_parse (tail stream) start (+ count 1)))
+  (if (> count 0)
+    (cons (prefix count start) nil)
+    nil))
+
+tokens_skip stream =
+(if stream
+  (if (== (head stream) ' ')
+    (tokens_skip (tail stream))
+    (tokens_parse stream stream 0))
+  nil)

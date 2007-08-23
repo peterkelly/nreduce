@@ -1,0 +1,5 @@
+#!/bin/bash
+echo -e "open green2:2000\nopen green3:2000\nopen green4:2000\nopen green5:2000" | nc green1 2000
+echo -e "open green3:2000\nopen green4:2000\nopen green5:2000" | nc green2 2000
+echo -e "open green4:2000\nopen green5:2000" | nc green3 2000
+echo -e "open green5:2000" | nc green4 2000

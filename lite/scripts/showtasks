@@ -1,0 +1,4 @@
+#!/bin/bash
+#parsh -o 'echo tasks | ~/nc localhost 2000 | head -5 | tail -1' | sort
+parsh -o ~/nreduce/scripts/showtasks2 | sort
+echo Done showing tasks

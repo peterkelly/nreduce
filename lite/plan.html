@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Project plan</title>
+<style type="text/css">
+.done { color: green }
+.ignore { color: grey }
+.partial { color: red }
+</style>
+  </head>
+  <body>
+
+    <h1>Remaining tasks</h1>
+
+    These are the main tasks that need to be completed for the project.
+
+    <br/>
+    <br/>
+
+    <span class="done">[done]</span>
+    <span class="ignore">[ignore]</span>
+    <span class="partial">[partial]</span>
+
+    <br/>
+    <br/>
+
+    Distributed execution
+    <ul>
+      <li class="done">Write scripts for easily launching various test configurations</li>
+      <li class="done">Enable a process to be started using only a subset of all available nodes</li>
+      <li class="done">Implement mechanism for node discovery and deciding which nodes should take part in a
+          new process</li>
+      <li class="done">Automatically spark expressions passed as strict arguments (currently parallel execution
+          relies on user code explicitly calling spark)</li>
+      <li class="done">Parallel execution: make more robust, and thoroughly test</li>
+      <li class="done">Invoke the distributed garbage collector automatically where appropriate, instead of
+          manually (as it currently has to be done)</li>
+      <li class="done">Add support for socket connections</li>
+      <li class="ignore">Add the ability to write to files</li>
+      <li class="done">Support multiple concurrent tasks running on a node</li>
+      <li class="done">Test for robustness as nodes join/leave the system at runtime</li>
+      <li class="done">Transfer arrays properly between nodes, instead of passing them as cons lists</li>
+      <li class="ignore">Write a tool to monitor a set of running nodes</li>
+    </ul>
+
+    XSLT compiler and runtime support
+    <ul>
+      <li class="partial">Complete main XSLT and XPath constructs (excluding reverse axes)</li>
+      <li class="ignore">
+        Implement rules from the paper
+        <a href="http://www.pms.ifi.lmu.de/publikationen/PMS-FB/PMS-FB-2002-4.pdf">
+          XPath: Looking Forward
+        </a>
+        to transform expressions containing reverse axes into those containing only
+        forward axes
+      </li>
+      <li class="done">HTTP client</li>
+      <li class="done">HTTP server</li>
+      <li class="partial">Support for accessing web services</li>
+      <li>Support for exposing an XSLT program as a web service</li>
+      <li class="partial">Integrate gridxslt and nreduce code trees</li>
+    </ul>
+
+    Evaluation
+    <ul>
+      <li>
+        Implement three sample applications which demonstrate the system, from the following
+        categories:
+        <ul>
+          <li>Traditional parallel program</li>
+          <li>Scientific workflow</li>
+          <li>Business workflow</li>
+        </ul>
+        Each of these should have some requirement that GridXSLT makes easier to satisfy, so it
+        can be shown that the "combined" programming model we provide can benefit each type of
+        application.
+      </li>
+      <li>Performance comparison of nreduce/ELC with other (interpreted) languages</li>
+      <li>Performance comparison of GridXSLT with other XSLT implementations</li>
+    </ul>
+
+    Minor fixes/testing
+    <ul>
+      <li>Ensure array references with index > 0 can be used everywhere and write some tests for
+          this using teststring and testarray</li>
+      <li>Allow parts of arrays to be garbage collected (i.e. if the first ref to an array is at
+          index 1000, then the graphs referenced from all preceding elements are not marked)</li>
+      <li class="done">String comparison operators (have streq already but need gt, lt etc.)</li>
+      <li>Add a field to struct builtin to specify the required type of each argument</li>
+      <li>Better error handling for when invalid argument types/values are passed to builtin
+          functions. Also check the case of insufficient/too many arguments being passed to
+          a supercombinator or builtin function (both at compile time and run time)</li>
+      <li class="done">Garbage collect file handles (and socket connections)</li>
+      <li>Search through the code for FIXMEs and fix them (any big ones should be added as items
+          to the plan)</li>
+      <li class="ignore">Deal with any further problems with partial evaluation that arise</li>
+      <li>Code cleanup</li>
+    </ul>
+
+    Papers to write
+    <ul>
+      <li class="partial">Efficient array/string storage</li>
+      <li class="done">nreduce overview</li>
+      <li class="parital">Messaging layer</li>
+      <li>Chord optimisations</li>
+    </ul>
+
+    Thesis
+    <ul>
+      <li>Draft: Introduction</li>
+      <li>Draft: Background and related work</li>
+      <li>Revised draft: Virtual machine</li>
+      <li>Draft: XSLT implementation</li>
+      <li>Draft: Evaluation</li>
+      <li>Draft: Conclusion</li>
+    </ul>
+
+    Things to explicitly leave out, since they're not strictly necessary for my project
+    (the "To <i>not</i> do" list)
+    <ul>
+      <li>JIT compilation</li>
+      <li>Windows support</li>
+      <li>User documentation</li>
+      <li>More compiler optimisations</li>
+      <li>Bytecode cache</li>
+    </ul>
+
+    <h1>Timeline</h1>
+
+    Here are my goals for what I want to have achieved at the end of each month.
+    <br/>
+    <br/>
+
+    February
+    <ul>
+      <li class="done">Full support for socket connections and multiple processes in nreduce</li>
+      <li class="partial">Majority of XPath and XSLT constructs supported in the compiler (forward axes only)</li>
+      <li>Minor fixes listed above done</li>
+    </ul>
+
+    March
+    <ul>
+      <li>nreduce and gridxslt code trees properly integrated</li>
+      <li class="partial">Support for reverse axes (using transformation rules)</li>
+      <li class="partial">Numerous test cases written for complex XSLT programs</li>
+      <li>Robust and well tested support for distributed, parallel execution</li>
+      <li>Detailed plan for evaluation</li>
+      <li>Ideas/design of sample applications chosen</li>
+    </ul>
+
+    April
+    <ul>
+      <li>Bug fixes and performance improvements to nreduce and XSLT support</li>
+      <li>Revised draft of virtual machine chapter</li>
+      <li>Draft of paper on array/string storage</li>
+      <li>Draft of paper on nreduce overview</li>
+      <li>Sample applications developed</li>
+      <li>Evaluation of nreduce (according to plan developed in March)</li>
+      <li>Evaluation of XSLT implementation</li>
+    </ul>
+
+    May
+    <ul>
+      <li>Draft of XSLT implementation chapter</li>
+      <li>Draft of Evaluation chapter</li>
+      <li>Draft of Introduction chapter</li>
+      <li>Draft of Conclusion chapter</li>
+    </ul>
+
+    June
+    <ul>
+      <li>Draft of Background and related work chapter</li>
+      <li>Revised draft of all other chapters</li>
+    </ul>
+
+    July
+    <ul>
+      <li>Revised draft of all chapters</li>
+    </ul>
+
+    August
+    <ul>
+      <li>Completed version of thesis</li>
+    </ul>
+
+  </body>
+</html>

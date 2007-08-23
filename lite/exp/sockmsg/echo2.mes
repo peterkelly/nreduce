@@ -1,0 +1,6 @@
+repeat = 3
+bg = ./echo2 1234 $val
+cmd = cat testfile | ./client localhost 1234 $val > /dev/null
+min = 512
+max = 32768
+incr = 512

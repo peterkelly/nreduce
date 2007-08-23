@@ -1,0 +1,33 @@
+printitems lst =
+(if lst
+  (append (head lst) (printitems (tail lst)))
+  nil)
+
+format str = (format1 str str 0 nil)
+
+format1 str start count got =
+(if str
+  (if (and (== (head str) '%') (tail str))
+    (letrec
+      got2 =
+      (if (> count 0)
+        (cons (prefix count start) got)
+        got)
+      str2 = (tail str)
+      spec = (head str2)
+      rest = (tail str2)
+     in
+      (if (== (head (tail str)) 's')
+        (!item.format1 rest rest 0 (cons item got2))
+        (if (== spec 'd')
+          (!item.format1 rest rest 0 (cons (numtostring item) got2))
+          (format1 rest rest 0 (cons "%" got2)))))
+    (format1 (tail str) start (+ count 1) got))
+  (append (printitems (reverse got)) (prefix count start)))
+
+main =
+(format
+  "Name: %s\nAge: %d\nOccupation: %s\n"
+  "Peter"
+  27
+  "Student")

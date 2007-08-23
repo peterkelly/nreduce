@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="Windows-1252"?>
+<VisualStudioProject
+	ProjectType="Visual C++"
+	Version="7.10"
+	Name="nreduce"
+	ProjectGUID="{70163B86-4E6E-4D49-B7E9-F5C92DFD2866}"
+	Keyword="Win32Proj">
+	<Platforms>
+		<Platform
+			Name="Win32"/>
+	</Platforms>
+	<Configurations>
+		<Configuration
+			Name="Debug|Win32"
+			OutputDirectory="Debug"
+			IntermediateDirectory="Debug"
+			ConfigurationType="1"
+			CharacterSet="2">
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="0"
+				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
+				MinimalRebuild="TRUE"
+				ExceptionHandling="FALSE"
+				BasicRuntimeChecks="3"
+				RuntimeLibrary="5"
+				UsePrecompiledHeader="0"
+				WarningLevel="3"
+				Detect64BitPortabilityProblems="FALSE"
+				DebugInformationFormat="4"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"
+				OutputFile="$(OutDir)/nreduce.exe"
+				LinkIncremental="2"
+				GenerateDebugInformation="TRUE"
+				ProgramDatabaseFile="$(OutDir)/nreduce.pdb"
+				SubSystem="1"
+				TargetMachine="1"/>
+			<Tool
+				Name="VCMIDLTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="VCResourceCompilerTool"/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"/>
+			<Tool
+				Name="VCWebDeploymentTool"/>
+			<Tool
+				Name="VCManagedWrapperGeneratorTool"/>
+			<Tool
+				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
+		</Configuration>
+		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="Release"
+			IntermediateDirectory="Release"
+			ConfigurationType="1"
+			CharacterSet="2">
+			<Tool
+				Name="VCCLCompilerTool"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
+				ExceptionHandling="FALSE"
+				RuntimeLibrary="4"
+				UsePrecompiledHeader="0"
+				WarningLevel="3"
+				Detect64BitPortabilityProblems="FALSE"
+				DebugInformationFormat="3"/>
+			<Tool
+				Name="VCCustomBuildTool"
+				Description="Running bison/flex"
+				CommandLine="cd src
+set PATH=&quot;C:\Progra~1\GnuWin32\bin&quot;
+bison.exe -d grammar.y
+flex.exe lexer.l
+"
+				Outputs="grammar.tab.c grammar.tab.h lexer.yy.c"/>
+			<Tool
+				Name="VCLinkerTool"
+				OutputFile="$(OutDir)/nreduce.exe"
+				LinkIncremental="1"
+				GenerateDebugInformation="TRUE"
+				SubSystem="1"
+				OptimizeReferences="2"
+				EnableCOMDATFolding="2"
+				TargetMachine="1"/>
+			<Tool
+				Name="VCMIDLTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="VCResourceCompilerTool"/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"/>
+			<Tool
+				Name="VCWebDeploymentTool"/>
+			<Tool
+				Name="VCManagedWrapperGeneratorTool"/>
+			<Tool
+				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
+		</Configuration>
+	</Configurations>
+	<References>
+	</References>
+	<Files>
+		<Filter
+			Name="Source Files"
+			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx"
+			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}">
+			<File
+				RelativePath=".\src\assembler.c">
+			</File>
+			<File
+				RelativePath=".\src\builtins.c">
+			</File>
+			<File
+				RelativePath=".\src\debug.c">
+			</File>
+			<File
+				RelativePath=".\src\gcode.c">
+			</File>
+			<File
+				RelativePath=".\src\gmachine.c">
+			</File>
+			<File
+				RelativePath=".\src\grammar.tab.c">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions="__STDC__"
+						CompileAs="1"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCLCompilerTool"
+						PreprocessorDefinitions="__STDC__"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\src\grammar.y">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Running bison"
+						CommandLine="cd src
+set PATH=&quot;C:\Progra~1\GnuWin32\bin&quot;
+bison.exe -d grammar.y
+"
+						Outputs="grammar.tab.c grammar.tab.h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Running bison"
+						CommandLine="cd src
+set PATH=&quot;C:\Progra~1\GnuWin32\bin&quot;
+bison.exe -d grammar.y
+"
+						Outputs="grammar.tab.c grammar.tab.h"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\src\graph.c">
+			</File>
+			<File
+				RelativePath=".\src\lexer.l">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Running flex"
+						CommandLine="cd src
+set PATH=&quot;C:\Progra~1\GnuWin32\bin&quot;
+flex.exe lexer.l
+"
+						Outputs="lexer.yy.c"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Running flex"
+						CommandLine="cd src
+set PATH=&quot;C:\Progra~1\GnuWin32\bin&quot;
+flex.exe lexer.l
+"
+						Outputs="lexer.yy.c"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\src\lexer.yy.c">
+			</File>
+			<File
+				RelativePath=".\src\lifting.c">
+			</File>
+			<File
+				RelativePath=".\src\memory.c">
+			</File>
+			<File
+				RelativePath=".\src\nreduce.c">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCLCompilerTool"
+						ObjectFile="$(IntDir)/$(InputName)1.obj"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCLCompilerTool"
+						ObjectFile="$(IntDir)/$(InputName)1.obj"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\src\reduction.c">
+			</File>
+			<File
+				RelativePath=".\src\renaming.c">
+			</File>
+			<File
+				RelativePath=".\src\reorder.c">
+			</File>
+			<File
+				RelativePath=".\src\resolve.c">
+			</File>
+			<File
+				RelativePath=".\src\source.c">
+			</File>
+			<File
+				RelativePath=".\src\strictness.c">
+			</File>
+			<File
+				RelativePath=".\src\super.c">
+			</File>
+			<File
+				RelativePath=".\src\util.c">
+			</File>
+		</Filter>
+		<Filter
+			Name="Header Files"
+			Filter="h;hpp;hxx;hm;inl;inc;xsd"
+			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
+			<File
+				RelativePath=".\src\assembler.h">
+			</File>
+			<File
+				RelativePath=".\src\gcode.h">
+			</File>
+			<File
+				RelativePath=".\src\grammar.tab.h">
+			</File>
+			<File
+				RelativePath=".\src\nreduce.h">
+			</File>
+		</Filter>
+		<Filter
+			Name="Resource Files"
+			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx"
+			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}">
+		</Filter>
+		<File
+			RelativePath=".\ReadMe.txt">
+		</File>
+	</Files>
+	<Globals>
+	</Globals>
+</VisualStudioProject>

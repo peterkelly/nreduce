@@ -1,0 +1,28 @@
+
+
+main =
+(letrec
+   lst = (loop 200)
+ in
+   (seq (parlist lst) (printlens lst 0)))
+
+printlens lst n =
+(if lst
+    (append "response "
+    (append (numtostring n)
+    (append ": "
+    (append (numtostring (head lst))
+    (append "\n"
+            (printlens (tail lst) (+ n 1)))))))
+    nil)
+
+
+loop n =
+(if (== n 0)
+    nil
+(letrec
+//   data = (connect "localhost" 80 "GET /libc-2.3.6.so HTTP/1.0\r\n\r\n")
+   data = (connect "localhost" 1234 "GET /lib/libc-2.3.6.so HTTP/1.0\r\n\r\n")
+//   data = (connect "localhost" 1234 "GET / HTTP/1.0\r\n\r\n")
+ in
+  (cons (len data) (loop (- n 1)))))

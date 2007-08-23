@@ -1,0 +1,5 @@
+repeat = 3
+cmd = ./pingpong $val 1
+min = 2500
+max = 100000
+incr = 2500
