@@ -1,9 +1,0 @@
-#!/bin/bash
-BASEDIR=`pwd`
-for FILENAME in `find . -name '*.cpp'`; do
-  FILEDIR=`echo $FILENAME | perl -pe 's/\/[^\/]*\.cpp//'`
-  FILE=`echo $FILENAME | perl -pe 's/^.*\/([^\/]*)\.cpp/$1/'`
-  cd $BASEDIR/$FILEDIR
-  echo $FILENAME
-  gcov -o .libs/${FILE}.da ${FILE}.cpp
-done

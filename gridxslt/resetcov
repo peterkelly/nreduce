@@ -1,3 +1,0 @@
-#!/bin/bash
-find . -name '*.da' -exec rm -f '{}' ';'
-find . -name '*.gcov' -exec rm -f '{}' ';'

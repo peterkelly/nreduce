@@ -1,7 +1,0 @@
-SUBDIRS = util http xmlschema dataflow xslt . lambda src
-AUTOMAKE_OPTIONS = foreign
-TESTS = runalltests
-lib_LTLIBRARIES = libgridxslt.la
-libgridxslt_la_SOURCES =
-libgridxslt_la_LIBADD = xslt/libxslt.la dataflow/libdataflow.la xmlschema/libxmlschema.la http/libhttp.la util/libutil.la
-CLEANFILES = *.da *.bb *.bbg *.gcov

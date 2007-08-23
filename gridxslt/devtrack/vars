@@ -1,2 +1,0 @@
-SPECS="xslt20 xpath20 xpath-functions xslt-xquery-serialization xmlschema-1 http11"
-XSLTCMD=saxon
