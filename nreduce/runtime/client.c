@@ -547,7 +547,7 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
       get_tasks_response_msg *gtrm = (get_tasks_response_msg*)msg->data;
       assert(sizeof(get_tasks_response_msg) <= msg->hdr.size);
       assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->hdr.size);
-      for (i = 0; i < gtrm->count; gtrm++) {
+      for (i = 0; i < gtrm->count; i++) {
         print_endpointid(str,gtrm->tasks[i]);
         printf("Task: %s\n",str);
       }

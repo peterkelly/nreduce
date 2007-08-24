@@ -760,6 +760,28 @@ void node_stats(node *n, int *regconnections, int *listeners)
   unlock_node(n);
 }
 
+int node_get_endpoints(node *n, const char *type, endpointid **epids)
+{
+  int count = 0;
+  int i = 0;
+  endpoint *ep;
+
+  lock_node(n);
+
+  for (ep = n->endpoints.first; ep; ep = ep->next)
+    if (!strcmp(ep->type,type))
+      count++;
+
+  *epids = (endpointid*)calloc(count,sizeof(endpointid));
+
+  for (ep = n->endpoints.first; ep; ep = ep->next)
+    if (!strcmp(ep->type,type))
+      (*epids)[i++] = ep->epid;
+
+  unlock_node(n);
+  return count;
+}
+
 static int endpoint_has_link(endpoint *endpt, endpointid epid)
 {
   list *l;

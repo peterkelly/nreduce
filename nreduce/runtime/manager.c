@@ -187,25 +187,13 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
 {
   get_tasks_response_msg *gtrm;
   int msize;
-  int count = 0;
-  int i = 0;
-  endpoint *ep;
-
-  lock_node(n);
-  for (ep = n->endpoints.first; ep; ep = ep->next) {
-    if (!strcmp(ep->type,"task"))
-      count++;
-  }
+  endpointid *epids = NULL;
+  int count = node_get_endpoints(n,"task",&epids);
 
   msize = sizeof(get_tasks_response_msg)+count*sizeof(endpointid);
   gtrm = (get_tasks_response_msg*)calloc(1,msize);
   gtrm->count = count;
-
-  for (ep = n->endpoints.first; ep; ep = ep->next) {
-    if (!strcmp(ep->type,"task"))
-      gtrm->tasks[i++] = ep->epid;
-  }
-  unlock_node(n);
+  memcpy(gtrm->tasks,epids,count*sizeof(endpointid));
 
   endpoint_send(endpt,m->sender,MSG_GET_TASKS_RESPONSE,gtrm,msize);
   free(gtrm);
