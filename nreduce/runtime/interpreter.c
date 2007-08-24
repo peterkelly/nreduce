@@ -1670,6 +1670,45 @@ void interpreter_sigfpe(int sig, siginfo_t *ino, void *uc1)
   longjmp(tsk->jbuf,1);
 }
 
+static void idmap_setup(node *n, endpoint *endpt, task *tsk)
+{
+  while (1) {
+    message *msg = endpoint_receive(tsk->endpt,-1);
+    if (MSG_INITTASK == msg->hdr.tag) {
+      inittask_msg *initmsg = (inittask_msg*)msg->data;
+      int i;
+      int resp = 0;
+      assert(sizeof(inittask_msg) <= msg->hdr.size);
+      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->hdr.size);
+
+      node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
+
+      assert(!tsk->haveidmap);
+      assert(initmsg->count == tsk->groupsize);
+      memcpy(tsk->idmap,initmsg->idmap,tsk->groupsize*sizeof(endpointid));
+      tsk->haveidmap = 1;
+
+      for (i = 0; i < tsk->groupsize; i++)
+        if (!endpointid_equals(&tsk->endpt->epid,&initmsg->idmap[i]))
+          endpoint_link(tsk->endpt,initmsg->idmap[i]);
+
+      for (i = 0; i < tsk->groupsize; i++)
+        node_log(n,LOG_INFO,"INITTASK: idmap[%d] = "EPID_FORMAT,i,EPID_ARGS(initmsg->idmap[i]));
+
+      endpoint_send(endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+    }
+    else if (MSG_STARTTASK == msg->hdr.tag) {
+      int resp = 0;
+      endpoint_send(endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+      break;
+    }
+    else {
+      assert(tsk->haveidmap);
+      handle_message(tsk,msg);
+    }
+  }
+}
+
 void interpreter_thread(node *n, endpoint *endpt, void *arg)
 {
   task *tsk = (task*)arg;
@@ -1688,11 +1727,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
   write(tsk->threadrunningfds[1],&semdata,1);
 
-  read(tsk->startfds[0],&semdata,1);
-  close(tsk->startfds[0]);
-  close(tsk->startfds[1]);
-  tsk->startfds[0] = -1;
-  tsk->startfds[1] = -1;
+  idmap_setup(n,endpt,tsk);
 
   tsk->newfish = 1;
 

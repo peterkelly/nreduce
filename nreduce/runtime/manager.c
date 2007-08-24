@@ -211,16 +211,6 @@ static void manager_get_tasks(node *n, endpoint *endpt, get_tasks_msg *m)
   free(gtrm);
 }
 
-static task *find_task(node *n, int localid)
-{
-  endpoint *endpt = find_endpoint(n,localid);
-  if (NULL == endpt)
-    return NULL;
-  if (strcmp(endpt->type,"task"))
-    fatal("Request for endpoint %d that is not a task",localid);
-  return (task*)endpt->data;
-}
-
 static void manager_thread(node *n, endpoint *endpt, void *arg)
 {
   int done = 0;
@@ -259,78 +249,6 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       endpoint_send(endpt,msg->hdr.source,MSG_NEWTASKRESP,
                     &epid.localid,sizeof(int));
       array_free(args);
-      break;
-    }
-    case MSG_INITTASK: {
-      inittask_msg *initmsg;
-      task *newtsk;
-      int i;
-      int resp = 0;
-      if (sizeof(inittask_msg) > msg->hdr.size)
-        fatal("INITTASK: invalid message size");
-      initmsg = (inittask_msg*)msg->data;
-      if (sizeof(initmsg)+initmsg->count*sizeof(endpointid) > msg->hdr.size)
-        fatal("INITTASK: invalid idmap size");
-
-      node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
-
-      lock_node(n);
-      newtsk = find_task(n,initmsg->localid);
-
-      if (NULL == newtsk)
-        fatal("INITTASK: task with localid %d does not exist",initmsg->localid);
-
-      if (newtsk->haveidmap)
-        fatal("INITTASK: task with localid %d already has an idmap",initmsg->localid);
-
-      if (initmsg->count != newtsk->groupsize)
-        fatal("INITTASK: idmap size does not match expected");
-      memcpy(newtsk->idmap,initmsg->idmap,newtsk->groupsize*sizeof(endpointid));
-      newtsk->haveidmap = 1;
-
-      for (i = 0; i < newtsk->groupsize; i++)
-        if (!endpointid_equals(&newtsk->endpt->epid,&initmsg->idmap[i]))
-          endpoint_link_locked(newtsk->endpt,initmsg->idmap[i]);
-
-      unlock_node(n);
-
-      for (i = 0; i < newtsk->groupsize; i++) {
-        endpointid_str str;
-        print_endpointid(str,initmsg->idmap[i]);
-        node_log(n,LOG_INFO,"INITTASK: idmap[%d] = %s",i,str);
-      }
-
-      endpoint_send(endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
-      break;
-    }
-    case MSG_STARTTASK: {
-      task *newtsk;
-      int resp = 0;
-      int localid;
-      char semdata = 0;
-      if (sizeof(int) > msg->hdr.size)
-        fatal("STARTTASK: invalid message size");
-      localid = *(int*)msg->data;
-
-      node_log(n,LOG_INFO,"STARTTASK: localid = %d",localid);
-
-      lock_node(n);
-      newtsk = find_task(n,localid);
-
-      if (NULL == newtsk)
-        fatal("STARTTASK: task with localid %d does not exist",localid);
-
-      if (!newtsk->haveidmap)
-        fatal("STARTTASK: task with localid %d does not have an idmap",localid);
-
-      if (newtsk->started)
-        fatal("STARTTASK: task with localid %d has already been started",localid);
-
-      write(newtsk->startfds[1],&semdata,1);
-      newtsk->started = 1;
-      unlock_node(n);
-
-      endpoint_send(endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
       break;
     }
     case MSG_START_CHORD: {

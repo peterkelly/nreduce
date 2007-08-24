@@ -489,8 +489,6 @@ typedef struct task {
 
   /* startup info (used by manager) */
   int haveidmap;
-  int started;
-  int startfds[2];
   int threadrunningfds[2];
 
   /* runtime execution info (used by interpreter and native) */

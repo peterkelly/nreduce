@@ -81,9 +81,16 @@ static int get_responses(node *n, launcher *lr, int tag,
     if (tag != msg->hdr.tag)
       fatal("%d: Got invalid response tag: %d",tag,msg->hdr.tag);
 
-    for (i = 0; i < count; i++)
-      if (endpointid_equals(&msg->hdr.source,&managerids[i]))
-        sender = i;
+    if ((MSG_STARTTASKRESP == tag) || (MSG_INITTASKRESP == tag)) {
+      for (i = 0; i < count; i++)
+        if (endpointid_equals(&msg->hdr.source,&lr->endpointids[i]))
+          sender = i;
+    }
+    else {
+      for (i = 0; i < count; i++)
+        if (endpointid_equals(&msg->hdr.source,&managerids[i]))
+          sender = i;
+    }
 
     if (0 > sender) {
       endpointid id = msg->hdr.source;
@@ -176,7 +183,7 @@ static void send_inittask(launcher *lr)
   /* send to managers */
   for (i = 0; i < lr->count; i++) {
     initmsg->localid = lr->endpointids[i].localid;
-    endpoint_send(lr->endpt,lr->managerids[i],MSG_INITTASK,(char*)initmsg,initsize);
+    endpoint_send(lr->endpt,lr->endpointids[i],MSG_INITTASK,(char*)initmsg,initsize);
   }
   free(initmsg);
 }
@@ -185,7 +192,7 @@ static void send_starttask(launcher *lr)
 {
   int i;
   for (i = 0; i < lr->count; i++)
-    endpoint_send(lr->endpt,lr->managerids[i],MSG_STARTTASK,&lr->localids[i],sizeof(int));
+    endpoint_send(lr->endpt,lr->endpointids[i],MSG_STARTTASK,&lr->localids[i],sizeof(int));
 }
 
 static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)

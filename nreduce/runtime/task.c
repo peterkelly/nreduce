@@ -366,8 +366,6 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   tsk->runptr = &tsk->rtemp;
   tsk->freeptr = (cell*)1;
 
-  if (0 > pipe(tsk->startfds))
-    fatal("pipe: %s",strerror(errno));
   if (0 > pipe(tsk->threadrunningfds))
     fatal("pipe: %s",strerror(errno));
 
@@ -530,11 +528,6 @@ void task_free(task *tsk)
 
   free(tsk->bcaddr_to_fno);
   free(tsk->bcdata);
-
-  if (0 <= tsk->startfds[0])
-    close(tsk->startfds[0]);
-  if (0 <= tsk->startfds[1])
-    close(tsk->startfds[1]);
 
   free(tsk->instraddrs);
   free(tsk->bpaddrs[0]);
