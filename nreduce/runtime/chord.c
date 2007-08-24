@@ -176,44 +176,16 @@ static chordnode closest_preceding_finger(chord *crd, chordid id)
   return crd->self;
 }
 
-static int have_link(endpoint *endpt, endpointid epid)
-{
-  list *l;
-  for (l = endpt->outlinks; l; l = l->next) {
-    endpointid *linkid = (endpointid*)l->data;
-    if (endpointid_equals(linkid,&epid))
-      return 1;
-  }
-  return 0;
-}
-
-static int link_ok_to_have(chord *crd, endpointid epid)
-{
-  int i;
-  for (i = 1; i < MBITS; i++) {
-    if (!chordnode_isnull(crd->fingers[i]) &&
-        endpointid_equals(&crd->fingers[i].epid,&epid))
-      return 1;
-  }
-  return 0;
-}
-
 static int check_links(chord *crd)
 {
+  int count = MBITS-1;
+  endpointid *epids = (endpointid*)malloc(count*sizeof(endpointid));
   int i;
-  list *l;
-  int r = 1;
-  lock_node(crd->n);
-  for (i = 1; i < MBITS; i++) {
-    if (!chordnode_isnull(crd->fingers[i]) && !have_link(crd->endpt,crd->fingers[i].epid))
-      r = 0;
-  }
-  for (l = crd->endpt->outlinks; l; l = l->next) {
-    endpointid *linkid = (endpointid*)l->data;
-    if (!link_ok_to_have(crd,*linkid))
-      r = 0;
-  }
-  unlock_node(crd->n);
+  int r;
+  for (i = 1; i < MBITS; i++)
+    epids[i-1] = crd->fingers[i].epid;
+  r = endpoint_check_links(crd->endpt,epids,count);
+  free(epids);
   return r;
 }
 

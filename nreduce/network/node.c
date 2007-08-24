@@ -792,6 +792,34 @@ static int endpoint_has_link(endpoint *endpt, endpointid epid)
   return 0;
 }
 
+static int link_ok_to_have(endpointid *epids, int count, endpointid epid)
+{
+  int i;
+  for (i = 0; i < count; i++)
+    if (!endpointid_isnull(&epids[i]) && endpointid_equals(&epids[i],&epid))
+      return 1;
+  return 0;
+}
+
+int endpoint_check_links(endpoint *endpt, endpointid *epids, int count)
+{
+  int r = 1;
+  int i;
+  list *l;
+  lock_node(endpt->n);
+  for (i = 0; i < count; i++) {
+    if (!endpointid_isnull(&epids[i]) && !endpoint_has_link(endpt,epids[i]))
+      r = 0;
+  }
+  for (l = endpt->outlinks; l; l = l->next) {
+    endpointid *linkid = (endpointid*)l->data;
+    if (!link_ok_to_have(epids,count,*linkid))
+      r = 0;
+  }
+  unlock_node(endpt->n);
+  return r;
+}
+
 void endpoint_link_locked(endpoint *endpt, endpointid to)
 {
   endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
