@@ -173,7 +173,6 @@ node *node_new(int loglevel)
   char *logenv;
 
   init_mutex(&n->lock);
-  init_mutex(&n->liblock);
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = FIRST_ID;
   n->nextsid = 2;
@@ -217,7 +216,6 @@ void node_free(node *n)
   assert(NULL == n->endpoints.first);
   assert(NULL == n->listeners.first);
 
-  destroy_mutex(&n->liblock);
   pthread_cond_destroy(&n->closecond);
   destroy_mutex(&n->lock);
   close(n->ioready_readfd);

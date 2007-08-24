@@ -169,7 +169,6 @@ typedef struct node {
   FILE *logfile;
   int loglevel;
   pthread_cond_t closecond;
-  pthread_mutex_t liblock;
   endpointid managerid;
   endpointid iothid;
   int iosize;

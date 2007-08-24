@@ -64,16 +64,24 @@ int set_non_blocking(int fd)
   return 0;
 }
 
-/* FIXME: should use re-entrant functions here */
 char *lookup_hostname(node *n, in_addr_t addr)
 {
-  struct hostent *he;
+  int alloc = 1024;
+  char *buf = malloc(alloc);
+  struct hostent *he = NULL;
+  int herr = 0;
   char *res;
-  struct in_addr addr1;
-  addr1.s_addr = addr;
 
-  lock_mutex(&n->liblock);
-  he = gethostbyaddr(&addr1,sizeof(struct in_addr),AF_INET);
+#ifdef HAVE_GETHOSTBYNAME_R
+  struct hostent ret;
+  while ((0 != gethostbyaddr_r(&addr,sizeof(in_addr_t),AF_INET,&ret,buf,alloc,&he,&herr)) &&
+         (ERANGE == errno))
+    buf = realloc(buf,alloc *= 2);
+#else
+  he = gethostbyaddr(&addr,sizeof(in_addr_t),AF_INET);
+  herr = h_errno;
+#endif
+
   if (NULL != he) {
     res = strdup(he->h_name);
   }
@@ -83,20 +91,33 @@ char *lookup_hostname(node *n, in_addr_t addr)
     sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
     res = hostname;
   }
-  unlock_mutex(&n->liblock);
+
+  free(buf);
   return res;
 }
 
 int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout)
 {
-  struct hostent *he;
+  int alloc = 1024;
+  char *buf = malloc(alloc);
+  struct hostent *he = NULL;
+  int herr = 0;
   int r = 0;
 
-  lock_mutex(&n->liblock);
-  if (NULL == (he = gethostbyname(host))) {
+#ifdef HAVE_GETHOSTBYNAME_R
+  struct hostent ret;
+  while ((0 != gethostbyname_r(host,&ret,buf,alloc,&he,&herr)) &&
+         (ERANGE == errno))
+    buf = realloc(buf,alloc *= 2);
+#else
+  he = gethostbyname(host);
+  herr = h_errno;
+#endif
+
+  if (NULL == he) {
     if (h_errout)
-      *h_errout = h_errno;
-    node_log(n,LOG_WARNING,"%s: %s",host,hstrerror(h_errno));
+      *h_errout = herr;
+    node_log(n,LOG_WARNING,"%s: %s",host,hstrerror(herr));
     r = -1;
   }
   else if (4 != he->h_length) {
@@ -108,7 +129,8 @@ int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout)
   else {
     *out = (*((struct in_addr*)he->h_addr)).s_addr;
   }
-  unlock_mutex(&n->liblock);
+
+  free(buf);
   return r;
 }
 
