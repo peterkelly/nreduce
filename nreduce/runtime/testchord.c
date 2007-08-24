@@ -644,7 +644,7 @@ static int read_managers(node *n, const char *nodesfile, endpointid **outids, in
 
 void run_chordtest(int argc, char **argv)
 {
-  node *n = node_start(LOG_ERROR,0,NULL,NULL);
+  node *n = node_start(LOG_ERROR,0);
   if (NULL == n)
     exit(1);
 
@@ -654,6 +654,7 @@ void run_chordtest(int argc, char **argv)
     managerid.ip = n->listenip;
     managerid.port = n->listenport;
     managerid.localid = MANAGER_ID;
+    start_manager(n);
     testchord(n,&managerid,1);
   }
   else {

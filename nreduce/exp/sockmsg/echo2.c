@@ -17,7 +17,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
 
   memset(&listen_sockid,0,sizeof(listen_sockid));
 
-  send_listen(endpt,n->managerid,INADDR_ANY,port,endpt->epid,1);
+  send_listen(endpt,n->iothid,INADDR_ANY,port,endpt->epid,1);
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
     switch (msg->hdr.tag) {
@@ -72,7 +72,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("echo: unexpected message %s",msg_names[msg->hdr.tag]);
+      fatal("echo: unexpected message %d",msg->hdr.tag);
       break;
     }
     message_free(msg);
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
   port = atoi(argv[1]);
   bufsize = atoi(argv[2]);
 
-  n = node_start(LOG_ERROR,0,NULL,NULL);
+  n = node_start(LOG_ERROR,0);
   n->iosize = bufsize;
   if (NULL == n)
     exit(1);

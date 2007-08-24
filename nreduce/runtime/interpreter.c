@@ -141,7 +141,7 @@ void handle_error(task *tsk)
   rem->rc = 1;
   rem->len = len;
   memcpy(rem->data,buf->data,len);
-  endpoint_send(tsk->endpt,tsk->out_so->sockid.managerid,MSG_REPORT_ERROR,rem,msglen);
+  endpoint_send(tsk->endpt,tsk->out_so->sockid.coordid,MSG_REPORT_ERROR,rem,msglen);
   free(rem);
   array_free(buf);
 
@@ -1008,7 +1008,7 @@ static void handle_message(task *tsk, message *msg)
     break;
   }
   default:
-    fatal("interpreter: unexpected message %s",msg_names[msg->hdr.tag]);
+    fatal("interpreter: unexpected message %d",msg->hdr.tag);
     break;
   }
   message_free(msg);
@@ -1684,7 +1684,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->endpt = endpt;
   tsk->endpt->interrupt = 1;
   pthread_setspecific(task_key,tsk);
-  endpoint_link(endpt,tsk->out_sockid.managerid);
+  endpoint_link(endpt,tsk->out_sockid.coordid);
 
   write(tsk->threadrunningfds[1],&semdata,1);
 

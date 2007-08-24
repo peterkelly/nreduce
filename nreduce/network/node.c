@@ -26,17 +26,6 @@
 
 #define NODE_C
 
-#define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
-
-#ifndef TEMP_FAILURE_RETRY
-# define TEMP_FAILURE_RETRY(expression) \
-  (__extension__                                                              \
-    ({ long int __result;                                                     \
-       do __result = (long int) (expression);                                 \
-       while (__result == -1L && errno == EINTR);                             \
-       __result; }))
-#endif
-
 #include "src/nreduce.h"
 #include "node.h"
 #include "messages.h"
@@ -58,9 +47,6 @@
 #include <unistd.h>
 #include <signal.h>
 
-#define MSG_HEADER_SIZE sizeof(msgheader)
-#define LISTEN_BACKLOG 10
-
 const char *log_levels[LOG_COUNT] = {
   "NONE",
   "ERROR",
@@ -71,164 +57,11 @@ const char *log_levels[LOG_COUNT] = {
 };
 
 static void endpoint_add_message(endpoint *endpt, message *msg);
-static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-                             int tag, const void *data, int size);
 static endpointid node_add_thread_locked(node *n, const char *type,
                                          endpoint_threadfun fun, void *arg, pthread_t *threadp,
                                          int localid, int stacksize);
 
-static int set_non_blocking(int fd)
-{
-  int flags;
-  if (0 > (flags = fcntl(fd,F_GETFL))) {
-    perror("fcntl(F_GETFL)");
-    return -1;
-  }
-
-  flags |= O_NONBLOCK;
-
-  if (0 > fcntl(fd,F_SETFL,flags)) {
-    perror("fcntl(F_SETFL)");
-    return -1;
-  }
-  return 0;
-}
-
-static void handle_disconnection(node *n, connection *conn)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-
-  if (conn->isreg)
-    return;
-
-  /* A connection to another node has failed. Search for links that referenced endpoints
-     on the other node, and sent an ENDPOINT_EXIT to the local endpoint in each case. */
-  endpoint *endpt;
-  for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-    int max = list_count(endpt->outlinks);
-    endpointid *exited = (endpointid*)malloc(max*sizeof(endpointid));
-    int count = 0;
-    list *l;
-    int i;
-
-    /* We must grab the list of exited endpoints before calling node_send_locked(), because it
-       will call through to endpoint_add_message() which will modify the endpoint list to remove
-       the links, so we can't do this while traversing the list. */
-    for (l = endpt->outlinks; l; l = l->next) {
-      endpointid *epid = (endpointid*)l->data;
-      if ((epid->ip == conn->ip) && (epid->port == conn->port))
-        exited[count++] = *epid;
-    }
-
-    /* Now we've found the relevant endpoints, send ENDPOINT_EXIT for each */
-    for (i = 0; i < count; i++) {
-      endpoint_exit_msg msg;
-      msg.epid = exited[i];
-      node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
-                       &msg,sizeof(endpoint_exit_msg));
-    }
-
-    free(exited);
-  }
-}
-
-static void notify_accept(node *n, connection *conn)
-{
-  listener *l = conn->l;
-  accept_response_msg arm;
-
-  if (!l->notify)
-    return;
-
-  assert(!socketid_isnull(&l->sockid));
-  assert(!endpointid_isnull(&l->owner));
-
-  conn->dontread = 1;
-  conn->owner = l->owner;
-  conn->isreg = 1;
-
-  /* send message */
-  assert(0 != l->accept_frameid);
-  arm.ioid = l->accept_frameid;
-  arm.sockid = conn->sockid;
-  snprintf(arm.hostname,HOSTNAME_MAX,"%s",conn->hostname);
-  arm.hostname[HOSTNAME_MAX] = '\0';
-  arm.port = conn->port;
-
-  node_send_locked(n,MANAGER_ID,l->owner,MSG_ACCEPT_RESPONSE,&arm,sizeof(arm));
-
-  l->accept_frameid = 0;
-  assert(!l->dontaccept);
-  l->dontaccept = 1;
-  node_notify(n);
-}
-
-/* FIXME: for all regular connections, perhaps we should assert that we have a frameid set */
-static void notify_connect(node *n, connection *conn, int error)
-{
-  if (0 < conn->frameids[CONNECT_FRAMEADDR]) {
-    connect_response_msg crm;
-
-    crm.ioid = conn->frameids[CONNECT_FRAMEADDR];
-    crm.error = error;
-    if (error)
-      memset(&crm.sockid,0,sizeof(crm.sockid));
-    else
-      crm.sockid = conn->sockid;
-    memcpy(crm.errmsg,conn->errmsg,sizeof(crm.errmsg));
-
-    conn->frameids[CONNECT_FRAMEADDR] = 0;
-
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
-  }
-
-  if (error)
-    handle_disconnection(n,conn);
-}
-
-static void notify_read(node *n, connection *conn)
-{
-  if (conn->isreg && (0 < conn->frameids[READ_FRAMEADDR])) {
-    int rrmlen = sizeof(read_response_msg)+conn->recvbuf->nbytes;
-    read_response_msg *rrm = (read_response_msg*)malloc(rrmlen);
-
-    rrm->ioid = conn->frameids[READ_FRAMEADDR];
-    rrm->sockid = conn->sockid;
-    rrm->len = conn->recvbuf->nbytes;
-    memcpy(rrm->data,conn->recvbuf->data,conn->recvbuf->nbytes);
-
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_READ_RESPONSE,rrm,rrmlen);
-
-    conn->frameids[READ_FRAMEADDR] = 0;
-    conn->recvbuf->nbytes = 0;
-    conn->dontread = 1;
-    free(rrm);
-  }
-}
-
-static void notify_closed(node *n, connection *conn, int error)
-{
-  if (0 != conn->owner.localid) {
-    connection_event_msg cem;
-    cem.sockid = conn->sockid;
-    cem.error = error;
-    memcpy(cem.errmsg,conn->errmsg,sizeof(cem.errmsg));
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_CONNECTION_CLOSED,&cem,sizeof(cem));
-  }
-  handle_disconnection(n,conn);
-}
-
-static void notify_write(node *n, connection *conn)
-{
-  if ((0 < conn->frameids[WRITE_FRAMEADDR]) && (n->iosize > conn->sendbuf->nbytes)) {
-    write_response_msg wrm;
-    wrm.ioid = conn->frameids[WRITE_FRAMEADDR];
-    conn->frameids[WRITE_FRAMEADDR] = 0;
-    node_send_locked(n,MANAGER_ID,conn->owner,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
-  }
-}
-
-static void got_message(node *n, const msgheader *hdr, const void *data)
+void got_message(node *n, const msgheader *hdr, const void *data)
 {
   endpoint *endpt;
   message *newmsg;
@@ -253,8 +86,8 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
       /* don't need to do anything in this case */
     }
     else {
-/*       node_log(n,LOG_WARNING,"Message %s received for unknown endpoint %d (source %s)", */
-/*                msg_names[hdr->tag],hdr->destlocalid,source); */
+/*       node_log(n,LOG_WARNING,"Message %d received for unknown endpoint %d (source %s)", */
+/*                hdr->tag,hdr->destlocalid,source); */
     }
     return;
   }
@@ -266,7 +99,7 @@ static void got_message(node *n, const msgheader *hdr, const void *data)
   endpoint_add_message(endpt,newmsg);
 }
 
-static void remove_connection(node *n, connection *conn)
+void remove_connection(node *n, connection *conn)
 {
   assert(NODE_ALREADY_LOCKED(n));
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
@@ -278,7 +111,7 @@ static void remove_connection(node *n, connection *conn)
   free(conn);
 }
 
-static void start_console(node *n, connection *conn)
+void start_console(node *n, connection *conn)
 {
   socketid *sockid = (socketid*)malloc(sizeof(socketid));
   endpoint *mgrendpt;
@@ -286,89 +119,9 @@ static void start_console(node *n, connection *conn)
   conn->frameids[READ_FRAMEADDR] = 1;
   memcpy(sockid,&conn->sockid,sizeof(socketid));
   conn->owner = node_add_thread_locked(n,"console",console_thread,sockid,NULL,0,0);
+  /* FIXME: is it the manager or the I/O thread that should be linked? */
   if (NULL != (mgrendpt = find_endpoint(n,MANAGER_ID)))
     endpoint_link_locked(mgrendpt,conn->owner);
-}
-
-static void process_received(node *n, connection *conn)
-{
-  int start = 0;
-
-  notify_read(n,conn);
-
-  if (conn->isreg)
-    return;
-
-  if (!conn->donewelcome) {
-    if (conn->recvbuf->nbytes < strlen(WELCOME_MESSAGE)) {
-      if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,conn->recvbuf->nbytes)) {
-        /* Data sent so far is not part of the welcome message; must be a console client */
-        start_console(n,conn);
-        notify_read(n,conn);
-        return;
-      }
-      else {
-        /* What we've received so far matches the welcome message but it isn't complete yet;
-           wait for more data */
-      }
-    }
-    else { /* conn->recvbuf->nbytes <= strlen(WELCOME_MESSAGE */
-      if (strncmp(conn->recvbuf->data,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE))) {
-        /* Have enough bytes but it's not the welcome message; must be a console client */
-        start_console(n,conn);
-        notify_read(n,conn);
-        return;
-      }
-      else {
-        /* We have the welcome message; it's a peer and we want to exchange ids next */
-        conn->donewelcome = 1;
-        start += strlen(WELCOME_MESSAGE);
-      }
-    }
-  }
-
-  if (conn->donewelcome && !conn->donehandshake) {
-    unsigned char *connip = (unsigned char*)&conn->ip;
-
-    if (0 > conn->port) {
-      if (sizeof(int) > conn->recvbuf->nbytes-start) {
-        array_remove_data(conn->recvbuf,start);
-        return;
-      }
-      conn->port = (int)(*(unsigned short*)&conn->recvbuf->data[start]);
-      start += sizeof(unsigned short);
-
-      if (0 > conn->port)
-        fatal("Client sent bad listen port: %d",conn->port);
-    }
-
-    node_log(n,LOG_INFO,"Node %u.%u.%u.%u:%d connected",
-             connip[0],connip[1],connip[2],connip[3],conn->port);
-    conn->donehandshake = 1;
-  }
-
-  /* inspect the next section of the input buffer to see if it contains a complete message */
-  while (MSG_HEADER_SIZE <= conn->recvbuf->nbytes-start) {
-    msgheader *hdr = (msgheader*)&conn->recvbuf->data[start];
-
-    /* verify header */
-    assert(0 <= hdr->size);
-    assert(0 <= hdr->tag);
-    assert(MSG_COUNT > hdr->tag);
-
-    hdr->source.ip = conn->ip;
-    hdr->source.port = conn->port;
-
-    if (MSG_HEADER_SIZE+hdr->size > conn->recvbuf->nbytes-start)
-      break; /* incomplete message */
-
-    /* complete message present; add it to the mailbox */
-    got_message(n,hdr,&conn->recvbuf->data[start+MSG_HEADER_SIZE]);
-    start += MSG_HEADER_SIZE+hdr->size;
-  }
-
-  /* remove the data we've consumed from the receive buffer */
-  array_remove_data(conn->recvbuf,start);
 }
 
 static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nodeport)
@@ -389,12 +142,12 @@ static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nod
   }
 }
 
-static connection *add_connection(node *n, const char *hostname, int sock, listener *l)
+connection *add_connection(node *n, const char *hostname, int sock, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
   assert(NODE_ALREADY_LOCKED(n));
-  assert(MANAGER_ID == n->managerid.localid);
-  conn->sockid.managerid = n->managerid;
+  assert(IO_ID == n->iothid.localid);
+  conn->sockid.coordid = n->iothid;
   conn->sockid.sid = n->nextsid++;
   conn->hostname = strdup(hostname);
   conn->ip = 0;
@@ -413,360 +166,6 @@ static connection *add_connection(node *n, const char *hostname, int sock, liste
   return conn;
 }
 
-static int handle_connected(node *n, connection *conn)
-{
-  int err;
-  socklen_t optlen = sizeof(int);
-
-  if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
-    snprintf(conn->errmsg,ERRMSG_MAX,"getsockopt SO_ERROR: %s",strerror(errno));
-    conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_connect(n,conn,1);
-    remove_connection(n,conn);
-    return -1;
-  }
-
-  if (0 == err) {
-    int yes = 1;
-    conn->connected = 1;
-    node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
-
-    if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
-      snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt TCP_NODELAY: %s",strerror(errno));
-      conn->errmsg[ERRMSG_MAX] = '\0';
-      notify_connect(n,conn,1);
-      remove_connection(n,conn);
-      return -1;
-    }
-
-    notify_connect(n,conn,0);
-  }
-  else {
-    node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
-             conn->hostname,conn->port,strerror(err));
-    snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
-    conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_connect(n,conn,1);
-    remove_connection(n,conn);
-    return -1;
-  }
-
-  return 0;
-}
-
-static void handle_write(node *n, connection *conn)
-{
-  while (0 < conn->sendbuf->nbytes) {
-    int w = TEMP_FAILURE_RETRY(write(conn->sock,conn->sendbuf->data,conn->sendbuf->nbytes));
-    if ((0 > w) && (EAGAIN == errno))
-      break;
-
-    if (0 > w) {
-      node_log(n,LOG_WARNING,"write() to %s:%d failed: %s",
-               conn->hostname,conn->port,strerror(errno));
-      snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
-      conn->errmsg[ERRMSG_MAX] = '\0';
-      notify_closed(n,conn,1);
-      remove_connection(n,conn);
-      return;
-    }
-
-    if (0 == w) {
-      node_log(n,LOG_WARNING,"write() to %s:%d failed: connection closed",
-               conn->hostname,conn->port);
-      snprintf(conn->errmsg,ERRMSG_MAX,"connection closed");
-      notify_closed(n,conn,1);
-      remove_connection(n,conn);
-      return;
-    }
-
-    array_remove_data(conn->sendbuf,w);
-  }
-
-  notify_write(n,conn);
-
-  if ((0 == conn->sendbuf->nbytes) && conn->finwrite)
-    done_writing(n,conn);
-}
-
-static void handle_read(node *n, connection *conn)
-{
-  /* Just do one read; there may still be more data pending after this, but we want to also
-     give a fair chance for other connections to be read from. We also want to process messages
-     as they arrive rather than waiting until can't ready an more, to avoid buffering up large
-     numbers of messages */
-  int r;
-  array *buf = conn->recvbuf;
-
-  assert(conn->canread);
-
-  array_mkroom(conn->recvbuf,n->iosize);
-  r = TEMP_FAILURE_RETRY(read(conn->sock,
-                              &buf->data[buf->nbytes],
-                              n->iosize));
-
-  if (0 > r) {
-    node_log(n,LOG_WARNING,"read() from %s:%d failed: %s",
-             conn->hostname,conn->port,strerror(errno));
-    snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
-    conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_closed(n,conn,1);
-    remove_connection(n,conn);
-    return;
-  }
-
-  if (0 == r) {
-    if (conn->isreg)
-      node_log(n,LOG_INFO,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
-    else
-      node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
-    notify_read(n,conn);
-    handle_disconnection(n,conn);
-
-    /* Don't close "regular" connections (socket streams accessible to ELC programs) here
-       because we may still need to send more data. In other cases, if the console client or
-       another node disconnects, we are done with the connection. */
-    if (!conn->isreg)
-      done_writing(n,conn);
-    done_reading(n,conn);
-    return;
-  }
-
-  conn->recvbuf->nbytes += r;
-  conn->totalread += r;
-  process_received(n,conn);
-}
-
-/* FIXME: should use re-entrant functions here */
-char *lookup_hostname(node *n, in_addr_t addr)
-{
-  struct hostent *he;
-  char *res;
-  struct in_addr addr1;
-  addr1.s_addr = addr;
-
-  lock_mutex(&n->liblock);
-  he = gethostbyaddr(&addr1,sizeof(struct in_addr),AF_INET);
-  if (NULL != he) {
-    res = strdup(he->h_name);
-  }
-  else {
-    unsigned char *c = (unsigned char*)&addr;
-    char *hostname = (char*)malloc(100);
-    sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
-    res = hostname;
-  }
-  unlock_mutex(&n->liblock);
-  return res;
-}
-
-int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout)
-{
-  struct hostent *he;
-  int r = 0;
-
-  lock_mutex(&n->liblock);
-  if (NULL == (he = gethostbyname(host))) {
-    if (h_errout)
-      *h_errout = h_errno;
-    node_log(n,LOG_WARNING,"%s: %s",host,hstrerror(h_errno));
-    r = -1;
-  }
-  else if (4 != he->h_length) {
-    if (h_errout)
-      *h_errout = HOST_NOT_FOUND;
-    node_log(n,LOG_WARNING,"%s: invalid address type",host);
-    r = -1;
-  }
-  else {
-    *out = (*((struct in_addr*)he->h_addr)).s_addr;
-  }
-  unlock_mutex(&n->liblock);
-  return r;
-}
-
-static void handle_new_connection(node *n, listener *l)
-{
-  struct sockaddr_in remote_addr;
-  socklen_t sin_size = sizeof(struct sockaddr_in);
-  int clientfd;
-  connection *conn;
-  int yes = 1;
-  char *hostname;
-
-  if (0 > (clientfd = accept(l->fd,(struct sockaddr*)&remote_addr,&sin_size))) {
-    perror("accept");
-    return;
-  }
-
-  if (0 > set_non_blocking(clientfd)) {
-    close(clientfd);
-    return;
-  }
-
-  if (0 > setsockopt(clientfd,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
-    perror("setsockopt TCP_NODELAY");
-    return;
-  }
-
-  hostname = lookup_hostname(n,remote_addr.sin_addr.s_addr);
-  node_log(n,LOG_INFO,"Got connection from %s",hostname);
-  conn = add_connection(n,hostname,clientfd,l);
-  free(hostname);
-
-  conn->connected = 1;
-  conn->ip = remote_addr.sin_addr.s_addr;
-
-  notify_accept(n,conn);
-}
-
-static void *ioloop(void *arg)
-{
-  node *n = (node*)arg;
-
-  lock_mutex(&n->lock);
-  while (!n->shutdown) {
-    int highest = -1;
-    int s;
-    fd_set readfds;
-    fd_set writefds;
-    connection *conn;
-    connection *next;
-    int havewrite = 0;
-    listener *l;
-
-    FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
-
-    for (l = n->listeners.first; l; l = l->next) {
-      if (!l->dontaccept)
-        FD_SET(l->fd,&readfds);
-      if (highest < l->fd)
-        highest = l->fd;
-    }
-
-    FD_SET(n->ioready_readfd,&readfds);
-    if (highest < n->ioready_readfd)
-      highest = n->ioready_readfd;
-
-    for (conn = n->connections.first; conn; conn = conn->next) {
-      assert(0 <= conn->sock);
-      if (highest < conn->sock)
-        highest = conn->sock;
-
-      if (conn->canread && !conn->dontread)
-        FD_SET(conn->sock,&readfds);
-
-      if (conn->canwrite && ((0 < conn->sendbuf->nbytes) || !conn->connected || conn->finwrite)) {
-        FD_SET(conn->sock,&writefds);
-        havewrite = 1;
-      }
-
-      /* Note: it is possible that we did not find any data waiting to be written at this point,
-         but some will become avaliable either just after we release the lock, or while the select
-         is actually blocked. node_notify() writes a single byte of data to the node's ioready pipe,
-         which will cause the select to be woken, and we will look around again to write the
-         data. */
-    }
-
-    unlock_mutex(&n->lock);
-    s = select(highest+1,&readfds,&writefds,NULL,NULL);
-    lock_mutex(&n->lock);
-
-    if (0 > s) {
-      /* Ignore bad file descriptor error. It is possible (and legitimate) that a connection
-         could be closed by another thread while we are waiting in the select loop. */
-      if (EBADF != errno)
-        fatal("select: %s",strerror(errno));
-    }
-
-    pthread_cond_broadcast(&n->cond);
-
-    assert(!FD_ISSET(n->ioready_readfd,&readfds) || n->notified);
-
-    if (FD_ISSET(n->ioready_readfd,&readfds) || n->notified) {
-      int c;
-      if (0 > read(n->ioready_readfd,&c,1))
-        fatal("Can't read from ioready_readfd: %s",strerror(errno));
-      n->notified = 0;
-    }
-
-    if (0 == s)
-      continue; /* timed out; no sockets are ready for reading or writing */
-
-    /* Do all the writing we can */
-    for (conn = n->connections.first; conn; conn = next) {
-      next = conn->next;
-      if (FD_ISSET(conn->sock,&writefds)) {
-        if (conn->connected)
-          handle_write(n,conn);
-        else
-          handle_connected(n,conn);
-      }
-    }
-
-    /* Read data */
-    for (conn = n->connections.first; conn; conn = next) {
-      next = conn->next;
-      if (FD_ISSET(conn->sock,&readfds) && conn->canread)
-        handle_read(n,conn);
-    }
-
-    /* accept new connections */
-    for (l = n->listeners.first; l; l = l->next) {
-      if (FD_ISSET(l->fd,&readfds))
-        handle_new_connection(n,l);
-    }
-
-    /* Handle pending close requests - this is done here to avoid closing an fd while select()
-      is looking at it */
-    while (n->toclose) {
-      int fd = (int)n->toclose->data;
-      list *next = n->toclose->next;
-      close(fd);
-      free(n->toclose);
-      n->toclose = next;
-    }
-  }
-  unlock_mutex(&n->lock);
-  return NULL;
-}
-
-static void determine_ip(node *n)
-{
-  in_addr_t addr = 0;
-  char hostname[4097];
-  FILE *hf = popen("hostname","r");
-  int size;
-  if (NULL == hf) {
-    fprintf(stderr,
-            "Could not determine IP address, because executing the hostname command "
-            "failed (%s)\n",strerror(errno));
-    exit(1);
-  }
-  size = fread(hostname,1,4096,hf);
-  if (0 > hf) {
-    fprintf(stderr,
-            "Could not determine IP address, because reading output from the hostname "
-            "command failed (%s)\n",strerror(errno));
-    pclose(hf);
-    exit(1);
-  }
-  pclose(hf);
-  if ((0 < size) && ('\n' == hostname[size-1]))
-    size--;
-  hostname[size] = '\0';
-
-  if (0 > lookup_address(n,hostname,&addr,NULL)) {
-    fprintf(stderr,
-            "Could not determine IP address, because the address \"%s\" "
-            "returned by the hostname command could not be resolved (%s)\n",
-            hostname,strerror(errno));
-    exit(1);
-  }
-  n->listenip = addr;
-}
-
 node *node_new(int loglevel)
 {
   node *n = (node*)calloc(1,sizeof(node));
@@ -775,7 +174,6 @@ node *node_new(int loglevel)
 
   init_mutex(&n->lock);
   init_mutex(&n->liblock);
-  pthread_cond_init(&n->cond,NULL);
   pthread_cond_init(&n->closecond,NULL);
   n->nextlocalid = FIRST_ID;
   n->nextsid = 2;
@@ -822,22 +220,25 @@ void node_free(node *n)
   destroy_mutex(&n->liblock);
   pthread_cond_destroy(&n->closecond);
   destroy_mutex(&n->lock);
-  pthread_cond_destroy(&n->cond);
   close(n->ioready_readfd);
   close(n->ioready_writefd);
   free(n);
 }
 
-node *node_start(int loglevel, int port, mgr_extfun ext, void *extarg)
+node *node_start(int loglevel, int port)
 {
   node *n = node_new(loglevel);
+  listener *l;
 
-  if (NULL == node_listen(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0)) {
+  lock_node(n);
+  l = node_listen_locked(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0);
+  unlock_node(n);
+
+  if (NULL == l) {
     node_free(n);
     return NULL;
   }
 
-  start_manager(n,ext,extarg);
   node_start_iothread(n);
   return n;
 }
@@ -869,8 +270,9 @@ void node_log(node *n, int level, const char *format, ...)
   free(newfmt);
 }
 
-listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
-                      int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen)
+listener *node_listen_locked(node *n, in_addr_t ip, int port, int notify, void *data,
+                             int dontaccept, int ismain, endpointid *owner, char *errmsg,
+                             int errlen)
 {
   int fd;
   int actualport = 0;
@@ -945,14 +347,16 @@ listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
     n->managerid.ip = n->listenip;
     n->managerid.port = n->listenport;
     n->managerid.localid = MANAGER_ID;
+
+    n->iothid.ip = n->listenip;
+    n->iothid.port = n->listenport;
+    n->iothid.localid = IO_ID;
   }
 
-  lock_node(n);
-  l->sockid.managerid = n->managerid;
+  l->sockid.coordid = n->iothid;
   l->sockid.sid = n->nextsid++;
   llist_append(&n->listeners,l);
   node_notify(n);
-  unlock_node(n);
 
   return l;
 }
@@ -986,12 +390,6 @@ void node_remove_listener(node *n, listener *l)
 
   list_push(&n->toclose,(void*)l->fd);
   free(l);
-}
-
-void node_start_iothread(node *n)
-{
-  if (0 != pthread_create(&n->iothread,NULL,ioloop,n))
-    fatal("pthread_create: %s",strerror(errno));
 }
 
 /* This works as long as we don't recycle localids... */
@@ -1032,36 +430,6 @@ void node_close_connections(node *n)
   }
   unlock_node(n);
 }
-
-#ifdef DEBUG_SHORT_KEEPALIVE
-static int set_keepalive(node *n, int sock, int s)
-{
-  int one = 1;
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPIDLE,&s,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPIDLE): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPINTVL,&s,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPINTVL): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPCNT,&one,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPCNT): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(SO_KEEPALIVE): %s",strerror(errno));
-    return -1;
-  }
-
-  node_log(n,LOG_DEBUG2,"Set connection keepalive interval to %ds",s);
-
-  return 0;
-}
-#endif
 
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen)
@@ -1155,8 +523,6 @@ void node_handle_endpoint_exit(node *n, endpointid epid)
   connection *conn;
   listener *l;
 
-  lock_node(n);
-
   conn = n->connections.first;
   while (conn) {
     connection *next = conn->next;
@@ -1173,12 +539,10 @@ void node_handle_endpoint_exit(node *n, endpointid epid)
       node_remove_listener(n,l);
     l = next;
   }
-
-  unlock_node(n);
 }
 
-static void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-                             int tag, const void *data, int size)
+void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
+                      int tag, const void *data, int size)
 {
   connection *conn;
   msgheader hdr;
@@ -1460,6 +824,10 @@ void endpoint_interrupt(endpoint *endpt) /* Can be called from native code */
   endpt->interrupt = 1;
   if (endpt->signal)
     pthread_kill(endpt->thread,SIGUSR1);
+  if (IO_ID == endpt->epid.localid) {
+/*     printf("interrupting I/O thread\n"); */
+    node_notify(endpt->n);
+  }
 }
 
 static void endpoint_add_message(endpoint *endpt, message *msg)
@@ -1495,6 +863,11 @@ static void endpoint_add_message(endpoint *endpt, message *msg)
   }
 }
 
+void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void *data, int size)
+{
+  node_send_locked(endpt->n,endpt->epid.localid,dest,tag,data,size);
+}
+
 void endpoint_send(endpoint *endpt, endpointid dest, int tag, const void *data, int size)
 {
   lock_node(endpt->n);
@@ -1511,7 +884,7 @@ message *endpoint_receive(endpoint *endpt, int delayms)
     if (0 > delayms) {
       pthread_cond_wait(&endpt->mailbox.cond,&endpt->mailbox.lock);
     }
-    else {
+    else if (0 < delayms) {
       struct timeval now;
       struct timespec abstime;
       gettimeofday(&now,NULL);
@@ -1553,7 +926,7 @@ void message_free(message *msg)
 
 int socketid_equals(const socketid *a, const socketid *b)
 {
-  return (endpointid_equals(&a->managerid,&b->managerid) && (a->sid == b->sid));
+  return (endpointid_equals(&a->coordid,&b->coordid) && (a->sid == b->sid));
 }
 
 int socketid_isnull(const socketid *a)

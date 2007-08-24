@@ -241,7 +241,7 @@ void console_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("console: unexpected message %s",msg_names[msg->hdr.tag]);
+      fatal("console: unexpected message %d",msg->hdr.tag);
       break;
     }
     message_free(msg);

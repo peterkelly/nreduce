@@ -23,6 +23,10 @@
 #ifndef _NETPRIVATE_H
 #define _NETPRIVATE_H
 
+#define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
+#define MSG_HEADER_SIZE sizeof(msgheader)
+#define LISTEN_BACKLOG 10
+
 typedef struct connection {
   socketid sockid;
   char *hostname;
@@ -74,8 +78,9 @@ typedef struct listener {
 #define NODE_ALREADY_LOCKED(_n) check_mutex_locked(&(_n)->lock)
 #define NODE_UNLOCKED(_n) check_mutex_unlocked(&(_n)->lock)
 
-listener *node_listen(node *n, in_addr_t ip, int port, int notify, void *data,
-                      int dontaccept, int ismain, endpointid *owner, char *errmsg, int errlen);
+listener *node_listen_locked(node *n, in_addr_t ip, int port, int notify, void *data,
+                             int dontaccept, int ismain, endpointid *owner, char *errmsg,
+                             int errlen);
 void node_remove_listener(node *n, listener *l);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
@@ -86,9 +91,38 @@ void node_handle_endpoint_exit(node *n, endpointid epid);
 void node_notify(node *n);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
+void remove_connection(node *n, connection *conn);
+void start_console(node *n, connection *conn);
+void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
+                             int tag, const void *data, int size);
+void got_message(node *n, const msgheader *hdr, const void *data);
+int set_non_blocking(int fd);
+connection *add_connection(node *n, const char *hostname, int sock, listener *l);
+void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
 
 void console_thread(node *n, endpoint *endpt, void *arg);
 
-void start_manager(node *n, mgr_extfun ext, void *extarg);
+/* iothread.c */
+
+void handle_disconnection(node *n, connection *conn);
+
+/* notify.c */
+
+void notify_accept(node *n, connection *conn);
+void notify_connect(node *n, connection *conn, int error);
+void notify_read(node *n, connection *conn);
+void notify_closed(node *n, connection *conn, int error);
+void notify_write(node *n, connection *conn);
+
+/* netutil.c */
+
+int set_non_blocking(int fd);
+char *lookup_hostname(node *n, in_addr_t addr);
+int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
+void determine_ip(node *n);
+
+#ifdef DEBUG_SHORT_KEEPALIVE
+int set_keepalive(node *n, int sock, int s)
+#endif
 
 #endif

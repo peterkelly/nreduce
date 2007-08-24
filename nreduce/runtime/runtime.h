@@ -753,7 +753,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk);
 
 /* taskman */
 
-int taskman_handle(node *n, endpoint *endpt, message *msg, int final, void *arg);
+void start_manager(node *n);
 
 /* java */
 

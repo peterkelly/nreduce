@@ -1162,7 +1162,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     node_log(tsk->n,LOG_DEBUG1,"opencon %s:%d: Initiated connection",hostname,port);
 
     ioid = suspend_current_frame(tsk,*tsk->runptr);
-    send_connect(tsk->endpt,tsk->n->managerid,hostname,port,tsk->endpt->epid,ioid);
+    send_connect(tsk->endpt,tsk->n->iothid,hostname,port,tsk->endpt->epid,ioid);
     so->frameids[CONNECT_FRAMEADDR] = ioid;
 
     free(hostname);
@@ -1303,7 +1303,7 @@ static void b_startlisten(task *tsk, pntr *argstack)
     make_pntr(argstack[0],so->c);
 
     ioid = suspend_current_frame(tsk,curf);
-    send_listen(tsk->endpt,tsk->n->managerid,ip,port,tsk->endpt->epid,ioid);
+    send_listen(tsk->endpt,tsk->n->iothid,ip,port,tsk->endpt->epid,ioid);
     so->frameids[LISTEN_FRAMEADDR] = ioid;
 
   }

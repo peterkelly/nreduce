@@ -8,7 +8,7 @@ libruntime_la_SOURCES = worker.c \
 	data.c \
 	interpreter.c \
 	reduction.c \
-	taskman.c \
+	manager.c \
 	client.c \
 	graph.c \
 	tosyntax.c \

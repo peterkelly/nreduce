@@ -55,12 +55,13 @@
 
 static node *worker_startup(int loglevel, int port)
 {
-  node *n = node_start(loglevel,port,taskman_handle,NULL);
+  node *n = node_start(loglevel,port);
   if (n) {
     unsigned char *ipbytes;
     ipbytes = (unsigned char*)&n->listenip;
     node_log(n,LOG_INFO,"Worker started, pid = %d, listening addr = %u.%u.%u.%u:%d",
              getpid(),ipbytes[0],ipbytes[1],ipbytes[2],ipbytes[3],n->listenport);
+    start_manager(n);
     node_add_thread2(n,"java",java_thread,NULL,NULL,JAVA_ID,0);
   }
   return n;
@@ -82,7 +83,7 @@ int standalone(const char *bcdata, int bcsize, int argc, const char **argv)
   managerid.localid = MANAGER_ID;
 
   memset(&oa,0,sizeof(oa));
-  out_sockid.managerid = node_add_thread(n,"output",output_thread,&oa,&thread);
+  out_sockid.coordid = node_add_thread(n,"output",output_thread,&oa,&thread);
   out_sockid.sid = 1;
 
   start_launcher(n,bcdata,bcsize,&managerid,1,NULL,out_sockid,argc,argv);

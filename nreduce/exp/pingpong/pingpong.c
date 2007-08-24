@@ -39,7 +39,7 @@ static void ping_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("ping: unexpected message %s",msg_names[msg->hdr.tag]);
+      fatal("ping: unexpected message %d",msg->hdr.tag);
       break;
     }
     message_free(msg);
@@ -62,7 +62,7 @@ static void pong_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("pong: unexpected message %s",msg_names[msg->hdr.tag]);
+      fatal("pong: unexpected message %d",msg->hdr.tag);
       break;
     }
     message_free(msg);
@@ -87,7 +87,7 @@ int main(int argc, char **argv)
   msgcount = atoi(argv[1]);
   size = atoi(argv[2]);
 
-  n = node_start(LOG_ERROR,0,NULL,NULL);
+  n = node_start(LOG_ERROR,0);
   if (NULL == n)
     exit(1);
   pa.pongid = node_add_thread(n,"pong",pong_thread,NULL,NULL);

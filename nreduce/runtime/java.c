@@ -273,7 +273,7 @@ static void java_jcmd(node *n, javath *jth, endpoint *endpt, message *msg)
   list_append(&jth->jcmds,jc);
 
   if (!jth->jconnected && !jth->jconnecting) {
-    send_connect(endpt,endpt->n->managerid,"127.0.0.1",JBRIDGE_PORT,endpt->epid,1);
+    send_connect(endpt,endpt->n->iothid,"127.0.0.1",JBRIDGE_PORT,endpt->epid,1);
     jth->jconnecting = 1;
     return;
   }
@@ -317,7 +317,7 @@ void java_thread(node *n, endpoint *endpt, void *arg)
       java_jcmd(n,&jth,endpt,msg);
       break;
     default:
-      fatal("java thread: unexpected message %s",msg_names[msg->hdr.tag]);
+      fatal("java thread: unexpected message %d",msg->hdr.tag);
       break;
     }
     message_free(msg);

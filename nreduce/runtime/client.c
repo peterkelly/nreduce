@@ -79,7 +79,7 @@ static int get_responses(node *n, launcher *lr, int tag,
     }
 
     if (tag != msg->hdr.tag)
-      fatal("%s: Got invalid response tag: %d",msg_names[tag],msg->hdr.tag);
+      fatal("%d: Got invalid response tag: %d",tag,msg->hdr.tag);
 
     for (i = 0; i < count; i++)
       if (endpointid_equals(&msg->hdr.source,&managerids[i]))
@@ -88,16 +88,16 @@ static int get_responses(node *n, launcher *lr, int tag,
     if (0 > sender) {
       endpointid id = msg->hdr.source;
       unsigned char *c = (unsigned char*)&id.ip;
-      node_log(n,LOG_ERROR,"%s: Got response from unknown source %u.%u.%u.%u:%u/%u",
-               msg_names[tag],c[0],c[1],c[2],c[3],id.port,id.localid);
+      node_log(n,LOG_ERROR,"%d: Got response from unknown source %u.%u.%u.%u:%u/%u",
+               tag,c[0],c[1],c[2],c[3],id.port,id.localid);
       abort();
     }
 
     if (sizeof(int) != msg->hdr.size)
-      fatal("%s: incorrect message size (%d)",msg->hdr.size,msg_names[tag]);
+      fatal("%d: incorrect message size (%d)",tag,msg->hdr.size);
 
     if (gotresponse[sender])
-      fatal("%s: Already have response for this source",msg_names[tag]);
+      fatal("%d: Already have response for this source",tag);
 
     gotresponse[sender] = 1;
     if (responses)
@@ -171,7 +171,7 @@ static void send_inittask(launcher *lr)
 
   /* send to output thread */
   initmsg->localid = 0;
-  endpoint_send(lr->endpt,lr->out_sockid.managerid,MSG_INITTASK,(char*)initmsg,initsize);
+  endpoint_send(lr->endpt,lr->out_sockid.coordid,MSG_INITTASK,(char*)initmsg,initsize);
 
   /* send to managers */
   for (i = 0; i < lr->count; i++) {
@@ -570,7 +570,7 @@ int do_client(char *initial_str, int argc, const char **argv)
   int r = 0;
   const char *cmd;
   endpointid initial;
-  node *n = node_start(LOG_WARNING,0,NULL,NULL);
+  node *n = node_start(LOG_WARNING,0);
   if (NULL == n)
     return -1;
 
@@ -607,7 +607,7 @@ int do_client(char *initial_str, int argc, const char **argv)
       socketid out_sockid;
       output_arg oa;
       memset(&oa,0,sizeof(oa));
-      out_sockid.managerid = node_add_thread(n,"output",output_thread,&oa,&thread);
+      out_sockid.coordid = node_add_thread(n,"output",output_thread,&oa,&thread);
       out_sockid.sid = 2;
       if (0 != client_run(n,nodes,program,out_sockid,argc-3,((const char**)argv)+3))
         exit(1);

@@ -43,10 +43,11 @@
 #define LOG_DEBUG2      5
 #define LOG_COUNT       6
 
-#define MANAGER_ID      1
-#define MAIN_CHORD_ID   2
-#define JAVA_ID         3
-#define FIRST_ID        4
+#define IO_ID           1
+#define MANAGER_ID      2
+#define MAIN_CHORD_ID   3
+#define JAVA_ID         4
+#define FIRST_ID        5
 
 #define WORKER_PORT     2000
 #define JBRIDGE_PORT    2001 /* FIXME: make this configurable */
@@ -131,7 +132,7 @@ typedef struct endpointlist {
 #define FRAMEADDR_COUNT          6
 
 typedef struct {
-  endpointid managerid;
+  endpointid coordid;
   unsigned int sid;
 } socketid;
 
@@ -164,13 +165,13 @@ typedef struct node {
   int ioready_readfd;
   int notified;
   pthread_mutex_t lock;
-  pthread_cond_t cond;
   int shutdown;
   FILE *logfile;
   int loglevel;
   pthread_cond_t closecond;
   pthread_mutex_t liblock;
   endpointid managerid;
+  endpointid iothid;
   int iosize;
   list *toclose;
 } node;
@@ -183,7 +184,7 @@ typedef struct node {
 char *lookup_hostname(node *n, in_addr_t addr);
 int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
 
-node *node_start(int loglevel, int port, mgr_extfun ext, void *extarg);
+node *node_start(int loglevel, int port);
 void node_run(node *n);
 void node_log(node *n, int level, const char *format, ...);
 endpoint *find_endpoint(node *n, int localid);

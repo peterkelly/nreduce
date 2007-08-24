@@ -31,75 +31,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-const char *msg_names[MSG_COUNT] = {
-  "DONE",
-  "FISH",
-  "FETCH",
-  "TRANSFER",
-  "ACK",
-  "MARKROOTS",
-  "MARKENTRY",
-  "SWEEP",
-  "SWEEPACK",
-  "UPDATE",
-  "RESPOND",
-  "SCHEDULE",
-  "UPDATEREF",
-  "STARTDISTGC",
-  "NEWTASK",
-  "NEWTASKRESP",
-  "INITTASK",
-  "INITTASKRESP",
-  "STARTTASK",
-  "STARTTASKRESP",
-  "KILL",
-  "ENDPOINT_EXIT",
-  "LINK",
-  "UNLINK",
-  "CONSOLE_DATA",
-  "FIND_SUCCESSOR",
-  "GOT_SUCCESSOR",
-  "GET_SUCCLIST",
-  "REPLY_SUCCLIST",
-  "STABILIZE",
-  "GET_TABLE",
-  "REPLY_TABLE",
-  "FIND_ALL",
-  "CHORD_STARTED",
-  "START_CHORD",
-  "DEBUG_START",
-  "DEBUG_DONE",
-  "ID_CHANGED",
-  "JOINED",
-  "INSERT",
-  "SET_NEXT",
-  "LISTEN",
-  "ACCEPT",
-  "CONNECT",
-  "READ",
-  "WRITE",
-  "FINWRITE",
-  "LISTEN_RESPONSE",
-  "ACCEPT_RESPONSE",
-  "CONNECT_RESPONSE",
-  "READ_RESPONSE",
-  "WRITE_RESPONSE",
-  "CONNECTION_CLOSED",
-  "FINWRITE_RESPONSE",
-  "DELETE_CONNECTION",
-  "DELETE_LISTENER",
-  "STARTGC",
-  "STARTGC_RESPONSE",
-  "STARTDISTGCACK",
-  "GET_TASKS",
-  "GET_TASKS_RESPONSE",
-  "REPORT_ERROR",
-  "PING",
-  "PONG",
-  "JCMD",
-  "JCMD_RESPONSE",
-};
-
 void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
                  endpointid owner, int ioid)
 {
@@ -116,7 +47,7 @@ void send_accept(endpoint *endpt, socketid sockid, int ioid)
   accept_msg am;
   am.sockid = sockid;
   am.ioid = ioid;
-  endpoint_send(endpt,endpt->n->managerid,MSG_ACCEPT,&am,sizeof(am));
+  endpoint_send(endpt,sockid.coordid,MSG_ACCEPT,&am,sizeof(am));
 }
 
 void send_connect(endpoint *endpt, endpointid epid,
@@ -135,7 +66,7 @@ void send_read(endpoint *endpt, socketid sid, int ioid)
   read_msg rm;
   rm.sockid = sid;
   rm.ioid = ioid;
-  endpoint_send(endpt,sid.managerid,MSG_READ,&rm,sizeof(rm));
+  endpoint_send(endpt,sid.coordid,MSG_READ,&rm,sizeof(rm));
 }
 
 void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len)
@@ -146,7 +77,7 @@ void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, in
   wm->ioid = ioid;
   wm->len = len;
   memcpy(wm->data,data,len);
-  endpoint_send(endpt,sockid.managerid,MSG_WRITE,wm,msglen);
+  endpoint_send(endpt,sockid.coordid,MSG_WRITE,wm,msglen);
   free(wm);
 }
 
@@ -157,14 +88,14 @@ void send_finwrite(endpoint *endpt, socketid sockid, int ioid)
   fwm.sockid = sockid;
   fwm.ioid = ioid;
 
-  endpoint_send(endpt,sockid.managerid,MSG_FINWRITE,&fwm,sizeof(fwm));
+  endpoint_send(endpt,sockid.coordid,MSG_FINWRITE,&fwm,sizeof(fwm));
 }
 
 void send_delete_connection(endpoint *endpt, socketid sockid)
 {
   delete_connection_msg dcm;
   dcm.sockid = sockid;
-  endpoint_send(endpt,sockid.managerid,MSG_DELETE_CONNECTION,&dcm,sizeof(dcm));
+  endpoint_send(endpt,sockid.coordid,MSG_DELETE_CONNECTION,&dcm,sizeof(dcm));
 }
 
 void send_delete_listener(endpoint *endpt, socketid sockid)
@@ -172,7 +103,7 @@ void send_delete_listener(endpoint *endpt, socketid sockid)
   delete_listener_msg dlm;
   dlm.sockid = sockid;
   if (!socketid_isnull(&sockid))
-    endpoint_send(endpt,sockid.managerid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
+    endpoint_send(endpt,sockid.coordid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
 }
 
 void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen)
