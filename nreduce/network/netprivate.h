@@ -179,7 +179,7 @@ void notify_closed(node *n, connection *conn, int error);
 void notify_write(node *n, connection *conn);
 
 #ifdef DEBUG_SHORT_KEEPALIVE
-int set_keepalive(node *n, int sock, int s)
+int set_keepalive(node *n, int sock, int s);
 #endif
 
 #endif
