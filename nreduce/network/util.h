@@ -26,6 +26,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <netdb.h>
 #include <sys/time.h>
 
 #define STACK_LIMIT 10240
@@ -150,5 +151,10 @@ void lock_mutex(pthread_mutex_t *mutex);
 void unlock_mutex(pthread_mutex_t *mutex);
 
 void enable_invalid_fpe();
+
+int set_non_blocking(int fd);
+char *lookup_hostname(in_addr_t addr);
+int lookup_address(const char *host, in_addr_t *out, int *h_errout);
+int determine_ip(in_addr_t *out);
 
 #endif

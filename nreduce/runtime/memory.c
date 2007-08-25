@@ -30,7 +30,7 @@
 #include "compiler/bytecode.h"
 #include "compiler/source.h"
 #include "runtime/runtime.h"
-#include "network/messages.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

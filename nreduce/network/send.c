@@ -24,9 +24,7 @@
 #include "config.h"
 #endif
 
-#define MESSAGES_C
-
-#include "messages.h"
+#include "netprivate.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -84,10 +82,8 @@ void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, in
 void send_finwrite(endpoint *endpt, socketid sockid, int ioid)
 {
   finwrite_msg fwm;
-
   fwm.sockid = sockid;
   fwm.ioid = ioid;
-
   endpoint_send(endpt,sockid.coordid,MSG_FINWRITE,&fwm,sizeof(fwm));
 }
 
@@ -104,30 +100,4 @@ void send_delete_listener(endpoint *endpt, socketid sockid)
   dlm.sockid = sockid;
   if (!socketid_isnull(&sockid))
     endpoint_send(endpt,sockid.coordid,MSG_DELETE_LISTENER,&dlm,sizeof(dlm));
-}
-
-void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen)
-{
-  endpointid javaid = { ip: endpt->n->listenip, port: endpt->n->listenport, localid: JAVA_ID };
-  int msglen = sizeof(jcmd_msg)+cmdlen;
-  jcmd_msg *jcm = (jcmd_msg*)calloc(msglen,1);
-  jcm->ioid = ioid;
-  jcm->oneway = oneway;
-  jcm->cmdlen = cmdlen;
-  memcpy(&jcm->cmd,data,cmdlen);
-  endpoint_send(endpt,javaid,MSG_JCMD,jcm,msglen);
-  free(jcm);
-}
-
-void send_jcmd_response(endpoint *endpt, endpointid epid, int ioid, int error,
-                         const char *data, int len)
-{
-  int msglen = sizeof(jcmd_response_msg)+len;
-  jcmd_response_msg *resp = (jcmd_response_msg*)calloc(msglen,1);
-  resp->ioid = ioid;
-  resp->error = error;
-  resp->len = len;
-  memcpy(&resp->data,data,len);
-  endpoint_send(endpt,epid,MSG_JCMD_RESPONSE,resp,msglen);
-  free(resp);
 }

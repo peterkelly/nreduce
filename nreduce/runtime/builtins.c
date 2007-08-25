@@ -32,7 +32,7 @@
 #include "network/util.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

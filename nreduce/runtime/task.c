@@ -31,7 +31,7 @@
 #include "compiler/source.h"
 #include "runtime/runtime.h"
 #include "modules/modules.h"
-#include "network/messages.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

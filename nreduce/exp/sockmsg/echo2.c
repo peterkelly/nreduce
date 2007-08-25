@@ -4,7 +4,6 @@
 
 #include "network/util.h"
 #include "network/node.h"
-#include "network/messages.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>

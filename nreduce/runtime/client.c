@@ -28,7 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -543,14 +543,11 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
     switch (msg->hdr.tag) {
     case MSG_GET_TASKS_RESPONSE: {
       int i;
-      endpointid_str str;
       get_tasks_response_msg *gtrm = (get_tasks_response_msg*)msg->data;
       assert(sizeof(get_tasks_response_msg) <= msg->hdr.size);
       assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->hdr.size);
-      for (i = 0; i < gtrm->count; i++) {
-        print_endpointid(str,gtrm->tasks[i]);
-        printf("Task: %s\n",str);
-      }
+      for (i = 0; i < gtrm->count; i++)
+        printf("Task: "EPID_FORMAT"\n",EPID_ARGS(gtrm->tasks[i]));
       done++;
       break;
     }

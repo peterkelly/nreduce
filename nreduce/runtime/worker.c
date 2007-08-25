@@ -30,7 +30,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -114,7 +114,7 @@ int string_to_mainchordid(node *n, const char *str, endpointid *out)
       fprintf(stderr,"Invalid address: %s\n",str);
       return -1;
     }
-    if (0 > lookup_address(n,host,&addr,NULL)) {
+    if (0 > lookup_address(host,&addr,NULL)) {
       fprintf(stderr,"Host lookup failed: %s\n",host);
       free(host);
       return -1;

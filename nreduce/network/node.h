@@ -23,17 +23,13 @@
 #ifndef _NODE_H
 #define _NODE_H
 
-#include "src/nreduce.h"
 #include <netdb.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
+#include <pthread.h>
 
 #define DEFAULT_IOSIZE 65536
 
 #define HOSTNAME_MAX 256
 #define ERRMSG_MAX 256
-
-//#define DEBUG_SHORT_KEEPALIVE
 
 #define LOG_NONE        0
 #define LOG_ERROR       1
@@ -50,11 +46,8 @@
 #define FIRST_ID        5
 
 #define WORKER_PORT     2000
-#define JBRIDGE_PORT    2001 /* FIXME: make this configurable */
 
 struct node;
-struct connection;
-struct listener;
 struct endpoint;
 
 #define EPID_FORMAT "%u.%u.%u.%u:%u/%u"
@@ -72,8 +65,6 @@ typedef struct endpointid {
   unsigned int localid;
 } endpointid;
 
-typedef char endpointid_str[100];
-
 typedef struct msgheader {
   endpointid source;
   unsigned int destlocalid;
@@ -88,40 +79,18 @@ typedef struct message {
   struct message *prev;
 } message;
 
-typedef struct messagelist {
-  message *first;
-  message *last; 
-  pthread_mutex_t lock;
-  pthread_cond_t cond;
-} messagelist;
-
 typedef void (*endpoint_threadfun)(struct node *n, struct endpoint *endpt, void *arg);
-typedef int (*mgr_extfun)(struct node *n, struct endpoint *endpt, message *msg,
-                          int final, void *arg);
 
 typedef struct endpoint {
   endpointid epid;
-  messagelist mailbox;
-  int checkmsg;
   int interrupt;
-  struct endpoint *prev;
-  struct endpoint *next;
   struct node *n;
-  char *type;
-  void *data;
-  int closed;
-  list *inlinks;
-  list *outlinks;
-  endpoint_threadfun fun;
-  pthread_t thread;
   int signal;
   int rc;
+  struct endpoint *prev;
+  struct endpoint *next;
+  struct endpoint_private *p;
 } endpoint;
-
-typedef struct endpointlist {
-  endpoint *first;
-  endpoint *last;
-} endpointlist;
 
 #define CONNECT_FRAMEADDR        0
 #define READ_FRAMEADDR           1
@@ -136,57 +105,19 @@ typedef struct {
   unsigned int sid;
 } socketid;
 
-typedef struct {
-  endpointid managerid;
-  unsigned int jid;
-} javaid;
-
-typedef struct connectionlist {
-  struct connection *first;
-  struct connection *last;
-} connectionlist;
-
-typedef struct listenerlist {
-  struct listener *first;
-  struct listener *last;
-} listenerlist;
-
 typedef struct node {
-  endpointlist endpoints;
-  connectionlist connections;
-  listenerlist listeners;
-  struct listener *mainl;
   in_addr_t listenip;
   unsigned short listenport;
-  unsigned int nextlocalid;
-  unsigned int nextsid;
-  pthread_t iothread;
-  int ioready_writefd;
-  int ioready_readfd;
-  int notified;
-  pthread_mutex_t lock;
-  int shutdown;
-  FILE *logfile;
-  int loglevel;
-  pthread_cond_t closecond;
-  endpointid managerid;
   endpointid iothid;
   int iosize;
-  list *toclose;
+  struct node_private *p;
 } node;
 
 /* node */
 
-#define lock_node(_n) { lock_mutex(&(_n)->lock);
-#define unlock_node(_n) unlock_mutex(&(_n)->lock); }
-
-char *lookup_hostname(node *n, in_addr_t addr);
-int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
-
 node *node_start(int loglevel, int port);
 void node_run(node *n);
 void node_log(node *n, int level, const char *format, ...);
-endpoint *find_endpoint(node *n, int localid);
 void node_shutdown(node *n);
 
 endpointid node_add_thread(node *n, const char *type, endpoint_threadfun fun, void *arg,
@@ -195,9 +126,8 @@ endpointid node_add_thread2(node *n, const char *type, endpoint_threadfun fun, v
                             pthread_t *threadp, int localid, int stacksize);
 void node_stats(node *n, int *regconnections, int *listeners);
 int node_get_endpoints(node *n, const char *type, endpointid **epids);
+
 int endpoint_check_links(endpoint *endpt, endpointid *epids, int count);
-void endpoint_link_locked(endpoint *endpt, endpointid to);
-void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 void endpoint_interrupt(endpoint *endpt);
@@ -205,7 +135,6 @@ void endpoint_send(endpoint *endpt, endpointid dest, int tag, const void *data, 
 message *endpoint_receive(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 int endpointid_isnull(const endpointid *epid);
-void print_endpointid(endpointid_str str, endpointid epid);
 
 void message_free(message *msg);
 
@@ -215,5 +144,134 @@ int socketid_isnull(const socketid *a);
 #ifndef NODE_C
 extern const char *log_levels[LOG_COUNT];
 #endif
+
+/* Node */
+#define MSG_KILL                2147483647
+#define MSG_ENDPOINT_EXIT       2147483646
+#define MSG_LINK                2147483645
+#define MSG_UNLINK              2147483644
+
+/* Regular connections */
+#define MSG_LISTEN              2147483643
+#define MSG_ACCEPT              2147483642
+#define MSG_CONNECT             2147483641
+#define MSG_READ                2147483640
+#define MSG_WRITE               2147483639
+#define MSG_FINWRITE            2147483638
+#define MSG_LISTEN_RESPONSE     2147483637
+#define MSG_ACCEPT_RESPONSE     2147483636
+#define MSG_CONNECT_RESPONSE    2147483635
+#define MSG_READ_RESPONSE       2147483634
+#define MSG_WRITE_RESPONSE      2147483633
+#define MSG_CONNECTION_CLOSED   2147483632
+#define MSG_FINWRITE_RESPONSE   2147483631
+#define MSG_DELETE_CONNECTION   2147483630
+#define MSG_DELETE_LISTENER     2147483629
+
+/* Console */
+#define MSG_CONSOLE_DATA        2147483628
+
+/* I/O messages */
+
+typedef struct {
+  in_addr_t ip;
+  int port;
+  endpointid owner;
+  int ioid;
+} __attribute__ ((__packed__)) listen_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} __attribute__ ((__packed__)) accept_msg;
+
+typedef struct {
+  char hostname[HOSTNAME_MAX+1];
+  int port;
+  endpointid owner;
+  int ioid;
+} __attribute__ ((__packed__)) connect_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} __attribute__ ((__packed__)) read_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+  int len;
+  char data[0];
+} __attribute__ ((__packed__)) write_msg;
+
+typedef struct {
+  socketid sockid;
+  int ioid;
+} __attribute__ ((__packed__)) finwrite_msg;
+
+typedef struct {
+  int ioid;
+  int error;
+  char errmsg[ERRMSG_MAX+1];
+  socketid sockid;
+} __attribute__ ((__packed__)) listen_response_msg;
+
+typedef struct {
+  int ioid;
+  socketid sockid;
+  char hostname[HOSTNAME_MAX+1];
+  int port;
+} __attribute__ ((__packed__)) accept_response_msg;
+
+typedef struct {
+  int ioid;
+  socketid sockid;
+  int error;
+  char errmsg[ERRMSG_MAX+1];
+} __attribute__ ((__packed__)) connect_response_msg;
+
+typedef struct {
+  int ioid;
+  socketid sockid;
+  int len;
+  char data[0];
+} __attribute__ ((__packed__)) read_response_msg;
+
+typedef struct {
+  int ioid;
+} __attribute__ ((__packed__)) write_response_msg;
+
+typedef struct {
+  int ioid;
+} __attribute__ ((__packed__)) finwrite_response_msg;
+
+typedef struct {
+  socketid sockid;
+  int error;
+  char errmsg[ERRMSG_MAX+1];
+} __attribute__ ((__packed__)) connection_event_msg;
+
+typedef struct {
+  socketid sockid;
+} __attribute__ ((__packed__)) delete_connection_msg;
+
+typedef struct {
+  socketid sockid;
+} __attribute__ ((__packed__)) delete_listener_msg;
+
+typedef struct {
+  endpointid epid;
+} __attribute__ ((__packed__)) endpoint_exit_msg;
+
+void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
+                 endpointid owner, int ioid);
+void send_accept(endpoint *endpt, socketid sockid, int ioid);
+void send_connect(endpoint *endpt, endpointid epid,
+                  const char *hostname, int port, endpointid owner, int ioid);
+void send_read(endpoint *endpt, socketid sid, int ioid);
+void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);
+void send_finwrite(endpoint *endpt, socketid sockid, int ioid);
+void send_delete_connection(endpoint *endpt, socketid sockid);
+void send_delete_listener(endpoint *endpt, socketid sockid);
 
 #endif

@@ -30,7 +30,7 @@
 #include "src/nreduce.h"
 #include "compiler/source.h"
 #include "runtime.h"
-#include "network/messages.h"
+#include "messages.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1000,10 +1000,8 @@ static void handle_message(task *tsk, message *msg)
     break;
   case MSG_ENDPOINT_EXIT: {
     endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
-    endpointid_str str;
     assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
-    print_endpointid(str,m->epid);
-    node_log(tsk->n,LOG_INFO,"task: received ENDPOINT_EXIT for %s",str);
+    node_log(tsk->n,LOG_INFO,"task: received ENDPOINT_EXIT for "EPID_FORMAT,EPID_ARGS(m->epid));
     tsk->done = 1;
     break;
   }
@@ -1640,8 +1638,8 @@ void *signal_thread(void *arg)
     ts.tv_sec = 0;
     ts.tv_nsec = 10*million;
     nanosleep(&ts,NULL);
-    printf("sending sigusr1\n");
-    pthread_kill(tsk->endpt->thread,SIGUSR1);\
+    printf("interrupting\n");
+    endpoint_interrupt(tsk->endpt);
   }
   return NULL;
 }

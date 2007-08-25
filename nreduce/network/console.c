@@ -26,7 +26,6 @@
 
 #include "src/nreduce.h"
 #include "node.h"
-#include "messages.h"
 #include "netprivate.h"
 #include <stdio.h>
 #include <string.h>
@@ -57,15 +56,15 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
                  "Hostname","Port","Socket","Regular?","Owner");
     array_printf(out,"%-30s %-6s %-6s %-8s %-20s\n",
                  "--------","----","------","--------","--------------------");
-    for (c2 = n->connections.first; c2; c2 = c2->next) {
-      endpointid_str owner;
-      if (endpointid_isnull(&c2->owner))
-        sprintf(owner,"(none)");
-      else
-        print_endpointid(owner,c2->owner);
-      array_printf(out,"%-30s %-6d %-6d %-8s %-20s\n",
+    for (c2 = n->p->connections.first; c2; c2 = c2->next) {
+      array_printf(out,"%-30s %-6d %-6d %-8s",
                    c2->hostname,c2->port,c2->sock,
-                   c2->isreg ? "Yes" : "No",owner);
+                   c2->isreg ? "Yes" : "No");
+      if (endpointid_isnull(&c2->owner))
+        array_printf(out," (none)");
+      else
+        array_printf(out," "EPID_FORMAT,EPID_ARGS(c2->owner));
+      array_printf(out,"\n");
     }
     unlock_node(n);
   }
@@ -74,13 +73,13 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
     array_printf(out,"%-7s %-4s %-20s\n","sid    ","port","owner");
     array_printf(out,"%-7s %-4s %-20s\n","-------","----","--------------------");
     lock_node(n);
-    for (l = n->listeners.first; l; l = l->next) {
-      endpointid_str owner;
+    for (l = n->p->listeners.first; l; l = l->next) {
+      array_printf(out,"%-7d %-4d",l->sockid.sid,l->port);
       if (endpointid_isnull(&l->owner))
-        sprintf(owner,"(none)");
+        array_printf(out," (none)");
       else
-        print_endpointid(owner,l->owner);
-      array_printf(out,"%-7d %-4d %-20s\n",l->sockid.sid,l->port,owner);
+        array_printf(out," "EPID_FORMAT,EPID_ARGS(l->owner));
+      array_printf(out,"\n");
     }
     unlock_node(n);
     return 0;
@@ -94,9 +93,9 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
     array_printf(out,
                  "%-7s %-3s %-9s %-6s %-10s\n","-------","---","---------","------","------------");
     lock_node(n);
-    for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-      if (!strcmp(endpt->type,"task")) {
-        task *tsk = (task*)endpt->data;
+    for (endpt = n->p->endpoints.first; endpt; endpt = endpt->next) {
+      if (!strcmp(endpt->p->type,"task")) {
+        task *tsk = (task*)endpt->p->data;
         array_printf(out,"%-7d %-3d %-9d %-6d %-12d\n",
                      endpt->epid.localid,tsk->tid,tsk->groupsize,tsk->bcsize,tsk->stats.ninstrs);
       }
@@ -110,8 +109,8 @@ static int process_cmd(node *n, endpoint *endpt, int argc, char **argv, array *o
     array_printf(out,"%-7s %-4s\n","localid","type");
     array_printf(out,"%-7s %-4s\n","-------","----");
     lock_node(n);
-    for (endpt = n->endpoints.first; endpt; endpt = endpt->next)
-      array_printf(out,"%-7d %s\n",endpt->epid.localid,endpt->type);
+    for (endpt = n->p->endpoints.first; endpt; endpt = endpt->next)
+      array_printf(out,"%-7d %s\n",endpt->epid.localid,endpt->p->type);
     unlock_node(n);
     return 0;
   }

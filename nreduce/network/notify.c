@@ -27,7 +27,6 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "node.h"
-#include "messages.h"
 #include "netprivate.h"
 #include <stdio.h>
 #include <string.h>

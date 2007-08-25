@@ -39,6 +39,7 @@
 #include <netinet/tcp.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fenv.h>
@@ -674,4 +675,125 @@ void enable_invalid_fpe()
   if (0 != fesetenv(&env))
     fatal("fesetenv: %s",strerror(errno));
 #endif
+}
+
+int set_non_blocking(int fd)
+{
+  int flags;
+  if (0 > (flags = fcntl(fd,F_GETFL))) {
+    perror("fcntl(F_GETFL)");
+    return -1;
+  }
+
+  flags |= O_NONBLOCK;
+
+  if (0 > fcntl(fd,F_SETFL,flags)) {
+    perror("fcntl(F_SETFL)");
+    return -1;
+  }
+  return 0;
+}
+
+char *lookup_hostname(in_addr_t addr)
+{
+  int alloc = 1024;
+  char *buf = malloc(alloc);
+  struct hostent *he = NULL;
+  int herr = 0;
+  char *res;
+
+#ifdef HAVE_GETHOSTBYNAME_R
+  struct hostent ret;
+  while ((0 != gethostbyaddr_r(&addr,sizeof(in_addr_t),AF_INET,&ret,buf,alloc,&he,&herr)) &&
+         (ERANGE == errno))
+    buf = realloc(buf,alloc *= 2);
+#else
+  he = gethostbyaddr(&addr,sizeof(in_addr_t),AF_INET);
+  herr = h_errno;
+#endif
+
+  if (NULL != he) {
+    res = strdup(he->h_name);
+  }
+  else {
+    unsigned char *c = (unsigned char*)&addr;
+    char *hostname = (char*)malloc(100);
+    sprintf(hostname,"%u.%u.%u.%u",c[0],c[1],c[2],c[3]);
+    res = hostname;
+  }
+
+  free(buf);
+  return res;
+}
+
+int lookup_address(const char *host, in_addr_t *out, int *h_errout)
+{
+  int alloc = 1024;
+  char *buf = malloc(alloc);
+  struct hostent *he = NULL;
+  int herr = 0;
+  int r = 0;
+
+#ifdef HAVE_GETHOSTBYNAME_R
+  struct hostent ret;
+  while ((0 != gethostbyname_r(host,&ret,buf,alloc,&he,&herr)) &&
+         (ERANGE == errno))
+    buf = realloc(buf,alloc *= 2);
+#else
+  he = gethostbyname(host);
+  herr = h_errno;
+#endif
+
+  if (NULL == he) {
+    if (h_errout)
+      *h_errout = herr;
+    r = -1;
+  }
+  else if (4 != he->h_length) {
+    if (h_errout)
+      *h_errout = HOST_NOT_FOUND;
+    r = -1;
+  }
+  else {
+    *out = (*((struct in_addr*)he->h_addr)).s_addr;
+  }
+
+  free(buf);
+  return r;
+}
+
+int determine_ip(in_addr_t *out)
+{
+  in_addr_t addr = 0;
+  char hostname[4097];
+  FILE *hf = popen("hostname","r");
+  int size;
+  if (NULL == hf) {
+    fprintf(stderr,
+            "Could not determine IP address, because executing the hostname command "
+            "failed (%s)\n",strerror(errno));
+    return -1;
+  }
+  size = fread(hostname,1,4096,hf);
+  if (0 > hf) {
+    fprintf(stderr,
+            "Could not determine IP address, because reading output from the hostname "
+            "command failed (%s)\n",strerror(errno));
+    pclose(hf);
+    return -1;
+  }
+  pclose(hf);
+  if ((0 < size) && ('\n' == hostname[size-1]))
+    size--;
+  hostname[size] = '\0';
+
+  if (0 > lookup_address(hostname,&addr,NULL)) {
+    fprintf(stderr,
+            "Could not determine IP address, because the address \"%s\" "
+            "returned by the hostname command could not be resolved (%s)\n",
+            hostname,strerror(errno));
+    return -1;
+  }
+  *out = addr;
+  return 0;
 }

@@ -23,9 +23,35 @@
 #ifndef _NETPRIVATE_H
 #define _NETPRIVATE_H
 
+#include "node.h"
+#include "util.h"
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+
+//#define DEBUG_SHORT_KEEPALIVE
+
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
+
+typedef struct messagelist {
+  message *first;
+  message *last; 
+  pthread_mutex_t lock;
+  pthread_cond_t cond;
+} messagelist;
+
+typedef struct endpoint_private {
+  messagelist mailbox;
+  pthread_t thread;
+  char *type;
+  void *data;
+  int closed;
+  list *inlinks;
+  list *outlinks;
+  endpoint_threadfun fun;
+} endpoint_private;
 
 typedef struct connection {
   socketid sockid;
@@ -75,8 +101,45 @@ typedef struct listener {
   int notify;
 } listener;
 
-#define NODE_ALREADY_LOCKED(_n) check_mutex_locked(&(_n)->lock)
-#define NODE_UNLOCKED(_n) check_mutex_unlocked(&(_n)->lock)
+typedef struct endpointlist {
+  endpoint *first;
+  endpoint *last;
+} endpointlist;
+
+typedef struct connectionlist {
+  struct connection *first;
+  struct connection *last;
+} connectionlist;
+
+typedef struct listenerlist {
+  listener *first;
+  listener *last;
+} listenerlist;
+
+typedef struct node_private {
+  struct listener *mainl;
+  endpointlist endpoints;
+  connectionlist connections;
+  listenerlist listeners;
+  unsigned int nextlocalid;
+  unsigned int nextsid;
+  pthread_t iothread;
+  int ioready_writefd;
+  int ioready_readfd;
+  int notified;
+  pthread_mutex_t lock;
+  int shutdown;
+  FILE *logfile;
+  int loglevel;
+  pthread_cond_t closecond;
+  list *toclose;
+} node_private;
+
+#define lock_node(_n) { lock_mutex(&(_n)->p->lock);
+#define unlock_node(_n) unlock_mutex(&(_n)->p->lock); }
+
+#define NODE_ALREADY_LOCKED(_n) check_mutex_locked(&(_n)->p->lock)
+#define NODE_UNLOCKED(_n) check_mutex_unlocked(&(_n)->p->lock)
 
 listener *node_listen_locked(node *n, in_addr_t ip, int port, int notify, void *data,
                              int dontaccept, int ismain, endpointid *owner, char *errmsg,
@@ -96,8 +159,9 @@ void start_console(node *n, connection *conn);
 void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
                              int tag, const void *data, int size);
 void got_message(node *n, const msgheader *hdr, const void *data);
-int set_non_blocking(int fd);
 connection *add_connection(node *n, const char *hostname, int sock, listener *l);
+void endpoint_link_locked(endpoint *endpt, endpointid to);
+void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
 
 void console_thread(node *n, endpoint *endpt, void *arg);
@@ -113,13 +177,6 @@ void notify_connect(node *n, connection *conn, int error);
 void notify_read(node *n, connection *conn);
 void notify_closed(node *n, connection *conn, int error);
 void notify_write(node *n, connection *conn);
-
-/* netutil.c */
-
-int set_non_blocking(int fd);
-char *lookup_hostname(node *n, in_addr_t addr);
-int lookup_address(node *n, const char *host, in_addr_t *out, int *h_errout);
-void determine_ip(node *n);
 
 #ifdef DEBUG_SHORT_KEEPALIVE
 int set_keepalive(node *n, int sock, int s)

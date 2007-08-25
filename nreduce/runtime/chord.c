@@ -28,7 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -54,7 +54,7 @@ static void chord_debug(chordnode cn, const char *function, const char *format, 
 {
   array *arr = array_new(1,0);
   char end = '\0';
-  endpointid_str str;
+  char str[100];
   char idstr[100];
   va_list ap;
 
@@ -63,7 +63,7 @@ static void chord_debug(chordnode cn, const char *function, const char *format, 
   else
     function = "";
 
-  print_endpointid(str,cn.epid);
+  sprintf(str,EPID_FORMAT,EPID_ARGS(cn.epid));
   sprintf(idstr,"#%d",cn.id);
   array_printf(arr,"%18s %6s %14s: ",str,idstr,function);
   va_start(ap,format);

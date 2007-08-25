@@ -4,10 +4,12 @@
 
 #include "network/util.h"
 #include "network/node.h"
-#include "network/messages.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+#define MSG_PING 0
+#define MSG_PONG 1
 
 typedef struct {
   int npings;

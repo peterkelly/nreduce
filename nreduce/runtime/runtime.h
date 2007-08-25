@@ -240,6 +240,11 @@ typedef struct builtin {
 #define SYSOBJECT_JAVA           3
 #define SYSOBJECT_COUNT          4
 
+typedef struct {
+  endpointid managerid;
+  unsigned int jid;
+} javaid;
+
 typedef struct sysobject {
   int type;
   int fd;
@@ -758,6 +763,7 @@ void start_manager(node *n);
 int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **methodname);
 int serialise_args(task *tsk, pntr args, array *arr);
 pntr decode_java_response(task *tsk, const char *str, endpointid source);
+void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen);
 void java_thread(node *n, endpoint *endpt, void *arg);
 
 #ifndef BUILTINS_C

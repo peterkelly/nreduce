@@ -28,7 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +42,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
+#define JBRIDGE_PORT    2001 /* FIXME: make this configurable */
 
 typedef struct javacmd {
   int ioid;
@@ -174,6 +176,32 @@ pntr decode_java_response(task *tsk, const char *str, endpointid source)
       return tsk->globnilpntr;
     }
   }
+}
+
+void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdlen)
+{
+  endpointid javaid = { ip: endpt->n->listenip, port: endpt->n->listenport, localid: JAVA_ID };
+  int msglen = sizeof(jcmd_msg)+cmdlen;
+  jcmd_msg *jcm = (jcmd_msg*)calloc(msglen,1);
+  jcm->ioid = ioid;
+  jcm->oneway = oneway;
+  jcm->cmdlen = cmdlen;
+  memcpy(&jcm->cmd,data,cmdlen);
+  endpoint_send(endpt,javaid,MSG_JCMD,jcm,msglen);
+  free(jcm);
+}
+
+static void send_jcmd_response(endpoint *endpt, endpointid epid, int ioid, int error,
+                         const char *data, int len)
+{
+  int msglen = sizeof(jcmd_response_msg)+len;
+  jcmd_response_msg *resp = (jcmd_response_msg*)calloc(msglen,1);
+  resp->ioid = ioid;
+  resp->error = error;
+  resp->len = len;
+  memcpy(&resp->data,data,len);
+  endpoint_send(endpt,epid,MSG_JCMD_RESPONSE,resp,msglen);
+  free(resp);
 }
 
 static void send_java_commands(node *n, javath *jth, endpoint *endpt)

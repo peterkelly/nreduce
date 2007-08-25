@@ -28,7 +28,7 @@
 #include "src/nreduce.h"
 #include "runtime.h"
 #include "network/node.h"
-#include "network/messages.h"
+#include "messages.h"
 #include "chord.h"
 #include <stdio.h>
 #include <string.h>
@@ -626,7 +626,7 @@ static int read_managers(node *n, const char *nodesfile, endpointid **outids, in
     managerids[i].port = port;
     managerids[i].localid = MANAGER_ID;
 
-    if (0 > lookup_address(n,host,&managerids[i].ip,NULL)) {
+    if (0 > lookup_address(host,&managerids[i].ip,NULL)) {
       fprintf(stderr,"%s: hostname lookup failed\n",host);
       array_free(nodes);
       free(managerids);

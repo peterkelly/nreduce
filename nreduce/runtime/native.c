@@ -425,7 +425,6 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   int bp;
 
   assert(tsk);
-  assert(pthread_self() == tsk->endpt->thread);
 
   if (!tsk->usr1setup)
     return;

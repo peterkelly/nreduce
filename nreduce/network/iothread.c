@@ -36,7 +36,6 @@
 #include "compiler/bytecode.h"
 #include "src/nreduce.h"
 #include "node.h"
-#include "messages.h"
 #include "netprivate.h"
 #include <stdio.h>
 #include <string.h>
@@ -55,7 +54,7 @@ static connection *get_connection(node *n, socketid id)
 {
   connection *conn;
   assert(NODE_ALREADY_LOCKED(n));
-  for (conn = n->connections.first; conn; conn = conn->next)
+  for (conn = n->p->connections.first; conn; conn = conn->next)
     if (socketid_equals(&conn->sockid,&id))
       return conn;
   return NULL;
@@ -65,7 +64,7 @@ static listener *get_listener(node *n, socketid id)
 {
   listener *l;
   assert(NODE_ALREADY_LOCKED(n));
-  for (l = n->listeners.first; l; l = l->next)
+  for (l = n->p->listeners.first; l; l = l->next)
     if (socketid_equals(&l->sockid,&id))
       return l;
   return NULL;
@@ -324,8 +323,8 @@ void handle_disconnection(node *n, connection *conn)
   /* A connection to another node has failed. Search for links that referenced endpoints
      on the other node, and sent an ENDPOINT_EXIT to the local endpoint in each case. */
   endpoint *endpt;
-  for (endpt = n->endpoints.first; endpt; endpt = endpt->next) {
-    int max = list_count(endpt->outlinks);
+  for (endpt = n->p->endpoints.first; endpt; endpt = endpt->next) {
+    int max = list_count(endpt->p->outlinks);
     endpointid *exited = (endpointid*)malloc(max*sizeof(endpointid));
     int count = 0;
     list *l;
@@ -334,7 +333,7 @@ void handle_disconnection(node *n, connection *conn)
     /* We must grab the list of exited endpoints before calling node_send_locked(), because it
        will call through to endpoint_add_message() which will modify the endpoint list to remove
        the links, so we can't do this while traversing the list. */
-    for (l = endpt->outlinks; l; l = l->next) {
+    for (l = endpt->p->outlinks; l; l = l->next) {
       endpointid *epid = (endpointid*)l->data;
       if ((epid->ip == conn->ip) && (epid->port == conn->port))
         exited[count++] = *epid;
@@ -416,7 +415,6 @@ static void process_received(node *n, connection *conn)
     /* verify header */
     assert(0 <= hdr->size);
     assert(0 <= hdr->tag);
-    assert(MSG_COUNT > hdr->tag);
 
     hdr->source.ip = conn->ip;
     hdr->source.port = conn->port;
@@ -546,7 +544,7 @@ static void handle_new_connection(node *n, listener *l)
     return;
   }
 
-  hostname = lookup_hostname(n,remote_addr.sin_addr.s_addr);
+  hostname = lookup_hostname(remote_addr.sin_addr.s_addr);
   node_log(n,LOG_INFO,"Got connection from %s",hostname);
   conn = add_connection(n,hostname,clientfd,l);
   free(hostname);
@@ -559,8 +557,8 @@ static void handle_new_connection(node *n, listener *l)
 
 static void ioloop(node *n, endpoint *endpt, void *arg)
 {
-  lock_mutex(&n->lock);
-  while (!n->shutdown) {
+  lock_mutex(&n->p->lock);
+  while (!n->p->shutdown) {
     int highest = -1;
     int s;
     fd_set readfds;
@@ -573,18 +571,18 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
 
-    for (l = n->listeners.first; l; l = l->next) {
+    for (l = n->p->listeners.first; l; l = l->next) {
       if (!l->dontaccept)
         FD_SET(l->fd,&readfds);
       if (highest < l->fd)
         highest = l->fd;
     }
 
-    FD_SET(n->ioready_readfd,&readfds);
-    if (highest < n->ioready_readfd)
-      highest = n->ioready_readfd;
+    FD_SET(n->p->ioready_readfd,&readfds);
+    if (highest < n->p->ioready_readfd)
+      highest = n->p->ioready_readfd;
 
-    for (conn = n->connections.first; conn; conn = conn->next) {
+    for (conn = n->p->connections.first; conn; conn = conn->next) {
       assert(0 <= conn->sock);
       if (highest < conn->sock)
         highest = conn->sock;
@@ -604,9 +602,9 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
          data. */
     }
 
-    unlock_mutex(&n->lock);
+    unlock_mutex(&n->p->lock);
     s = select(highest+1,&readfds,&writefds,NULL,NULL);
-    lock_mutex(&n->lock);
+    lock_mutex(&n->p->lock);
 
     if (0 > s) {
       /* Ignore bad file descriptor error. It is possible (and legitimate) that a connection
@@ -615,13 +613,13 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
         fatal("select: %s",strerror(errno));
     }
 
-    assert(!FD_ISSET(n->ioready_readfd,&readfds) || n->notified);
+    assert(!FD_ISSET(n->p->ioready_readfd,&readfds) || n->p->notified);
 
-    if (FD_ISSET(n->ioready_readfd,&readfds) || n->notified) {
+    if (FD_ISSET(n->p->ioready_readfd,&readfds) || n->p->notified) {
       int c;
-      if (0 > read(n->ioready_readfd,&c,1))
+      if (0 > read(n->p->ioready_readfd,&c,1))
         fatal("Can't read from ioready_readfd: %s",strerror(errno));
-      n->notified = 0;
+      n->p->notified = 0;
     }
 
     if (0 == s)
@@ -638,7 +636,7 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     }
 
     /* Do all the writing we can */
-    for (conn = n->connections.first; conn; conn = next) {
+    for (conn = n->p->connections.first; conn; conn = next) {
       next = conn->next;
       if (FD_ISSET(conn->sock,&writefds)) {
         if (conn->connected)
@@ -649,32 +647,32 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     }
 
     /* Read data */
-    for (conn = n->connections.first; conn; conn = next) {
+    for (conn = n->p->connections.first; conn; conn = next) {
       next = conn->next;
       if (FD_ISSET(conn->sock,&readfds) && conn->canread)
         handle_read(n,conn);
     }
 
     /* accept new connections */
-    for (l = n->listeners.first; l; l = l->next) {
+    for (l = n->p->listeners.first; l; l = l->next) {
       if (FD_ISSET(l->fd,&readfds))
         handle_new_connection(n,l);
     }
 
     /* Handle pending close requests - this is done here to avoid closing an fd while select()
       is looking at it */
-    while (n->toclose) {
-      int fd = (int)n->toclose->data;
-      list *next = n->toclose->next;
+    while (n->p->toclose) {
+      int fd = (int)n->p->toclose->data;
+      list *next = n->p->toclose->next;
       close(fd);
-      free(n->toclose);
-      n->toclose = next;
+      free(n->p->toclose);
+      n->p->toclose = next;
     }
   }
-  unlock_mutex(&n->lock);
+  unlock_mutex(&n->p->lock);
 }
 
 void node_start_iothread(node *n)
 {
-  node_add_thread2(n,"io",ioloop,NULL,&n->iothread,IO_ID,0);
+  node_add_thread2(n,"io",ioloop,NULL,&n->p->iothread,IO_ID,0);
 }
