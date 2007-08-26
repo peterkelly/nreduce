@@ -81,13 +81,13 @@ void got_message(node *n, const msgheader *hdr, const void *data)
        already exited. If the link were to arrive just before the endpoint exits, then
        the endpoint removal code would take care of sending the exit message. */
     if (MSG_LINK == hdr->tag) {
-      endpointid destid;
-      destid.ip = n->listenip;
-      destid.port = n->listenport;
-      destid.localid = hdr->destlocalid;
+      endpoint_exit_msg eem;
+      eem.epid.ip = n->listenip;
+      eem.epid.port = n->listenport;
+      eem.epid.localid = hdr->destlocalid;
+      eem.reason = 0;
       assert(sizeof(endpointid) == hdr->size);
-      node_send_locked(n,hdr->destlocalid,*(endpointid*)data,MSG_ENDPOINT_EXIT,
-                       &destid,sizeof(endpointid));
+      node_send_locked(n,hdr->destlocalid,*(endpointid*)data,MSG_ENDPOINT_EXIT,&eem,sizeof(eem));
     }
     else if (MSG_UNLINK == hdr->tag) {
       /* don't need to do anything in this case */
@@ -237,12 +237,14 @@ node *node_start(int loglevel, int port)
 {
   node *n = node_new(loglevel);
   listener *l;
+  char errmsg[ERRMSG_MAX+1];
 
   lock_node(n);
-  l = node_listen_locked(n,n->listenip,port,0,NULL,0,1,NULL,NULL,0);
+  l = node_listen_locked(n,n->listenip,port,0,NULL,0,1,NULL,errmsg,ERRMSG_MAX);
   unlock_node(n);
 
   if (NULL == l) {
+    fprintf(stderr,"%s\n",errmsg);
     node_free(n);
     return NULL;
   }
@@ -296,43 +298,32 @@ listener *node_listen_locked(node *n, in_addr_t ip, int port, int notify, void *
   memset(&local_addr.sin_zero,0,8);
 
   if (-1 == (fd = socket(AF_INET,SOCK_STREAM,0))) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    else
-      node_log(n,LOG_ERROR,"socket: %s",strerror(errno));
+    snprintf(errmsg,errlen,"socket: %s",strerror(errno));
     return NULL;
   }
 
   if (-1 == setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    else
-      node_log(n,LOG_ERROR,"setsockopt: %s",strerror(errno));
+    snprintf(errmsg,errlen,"setsockopt: %s",strerror(errno));
+    close(fd);
     return NULL;
   }
 
   if (-1 == bind(fd,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    else
-      node_log(n,LOG_ERROR,"bind: %s",strerror(errno));
+    snprintf(errmsg,errlen,"bind: %s",strerror(errno));
+    close(fd);
     return NULL;
   }
 
   if (0 > getsockname(fd,(struct sockaddr*)&new_addr,&new_size)) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    else
-      node_log(n,LOG_ERROR,"getsockname: %s",strerror(errno));
+    snprintf(errmsg,errlen,"getsockname: %s",strerror(errno));
+    close(fd);
     return NULL;
   }
   actualport = ntohs(new_addr.sin_port);
 
   if (-1 == listen(fd,LISTEN_BACKLOG)) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    else
-      node_log(n,LOG_ERROR,"listen: %s",strerror(errno));
+    snprintf(errmsg,errlen,"listen: %s",strerror(errno));
+    close(fd);
     return NULL;
   }
 
@@ -425,6 +416,35 @@ void node_close_connections(node *n)
   unlock_node(n);
 }
 
+#ifdef DEBUG_SHORT_KEEPALIVE
+int set_keepalive(node *n, int sock, int s, char *errmsg, int errlen)
+
+{
+  int one = 1;
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPIDLE,&s,sizeof(int))) {
+    snprintf(errmsg,errlen,"setsockopt(TCP_KEEPIDLE): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPINTVL,&s,sizeof(int))) {
+    snprintf(errmsg,errlen,"setsockopt(TCP_KEEPINTVL): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPCNT,&one,sizeof(int))) {
+    snprintf(errmsg,errlen,"setsockopt(TCP_KEEPCNT): %s",strerror(errno));
+    return -1;
+  }
+
+  if (0 > setsockopt(sock,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(int))) {
+    snprintf(errmsg,errlen,"setsockopt(SO_KEEPALIVE): %s",strerror(errno));
+    return -1;
+  }
+
+  return 0;
+}
+#endif
+
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen)
 {
@@ -444,8 +464,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   if (dest) {
     int error = 0;
     if (0 > lookup_address(dest,&addr.sin_addr.s_addr,&error)) {
-      if (errmsg)
-        snprintf(errmsg,errlen,"%s",hstrerror(error));
+      snprintf(errmsg,errlen,"%s",hstrerror(error));
       return NULL;
     }
   }
@@ -454,15 +473,13 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   }
 
   if (0 > (sock = socket(AF_INET,SOCK_STREAM,0))) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
+    snprintf(errmsg,errlen,"socket: %s",strerror(errno));
     perror("socket");
     return NULL;
   }
 
   if (0 > set_non_blocking(sock)) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"cannot set non-blocking socket");
+    snprintf(errmsg,errlen,"cannot set non-blocking socket");
     return NULL;
   }
 
@@ -471,17 +488,13 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   r = connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr));
   assert(0 > r);
   if (EINPROGRESS != errno) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"%s",strerror(errno));
-    node_log(n,LOG_WARNING,"connect: %s",strerror(errno));
+    snprintf(errmsg,errlen,"connect: %s",strerror(errno));
     return NULL;
   }
 
 #ifdef DEBUG_SHORT_KEEPALIVE
   /* Set a small keepalive interval so connection timeouts can be tested easily */
-  if (0 > set_keepalive(n,sock,2)) {
-    if (errmsg)
-      snprintf(errmsg,errlen,"error initializing keepalive");
+  if (0 > set_keepalive(n,sock,2,errmsg,errlen)) {
     return NULL;
   }
 #endif
@@ -512,7 +525,7 @@ connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
   return conn;
 }
 
-void node_handle_endpoint_exit(node *n, endpointid epid)
+void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m)
 {
   connection *conn;
   listener *l;
@@ -521,7 +534,7 @@ void node_handle_endpoint_exit(node *n, endpointid epid)
   while (conn) {
     connection *next = conn->next;
     /* no need to notify here; since the owner has exited */
-    if (!endpointid_isnull(&conn->owner) && endpointid_equals(&conn->owner,&epid))
+    if (!endpointid_isnull(&conn->owner) && endpointid_equals(&conn->owner,&m->epid))
       remove_connection(n,conn);
     conn = next;
   }
@@ -529,7 +542,7 @@ void node_handle_endpoint_exit(node *n, endpointid epid)
   l = n->p->listeners.first;
   while (l) {
     listener *next = l->next;
-    if (!endpointid_isnull(&l->owner) && endpointid_equals(&l->owner,&epid))
+    if (!endpointid_isnull(&l->owner) && endpointid_equals(&l->owner,&m->epid))
       node_remove_listener(n,l);
     l = next;
   }
@@ -560,10 +573,19 @@ void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpoi
   }
   else {
     if (NULL == (conn = find_connection(n,destendpointid.ip,destendpointid.port))) {
+      char errmsg[ERRMSG_MAX+1];
       unsigned char *addrbytes = (unsigned char*)&destendpointid.ip;
       node_log(n,LOG_INFO,"No connection yet to %u.%u.%u.%u:%d; establishing",
                addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.port);
-      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1,NULL,0);
+      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1,errmsg,ERRMSG_MAX);
+      if (NULL == conn) {
+        if (MSG_LINK == tag) {
+          endpointid epid = { ip: n->listenip, port: n->listenport, localid: sourcelocalid };
+          endpoint_exit_msg eem = { epid: destendpointid, reason: 0 };
+          node_send_locked(n,sourcelocalid,epid,MSG_ENDPOINT_EXIT,&eem,sizeof(eem));
+        }
+        return;
+      }
     }
 
     array_append(conn->sendbuf,&hdr,sizeof(msgheader));
@@ -637,9 +659,12 @@ static void *endpoint_thread(void *data)
   lock_node(n);
   for (l = endpt->p->inlinks; l; l = l->next) {
     endpointid link = *(endpointid*)l->data;
-    if (!endpointid_equals(&endpt->epid,&link))
-      node_send_locked(n,endpt->epid.localid,link,MSG_ENDPOINT_EXIT,
-                       &endpt->epid,sizeof(endpointid));
+    if (!endpointid_equals(&endpt->epid,&link)) {
+      endpoint_exit_msg eem;
+      eem.epid = endpt->epid;
+      eem.reason = 1; /* FIXME: should make this settable by the endpoint */
+      node_send_locked(n,endpt->epid.localid,link,MSG_ENDPOINT_EXIT,&eem,sizeof(eem));
+    }
   }
   llist_remove(&n->p->endpoints,endpt);
   pthread_cond_broadcast(&n->p->closecond);
@@ -852,6 +877,8 @@ void endpoint_unlink_locked(endpoint *endpt, endpointid to)
 
 void endpoint_link(endpoint *endpt, endpointid to)
 {
+  /* FIXME: the endpointid included in the payload of the link and unlink messages is redundant.
+     Just use the source instead. */
   assert(!endpointid_isnull(&to));
   lock_node(endpt->n);
   endpoint_link_locked(endpt,to);
@@ -891,9 +918,10 @@ static void endpoint_add_message(endpoint *endpt, message *msg)
   else {
 
     if (MSG_ENDPOINT_EXIT == msg->hdr.tag) {
-      assert(sizeof(endpointid) == msg->hdr.size);
-      endpoint_list_remove(&endpt->p->inlinks,*(endpointid*)msg->data);
-      endpoint_list_remove(&endpt->p->outlinks,*(endpointid*)msg->data);
+      endpoint_exit_msg *eem = (endpoint_exit_msg*)msg->data;
+      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      endpoint_list_remove(&endpt->p->inlinks,eem->epid);
+      endpoint_list_remove(&endpt->p->outlinks,eem->epid);
     }
 
     lock_mutex(&endpt->p->mailbox.lock);
@@ -970,34 +998,3 @@ int socketid_isnull(const socketid *a)
 {
   return (0 == a->sid);
 }
-
-#ifdef DEBUG_SHORT_KEEPALIVE
-int set_keepalive(node *n, int sock, int s)
-
-{
-  int one = 1;
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPIDLE,&s,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPIDLE): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPINTVL,&s,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPINTVL): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,IPPROTO_TCP,TCP_KEEPCNT,&one,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(TCP_KEEPCNT): %s",strerror(errno));
-    return -1;
-  }
-
-  if (0 > setsockopt(sock,SOL_SOCKET,SO_KEEPALIVE,&one,sizeof(int))) {
-    node_log(n,LOG_ERROR,"setsockopt(SO_KEEPALIVE): %s",strerror(errno));
-    return -1;
-  }
-
-  node_log(n,LOG_DEBUG2,"Set connection keepalive interval to %ds",s);
-
-  return 0;
-}
-#endif

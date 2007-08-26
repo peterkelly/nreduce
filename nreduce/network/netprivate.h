@@ -150,7 +150,7 @@ void node_close_endpoints(node *n);
 void node_close_connections(node *n);
 connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
                                 int port, int othernode, char *errmsg, int errlen);
-void node_handle_endpoint_exit(node *n, endpointid epid);
+void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m);
 void node_notify(node *n);
 void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
@@ -177,9 +177,5 @@ void notify_connect(node *n, connection *conn, int error);
 void notify_read(node *n, connection *conn);
 void notify_closed(node *n, connection *conn, int error);
 void notify_write(node *n, connection *conn);
-
-#ifdef DEBUG_SHORT_KEEPALIVE
-int set_keepalive(node *n, int sock, int s);
-#endif
 
 #endif

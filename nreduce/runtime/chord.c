@@ -103,8 +103,9 @@ static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
     else {
       switch (msg->hdr.tag) {
       case MSG_ENDPOINT_EXIT: {
-        assert(sizeof(endpointid) == msg->hdr.size);
-        assert(endpointid_equals((endpointid*)msg->data,&stb->chord_epid));
+        endpoint_exit_msg *eem = (endpoint_exit_msg*)msg->data;
+        assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+        assert(endpointid_equals(&eem->epid,&stb->chord_epid));
         done = 1;
         break;
       }

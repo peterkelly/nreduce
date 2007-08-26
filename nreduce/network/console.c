@@ -236,7 +236,6 @@ void console_thread(node *n, endpoint *endpt, void *arg)
       break;
     }
     case MSG_KILL:
-      node_log(n,LOG_INFO,"Console received KILL");
       done = 1;
       break;
     default:

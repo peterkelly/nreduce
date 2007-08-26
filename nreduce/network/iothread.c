@@ -238,7 +238,7 @@ static void iothread_handle_message(node *n, endpoint *endpt, message *msg)
   switch (msg->hdr.tag) {
   case MSG_ENDPOINT_EXIT:
     assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
-    node_handle_endpoint_exit(n,((endpoint_exit_msg*)msg->data)->epid);
+    node_handle_endpoint_exit(n,(endpoint_exit_msg*)msg->data);
     break;
   case MSG_LISTEN:
     assert(sizeof(listen_msg) == msg->hdr.size);
@@ -343,6 +343,7 @@ void handle_disconnection(node *n, connection *conn)
     for (i = 0; i < count; i++) {
       endpoint_exit_msg msg;
       msg.epid = exited[i];
+      msg.reason = 0;
       node_send_locked(n,endpt->epid.localid,endpt->epid,MSG_ENDPOINT_EXIT,
                        &msg,sizeof(endpoint_exit_msg));
     }

@@ -261,6 +261,7 @@ typedef struct {
 
 typedef struct {
   endpointid epid;
+  int reason;
 } __attribute__ ((__packed__)) endpoint_exit_msg;
 
 void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
