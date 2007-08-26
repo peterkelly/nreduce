@@ -1,1 +1,1 @@
-SUBDIRS = sockmsg pingpong
+SUBDIRS = sockmsg pingpong httpserver

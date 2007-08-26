@@ -95,9 +95,9 @@ int main(int argc, char **argv)
   bufsize = atoi(argv[2]);
 
   n = node_start(LOG_ERROR,0);
-  n->iosize = bufsize;
   if (NULL == n)
     exit(1);
+  n->iosize = bufsize;
   node_add_thread(n,"echo",echo_thread,&port,NULL);
   node_run(n);
 

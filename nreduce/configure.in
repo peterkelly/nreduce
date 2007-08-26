@@ -62,4 +62,4 @@ if $CC --version | grep '^icc '; then
   CFLAGS="$CFLAGS -wd279,1418,1419,869,1684,1572,193,111,810"
 fi
 
-AC_OUTPUT(Makefile src/Makefile modules/Makefile compiler/Makefile runtime/Makefile network/Makefile java/Makefile java/nreduce/Makefile exp/Makefile exp/sockmsg/Makefile exp/pingpong/Makefile)
+AC_OUTPUT(Makefile src/Makefile modules/Makefile compiler/Makefile runtime/Makefile network/Makefile java/Makefile java/nreduce/Makefile exp/Makefile exp/sockmsg/Makefile exp/pingpong/Makefile exp/httpserver/Makefile)
