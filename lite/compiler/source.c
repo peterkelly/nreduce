@@ -217,7 +217,8 @@ int source_parse_file(source *src, const char *filename, const char *modname)
   yylex_destroy();
 #endif
 
-  fclose(yyin);
+  if (yyin)
+    fclose(yyin);
 
   return r;
 }
