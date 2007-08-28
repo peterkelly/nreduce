@@ -29,7 +29,7 @@ static void ping_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_PONG:
       endpoint_send(endpt,pa->pongid,MSG_PING,data,pa->size);
       pa->npings--;
@@ -41,7 +41,7 @@ static void ping_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("ping: unexpected message %d",msg->hdr.tag);
+      fatal("ping: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);
@@ -56,15 +56,15 @@ static void pong_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_PING:
-      endpoint_send(endpt,msg->hdr.source,MSG_PONG,msg->data,msg->hdr.size);
+      endpoint_send(endpt,msg->source,MSG_PONG,msg->data,msg->size);
       break;
     case MSG_KILL:
       done = 1;
       break;
     default:
-      fatal("pong: unexpected message %d",msg->hdr.tag);
+      fatal("pong: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);

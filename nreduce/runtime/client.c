@@ -72,36 +72,36 @@ static int get_responses(node *n, launcher *lr, int tag,
     message *msg = endpoint_receive(lr->endpt,-1);
     int sender = -1;
 
-    if (MSG_KILL == msg->hdr.tag) {
+    if (MSG_KILL == msg->tag) {
       lr->cancel = 1;
       free(gotresponse);
       return -1;
     }
 
-    if (tag != msg->hdr.tag)
-      fatal("%d: Got invalid response tag: %d",tag,msg->hdr.tag);
+    if (tag != msg->tag)
+      fatal("%d: Got invalid response tag: %d",tag,msg->tag);
 
     if ((MSG_STARTTASKRESP == tag) || (MSG_INITTASKRESP == tag)) {
       for (i = 0; i < count; i++)
-        if (endpointid_equals(&msg->hdr.source,&lr->endpointids[i]))
+        if (endpointid_equals(&msg->source,&lr->endpointids[i]))
           sender = i;
     }
     else {
       for (i = 0; i < count; i++)
-        if (endpointid_equals(&msg->hdr.source,&managerids[i]))
+        if (endpointid_equals(&msg->source,&managerids[i]))
           sender = i;
     }
 
     if (0 > sender) {
-      endpointid id = msg->hdr.source;
+      endpointid id = msg->source;
       unsigned char *c = (unsigned char*)&id.ip;
       node_log(n,LOG_ERROR,"%d: Got response from unknown source %u.%u.%u.%u:%u/%u",
                tag,c[0],c[1],c[2],c[3],id.port,id.localid);
       abort();
     }
 
-    if (sizeof(int) != msg->hdr.size)
-      fatal("%d: incorrect message size (%d)",tag,msg->hdr.size);
+    if (sizeof(int) != msg->size)
+      fatal("%d: incorrect message size (%d)",tag,msg->size);
 
     if (gotresponse[sender])
       fatal("%d: Already have response for this source",tag);
@@ -206,11 +206,11 @@ static void launcher_startgc(node *n, endpoint *endpt, launcher *lr)
   free(sgcm);
 
   msg = endpoint_receive(endpt,-1);
-  if (MSG_KILL == msg->hdr.tag) {
+  if (MSG_KILL == msg->tag) {
     lr->cancel = 1;
   }
   else {
-    assert(MSG_STARTGC_RESPONSE == msg->hdr.tag);
+    assert(MSG_STARTGC_RESPONSE == msg->tag);
   }
   message_free(msg);
 }
@@ -349,19 +349,19 @@ void output_thread(node *n, endpoint *endpt, void *arg)
   oa->rc = 0;
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_WRITE: {
       write_response_msg wrm;
       write_msg *m = (write_msg*)msg->data;
-      assert(sizeof(write_msg) <= msg->hdr.size);
+      assert(sizeof(write_msg) <= msg->size);
       fwrite(m->data,1,m->len,stdout);
       wrm.ioid = m->ioid;
-      endpoint_send(endpt,msg->hdr.source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
+      endpoint_send(endpt,msg->source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
       break;
     }
     case MSG_REPORT_ERROR: {
       report_error_msg *m = (report_error_msg*)msg->data;
-      assert(sizeof(report_error_msg) <= msg->hdr.size);
+      assert(sizeof(report_error_msg) <= msg->size);
       fwrite(m->data,1,m->len,stderr);
       fprintf(stderr,"\n");
       oa->rc = m->rc;
@@ -370,23 +370,23 @@ void output_thread(node *n, endpoint *endpt, void *arg)
     case MSG_FINWRITE: {
       finwrite_response_msg frm;
       finwrite_msg *m = (finwrite_msg*)msg->data;
-      assert(sizeof(finwrite_msg) == msg->hdr.size);
+      assert(sizeof(finwrite_msg) == msg->size);
       frm.ioid = m->ioid;
-      endpoint_send(endpt,msg->hdr.source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
+      endpoint_send(endpt,msg->source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
       break;
     }
     case MSG_INITTASK: {
       inittask_msg *initmsg = (inittask_msg*)msg->data;
       int i;
-      assert(sizeof(inittask_msg) <= msg->hdr.size);
-      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->hdr.size);
+      assert(sizeof(inittask_msg) <= msg->size);
+      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->size);
       for (i = 0; i < initmsg->count; i++)
         endpoint_link(endpt,initmsg->idmap[i]);
       break;
     }
     case MSG_ENDPOINT_EXIT: {
       endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
-      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      assert(sizeof(endpoint_exit_msg) == msg->size);
       if (!conn_deleted) {
         fprintf(stderr,"Unexpected task exit: "EPID_FORMAT"\n",EPID_ARGS(m->epid));
         oa->rc = 1;
@@ -401,7 +401,7 @@ void output_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("invalid message: %d",msg->hdr.tag);
+      fatal("invalid message: %d",msg->tag);
       break;
     }
     message_free(msg);
@@ -415,12 +415,12 @@ static void connection_thread(node *n, endpoint *endpt, void *arg)
   endpoint_link(endpt,*destid);
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_ENDPOINT_EXIT: {
       endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
       unsigned char *c;
       int port;
-      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      assert(sizeof(endpoint_exit_msg) == msg->size);
       c = (unsigned char*)&m->epid.ip;
       port = m->epid.port;
       fprintf(stderr,"Connection to %u.%u.%u.%u:%u failed\n",c[0],c[1],c[2],c[3],port);
@@ -431,7 +431,7 @@ static void connection_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("invalid message: %d",msg->hdr.tag);
+      fatal("invalid message: %d",msg->tag);
       break;
     }
     message_free(msg);
@@ -465,16 +465,16 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_GOT_SUCCESSOR: {
       got_successor_msg *m = (got_successor_msg*)msg->data;
-      assert(sizeof(got_successor_msg) == msg->hdr.size);
+      assert(sizeof(got_successor_msg) == msg->size);
       endpoint_send(endpt,m->successor.epid,MSG_GET_TABLE,&gtm,sizeof(gtm));
       break;
     }
     case MSG_REPLY_TABLE: {
       reply_table_msg *m = (reply_table_msg*)msg->data;
-      assert(sizeof(reply_table_msg) == msg->hdr.size);
+      assert(sizeof(reply_table_msg) == msg->size);
 
       if (endpointid_equals(&fsd->first,&m->cn.epid)) {
         done = 1;
@@ -499,7 +499,7 @@ static void find_nodes_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("Invalid message: %d",msg->hdr.tag);
+      fatal("Invalid message: %d",msg->tag);
       break;
     }
   }
@@ -540,19 +540,19 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
 
   while (done < nmanagers) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_GET_TASKS_RESPONSE: {
       int i;
       get_tasks_response_msg *gtrm = (get_tasks_response_msg*)msg->data;
-      assert(sizeof(get_tasks_response_msg) <= msg->hdr.size);
-      assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->hdr.size);
+      assert(sizeof(get_tasks_response_msg) <= msg->size);
+      assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->size);
       for (i = 0; i < gtrm->count; i++)
         printf("Task: "EPID_FORMAT"\n",EPID_ARGS(gtrm->tasks[i]));
       done++;
       break;
     }
     default:
-      fatal("Invalid message: %d",msg->hdr.tag);
+      fatal("Invalid message: %d",msg->tag);
       break;
     }
     message_free(msg);

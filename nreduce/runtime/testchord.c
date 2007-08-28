@@ -74,7 +74,7 @@ static void debug_control_thread(node *n, endpoint *endpt, void *arg)
       indebug = 1;
     }
     else {
-      switch (msg->hdr.tag) {
+      switch (msg->tag) {
       case MSG_DEBUG_DONE:
         assert(indebug);
         indebug = 0;
@@ -83,7 +83,7 @@ static void debug_control_thread(node *n, endpoint *endpt, void *arg)
         fatal("Node shutdown during chord test");
         break;
       default:
-        fatal("debug_control received invalid message: %d",msg->hdr.tag);
+        fatal("debug_control received invalid message: %d",msg->tag);
         break;
       }
       message_free(msg);
@@ -111,10 +111,10 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
     if (!msg) {
       fatal("Timeout waiting for CHORD_STARTED message");
     }
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_CHORD_STARTED: {
       chord_started_msg *m = (chord_started_msg*)msg->data;
-      assert(sizeof(chord_started_msg) == msg->hdr.size);
+      assert(sizeof(chord_started_msg) == msg->size);
       endpoint_link(endpt,m->cn.epid);
       cn = m->cn;
       done = 1;
@@ -124,7 +124,7 @@ static chordnode start_one_chord(node *n, endpoint *endpt, endpointid initial, e
       fatal("Node shutdown during chord test");
       break;
     default:
-      fatal("start_one_chord received invalid message: %d",msg->hdr.tag);
+      fatal("start_one_chord received invalid message: %d",msg->tag);
       break;
     }
     message_free(msg);
@@ -465,33 +465,33 @@ static void check_loop(node *n, endpoint *endpt, chordnode *nodes, int ncount2,
       printf("debug_loop: timeout: node %d, lookup %d\n",chk->cur_node,chk->cur_lookup);
       abort();
     }
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_DEBUG_START:
-      assert(sizeof(endpointid) == msg->hdr.size);
+      assert(sizeof(endpointid) == msg->size);
       check_debug_start(chk,(endpointid*)msg->data);
       break;
     case MSG_REPLY_TABLE:
-      assert(sizeof(reply_table_msg) == msg->hdr.size);
+      assert(sizeof(reply_table_msg) == msg->size);
       check_reply_table(chk,(reply_table_msg*)msg->data);
       break;
     case MSG_GOT_SUCCESSOR:
-      assert(sizeof(got_successor_msg) == msg->hdr.size);
+      assert(sizeof(got_successor_msg) == msg->size);
       check_got_successor(chk,(got_successor_msg*)msg->data);
       break;
     case MSG_ENDPOINT_EXIT:
-      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      assert(sizeof(endpoint_exit_msg) == msg->size);
       check_endpoint_exit(chk,(endpoint_exit_msg*)msg->data);
       break;
     case MSG_CHORD_STARTED:
-      assert(sizeof(chord_started_msg) == msg->hdr.size);
+      assert(sizeof(chord_started_msg) == msg->size);
       check_chord_started(chk,(chord_started_msg*)msg->data);
       break;
     case MSG_ID_CHANGED:
-      assert(sizeof(id_changed_msg) == msg->hdr.size);
+      assert(sizeof(id_changed_msg) == msg->size);
       check_id_changed(chk,(id_changed_msg*)msg->data);
       break;
     case MSG_JOINED:
-      assert(sizeof(joined_msg) == msg->hdr.size);
+      assert(sizeof(joined_msg) == msg->size);
       check_joined(chk,(joined_msg*)msg->data);
       break;
     case MSG_KILL:

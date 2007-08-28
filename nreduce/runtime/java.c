@@ -287,9 +287,9 @@ static void java_jcmd(node *n, javath *jth, endpoint *endpt, message *msg)
   jcmd_msg *m;
   javacmd *jc;
   char newline = '\n';
-  assert(sizeof(jcmd_msg) <= msg->hdr.size);
+  assert(sizeof(jcmd_msg) <= msg->size);
   m = (jcmd_msg*)msg->data;
-  assert(msg->hdr.size == sizeof(jcmd_msg)+m->cmdlen);
+  assert(msg->size == sizeof(jcmd_msg)+m->cmdlen);
 
   array_append(jth->jsendbuf,m->cmd,m->cmdlen);
   array_append(jth->jsendbuf,&newline,1);
@@ -297,7 +297,7 @@ static void java_jcmd(node *n, javath *jth, endpoint *endpt, message *msg)
   jc = (javacmd*)calloc(sizeof(javacmd),1);
   jc->ioid = m->ioid;
   jc->oneway = m->oneway;
-  jc->epid = msg->hdr.source;
+  jc->epid = msg->source;
   list_append(&jth->jcmds,jc);
 
   if (!jth->jconnected && !jth->jconnecting) {
@@ -321,21 +321,21 @@ void java_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_KILL:
       node_log(n,LOG_INFO,"Java thread received KILL");
       done = 1;
       break;
     case MSG_CONNECT_RESPONSE:
-      assert(sizeof(connect_response_msg) == msg->hdr.size);
+      assert(sizeof(connect_response_msg) == msg->size);
       java_connect_response(n,&jth,endpt,(connect_response_msg*)msg->data);
       break;
     case MSG_CONNECTION_CLOSED:
-      assert(sizeof(connection_event_msg) == msg->hdr.size);
+      assert(sizeof(connection_event_msg) == msg->size);
       java_connection_closed(n,&jth,endpt,(connection_event_msg*)msg->data);
       break;
     case MSG_READ_RESPONSE:
-      assert(sizeof(read_response_msg) <= msg->hdr.size);
+      assert(sizeof(read_response_msg) <= msg->size);
       java_read_response(n,&jth,endpt,(read_response_msg*)msg->data);
       break;
     case MSG_WRITE_RESPONSE:
@@ -345,7 +345,7 @@ void java_thread(node *n, endpoint *endpt, void *arg)
       java_jcmd(n,&jth,endpt,msg);
       break;
     default:
-      fatal("java thread: unexpected message %d",msg->hdr.tag);
+      fatal("java thread: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);

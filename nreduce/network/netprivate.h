@@ -156,9 +156,10 @@ void done_writing(node *n, connection *conn);
 void done_reading(node *n, connection *conn);
 void remove_connection(node *n, connection *conn);
 void start_console(node *n, connection *conn);
-void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-                             int tag, const void *data, int size);
-void got_message(node *n, const msgheader *hdr, const void *data);
+void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid,
+                      uint32_t tag, const void *data, uint32_t size);
+void got_message(node *n, const msgheader *hdr, endpointid source,
+                 uint32_t tag, uint32_t size, const void *data);
 connection *add_connection(node *n, const char *hostname, int sock, listener *l);
 void endpoint_link_locked(endpoint *endpt, endpointid to);
 void endpoint_unlink_locked(endpoint *endpt, endpointid to);

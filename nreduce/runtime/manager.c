@@ -90,7 +90,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
 
       continue;
     }
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_STARTDISTGCACK: {
       assert(ingc);
       assert(!mark_done);
@@ -111,7 +111,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
     }
     case MSG_UPDATE: {
       update_msg *m = (update_msg*)msg->data;
-      assert(sizeof(update_msg)+ga->ntasks*sizeof(int) == msg->hdr.size);
+      assert(sizeof(update_msg)+ga->ntasks*sizeof(int) == msg->size);
       assert(ingc);
       assert(!mark_done);
       assert(m->gciter == gciter);
@@ -120,7 +120,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
         count[i] += m->counts[i];
 
       #ifdef DEBUG_DISTGC
-      printf("after update (gciter %d) from "EPID_FORMAT":",m->gciter,EPID_ARGS(msg->hdr.source));
+      printf("after update (gciter %d) from "EPID_FORMAT":",m->gciter,EPID_ARGS(msg->source));
       for (i = 0; i < ga->ntasks; i++)
         printf(" %d",count[i]);
       printf("\n");
@@ -165,7 +165,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("gc: unexpected message %d",msg->hdr.tag);
+      fatal("gc: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);
@@ -204,22 +204,22 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
   int done = 0;
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_NEWTASK: {
       newtask_msg *ntmsg;
       endpointid epid;
       array *args = array_new(sizeof(char*),0);
       char *str;
       char *start;
-      if (sizeof(newtask_msg) > msg->hdr.size)
+      if (sizeof(newtask_msg) > msg->size)
         fatal("NEWTASK: invalid message size");
       ntmsg = (newtask_msg*)msg->data;
-      if (sizeof(newtask_msg)+ntmsg->bcsize > msg->hdr.size)
+      if (sizeof(newtask_msg)+ntmsg->bcsize > msg->size)
         fatal("NEWTASK: invalid bytecode size");
 
       str = ((char*)msg->data)+sizeof(newtask_msg)+ntmsg->bcsize;
       start = str;
-      while (str < ((char*)msg->data)+msg->hdr.size) {
+      while (str < ((char*)msg->data)+msg->size) {
         if ('\0' == *str) {
           array_append(args,&start,sizeof(char*));
           start = str+1;
@@ -234,23 +234,23 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,args,n,
                ntmsg->out_sockid,&epid);
 
-      endpoint_send(endpt,msg->hdr.source,MSG_NEWTASKRESP,
+      endpoint_send(endpt,msg->source,MSG_NEWTASKRESP,
                     &epid.localid,sizeof(int));
       array_free(args);
       break;
     }
     case MSG_START_CHORD: {
       start_chord_msg *m = (start_chord_msg*)msg->data;
-      assert(sizeof(start_chord_msg) == msg->hdr.size);
+      assert(sizeof(start_chord_msg) == msg->size);
       start_chord(n,0,m->initial,m->caller,m->stabilize_delay);
       break;
     }
     case MSG_STARTGC:
-      assert(sizeof(startgc_msg) <= msg->hdr.size);
-      manager_startgc(n,endpt,(startgc_msg*)msg->data,msg->hdr.source);
+      assert(sizeof(startgc_msg) <= msg->size);
+      manager_startgc(n,endpt,(startgc_msg*)msg->data,msg->source);
       break;
     case MSG_GET_TASKS:
-      assert(sizeof(get_tasks_msg) == msg->hdr.size);
+      assert(sizeof(get_tasks_msg) == msg->size);
       manager_get_tasks(n,endpt,(get_tasks_msg*)msg->data);
       break;
     case MSG_KILL:
@@ -258,7 +258,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("manager: unexpected message %d",msg->hdr.tag);
+      fatal("manager: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);

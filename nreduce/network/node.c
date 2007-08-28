@@ -70,7 +70,8 @@ static endpoint *find_endpoint(node *n, int localid)
   return endpt;
 }
 
-void got_message(node *n, const msgheader *hdr, const void *data)
+void got_message(node *n, const msgheader *hdr, endpointid source,
+                 uint32_t tag, uint32_t size, const void *data)
 {
   endpoint *endpt;
   message *newmsg;
@@ -80,16 +81,16 @@ void got_message(node *n, const msgheader *hdr, const void *data)
     /* This handles the case where a link message is sent but the destination has
        already exited. If the link were to arrive just before the endpoint exits, then
        the endpoint removal code would take care of sending the exit message. */
-    if (MSG_LINK == hdr->tag) {
+    if (MSG_LINK == tag) {
       endpoint_exit_msg eem;
       eem.epid.ip = n->listenip;
       eem.epid.port = n->listenport;
       eem.epid.localid = hdr->destlocalid;
       eem.reason = 0;
-      assert(sizeof(endpointid) == hdr->size);
+      assert(sizeof(endpointid) == size);
       node_send_locked(n,hdr->destlocalid,*(endpointid*)data,MSG_ENDPOINT_EXIT,&eem,sizeof(eem));
     }
-    else if (MSG_UNLINK == hdr->tag) {
+    else if (MSG_UNLINK == tag) {
       /* don't need to do anything in this case */
     }
     else {
@@ -100,10 +101,16 @@ void got_message(node *n, const msgheader *hdr, const void *data)
     return;
   }
 
-  newmsg = (message*)calloc(1,sizeof(message));
-  newmsg->hdr = *hdr;
-  newmsg->data = (char*)malloc(hdr->size);
-  memcpy(newmsg->data,data,hdr->size);
+  newmsg = (message*)malloc(sizeof(message)+size);
+  newmsg->next = NULL;
+  newmsg->prev = NULL;
+  newmsg->source = source;
+  newmsg->dest.ip = n->listenip;
+  newmsg->dest.port = n->listenport;
+  newmsg->dest.localid = hdr->destlocalid;
+  newmsg->tag = tag;
+  newmsg->size = size;
+  memcpy(newmsg->data,data,size);
   endpoint_add_message(endpt,newmsg);
 }
 
@@ -548,8 +555,8 @@ void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m)
   }
 }
 
-void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpointid,
-                      int tag, const void *data, int size)
+void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid,
+                      uint32_t tag, const void *data, uint32_t size)
 {
   connection *conn;
   msgheader hdr;
@@ -560,16 +567,15 @@ void node_send_locked(node *n, unsigned int sourcelocalid, endpointid destendpoi
   assert(0 < destendpointid.port);
 
   memset(&hdr,0,sizeof(msgheader));
-  hdr.source.ip = n->listenip;
-  hdr.source.port = n->listenport;
-  hdr.source.localid = sourcelocalid;
+  hdr.sourcelocalid = sourcelocalid;
   hdr.destlocalid = destendpointid.localid;
-  hdr.size = size;
-  hdr.tag = tag;
+  hdr.size1 = size;
+  hdr.tag1 = tag;
 
   if ((destendpointid.ip == n->listenip) &&
       (destendpointid.port == n->listenport)) {
-    got_message(n,&hdr,data);
+    endpointid source = { ip: n->listenip, port: n->listenport, localid: sourcelocalid };
+    got_message(n,&hdr,source,tag,size,data);
   }
   else {
     if (NULL == (conn = find_connection(n,destendpointid.ip,destendpointid.port))) {
@@ -904,22 +910,24 @@ void endpoint_interrupt(endpoint *endpt) /* Can be called from native code */
 static void endpoint_add_message(endpoint *endpt, message *msg)
 {
   assert(NODE_ALREADY_LOCKED(endpt->n));
-  if (MSG_LINK == msg->hdr.tag) {
-    assert(sizeof(endpointid) == msg->hdr.size);
-    assert(!endpointid_isnull((endpointid*)msg->data));
-    list_push(&endpt->p->inlinks,(endpointid*)msg->data);
+  if (MSG_LINK == msg->tag) {
+    endpointid *epid = (endpointid*)malloc(sizeof(endpointid));
+    memcpy(epid,msg->data,sizeof(endpointid));
+    assert(sizeof(endpointid) == msg->size);
+    assert(!endpointid_isnull(epid));
+    list_push(&endpt->p->inlinks,epid);
     free(msg);
   }
-  else if (MSG_UNLINK == msg->hdr.tag) {
-    assert(sizeof(endpointid) == msg->hdr.size);
+  else if (MSG_UNLINK == msg->tag) {
+    assert(sizeof(endpointid) == msg->size);
     endpoint_list_remove(&endpt->p->inlinks,*(endpointid*)msg->data);
     message_free(msg);
   }
   else {
 
-    if (MSG_ENDPOINT_EXIT == msg->hdr.tag) {
+    if (MSG_ENDPOINT_EXIT == msg->tag) {
       endpoint_exit_msg *eem = (endpoint_exit_msg*)msg->data;
-      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      assert(sizeof(endpoint_exit_msg) == msg->size);
       endpoint_list_remove(&endpt->p->inlinks,eem->epid);
       endpoint_list_remove(&endpt->p->outlinks,eem->epid);
     }
@@ -939,7 +947,7 @@ void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void 
   node_send_locked(endpt->n,endpt->epid.localid,dest,tag,data,size);
 }
 
-void endpoint_send(endpoint *endpt, endpointid dest, int tag, const void *data, int size)
+void endpoint_send(endpoint *endpt, endpointid dest, uint32_t tag, const void *data, uint32_t size)
 {
   lock_node(endpt->n);
   node_send_locked(endpt->n,endpt->epid.localid,dest,tag,data,size);
@@ -985,7 +993,6 @@ int endpointid_isnull(const endpointid *epid)
 
 void message_free(message *msg)
 {
-  free(msg->data);
   free(msg);
 }
 

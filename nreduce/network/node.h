@@ -50,33 +50,36 @@
 struct node;
 struct endpoint;
 
-#define EPID_FORMAT "%u.%u.%u.%u:%u/%u"
-#define EPID_ARGS(epid) \
-   ((unsigned char*)&(epid).ip)[0],                \
-   ((unsigned char*)&(epid).ip)[1],                \
-   ((unsigned char*)&(epid).ip)[2],                \
-   ((unsigned char*)&(epid).ip)[3],                \
-    (epid).port,\
-    (epid).localid
+#define IP_FORMAT "%u.%u.%u.%u"
+#define IP_ARGS(ip) ((unsigned char*)&(ip))[0], \
+                    ((unsigned char*)&(ip))[1], \
+                    ((unsigned char*)&(ip))[2], \
+                    ((unsigned char*)&(ip))[3]
+
+#define EPID_FORMAT IP_FORMAT":%u/%u"
+#define EPID_ARGS(epid) IP_ARGS((epid).ip),(epid).port,(epid).localid
 
 typedef struct endpointid {
   in_addr_t ip;
-  unsigned short port;
-  unsigned int localid;
-} endpointid;
+  uint16_t port;
+  uint32_t localid;
+} __attribute__ ((__packed__)) endpointid;
 
 typedef struct msgheader {
-  endpointid source;
-  unsigned int destlocalid;
-  int size;
-  int tag;
-} msgheader;
+  uint32_t sourcelocalid;
+  uint32_t destlocalid;
+  uint32_t size1;
+  uint32_t tag1;
+} __attribute__ ((__packed__)) msgheader;
 
 typedef struct message {
-  msgheader hdr;
-  char *data;
   struct message *next;
   struct message *prev;
+  endpointid source;
+  endpointid dest;
+  uint32_t tag;
+  uint32_t size;
+  char data[0];
 } message;
 
 typedef void (*endpoint_threadfun)(struct node *n, struct endpoint *endpt, void *arg);
@@ -131,7 +134,7 @@ int endpoint_check_links(endpoint *endpt, endpointid *epids, int count);
 void endpoint_link(endpoint *endpt, endpointid to);
 void endpoint_unlink(endpoint *endpt, endpointid to);
 void endpoint_interrupt(endpoint *endpt);
-void endpoint_send(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
+void endpoint_send(endpoint *endpt, endpointid dest, uint32_t tag, const void *data, uint32_t size);
 message *endpoint_receive(endpoint *endpt, int delayms);
 int endpointid_equals(const endpointid *e1, const endpointid *e2);
 int endpointid_isnull(const endpointid *epid);

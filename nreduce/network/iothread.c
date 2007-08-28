@@ -235,45 +235,45 @@ static void iothread_delete_listener(node *n, endpoint *endpt,
 
 static void iothread_handle_message(node *n, endpoint *endpt, message *msg)
 {
-  switch (msg->hdr.tag) {
+  switch (msg->tag) {
   case MSG_ENDPOINT_EXIT:
-    assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+    assert(sizeof(endpoint_exit_msg) == msg->size);
     node_handle_endpoint_exit(n,(endpoint_exit_msg*)msg->data);
     break;
   case MSG_LISTEN:
-    assert(sizeof(listen_msg) == msg->hdr.size);
-    iothread_listen(n,endpt,(listen_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(listen_msg) == msg->size);
+    iothread_listen(n,endpt,(listen_msg*)msg->data,msg->source);
     break;
   case MSG_ACCEPT:
-    assert(sizeof(accept_msg) == msg->hdr.size);
-    iothread_accept(n,endpt,(accept_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(accept_msg) == msg->size);
+    iothread_accept(n,endpt,(accept_msg*)msg->data,msg->source);
     break;
   case MSG_CONNECT:
-    assert(sizeof(connect_msg) == msg->hdr.size);
-    iothread_connect(n,endpt,(connect_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(connect_msg) == msg->size);
+    iothread_connect(n,endpt,(connect_msg*)msg->data,msg->source);
     break;
   case MSG_READ:
-    assert(sizeof(read_msg) == msg->hdr.size);
+    assert(sizeof(read_msg) == msg->size);
     iothread_read(n,endpt,(read_msg*)msg->data);
     break;
   case MSG_WRITE:
-    assert(sizeof(write_msg) <= msg->hdr.size);
-    iothread_write(n,endpt,(write_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(write_msg) <= msg->size);
+    iothread_write(n,endpt,(write_msg*)msg->data,msg->source);
     break;
   case MSG_FINWRITE:
-    assert(sizeof(finwrite_msg) == msg->hdr.size);
-    iothread_finwrite(n,endpt,(finwrite_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(finwrite_msg) == msg->size);
+    iothread_finwrite(n,endpt,(finwrite_msg*)msg->data,msg->source);
     break;
   case MSG_DELETE_CONNECTION:
-    assert(sizeof(delete_connection_msg) == msg->hdr.size);
-    iothread_delete_connection(n,endpt,(delete_connection_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(delete_connection_msg) == msg->size);
+    iothread_delete_connection(n,endpt,(delete_connection_msg*)msg->data,msg->source);
     break;
   case MSG_DELETE_LISTENER:
-    assert(sizeof(delete_listener_msg) == msg->hdr.size);
-    iothread_delete_listener(n,endpt,(delete_listener_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(delete_listener_msg) == msg->size);
+    iothread_delete_listener(n,endpt,(delete_listener_msg*)msg->data,msg->source);
     break;
   default:
-    fatal("iothread: received unknown message %d",msg->hdr.tag);
+    fatal("iothread: received unknown message %d",msg->tag);
     break;
   }
 }
@@ -412,20 +412,18 @@ static void process_received(node *n, connection *conn)
   /* inspect the next section of the input buffer to see if it contains a complete message */
   while (MSG_HEADER_SIZE <= conn->recvbuf->nbytes-start) {
     msgheader *hdr = (msgheader*)&conn->recvbuf->data[start];
+    endpointid source;
 
-    /* verify header */
-    assert(0 <= hdr->size);
-    assert(0 <= hdr->tag);
+    source.ip = conn->ip;
+    source.port = conn->port;
+    source.localid = hdr->sourcelocalid;
 
-    hdr->source.ip = conn->ip;
-    hdr->source.port = conn->port;
-
-    if (MSG_HEADER_SIZE+hdr->size > conn->recvbuf->nbytes-start)
+    if (MSG_HEADER_SIZE+hdr->size1 > conn->recvbuf->nbytes-start)
       break; /* incomplete message */
 
     /* complete message present; add it to the mailbox */
-    got_message(n,hdr,&conn->recvbuf->data[start+MSG_HEADER_SIZE]);
-    start += MSG_HEADER_SIZE+hdr->size;
+    got_message(n,hdr,source,hdr->tag1,hdr->size1,&conn->recvbuf->data[start+MSG_HEADER_SIZE]);
+    start += MSG_HEADER_SIZE+hdr->size1;
   }
 
   /* remove the data we've consumed from the receive buffer */

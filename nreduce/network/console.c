@@ -184,14 +184,14 @@ void console_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     msg = endpoint_receive(csl->endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_READ_RESPONSE: {
       read_response_msg *m = (read_response_msg*)msg->data;
       int start = 0;
       int c = 0;
       int doclose = 0;
 
-      assert(sizeof(read_response_msg) <= msg->hdr.size);
+      assert(sizeof(read_response_msg) <= msg->size);
 
       array_append(input,m->data,m->len);
 
@@ -239,7 +239,7 @@ void console_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("console: unexpected message %d",msg->hdr.tag);
+      fatal("console: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);

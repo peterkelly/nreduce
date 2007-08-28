@@ -19,10 +19,10 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
   send_listen(endpt,n->iothid,INADDR_ANY,port,endpt->epid,1);
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_LISTEN_RESPONSE: {
       listen_response_msg *lrm = (listen_response_msg*)msg->data;
-      assert(sizeof(listen_response_msg) == msg->hdr.size);
+      assert(sizeof(listen_response_msg) == msg->size);
       if (lrm->error) {
         fprintf(stderr,"listen failed: %s\n",lrm->errmsg);
         done = 1;
@@ -37,7 +37,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
     }
     case MSG_ACCEPT_RESPONSE: {
       accept_response_msg *arm = (accept_response_msg*)msg->data;
-      assert(sizeof(accept_response_msg) == msg->hdr.size);
+      assert(sizeof(accept_response_msg) == msg->size);
       printf("got connection from %s\n",arm->hostname);
       send_accept(endpt,listen_sockid,1);
       send_read(endpt,arm->sockid,1);
@@ -45,7 +45,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
     }
     case MSG_READ_RESPONSE: {
       read_response_msg *rrm = (read_response_msg*)msg->data;
-      assert(sizeof(read_response_msg) <= msg->hdr.size);
+      assert(sizeof(read_response_msg) <= msg->size);
 /*       printf("read %d bytes\n",rrm->len); */
       if (0 < rrm->len) {
         send_read(endpt,rrm->sockid,1);
@@ -71,7 +71,7 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     default:
-      fatal("echo: unexpected message %d",msg->hdr.tag);
+      fatal("echo: unexpected message %d",msg->tag);
       break;
     }
     message_free(msg);

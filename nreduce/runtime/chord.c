@@ -101,10 +101,10 @@ static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
       endpoint_send(endpt,stb->chord_epid,MSG_STABILIZE,NULL,0);
     }
     else {
-      switch (msg->hdr.tag) {
+      switch (msg->tag) {
       case MSG_ENDPOINT_EXIT: {
         endpoint_exit_msg *eem = (endpoint_exit_msg*)msg->data;
-        assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+        assert(sizeof(endpoint_exit_msg) == msg->size);
         assert(endpointid_equals(&eem->epid,&stb->chord_epid));
         done = 1;
         break;
@@ -113,7 +113,7 @@ static void stabilizer_thread(node *n, endpoint *endpt, void *arg)
         done = 1;
         break;
       default:
-        fatal("Stabilizer received invalid message: %d",msg->hdr.tag);
+        fatal("Stabilizer received invalid message: %d",msg->tag);
         break;
       }
       message_free(msg);
@@ -502,49 +502,49 @@ static void chord_thread(node *n, endpoint *endpt, void *arg)
 
   while (!done) {
     msg = endpoint_receive(endpt,-1);
-    switch (msg->hdr.tag) {
+    switch (msg->tag) {
     case MSG_FIND_SUCCESSOR:
-      assert(sizeof(find_successor_msg) == msg->hdr.size);
+      assert(sizeof(find_successor_msg) == msg->size);
       chord_find_successor(crd,(find_successor_msg*)msg->data);
       break;
     case MSG_INSERT:
-      assert(sizeof(insert_msg) == msg->hdr.size);
+      assert(sizeof(insert_msg) == msg->size);
       chord_insert(crd,(insert_msg*)msg->data);
       break;
     case MSG_SET_NEXT:
-      assert(sizeof(set_next_msg) == msg->hdr.size);
+      assert(sizeof(set_next_msg) == msg->size);
       chord_set_next(crd,(set_next_msg*)msg->data);
       break;
     case MSG_GET_SUCCLIST:
-      assert(sizeof(get_succlist_msg) == msg->hdr.size);
+      assert(sizeof(get_succlist_msg) == msg->size);
       chord_get_succlist(crd,(get_succlist_msg*)msg->data);
       break;
     case MSG_REPLY_SUCCLIST:
-      assert(sizeof(reply_succlist_msg) == msg->hdr.size);
+      assert(sizeof(reply_succlist_msg) == msg->size);
       chord_reply_succlist(crd,(reply_succlist_msg*)msg->data);
       break;
     case MSG_GOT_SUCCESSOR:
-      assert(sizeof(got_successor_msg) == msg->hdr.size);
+      assert(sizeof(got_successor_msg) == msg->size);
       chord_got_successor(crd,(got_successor_msg*)msg->data);
       break;
     case MSG_STABILIZE:
       chord_stabilize(crd);
       break;
     case MSG_GET_TABLE:
-      assert(sizeof(get_table_msg) == msg->hdr.size);
+      assert(sizeof(get_table_msg) == msg->size);
       chord_get_table(crd,(get_table_msg*)msg->data);
       break;
     case MSG_FIND_ALL:
       break;
     case MSG_ENDPOINT_EXIT:
-      assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+      assert(sizeof(endpoint_exit_msg) == msg->size);
       chord_endpoint_exit(crd,(endpoint_exit_msg*)msg->data);
       break;
     case MSG_KILL:
       done = 1;
       break;
     default:
-      fatal("Chord received invalid message: %d",msg->hdr.tag);
+      fatal("Chord received invalid message: %d",msg->tag);
       break;
     }
     message_free(msg);

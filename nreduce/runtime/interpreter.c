@@ -500,19 +500,19 @@ static void interpreter_fish(task *tsk, message *msg)
   int reqtsk, age, nframes;
   int scheduled = 0;
   array *newmsg;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   int done = 0;
 
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
-  start_address_reading(tsk,from,msg->hdr.tag);
+  start_address_reading(tsk,from,msg->tag);
   read_int(&rd,&reqtsk);
   read_int(&rd,&age);
   read_int(&rd,&nframes);
   read_end(&rd);
-  finish_address_reading(tsk,from,msg->hdr.tag);
+  finish_address_reading(tsk,from,msg->tag);
 
   if (reqtsk == tsk->tid)
     return;
@@ -556,10 +556,10 @@ static void interpreter_fetch(task *tsk, message *msg)
   gaddr storeaddr;
   gaddr objaddr;
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
   /* FETCH (objaddr) (storeaddr)
      Request to send the requested object (or a copy of it) to another task
@@ -570,11 +570,11 @@ static void interpreter_fetch(task *tsk, message *msg)
      points to the requested object. When we send the response, the other address
      will store the object in the p field of the relevant "global" structure. */
 
-  start_address_reading(tsk,from,msg->hdr.tag);
+  start_address_reading(tsk,from,msg->tag);
   read_gaddr(&rd,&objaddr);
   read_gaddr(&rd,&storeaddr);
   read_end(&rd);
-  finish_address_reading(tsk,from,msg->hdr.tag);
+  finish_address_reading(tsk,from,msg->tag);
 
   assert(objaddr.tid == tsk->tid);
   assert(storeaddr.tid == from);
@@ -637,16 +637,16 @@ static void interpreter_respond(task *tsk, message *msg)
   global *objglo;
 
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
-  start_address_reading(tsk,from,msg->hdr.tag);
+  start_address_reading(tsk,from,msg->tag);
   read_pntr(&rd,&obj);
   read_gaddr(&rd,&storeaddr);
   read_end(&rd);
-  finish_address_reading(tsk,from,msg->hdr.tag);
+  finish_address_reading(tsk,from,msg->tag);
 
   ref = global_lookup_existing(tsk,storeaddr);
 
@@ -682,14 +682,14 @@ static void interpreter_schedule(task *tsk, message *msg)
   int count = 0;
 
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
   urmsg = write_start();
 
-  start_address_reading(tsk,from,msg->hdr.tag);
+  start_address_reading(tsk,from,msg->tag);
   while (rd.pos < rd.size) {
     read_pntr(&rd,&framep);
     read_gaddr(&rd,&tellsrc);
@@ -703,7 +703,7 @@ static void interpreter_schedule(task *tsk, message *msg)
     count++;
   }
   read_end(&rd);
-  finish_address_reading(tsk,from,msg->hdr.tag);
+  finish_address_reading(tsk,from,msg->tag);
 
   msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
   write_end(urmsg);
@@ -720,12 +720,12 @@ static void interpreter_updateref(task *tsk, message *msg)
   global *glo;
 
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
-  start_address_reading(tsk,from,msg->hdr.tag);
+  start_address_reading(tsk,from,msg->tag);
   while (rd.pos < rd.size) {
     read_gaddr(&rd,&refaddr);
     read_gaddr(&rd,&remoteaddr);
@@ -749,7 +749,7 @@ static void interpreter_updateref(task *tsk, message *msg)
     resume_waiters(tsk,&glo->wq,glo->p);
   }
   read_end(&rd);
-  finish_address_reading(tsk,from,msg->hdr.tag);
+  finish_address_reading(tsk,from,msg->tag);
 }
 
 static void interpreter_ack(task *tsk, message *msg)
@@ -761,10 +761,10 @@ static void interpreter_ack(task *tsk, message *msg)
   int i;
 
   reader rd;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
 
 
@@ -871,10 +871,10 @@ static void interpreter_markentry(task *tsk, message *msg)
   int pid;
 
   reader rd;
-  int tag = msg->hdr.tag;
+  int tag = msg->tag;
   char *data = msg->data;
-  int size = msg->hdr.size;
-  int from = get_idmap_index(tsk,msg->hdr.source);
+  int size = msg->size;
+  int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
   assert(tsk->indistgc);
@@ -913,7 +913,7 @@ static void interpreter_sweep(task *tsk, message *msg)
   assert(tsk->indistgc);
   assert(!endpointid_isnull(&tsk->gc));
 
-  rd = read_start(tsk,msg->data,msg->hdr.size);
+  rd = read_start(tsk,msg->data,msg->size);
 
   /* do sweep */
   endpoint_send(tsk->endpt,tsk->gc,MSG_SWEEPACK,NULL,0);
@@ -930,7 +930,7 @@ static void interpreter_sweep(task *tsk, message *msg)
 
 static void handle_message(task *tsk, message *msg)
 {
-  switch (msg->hdr.tag) {
+  switch (msg->tag) {
   case MSG_FISH:
     interpreter_fish(tsk,msg);
     break;
@@ -950,7 +950,7 @@ static void handle_message(task *tsk, message *msg)
     interpreter_ack(tsk,msg);
     break;
   case MSG_STARTDISTGC:
-    assert(sizeof(startdistgc_msg) == msg->hdr.size);
+    assert(sizeof(startdistgc_msg) == msg->size);
     interpreter_startdistgc(tsk,(startdistgc_msg*)msg->data);
     break;
   case MSG_MARKROOTS:
@@ -963,36 +963,36 @@ static void handle_message(task *tsk, message *msg)
     interpreter_sweep(tsk,msg);
     break;
   case MSG_LISTEN_RESPONSE:
-    assert(sizeof(listen_response_msg) == msg->hdr.size);
+    assert(sizeof(listen_response_msg) == msg->size);
     interpreter_listen_response(tsk,(listen_response_msg*)msg->data);
     break;
   case MSG_ACCEPT_RESPONSE:
-    assert(sizeof(accept_response_msg) == msg->hdr.size);
+    assert(sizeof(accept_response_msg) == msg->size);
     interpreter_accept_response(tsk,(accept_response_msg*)msg->data);
     break;
   case MSG_CONNECT_RESPONSE:
-    assert(sizeof(connect_response_msg) == msg->hdr.size);
+    assert(sizeof(connect_response_msg) == msg->size);
     interpreter_connect_response(tsk,(connect_response_msg*)msg->data);
     break;
   case MSG_READ_RESPONSE:
-    assert(sizeof(read_response_msg) <= msg->hdr.size);
+    assert(sizeof(read_response_msg) <= msg->size);
     interpreter_read_response(tsk,(read_response_msg*)msg->data);
     break;
   case MSG_WRITE_RESPONSE:
-    assert(sizeof(write_response_msg) == msg->hdr.size);
+    assert(sizeof(write_response_msg) == msg->size);
     interpreter_write_response(tsk,(write_response_msg*)msg->data);
     break;
   case MSG_FINWRITE_RESPONSE:
-    assert(sizeof(finwrite_response_msg) == msg->hdr.size);
+    assert(sizeof(finwrite_response_msg) == msg->size);
     interpreter_finwrite_response(tsk,(finwrite_response_msg*)msg->data);
     break;
   case MSG_CONNECTION_CLOSED:
-    assert(sizeof(connection_event_msg) == msg->hdr.size);
+    assert(sizeof(connection_event_msg) == msg->size);
     interpreter_connection_event(tsk,(connection_event_msg*)msg->data);
     break;
   case MSG_JCMD_RESPONSE:
-    assert(sizeof(jcmd_response_msg) <= msg->hdr.size);
-    interpreter_jcmd_response(tsk,(jcmd_response_msg*)msg->data,msg->hdr.source);
+    assert(sizeof(jcmd_response_msg) <= msg->size);
+    interpreter_jcmd_response(tsk,(jcmd_response_msg*)msg->data,msg->source);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");
@@ -1000,13 +1000,13 @@ static void handle_message(task *tsk, message *msg)
     break;
   case MSG_ENDPOINT_EXIT: {
     endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
-    assert(sizeof(endpoint_exit_msg) == msg->hdr.size);
+    assert(sizeof(endpoint_exit_msg) == msg->size);
     node_log(tsk->n,LOG_INFO,"task: received ENDPOINT_EXIT for "EPID_FORMAT,EPID_ARGS(m->epid));
     tsk->done = 1;
     break;
   }
   default:
-    fatal("interpreter: unexpected message %d",msg->hdr.tag);
+    fatal("interpreter: unexpected message %d",msg->tag);
     break;
   }
   message_free(msg);
@@ -1672,12 +1672,12 @@ static void idmap_setup(node *n, endpoint *endpt, task *tsk)
 {
   while (1) {
     message *msg = endpoint_receive(tsk->endpt,-1);
-    if (MSG_INITTASK == msg->hdr.tag) {
+    if (MSG_INITTASK == msg->tag) {
       inittask_msg *initmsg = (inittask_msg*)msg->data;
       int i;
       int resp = 0;
-      assert(sizeof(inittask_msg) <= msg->hdr.size);
-      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->hdr.size);
+      assert(sizeof(inittask_msg) <= msg->size);
+      assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->size);
 
       node_log(n,LOG_INFO,"INITTASK: localid = %d, count = %d",initmsg->localid,initmsg->count);
 
@@ -1693,11 +1693,11 @@ static void idmap_setup(node *n, endpoint *endpt, task *tsk)
       for (i = 0; i < tsk->groupsize; i++)
         node_log(n,LOG_INFO,"INITTASK: idmap[%d] = "EPID_FORMAT,i,EPID_ARGS(initmsg->idmap[i]));
 
-      endpoint_send(endpt,msg->hdr.source,MSG_INITTASKRESP,&resp,sizeof(int));
+      endpoint_send(endpt,msg->source,MSG_INITTASKRESP,&resp,sizeof(int));
     }
-    else if (MSG_STARTTASK == msg->hdr.tag) {
+    else if (MSG_STARTTASK == msg->tag) {
       int resp = 0;
-      endpoint_send(endpt,msg->hdr.source,MSG_STARTTASKRESP,&resp,sizeof(int));
+      endpoint_send(endpt,msg->source,MSG_STARTTASKRESP,&resp,sizeof(int));
       break;
     }
     else {
