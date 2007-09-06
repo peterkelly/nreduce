@@ -1,0 +1,321 @@
+foldr f base lst =
+(if lst
+  (f (head lst) (foldr f base (tail lst)))
+  base)
+
+apmap f lst = (foldr append nil (map f lst))
+
+force lst =
+(if lst
+  (seq (head lst) (cons (head lst) (force (tail lst))))
+  nil)
+
+hash str !val =
+(if str
+  (hash (tail str) (+ (head str) val))
+  (% val 256))
+
+mkhit word count docid = (cons word (cons count docid))
+
+hit_word hit = (head hit)
+hit_count hit = (head (tail hit))
+hit_docid hit = (tail (tail hit))
+
+mkposting hash docid word = (cons hash (cons docid (cons word nil)))
+
+posting_hash posting = (item 0 posting)
+posting_docid posting = (item 1 posting)
+posting_word posting = (item 2 posting)
+
+tokenize1 str start !count =
+(if str
+  (letrec
+    c = (head str)
+   in
+    (if (if (if (>= c 'a') (<= c 'z') nil)
+            1
+        (if (if (>= c 'A') (<= c 'Z') nil)
+            1
+            nil))
+      (tokenize1 (tail str) start (+ count 1))
+    (if (< count 2)
+      (tokenize (tail str))
+    (cons (prefix count start) (tokenize (tail str))))))
+  nil)
+
+tokenize str = (tokenize1 str str 0)
+
+getpostings path fileid =
+(letrec
+  filename = (head fileid)
+  id = (tail fileid)
+in
+//(seq (echo (append "Indexing " (append filename "\n")))
+(letrec
+  content = (readb (append path filename))
+  tokens = (tokenize content)
+ in
+//  (seq (echo (append "  tokens: " (append (numtostring (len tokens)) "\n")))
+  (map (!token.mkposting (hash token 0) id token) tokens)))
+
+filtereq n lst =
+(if lst
+  (letrec x = (head lst) in
+  (if (== (head x) n)
+    (cons x (filtereq n (tail lst)))
+    (filtereq n (tail lst))))
+  nil)
+
+wordsort lst = (mergesort (!it.!pivot.(strcmp (item 2 it) (item 2 pivot))) lst)
+
+wrap lst =
+(if lst
+  (cons
+    (cons (head lst) nil)
+    (wrap (tail lst)))
+  nil)
+
+mergesort cmp lst =
+(mergesort2 cmp (wrap lst))
+
+mergesort2 cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (mergesort2 cmp (merge_pairs cmp pairs))
+    (head pairs))
+  nil)
+
+merge_pairs cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (letrec
+      !xs = (head pairs)
+      !ys = (head (tail pairs))
+      !xss = (tail (tail pairs))
+     in
+      (cons (merge cmp xs ys) (merge_pairs cmp xss)))
+    pairs)
+  nil)
+
+merge cmp xlst ylst =
+(if xlst
+  (if ylst
+    (letrec
+      !x = (head xlst)
+      !y = (head ylst)
+     in
+      (if (> (cmp x y) 0)
+        (cons y (merge cmp xlst (tail ylst)))
+        (cons x (merge cmp (tail xlst) ylst))
+        ))
+    xlst)
+  ylst)
+
+hitcol1 docid entries prevword !count =
+(if entries
+  (letrec
+    curword = (item 2 (head entries))
+    curdocid = (item 1 (head entries))
+   in
+    (if (streq curword prevword)
+        (hitcol1 docid (tail entries) curword (+ count 1))
+        (cons (mkhit prevword count docid) (hitcol1 docid (tail entries) curword 1))))
+  (cons (mkhit prevword count docid) nil))
+
+hitcol postings =
+(if postings
+  (letrec
+    posting = (head postings)
+    word = (item 2 posting)
+    docid = (item 1 posting)
+   in
+    (hitcol1 docid postings word 1))
+  nil)
+
+gethits postings = (hitcol postings)
+
+split n lst lt ge =
+(if lst
+  (letrec x = (head lst) in
+  (if (< (head x) n)
+    (split n (tail lst) (cons x lt) ge)
+    (split n (tail lst) lt (cons x ge))))
+  (cons lt ge))
+
+mkhashtable1 tokens lo hi =
+(if (== lo hi)
+  (cons (gethits (wordsort tokens)) nil)
+(if (== (- hi lo) 1)
+  (letrec
+     pair = (split hi tokens nil nil)
+     lt = (head pair)
+     ge = (tail pair)
+    in
+     (append (mkhashtable1 lt lo lo)
+             (mkhashtable1 ge hi hi)))
+  (letrec
+    mid = (floor (/ (+ lo hi) 2))
+    pair = (split mid tokens nil nil)
+    lt = (head pair)
+    ge = (tail pair)
+   in
+    (append (mkhashtable1 lt lo (- mid 1))
+            (mkhashtable1 ge mid hi)))))
+
+mkhashtable tokens = (mkhashtable1 tokens 0 255)
+
+isfile props = (streq (item 1 props) "file")
+
+idfiles lst !id =
+(if lst
+  (cons (cons (head lst) id)
+        (idfiles (tail lst) (+ id 1)))
+  nil)
+
+collate1 hits curword matched =
+(if hits
+  (letrec
+     hit = (head hits)
+     word = (hit_word hit)
+   in
+     (if (streq word curword)
+         (collate1 (tail hits) curword (cons hit matched))
+         (cons (cons curword matched) (collate1 (tail hits) word (cons hit nil)))))
+  (cons (cons curword matched) nil))
+
+//collate hits = (collate1 hits nil nil)
+
+collate hits =
+(if hits
+  (letrec
+     hit = (head hits)
+     word = (hit_word hit)
+   in
+    (collate1 (tail hits) word (cons hit nil)))
+  nil) 
+
+mergehash hashtables n =
+(if (>= n 256)
+  nil
+  (cons (foldr append nil (map head hashtables))
+        (mergehash (map tail hashtables) (+ n 1))))
+
+showind ind =
+(append "Index: " (append (numtostring (len (map (!x.seq x x) ind))) "\n"))
+
+showhits hits =
+(if hits
+  (letrec
+     hit = (head hits)
+     word = (hit_word hit)
+     count = (hit_count hit)
+     docid = (hit_docid hit)
+    in
+     (append word (append " x "
+     (append (numtostring count) (append " in "
+     (append (numtostring docid) (append "\n"
+     (showhits (tail hits)))))))))
+  nil)
+
+showhashtable1 ht !n =
+(if ht
+  (letrec
+    bin = (head ht)
+   in
+    (append "hash " (append (numtostring n) (append ":\n"
+    (append (showhits bin) (showhashtable1 (tail ht) (+ n 1)))))))
+  nil)
+
+showhashtable ht = (showhashtable1 ht 0)
+
+showhits2 hits =
+(if hits
+  (letrec
+     hit = (head hits)
+     word = (hit_word hit)
+     count = (hit_count hit)
+     docid = (hit_docid hit)
+    in
+     (append " "
+     (append (numtostring docid) (append "("
+     (append (numtostring count) (append ")"
+     (showhits2 (tail hits))))))))
+  nil)
+
+showcollated wordlist =
+(if wordlist
+  (letrec
+    w = (head wordlist)
+    word = (head w)
+    hits = (tail w)
+  in
+    (append word (append (showhits2 hits) (append "\n"
+    (showcollated (tail wordlist))))))
+  nil)
+
+showfileids lst =
+(apmap (!fileid.
+  (letrec
+    filename = (head fileid)
+    id = (tail fileid)
+   in
+    (append filename (append " - " (append (numtostring id) "\n")))))
+  lst)
+
+showposting posting =
+(letrec
+  hash = (posting_hash posting)
+  docid = (posting_docid posting)
+  word = (posting_word posting)
+ in
+  (append (numtostring hash) (append " - "
+  (append (numtostring docid) (append " - "
+  (append word "\n"))))))
+
+showdocpostings postings = (apmap showposting postings)
+
+showallpostings lst = (apmap showdocpostings lst)
+
+hitwordsort2 pivot lst before after =
+(if lst
+  (letrec
+    !it = (head lst)
+    !rest = (tail lst)
+   in
+    (if (< (strcmp (item 0 it) (item 0 pivot)) 0)
+      (hitwordsort2 pivot rest (cons it before) after)
+      (hitwordsort2 pivot rest before (cons it after))))
+  (append (hitwordsort before) (cons pivot (hitwordsort after))))
+
+hitwordsort lst =
+(if lst
+  (letrec
+    !pivot = (head lst)
+   in
+    (hitwordsort2 pivot (tail lst) nil nil))
+  nil)
+
+indexpath path =
+(letrec
+  filenames = (mergesort strcmp (map (!file.item 0 file) (filter isfile (readdir path))))
+  fileids = (idfiles filenames 0)
+  postings = (map (!fid.getpostings path fid) fileids)
+  hashtables = (map mkhashtable postings)
+  merged = (mergehash hashtables 0)
+  sorted = (map hitwordsort merged)
+  collated = (map collate sorted)
+ in
+  (append (showfileids fileids)
+  (apmap showcollated collated)))
+
+//  (showhashtable sorted))
+//  (showhashtable merged))
+//  (apmap showhashtable hashtables))
+//  (showhashtable (head hashtables)))
+//  (showallpostings postings))
+//  (showfileids fileids))
+
+main args =
+(if (== (len args) 0)
+  "Please specify directory to index (including /)\n"
+  (indexpath (item 0 args)))

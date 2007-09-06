@@ -129,9 +129,13 @@ struct gaddr;
 
 #define NUM_BUILTINS     59
 
+#ifdef NDEBUG
+#define checkcell(_c) (_c)
+#else
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \
                         (_c); })
+#endif
 
 //#define celltype(_c) ((_c)->type)
 #define celltype(_c) (checkcell(_c)->type)
