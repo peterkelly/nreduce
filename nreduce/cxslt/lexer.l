@@ -61,25 +61,25 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 \}                       { string_buf_ptr = string_buf; BEGIN(avt); }
 <avt>\{                  { BEGIN(INITIAL);
                            *string_buf_ptr = '\0';
-                           yylval.string = strdup(string_buf);
+                           xlval.string = strdup(string_buf);
                            return AVT_LITERAL; }
 <avt>"{{"                { *string_buf_ptr++ = '{'; }
 <avt>"}}"                { *string_buf_ptr++ = '}'; }
-<avt>.                   { *string_buf_ptr++ = yytext[0]; }
+<avt>.                   { *string_buf_ptr++ = xtext[0]; }
 
 \"                       { string_buf_ptr = string_buf; BEGIN(string1); }
 <string1>\"              { /* saw closing quote - all done */
                            BEGIN(INITIAL);
                            *string_buf_ptr = '\0';
-                           yylval.string = strdup(string_buf);
+                           xlval.string = strdup(string_buf);
                            return STRING_LITERAL; }
 <string1>\\n             { *string_buf_ptr++ = '\n'; }
 <string1>\\t             { *string_buf_ptr++ = '\t'; }
 <string1>\\r             { *string_buf_ptr++ = '\r'; }
 <string1>\\b             { *string_buf_ptr++ = '\b'; }
 <string1>\\f             { *string_buf_ptr++ = '\f'; }
-<string1>\\(.|\n)        { *string_buf_ptr++ = yytext[1]; }
-<string1>[^\\\n\"]+      { char *yptr = yytext;
+<string1>\\(.|\n)        { *string_buf_ptr++ = xtext[1]; }
+<string1>[^\\\n\"]+      { char *yptr = xtext;
                            while ( *yptr )
                              *string_buf_ptr++ = *yptr++; }
 
@@ -87,15 +87,15 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 <string2>\'              { /* saw closing quote - all done */
                            BEGIN(INITIAL);
                            *string_buf_ptr = '\0';
-                           yylval.string = strdup(string_buf);
+                           xlval.string = strdup(string_buf);
                            return STRING_LITERAL; }
 <string2>\\n             { *string_buf_ptr++ = '\n'; }
 <string2>\\t             { *string_buf_ptr++ = '\t'; }
 <string2>\\r             { *string_buf_ptr++ = '\r'; }
 <string2>\\b             { *string_buf_ptr++ = '\b'; }
 <string2>\\f             { *string_buf_ptr++ = '\f'; }
-<string2>\\(.|\n)        { *string_buf_ptr++ = yytext[1]; }
-<string2>[^\\\n\']+      { char *yptr = yytext;
+<string2>\\(.|\n)        { *string_buf_ptr++ = xtext[1]; }
+<string2>[^\\\n\']+      { char *yptr = xtext;
                            while ( *yptr )
                              *string_buf_ptr++ = *yptr++; }
 
@@ -188,15 +188,15 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 "key"                    { return KEY; }
 "void"                   { return VOID; }
 
-{INTEGER}                { yylval.inumber = atoi(yytext); return INTEGER_LITERAL; }
-{DECIMAL}                { yylval.number = atof(yytext); return DECIMAL_LITERAL; }
-{DOUBLE}                 { yylval.number = atof(yytext); return DOUBLE_LITERAL; }
-{NCNAME}                 { yylval.string = strdup(yytext); return NCNAME; }
+{INTEGER}                { xlval.inumber = atoi(xtext); return INTEGER_LITERAL; }
+{DECIMAL}                { xlval.number = atof(xtext); return DECIMAL_LITERAL; }
+{DOUBLE}                 { xlval.number = atof(xtext); return DOUBLE_LITERAL; }
+{NCNAME}                 { xlval.string = strdup(xtext); return NCNAME; }
 
 " "
 "\t"
 "\n"                     { lex_lineno++; }
-.                        { fprintf(stderr,"Unrecognised string: \"%s\"\n",yytext);
+.                        { fprintf(stderr,"Unrecognised string: \"%s\"\n",xtext);
                            return -1;
                            if (0) /* hide warning about yyunput not being used */ 
                              yyunput(0,0); }

@@ -33,7 +33,7 @@ elcgen *gen2;
 /* FIXME: escape strings when printing (note that xmlChar complicates things) */
 /* FIXME: can't use reserved words like eq, text, item for element names in path
    expressions. Need to fix the tokenizer/parser */
-/* FIXME: use an autoconf script to set YYLEX_DESTROY where appropriate - currently
+/* FIXME: use an autoconf script to set XLEX_DESTROY where appropriate - currently
    it does not get set at all */
 /* FIXME: apparently we're supposed to free the strings returned form xmlGetProp() */
 
@@ -41,23 +41,23 @@ int parse_firstline = 0;
 expression *parse_expr = NULL;
 xmlNodePtr parse_node = NULL;
 
-typedef struct yy_buffer_state *YY_BUFFER_STATE;
-YY_BUFFER_STATE yy_scan_string(const char *str);
-void yy_switch_to_buffer(YY_BUFFER_STATE new_buffer);
-void yy_delete_buffer(YY_BUFFER_STATE buffer);
-#if HAVE_YYLEX_DESTROY
-int yylex_destroy(void);
+typedef struct x_buffer_state *X_BUFFER_STATE;
+X_BUFFER_STATE x_scan_string(const char *str);
+void x_switch_to_buffer(X_BUFFER_STATE new_buffer);
+void x_delete_buffer(X_BUFFER_STATE buffer);
+#if HAVE_XLEX_DESTROY
+int xlex_destroy(void);
 #endif
 
-extern FILE *yyin;
+extern FILE *xin;
 extern int lex_lineno;
-int yyparse();
+int xparse();
 
 void compile_sequence(xmlNodePtr first);
 void compile_expression(expression *expr);
 
-static int option_indent = 0;
-static int option_strip = 0;
+static int option_indent = 0; /* FIXME: make this non-global */
+static int option_strip = 0; /* FIXME: make this non-global */
 static xmlDocPtr parse_doc = NULL; /* FIXME: make this non-global */
 static char *parse_filename = NULL; /* FIXME: make this non-global */
 
@@ -226,7 +226,7 @@ char *nsname_to_ident(const char *nsuri, const char *localname)
   }
 }
 
-char *escape(const char *str2)
+char *escape1(const char *str2)
 {
   // FIXME: probably not safe with char
   const char *str = (const char*)str2;
@@ -445,7 +445,7 @@ void compile_expression(expression *expr)
     printf("(cons (xml::mknumber %f) nil)",expr->num);
     break;
   case XPATH_STRING_LITERAL: {
-    char *esc = escape(expr->str);
+    char *esc = escape1(expr->str);
     printf("(cons (xml::mkstring \"%s\") nil)",esc);
     free(esc);
     break;
@@ -558,8 +558,8 @@ void compile_expression(expression *expr)
       }
     }
     else {
-      char *nsuri = expr->qn.uri ? escape(expr->qn.uri) : NULL;
-      char *localname = expr->qn.localpart ? escape(expr->qn.localpart) : NULL;
+      char *nsuri = expr->qn.uri ? escape1(expr->qn.uri) : NULL;
+      char *localname = expr->qn.localpart ? escape1(expr->qn.localpart) : NULL;
       char *type = (AXIS_ATTRIBUTE == expr->axis) ? "xml::TYPE_ATTRIBUTE" : "xml::TYPE_ELEMENT";
 
       if (nsuri && localname)
@@ -690,7 +690,7 @@ void compile_expression(expression *expr)
 
 expression *parse_string(xmlNodePtr n, const char *str)
 {
-  YY_BUFFER_STATE bufstate;
+  X_BUFFER_STATE bufstate;
   int r;
   expression *expr;
   parse_node = n;
@@ -698,14 +698,14 @@ expression *parse_string(xmlNodePtr n, const char *str)
   parse_expr = NULL;
   lex_lineno = 0;
 
-  bufstate = yy_scan_string(str);
-  yy_switch_to_buffer(bufstate);
+  bufstate = x_scan_string(str);
+  x_switch_to_buffer(bufstate);
 
-  r = yyparse();
+  r = xparse();
 
-  yy_delete_buffer(bufstate);
-#if HAVE_YYLEX_DESTROY
-  yylex_destroy();
+  x_delete_buffer(bufstate);
+#if HAVE_XLEX_DESTROY
+  xlex_destroy();
 #endif
 
   if (0 != r) {
@@ -730,7 +730,7 @@ void compile_expr_string(xmlNodePtr n, const char *str)
 void compile_avt_component(expression *expr)
 {
   if (XPATH_STRING_LITERAL == expr->type) {
-    char *esc = escape(expr->str);
+    char *esc = escape1(expr->str);
     printf("\"%s\"",esc);
     free(esc);
   }
@@ -808,6 +808,8 @@ void compile_namespaces(xmlNodePtr n)
     printf(")");
 }
 
+/* FIXME: add a parameter saying where it will be used (e.g. complex content,
+   simple content, boolean value) */
 void compile_instruction(xmlNodePtr n)
 {
   switch (n->type) {
@@ -834,7 +836,7 @@ void compile_instruction(xmlNodePtr n)
       }
       else if (!xmlStrcmp(n->name,"text")) {
         char *str = xmlNodeListGetString(parse_doc,n->children,1);
-        char *esc = escape(str);
+        char *esc = escape1(str);
         printf("(cons (xml::mktext \"%s\") nil)",esc);
         free(esc);
         free(str);
@@ -906,6 +908,7 @@ void compile_instruction(xmlNodePtr n)
       }
       else if (!xmlStrcmp(n->name,"element")) {
         /* FIXME: complete this, and handle namespaces properly */
+        /* FIXME: avoid reparenting - set the parents correctly in the first place */
         char *name = get_required_attr(n,"name");
 
         printf("\n// element %s\n",name);
@@ -956,6 +959,7 @@ void compile_instruction(xmlNodePtr n)
       }
     }
     else {
+      /* FIXME: avoid reparenting - set the parents correctly in the first place */
       printf("(letrec\n");
 
       printf("attrs = (append ");
@@ -984,7 +988,7 @@ void compile_instruction(xmlNodePtr n)
     break;
   }
   case XML_TEXT_NODE: {
-    char *esc = escape((const char*)n->content);
+    char *esc = escape1((const char*)n->content);
     printf("(cons (xml::mktext \"%s\") nil)",esc);
     free(esc);
     break;
@@ -1160,26 +1164,12 @@ void process_root(xmlNodePtr n)
   }
 }
 
-
-
-int main(int argc, char **argv)
+int cxslt(char *sourcefile, char *xsltfile)
 {
-  char *sourcefile;
-  char *xsltfile;
   xmlDocPtr doc;
   xmlNodePtr root;
 
   gen2 = (elcgen*)calloc(1,sizeof(elcgen));
-
-  setbuf(stdout,NULL);
-
-  if (3 > argc) {
-    fprintf(stderr,"Usage: cxslt <sourcefile> <xsltfile>\n");
-    exit(1);
-  }
-
-  sourcefile = argv[1];
-  xsltfile = argv[2];
 
   if (NULL == (doc = xmlReadFile(xsltfile,NULL,0))) {
     fprintf(stderr,"Error parsing %s\n",xsltfile);

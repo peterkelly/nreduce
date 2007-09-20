@@ -14,10 +14,12 @@ import util
 
 get url = (http::parse_url url (get2 url))
 
-get2 url scheme host port path =
+get2 url scheme host portstr path =
 (letrec
-  request = (appendn 5 "GET " path " HTTP/1.1\r\nHost: " host "\r\nConnection: close\r\n\r\n")
-  stream = (connect host (stringtonum port) request)
+  port = (stringtonum portstr)
+  hostport = (if (== port 80) host (append host (append ":" (numtostring port))))
+  request = (appendn 5 "GET " path " HTTP/1.1\r\nHost: " hostport "\r\nConnection: close\r\n\r\n")
+  stream = (connect host port request)
  in
   (http::parse_response stream (get3 url)))
 

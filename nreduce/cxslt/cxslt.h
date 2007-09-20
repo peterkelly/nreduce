@@ -2,6 +2,7 @@
 #define _CXSLT_H
 
 #include <libxml/tree.h>
+#include "network/util.h"
 
 #define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
 #define WSDL_NAMESPACE "http://schemas.xmlsoap.org/wsdl/"
@@ -13,32 +14,6 @@
 #define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
 #define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
 #define xmlNodeListGetString(doc,list,inLine) (char*)xmlNodeListGetString(doc,list,inLine)
-
-/* util */
-
-typedef struct list list;
-struct list {
-  void *data;
-  list *next;
-};
-
-typedef void (*list_d_t)(void *a);
-typedef void* (*list_copy_t)(void *a);
-
-list *list_new(void *data, list *next);
-list *list_copy(list *orig, list_copy_t copy);
-void list_append(list **l, void *data);
-void list_push(list **l, void *data);
-void *list_pop(list **l);
-int list_count(list *l);
-void *list_item(list *l, int item);
-void list_free(list *l, list_d_t d);
-
-int list_contains_string(list *l, const char *str);
-int list_contains_ptr(list *l, const void *data);
-void list_remove_ptr(list **l, void *ptr);
-
-void fatal(const char *format, ...);
 
 /* cxslt */
 
@@ -205,5 +180,9 @@ char *wsdl_get_url(wsdlfile *wf);
 void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
                                  qname *inqn, qname *outqn,
                                  list **inargs, list **outargs);
+
+/* cxslt */
+
+int cxslt(char *sourcefile, char *xsltfile);
 
 #endif

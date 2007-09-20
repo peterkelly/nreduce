@@ -1,0 +1,3 @@
+#!/bin/bash
+./compile $@ > out.elc || exit 1
+../src/nreduce out.elc

@@ -573,11 +573,13 @@ in
 //==================================================================================================
 
 parse tokens =
-(letrec
-  children = (parse1 tokens nil doc doc nil 0)
-  doc = (mkdoc children)
- in
-  (cons doc nil))
+(if tokens
+  (letrec
+    children = (parse1 tokens nil doc doc nil 0)
+    doc = (mkdoc children)
+   in
+    (cons doc nil))
+  (error "parse: no tokens"))
 
 parse1 tokens namespaces root parent prev !depth =
 (if (not tokens)
@@ -713,10 +715,10 @@ parse_attrs tokens namespaces root parent prev =
         rest2 = (tail rest)
         qname = (tail cur)
         nsprefix = (getnsprefix qname)
-        nsuri = (ns_lookup nsprefix namespaces)
+        nsuri = (if nsprefix (ns_lookup nsprefix namespaces) nil)
         localname = (getlocalname qname)
-	attr = (mkattr root parent prev next nsuri nsprefix localname value)
-	next = (parse_attrs rest2 namespaces root parent attr)
+        attr = (mkattr root parent prev next nsuri nsprefix localname value)
+        next = (parse_attrs rest2 namespaces root parent attr)
        in
         // Check if it's a namespace attribute; if so, skip this one
         (if (streq nsprefix "xmlns")
@@ -961,4 +963,6 @@ printxml indent root =
   raw = (cons root nil)
   nodes = (if indent (add_whitespace raw) raw)
  in
-  (append XML_DECL (print_nodes nodes nil)))
+  (if nodes
+    (append XML_DECL (print_nodes nodes nil))
+    XML_DECL))
