@@ -1,0 +1,2 @@
+#!/bin/bash
+java client.Client http://localhost:8080/test2?WSDL
