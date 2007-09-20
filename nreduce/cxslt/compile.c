@@ -30,6 +30,10 @@
 
 int main(int argc, char **argv)
 {
+  char *elc;
+  array *xslt;
+  char zero = '\0';
+
   setbuf(stdout,NULL);
 
   if (3 > argc) {
@@ -37,5 +41,12 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  return cxslt(argv[1],argv[2]);
+  xslt = read_file(argv[2]);
+  array_append(xslt,&zero,1);
+
+  elc = cxslt(argv[1],xslt->data,argv[2]);
+  printf("%s",elc);
+  free(elc);
+
+  return 0;
 }

@@ -797,3 +797,26 @@ int determine_ip(in_addr_t *out)
   *out = addr;
   return 0;
 }
+
+array *read_file(const char *filename)
+{
+  FILE *f;
+  int r;
+  array *buf;
+  if (NULL == (f = fopen(filename,"r"))) {
+    perror(filename);
+    return NULL;
+  }
+
+  buf = array_new(1,0);
+  while (1) {
+    array_mkroom(buf,1024);
+    r = fread(&buf->data[buf->nbytes],1,1024,f);
+    if (0 >= r)
+      break;
+    buf->nbytes += r;
+  }
+
+  fclose(f);
+  return buf;
+}

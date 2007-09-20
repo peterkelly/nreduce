@@ -537,29 +537,6 @@ void task_free(task *tsk)
   free(tsk);
 }
 
-static array *read_file(const char *filename)
-{
-  FILE *f;
-  int r;
-  array *buf;
-  if (NULL == (f = fopen(filename,"r"))) {
-    perror(filename);
-    return NULL;
-  }
-
-  buf = array_new(1,0);
-  while (1) {
-    array_mkroom(buf,1024);
-    r = fread(&buf->data[buf->nbytes],1,1024,f);
-    if (0 >= r)
-      break;
-    buf->nbytes += r;
-  }
-
-  fclose(f);
-  return buf;
-}
-
 static array *get_lines(const char *data, int len)
 {
   int pos;

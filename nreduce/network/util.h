@@ -157,4 +157,6 @@ char *lookup_hostname(in_addr_t addr);
 int lookup_address(const char *host, in_addr_t *out, int *h_errout);
 int determine_ip(in_addr_t *out);
 
+array *read_file(const char *filename);
+
 #endif

@@ -167,6 +167,11 @@ typedef struct {
 typedef struct {
   list *wsdlfiles;
   xmlNodePtr toplevel;
+  array *buf;
+  int option_indent;
+  int option_strip;
+  xmlDocPtr parse_doc;
+  const char *parse_filename;
 } elcgen;
 
 qname string_to_qname(const char *str, xmlNodePtr n);
@@ -183,6 +188,6 @@ void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
 
 /* cxslt */
 
-int cxslt(char *sourcefile, char *xsltfile);
+char *cxslt(const char *sourcefile, const char *xslt, const char *xslturl);
 
 #endif
