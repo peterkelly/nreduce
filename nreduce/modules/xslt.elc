@@ -797,7 +797,8 @@ post3 url content version status reason headers body =
 
 
 
-reparent lst parent prev =
+
+copytree cfun lst parent prev =
 (if lst
   (letrec
     cur = (head lst)
@@ -817,34 +818,37 @@ reparent lst parent prev =
           (xml::item_localname cur)
           (xml::item_attributes cur)
           (xml::item_namespaces cur)
-          (reparent (xml::item_children cur) elem nil))
+          (copytree cfun (cfun (xml::item_children cur)) elem nil))
         next =
-        (reparent rest parent elem)
+        (copytree cfun rest parent elem)
        in
         (cons elem next))
       (if (== type xml::TYPE_TEXT)
         (letrec
           content = (xml::item_value cur)
           text = (xml::mktext2 content parent prev next)
-          next = (reparent rest parent text)
+          next = (copytree cfun rest parent text)
          in
           (cons text next))
         (if (== type xml::TYPE_COMMENT)
           (letrec
             content = (xml::item_value cur)
             comment = (xml::mkcomment2 content parent prev next)
-            next = (reparent rest parent comment)
+            next = (copytree cfun rest parent comment)
            in
             (cons comment next))
           (if (== type xml::TYPE_DOCUMENT)
             (letrec
-              doc = (xml::mkdoc (reparent (xml::item_children cur) doc nil))
+              doc = (xml::mkdoc (copytree cfun (cfun (xml::item_children cur)) doc nil))
              in
               (cons doc nil))
-            (cons cur (reparent rest parent cur)))))))
+            (cons cur (copytree cfun rest parent cur)))))))
   nil)
 
+copydoc cfun doc = (xml::mkdoc (xslt::copytree cfun (xml::item_children doc) nil nil))
 
+reparent lst parent prev =
+(copytree (!x.x) lst parent prev)
 
 /* FIXME: need to remove duplicate nodes in the result sequence */
 path_result lst =

@@ -1,0 +1,166 @@
+import xml
+import xslt
+import http
+
+WSDL_NS = "http://schemas.xmlsoap.org/wsdl/"
+XSD_NS = "http://www.w3.org/2001/XMLSchema"
+
+/* Generic routines */
+
+apmap f lst =
+(if lst
+  (append (f (head lst))
+    (apmap f (tail lst)))
+  nil)
+
+qsort2 cmp pivot lst before after =
+(if lst
+  (letrec
+    item = (head lst)
+    rest = (tail lst)
+   in
+    (if (< (cmp item pivot) 0)
+      (qsort2 cmp pivot rest (cons item before) after)
+      (qsort2 cmp pivot rest before (cons item after))))
+  (append (qsort cmp before) (cons pivot (qsort cmp after))))
+
+qsort cmp lst =
+(if lst
+  (letrec
+    pivot = (head lst)
+   in
+    (qsort2 cmp pivot (tail lst) nil nil))
+  nil)
+
+unique1 lst =
+(if lst
+  (if (tail lst)
+    (if (streq (head lst) (head (tail lst)))
+      (unique1 (tail lst))
+      (cons (head lst) (unique1 (tail lst))))
+    (cons (head lst) nil))
+  nil)
+
+unique lst =
+(letrec
+  sorted = (qsort strcmp lst)
+ in
+  (unique1 sorted))
+
+lastindexof char str pos last =
+(if str
+  (if (== char (head str))
+    (lastindexof char (tail str) (+ pos 1) pos)
+    (lastindexof char (tail str) (+ pos 1) last))
+  last)
+
+urlbase url =
+(letrec
+  last = (lastindexof '/' url 0 nil)
+ in
+ (if last
+   (prefix (+ last 1) url)
+   url))
+
+ishttp url =
+(if (>= (len url) 7)
+  (streq (prefix 7 url) "http://")
+  nil)
+
+readurl url =
+(if (ishttp url)
+  (http::get url)
+  (readb url))
+
+/* Preprocessing */
+
+processlist base lst =
+(if lst
+  (letrec
+    node = (head lst)
+  in
+   (if (xml::is_element XSD_NS "import" node)
+     (letrec
+       relurl = (xml::getattr node "" "schemaLocation")
+       absurl = (if (ishttp relurl) relurl (append base relurl))
+       attrs = (cons (xml::mkattr nil nil nil nil "" "" "url" absurl) nil)
+       children = (xml::item_children (xml::parsexml 1 (readurl absurl)))
+      in
+       (append children (processlist base (tail lst))))
+     (cons node (processlist base (tail lst)))))
+  nil)
+
+ppwsdl url =
+(letrec
+  base = (urlbase url)
+  doc = (xml::parsexml 1 (readurl url))
+ in
+  (xslt::copydoc (processlist base) doc))
+
+printlist lst =
+(if lst
+  (append (head lst) (append "\n" (printlist (tail lst))))
+  nil)
+
+getwsns1 lst =
+(if lst
+  (letrec
+    nsuri = (xml::item_nsuri (head lst))
+   in
+    (if (if (>= (len nsuri) 5) (streq (prefix 5 nsuri) "wsdl-") nil)
+      (cons (skip 5 nsuri) (getwsns1 (tail lst)))
+      (getwsns1 (tail lst))))
+  nil)
+
+getwsns node =
+(getwsns1 (xml::item_namespaces node))
+
+wsrefs nodes =
+(if nodes
+  (letrec
+    node = (head nodes)
+    type = (xml::item_type node)
+  in
+   (if (== type xml::TYPE_ELEMENT)
+     (append (getwsns node)
+     (append (wsrefs (xml::item_children node))
+     (wsrefs (tail nodes))))
+   (if (== type xml::TYPE_DOCUMENT)
+     (wsrefs (xml::item_children node))
+     (wsrefs (tail nodes)))))
+  nil)
+
+getwsdl url =
+(letrec
+  attributes = (cons (xml::mkattr nil nil nil nil nil nil "source" url) nil)
+  children = (xml::item_children (ppwsdl url))
+in
+  (cons (xml::mkelem nil nil nil nil nil nil "wsdlfile" attributes nil children) nil))
+
+addextra extra nodes =
+(if nodes
+  (letrec
+    node = (head nodes)
+    type = (xml::item_type node)
+   in
+    (if (== type xml::TYPE_ELEMENT)
+        (cons
+          (xml::mkelem nil nil nil nil
+            (xml::item_nsuri node)
+            (xml::item_nsprefix node)
+            (xml::item_localname node)
+            (xml::item_attributes node)
+            (xml::item_namespaces node)
+            (append extra (xml::item_children node)))
+          (tail nodes))
+        (cons node (addextra extra (tail nodes)))))
+  nil)
+
+ppxslt url =
+(letrec
+  base = (urlbase url)
+  doc = (xml::parsexml 1 (readurl url))
+  webservices = (unique (wsrefs (xml::item_children doc)))
+  wsdlelems = (apmap getwsdl webservices)
+ in
+  (xml::mkdoc (addextra wsdlelems (xml::item_children doc))))

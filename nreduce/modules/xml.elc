@@ -822,6 +822,28 @@ ns_lookup nsprefix nslists =
   XMLNS_NS
   (ns_lookup2 nsprefix nslists))
 
+getattr2 lst nsuri localname =
+(if lst
+  (letrec
+    cur = (head lst)
+   in
+    (if (streq (xml::item_nsuri cur) nsuri)
+      (if (streq (xml::item_localname cur) localname)
+        (xml::item_value cur)
+        (getattr2 (tail lst) nsuri localname))
+      (getattr2 (tail lst) nsuri localname)))
+  nil)
+
+getattr elem nsuri localname =
+(getattr2 (xml::item_attributes elem) nsuri localname)
+
+is_element nsuri localname node =
+(if (== (xml::item_type node) xml::TYPE_ELEMENT)
+  (if (streq (xml::item_nsuri node) nsuri)
+    (streq (xml::item_localname node) localname)
+    nil)
+  nil)
+
 // FIXME: need to escape element/attribute names and values when printing
 
 apmap lst fun = (if lst (append (fun (head lst)) (apmap (tail lst) fun)) nil)
