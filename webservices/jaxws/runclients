@@ -10,10 +10,16 @@ fi
 
 
 echo ============================== HelloRPC =====================================
-java client.HelloRPCClient http://localhost:$PORT/hellorpc?WSDL
+java $JVMARGS client.HelloRPCClient http://localhost:$PORT/hellorpc?WSDL
 
 echo ============================== HelloDW =====================================
-java client.HelloDWClient http://localhost:$PORT/hellodw?WSDL
+java $JVMARGS client.HelloDWClient http://localhost:$PORT/hellodw?WSDL
+
+echo ============================== CalcRPC =====================================
+java $JVMARGS client.CalcRPCClient http://localhost:$PORT/calcrpc?WSDL
+
+echo ============================== CalcDW =====================================
+java $JVMARGS client.CalcDWClient http://localhost:$PORT/calcdw?WSDL
 
 echo ============================== PeopleRPC =====================================
 java $JVMARGS client.PeopleRPCClient http://localhost:$PORT/peoplerpc?WSDL

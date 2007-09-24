@@ -1,0 +1,42 @@
+
+==============
+Listen Port: 8081
+Target Host: 127.0.0.1
+Target Port: 8080
+==== Request ====
+POST /calcrpc HTTP/1.1
+SOAPAction: ""
+Content-Type: text/xml;charset="utf-8"
+Accept: text/xml, multipart/related, text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2
+User-Agent: JAX-WS RI 2.1.2-06/14/2007 05:26 PM(vivekp)-M1
+Host: 127.0.0.1:8081
+Content-Length: 215
+
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:add3 xmlns:ns2="http://calcrpc.service/">
+            <arg0>4</arg0>
+            <arg1>5</arg1>
+            <arg2>6</arg2>
+         </ns2:add3>
+      </S:Body>
+   </S:Envelope>==== Response ====
+HTTP/1.1 200 OK
+Date: Mon, 24 Sep 2007 07:16:59 GMT
+Content-type: text/xml;charset="utf-8"
+Transfer-encoding: chunked
+
+d0
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:add3Response xmlns:ns2="http://calcrpc.service/">
+            <return>15</return>
+         </ns2:add3Response>
+      </S:Body>
+   </S:Envelope>
+0
+
+
+==============

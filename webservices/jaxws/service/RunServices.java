@@ -1,10 +1,12 @@
 package service;
 
 import javax.xml.ws.Endpoint;
-import service.peoplerpc.PeopleRPC;
-import service.peopledw.PeopleDW;
 import service.hellorpc.HelloRPC;
 import service.hellodw.HelloDW;
+import service.calcrpc.CalcRPC;
+import service.calcdw.CalcDW;
+import service.peoplerpc.PeopleRPC;
+import service.peopledw.PeopleDW;
 
 public class RunServices
 {
@@ -18,6 +20,8 @@ public class RunServices
         String base = "http://localhost:"+port;
         Endpoint.publish(base+"/hellorpc",new HelloRPC());
         Endpoint.publish(base+"/hellodw",new HelloDW());
+        Endpoint.publish(base+"/calcrpc",new CalcRPC());
+        Endpoint.publish(base+"/calcdw",new CalcDW());
         Endpoint.publish(base+"/peoplerpc",new PeopleRPC());
         Endpoint.publish(base+"/peopledw",new PeopleDW());
     }
