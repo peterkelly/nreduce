@@ -322,7 +322,7 @@ static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list
   while (sequence && !is_element(sequence,XMLSCHEMA_NAMESPACE,"sequence"))
     sequence = sequence->next;
   if (NULL == sequence)
-    return gen_error(gen,"complex type does not contain a sequence");
+    return 1;
 
   for (arg = sequence->children; arg; arg = arg->next) {
     if (is_element(arg,XMLSCHEMA_NAMESPACE,"element") && xmlHasProp(arg,"name")) {

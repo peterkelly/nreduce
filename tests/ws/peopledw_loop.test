@@ -1,0 +1,44 @@
+=================================== PROGRAM ====================================
+xslt runtests.tmp/test.xsl
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		xmlns:people="wsdl-http://localhost:8080/peopledw?WSDL"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="people:getNames()/text()">
+        <person>
+          <xsl:sequence select="people:getPerson(.)/*"/>
+        </person>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <person>
+      <name>Fred</name>
+      <age>20</age>
+      <occupation>Plumber</occupation>
+   </person>
+   <person>
+      <name>Joe</name>
+      <age>33</age>
+      <occupation>Marketing executive</occupation>
+   </person>
+   <person>
+      <name>Bob</name>
+      <age>38</age>
+      <occupation>Builder</occupation>
+   </person>
+</result>
+================================== RETURN CODE =================================
+0

@@ -1,14 +1,10 @@
 =================================== PROGRAM ====================================
-gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
-===================================== FILE =====================================
-in.xml
-<?xml version="1.0"?>
-<empty/>
+xslt runtests.tmp/test.xsl
 ===================================== FILE =====================================
 test.xsl
 <?xml version="1.0" encoding="utf-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-		xmlns:test2="../webservices/test2/test2.wsdl"
+		xmlns:people="wsdl-http://localhost:8080/peopledw?WSDL"
 		version="2.0">
 
   <xsl:output method="xml" indent="yes"/>
@@ -16,11 +12,7 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:for-each select="test2:getNames()/self::*:getNamesReturn">
-	<person name="{.}">
-	  <xsl:sequence select="test2:getPerson(string(.))/node()"/>
-	</person>
-      </xsl:for-each>
+      <xsl:sequence select="people:getPerson('Fred')"/>
     </result>
   </xsl:template>
 
@@ -28,21 +20,11 @@ test.xsl
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
 <result>
-   <person name="Fred">
-      <age>20</age>
+   <return>
       <name>Fred</name>
+      <age>20</age>
       <occupation>Plumber</occupation>
-   </person>
-   <person name="Joe">
-      <age>33</age>
-      <name>Joe</name>
-      <occupation>Marketing executive</occupation>
-   </person>
-   <person name="Bob">
-      <age>38</age>
-      <name>Bob</name>
-      <occupation>Builder</occupation>
-   </person>
+   </return>
 </result>
 ================================== RETURN CODE =================================
 0

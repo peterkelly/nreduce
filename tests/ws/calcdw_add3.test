@@ -1,14 +1,10 @@
 =================================== PROGRAM ====================================
-gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
-===================================== FILE =====================================
-in.xml
-<?xml version="1.0"?>
-<empty/>
+xslt runtests.tmp/test.xsl
 ===================================== FILE =====================================
 test.xsl
 <?xml version="1.0" encoding="utf-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-		xmlns:test2="../webservices/test2/test2.wsdl"
+		xmlns:calc="wsdl-http://localhost:8080/calcdw?WSDL"
 		version="2.0">
 
   <xsl:output method="xml" indent="yes"/>
@@ -16,7 +12,7 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:sequence select="test2:getNames()"/>
+      <xsl:sequence select="calc:add3(4,5,6)"/>
     </result>
   </xsl:template>
 
@@ -24,9 +20,7 @@ test.xsl
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
 <result>
-   <getNamesReturn>Fred</getNamesReturn>
-   <getNamesReturn>Joe</getNamesReturn>
-   <getNamesReturn>Bob</getNamesReturn>
+   <return>15</return>
 </result>
 ================================== RETURN CODE =================================
 0
