@@ -1,0 +1,22 @@
+#!/bin/bash
+
+PORT=$1
+JVMARGS=-Dhttp.keepAlive=false
+
+if [ -z $PORT ]; then
+  echo "Usage: runclient <port>"
+  exit 1
+fi
+
+
+echo ============================== HelloRPC =====================================
+java client.HelloRPCClient http://localhost:$PORT/hellorpc?WSDL
+
+echo ============================== HelloDW =====================================
+java client.HelloDWClient http://localhost:$PORT/hellodw?WSDL
+
+echo ============================== PeopleRPC =====================================
+java $JVMARGS client.PeopleRPCClient http://localhost:$PORT/peoplerpc?WSDL
+
+echo ============================== PeopleDW =====================================
+java $JVMARGS client.PeopleDWClient http://localhost:$PORT/peopledw?WSDL

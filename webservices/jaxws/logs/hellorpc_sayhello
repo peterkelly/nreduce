@@ -1,0 +1,41 @@
+
+==============
+Listen Port: 8081
+Target Host: 127.0.0.1
+Target Port: 8080
+==== Request ====
+POST /hellorpc HTTP/1.1
+SOAPAction: ""
+Content-Type: text/xml;charset="utf-8"
+Accept: text/xml, multipart/related, text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2
+User-Agent: JAX-WS RI 2.1.2-06/14/2007 05:26 PM(vivekp)-M1
+Host: 127.0.0.1:8081
+Connection: keep-alive
+Content-Length: 200
+
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:sayHello xmlns:ns2="http://hellorpc.service/">
+            <arg0>Peter</arg0>
+         </ns2:sayHello>
+      </S:Body>
+   </S:Envelope>==== Response ====
+HTTP/1.1 200 OK
+Date: Mon, 24 Sep 2007 04:02:49 GMT
+Content-type: text/xml;charset="utf-8"
+Transfer-encoding: chunked
+
+e2
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:sayHelloResponse xmlns:ns2="http://hellorpc.service/">
+            <return>Hello Peter</return>
+         </ns2:sayHelloResponse>
+      </S:Body>
+   </S:Envelope>
+0
+
+
+==============

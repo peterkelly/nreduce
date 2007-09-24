@@ -1,0 +1,2 @@
+#!/bin/bash
+java service.RunServices 8080

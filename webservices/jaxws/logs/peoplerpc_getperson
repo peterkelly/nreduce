@@ -1,0 +1,44 @@
+
+==============
+Listen Port: 8081
+Target Host: 127.0.0.1
+Target Port: 8080
+==== Request ====
+POST /peoplerpc HTTP/1.1
+SOAPAction: ""
+Content-Type: text/xml;charset="utf-8"
+Accept: text/xml, multipart/related, text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2
+User-Agent: JAX-WS RI 2.1.2-06/14/2007 05:26 PM(vivekp)-M1
+Host: 127.0.0.1:8081
+Content-Length: 202
+
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:getPerson xmlns:ns2="http://peoplerpc.service/">
+            <arg0>Fred</arg0>
+         </ns2:getPerson>
+      </S:Body>
+   </S:Envelope>==== Response ====
+HTTP/1.1 200 OK
+Date: Mon, 24 Sep 2007 04:04:25 GMT
+Content-type: text/xml;charset="utf-8"
+Transfer-encoding: chunked
+
+118
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:getPersonResponse xmlns:ns2="http://peoplerpc.service/">
+            <return>
+               <name>Fred</name>
+               <age>20</age>
+               <occupation>Plumber</occupation>
+            </return>
+         </ns2:getPersonResponse>
+      </S:Body>
+   </S:Envelope>
+0
+
+
+==============
