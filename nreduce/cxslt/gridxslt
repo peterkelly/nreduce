@@ -1,3 +1,5 @@
 #!/bin/bash
-./compile $@ > out.elc || exit 1
-../src/nreduce out.elc
+XML=$1
+XSLT=$2
+./compile $XSLT > out.elc || exit 1
+../src/nreduce out.elc $XML

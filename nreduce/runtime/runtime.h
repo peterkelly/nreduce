@@ -127,7 +127,10 @@ struct gaddr;
 #define B_JCALL          57
 #define B_ISCONS         58
 
-#define NUM_BUILTINS     59
+#define B_CXSLT1         59
+#define B_CACHE          60
+
+#define NUM_BUILTINS     61
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)

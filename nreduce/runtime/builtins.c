@@ -33,6 +33,7 @@
 #include "runtime.h"
 #include "network/node.h"
 #include "messages.h"
+#include "cxslt/xslt.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1590,6 +1591,46 @@ static void b_iscons(task *tsk, pntr *argstack)
           (CELL_AREF == pntrtype(argstack[0])));
 }
 
+static void b_cxslt1(task *tsk, pntr *argstack)
+{
+  pntr sourcepntr = argstack[1];
+  pntr urlpntr = argstack[0];
+  char *source;
+  char *url;
+  char *compiled;
+
+  if (0 <= array_to_string(sourcepntr,&source)) {
+    set_error(tsk,"cxslt1: source is not a string");
+    return;
+  }
+
+  if (0 <= array_to_string(urlpntr,&url)) {
+    set_error(tsk,"cxslt1: url is not a string");
+    free(source);
+    return;
+  }
+
+/*   printf("------------- cxslt: url ------------------------\n"); */
+/*   printf("%s\n",url); */
+/*   printf("------------- cxslt: source ---------------------\n"); */
+/*   printf("%s\n",source); */
+/*   printf("-------------------------------------------------\n"); */
+
+  /* FIXME: need to handle compile errors. Currently the compiler does this by calling exit(),
+     which is really bad. Need to instead have it return an error code and messages, so that
+     we can call set_error() here. */
+  compiled = cxslt(source,url);
+  argstack[0] = string_to_array(tsk,compiled);
+
+  free(source);
+  free(url);
+}
+
+static void b_cache1(task *tsk, pntr *argstack)
+{
+  assert(!"not yet implemented");
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1681,6 +1722,9 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "_jnew",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_jnew           },
 { "_jcall",         3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_jcall          },
 { "iscons",         1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_iscons         },
+
+{ "cxslt1",         2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_cxslt1         },
+{ "cache1",         2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_cache1         },
 
 };
 

@@ -1,0 +1,11 @@
+import preprocess
+
+main args =
+(if (== 0 (len args))
+  "Please specify url\n"
+(letrec
+  url = (head args)
+  doc = (preprocess::ppxslt url)
+  source = (xml::printxml 1 doc)
+ in
+  (cxslt source url)))

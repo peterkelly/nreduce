@@ -20,33 +20,9 @@
  *
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <assert.h>
-#include <libxml/parser.h>
-#include "cxslt.h"
+#ifndef _XSLT_H
+#define _XSLT_H
 
-int main(int argc, char **argv)
-{
-  char *elc;
-  array *xslt;
-  char zero = '\0';
+char *cxslt(const char *xslt, const char *xslturl);
 
-  setbuf(stdout,NULL);
-
-  if (2 > argc) {
-    fprintf(stderr,"Usage: compile <xsltfile>\n");
-    exit(1);
-  }
-
-  xslt = read_file(argv[1]);
-  array_append(xslt,&zero,1);
-
-  elc = cxslt(xslt->data,argv[1]);
-  printf("%s",elc);
-  free(elc);
-
-  return 0;
-}
+#endif

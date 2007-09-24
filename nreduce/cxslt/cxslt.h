@@ -1,8 +1,31 @@
+/*
+ * This file is part of the nreduce project
+ * Copyright (C) 2007 Peter Kelly (pmk@cs.adelaide.edu.au)
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * $Id: cxslt.c 603 2007-08-14 02:44:16Z pmkelly $
+ *
+ */
+
 #ifndef _CXSLT_H
 #define _CXSLT_H
 
 #include <libxml/tree.h>
 #include "network/util.h"
+#include "xslt.h"
 
 #define XSLT_NAMESPACE "http://www.w3.org/1999/XSL/Transform"
 #define WSDL_NAMESPACE "http://schemas.xmlsoap.org/wsdl/"
@@ -13,6 +36,7 @@
 #define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
 #define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
 #define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+#define xmlHasProp(a,b) (xmlHasProp(a,(xmlChar*)(b)))
 #define xmlNodeListGetString(doc,list,inLine) (char*)xmlNodeListGetString(doc,list,inLine)
 
 /* cxslt */
@@ -125,6 +149,8 @@
 #define OCCURS_ZERO_OR_MORE           2
 #define OCCURS_ONE_OR_MORE            3
 
+#define QNAME_NULL { uri: NULL, prefix : NULL, localpart : NULL }
+
 typedef struct qname {
   char *uri;
   char *prefix;
@@ -172,22 +198,26 @@ typedef struct {
   int option_strip;
   xmlDocPtr parse_doc;
   const char *parse_filename;
+  char *error;
 } elcgen;
 
 qname string_to_qname(const char *str, xmlNodePtr n);
 void free_qname(qname qn);
+void free_qname_ptr(void *qn);
+
+int gen_error(elcgen *gen, const char *format, ...);
 
 /* wsdl */
 
+#define STYLE_RPC          1
+#define STYLE_DOCWRAPPED   2
+
 wsdlfile *process_wsdl(elcgen *gen, const char *filename);
-xmlNodePtr wsdl_get_object(wsdlfile *wf, const char *type, const char *name);
-char *wsdl_get_url(wsdlfile *wf);
-void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
-                                 qname *inqn, qname *outqn,
-                                 list **inargs, list **outargs);
-
-/* cxslt */
-
-char *cxslt(const char *sourcefile, const char *xslt, const char *xslturl);
+int wsdl_get_style(elcgen *gen, xmlNodePtr wsdlroot, int *styleout);
+int wsdl_get_url(elcgen *gen, wsdlfile *wf, char **urlout);
+int wsdl_get_operation_messages(elcgen *gen,
+                                wsdlfile *wf, const char *opname,
+                                qname *inqn, qname *outqn,
+                                list **inargs, list **outargs);
 
 #endif

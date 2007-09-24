@@ -34,7 +34,8 @@
 /* FIXME: use an autoconf script to set XLEX_DESTROY where appropriate - currently
    it does not get set at all */
 /* FIXME: apparently we're supposed to free the strings returned form xmlGetProp() */
-/* FIXME: don't call exit() from these routines - find another way to deal with the errors */
+/* FIXME: don't call exit() or fatal() from these routines -
+   find another way to deal with the errors */
 
 typedef struct x_buffer_state *X_BUFFER_STATE;
 X_BUFFER_STATE x_scan_string(const char *str);
@@ -50,6 +51,26 @@ int xparse();
 
 static void compile_sequence(elcgen *gen, xmlNodePtr first);
 static void compile_expression(elcgen *gen, expression *expr);
+
+int gen_error(elcgen *gen, const char *format, ...)
+{
+  va_list ap;
+  int len;
+  char *newerror;
+  va_start(ap,format);
+  len = vsnprintf(NULL,0,format,ap);
+  va_end(ap);
+
+  newerror = (char*)malloc(len+1);
+  va_start(ap,format);
+  len = vsnprintf(newerror,len+1,format,ap);
+  va_end(ap);
+
+  free(gen->error);
+  gen->error = newerror;
+
+  return 0;
+}
 
 static void check_attr(elcgen *gen, xmlNodePtr n, const char *value, const char *name)
 {
@@ -158,6 +179,12 @@ void free_qname(qname qn)
   free(qn.uri);
   free(qn.prefix);
   free(qn.localpart);
+}
+
+void free_qname_ptr(void *qn)
+{
+  free_qname(*(qname*)qn);
+  free(qn);
 }
 
 static char *string_to_ident(const char *str)
@@ -284,7 +311,7 @@ static void compile_binary(elcgen *gen, expression *expr, const char *fun)
   array_printf(gen->buf,")");
 }
 
-static void compile_ws_call(elcgen *gen, expression *expr)
+static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
 {
   char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
   wsdlfile *wf;
@@ -299,32 +326,44 @@ static void compile_ws_call(elcgen *gen, expression *expr)
   list *l;
 
 #if 0
-  array_printf(gen->buf,"\n\n\n");
-  array_printf(gen->buf,"//////////////// compile_ws_call\n");
-  array_printf(gen->buf,"uri = %s\n",expr->qn.uri);
-  array_printf(gen->buf,"prefix = %s\n",expr->qn.prefix);
-  array_printf(gen->buf,"localpart = %s\n",expr->qn.localpart);
+  printf("\n\n\n");
+  printf("//////////////// compile_ws_call\n");
+  printf("uri = %s\n",expr->qn.uri);
+  printf("prefix = %s\n",expr->qn.prefix);
+  printf("localpart = %s\n",expr->qn.localpart);
 #endif
 
-  wf = process_wsdl(gen,expr->qn.uri);
-  service_url = wsdl_get_url(wf);
+  wf = process_wsdl(gen,wsdlurl);
 
-  wsdl_get_operation_messages(wf,expr->qn.localpart,&inelem,&outelem,&inargs,&outargs);
+  if (!wsdl_get_url(gen,wf,&service_url)) {
+    gen_error(gen,"%s: %s",wf->filename,gen->error);
+    fatal("%s",gen->error);
+  }
 
-#if 0
-  array_printf(gen->buf,"service url = %s\n",service_url);
-  array_printf(gen->buf,"input element = {%s}%s\n",inelem.uri,inelem.localpart);
-  array_printf(gen->buf,"output element = {%s}%s\n",outelem.uri,outelem.localpart);
+  if (!wsdl_get_operation_messages(gen,wf,expr->qn.localpart,&inelem,&outelem,&inargs,&outargs)) {
+    gen_error(gen,"%s: %s",wf->filename,gen->error);
+    fatal("%s",gen->error);
+    /* FIXME: return here instead of using fatal */
+  }
 
-  array_printf(gen->buf,"inargs =");
-  for (l = inargs; l; l = l->next)
-    array_printf(gen->buf," %s",(char*)l->data);
-  array_printf(gen->buf,"\n");
+#if 1
+  printf("service url = %s\n",service_url);
+  printf("input element = {%s}%s\n",inelem.uri,inelem.localpart);
+  printf("output element = {%s}%s\n",outelem.uri,outelem.localpart);
 
-  array_printf(gen->buf,"outargs =");
-  for (l = outargs; l; l = l->next)
-    array_printf(gen->buf," %s",(char*)l->data);
-  array_printf(gen->buf,"\n");
+  printf("inargs =");
+  for (l = inargs; l; l = l->next) {
+    qname *qn = (qname*)l->data;
+    printf(" {%s}%s",qn->uri,qn->localpart);
+  }
+  printf("\n");
+
+  printf("outargs =");
+  for (l = outargs; l; l = l->next) {
+    qname *qn = (qname*)l->data;
+    printf(" {%s}%s",qn->uri,qn->localpart);
+  }
+  printf("\n");
 #endif
 
   supplied = 0;
@@ -338,21 +377,25 @@ static void compile_ws_call(elcgen *gen, expression *expr)
 
 
   array_printf(gen->buf,"(letrec requestxml = ");
-  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Envelope\" nil ");
-  array_printf(gen->buf,"(cons (xml::mknamespace \""SOAPENV_NAMESPACE"\" \"soapenv\") nil)");
+  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE
+               "\" \"soapenv\" \"Envelope\" nil ");
+  array_printf(gen->buf,"(cons (xml::mknamespace \""SOAPENV_NAMESPACE
+               "\" \"soapenv\") nil)");
+  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE
+               "\" \"soapenv\" \"Body\" nil nil");
 
-  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE"\" \"soapenv\" \"Body\" nil nil");
-
-  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil (cons (xml::mknamespace \"%s\" nil) nil) ",
-         inelem.uri,inelem.localpart,inelem.uri);
-
+  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil "
+               "(cons (xml::mknamespace \"%s\" nil) nil) ",
+               inelem.uri,inelem.localpart,inelem.uri);
 
   //printf("nil");
   l = inargs;
   for (p = expr->left; p; p = p->right) {
+    qname *argname = (qname*)l->data;
     assert(XPATH_ACTUAL_PARAM == p->type);
-    array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
-           inelem.uri,(char*)l->data);
+    array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil ",
+                 argname->uri,argname->localpart);
+    array_printf(gen->buf,"(cons (xml::mknamespace \"%s\" \"\") nil)",argname->uri);
     array_printf(gen->buf,"(xslt::concomplex (xslt::get_children ");
     compile_expression(gen,p->left);
     array_printf(gen->buf,"))) ");
@@ -364,7 +407,7 @@ static void compile_ws_call(elcgen *gen, expression *expr)
 
   array_printf(gen->buf,") nil)");
   array_printf(gen->buf,") nil)) nil)");
-  array_printf(gen->buf,"request = (xslt::output 1 requestxml)");
+  array_printf(gen->buf,"request = (xslt::output nil requestxml)");
   array_printf(gen->buf,"response = (xslt::post \"%s\" request)",service_url);
   array_printf(gen->buf,"responsedoc = (xml::parsexml 1 response)");
   array_printf(gen->buf,"topelems = (xml::item_children responsedoc)");
@@ -390,8 +433,8 @@ static void compile_ws_call(elcgen *gen, expression *expr)
   free(inelem.localpart);
   free(outelem.uri);
   free(outelem.localpart);
-  list_free(inargs,free);
-  list_free(outargs,free);
+  list_free(inargs,free_qname_ptr);
+  list_free(outargs,free_qname_ptr);
 }
 
 static void compile_expression(elcgen *gen, expression *expr)
@@ -623,8 +666,13 @@ static void compile_expression(elcgen *gen, expression *expr)
         array_printf(gen->buf,")");
         free(ident);
       }
+      else if (!strncmp(expr->qn.uri,"wsdl-",5)) {
+        compile_ws_call(gen,expr,expr->qn.uri+5);
+      }
       else {
-        compile_ws_call(gen,expr);
+        fprintf(stderr,"Call to non-existent function {%s}%s\n",
+                expr->qn.uri ? expr->qn.uri : "",expr->qn.localpart);
+        exit(1);
       }
     }
     else {
@@ -1159,7 +1207,7 @@ static void process_root(elcgen *gen, xmlNodePtr n)
   }
 }
 
-char *cxslt(const char *sourcefile, const char *xslt, const char *xslturl)
+char *cxslt(const char *xslt, const char *xslturl)
 {
   xmlDocPtr doc;
   xmlNodePtr root;
@@ -1176,18 +1224,27 @@ char *cxslt(const char *sourcefile, const char *xslt, const char *xslturl)
 
   array_printf(gen->buf,"import xml\n");
   array_printf(gen->buf,"import xslt\n");
-  array_printf(gen->buf,"FILENAME = \"%s\"\n",sourcefile);
 
   gen->parse_doc = doc;
   gen->parse_filename = xslturl;
   root = xmlDocGetRootElement(doc);
+  printf("/*\n\n");
   process_root(gen,root);
+  printf("\n*/\n");
 
   array_printf(gen->buf,"STRIPALL = %s\n",gen->option_strip ? "1" : "nil");
   array_printf(gen->buf,"INDENT = %s\n",gen->option_indent ? "1" : "nil");
-  array_printf(gen->buf,"main = (xslt::output INDENT (cons (xml::mkdoc (xslt::concomplex (top (xml::parsexml "
-         "STRIPALL (readb FILENAME)) 1 1))) nil))\n");
-
+  array_printf(gen->buf,
+               "main args =\n"
+               "(letrec\n"
+               "  input =\n"
+               "    (if (== (len args) 0)\n"
+               "      (xml::mkdoc nil)\n"
+               "      (xml::parsexml STRIPALL (readb (head args))))\n"
+               "  result = (top input 1 1)\n"
+               "  doc = (cons (xml::mkdoc (xslt::concomplex result)) nil)\n"
+               "in\n"
+               " (xslt::output INDENT doc))\n");
   xmlFreeDoc(doc);
   array_append(gen->buf,&zero,1);
   res = gen->buf->data;

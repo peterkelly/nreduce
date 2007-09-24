@@ -28,6 +28,38 @@
 #include <libxml/parser.h>
 #include "cxslt.h"
 
+static int nullstrcmp(const char *a, const char *b)
+{
+  if ((NULL == a) && (NULL == b))
+    return 0;
+  else if (NULL == a)
+    return -1;
+  else if (NULL == b)
+    return 1;
+  else
+    return strcmp(a,b);
+}
+
+static int attr_equals(xmlNodePtr n, const char *name, const char *value)
+{
+  int equals = 0;
+  if (xmlHasProp(n,name)) {
+    char *str = xmlGetProp(n,name);
+    if (!strcmp(str,value))
+      equals = 1;
+    free(str);
+  }
+  return equals;
+}
+
+static qname get_qname_attr(xmlNodePtr n, const char *attrname)
+{
+  char *str = xmlGetProp(n,attrname);
+  qname qn = string_to_qname(str,n);
+  free(str);
+  return qn;
+}
+
 static int is_element(xmlNodePtr n, const char *ns, const char *name)
 {
   return ((XML_ELEMENT_NODE == n->type) &&
@@ -41,15 +73,12 @@ static int is_wsdl_element(xmlNodePtr n, const char *name)
   return is_element(n,WSDL_NAMESPACE,name);
 }
 
-static int is_wsdlsoap_element(xmlNodePtr n, const char *name)
-{
-  return is_element(n,WSDLSOAP_NAMESPACE,name);
-}
-
 wsdlfile *process_wsdl(elcgen *gen, const char *filename)
 {
   list *l;
   wsdlfile *wf;
+  xmlNodePtr n;
+
   for (l = gen->wsdlfiles; l; l = l->next) {
     wf = (wsdlfile*)l->data;
     if (!strcmp(wf->filename,filename))
@@ -58,212 +87,421 @@ wsdlfile *process_wsdl(elcgen *gen, const char *filename)
   wf = (wsdlfile*)calloc(1,sizeof(wsdlfile));
   wf->filename = strdup(filename);
 
-  if (NULL == (wf->doc = xmlReadFile(wf->filename,NULL,0))) {
-    fprintf(stderr,"Error parsing %s\n",wf->filename);
-    exit(1);
+  for (n = gen->toplevel->children; n; n = n->next) {
+    if ((NULL == n->ns) && (!strcmp((char*)n->name,"wsdlfile"))) {
+      char *source = xmlGetProp(n,"source");
+      if (!strcmp(source,filename)) {
+        n = n->children;
+        while (n && (XML_ELEMENT_NODE != n->type))
+          n = n->next;
+        if (n) {
+          wf->root = n;
+          break;
+        }
+      }
+      free(source);
+    }
   }
 
-  wf->root = xmlDocGetRootElement(wf->doc);
+  if (NULL == wf->root) {
+    fprintf(stderr,"Could not find WSDL for %s\n",wf->filename);
+    exit(1);
+  }
 
   if (!is_wsdl_element(wf->root,"definitions")) {
     fprintf(stderr,"%s: invalid root element\n",wf->filename);
     exit(1);
   }
 
-/*   printf("processed %s\n",wf->filename); */
-
   return wf;
 }
 
-xmlNodePtr wsdl_get_object(wsdlfile *wf, const char *type, const char *name)
+static xmlNodePtr get_child(xmlNodePtr parent, const char *elemns, const char *elemname,
+                            const char *attr, const char *value)
 {
   xmlNodePtr c;
-  for (c = wf->root->children; c; c = c->next) {
-    if (is_wsdl_element(c,type)) {
-      if (NULL == name) {
+  for (c = parent->children; c; c = c->next) {
+    if (!is_element(c,elemns,elemname))
+      continue;
+    if ((NULL == attr) || (NULL == value))
+      return c;
+    if (xmlHasProp(c,attr)) {
+      char *str = xmlGetProp(c,attr);
+      int cmp = strcmp(str,value);
+      free(str);
+      if (!cmp)
         return c;
-      }
-      else {
-        char *nameattr = xmlGetProp(c,"name");
-        if (nameattr && !xmlStrcmp(nameattr,name))
-          return c;
-      }
     }
   }
   return NULL;
 }
 
-char *wsdl_get_url(wsdlfile *wf)
+static xmlNodePtr get_object(xmlNodePtr wsdlroot, const char *type, const char *name)
 {
-  xmlNodePtr n = wsdl_get_object(wf,"service",NULL);
+  return get_child(wsdlroot,WSDL_NAMESPACE,type,"name",name);
+}
+
+int wsdl_get_style(elcgen *gen, xmlNodePtr wsdlroot, int *styleout)
+{
+  xmlNodePtr service;
   xmlNodePtr port;
-  if (NULL == n) {
-    fprintf(stderr,"%s: no service found\n",wf->filename);
-    exit(1);
+  xmlNodePtr binding;
+  xmlNodePtr soapb;
+
+  *styleout = 0;
+  if ((NULL != (service = get_child(wsdlroot,WSDL_NAMESPACE,"service",NULL,NULL))) &&
+      (NULL != (port = get_child(service,WSDL_NAMESPACE,"port",NULL,NULL))) &&
+      xmlHasProp(port,"binding")) {
+
+    qname bqn = get_qname_attr(port,"binding");
+    if ((NULL != (binding = get_child(wsdlroot,WSDL_NAMESPACE,"binding","name",bqn.localpart))) &&
+        (NULL != (soapb = get_child(binding,WSDLSOAP_NAMESPACE,"binding",NULL,NULL))) &&
+        xmlHasProp(soapb,"style")) {
+
+      char *style = xmlGetProp(soapb,"style");
+      if (!strcmp(style,"rpc"))
+        *styleout = STYLE_RPC;
+      else if (!strcmp(style,"document"))
+        *styleout = STYLE_DOCWRAPPED;
+      else
+        gen_error(gen,"SOAP binding has invalid style \"%s\"",style);
+      free(style);
+    }
+    free_qname(bqn);
   }
-  for (port = n->children; port; port = port->next) {
-    if (is_wsdl_element(port,"port")) {
-      xmlNodePtr address;
-      for (address = port->children; address; address = address->next) {
-        if (is_wsdlsoap_element(address,"address")) {
-          char *location = xmlGetProp(address,"location");
-          if (location)
-            return location;
-        }
-      }
+
+  if (0 == *styleout)
+    return gen_error(gen,"Could not find SOAP binding style");
+  else
+    return 1;
+}
+
+int wsdl_get_url(elcgen *gen, wsdlfile *wf, char **urlout)
+{
+  xmlNodePtr service;
+  xmlNodePtr port;
+  xmlNodePtr address;
+
+  if ((NULL != (service = get_object(wf->root,"service",NULL))) &&
+      (NULL != (port = get_child(service,WSDL_NAMESPACE,"port",NULL,NULL))) &&
+      (NULL != (address = get_child(port,WSDLSOAP_NAMESPACE,"address",NULL,NULL)))) {
+    if (xmlHasProp(address,"location")) {
+      printf("service name = %s\n",xmlGetProp(service,"name"));
+      printf("port name = %s\n",xmlGetProp(port,"name"));
+      printf("address location = %s\n",xmlGetProp(address,"location"));
+      *urlout = xmlGetProp(address,"location");
+      return 1;
     }
   }
-  fprintf(stderr,"%s: could not get url\n",wf->filename);
-  exit(1);
+  return gen_error(gen,"could not get url");
+}
+
+static xmlNodePtr get_element_r(xmlNodePtr schema, const char *elemname)
+{
+  xmlNodePtr n;
+  for (n = schema->children; n; n = n->next) {
+    if (is_element(n,XMLSCHEMA_NAMESPACE,"element")) {
+      char *name = xmlGetProp(n,"name");
+      if (!strcmp(name,elemname))
+        return n;
+    }
+    else if (is_element(n,XMLSCHEMA_NAMESPACE,"schema")) {
+      xmlNodePtr element;
+      if (NULL != (element = get_element_r(n,elemname)))
+        return element;
+    }
+  }
   return NULL;
 }
 
-static qname get_part_element(wsdlfile *wf, xmlNodePtr message, const char *msgname)
+static xmlNodePtr get_wsdl_types(xmlNodePtr wsdlroot)
 {
-  xmlNodePtr part;
-  qname empty;
-  memset(&empty,0,sizeof(empty));
-  for (part = message->children; part; part = part->next) {
-    if (is_wsdl_element(part,"part")) {
-      char *element = xmlGetProp(part,"element");
-
-      if (NULL == element)
-        return empty;
-
-      return string_to_qname(element,part);
-    }
+  xmlNodePtr n;
+  for (n = wsdlroot->children; n; n = n->next) {
+    if (is_wsdl_element(n,"types"))
+      return n;
   }
-  return empty;
+  return NULL;
 }
 
 static xmlNodePtr get_element(wsdlfile *wf, const char *elemname)
 {
-  xmlNodePtr types = wf->root->children;
-  xmlNodePtr schema;
+  xmlNodePtr types;
+  xmlNodePtr n;
   xmlNodePtr element;
 
-  while (types && !is_wsdl_element(types,"types"))
-    types = types->next;
-  if (NULL == types)
+  if (NULL == (types = get_wsdl_types(wf->root)))
     fatal("%s: no type definitions",wf->filename);
 
-  schema = types->children;
-  while (schema && !is_element(schema,XMLSCHEMA_NAMESPACE,"schema"))
-    schema = schema->next;
-  if (NULL == schema)
-    fatal("%s: no schema",wf->filename);
-
-  for (element = schema->children; element; element = element->next) {
-    if (is_element(element,XMLSCHEMA_NAMESPACE,"element")) {
-      char *name = xmlGetProp(element,"name");
-      if (!strcmp(name,elemname))
+  for (n = types->children; n; n = n->next) {
+    if (is_element(n,XMLSCHEMA_NAMESPACE,"schema")) {
+      if (NULL != (element = get_element_r(n,elemname)))
         return element;
     }
   }
 
-  if (NULL == schema)
-    fatal("%s: no such element \"%s\"",wf->filename,elemname);
+  fatal("%s: no such element \"%s\"",wf->filename,elemname);
   return NULL;
 }
 
-static list *get_element_args(wsdlfile *wf, xmlNodePtr elem)
+static xmlNodePtr get_complex_type(xmlNodePtr root, qname name)
 {
-  list *args = NULL;
-  xmlNodePtr complexType = elem->children;
+  xmlNodePtr sn;
+  xmlNodePtr type = NULL;
+  for (sn = root->children; sn && (NULL == type); sn = sn->next) {
+    if (is_element(sn,XMLSCHEMA_NAMESPACE,"schema")) {
+
+      char *targetNamespace = xmlGetProp(sn,"targetNamespace");
+      if (!nullstrcmp(targetNamespace,name.uri)) {
+        xmlNodePtr tn;
+        for (tn = sn->children; tn && (NULL == type); tn = tn->next) {
+          if (is_element(tn,XMLSCHEMA_NAMESPACE,"complexType")) {
+            char *typename = xmlGetProp(tn,"name");
+            if (typename && !strcmp(typename,name.localpart))
+              type = tn;
+            free(typename);
+          }
+        }
+      }
+      free(targetNamespace);
+
+      if (NULL == type)
+        type = get_complex_type(sn,name);
+    }
+    else if (XML_ELEMENT_NODE == sn->type) {
+      type = get_complex_type(sn,name);
+    }
+  }
+  return type;
+}
+
+static char *element_namespace(xmlNodePtr elem)
+{
+  int qualified = 0;
+  xmlNodePtr n;
+  if (attr_equals(elem,"form","qualified"))
+    qualified = 1;
+  n = elem;
+  while (n && !is_element(n,XMLSCHEMA_NAMESPACE,"schema"))
+    n = n->parent;
+  if (n) {
+    if (attr_equals(n,"elementFormDefault","qualified"))
+      qualified = 1;
+    if (qualified && xmlHasProp(n,"targetNamespace"))
+      return xmlGetProp(n,"targetNamespace");
+  }
+  return strdup("");
+}
+
+static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list **args)
+{
+  xmlNodePtr complexType;
   xmlNodePtr sequence;
   xmlNodePtr arg;
-  while (complexType && !is_element(complexType,XMLSCHEMA_NAMESPACE,"complexType"))
-    complexType = complexType->next;
-  if (NULL == complexType)
-    return NULL;
+
+  *args = NULL;
+
+  if (xmlHasProp(elem,"type")) {
+    char *typename = xmlGetProp(elem,"type");
+    qname tqn = string_to_qname(typename,elem);
+    complexType = get_complex_type(types,tqn);
+    free_qname(tqn);
+    free(typename);
+    if (NULL == complexType)
+      return gen_error(gen,"no complex type %s",typename);
+  }
+  else {
+    complexType = elem->children;
+    while (complexType && !is_element(complexType,XMLSCHEMA_NAMESPACE,"complexType"))
+      complexType = complexType->next;
+    if (NULL == complexType)
+      return gen_error(gen,"no complex type");
+  }
 
   sequence = complexType->children;
   while (sequence && !is_element(sequence,XMLSCHEMA_NAMESPACE,"sequence"))
     sequence = sequence->next;
   if (NULL == sequence)
-    return NULL;
+    return gen_error(gen,"complex type does not contain a sequence");
 
   for (arg = sequence->children; arg; arg = arg->next) {
-    if (is_element(arg,XMLSCHEMA_NAMESPACE,"element")) {
-      char *name = xmlGetProp(arg,"name");
-      if (name)
-        list_append(&args,strdup(name));
+    if (is_element(arg,XMLSCHEMA_NAMESPACE,"element") && xmlHasProp(arg,"name")) {
+      qname *qn = (qname*)calloc(1,sizeof(qname));
+      qn->uri = element_namespace(arg);
+      qn->localpart = xmlGetProp(arg,"name");
+      list_append(args,qn);
     }
   }
 
-  return args;
+  return 1;
 }
 
-void wsdl_get_operation_messages(wsdlfile *wf, const char *opname,
-                                 qname *inqn, qname *outqn,
-                                 list **inargs, list **outargs)
+static void get_message_parts(elcgen *gen, xmlNodePtr message, list **parts)
 {
-  xmlNodePtr portType = wsdl_get_object(wf,"portType",NULL);
+  xmlNodePtr n;
+  for (n = message->children; n; n = n->next) {
+    if (is_wsdl_element(n,"part") && xmlHasProp(n,"name")) {
+      qname *qn = (qname*)calloc(1,sizeof(qname));
+      qn->uri = strdup("");
+      qn->localpart = xmlGetProp(n,"name");
+      list_append(parts,qn);
+    }
+  }
+}
+
+static int get_message_names(elcgen *gen, wsdlfile *wf, xmlNodePtr operation,
+                             const char *opname,
+                             qname *in, qname *out)
+{
+  xmlNodePtr n;
+
+  memset(in,0,sizeof(qname));
+  memset(out,0,sizeof(qname));
+
+  for (n = operation->children; n; n = n->next) {
+    if (is_wsdl_element(n,"input") && xmlHasProp(n,"message"))
+      *in = get_qname_attr(n,"message");
+    if (is_wsdl_element(n,"output") && xmlHasProp(n,"message"))
+      *out = get_qname_attr(n,"message");
+  }
+
+  if (NULL == in->localpart)
+    gen_error(gen,"operation \"%s\" has no input message",opname);
+  else if (NULL == out->localpart)
+    gen_error(gen,"operation \"%s\" has no output message",opname);
+  else
+    return 1;
+
+  free_qname(*in);
+  free_qname(*out);
+  return 0;
+}
+
+static xmlNodePtr get_operation(wsdlfile *wf, const char *opname)
+{
+  xmlNodePtr n;
+  xmlNodePtr found = NULL;
+  xmlNodePtr portType = get_object(wf->root,"portType",NULL);
+
+  if (NULL == portType)
+    return NULL;
+
+  for (n = portType->children; n && (NULL == found); n = n->next) {
+    if (is_wsdl_element(n,"operation") && xmlHasProp(n,"name")) {
+      char *name = xmlGetProp(n,"name");
+      if (name && !strcmp(name,opname))
+        found = n;
+      free(name);
+    }
+  }
+  return found;
+}
+
+static qname get_message_elemname(xmlNodePtr message)
+{
+  xmlNodePtr n;
+  qname empty;
+  memset(&empty,0,sizeof(empty));
+  for (n = message->children; n; n = n->next) {
+    if (is_wsdl_element(n,"part") && xmlHasProp(n,"element"))
+      return get_qname_attr(n,"element");
+  }
+  return empty;
+}
+
+int wsdl_get_operation_messages(elcgen *gen,
+                                wsdlfile *wf, const char *opname,
+                                qname *inqn, qname *outqn,
+                                list **inargs, list **outargs)
+{
+  xmlNodePtr types;
   xmlNodePtr operation;
+  qname inmsgqname;
+  qname outmsgqname;
+  xmlNodePtr inpmessage;
+  xmlNodePtr outpmessage;
+  int style;
+  int r = 0;
+  char *targetns;
 
   memset(inqn,0,sizeof(*inqn));
   memset(outqn,0,sizeof(*outqn));
   *inargs = NULL;
   *outargs = NULL;
 
-  if (NULL == portType)
-    fatal("%s: no port types found",wf->filename);
+  if (!wsdl_get_style(gen,wf->root,&style))
+    return 0;
 
-  for (operation = portType->children; operation; operation = operation->next) {
-    if (is_wsdl_element(operation,"operation")) {
-      char *name = xmlGetProp(operation,"name");
-      char *inmsgname = NULL;
-      char *outmsgname = NULL;
-      xmlNodePtr message;
-      xmlNodePtr inpmessage;
-      xmlNodePtr outpmessage;
-      qname inpelemname;
-      qname outpelemname;
-      xmlNodePtr inpelem;
-      xmlNodePtr outpelem;
+  printf("wsdl style = %d\n",style);
 
-      if ((NULL == name) || strcmp(name,opname))
-        continue;
+  if (NULL == (targetns = xmlGetProp(wf->root,"targetNamespace")))
+    return gen_error(gen,"no target namespace");
 
-      for (message = operation->children; message; message = message->next) {
-        if (is_wsdl_element(message,"input"))
-          inmsgname = xmlGetProp(message,"name");
-        if (is_wsdl_element(message,"output"))
-          outmsgname = xmlGetProp(message,"name");
-      }
-      if (NULL == inmsgname)
-        fatal("%s: operation \"%s\" has no input message",wf->filename,opname);
-      if (NULL == outmsgname)
-        fatal("%s: operation \"%s\" has no output message",wf->filename,opname);
+  if (NULL == (types = get_wsdl_types(wf->root)))
+    return gen_error(gen,"no <types> element");
 
-      inmsgname = strdup(inmsgname);
-      outmsgname = strdup(outmsgname);
+  if (NULL == (operation = get_operation(wf,opname)))
+    return gen_error(gen,"no operation named \"%s\"",opname);
 
-      if (NULL == (inpmessage = wsdl_get_object(wf,"message",inmsgname)))
-        fatal("%s: no such message \"%s\"",wf->filename,inmsgname);
-      if (NULL == (outpmessage = wsdl_get_object(wf,"message",outmsgname)))
-        fatal("%s: no such message \"%s\"",wf->filename,outmsgname);
+  if (!get_message_names(gen,wf,operation,opname,&inmsgqname,&outmsgqname))
+    return 0;
 
-      inpelemname = get_part_element(wf,inpmessage,inmsgname);
-      outpelemname = get_part_element(wf,outpmessage,outmsgname);
+  if (NULL == (inpmessage = get_object(wf->root,"message",inmsgqname.localpart)))
+    gen_error(gen,"no such message \"%s\"",inmsgqname.localpart);
+  else if (NULL == (outpmessage = get_object(wf->root,"message",outmsgqname.localpart)))
+    gen_error(gen,"no such message \"%s\"",outmsgqname.localpart);
+  else if (STYLE_RPC == style) {
+    inqn->uri = strdup(targetns);
+    inqn->localpart = strdup(opname);
+    outqn->uri = strdup(targetns);
+    outqn->localpart = (char*)malloc(strlen(opname)+strlen("Response")+1);
+    sprintf(outqn->localpart,"%sResponse",opname);
+    get_message_parts(gen,inpmessage,inargs);
+    get_message_parts(gen,inpmessage,outargs);
+    r = 1;
+  }
+  else { /* STYLE_DOCWRAPPED */
+    qname inpelemname = QNAME_NULL;
+    qname outpelemname = QNAME_NULL;
+    xmlNodePtr inpelem = NULL;
+    xmlNodePtr outpelem = NULL;
 
-      if (NULL == inpelemname.localpart)
-        fatal("%s: no element specified in message \"%s\"",wf->filename,inmsgname);
-      if (NULL == outpelemname.localpart)
-        fatal("%s: no element specified in message \"%s\"",wf->filename,outmsgname);
+    inpelemname = get_message_elemname(inpmessage);
+    outpelemname = get_message_elemname(outpmessage);
 
-      if (NULL == (inpelem = get_element(wf,inpelemname.localpart)))
-        fatal("%s: no such element \"%s\"",wf->filename,inpelemname.localpart);
-      if (NULL == (outpelem = get_element(wf,outpelemname.localpart)))
-        fatal("%s: no such element \"%s\"",wf->filename,outpelemname.localpart);
+    if (NULL == inpelemname.localpart)
+      gen_error(gen,"no element specified in message \"%s\"",inmsgqname.localpart);
+    else if (NULL == outpelemname.localpart)
+      gen_error(gen,"no element specified in message \"%s\"",outmsgqname.localpart);
+    else if (NULL == (inpelem = get_element(wf,inpelemname.localpart)))
+      gen_error(gen,"no such element \"%s\"",inpelemname.localpart);
+    else if (NULL == (outpelem = get_element(wf,outpelemname.localpart)))
+      gen_error(gen,"no such element \"%s\"",outpelemname.localpart);
+    else {
+      printf("opname = %s\n",opname);
+      printf("input message name = {%s}%s\n",inmsgqname.uri,inmsgqname.localpart);
+      printf("output message name = {%s}%s\n",outmsgqname.uri,outmsgqname.localpart);
+      printf("input element name = {%s}%s\n",inpelemname.uri,inpelemname.localpart);
+      printf("output element name = {%s}%s\n",outpelemname.uri,outpelemname.localpart);
 
       *inqn = inpelemname;
       *outqn = outpelemname;
-      *inargs = get_element_args(wf,inpelem);
-      *outargs = get_element_args(wf,outpelem);
+      if (get_element_args(gen,types,inpelem,inargs) &&
+          get_element_args(gen,types,outpelem,outargs))
+        r = 1;
+    }
 
-      return;
+    if (0 == r) {
+      list_free(*inargs,free_qname_ptr);
+      list_free(*outargs,free_qname_ptr);
+      free_qname(inpelemname);
+      free_qname(outpelemname);
     }
   }
-  fatal("%s: no operation named \"%s\"\n",wf->filename,opname);
+
+  free_qname(inmsgqname);
+  free_qname(outmsgqname);
+  free(targetns);
+
+  return r;
 }

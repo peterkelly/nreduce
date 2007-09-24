@@ -127,6 +127,7 @@ extern xmlNodePtr parse_node;
 %token KEY
 %token VOID
 
+%type <string> NCName
 %token <string> NCNAME
 %token <string> STRING_LITERAL
 %token <string> AVT_LITERAL
@@ -211,6 +212,12 @@ extern xmlNodePtr parse_node;
 %type <qn> XPathTypeName
 
 %%
+
+ /* FIXME: need to include other keywords here. Expect a lot of shift/reduce conflicts :( */
+NCName:
+  NCNAME                          { $$ = $1; }
+| RETURN                          { $$ = strdup("return"); }
+;
 
 AVTLiteral:
   AVT_LITERAL                     { $$ = new_expression(XPATH_STRING_LITERAL);
@@ -502,10 +509,10 @@ XPathWildcard:
 '*'                               { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = NULL; }
-| NCNAME ':' '*'                  { $$.uri = strdup(lookup_nsuri(parse_node,$1));
+| NCName ':' '*'                  { $$.uri = strdup(lookup_nsuri(parse_node,$1));
                                     $$.prefix = $1;
                                     $$.localpart = NULL; }
-| '*' ':' NCNAME                  { $$.uri = NULL;
+| '*' ':' NCName                  { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = $3; }
 ;
@@ -660,7 +667,7 @@ XPathSchemaAttributeTest:
 XPathPITest:
 PROCESSING_INSTRUCTION '(' ')'    { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_PI; }
-| PROCESSING_INSTRUCTION '(' NCNAME ')'
+| PROCESSING_INSTRUCTION '(' NCName ')'
                                   { assert(!"FIXME: implement"); }
 | PROCESSING_INSTRUCTION '(' STRING_LITERAL ')'
                                   { assert(!"FIXME: implement"); }
@@ -700,10 +707,10 @@ XPathTypeName:
 ;
 
 QName:
-  NCNAME                          { $$.uri = strdup(lookup_nsuri(parse_node,""));
+  NCName                          { $$.uri = strdup(lookup_nsuri(parse_node,""));
                                     $$.prefix = strdup("");
                                     $$.localpart = $1; }
-| NCNAME ':' NCNAME               { $$.uri = strdup(lookup_nsuri(parse_node,$1));
+| NCName ':' NCName               { $$.uri = strdup(lookup_nsuri(parse_node,$1));
                                     $$.prefix = $1;
                                     $$.localpart = $3; }
 ;

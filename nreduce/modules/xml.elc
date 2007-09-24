@@ -379,7 +379,11 @@ tokenize_value_sq !stream !start !count =
       (tokenize_value_sq rest start (+ count 1))))
   (error "XML parse error: unexpected end of input in attribute value"))
 
-isspace c = (or (== c ' ') (or (== c '\r') (== c '\n')))
+isspace c =
+(if (== c ' ') 1
+(if (== c '\r') 1
+(if (== c '\n') 1
+(if (== c '\t') 1 nil))))
 
 //==================================================================================================
 // xml::print_tokens tokens

@@ -210,3 +210,7 @@ jcall obj method args =
 (_jcall (if (iscons obj) (forcelist obj) obj)
         (forcelist method)
         (forcelist2 args))
+
+cxslt source url = (cxslt1 (forcelist source) (forcelist url))
+
+cache key value = (cache1 (forcelist key) (forcelist value))

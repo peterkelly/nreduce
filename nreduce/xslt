@@ -1,0 +1,3 @@
+#!/bin/bash
+src/nreduce samples/runcxslt.elc $1 > out.elc
+src/nreduce out.elc $2
