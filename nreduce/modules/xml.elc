@@ -850,8 +850,6 @@ is_element nsuri localname node =
 
 // FIXME: need to escape element/attribute names and values when printing
 
-apmap lst fun = (if lst (append (fun (head lst)) (apmap (tail lst) fun)) nil)
-
 print_attrs lst next =
 (if lst
   (letrec

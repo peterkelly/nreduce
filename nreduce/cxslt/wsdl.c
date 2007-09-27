@@ -293,6 +293,18 @@ static char *element_namespace(xmlNodePtr elem)
   return strdup("");
 }
 
+static int has_simple_type(xmlNodePtr n)
+{
+  int simple = 0;
+  if (xmlHasProp(n,"type")) {
+    qname qn = get_qname_attr(n,"type");
+    if (!strcmp(qn.uri,XMLSCHEMA_NAMESPACE))
+      simple = 1;
+    free_qname(qn);
+  }
+  return simple;
+}
+
 static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list **args)
 {
   xmlNodePtr complexType;
@@ -327,6 +339,7 @@ static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list
   for (arg = sequence->children; arg; arg = arg->next) {
     if (is_element(arg,XMLSCHEMA_NAMESPACE,"element") && xmlHasProp(arg,"name")) {
       wsarg *wa = (wsarg*)calloc(1,sizeof(wsarg));
+      wa->simple = has_simple_type(arg);
       wa->list = 0;
       wa->uri = element_namespace(arg);
       wa->localpart = xmlGetProp(arg,"name");
@@ -350,6 +363,7 @@ static void get_message_parts(elcgen *gen, xmlNodePtr message, list **parts)
   for (n = message->children; n; n = n->next) {
     if (is_wsdl_element(n,"part") && xmlHasProp(n,"name")) {
       wsarg *wa = (wsarg*)calloc(1,sizeof(wsarg));
+      wa->simple = has_simple_type(n);
       wa->list = 0;
       wa->uri = strdup("");
       wa->localpart = xmlGetProp(n,"name");
@@ -466,7 +480,7 @@ int wsdl_get_operation_messages(elcgen *gen,
     outqn->localpart = (char*)malloc(strlen(opname)+strlen("Response")+1);
     sprintf(outqn->localpart,"%sResponse",opname);
     get_message_parts(gen,inpmessage,inargs);
-    get_message_parts(gen,inpmessage,outargs);
+    get_message_parts(gen,outpmessage,outargs);
     r = 1;
   }
   else { /* STYLE_DOCWRAPPED */

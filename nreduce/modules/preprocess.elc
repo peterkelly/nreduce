@@ -7,12 +7,6 @@ XSD_NS = "http://www.w3.org/2001/XMLSchema"
 
 /* Generic routines */
 
-apmap f lst =
-(if lst
-  (append (f (head lst))
-    (apmap f (tail lst)))
-  nil)
-
 qsort2 cmp pivot lst before after =
 (if lst
   (letrec

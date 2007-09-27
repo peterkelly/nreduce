@@ -159,6 +159,7 @@ typedef struct qname {
 
 typedef struct wsarg {
   int list;
+  int simple;
   char *uri;
   char *localpart;
 } wsarg;

@@ -165,6 +165,12 @@ map f lst =
     (map f (tail lst)))
   nil)
 
+apmap f lst =
+(if lst
+  (append (f (head lst))
+    (apmap f (tail lst)))
+  nil)
+
 filter f lst =
 (if lst
   (if (f (head lst))

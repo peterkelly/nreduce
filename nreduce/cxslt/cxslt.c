@@ -374,9 +374,11 @@ static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
   expected = list_count(inargs);
 
   if (supplied != expected)
-    fatal("Incorrect # args for web service call %s: expected %d, got %d\n",
+    fatal("Incorrect # args for web service call %s: expected %d, got %d",
           expr->qn.localpart,expected,supplied);
 
+  if (1 != list_count(outargs))
+    fatal("Multiple return arguments for web service call %s",expr->qn.localpart);
 
   array_printf(gen->buf,"(letrec requestxml = ");
   array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE
@@ -438,11 +440,12 @@ static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
          "(xml::item_children citem))",outelem.uri,outelem.localpart);
   array_printf(gen->buf,") bodies)");
 
-  array_printf(gen->buf,"returns = (xslt::apmap3 (!citem.!cpos.!csize.(xml::item_children citem)) respelems)");
+  array_printf(gen->buf,"returns = (apmap xml::item_children respelems)");
 
-  array_printf(gen->buf,"in returns)");
-
-
+  if (((wsarg*)outargs->data)->simple)
+    array_printf(gen->buf,"in (apmap xml::item_children returns))");
+  else
+    array_printf(gen->buf,"in returns)");
 
   free(ident);
   free(inelem.uri);
