@@ -36,8 +36,6 @@ test.xsl
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>91</return>
-</result>
+<result>91</result>
 ================================== RETURN CODE =================================
 0

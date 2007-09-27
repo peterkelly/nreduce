@@ -24,8 +24,6 @@ test.xsl
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>Fred (20), Plumber</return>
-</result>
+<result>Fred (20), Plumber</result>
 ================================== RETURN CODE =================================
 0

@@ -19,8 +19,6 @@ test.xsl
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>Hello Peter</return>
-</result>
+<result>Hello Peter</result>
 ================================== RETURN CODE =================================
 0

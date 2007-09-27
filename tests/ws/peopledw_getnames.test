@@ -19,10 +19,6 @@ test.xsl
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>Fred</return>
-   <return>Joe</return>
-   <return>Bob</return>
-</result>
+<result>FredJoeBob</result>
 ================================== RETURN CODE =================================
 0

@@ -12,7 +12,7 @@ test.xsl
 
   <xsl:template match="/">
     <result>
-      <xsl:for-each select="people:getNames()/text()">
+      <xsl:for-each select="people:getNames()">
         <person>
           <xsl:sequence select="people:getPerson(.)/*"/>
         </person>

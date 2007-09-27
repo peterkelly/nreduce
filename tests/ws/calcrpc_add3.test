@@ -19,8 +19,6 @@ test.xsl
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>15</return>
-</result>
+<result>15</result>
 ================================== RETURN CODE =================================
 0
