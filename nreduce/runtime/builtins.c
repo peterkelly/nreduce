@@ -1619,8 +1619,13 @@ static void b_cxslt1(task *tsk, pntr *argstack)
   /* FIXME: need to handle compile errors. Currently the compiler does this by calling exit(),
      which is really bad. Need to instead have it return an error code and messages, so that
      we can call set_error() here. */
-  compiled = cxslt(source,url);
-  argstack[0] = string_to_array(tsk,compiled);
+  if (cxslt(source,url,&compiled)) {
+    argstack[0] = string_to_array(tsk,compiled);
+  }
+  else {
+    set_error(tsk,"%s",compiled);
+  }
+  free(compiled);
 
   free(source);
   free(url);

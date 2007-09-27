@@ -208,18 +208,25 @@ typedef struct {
   char *error;
 } elcgen;
 
-qname string_to_qname(const char *str, xmlNodePtr n);
-void free_qname(qname qn);
 void free_wsarg_ptr(void *a);
 
 int gen_error(elcgen *gen, const char *format, ...);
+
+/* xmlutil */
+
+int attr_equals(xmlNodePtr n, const char *name, const char *value);
+qname string_to_qname(const char *str, xmlNodePtr n);
+void free_qname(qname qn);
+int nullstrcmp(const char *a, const char *b);
+qname get_qname_attr(xmlNodePtr n, const char *attrname);
+int is_element(xmlNodePtr n, const char *ns, const char *name);
 
 /* wsdl */
 
 #define STYLE_RPC          1
 #define STYLE_DOCWRAPPED   2
 
-wsdlfile *process_wsdl(elcgen *gen, const char *filename);
+int process_wsdl(elcgen *gen, const char *filename, wsdlfile **wfout);
 int wsdl_get_style(elcgen *gen, xmlNodePtr wsdlroot, int *styleout);
 int wsdl_get_url(elcgen *gen, wsdlfile *wf, char **urlout);
 int wsdl_get_operation_messages(elcgen *gen,

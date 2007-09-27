@@ -30,7 +30,7 @@
 
 int main(int argc, char **argv)
 {
-  char *elc;
+  char *compresult;
   array *xslt;
   char zero = '\0';
 
@@ -44,9 +44,14 @@ int main(int argc, char **argv)
   xslt = read_file(argv[1]);
   array_append(xslt,&zero,1);
 
-  elc = cxslt(xslt->data,argv[1]);
-  printf("%s",elc);
-  free(elc);
-
-  return 0;
+  if (cxslt(xslt->data,argv[1],&compresult)) {
+    printf("%s",compresult);
+    free(compresult);
+    return 0;
+  }
+  else {
+    fprintf(stderr,"%s",compresult);
+    free(compresult);
+    return 1;
+  }
 }

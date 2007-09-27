@@ -28,61 +28,25 @@
 #include <libxml/parser.h>
 #include "cxslt.h"
 
-static int nullstrcmp(const char *a, const char *b)
-{
-  if ((NULL == a) && (NULL == b))
-    return 0;
-  else if (NULL == a)
-    return -1;
-  else if (NULL == b)
-    return 1;
-  else
-    return strcmp(a,b);
-}
-
-static int attr_equals(xmlNodePtr n, const char *name, const char *value)
-{
-  int equals = 0;
-  if (xmlHasProp(n,name)) {
-    char *str = xmlGetProp(n,name);
-    if (!strcmp(str,value))
-      equals = 1;
-    free(str);
-  }
-  return equals;
-}
-
-static qname get_qname_attr(xmlNodePtr n, const char *attrname)
-{
-  char *str = xmlGetProp(n,attrname);
-  qname qn = string_to_qname(str,n);
-  free(str);
-  return qn;
-}
-
-static int is_element(xmlNodePtr n, const char *ns, const char *name)
-{
-  return ((XML_ELEMENT_NODE == n->type) &&
-          (NULL != n->ns) &&
-          !xmlStrcmp(n->ns->href,ns) &&
-          !xmlStrcmp(n->name,name));
-}
-
 static int is_wsdl_element(xmlNodePtr n, const char *name)
 {
   return is_element(n,WSDL_NAMESPACE,name);
 }
 
-wsdlfile *process_wsdl(elcgen *gen, const char *filename)
+int process_wsdl(elcgen *gen, const char *filename, wsdlfile **wfout)
 {
   list *l;
   wsdlfile *wf;
   xmlNodePtr n;
 
+  *wfout = NULL;
+
   for (l = gen->wsdlfiles; l; l = l->next) {
     wf = (wsdlfile*)l->data;
-    if (!strcmp(wf->filename,filename))
-      return wf;
+    if (!strcmp(wf->filename,filename)) {
+      *wfout = wf;
+      return 1;
+    }
   }
   wf = (wsdlfile*)calloc(1,sizeof(wsdlfile));
   wf->filename = strdup(filename);
@@ -103,17 +67,14 @@ wsdlfile *process_wsdl(elcgen *gen, const char *filename)
     }
   }
 
-  if (NULL == wf->root) {
-    fprintf(stderr,"Could not find WSDL for %s\n",wf->filename);
-    exit(1);
-  }
+  if (NULL == wf->root)
+    return gen_error(gen,"Could not find WSDL for %s",wf->filename);
 
-  if (!is_wsdl_element(wf->root,"definitions")) {
-    fprintf(stderr,"%s: invalid root element\n",wf->filename);
-    exit(1);
-  }
+  if (!is_wsdl_element(wf->root,"definitions"))
+    return gen_error(gen,"%s: invalid root element",wf->filename);
 
-  return wf;
+  *wfout = wf;
+  return 1;
 }
 
 static xmlNodePtr get_child(xmlNodePtr parent, const char *elemns, const char *elemname,
@@ -231,7 +192,7 @@ static xmlNodePtr get_element(wsdlfile *wf, const char *elemname)
   xmlNodePtr element;
 
   if (NULL == (types = get_wsdl_types(wf->root)))
-    fatal("%s: no type definitions",wf->filename);
+    return NULL;
 
   for (n = types->children; n; n = n->next) {
     if (is_element(n,XMLSCHEMA_NAMESPACE,"schema")) {
@@ -240,7 +201,6 @@ static xmlNodePtr get_element(wsdlfile *wf, const char *elemname)
     }
   }
 
-  fatal("%s: no such element \"%s\"",wf->filename,elemname);
   return NULL;
 }
 

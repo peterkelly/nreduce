@@ -23,6 +23,6 @@
 #ifndef _XSLT_H
 #define _XSLT_H
 
-char *cxslt(const char *xslt, const char *xslturl);
+int cxslt(const char *xslt, const char *xslturl, char **result);
 
 #endif
