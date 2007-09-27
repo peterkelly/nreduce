@@ -157,6 +157,12 @@ typedef struct qname {
   char *localpart;
 } qname;
 
+typedef struct wsarg {
+  int list;
+  char *uri;
+  char *localpart;
+} wsarg;
+
 typedef struct expression {
   int type;
   struct expression *left;
@@ -203,7 +209,7 @@ typedef struct {
 
 qname string_to_qname(const char *str, xmlNodePtr n);
 void free_qname(qname qn);
-void free_qname_ptr(void *qn);
+void free_wsarg_ptr(void *a);
 
 int gen_error(elcgen *gen, const char *format, ...);
 

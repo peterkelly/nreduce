@@ -181,10 +181,12 @@ void free_qname(qname qn)
   free(qn.localpart);
 }
 
-void free_qname_ptr(void *qn)
+void free_wsarg_ptr(void *a)
 {
-  free_qname(*(qname*)qn);
-  free(qn);
+  wsarg *arg = (wsarg*)a;
+  free(arg->uri);
+  free(arg->localpart);
+  free(arg);
 }
 
 static char *string_to_ident(const char *str)
@@ -353,15 +355,15 @@ static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
 
   printf("inargs =");
   for (l = inargs; l; l = l->next) {
-    qname *qn = (qname*)l->data;
-    printf(" {%s}%s",qn->uri,qn->localpart);
+    wsarg *wa = (wsarg*)l->data;
+    printf(" {%s}%s (%s)",wa->uri,wa->localpart,wa->list ? "list" : "single");
   }
   printf("\n");
 
   printf("outargs =");
   for (l = outargs; l; l = l->next) {
-    qname *qn = (qname*)l->data;
-    printf(" {%s}%s",qn->uri,qn->localpart);
+    wsarg *wa = (wsarg*)l->data;
+    printf(" {%s}%s (%s)",wa->uri,wa->localpart,wa->list ? "list" : "single");
   }
   printf("\n");
 #endif
@@ -378,27 +380,41 @@ static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
 
   array_printf(gen->buf,"(letrec requestxml = ");
   array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE
-               "\" \"soapenv\" \"Envelope\" nil ");
+               "\" \"soapenv\" \"Envelope\" nil \n");
   array_printf(gen->buf,"(cons (xml::mknamespace \""SOAPENV_NAMESPACE
-               "\" \"soapenv\") nil)");
+               "\" \"soapenv\") nil)\n");
   array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \""SOAPENV_NAMESPACE
-               "\" \"soapenv\" \"Body\" nil nil");
+               "\" \"soapenv\" \"Body\" nil nil\n");
 
-  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil "
-               "(cons (xml::mknamespace \"%s\" nil) nil) ",
+  array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" \"operation\" \"%s\" nil "
+               "(cons (xml::mknamespace \"%s\" \"operation\") nil) \n",
                inelem.uri,inelem.localpart,inelem.uri);
 
   //printf("nil");
   l = inargs;
   for (p = expr->left; p; p = p->right) {
-    qname *argname = (qname*)l->data;
+    wsarg *argname = (wsarg*)l->data;
     assert(XPATH_ACTUAL_PARAM == p->type);
-    array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil ",
-                 argname->uri,argname->localpart);
-    array_printf(gen->buf,"(cons (xml::mknamespace \"%s\" \"\") nil)",argname->uri);
-    array_printf(gen->buf,"(xslt::concomplex (xslt::get_children ");
-    compile_expression(gen,p->left);
-    array_printf(gen->buf,"))) ");
+    /* FIXME: we should really use a different structure here, instead of using prefix to
+       distinguish between array and normal args */
+    if (argname->list) {
+      printf("%s: compiling as array argument\n",argname->localpart);
+      array_printf(gen->buf,"(append (map (!x.");
+      array_printf(gen->buf,"(xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
+                   argname->uri,argname->localpart);
+      array_printf(gen->buf,"(xml::item_children x))) ");
+      array_printf(gen->buf,"(filter (!x.== (xml::item_type x) xml::TYPE_ELEMENT) ");
+      array_printf(gen->buf,"(xslt::concomplex (xslt::get_children ");
+      compile_expression(gen,p->left);
+      array_printf(gen->buf,")))) ");
+    }
+    else {
+      array_printf(gen->buf,"(cons (xml::mkelem nil nil nil nil \"%s\" nil \"%s\" nil nil ",
+                   argname->uri,argname->localpart);
+      array_printf(gen->buf,"(xslt::concomplex (xslt::get_children ");
+      compile_expression(gen,p->left);
+      array_printf(gen->buf,"))) \n");
+    }
     l = l->next;
   }
   array_printf(gen->buf,"nil");
@@ -433,8 +449,8 @@ static void compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
   free(inelem.localpart);
   free(outelem.uri);
   free(outelem.localpart);
-  list_free(inargs,free_qname_ptr);
-  list_free(outargs,free_qname_ptr);
+  list_free(inargs,free_wsarg_ptr);
+  list_free(outargs,free_wsarg_ptr);
 }
 
 static void compile_expression(elcgen *gen, expression *expr)
@@ -843,7 +859,10 @@ static void compile_namespaces(elcgen *gen, xmlNodePtr n)
   xmlNsPtr ns;
   int count = 0;
   for (ns = n->nsDef; ns; ns = ns->next) {
-    array_printf(gen->buf,"(cons (xml::mknamespace \"%s\" \"%s\")\n",ns->href,ns->prefix);
+    if (ns->prefix)
+      array_printf(gen->buf,"(cons (xml::mknamespace \"%s\" \"%s\")\n",ns->href,ns->prefix);
+    else
+      array_printf(gen->buf,"(cons (xml::mknamespace \"%s\" nil)\n",ns->href);
     count++;
   }
   array_printf(gen->buf,"nil");

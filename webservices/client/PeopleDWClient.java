@@ -45,6 +45,14 @@ public class PeopleDWClient
                                ", age = "+person.getAge()+
                                ", occupation = "+person.getOccupation());
         }
+        System.out.println();
+
+        int total = svc.totalAges(people);
+        System.out.println("total ages = "+total);
+        System.out.println();
+
+        String description = svc.describe(people.get(0));
+        System.out.println("people[0] description = "+description);
     }
 
 }

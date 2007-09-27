@@ -326,10 +326,18 @@ static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list
 
   for (arg = sequence->children; arg; arg = arg->next) {
     if (is_element(arg,XMLSCHEMA_NAMESPACE,"element") && xmlHasProp(arg,"name")) {
-      qname *qn = (qname*)calloc(1,sizeof(qname));
-      qn->uri = element_namespace(arg);
-      qn->localpart = xmlGetProp(arg,"name");
-      list_append(args,qn);
+      wsarg *wa = (wsarg*)calloc(1,sizeof(wsarg));
+      wa->list = 0;
+      wa->uri = element_namespace(arg);
+      wa->localpart = xmlGetProp(arg,"name");
+      list_append(args,wa);
+
+      if (xmlHasProp(arg,"maxOccurs")) {
+        char *max = xmlGetProp(arg,"maxOccurs");
+        if (strcmp(max,"1"))
+          wa->list = 1;
+        free(max);
+      }
     }
   }
 
@@ -341,10 +349,11 @@ static void get_message_parts(elcgen *gen, xmlNodePtr message, list **parts)
   xmlNodePtr n;
   for (n = message->children; n; n = n->next) {
     if (is_wsdl_element(n,"part") && xmlHasProp(n,"name")) {
-      qname *qn = (qname*)calloc(1,sizeof(qname));
-      qn->uri = strdup("");
-      qn->localpart = xmlGetProp(n,"name");
-      list_append(parts,qn);
+      wsarg *wa = (wsarg*)calloc(1,sizeof(wsarg));
+      wa->list = 0;
+      wa->uri = strdup("");
+      wa->localpart = xmlGetProp(n,"name");
+      list_append(parts,wa);
     }
   }
 }
@@ -492,8 +501,8 @@ int wsdl_get_operation_messages(elcgen *gen,
     }
 
     if (0 == r) {
-      list_free(*inargs,free_qname_ptr);
-      list_free(*outargs,free_qname_ptr);
+      list_free(*inargs,free_wsarg_ptr);
+      list_free(*outargs,free_wsarg_ptr);
       free_qname(inpelemname);
       free_qname(outpelemname);
     }

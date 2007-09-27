@@ -7,6 +7,7 @@ import javax.xml.namespace.QName;
 import proxy.peoplerpc.PeopleRPC;
 import proxy.peoplerpc.PeopleRPCService;
 import proxy.peoplerpc.Person;
+import proxy.peoplerpc.PersonArray;
 
 public class PeopleRPCClient
 {
@@ -39,12 +40,21 @@ public class PeopleRPCClient
         System.out.println();
 
         System.out.println("All people:\n");
-        List<Person> people = svc.getAllPeople().getItem();
+        PersonArray peoplearr = svc.getAllPeople();
+        List<Person> people = peoplearr.getItem();
         for (Person person : people) {
             System.out.println("name = "+person.getName()+
                                ", age = "+person.getAge()+
                                ", occupation = "+person.getOccupation());
         }
+        System.out.println();
+
+        int total = svc.totalAges(peoplearr);
+        System.out.println("total ages = "+total);
+        System.out.println();
+
+        String description = svc.describe(people.get(0));
+        System.out.println("people[0] description = "+description);
     }
 
 }

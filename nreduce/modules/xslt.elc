@@ -516,9 +516,16 @@ concomplex3 lst =
         (cons (head lst) (concomplex3 (tail lst))))
     nil)
 
-concomplex lst = (concomplex3 (concomplex2 lst))
+concomplex4 lst =
+(if lst
+    (if (== (xml::item_type (head lst)) xml::TYPE_DOCUMENT)
+        (append (xml::item_children (head lst)) (concomplex4 (tail lst)))
+        (cons (head lst) (concomplex4 (tail lst))))
+    nil)
 
+// FIXME: remaining steps
 
+concomplex lst = (concomplex4 (concomplex3 (concomplex2 lst)))
 
 //==================================================================================================
 // XPath Functions and Operators

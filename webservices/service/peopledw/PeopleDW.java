@@ -41,4 +41,19 @@ public class PeopleDW
     {
         return people;
     }
+
+    @WebMethod
+    public int totalAges(Person[] p)
+    {
+        int total = 0;
+        for (int i = 0; i < p.length; i++)
+            total += p[i].age;
+        return total;
+    }
+
+    @WebMethod
+    public String describe(Person p)
+    {
+        return p.name+" ("+p.age+"), "+p.occupation;
+    }
 }

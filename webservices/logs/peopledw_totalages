@@ -1,0 +1,54 @@
+
+==============
+Listen Port: 8081
+Target Host: 127.0.0.1
+Target Port: 8080
+==== Request ====
+POST /peopledw HTTP/1.1
+SOAPAction: ""
+Content-Type: text/xml;charset="utf-8"
+Accept: text/xml, multipart/related, text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2
+User-Agent: JAX-WS RI 2.1.2-06/14/2007 05:26 PM(vivekp)-M1
+Host: 127.0.0.1:8081
+Content-Length: 419
+
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:totalAges xmlns:ns2="http://peopledw.service/">
+            <arg0>
+               <name>Fred</name>
+               <age>20</age>
+               <occupation>Plumber</occupation>
+            </arg0>
+            <arg0>
+               <name>Joe</name>
+               <age>33</age>
+               <occupation>Marketing executive</occupation>
+            </arg0>
+            <arg0>
+               <name>Bob</name>
+               <age>38</age>
+               <occupation>Builder</occupation>
+            </arg0>
+         </ns2:totalAges>
+      </S:Body>
+   </S:Envelope>==== Response ====
+HTTP/1.1 200 OK
+Date: Wed, 26 Sep 2007 05:49:12 GMT
+Content-type: text/xml;charset="utf-8"
+Transfer-encoding: chunked
+
+db
+<?xml version="1.0" ?>
+   <S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+      <S:Body>
+         <ns2:totalAgesResponse xmlns:ns2="http://peopledw.service/">
+            <return>91</return>
+         </ns2:totalAgesResponse>
+      </S:Body>
+   </S:Envelope>
+0
+
+
+==============
