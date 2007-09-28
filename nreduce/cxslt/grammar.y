@@ -405,9 +405,10 @@ XPathNodeComp:
 ;
 
 XPathPathExpr:
-  '/'                             { $$ = new_RootExpr(NULL); }
-| '/' XPathRelativePathExpr       { $$ = new_RootExpr($2); }
-| SLASHSLASH XPathRelativePathExpr { /*
+  '/'                             { $$ = new_expression2(XPATH_ROOT,NULL,NULL); }
+| '/' XPathRelativePathExpr       { $$ = new_expression2(XPATH_ROOT,$2,NULL); }
+| SLASHSLASH XPathRelativePathExpr { fatal("unsupported: //");
+                                     /*
                                       expression *dos;
                                     dos = new NodeTestExpr(XPATH_NODE_TEST_SEQUENCETYPE,
                                                            SequenceTypeImpl::node(),

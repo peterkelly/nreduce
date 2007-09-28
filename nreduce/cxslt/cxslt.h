@@ -189,7 +189,6 @@ expression *new_VarInExpr(expression *left);
 expression *new_VarInListExpr(expression *left, expression *right);
 expression *new_QuantifiedExpr(int type, expression *left, expression *right);
 expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch);
-expression *new_RootExpr(expression *left);
 
 typedef struct {
   char *filename;

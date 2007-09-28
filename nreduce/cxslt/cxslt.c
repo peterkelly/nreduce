@@ -96,13 +96,41 @@ expression *new_expression2(int type, expression *left, expression *right)
   return expr;
 }
 
-expression *new_TypeExpr(int type, seqtype *st, expression *right) { return NULL; }
-expression *new_ForExpr(expression *left, expression *right) { return NULL; }
-expression *new_VarInExpr(expression *left) { return NULL; }
-expression *new_VarInListExpr(expression *left, expression *right) { return NULL; }
-expression *new_QuantifiedExpr(int type, expression *left, expression *right) { return NULL; }
-expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch) { return NULL; }
-expression *new_RootExpr(expression *left) { return NULL; }
+expression *new_TypeExpr(int type, seqtype *st, expression *right)
+{
+  fatal("unsupported: TypeExpr");
+  return NULL;
+}
+
+expression *new_ForExpr(expression *left, expression *right)
+{
+  fatal("unsupported: ForExpr");
+  return NULL;
+}
+
+expression *new_VarInExpr(expression *left)
+{
+  fatal("unsupported: VarInExpr");
+  return NULL;
+}
+
+expression *new_VarInListExpr(expression *left, expression *right)
+{
+  fatal("unsupported: VarInListExpr");
+  return NULL;
+}
+
+expression *new_QuantifiedExpr(int type, expression *left, expression *right)
+{
+  fatal("unsupported: QuantifiedExpr");
+  return NULL;
+}
+
+expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch)
+{
+  fatal("unsupported: XPathIfExpr");
+  return NULL;
+}
 
 void free_expression(expression *expr)
 {
@@ -539,7 +567,7 @@ static int compile_expression(elcgen *gen, expression *expr)
       case KIND_SCHEMA_ATTRIBUTE:
         return gen_error(gen,"Schema attribute tests not supported");
       case KIND_PI:
-        fprintf(stderr,"Processing instruction tests not supported\n");
+        return gen_error(gen,"Processing instruction tests not supported");
         break;
       case KIND_COMMENT:
         array_printf(gen->buf,"(xslt::type_test xml::TYPE_COMMENT)");
@@ -641,7 +669,7 @@ static int compile_expression(elcgen *gen, expression *expr)
         return compile_ws_call(gen,expr,expr->qn.uri+5);
       }
       else {
-        return gen_error(gen,"Call to non-existent function {%s}%s\n",
+        return gen_error(gen,"Call to non-existent function {%s}%s",
                          expr->qn.uri ? expr->qn.uri : "",expr->qn.localpart);
       }
     }
@@ -687,6 +715,9 @@ static int compile_expression(elcgen *gen, expression *expr)
       }
     }
     break;
+  case XPATH_ROOT:
+    /* FIXME */
+    return gen_error(gen,"Unsupported expression type: root",expr->type);
   default:
     return gen_error(gen,"Unsupported expression type: %d",expr->type);
   }
@@ -732,6 +763,9 @@ static expression *parse_xpath(elcgen *gen, xmlNodePtr n, const char *str)
   parse_expr = NULL;
 
   pthread_mutex_unlock(&xpath_lock);
+
+  if (NULL == expr)
+    gen_error(gen,"XPath parse returned NULL expr");
 
   return expr;
 }
@@ -1235,7 +1269,7 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
 
   *result = NULL;
   if (NULL == (doc = xmlReadMemory(xslt,strlen(xslt),NULL,NULL,0))) {
-    gen_error(gen,"Error parsing %s\n",xslturl);
+    gen_error(gen,"Error parsing %s",xslturl);
   }
   else {
     array_printf(gen->buf,"import xml\n");
