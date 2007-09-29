@@ -79,14 +79,6 @@ void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, in
   free(wm);
 }
 
-void send_finwrite(endpoint *endpt, socketid sockid, int ioid)
-{
-  finwrite_msg fwm;
-  fwm.sockid = sockid;
-  fwm.ioid = ioid;
-  endpoint_send(endpt,sockid.coordid,MSG_FINWRITE,&fwm,sizeof(fwm));
-}
-
 void send_delete_connection(endpoint *endpt, socketid sockid)
 {
   delete_connection_msg dcm;

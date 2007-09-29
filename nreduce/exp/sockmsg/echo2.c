@@ -57,12 +57,11 @@ static void echo_thread(node *n, endpoint *endpt, void *arg)
         send_write(endpt,rrm->sockid,0,rrm->data,rrm->len);
       }
       else {
-        send_finwrite(endpt,rrm->sockid,1);
+        send_write(endpt,rrm->sockid,0,NULL,0);
       }
       break;
     }
     case MSG_WRITE_RESPONSE:
-    case MSG_FINWRITE_RESPONSE:
       /* ignore */
       break;
     case MSG_CONNECTION_CLOSED:

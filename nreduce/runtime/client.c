@@ -367,14 +367,6 @@ void output_thread(node *n, endpoint *endpt, void *arg)
       oa->rc = m->rc;
       break;
     }
-    case MSG_FINWRITE: {
-      finwrite_response_msg frm;
-      finwrite_msg *m = (finwrite_msg*)msg->data;
-      assert(sizeof(finwrite_msg) == msg->size);
-      frm.ioid = m->ioid;
-      endpoint_send(endpt,msg->source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
-      break;
-    }
     case MSG_INITTASK: {
       inittask_msg *initmsg = (inittask_msg*)msg->data;
       int i;

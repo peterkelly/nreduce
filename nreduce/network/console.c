@@ -216,7 +216,7 @@ void console_thread(node *n, endpoint *endpt, void *arg)
       array_remove_data(input,start);
 
       if (doclose) {
-        send_finwrite(endpt,csl->sockid,1);
+        send_write(endpt,csl->sockid,1,NULL,0);
         done = 1;
       }
       else if (0 == m->len) {

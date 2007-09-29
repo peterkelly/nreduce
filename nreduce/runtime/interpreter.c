@@ -422,21 +422,12 @@ static void interpreter_write_response(task *tsk, write_response_msg *m)
   frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
   sysobject *so = get_frame_sysobject(f2);
   assert(SYSOBJECT_CONNECTION == so->type);
-  assert((B_PRINT == f2->instr->arg0) || (B_PRINTARRAY == f2->instr->arg0));
+  assert((B_PRINT == f2->instr->arg0) ||
+         (B_PRINTARRAY == f2->instr->arg0) ||
+         (B_PRINTEND == f2->instr->arg0));
 
   assert(m->ioid == so->frameids[WRITE_FRAMEADDR]);
   so->frameids[WRITE_FRAMEADDR] = 0;
-}
-
-static void interpreter_finwrite_response(task *tsk, finwrite_response_msg *m)
-{
-  frame *f2 = retrieve_blocked_frame(tsk,m->ioid);
-  sysobject *so = get_frame_sysobject(f2);
-  assert(SYSOBJECT_CONNECTION == so->type);
-  assert(B_PRINTEND == f2->instr->arg0);
-
-  assert(m->ioid == so->frameids[FINWRITE_FRAMEADDR]);
-  so->frameids[FINWRITE_FRAMEADDR] = 0;
 }
 
 static void interpreter_connection_event(task *tsk, connection_event_msg *m)
@@ -981,10 +972,6 @@ static void handle_message(task *tsk, message *msg)
   case MSG_WRITE_RESPONSE:
     assert(sizeof(write_response_msg) == msg->size);
     interpreter_write_response(tsk,(write_response_msg*)msg->data);
-    break;
-  case MSG_FINWRITE_RESPONSE:
-    assert(sizeof(finwrite_response_msg) == msg->size);
-    interpreter_finwrite_response(tsk,(finwrite_response_msg*)msg->data);
     break;
   case MSG_CONNECTION_CLOSED:
     assert(sizeof(connection_event_msg) == msg->size);

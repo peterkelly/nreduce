@@ -1459,26 +1459,11 @@ static void b_printarray(task *tsk, pntr *argstack)
 
 static void b_printend(task *tsk, pntr *argstack)
 {
-  frame *curf = *tsk->runptr;
-  if (CELL_NIL == pntrtype(argstack[0]))
+  pntr destpntr = argstack[0];
+  if (CELL_NIL == pntrtype(destpntr))
     return;
-  if (0 == curf->resume) {
-    sysobject *so;
-    int ioid;
-
-    CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION);
-    so = psysobject(argstack[0]);
-    assert(so->connected);
-
-    ioid = suspend_current_frame(tsk,curf);
-    send_finwrite(tsk->endpt,so->sockid,ioid);
-    assert(0 == so->frameids[FINWRITE_FRAMEADDR]);
-    so->frameids[FINWRITE_FRAMEADDR] = ioid;
-  }
-  else {
-    curf->resume = 0;
-    argstack[0] = tsk->globnilpntr;
-  }
+  CHECK_SYSOBJECT_ARG(0,SYSOBJECT_CONNECTION);
+  write_data(tsk,argstack,NULL,0,destpntr);
 }
 
 static void b_error1(task *tsk, pntr *argstack)

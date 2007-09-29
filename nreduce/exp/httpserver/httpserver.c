@@ -187,7 +187,7 @@ static void handle_request(endpoint *endpt, httpconn *hc,
   array_printf(response,"</table>\n");
   array_printf(response,"</body></html>\n");
   send_write(endpt,hc->sockid,0,response->data,response->nbytes);
-  send_finwrite(endpt,hc->sockid,1);
+  send_write(endpt,hc->sockid,0,NULL,0);
   array_free(response);
 }
 
@@ -202,7 +202,7 @@ static void send_error(endpoint *endpt, httpconn *hc,
   array_printf(response,"\r\n");
   array_printf(response,"%s\n",msg);
   send_write(endpt,hc->sockid,0,response->data,response->nbytes);
-  send_finwrite(endpt,hc->sockid,1);
+  send_write(endpt,hc->sockid,0,NULL,0);
   array_free(response);
 }
 
@@ -308,7 +308,6 @@ static void http_thread(node *n, endpoint *endpt, void *arg)
       break;
     }
     case MSG_WRITE_RESPONSE:
-    case MSG_FINWRITE_RESPONSE:
       /* ignore */
       break;
     case MSG_CONNECTION_CLOSED: {

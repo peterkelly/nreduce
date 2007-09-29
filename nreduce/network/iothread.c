@@ -166,7 +166,10 @@ static void iothread_write(node *n, endpoint *endpt, write_msg *m, endpointid so
   if (NULL != (conn = get_connection(n,m->sockid))) {
     assert(!conn->collected);
 
-    array_append(conn->sendbuf,m->data,m->len);
+    if (0 < m->len)
+      array_append(conn->sendbuf,m->data,m->len);
+    else
+      conn->finwrite = 1;
 
     assert(0 == conn->frameids[WRITE_FRAMEADDR]);
 
@@ -181,30 +184,10 @@ static void iothread_write(node *n, endpoint *endpt, write_msg *m, endpointid so
     node_notify(n);
   }
 
-  if (spaceleft) {
+  if (spaceleft || (0 == m->len)) {
     write_response_msg wrm;
     wrm.ioid = m->ioid;
     endpoint_send_locked(endpt,source,MSG_WRITE_RESPONSE,&wrm,sizeof(wrm));
-  }
-}
-
-static void iothread_finwrite(node *n, endpoint *endpt, finwrite_msg *m, endpointid source)
-{
-  connection *conn;
-
-  /* If the connection doesn't exist any more, ignore the request - the caller is about to
-     receive a CONNECTION_CLOSED MESSAGE */
-  conn = get_connection(n,m->sockid);
-  if (conn) {
-    assert(!conn->collected);
-    conn->finwrite = 1;
-    node_notify(n);
-  }
-
-  if (conn) {
-    finwrite_response_msg frm;
-    frm.ioid = m->ioid;
-    endpoint_send_locked(endpt,source,MSG_FINWRITE_RESPONSE,&frm,sizeof(frm));
   }
 }
 
@@ -259,10 +242,6 @@ static void iothread_handle_message(node *n, endpoint *endpt, message *msg)
   case MSG_WRITE:
     assert(sizeof(write_msg) <= msg->size);
     iothread_write(n,endpt,(write_msg*)msg->data,msg->source);
-    break;
-  case MSG_FINWRITE:
-    assert(sizeof(finwrite_msg) == msg->size);
-    iothread_finwrite(n,endpt,(finwrite_msg*)msg->data,msg->source);
     break;
   case MSG_DELETE_CONNECTION:
     assert(sizeof(delete_connection_msg) == msg->size);

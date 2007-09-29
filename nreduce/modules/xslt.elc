@@ -556,14 +556,6 @@ node_to_string node =
 fn_string0 node =
 (cons (xml::mkstring (node_to_string node)) nil)
 
-// FIXME: temp
-fn_show_id lst =
-(map (!node.(xml::mknumber (xml::item_id node))) lst)
-
-// FIXME: temp
-fn_show_index lst =
-(map (!node.(xml::mknumber (xml::item_index node))) lst)
-
 fn_string arg0 =
 (if arg0
   (if (tail arg0)

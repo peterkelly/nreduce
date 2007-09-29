@@ -98,10 +98,9 @@ typedef struct endpoint {
 #define CONNECT_FRAMEADDR        0
 #define READ_FRAMEADDR           1
 #define WRITE_FRAMEADDR          2
-#define FINWRITE_FRAMEADDR       3
-#define LISTEN_FRAMEADDR         4
-#define ACCEPT_FRAMEADDR         5
-#define FRAMEADDR_COUNT          6
+#define LISTEN_FRAMEADDR         3
+#define ACCEPT_FRAMEADDR         4
+#define FRAMEADDR_COUNT          5
 
 typedef struct {
   endpointid coordid;
@@ -160,16 +159,14 @@ extern const char *log_levels[LOG_COUNT];
 #define MSG_CONNECT             2147483641
 #define MSG_READ                2147483640
 #define MSG_WRITE               2147483639
-#define MSG_FINWRITE            2147483638
-#define MSG_LISTEN_RESPONSE     2147483637
-#define MSG_ACCEPT_RESPONSE     2147483636
-#define MSG_CONNECT_RESPONSE    2147483635
-#define MSG_READ_RESPONSE       2147483634
-#define MSG_WRITE_RESPONSE      2147483633
-#define MSG_CONNECTION_CLOSED   2147483632
-#define MSG_FINWRITE_RESPONSE   2147483631
-#define MSG_DELETE_CONNECTION   2147483630
-#define MSG_DELETE_LISTENER     2147483629
+#define MSG_LISTEN_RESPONSE     2147483638
+#define MSG_ACCEPT_RESPONSE     2147483637
+#define MSG_CONNECT_RESPONSE    2147483636
+#define MSG_READ_RESPONSE       2147483635
+#define MSG_WRITE_RESPONSE      2147483634
+#define MSG_CONNECTION_CLOSED   2147483633
+#define MSG_DELETE_CONNECTION   2147483632
+#define MSG_DELETE_LISTENER     2147483631
 
 /* Console */
 #define MSG_CONSOLE_DATA        2147483628
@@ -208,11 +205,6 @@ typedef struct {
 } __attribute__ ((__packed__)) write_msg;
 
 typedef struct {
-  socketid sockid;
-  int ioid;
-} __attribute__ ((__packed__)) finwrite_msg;
-
-typedef struct {
   int ioid;
   int error;
   char errmsg[ERRMSG_MAX+1];
@@ -245,10 +237,6 @@ typedef struct {
 } __attribute__ ((__packed__)) write_response_msg;
 
 typedef struct {
-  int ioid;
-} __attribute__ ((__packed__)) finwrite_response_msg;
-
-typedef struct {
   socketid sockid;
   int error;
   char errmsg[ERRMSG_MAX+1];
@@ -274,7 +262,6 @@ void send_connect(endpoint *endpt, endpointid epid,
                   const char *hostname, int port, endpointid owner, int ioid);
 void send_read(endpoint *endpt, socketid sid, int ioid);
 void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);
-void send_finwrite(endpoint *endpt, socketid sockid, int ioid);
 void send_delete_connection(endpoint *endpt, socketid sockid);
 void send_delete_listener(endpoint *endpt, socketid sockid);
 
