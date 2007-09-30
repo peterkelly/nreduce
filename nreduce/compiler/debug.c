@@ -392,7 +392,7 @@ void print_scomb_code(source *src, FILE *f, scomb *sc)
   free(scname);
   for (i = 0; i < sc->nargs; i++) {
     const char *argname = real_varname(src,sc->argnames[i]);
-    if (strcmp(argname,"__args")) {
+    if (strcmp(argname,"__args") && strcmp(argname,"__stdin")) {
       if (sc->strictin) {
         if (sc->strictin[i])
           col += fprintf(f,"!");

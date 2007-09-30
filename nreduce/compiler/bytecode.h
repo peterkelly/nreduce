@@ -77,6 +77,7 @@ typedef struct funinfo {
 } funinfo;
 
 typedef struct bcheader {
+  char signature[16];
   int nops;
   int nfunctions;
   int nstrings;

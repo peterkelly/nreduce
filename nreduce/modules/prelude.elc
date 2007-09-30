@@ -26,7 +26,21 @@ spark val =
 (seq (sparklist val) val)
 
 __start args =
-(seq (printer (getoutput nil) (main args)) (exit nil))
+(if (if (== (len args) 2) (streq (head args) "_connection") nil)
+  (letrec
+    outputso = (mkconn (forcelist (item 1 args)))
+    input = (streamcon outputso)
+    realargs = (tail (tail args))
+   in
+  (seq (printer outputso (main realargs input))
+       (exit nil)))
+
+  (letrec
+    outputso = (getoutput nil)
+    input = nil
+   in
+  (seq (printer outputso (main args input))
+       (exit nil))))
 
 streamfd fd =
 (readchunk fd (streamfd fd))
@@ -220,3 +234,17 @@ jcall obj method args =
 cxslt source url = (cxslt1 (forcelist source) (forcelist url))
 
 cache key value = (cache1 (forcelist key) (forcelist value))
+
+spawn bytecode to =
+(letrec
+  cp = (connpair nil)
+  a = (head cp)
+  b = (tail cp)
+  connso = (mkconn (forcelist a))
+  from = (streamcon connso)
+ in
+  (seq (_spawn (forcelist bytecode) b)
+  (par (printer connso to)
+       from)))
+
+compile code filename = (_compile (forcelist code) (forcelist filename))

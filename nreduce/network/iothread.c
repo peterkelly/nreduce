@@ -129,7 +129,44 @@ static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointi
   }
 }
 
-static void iothread_read(node *n, endpoint *endpt, read_msg *m)
+static void iothread_connpair(node *n, endpoint *endpt, connpair_msg *m, endpointid source)
+{
+  connpair_response_msg crm;
+  int fds[2];
+  memset(&crm,0,sizeof(crm));
+  crm.ioid = m->ioid;
+  if (0 > socketpair(AF_UNIX,SOCK_STREAM,0,fds)) {
+    crm.error = 1;
+    snprintf(crm.errmsg,ERRMSG_MAX,"socketpair: %s",strerror(errno));
+    crm.errmsg[ERRMSG_MAX] = '\0';
+  }
+  else if ((0 > set_non_blocking(fds[0])) || (0 > set_non_blocking(fds[1]))) {
+    crm.error = 1;
+    snprintf(crm.errmsg,ERRMSG_MAX,"cannot set non-blocking socket");
+    crm.errmsg[ERRMSG_MAX] = '\0';
+  }
+  else {
+    connection *ca = add_connection(n,"(internal)",fds[0],NULL);
+    connection *cb = add_connection(n,"(internal)",fds[1],NULL);
+    crm.a = ca->sockid;
+    crm.b = cb->sockid;
+
+    ca->connected = 1;
+    ca->dontread = 1;
+    ca->isreg = 1;
+    ca->owner = source;
+
+    cb->connected = 1;
+    cb->dontread = 1;
+    cb->isreg = 1;
+    cb->owner = source;
+
+    node_notify(n);
+  }
+  endpoint_send_locked(endpt,source,MSG_CONNPAIR_RESPONSE,&crm,sizeof(crm));
+}
+
+static void iothread_read(node *n, endpoint *endpt, read_msg *m, endpointid source)
 {
   connection *conn;
 
@@ -141,6 +178,11 @@ static void iothread_read(node *n, endpoint *endpt, read_msg *m)
     assert(!conn->collected);
     assert(conn->dontread);
     assert(0 == conn->frameids[READ_FRAMEADDR]);
+
+    if (!endpointid_equals(&conn->owner,&source)) {
+      conn->owner = source;
+      endpoint_link_locked(endpt,conn->owner);
+    }
 
     conn->frameids[READ_FRAMEADDR] = m->ioid;
     conn->dontread = 0;
@@ -165,6 +207,11 @@ static void iothread_write(node *n, endpoint *endpt, write_msg *m, endpointid so
      receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = get_connection(n,m->sockid))) {
     assert(!conn->collected);
+
+    if (!endpointid_equals(&conn->owner,&source)) {
+      conn->owner = source;
+      endpoint_link_locked(endpt,conn->owner);
+    }
 
     if (0 < m->len)
       array_append(conn->sendbuf,m->data,m->len);
@@ -235,9 +282,13 @@ static void iothread_handle_message(node *n, endpoint *endpt, message *msg)
     assert(sizeof(connect_msg) == msg->size);
     iothread_connect(n,endpt,(connect_msg*)msg->data,msg->source);
     break;
+  case MSG_CONNPAIR:
+    assert(sizeof(connpair_msg) <= msg->size);
+    iothread_connpair(n,endpt,(connpair_msg*)msg->data,msg->source);
+    break;
   case MSG_READ:
     assert(sizeof(read_msg) == msg->size);
-    iothread_read(n,endpt,(read_msg*)msg->data);
+    iothread_read(n,endpt,(read_msg*)msg->data,msg->source);
     break;
   case MSG_WRITE:
     assert(sizeof(write_msg) <= msg->size);

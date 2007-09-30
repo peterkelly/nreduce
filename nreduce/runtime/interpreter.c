@@ -328,7 +328,8 @@ static sysobject *get_frame_sysobject(frame *f)
          (B_ACCEPT == f->instr->arg0) ||
          (B_STARTLISTEN == f->instr->arg0) ||
          (B_JCALL == f->instr->arg0) ||
-         (B_JNEW == f->instr->arg0));
+         (B_JNEW == f->instr->arg0) ||
+         (B_CONNPAIR == f->instr->arg0));
   assert(1 <= f->instr->expcount);
   objp = f->data[f->instr->expcount-1];
   assert(CELL_SYSOBJECT == pntrtype(objp));
@@ -398,6 +399,19 @@ static void interpreter_connect_response(task *tsk, connect_response_msg *m)
   assert(0 == so->sockid.sid);
   assert(!socketid_isnull(&m->sockid) || m->error);
   so->sockid = m->sockid;
+}
+
+static void interpreter_connpair_response(task *tsk, connpair_response_msg *m)
+{
+  frame *f = retrieve_blocked_frame(tsk,m->ioid);
+  assert(OP_BIF == f->instr->opcode);
+  assert(B_CONNPAIR == f->instr->arg0);
+  assert(1 <= f->instr->expcount);
+  if (m->error)
+    set_error(tsk,"connpair: %s",m->errmsg);
+  else
+    f->data[f->instr->expcount-1] = mkcons(tsk,socketid_string(tsk,m->a),
+                                           socketid_string(tsk,m->b));
 }
 
 static void interpreter_read_response(task *tsk, read_response_msg *m)
@@ -965,6 +979,10 @@ static void handle_message(task *tsk, message *msg)
     assert(sizeof(connect_response_msg) == msg->size);
     interpreter_connect_response(tsk,(connect_response_msg*)msg->data);
     break;
+  case MSG_CONNPAIR_RESPONSE:
+    assert(sizeof(connpair_response_msg) == msg->size);
+    interpreter_connpair_response(tsk,(connpair_response_msg*)msg->data);
+    break;
   case MSG_READ_RESPONSE:
     assert(sizeof(read_response_msg) <= msg->size);
     interpreter_read_response(tsk,(read_response_msg*)msg->data);
@@ -1415,7 +1433,8 @@ inline void op_bif(task *tsk, frame *runnable, const instruction *instr)
 
   #ifndef NDEBUG
   assert(!builtin_info[bif].reswhnf ||
-         (CELL_IND != pntrtype(f2->data[instr->expcount-nargs])));
+         (CELL_IND != pntrtype(f2->data[instr->expcount-nargs])) ||
+         (0 != f2->resume));
   #endif
 }
 

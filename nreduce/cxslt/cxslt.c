@@ -1285,11 +1285,13 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
       array_printf(gen->buf,"STRIPALL = %s\n",gen->option_strip ? "1" : "nil");
       array_printf(gen->buf,"INDENT = %s\n",gen->option_indent ? "1" : "nil");
       array_printf(gen->buf,
-                   "main args =\n"
+                   "main args stdin =\n"
                    "(letrec\n"
                    "  input =\n"
                    "    (if (== (len args) 0)\n"
-                   "      (xml::mkdoc nil)\n"
+                   "      (if stdin\n"
+                   "        (xml::parsexml STRIPALL stdin)\n"
+                   "        (xml::mkdoc nil))\n"
                    "      (xml::parsexml STRIPALL (readb (head args))))\n"
                    "  result = (top input 1 1)\n"
                    "  doc = (cons (xml::mkdoc (xslt::concomplex result)) nil)\n"

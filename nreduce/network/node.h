@@ -100,7 +100,8 @@ typedef struct endpoint {
 #define WRITE_FRAMEADDR          2
 #define LISTEN_FRAMEADDR         3
 #define ACCEPT_FRAMEADDR         4
-#define FRAMEADDR_COUNT          5
+#define CONNPAIR_FRAMEADDR       5
+#define FRAMEADDR_COUNT          6
 
 typedef struct {
   endpointid coordid;
@@ -157,16 +158,18 @@ extern const char *log_levels[LOG_COUNT];
 #define MSG_LISTEN              2147483643
 #define MSG_ACCEPT              2147483642
 #define MSG_CONNECT             2147483641
-#define MSG_READ                2147483640
-#define MSG_WRITE               2147483639
-#define MSG_LISTEN_RESPONSE     2147483638
-#define MSG_ACCEPT_RESPONSE     2147483637
-#define MSG_CONNECT_RESPONSE    2147483636
-#define MSG_READ_RESPONSE       2147483635
-#define MSG_WRITE_RESPONSE      2147483634
-#define MSG_CONNECTION_CLOSED   2147483633
-#define MSG_DELETE_CONNECTION   2147483632
-#define MSG_DELETE_LISTENER     2147483631
+#define MSG_CONNPAIR            2147483640
+#define MSG_READ                2147483639
+#define MSG_WRITE               2147483638
+#define MSG_LISTEN_RESPONSE     2147483637
+#define MSG_ACCEPT_RESPONSE     2147483636
+#define MSG_CONNECT_RESPONSE    2147483635
+#define MSG_CONNPAIR_RESPONSE   2147483634
+#define MSG_READ_RESPONSE       2147483633
+#define MSG_WRITE_RESPONSE      2147483632
+#define MSG_CONNECTION_CLOSED   2147483631
+#define MSG_DELETE_CONNECTION   2147483630
+#define MSG_DELETE_LISTENER     2147483629
 
 /* Console */
 #define MSG_CONSOLE_DATA        2147483628
@@ -191,6 +194,10 @@ typedef struct {
   endpointid owner;
   int ioid;
 } __attribute__ ((__packed__)) connect_msg;
+
+typedef struct {
+  int ioid;
+} __attribute__ ((__packed__)) connpair_msg;
 
 typedef struct {
   socketid sockid;
@@ -227,6 +234,14 @@ typedef struct {
 
 typedef struct {
   int ioid;
+  socketid a;
+  socketid b;
+  int error;
+  char errmsg[ERRMSG_MAX+1];
+} __attribute__ ((__packed__)) connpair_response_msg;
+
+typedef struct {
+  int ioid;
   socketid sockid;
   int len;
   char data[0];
@@ -260,6 +275,7 @@ void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
 void send_accept(endpoint *endpt, socketid sockid, int ioid);
 void send_connect(endpoint *endpt, endpointid epid,
                   const char *hostname, int port, endpointid owner, int ioid);
+void send_connpair(endpoint *endpt, endpointid epid, int ioid);
 void send_read(endpoint *endpt, socketid sid, int ioid);
 void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);
 void send_delete_connection(endpoint *endpt, socketid sockid);

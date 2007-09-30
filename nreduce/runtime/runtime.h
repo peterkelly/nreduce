@@ -130,7 +130,12 @@ struct gaddr;
 #define B_CXSLT1         59
 #define B_CACHE          60
 
-#define NUM_BUILTINS     61
+#define B_CONNPAIR       61
+#define B_MKCONN         62
+#define B_SPAWN          63
+#define B_COMPILE        64
+
+#define NUM_BUILTINS     65
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -656,9 +661,12 @@ carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewra
 void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
 pntr data_to_list(task *tsk, const char *data, int size, pntr tail);
 
+pntr socketid_string(task *tsk, socketid sockid);
+pntr mkcons(task *tsk, pntr head, pntr tail);
+
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
-int array_to_string(pntr refpntr, char **str);
+int array_to_string(pntr refpntr, char **str, int *sizeout);
 int flatten_list(pntr refpntr, pntr **data);
 
 /* worker */

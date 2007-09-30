@@ -47,6 +47,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <dirent.h>
+#include <arpa/inet.h>
 
 static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
@@ -514,7 +515,7 @@ pntr string_to_array(task *tsk, const char *str)
   return data_to_list(tsk,str,strlen(str),tsk->globnilpntr);
 }
 
-int array_to_string(pntr refpntr, char **str)
+int array_to_string(pntr refpntr, char **str, int *sizeout)
 {
   pntr p = refpntr;
   array *buf = array_new(1,0);
@@ -577,6 +578,8 @@ int array_to_string(pntr refpntr, char **str)
     free(buf->data);
   }
   else {
+    if (sizeout)
+      *sizeout = buf->nbytes;
     array_append(buf,&zero,1);
     *str = buf->data;
   }
@@ -868,7 +871,7 @@ static void b_stringtonum1(task *tsk, pntr *argstack)
   char *str;
   char *end = NULL;
 
-  if (0 <= (badtype = array_to_string(p,&str))) {
+  if (0 <= (badtype = array_to_string(p,&str,NULL))) {
     set_error(tsk,"stringtonum1: argument is not a string (contains non-char: %s)",
               cell_types[badtype]);
     return;
@@ -912,7 +915,7 @@ static void b_openfd(task *tsk, pntr *argstack)
   int badtype;
   sysobject *so;
 
-  if (0 <= (badtype = array_to_string(filenamepntr,&filename))) {
+  if (0 <= (badtype = array_to_string(filenamepntr,&filename,NULL))) {
     set_error(tsk,"openfd: filename is not a string (contains non-char: %s)",cell_types[badtype]);
     return;
   }
@@ -976,7 +979,7 @@ static void b_readdir1(task *tsk, pntr *argstack)
   int badtype;
   int count = 0;
 
-  if (0 <= (badtype = array_to_string(filenamepntr,&path))) {
+  if (0 <= (badtype = array_to_string(filenamepntr,&path,NULL))) {
     set_error(tsk,"readdir: path is not a string (contains non-char: %s)",cell_types[badtype]);
     return;
   }
@@ -1047,7 +1050,7 @@ static void b_fexists(task *tsk, pntr *argstack)
   int s;
   struct stat statbuf;
 
-  if (0 <= (badtype = array_to_string(pathpntr,&path))) {
+  if (0 <= (badtype = array_to_string(pathpntr,&path,NULL))) {
     set_error(tsk,"fexists: filename is not a string (contains non-char: %s)",cell_types[badtype]);
     return;
   }
@@ -1073,7 +1076,7 @@ static void b_fisdir(task *tsk, pntr *argstack)
   int badtype;
   struct stat statbuf;
 
-  if (0 <= (badtype = array_to_string(pathpntr,&path))) {
+  if (0 <= (badtype = array_to_string(pathpntr,&path,NULL))) {
     set_error(tsk,"fisdir: filename is not a string (contains non-char: %s)",cell_types[badtype]);
     return;
   }
@@ -1146,7 +1149,7 @@ static void b_opencon(task *tsk, pntr *argstack)
     CHECK_ARG(1,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
 
-    if (0 <= (badtype = array_to_string(hostnamepntr,&hostname))) {
+    if (0 <= (badtype = array_to_string(hostnamepntr,&hostname,NULL))) {
       set_error(tsk,"opencon: hostname is not a string (contains non-char: %s)",
                 cell_types[badtype]);
       return;
@@ -1382,10 +1385,12 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   assert(so->connected);
 
   if (so->closed) {
-    if (so->error)
-      set_error(tsk,"writecon %s:%d: %s",so->hostname,so->port,so->errmsg);
-    else
-      set_error(tsk,"writecon %s:%d: Connection is closed",so->hostname,so->port);
+    if (0 < len) {
+      if (so->error)
+        set_error(tsk,"writecon %s:%d: %s",so->hostname,so->port,so->errmsg);
+      else
+        set_error(tsk,"writecon %s:%d: Connection is closed",so->hostname,so->port);
+    }
     curf->resume = 0;
     return;
   }
@@ -1472,7 +1477,7 @@ static void b_error1(task *tsk, pntr *argstack)
   int badtype;
   char *str;
 
-  if (0 <= (badtype = array_to_string(p,&str))) {
+  if (0 <= (badtype = array_to_string(p,&str,NULL))) {
     set_error(tsk,"error1: argument is not a string (contains non-char: %s)",cell_types[badtype]);
     return;
   }
@@ -1518,7 +1523,7 @@ static void b_jnew(task *tsk, pntr *argstack)
   if (0 == curf->resume) {
     char *classname = NULL;
 
-    if (0 <= array_to_string(classn,&classname)) {
+    if (0 <= array_to_string(classn,&classname,NULL)) {
       set_error(tsk,"jnew: class name is not a string");
     }
     else {
@@ -1584,12 +1589,12 @@ static void b_cxslt1(task *tsk, pntr *argstack)
   char *url;
   char *compiled;
 
-  if (0 <= array_to_string(sourcepntr,&source)) {
+  if (0 <= array_to_string(sourcepntr,&source,NULL)) {
     set_error(tsk,"cxslt1: source is not a string");
     return;
   }
 
-  if (0 <= array_to_string(urlpntr,&url)) {
+  if (0 <= array_to_string(urlpntr,&url,NULL)) {
     set_error(tsk,"cxslt1: url is not a string");
     free(source);
     return;
@@ -1619,6 +1624,152 @@ static void b_cxslt1(task *tsk, pntr *argstack)
 static void b_cache1(task *tsk, pntr *argstack)
 {
   assert(!"not yet implemented");
+}
+
+pntr socketid_string(task *tsk, socketid sockid)
+{
+  char ident[100];
+  snprintf(ident,100,IP_FORMAT" %d %d %d",IP_ARGS(sockid.coordid.ip),
+           sockid.coordid.port,sockid.coordid.localid,sockid.sid);
+  return string_to_array(tsk,ident);
+}
+
+pntr mkcons(task *tsk, pntr head, pntr tail)
+{
+  pntr p;
+  cell *pair = alloc_cell(tsk);
+  pair->type = CELL_CONS;
+  pair->field1 = head;
+  pair->field2 = tail;
+  make_pntr(p,pair);
+  return p;
+}
+
+static void b_connpair(task *tsk, pntr *argstack)
+{
+  frame *curf = *tsk->runptr;
+
+  if (0 == curf->resume) {
+    int ioid = suspend_current_frame(tsk,*tsk->runptr);
+    send_connpair(tsk->endpt,tsk->n->iothid,ioid);
+  }
+  else {
+    /* Response processing done in interpreter_connpair_response() */
+    curf->resume = 0;
+  }
+}
+
+static void b_mkconn(task *tsk, pntr *argstack)
+{
+  pntr identpntr = argstack[0];
+  char *ident;
+  char ipstr[21];
+  int port;
+  int localid;
+  int sid;
+  sysobject *so;
+
+  if (0 <= array_to_string(identpntr,&ident,NULL)) {
+    set_error(tsk,"mkconn: identifier is not a string");
+    return;
+  }
+
+  if (4 != sscanf(ident,"%20s %d %d %d",ipstr,&port,&localid,&sid)) {
+    set_error(tsk,"mkconn: invalid identifier");
+    free(ident);
+    return;
+  }
+
+  so = new_sysobject(tsk,SYSOBJECT_CONNECTION);
+  so->hostname = strdup("(pair)");
+  so->port = 0;
+  so->sockid.coordid.ip = inet_addr(ipstr);
+  so->sockid.coordid.port = port;
+  so->sockid.coordid.localid = localid;
+  so->sockid.sid = sid;
+  so->connected = 1;
+
+  make_pntr(argstack[0],so->c);
+
+  free(ident);
+}
+
+static void b_spawn(task *tsk, pntr *argstack)
+{
+  pntr bcpntr = argstack[1];
+  pntr identpntr = argstack[0];
+  char *ident;
+  int bcsize;
+  char *bcdata;
+  node *n = tsk->n;
+  const char *argv[2];
+  endpointid managerid = { ip: n->listenip, port: n->listenport, localid: MANAGER_ID };
+
+  if (0 <= array_to_string(bcpntr,&bcdata,&bcsize)) {
+    set_error(tsk,"spawn: bytecode is not a byte array");
+    return;
+  }
+
+  if ((sizeof(bcheader) > bcsize) ||
+      memcmp(((bcheader*)bcdata)->signature,"NREDUCE BYTECODE",16)) {
+    set_error(tsk,"spawn: invalid bytecode");
+    free(bcdata);
+    return;
+  }
+
+  if (0 <= array_to_string(identpntr,&ident,NULL)) {
+    set_error(tsk,"spawn: identifier is not a string");
+    free(bcdata);
+    return;
+  }
+
+  argv[0] = "_connection";
+  argv[1] = ident;
+
+  start_launcher(n,bcdata,bcsize,&managerid,1,NULL,tsk->out_sockid,2,argv);
+  free(bcdata);
+  free(ident);
+
+  argstack[0] = tsk->globnilpntr;
+}
+
+static void b_compile(task *tsk, pntr *argstack)
+{
+  source *src;
+  pntr codepntr = argstack[1];
+  pntr filenamepntr = argstack[0];
+  char *code;
+  char *filename;
+  int bcsize;
+  char *bcdata = NULL;
+
+  if (0 <= array_to_string(codepntr,&code,NULL)) {
+    set_error(tsk,"compile: code is not a string");
+    return;
+  }
+
+  if (0 <= array_to_string(filenamepntr,&filename,NULL)) {
+    set_error(tsk,"compile: filename is not a string");
+    free(code);
+    return;
+  }
+
+  src = source_new();
+  if ((0 != source_parse_string(src,code,"(unknown)","")) ||
+      (0 != source_process(src,0,0,0,0)) ||
+      (0 != source_compile(src,&bcdata,&bcsize))) {
+    set_error(tsk,"compile error");
+  }
+  else {
+    carray *arr = carray_new(tsk,1,0,NULL,NULL);
+    make_pntr(argstack[0],arr->wrapper);
+    carray_append(tsk,&arr,bcdata,bcsize,1);
+  }
+
+  free(bcdata);
+  free(code);
+  free(filename);
+  source_free(src);
 }
 
 int get_builtin(const char *name)
@@ -1716,5 +1867,9 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "cxslt1",         2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_cxslt1         },
 { "cache1",         2, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_cache1         },
 
-};
+{ "connpair",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_connpair       },
+{ "mkconn",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_mkconn         },
+{ "_spawn",         2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_spawn          },
+{ "_compile",       2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_compile        },
 
+};

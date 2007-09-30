@@ -346,6 +346,7 @@ void output_thread(node *n, endpoint *endpt, void *arg)
   output_arg *oa = (output_arg*)arg;
   int done = 0;
   int conn_deleted = 0;
+  int havetasks = 0;
   oa->rc = 0;
   while (!done) {
     message *msg = endpoint_receive(endpt,-1);
@@ -372,6 +373,9 @@ void output_thread(node *n, endpoint *endpt, void *arg)
       int i;
       assert(sizeof(inittask_msg) <= msg->size);
       assert(sizeof(initmsg)+initmsg->count*sizeof(endpointid) <= msg->size);
+      if (havetasks)
+        break;
+      havetasks = 1;
       for (i = 0; i < initmsg->count; i++)
         endpoint_link(endpt,initmsg->idmap[i]);
       break;

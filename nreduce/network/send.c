@@ -59,6 +59,13 @@ void send_connect(endpoint *endpt, endpointid epid,
   endpoint_send(endpt,epid,MSG_CONNECT,&cm,sizeof(cm));
 }
 
+void send_connpair(endpoint *endpt, endpointid epid, int ioid)
+{
+  connpair_msg pm;
+  pm.ioid = ioid;
+  endpoint_send(endpt,epid,MSG_CONNPAIR,&pm,sizeof(pm));
+}
+
 void send_read(endpoint *endpt, socketid sid, int ioid)
 {
   read_msg rm;

@@ -147,18 +147,23 @@ static int check_for_main(source *src)
     if (!strcmp(sc->name,"main")) {
       gotmain = 1;
 
-      if (2 <= sc->nargs) {
-        fprintf(stderr,"Supercombinator \"main\" must take either 0 or 1 arguments\n");
+      if (2 < sc->nargs) {
+        fprintf(stderr,"Supercombinator \"main\" must take at most 2 arguments (args,stdin)\n");
         return -1;
       }
-      else if (0 == sc->nargs) {
-        sc->nargs = 1;
+      else if (2 > sc->nargs) {
+        char **newargnames = (char**)malloc(2*sizeof(char*));
+        int *newstrictin = (int*)malloc(2*sizeof(int));
+        newargnames[0] = (1 == sc->nargs) ? sc->argnames[0] : strdup("__args");
+        newargnames[1] = strdup("__stdin");
+        newstrictin[0] = (1 == sc->nargs) ? sc->strictin[0] : 0;
+        newstrictin[1] = 0;
+
         free(sc->argnames);
         free(sc->strictin);
-        sc->argnames = (char**)malloc(sizeof(char*));
-        sc->argnames[0] = strdup("__args");
-        sc->strictin = (int*)malloc(sizeof(int));
-        sc->strictin[0] = 0;
+        sc->argnames = newargnames;
+        sc->strictin = newstrictin;
+        sc->nargs = 2;
       }
     }
   }

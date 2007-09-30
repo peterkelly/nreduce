@@ -1448,7 +1448,7 @@ void compile(source *src, char **bcdata, int *bcsize)
   nosl.fileno = -1;
   nosl.lineno = -1;
 
-
+  memcpy(comp->bch.signature,"NREDUCE BYTECODE",16);
   comp->instructions = array_new(sizeof(instruction),0);
   comp->si = NULL;
   comp->stringmap = array_new(sizeof(char*),0);

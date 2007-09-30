@@ -1,0 +1,15 @@
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main =
+(letrec
+  source = "main args stdin = (append \"-\" (append stdin \"-\"))\n"
+  bytecode = (compile source nil)
+  stream = (spawn bytecode "test")
+ in
+(append "*" (append stream "*\n")))
+==================================== OUTPUT ====================================
+*-test-*
+================================== RETURN CODE =================================
+0
