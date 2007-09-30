@@ -205,6 +205,7 @@ typedef struct {
   xmlDocPtr parse_doc;
   const char *parse_filename;
   char *error;
+  int indent;
 } elcgen;
 
 void free_wsarg_ptr(void *a);

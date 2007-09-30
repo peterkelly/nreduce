@@ -389,6 +389,8 @@ getnumber x =
 
 range min max = (if (<= min max) (cons (xml::mknumber min) (range (+ min 1) max)) nil)
 
+foreach3 lst f = (apmap3 f lst)
+
 apmap3 f lst = (apmap3a f lst 1 0)
 
 apmap3a f lst !pos !total =
@@ -890,3 +892,63 @@ docorder_sort2 pivot lst before after =
       (docorder_sort2 pivot rest (cons item before) after)
       (docorder_sort2 pivot rest before (cons item after))))
   (append (docorder_sort before) (cons pivot (docorder_sort after))))
+
+construct_elem nsuri nsprefix localpart xa xn content =
+(letrec
+  attrs = (append xa (xslt::get_attributes content))
+  namespaces = (append xn (xslt::get_namespaces content))
+  children2 = (xslt::concomplex (xslt::get_children content))
+  children = (xslt::reparent children2 elem nil)
+  elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs namespaces children)
+ in
+  (cons elem nil))
+
+construct_text str =
+(cons (xml::mktext str) nil)
+
+construct_value_of expr =
+(cons (xml::mktext (xslt::consimple expr)) nil)
+
+SOAPENV_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/"
+
+call_ws service_url inuri inlocalpart outuri outlocalpart args =
+(letrec
+  requestxml =
+    (cons (xml::mkelem nil nil nil nil SOAPENV_NAMESPACE "soapenv" "Envelope" nil
+      (cons (xml::mknamespace SOAPENV_NAMESPACE "soapenv") nil)
+      (cons (xml::mkelem nil nil nil nil SOAPENV_NAMESPACE "soapenv" "Body" nil nil
+        (cons (xml::mkelem nil nil nil nil inuri "operation" inlocalpart nil 
+           (cons (xml::mknamespace inuri "operation") nil)
+           args) nil)) nil)) nil)
+  request = (xslt::output nil requestxml)
+  response = (xslt::post service_url request)
+  responsedoc = (xml::parsexml 1 response)
+  topelems = (xml::item_children responsedoc)
+
+  bodies = (xslt::apmap3
+             (!citem.!cpos.!csize.
+               (filter
+                 (xslt::name_test xml::TYPE_ELEMENT SOAPENV_NAMESPACE "Body")
+                 (xml::item_children citem)))
+             topelems)
+
+  respelems = (xslt::apmap3
+                (!citem.!cpos.!csize.
+                  (filter
+                    (xslt::name_test xml::TYPE_ELEMENT outuri outlocalpart) 
+                    (xml::item_children citem)))
+                bodies)
+  returns = (apmap xml::item_children respelems)
+in
+  returns)
+
+ws_arg_list nsuri localpart expr =
+(map
+  (!x.(xml::mkelem nil nil nil nil nsuri nil localpart nil nil (xml::item_children x)))
+  (filter
+    (!x.== (xml::item_type x) xml::TYPE_ELEMENT)
+    (xslt::concomplex (xslt::get_children expr))))
+
+ws_arg nsuri localpart expr =
+(xml::mkelem nil nil nil nil nsuri nil localpart nil nil 
+  (xslt::concomplex (xslt::get_children expr)))
