@@ -62,7 +62,7 @@ typedef struct javath {
 
 int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **methodname)
 {
-  if (0 <= array_to_string(method,methodname,NULL))
+  if (0 > array_to_string(method,methodname))
     return set_error(tsk,"jcall: method is not a string");
 
   if ((CELL_SYSOBJECT == pntrtype(obj)) && (SYSOBJECT_JAVA == psysobject(obj)->type)) {
@@ -71,7 +71,7 @@ int get_callinfo(task *tsk, pntr obj, pntr method, char **targetname, char **met
     *targetname = str;
   }
   else if ((CELL_AREF == pntrtype(obj)) || (CELL_CONS == pntrtype(obj))) {
-    if (0 <= array_to_string(obj,targetname,NULL))
+    if (0 > array_to_string(obj,targetname))
       return set_error(tsk,"jcall: class name is not a string");
   }
   else {
@@ -91,7 +91,7 @@ static int serialise_arg(task *tsk, array *arr, int argno, pntr val)
     return 1;
   case CELL_CONS:
   case CELL_AREF:
-    if (0 > array_to_string(val,&str,NULL)) {
+    if (0 <= array_to_string(val,&str)) {
       escaped = escape(str);
       array_printf(arr," \"%s\"",escaped);
       free(escaped);

@@ -48,18 +48,16 @@ streamfd fd =
 readb filename =
 (streamfd (openfd (forcelist filename)))
 
-exists path =
-(fexists (forcelist path))
+exists path = (_exists (forcelist path))
 
-isdir path =
-(fisdir (forcelist path))
+isdir path = (_isdir (forcelist path))
 
 streamcon so =
 (readcon so (streamcon so))
 
 connect host port out =
 (letrec
-  con = (opencon (forcelist host) port (printer con out))
+  con = (_connect (forcelist host) port (printer con out))
  in
   (streamcon con))
 
@@ -71,11 +69,9 @@ acceptloop handler so =
   (seq connso
     (cons instream (acceptloop handler so))))
 
-listen port handler =
-(acceptloop handler (startlisten port))
+listen port handler = (acceptloop handler (_listen port))
 
-readdir filename =
-(readdir1 (forcelist filename))
+readdir filename = (_readdir (forcelist filename))
 
 stdin =
 (streamfd 0)
@@ -216,11 +212,9 @@ echo1 dest lst =
 
 echo str = (echo1 (getoutput nil) (forcelist str))
 
-stringtonum str =
-(stringtonum1 (forcelist str))
+stringtonum str = (_stringtonum (forcelist str))
 
-error str =
-(error1 (forcelist str))
+error str = (_error (forcelist str))
 
 jnew class args = (_jnew (forcelist class) (forcelist2 args))
 
@@ -231,9 +225,9 @@ jcall obj method args =
         (forcelist method)
         (forcelist2 args))
 
-cxslt source url = (cxslt1 (forcelist source) (forcelist url))
+cxslt source url = (_cxslt (forcelist source) (forcelist url))
 
-cache key value = (cache1 (forcelist key) (forcelist value))
+cache key value = (_cache (forcelist key) (forcelist value))
 
 spawn bytecode to =
 (letrec

@@ -666,7 +666,7 @@ pntr mkcons(task *tsk, pntr head, pntr tail);
 
 int get_builtin(const char *name);
 pntr string_to_array(task *tsk, const char *str);
-int array_to_string(pntr refpntr, char **str, int *sizeout);
+int array_to_string(pntr refpntr, char **str);
 int flatten_list(pntr refpntr, pntr **data);
 
 /* worker */
