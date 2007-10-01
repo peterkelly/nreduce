@@ -1,0 +1,24 @@
+This used to crash in sink_single() with the assertion (SNODE_WRAP != hu->type)
+failing
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+apmap3 f lst = (apmap3a f lst 1 0)
+
+apmap3a f lst !pos !total =
+(if lst
+    (append (f (head lst) pos (+ total (len lst)))
+            (apmap3a f (tail lst) (+ pos 1) (+ total 1)))
+    nil)
+
+top = 
+(letrec
+ a = nil
+in
+(head (apmap3 nil (append a a))))
+
+main = nil
+==================================== OUTPUT ====================================
+================================== RETURN CODE =================================
+0
