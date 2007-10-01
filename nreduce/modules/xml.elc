@@ -132,7 +132,10 @@ mknamespace nsuri nsprefix =
 (mkitem TYPE_NAMESPACE nil nil nil nil nil nsuri nsprefix nil nil nil nil)
 
 mkdoc children =
-(mkitem TYPE_DOCUMENT nil nil nil nil nil nil nil nil nil nil children)
+(letrec
+  doc = (mkitem TYPE_DOCUMENT nil doc nil nil nil nil nil nil nil nil children)
+ in
+  doc)
 
 mkqname nsuri nsprefix localname =
 (mkitem TYPE_QNAME nil nil nil nil nil nsuri nsprefix localname nil nil nil)
@@ -926,7 +929,7 @@ print_nodes lst next =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-stripspaces lst parent prev =
+stripspaces lst root parent prev =
 (if lst
   (letrec
     cur = (head lst)
@@ -937,7 +940,7 @@ stripspaces lst parent prev =
       (letrec
         elem =
         (mkelem
-          nil
+          root
           parent
           prev
           next
@@ -946,9 +949,9 @@ stripspaces lst parent prev =
           (item_localname cur)
           (item_attributes cur)
           (item_namespaces cur)
-          (stripspaces (item_children cur) elem nil))
+          (stripspaces (item_children cur) root elem nil))
         next =
-        (stripspaces rest parent elem)
+        (stripspaces rest root parent elem)
        in
         (cons elem next))
       (if (== type TYPE_TEXT)
@@ -956,31 +959,32 @@ stripspaces lst parent prev =
           (letrec
             content = (item_value cur)
             text = (mktext2 content parent prev next)
-            next = (stripspaces rest parent text)
+            next = (stripspaces rest root parent text)
            in
             (cons text next))
-          (stripspaces rest parent prev))
+          (stripspaces rest root parent prev))
         (if (== type TYPE_COMMENT)
           (letrec
             content = (item_value cur)
             comment = (mkcomment2 content parent prev next)
-            next = (stripspaces rest parent comment)
+            next = (stripspaces rest root parent comment)
            in
             (cons comment next))
           (if (== type TYPE_DOCUMENT)
             (letrec
-              doc = (mkdoc (stripspaces (item_children cur) doc nil))
+              doc = (mkdoc (stripspaces (item_children cur) root doc nil))
              in
               (cons doc nil))
-            (cons cur (stripspaces rest parent cur)))))))
+            (cons cur (stripspaces rest root parent cur)))))))
   nil)
 
 parsexml strip stream =
 (letrec
  input = (parse (tokenize stream))
- input2 = (if strip (stripspaces input nil nil) input)
+ input2 = (if strip (stripspaces input res nil nil) input)
+ res = (head input2)
  in
-  (head input2))
+  res)
 
 printxml indent root =
 (letrec

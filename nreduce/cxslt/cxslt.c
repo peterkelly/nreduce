@@ -34,6 +34,9 @@
 /* FIXME: use an autoconf script to set XLEX_DESTROY where appropriate - currently
    it does not get set at all */
 /* FIXME: apparently we're supposed to free the strings returned form xmlGetProp() */
+/* FIXME: report XPTY0020 if an axis step occurs where the context item is not a node?
+          The check may be unnecessarily expensive, and the program will probably throw
+          an error anyway... */
 
 typedef struct x_buffer_state *X_BUFFER_STATE;
 X_BUFFER_STATE x_scan_string(const char *str);
@@ -757,8 +760,8 @@ static int compile_expression(elcgen *gen, expression *expr)
     }
     break;
   case XPATH_ROOT:
-    /* FIXME */
-    return gen_error(gen,"Unsupported expression type: root",expr->type);
+    gen_printf(gen,"(cons (xml::item_root citem) nil)");
+    break;
   default:
     return gen_error(gen,"Unsupported expression type: %d",expr->type);
   }

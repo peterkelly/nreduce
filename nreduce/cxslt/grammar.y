@@ -406,14 +406,16 @@ XPathNodeComp:
 
 XPathPathExpr:
   '/'                             { $$ = new_expression2(XPATH_ROOT,NULL,NULL); }
-| '/' XPathRelativePathExpr       { $$ = new_expression2(XPATH_ROOT,$2,NULL); }
-| SLASHSLASH XPathRelativePathExpr { fatal("unsupported: //");
-                                     /*
-                                      expression *dos;
-                                    dos = new NodeTestExpr(XPATH_NODE_TEST_SEQUENCETYPE,
-                                                           SequenceTypeImpl::node(),
-                                                           AXIS_DESCENDANT_OR_SELF);
-                                                           $$ = new_RootExpr(new_StepExpr(dos,$2));*/ }
+| '/' XPathRelativePathExpr       { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+                                    $$ = new_expression2(XPATH_STEP,root,$2); }
+| SLASHSLASH XPathRelativePathExpr
+                                  { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+                                    expression *step1;
+                                    expression *test = new_expression(XPATH_KIND_TEST);
+                                    test->axis = AXIS_DESCENDANT_OR_SELF;
+                                    test->kind = KIND_ANY;
+                                    step1 = new_expression2(XPATH_STEP,root,test);
+                                    $$ = new_expression2(XPATH_STEP,step1,$2); }
 | XPathRelativePathExpr           { $$ = $1; }
 ;
 
