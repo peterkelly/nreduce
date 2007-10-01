@@ -113,6 +113,7 @@ mkbool b =
 mkelem root parent prev next nsuri nsprefix localname attributes namespaces children =
 (mkitem TYPE_ELEMENT nil root parent prev next nsuri nsprefix localname attributes namespaces children)
 
+/* FIXME: should text and comment nodes have a root pointer as well? */
 mktext2 value parent prev next =
 (mkitem TYPE_TEXT value nil parent prev next nil nil nil nil nil nil)
 

@@ -555,6 +555,16 @@ node_to_string node =
   (xml::item_value (atom_to_string node))
   (dm_string_value node))
 
+fn_root0 node =
+(cons (xml::item_root node) nil)
+
+fn_root arg0 =
+(if arg0
+  (if (tail arg0)
+    (error "root: argument is a list of length > 1")
+    (fn_root0 (head arg0)))
+  (error "root: argument is an empty list"))
+
 fn_string0 node =
 (cons (xml::mkstring (node_to_string node)) nil)
 
@@ -799,7 +809,7 @@ post3 url content version status reason headers body =
 
 
 
-copytree cfun lst parent prev =
+copytree cfun lst root parent prev =
 (if lst
   (letrec
     cur = (head lst)
@@ -810,7 +820,7 @@ copytree cfun lst parent prev =
       (letrec
         elem =
         (xml::mkelem
-          nil
+          root
           parent
           prev
           next
@@ -819,37 +829,41 @@ copytree cfun lst parent prev =
           (xml::item_localname cur)
           (xml::item_attributes cur)
           (xml::item_namespaces cur)
-          (copytree cfun (cfun (xml::item_children cur)) elem nil))
+          (copytree cfun (cfun (xml::item_children cur)) root elem nil))
         next =
-        (copytree cfun rest parent elem)
+        (copytree cfun rest root parent elem)
        in
         (cons elem next))
       (if (== type xml::TYPE_TEXT)
         (letrec
           content = (xml::item_value cur)
           text = (xml::mktext2 content parent prev next)
-          next = (copytree cfun rest parent text)
+          next = (copytree cfun rest root parent text)
          in
           (cons text next))
         (if (== type xml::TYPE_COMMENT)
           (letrec
             content = (xml::item_value cur)
             comment = (xml::mkcomment2 content parent prev next)
-            next = (copytree cfun rest parent comment)
+            next = (copytree cfun rest root parent comment)
            in
             (cons comment next))
           (if (== type xml::TYPE_DOCUMENT)
             (letrec
-              doc = (xml::mkdoc (copytree cfun (cfun (xml::item_children cur)) doc nil))
+              doc = (xml::mkdoc (copytree cfun (cfun (xml::item_children cur)) root doc nil))
              in
               (cons doc nil))
-            (cons cur (copytree cfun rest parent cur)))))))
+            (cons cur (copytree cfun rest root parent cur)))))))
   nil)
 
-copydoc cfun doc = (xml::mkdoc (xslt::copytree cfun (xml::item_children doc) nil nil))
+copydoc cfun doc =
+(letrec
+  res = (xml::mkdoc (xslt::copytree cfun (xml::item_children doc) res nil nil))
+ in
+  res)
 
-reparent lst parent prev =
-(copytree (!x.x) lst parent prev)
+reparent lst root parent prev =
+(copytree (!x.x) lst root parent prev)
 
 /* FIXME: need to remove duplicate nodes in the result sequence */
 path_result lst =
@@ -898,7 +912,7 @@ construct_elem nsuri nsprefix localpart xa xn content =
   attrs = (append xa (xslt::get_attributes content))
   namespaces = (append xn (xslt::get_namespaces content))
   children2 = (xslt::concomplex (xslt::get_children content))
-  children = (xslt::reparent children2 elem nil)
+  children = (xslt::reparent children2 nil elem nil)
   elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs namespaces children)
  in
   (cons elem nil))

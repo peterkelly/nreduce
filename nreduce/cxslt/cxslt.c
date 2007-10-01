@@ -729,6 +729,9 @@ static int compile_expression(elcgen *gen, expression *expr)
       else if (!strcmp(expr->qn.localpart,"string-length") && (0 == nargs)) {
         gen_iprintf(gen,"(xslt::fn_string_length0 citem)");
       }
+      else if (!strcmp(expr->qn.localpart,"root") && (0 == nargs)) {
+        gen_printf(gen,"(cons (xml::item_root citem) nil)");
+      }
       else if (!strcmp(expr->qn.localpart,"position")) {
         gen_iprintf(gen,"(cons (xml::mknumber cpos) nil)");
       }
@@ -1170,16 +1173,18 @@ static int compile_sequence(elcgen *gen, xmlNodePtr first)
       qn = string_to_qname(name,child);
       ident = nsname_to_ident(qn.uri,qn.localpart);
 
-      gen_printf(gen,"(letrec %s = ",ident);
+      gen_iprintf(gen,"(letrec %s = ",ident);
+      gen->indent++;
       if (select) {
         r = compile_expr_string(gen,child,select);
       }
       else {
-        gen_printf(gen,"(cons (xml::mkdoc ");
+        gen_printf(gen,"(cons (xslt::copydoc (!x.x) (xml::mkdoc ");
         r = compile_sequence(gen,child->children);
-        gen_printf(gen,") nil)");
+        gen_printf(gen,")) nil)");
       }
-      gen_printf(gen," in ");
+      gen->indent--;
+      gen_iprintf(gen," in ");
 
       free(ident);
       free_qname(qn);

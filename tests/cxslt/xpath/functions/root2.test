@@ -1,0 +1,47 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:variable name="a">
+        <first>
+          <second/>
+        </first>
+      </xsl:variable>
+      <xsl:variable name="b">
+        <third>
+          <fourth/>
+        </third>
+      </xsl:variable>
+      <xsl:sequence select="$a/first/second,$b/third/fourth"/>
+      <xsl:sequence select="root($a/first/second),root($b/third/fourth)"/>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <second/>
+   <fourth/>
+   <first>
+      <second/>
+   </first>
+   <third>
+      <fourth/>
+   </third>
+</result>
+================================== RETURN CODE =================================
+0
