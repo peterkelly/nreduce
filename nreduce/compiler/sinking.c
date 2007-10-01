@@ -175,6 +175,9 @@ static void sink_single(source *src, snode *s, int *changed)
            ((SNODE_LETREC == hu->parent->type) || (SNODE_WRAP == hu->parent->type)))
       hu = hu->parent;
 
+    while (hu && (SNODE_WRAP == hu->type))
+      hu = hu->target;
+
     if (1 == nusers) {
       letrec *rec = *recptr;
       snode *u = rec->users;

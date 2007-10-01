@@ -870,6 +870,13 @@ path_result lst =
 (if lst
   (if (isatomic (head lst))
     (check_atomic lst)
+    (check_node lst))
+  nil)
+
+path_result_sort lst =
+(if lst
+  (if (isatomic (head lst))
+    (check_atomic lst)
     (docorder_sort (check_node lst)))
   nil)
 
@@ -911,8 +918,7 @@ construct_elem nsuri nsprefix localpart xa xn content =
 (letrec
   attrs = (append xa (xslt::get_attributes content))
   namespaces = (append xn (xslt::get_namespaces content))
-  children2 = (xslt::concomplex (xslt::get_children content))
-  children = (xslt::reparent children2 nil elem nil)
+  children = (xslt::concomplex (xslt::get_children content))
   elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs namespaces children)
  in
   (cons elem nil))

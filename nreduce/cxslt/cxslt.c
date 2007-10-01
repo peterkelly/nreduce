@@ -51,7 +51,7 @@ extern int lex_lineno;
 int xparse();
 
 static int compile_sequence(elcgen *gen, xmlNodePtr first);
-static int compile_expression(elcgen *gen, expression *expr);
+static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr);
 
 int gen_error(elcgen *gen, const char *format, ...)
 {
@@ -308,21 +308,21 @@ static int have_user_function(elcgen *gen, qname qn)
   return 0;
 }
 
-static int compile_binary(elcgen *gen, expression *expr, const char *fun)
+static int compile_binary(elcgen *gen, xmlNodePtr n, expression *expr, const char *fun)
 {
   gen_iprintf(gen,"(%s ",fun);
   gen->indent++;
-  if (!compile_expression(gen,expr->left))
+  if (!compile_expression(gen,n,expr->left))
     return 0;
   gen_printf(gen," ");
-  if (!compile_expression(gen,expr->right))
+  if (!compile_expression(gen,n,expr->right))
     return 0;
   gen_printf(gen,")");
   gen->indent--;
   return 1;
 }
 
-static int compile_post(elcgen *gen, expression *expr, const char *service_url,
+static int compile_post(elcgen *gen, xmlNodePtr n, expression *expr, const char *service_url,
                         qname inelem, qname outelem,
                         list *inargs, list *outargs)
 {
@@ -354,7 +354,7 @@ static int compile_post(elcgen *gen, expression *expr, const char *service_url,
     gen_printf(gen," \"%s\" \"%s\" ",argname->uri,argname->localpart);
 
     gen->indent++;
-    if (!compile_expression(gen,p->left))
+    if (!compile_expression(gen,n,p->left))
       r = 0;
     gen->indent--;
     gen_printf(gen,")");
@@ -403,7 +403,7 @@ static void wscall_debug(elcgen *gen, expression *expr, const char *service_url,
 }
 #endif
 
-static int compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
+static int compile_ws_call(elcgen *gen, xmlNodePtr n, expression *expr, const char *wsdlurl)
 {
   char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
   wsdlfile *wf;
@@ -441,7 +441,7 @@ static int compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
   else if (1 != list_count(outargs))
     r = gen_error(gen,"Multiple return arguments for web service call %s",expr->qn.localpart);
   else
-    r = compile_post(gen,expr,service_url,inelem,outelem,inargs,outargs);
+    r = compile_post(gen,n,expr,service_url,inelem,outelem,inargs,outargs);
 
   free(ident);
   free(inelem.uri);
@@ -453,31 +453,73 @@ static int compile_ws_call(elcgen *gen, expression *expr, const char *wsdlurl)
   return r;
 }
 
-static int compile_expression(elcgen *gen, expression *expr)
+static xmlNodePtr lookup_variable(xmlNodePtr n, qname qn)
+{
+  for (; n; n = n->parent) {
+    xmlNodePtr v;
+    for (v = n->prev; v; v = v->prev) {
+      if (is_element(v,XSLT_NAMESPACE,"variable") && xmlHasProp(v,"name")) {
+        qname varname = get_qname_attr(v,"name");
+        if (!nullstrcmp(varname.uri,qn.uri) &&
+            !strcmp(varname.localpart,qn.localpart)) {
+          free_qname(varname);
+          return v;
+        }
+        free_qname(varname);
+      }
+    }
+  }
+  return NULL;
+}
+
+static int is_expr_doc_order(xmlNodePtr n, expression *expr)
 {
   switch (expr->type) {
-  case XPATH_OR:         return compile_binary(gen,expr,"or"); /* FIXME: test */
-  case XPATH_AND:        return compile_binary(gen,expr,"and"); /* FIXME: test */
+  case XPATH_STEP:
+  case XPATH_FORWARD_AXIS_STEP:
+  case XPATH_REVERSE_AXIS_STEP:
+  case XPATH_KIND_TEST:
+  case XPATH_NAME_TEST:
+  case XPATH_ROOT:
+    return 1;
+  case XPATH_PAREN:
+    return is_expr_doc_order(n,expr->left);
+  case XPATH_VAR_REF: {
+    xmlNodePtr var = lookup_variable(n,expr->qn);
+    return !xmlHasProp(var,"select");
+    break;
+  }
+  default:
+    break;
+  }
+  return 0;
+}
 
-  case XPATH_VALUE_EQ:   return compile_binary(gen,expr,"xslt::value_eq");
-  case XPATH_VALUE_NE:   return compile_binary(gen,expr,"xslt::value_ne");
-  case XPATH_VALUE_LT:   return compile_binary(gen,expr,"xslt::value_lt");
-  case XPATH_VALUE_LE:   return compile_binary(gen,expr,"xslt::value_le");
-  case XPATH_VALUE_GT:   return compile_binary(gen,expr,"xslt::value_gt");
-  case XPATH_VALUE_GE:   return compile_binary(gen,expr,"xslt::value_ge");
+static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
+{
+  switch (expr->type) {
+  case XPATH_OR:         return compile_binary(gen,n,expr,"or"); /* FIXME: test */
+  case XPATH_AND:        return compile_binary(gen,n,expr,"and"); /* FIXME: test */
 
-  case XPATH_GENERAL_EQ: return compile_binary(gen,expr,"xslt::general_eq");
-  case XPATH_GENERAL_NE: return compile_binary(gen,expr,"xslt::general_ne");
-  case XPATH_GENERAL_LT: return compile_binary(gen,expr,"xslt::general_lt");
-  case XPATH_GENERAL_LE: return compile_binary(gen,expr,"xslt::general_le");
-  case XPATH_GENERAL_GT: return compile_binary(gen,expr,"xslt::general_gt");
-  case XPATH_GENERAL_GE: return compile_binary(gen,expr,"xslt::general_ge");
-  case XPATH_ADD:        return compile_binary(gen,expr,"xslt::add");
-  case XPATH_SUBTRACT:   return compile_binary(gen,expr,"xslt::subtract");
-  case XPATH_MULTIPLY:   return compile_binary(gen,expr,"xslt::multiply");
-  case XPATH_DIVIDE:     return compile_binary(gen,expr,"xslt::divide");
-  case XPATH_IDIVIDE:    return compile_binary(gen,expr,"xslt::idivide"); /* FIXME: test */
-  case XPATH_MOD:        return compile_binary(gen,expr,"xslt::mod");
+  case XPATH_VALUE_EQ:   return compile_binary(gen,n,expr,"xslt::value_eq");
+  case XPATH_VALUE_NE:   return compile_binary(gen,n,expr,"xslt::value_ne");
+  case XPATH_VALUE_LT:   return compile_binary(gen,n,expr,"xslt::value_lt");
+  case XPATH_VALUE_LE:   return compile_binary(gen,n,expr,"xslt::value_le");
+  case XPATH_VALUE_GT:   return compile_binary(gen,n,expr,"xslt::value_gt");
+  case XPATH_VALUE_GE:   return compile_binary(gen,n,expr,"xslt::value_ge");
+
+  case XPATH_GENERAL_EQ: return compile_binary(gen,n,expr,"xslt::general_eq");
+  case XPATH_GENERAL_NE: return compile_binary(gen,n,expr,"xslt::general_ne");
+  case XPATH_GENERAL_LT: return compile_binary(gen,n,expr,"xslt::general_lt");
+  case XPATH_GENERAL_LE: return compile_binary(gen,n,expr,"xslt::general_le");
+  case XPATH_GENERAL_GT: return compile_binary(gen,n,expr,"xslt::general_gt");
+  case XPATH_GENERAL_GE: return compile_binary(gen,n,expr,"xslt::general_ge");
+  case XPATH_ADD:        return compile_binary(gen,n,expr,"xslt::add");
+  case XPATH_SUBTRACT:   return compile_binary(gen,n,expr,"xslt::subtract");
+  case XPATH_MULTIPLY:   return compile_binary(gen,n,expr,"xslt::multiply");
+  case XPATH_DIVIDE:     return compile_binary(gen,n,expr,"xslt::divide");
+  case XPATH_IDIVIDE:    return compile_binary(gen,n,expr,"xslt::idivide"); /* FIXME: test */
+  case XPATH_MOD:        return compile_binary(gen,n,expr,"xslt::mod");
   case XPATH_INTEGER_LITERAL:
     gen_iprintf(gen,"(cons (xml::mknumber %f) nil)",expr->num);
     break;
@@ -498,13 +540,13 @@ static int compile_expression(elcgen *gen, expression *expr)
     gen->indent++;
     gen_iprintf(gen,"(xslt::getnumber ");
     gen->indent++;
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen->indent--;
     gen_printf(gen,") ");
     gen_iprintf(gen,"(xslt::getnumber ");
     gen->indent++;
-    if (!compile_expression(gen,expr->right))
+    if (!compile_expression(gen,n,expr->right))
       return 0;
     gen->indent--;
     gen_printf(gen,"))");
@@ -513,10 +555,10 @@ static int compile_expression(elcgen *gen, expression *expr)
   }
   case XPATH_SEQUENCE:
     gen_iprintf(gen,"(append ");
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen_printf(gen," ");
-    if (!compile_expression(gen,expr->right))
+    if (!compile_expression(gen,n,expr->right))
       return 0;
     gen_printf(gen,")");
     break;
@@ -526,7 +568,7 @@ static int compile_expression(elcgen *gen, expression *expr)
   case XPATH_UNARY_MINUS:
     gen_iprintf(gen,"(xslt::uminus ");
     gen->indent++;
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen->indent--;
     gen_printf(gen,")");
@@ -534,13 +576,13 @@ static int compile_expression(elcgen *gen, expression *expr)
   case XPATH_UNARY_PLUS:
     gen_iprintf(gen,"(xslt::uplus ");
     gen->indent++;
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen->indent--;
     gen_printf(gen,")");
     break;
   case XPATH_PAREN:
-    return compile_expression(gen,expr->left);
+    return compile_expression(gen,n,expr->left);
   case XPATH_EMPTY:
     gen_printf(gen,"nil");
     break;
@@ -555,25 +597,29 @@ static int compile_expression(elcgen *gen, expression *expr)
     gen_iprintf(gen,"(xslt::filter3");
     gen->indent++;
     gen_iprintf(gen,"(!citem.!cpos.!csize.xslt::predicate_match cpos ");
-    if (!compile_expression(gen,expr->right))
+    if (!compile_expression(gen,n,expr->right))
       return 0;
     gen_printf(gen,") ");
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen_printf(gen,")");
     gen->indent--;
     break;
   case XPATH_STEP:
     gen_printorig(gen,"path step",NULL);
+    gen_iprintf(gen,"/* left = %d, right = %d */ ",expr->left->type,expr->right->type);
 
-    gen_iprintf(gen,"(xslt::path_result");
+    if (is_expr_doc_order(n,expr->left) && is_expr_doc_order(n,expr->right))
+      gen_iprintf(gen,"(xslt::path_result");
+    else
+      gen_iprintf(gen,"(xslt::path_result_sort");
     gen->indent++;
     gen_iprintf(gen,"(xslt::apmap3 (!citem.!cpos.!csize.");
     gen->indent++;
-    if (!compile_expression(gen,expr->right))
+    if (!compile_expression(gen,n,expr->right))
       return 0;
     gen_printf(gen,") ");
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen->indent--;
     gen_printf(gen,")");
@@ -581,11 +627,11 @@ static int compile_expression(elcgen *gen, expression *expr)
     gen->indent--;
     break;
   case XPATH_FORWARD_AXIS_STEP:
-    return compile_expression(gen,expr->left);
+    return compile_expression(gen,n,expr->left);
   case XPATH_REVERSE_AXIS_STEP:
     gen_iprintf(gen,"(reverse ");
     gen->indent++;
-    if (!compile_expression(gen,expr->left))
+    if (!compile_expression(gen,n,expr->left))
       return 0;
     gen->indent--;
     gen_printf(gen,")");
@@ -701,7 +747,7 @@ static int compile_expression(elcgen *gen, expression *expr)
         for (p = expr->left; p; p = p->right) {
           assert(XPATH_ACTUAL_PARAM == p->type);
           gen_printf(gen," ");
-          if (!compile_expression(gen,p->left))
+          if (!compile_expression(gen,n,p->left))
             return 0;
         }
         gen->indent--;
@@ -709,7 +755,7 @@ static int compile_expression(elcgen *gen, expression *expr)
         free(ident);
       }
       else if (!strncmp(expr->qn.uri,"wsdl-",5)) {
-        return compile_ws_call(gen,expr,expr->qn.uri+5);
+        return compile_ws_call(gen,n,expr,expr->qn.uri+5);
       }
       else {
         return gen_error(gen,"Call to non-existent function {%s}%s",
@@ -752,7 +798,7 @@ static int compile_expression(elcgen *gen, expression *expr)
         for (p = expr->left; p && r; p = p->right) {
           assert(XPATH_ACTUAL_PARAM == p->type);
           gen_printf(gen," ");
-          if (!compile_expression(gen,p->left))
+          if (!compile_expression(gen,n,p->left))
             r = 0;
         }
         gen->indent--;
@@ -822,13 +868,13 @@ static int compile_expr_string(elcgen *gen, xmlNodePtr n, const char *str)
   int r = 0;
   expression *expr = parse_xpath(gen,n,str);
   if (expr) {
-    r = compile_expression(gen,expr);
+    r = compile_expression(gen,n,expr);
     free_expression(expr);
   }
   return r;
 }
 
-static int compile_avt_component(elcgen *gen, expression *expr)
+static int compile_avt_component(elcgen *gen, xmlNodePtr n, expression *expr)
 {
   if (XPATH_STRING_LITERAL == expr->type) {
     char *esc = escape1(expr->str);
@@ -837,7 +883,7 @@ static int compile_avt_component(elcgen *gen, expression *expr)
   }
   else {
     gen_printf(gen,"(xslt::consimple ");
-    if (!compile_expression(gen,expr))
+    if (!compile_expression(gen,n,expr))
       return 0;
     gen_printf(gen,") ");
   }
@@ -861,14 +907,14 @@ static int compile_avt(elcgen *gen, xmlNodePtr n, const char *str)
 
   while (r && (XPATH_AVT_COMPONENT == cur->type)) {
     gen_printf(gen,"(append ");
-    if (!compile_avt_component(gen,cur->left))
+    if (!compile_avt_component(gen,n,cur->left))
       r = 0;
 
     count++;
     cur = cur->right;
   }
 
-  if (r && !compile_avt_component(gen,cur))
+  if (r && !compile_avt_component(gen,n,cur))
     r = 0;
 
   while (0 < count--)
@@ -1046,7 +1092,6 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
       }
       else if (!xmlStrcmp(n->name,"element")) {
         /* FIXME: complete this, and handle namespaces properly */
-        /* FIXME: avoid reparenting - set the parents correctly in the first place */
         char *name = xmlGetProp(n,"name");
         if (NULL == name)
           return gen_error(gen,"missing name attribute");
@@ -1100,7 +1145,6 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
       }
     }
     else {
-      /* FIXME: avoid reparenting - set the parents correctly in the first place */
       gen_iprintf(gen,"(xslt::construct_elem");
       if (n->ns)
         gen_printf(gen," \"%s\" \"%s\" \"%s\" ",n->ns->href,n->ns->prefix,n->name);
@@ -1258,8 +1302,11 @@ static int compile_function(elcgen *gen, xmlNodePtr child)
   }
 
   gen_printf(gen," = ");
+  gen_iprintf(gen,"(xslt::reparent ");
+  gen->indent++;
   r = compile_sequence(gen,pn);
-  gen_printf(gen,"\n");
+  gen->indent--;
+  gen_iprintf(gen,"  nil nil nil)\n");
 
   free_qname(fqn);
   free(name);
