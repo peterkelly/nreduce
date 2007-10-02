@@ -690,13 +690,7 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
 
     /* Handle pending close requests - this is done here to avoid closing an fd while select()
       is looking at it */
-    while (n->p->toclose) {
-      int fd = (int)n->p->toclose->data;
-      list *next = n->p->toclose->next;
-      close(fd);
-      free(n->p->toclose);
-      n->p->toclose = next;
-    }
+    node_close_pending(n);
   }
   unlock_mutex(&n->p->lock);
 }

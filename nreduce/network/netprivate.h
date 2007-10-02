@@ -145,6 +145,7 @@ listener *node_listen_locked(node *n, in_addr_t ip, int port, int notify, void *
                              int dontaccept, int ismain, endpointid *owner, char *errmsg,
                              int errlen);
 void node_remove_listener(node *n, listener *l);
+void node_close_pending(node *n);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);

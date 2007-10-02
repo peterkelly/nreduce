@@ -229,11 +229,7 @@ static void node_free(node *n)
     node_remove_listener(n,n->p->mainl);
     unlock_node(n);
   }
-  while (n->p->toclose) {
-    list *next = n->p->toclose->next;
-    free(n->p->toclose);
-    n->p->toclose = next;
-  }
+  node_close_pending(n);
   assert(NULL == n->p->endpoints.first);
   assert(NULL == n->p->listeners.first);
 
@@ -387,6 +383,17 @@ void node_remove_listener(node *n, listener *l)
 
   list_push(&n->p->toclose,(void*)l->fd);
   free(l);
+}
+
+void node_close_pending(node *n)
+{
+  while (n->p->toclose) {
+    int fd = (int)n->p->toclose->data;
+    list *next = n->p->toclose->next;
+    close(fd);
+    free(n->p->toclose);
+    n->p->toclose = next;
+  }
 }
 
 /* This works as long as we don't recycle localids... */
