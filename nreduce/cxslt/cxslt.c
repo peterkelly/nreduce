@@ -376,13 +376,14 @@ static int compile_post(elcgen *gen, xmlNodePtr n, expression *expr, const char 
   return r;
 }
 
-#define WSCALL_DEBUG
+//#define WSCALL_DEBUG
 #ifdef WSCALL_DEBUG
 static void wscall_debug(elcgen *gen, expression *expr, const char *service_url,
                         qname inelem, qname outelem,
                         list *inargs, list *outargs)
 {
   list *l;
+  printf("/*\n");
   printf("service url = %s\n",service_url);
   printf("input element = {%s}%s\n",inelem.uri,inelem.localpart);
   printf("output element = {%s}%s\n",outelem.uri,outelem.localpart);
@@ -399,7 +400,7 @@ static void wscall_debug(elcgen *gen, expression *expr, const char *service_url,
     wsarg *wa = (wsarg*)l->data;
     printf(" {%s}%s (%s)",wa->uri,wa->localpart,wa->list ? "list" : "single");
   }
-  printf("\n");
+  printf("\n*/\n");
 }
 #endif
 
@@ -607,7 +608,6 @@ static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
     break;
   case XPATH_STEP:
     gen_printorig(gen,"path step",NULL);
-    gen_iprintf(gen,"/* left = %d, right = %d */ ",expr->left->type,expr->right->type);
 
     if (is_expr_doc_order(n,expr->left) && is_expr_doc_order(n,expr->right))
       gen_iprintf(gen,"(xslt::path_result");
@@ -1357,12 +1357,9 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
     gen->parse_doc = doc;
     gen->parse_filename = xslturl;
     root = xmlDocGetRootElement(doc);
-    printf("/*\n\n");
     if (process_root(gen,root)) {
-      printf("\n*/\n");
-
-      gen_printf(gen,"STRIPALL = %s\n",gen->option_strip ? "1" : "nil");
-      gen_printf(gen,"INDENT = %s\n",gen->option_indent ? "1" : "nil");
+      gen_printf(gen,"STRIPALL = %s\n\n",gen->option_strip ? "1" : "nil");
+      gen_printf(gen,"INDENT = %s\n\n",gen->option_indent ? "1" : "nil");
       gen_printf(gen,
                    "main args stdin =\n"
                    "(letrec\n"

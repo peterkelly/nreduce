@@ -125,6 +125,7 @@ CHAR                     \'.\'
 
 "&&"                     { return CONDAND; }
 "||"                     { return CONDOR; }
+"++"                     { return PLUSPLUS; }
 "?"                      { return '?'; }
 ":"                      { return ':'; }
 "["                      { return '['; }

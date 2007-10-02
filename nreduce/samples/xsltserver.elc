@@ -1,0 +1,114 @@
+import http
+import preprocess
+import xml
+
+endswith str ext =
+(letrec
+  strlen = (len str)
+  extlen = (len ext)
+in
+  (if (< extlen strlen)
+    (streq (skip (- strlen extlen) str) ext)
+    nil))
+
+httpheader type = 
+(++ "HTTP/1.1 200 OK\r\n"
+(++ "Content-Type: " (++ type (++ "; charset=UTF-8\r\n"
+(++ "Connection: close\r\n"
+    "\r\n")))))
+
+httpnotfound uri =
+(++ "HTTP/1.1 404 Not Found\r\n"
+(++ "Content-Type: text/plain; charset=UTF-8\r\n"
+(++ "Connection: close\r\n"
+(++ "\r\n"
+(++ "URI " (++ uri " does not exist\n"))))))
+
+handle_xslt filename compiled headers body =
+(letrec
+  bytecode = (get_compiled filename compiled)
+  clength = (stringtonum (http::get_header "content-length" headers))
+  postdata = (prefix clength body)
+ in
+  (if bytecode
+    (++ (httpheader "text/xml") (spawn bytecode postdata))
+    (httpnotfound filename)))
+
+show_services compiled =
+(if compiled
+  (letrec
+    cur = (head compiled)
+    filename = (head cur)
+  in
+    (++ "<li>" (++ filename (++ "</li>\n"
+        (show_services (tail compiled))))))
+  nil)
+
+handle_root compiled =
+(++ (httpheader "text/html")
+(++ "<html><head><title>Available services</title></head><body>\n"
+(++ "<h1>Available services</h1>\n"
+(++ "<ul>" (++ (show_services compiled) (++ "</ul>"
+    "</body></html>"))))))
+
+process path compiled method uri1 version headers body =
+(letrec
+  filename = (tail uri1)
+  uri = (++ path (++ "/" filename))
+in
+  (if (streq uri1 "/")
+    (handle_root compiled)
+  (if (not (exists uri))
+    (++ (httpheader "text/plain") (++ "File " (++ uri " does not exist")))
+  (if (isdir uri)
+    (++ (httpheader "text/plain") (++ "directory: " (++ uri "\n")))
+  (if (and (endswith uri ".xsl") (streq method "POST"))
+    (handle_xslt filename compiled headers body)
+    (++ (httpheader "text/plain") (readb uri)))))))
+
+handler path compiled stream =
+(if stream
+  (http::parse_request stream (process path compiled))
+  nil)
+
+get_compiled want compiled =
+(if compiled
+  (letrec
+    cur = (head compiled)
+    filename = (head cur)
+    bytecode = (tail cur)
+  in
+    (if (streq filename want)
+      bytecode
+      (get_compiled want (tail compiled))))
+  nil)
+
+compile_path1 path entries =
+(if entries
+  (letrec
+    cur = (head entries)
+    filename = (item 0 cur)
+    fullpath = (++ path (++ "/" filename))
+    doc = (preprocess::ppxslt fullpath)
+    source = (xml::printxml 1 doc)
+    elc = (cxslt source fullpath)
+    bytecode = (compile elc fullpath)
+    pair = (cons filename bytecode)
+  in
+    (if (endswith filename ".xsl")
+       (cons pair (compile_path1 path (tail entries)))
+       (compile_path1 path (tail entries))))
+  nil)
+
+compile_path path =
+(compile_path1 path (readdir path))
+
+main args =
+(if (< (len args) 2)
+  "Usage: xsltserver <port> <path>\n"
+(letrec
+  port = (stringtonum (item 0 args))
+  path = (item 1 args)
+  compiled = (compile_path path)
+in
+  (parlist (listen port (handler path compiled)))))

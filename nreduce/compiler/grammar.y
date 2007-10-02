@@ -78,6 +78,7 @@ extern const char *parse_modname;
 %token SHR
 %token CONDAND
 %token CONDOR
+%token PLUSPLUS
 %token<i> INTEGER
 %token<d> DOUBLE
 %token<s> STRING
@@ -175,6 +176,7 @@ SingleExpr:
 
 | CONDAND                         { $$ = makesym(yyfileno,@$.first_line,"and"); }
 | CONDOR                          { $$ = makesym(yyfileno,@$.first_line,"or"); }
+| PLUSPLUS                        { $$ = makesym(yyfileno,@$.first_line,"append"); }
 | IF                              { $$ = makesym(yyfileno,@$.first_line,"if"); }
 | ELSE                            { $$ = makesym(yyfileno,@$.first_line,"else"); }
 | '(' Expr ')'                    { $$ = $2; }

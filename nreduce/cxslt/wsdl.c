@@ -147,9 +147,9 @@ int wsdl_get_url(elcgen *gen, wsdlfile *wf, char **urlout)
       (NULL != (port = get_child(service,WSDL_NAMESPACE,"port",NULL,NULL))) &&
       (NULL != (address = get_child(port,WSDLSOAP_NAMESPACE,"address",NULL,NULL)))) {
     if (xmlHasProp(address,"location")) {
-      printf("service name = %s\n",xmlGetProp(service,"name"));
-      printf("port name = %s\n",xmlGetProp(port,"name"));
-      printf("address location = %s\n",xmlGetProp(address,"location"));
+/*       printf("service name = %s\n",xmlGetProp(service,"name")); */
+/*       printf("port name = %s\n",xmlGetProp(port,"name")); */
+/*       printf("address location = %s\n",xmlGetProp(address,"location")); */
       *urlout = xmlGetProp(address,"location");
       return 1;
     }
@@ -415,7 +415,7 @@ int wsdl_get_operation_messages(elcgen *gen,
   if (!wsdl_get_style(gen,wf->root,&style))
     return 0;
 
-  printf("wsdl style = %d\n",style);
+/*   printf("wsdl style = %d\n",style); */
 
   if (NULL == (targetns = xmlGetProp(wf->root,"targetNamespace")))
     return gen_error(gen,"no target namespace");
@@ -461,11 +461,11 @@ int wsdl_get_operation_messages(elcgen *gen,
     else if (NULL == (outpelem = get_element(wf,outpelemname.localpart)))
       gen_error(gen,"no such element \"%s\"",outpelemname.localpart);
     else {
-      printf("opname = %s\n",opname);
-      printf("input message name = {%s}%s\n",inmsgqname.uri,inmsgqname.localpart);
-      printf("output message name = {%s}%s\n",outmsgqname.uri,outmsgqname.localpart);
-      printf("input element name = {%s}%s\n",inpelemname.uri,inpelemname.localpart);
-      printf("output element name = {%s}%s\n",outpelemname.uri,outpelemname.localpart);
+/*       printf("opname = %s\n",opname); */
+/*       printf("input message name = {%s}%s\n",inmsgqname.uri,inmsgqname.localpart); */
+/*       printf("output message name = {%s}%s\n",outmsgqname.uri,outmsgqname.localpart); */
+/*       printf("input element name = {%s}%s\n",inpelemname.uri,inpelemname.localpart); */
+/*       printf("output element name = {%s}%s\n",outpelemname.uri,outpelemname.localpart); */
 
       *inqn = inpelemname;
       *outqn = outpelemname;
