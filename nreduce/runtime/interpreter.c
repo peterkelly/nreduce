@@ -1700,10 +1700,12 @@ static void idmap_setup(node *n, endpoint *endpt, task *tsk)
         node_log(n,LOG_INFO,"INITTASK: idmap[%d] = "EPID_FORMAT,i,EPID_ARGS(initmsg->idmap[i]));
 
       endpoint_send(endpt,msg->source,MSG_INITTASKRESP,&resp,sizeof(int));
+      message_free(msg);
     }
     else if (MSG_STARTTASK == msg->tag) {
       int resp = 0;
       endpoint_send(endpt,msg->source,MSG_STARTTASKRESP,&resp,sizeof(int));
+      message_free(msg);
       break;
     }
     else {

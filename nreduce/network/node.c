@@ -180,7 +180,7 @@ connection *add_connection(node *n, const char *hostname, int sock, listener *l)
   return conn;
 }
 
-node *node_new(int loglevel)
+static node *node_new(int loglevel)
 {
   node *n = (node*)calloc(1,sizeof(node));
   int pipefds[2];
@@ -222,12 +222,17 @@ node *node_new(int loglevel)
   return n;
 }
 
-void node_free(node *n)
+static void node_free(node *n)
 {
   if (n->p->mainl) {
     lock_node(n);
     node_remove_listener(n,n->p->mainl);
     unlock_node(n);
+  }
+  while (n->p->toclose) {
+    list *next = n->p->toclose->next;
+    free(n->p->toclose);
+    n->p->toclose = next;
   }
   assert(NULL == n->p->endpoints.first);
   assert(NULL == n->p->listeners.first);
