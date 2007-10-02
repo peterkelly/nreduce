@@ -670,7 +670,7 @@ node_ancestors_or_self node =
 node_descendants node =
 (letrec
 
-  node_desc_list = (!lst.!next.
+  node_desc_list lst next =
     (if lst
       (letrec
         node = (head lst)
@@ -679,9 +679,9 @@ node_descendants node =
           (loop
             node
             (node_desc_list (tail lst) next))))
-      next))
+      next)
 
-  loop = (!node.!next.
+  loop node next =
     (letrec
       type = (xml::item_type node)
      in
@@ -689,7 +689,7 @@ node_descendants node =
         (node_desc_list (xml::item_children node) next)
         (if (== type xml::TYPE_DOCUMENT)
           (node_desc_list (xml::item_children node) next)
-          next))))
+          next)))
 
  in
   (loop node nil))
@@ -709,23 +709,23 @@ node_following_siblings node =
 node_preceding node =
 (letrec
 
-  last = (!lst.
+  last lst =
     (if lst
       (if (tail lst)
         (last (tail lst))
         (head lst))
-      nil))
+      nil)
 
-  last_descendant = (!node.!level.!done.
+  last_descendant node level done =
     (letrec
       children = (xml::item_children node)
       lastchild = (last children)
      in
       (if lastchild
         (last_descendant lastchild (+ level 1) done)
-        (cons node (loop node level done)))))
+        (cons node (loop node level done))))
 
-  loop = (!node.!level.!done.
+  loop node level done =
     (letrec
       prev = (xml::item_prev node)
       parent = (xml::item_parent node)
@@ -741,7 +741,7 @@ node_preceding node =
             (if (< newlevel done)
               next
               (cons parent next)))
-          nil))))
+          nil)))
 
  in
   (loop node 0 0))
@@ -749,7 +749,7 @@ node_preceding node =
 node_following node =
 (letrec
 
-  gonext = (!node.
+  gonext node =
     (letrec
       nextlist = (xml::item_next node)
       parent = (xml::item_parent node)
@@ -758,16 +758,16 @@ node_following node =
         (traverse (head nextlist))
         (if parent
           (gonext parent)
-          nil))))
+          nil)))
 
-  traverse = (!node.
+  traverse node =
     (cons node
       (letrec
         children = (xml::item_children node)
        in
         (if children
           (traverse (head children))
-          (gonext node)))))
+          (gonext node))))
 
  in
   (gonext node))

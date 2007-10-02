@@ -72,6 +72,7 @@ extern const char *parse_modname;
 %type <c> SingleLambda
 %type <c> Lambdas
 %type <c> AppliedExpr
+%type <c> LetrecValue
 %type <lr> Letrec
 %type <lr> Letrecs
 %type <c> Expr
@@ -143,15 +144,24 @@ AppliedExpr:
                                     $$->right = $2; }
 ;
 
-Letrec:
-  SYMBOL '=' ListExpr             { $$ = (letrec*)calloc(1,sizeof(letrec));
+LetrecValue:
+  '=' ListExpr                    { $$ = $2; }
+| SYMBOL LetrecValue              { $$ = snode_new(yyfileno,@$.first_line);
+                                    $$->type = SNODE_LAMBDA;
                                     $$->name = make_varname($1);
                                     free($1);
-                                    $$->value = $3; }
-| LAMBDA SYMBOL '=' ListExpr      { $$ = (letrec*)calloc(1,sizeof(letrec));
+                                    $$->body = $2; }
+;
+
+Letrec:
+  SYMBOL LetrecValue              { $$ = (letrec*)calloc(1,sizeof(letrec));
+                                    $$->name = make_varname($1);
+                                    free($1);
+                                    $$->value = $2; }
+| LAMBDA SYMBOL LetrecValue       { $$ = (letrec*)calloc(1,sizeof(letrec));
                                     $$->name = make_varname($2);
                                     free($2);
-                                    $$->value = $4;
+                                    $$->value = $3;
                                     $$->strict = 1; }
 ;
 
