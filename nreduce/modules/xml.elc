@@ -434,9 +434,9 @@ print_token val =
 //==================================================================================================
 
 add_whitespace nodes =
-(add_whitespace1 0 nodes nil 0)
+(add_whitespace1 0 nodes nil 0 nil)
 
-add_whitespace1 depth lst needindent haveindent =
+add_whitespace1 depth lst needindent haveindent parent =
 (if lst
   (letrec
     this = (head lst)
@@ -451,14 +451,16 @@ add_whitespace1 depth lst needindent haveindent =
         attributes = (item_attributes this)
         namespaces = (item_namespaces this)
         children = (item_children this)
+        elem =
+          (mkelem nil parent nil nil nsuri nsprefix localname attributes namespaces
+              (if children
+                (add_whitespace1 (+ depth 1) children 1 0 elem)
+                nil))
        in
         (maybe_indent depth needindent haveindent
           (cons
-            (mkelem nil nil nil nil nsuri nsprefix localname attributes namespaces
-              (if children
-                (add_whitespace1 (+ depth 1) children 1 0)
-                nil))
-            (add_whitespace1 depth rest 1 0))))
+            elem
+            (add_whitespace1 depth rest 1 0 parent))))
       (if (== type TYPE_TEXT)
         (letrec
           str = (item_value this)
@@ -468,20 +470,21 @@ add_whitespace1 depth lst needindent haveindent =
           (cons
             this
             (if nws
-              (add_whitespace1 depth rest nil 0)
-              (add_whitespace1 depth rest needindent newhave))))
+              (add_whitespace1 depth rest nil 0 parent)
+              (add_whitespace1 depth rest needindent newhave parent))))
         (if (== type TYPE_COMMENT)
           (maybe_indent depth needindent haveindent
             (cons
               this
-              (add_whitespace1 depth rest nil 0)))
+              (add_whitespace1 depth rest nil 0 parent)))
           (if (== type TYPE_DOCUMENT)
             (letrec
               children = (item_children this)
+              doc = (mkdoc (add_whitespace1 depth children 1 0 doc))
              in
               (cons
-                (mkdoc (add_whitespace1 depth children 1 0))
-                (add_whitespace1 depth rest nil 0)))
+                doc
+                (add_whitespace1 depth rest nil 0 parent)))
             nil)))))
   (if (> depth 0)
     (maybe_indent (- depth 1) needindent haveindent nil)
@@ -871,18 +874,59 @@ print_attrs lst next =
             (append "\"" (print_attrs (tail lst) next)))))))
   next)
 
-print_namespaces lst next =
+have_namespace lst nsprefix nsuri =
+(if lst
+  (letrec
+    cur = (head lst)
+  in
+    (if (streq nsprefix (item_nsprefix cur))
+      (if (streq nsuri (item_nsuri cur))
+        1
+        (have_namespace (tail lst) nsprefix nsuri))
+      (have_namespace (tail lst) nsprefix nsuri)))
+  nil)
+
+node_has_namespace node nsprefix nsuri =
+(if node
+  (if (have_namespace (item_namespaces node) nsprefix nsuri)
+    1
+    (node_has_namespace (item_parent node) nsprefix nsuri))
+  nil)
+
+have_nsprefix nsprefix lst =
+(if lst
+  (if (streq nsprefix (item_nsprefix (head lst)))
+    1
+    (have_nsprefix nsprefix (tail lst)))
+  nil)
+
+node_default_namespace node =
+(if node
+  (if (have_nsprefix "" (item_namespaces node))
+    (if (streq "" (ns_lookup1 "" (item_namespaces node)))
+      1
+      nil)
+    (node_default_namespace (item_parent node)))
+  1)
+
+print_namespaces node lst next =
 (if lst
   (letrec
     cur = (head lst)
     nsuri = (item_nsuri cur)
     nsprefix = (item_nsprefix cur)
+    parent = (item_parent node)
    in
-    (append (if nsprefix " xmlns:" " xmlns")
-      (append nsprefix
-        (append "=\""
-          (append nsuri
-            (append "\"" (print_namespaces (tail lst) next)))))))
+    (if (node_has_namespace parent nsprefix nsuri)
+      (print_namespaces node (tail lst) next)
+    (if (and (and (streq nsprefix "") (streq nsuri ""))
+             (node_default_namespace parent))
+      (print_namespaces node (tail lst) next)
+      (append (if nsprefix " xmlns:" " xmlns")
+        (append nsprefix
+          (append "=\""
+            (append nsuri
+              (append "\"" (print_namespaces node (tail lst) next)))))))))
   next)
 
 print_nodes lst next =
@@ -905,7 +949,7 @@ print_nodes lst next =
         (if children
           (cons '<'
             (append qname
-              (print_namespaces namespaces
+              (print_namespaces node namespaces
                 (print_attrs attributes
                   (cons '>'
                     (print_nodes children
@@ -916,7 +960,7 @@ print_nodes lst next =
                               (print_nodes rest next)))))))))))
           (cons '<'
             (append qname
-              (print_namespaces namespaces
+              (print_namespaces node namespaces
                 (print_attrs attributes
                   (append "/>" (print_nodes rest next))))))))
       (if (== (item_type node) TYPE_TEXT)

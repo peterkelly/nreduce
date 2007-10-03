@@ -36,6 +36,7 @@
 #define xmlStrcmp(a,b) xmlStrcmp((xmlChar*)(a),(xmlChar*)(b))
 #define xmlStrdup(a) ((char*)xmlStrdup((xmlChar*)(a)))
 #define xmlGetProp(a,b) ((char*)xmlGetProp(a,(xmlChar*)(b)))
+#define xmlGetNsProp(a,b,c) ((char*)xmlGetNsProp(a,(xmlChar*)(b),(xmlChar*)(c)))
 #define xmlHasProp(a,b) (xmlHasProp(a,(xmlChar*)(b)))
 #define xmlNodeListGetString(doc,list,inLine) (char*)xmlNodeListGetString(doc,list,inLine)
 

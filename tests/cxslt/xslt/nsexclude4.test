@@ -1,41 +1,36 @@
 =================================== PROGRAM ====================================
-xslt runtests.tmp/test.xsl
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<empty/>
 ===================================== FILE =====================================
 test.xsl
 <?xml version="1.0" encoding="utf-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-		xmlns:people="wsdl-http://localhost:8080/peopledw?WSDL"
-		exclude-result-prefixes="people"
+    xmlns:a="http://test1"
+    xmlns:b="http://test2"
+    xmlns:c="http://test3"
 		version="2.0">
 
   <xsl:output method="xml" indent="yes"/>
   <xsl:strip-space elements="*"/>
 
+  <xsl:function name="a:getelem">
+    <outer xsl:exclude-result-prefixes="a b">
+      <inner>Hello</inner>
+    </outer>
+  </xsl:function>
+
   <xsl:template match="/">
-    <result>
-      <xsl:sequence select="people:getAllPeople()"/>
-    </result>
+    <xsl:sequence select="a:getelem()"/>
   </xsl:template>
 
 </xsl:stylesheet>
 ==================================== OUTPUT ====================================
 <?xml version="1.0" encoding="UTF-8"?>
-<result>
-   <return>
-      <name>Fred</name>
-      <age>20</age>
-      <occupation>Plumber</occupation>
-   </return>
-   <return>
-      <name>Joe</name>
-      <age>33</age>
-      <occupation>Marketing executive</occupation>
-   </return>
-   <return>
-      <name>Bob</name>
-      <age>38</age>
-      <occupation>Builder</occupation>
-   </return>
-</result>
+<outer xmlns:c="http://test3">
+   <inner>Hello</inner>
+</outer>
 ================================== RETURN CODE =================================
 0

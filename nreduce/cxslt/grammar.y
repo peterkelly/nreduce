@@ -468,8 +468,12 @@ XPathForwardAxis:
 ;
 
 XPathAbbrevForwardStep:
-XPathNodeTest                   { $$ = $1; /* FIXME: if nodetest is attribute use AXIS_ATTRIBUTE */
-                                    $$->axis = AXIS_CHILD; }
+  XPathNodeTest                   { $$ = $1;
+                                    $$->axis = AXIS_CHILD;
+                                    if ((XPATH_KIND_TEST == $$->type) &&
+                                        ((KIND_ATTRIBUTE == $$->kind) ||
+                                         (KIND_SCHEMA_ATTRIBUTE == $$->kind)))
+                                      $$->axis = AXIS_ATTRIBUTE; }
 | '@' XPathNodeTest               { $$ = $2;
                                     $$->axis = AXIS_ATTRIBUTE; }
 ;

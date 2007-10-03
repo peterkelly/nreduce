@@ -933,20 +933,27 @@ static int compile_attributes(elcgen *gen, xmlNodePtr n)
 
   for (attr = n->properties; attr && r; attr = attr->next) {
     char *value;
-    if (attr->ns)
+    int print = 0;
+    if (attr->ns && strcmp((char*)attr->ns->href,XSLT_NAMESPACE)) {
       gen_printf(gen,"(cons (xml::mkattr nil nil nil nil \"%s\" \"%s\" \"%s\" ",
              attr->ns->href,attr->ns->prefix,attr->name);
-    else
+      print = 1;
+    }
+    else if (NULL == attr->ns) {
       gen_printf(gen,"(cons (xml::mkattr nil nil nil nil nil nil \"%s\" ",attr->name);
+      print = 1;
+    }
 
-    value = xmlNodeListGetString(gen->parse_doc,attr->children,1);
-    gen_printf(gen,"//xxx value: %s\n",value);
-    r = compile_avt(gen,n,value);
-    free(value);
+    if (print) {
+      value = xmlNodeListGetString(gen->parse_doc,attr->children,1);
+      gen_printf(gen,"//xxx value: %s\n",value);
+      r = compile_avt(gen,n,value);
+      free(value);
 
-    gen_printf(gen,")\n");
+      gen_printf(gen,")\n");
 
-    count++;
+      count++;
+    }
   }
   gen_printf(gen,"nil");
   while (0 < count--)
@@ -954,16 +961,83 @@ static int compile_attributes(elcgen *gen, xmlNodePtr n)
   return r;
 }
 
-static int compile_namespaces(elcgen *gen, xmlNodePtr n)
+static int exclude_namespace(elcgen *gen, xmlNodePtr n2, const char *uri)
+{
+  xmlNodePtr p;
+  int found = 0;
+
+  if (!strcmp(uri,XSLT_NAMESPACE))
+    return 1;
+
+  for (p = n2; p && (XML_ELEMENT_NODE == p->type) && !found; p = p->parent) {
+    char *str;
+    if (p->ns && !strcmp((char*)p->ns->href,XSLT_NAMESPACE))
+      str = xmlGetNsProp(p,"exclude-result-prefixes",NULL);
+    else
+      str = xmlGetNsProp(p,"exclude-result-prefixes",XSLT_NAMESPACE);
+    if (str) {
+      int end = 0;
+      char *start = str;
+      char *c;
+
+      for (c = str; !found && !end; c++) {
+        end = ('\0' == *c);
+        if (end || isspace(*c)) {
+          if (c > start) {
+            xmlNsPtr ns;
+            *c = '\0';
+
+            if (!strcmp(start,"#all")) {
+              found = (NULL != xmlSearchNsByHref(gen->parse_doc,p,(xmlChar*)uri));
+            }
+            else if (!strcmp(start,"#default")) {
+              found = ((NULL != p->ns) && !strcmp((char*)p->ns->href,uri));
+            }
+            else {
+              ns = xmlSearchNs(gen->parse_doc,p,(xmlChar*)start);
+              found = ((NULL != ns) && !strcmp((char*)ns->href,uri));
+            }
+          }
+          start = c+1;
+        }
+      }
+      free(str);
+    }
+  }
+  return found;
+}
+
+static int have_prefix(xmlNodePtr start, xmlNodePtr end, const char *prefix)
 {
   xmlNsPtr ns;
+  xmlNodePtr p;
+  for (p = start; p != end; p = p->parent)
+    for (ns = p->nsDef; ns; ns = ns->next)
+      if (!nullstrcmp((char*)ns->prefix,prefix))
+        return 1;
+  return 0;
+}
+
+static int compile_namespaces(elcgen *gen, xmlNodePtr n2)
+{
+  xmlNsPtr ns;
+  xmlNodePtr p;
   int count = 0;
-  for (ns = n->nsDef; ns; ns = ns->next) {
-    if (ns->prefix)
-      gen_printf(gen,"(cons (xml::mknamespace \"%s\" \"%s\")\n",ns->href,ns->prefix);
-    else
-      gen_printf(gen,"(cons (xml::mknamespace \"%s\" nil)\n",ns->href);
-    count++;
+  for (p = n2; p; p = p->parent) {
+    for (ns = p->nsDef; ns; ns = ns->next) {
+      if (have_prefix(n2,p,(char*)ns->prefix))
+        continue;
+      if (ns->prefix) {
+        if (!exclude_namespace(gen,n2,(char*)ns->href)) {
+          gen_iprintf(gen,"(cons (xml::mknamespace \"%s\" \"%s\") ",ns->href,ns->prefix);
+          count++;
+        }
+      }
+      else {
+        gen_iprintf(gen,"(cons (xml::mknamespace \"%s\" nil) ",ns->href);
+        count++;
+      }
+    }
   }
   gen_printf(gen,"nil");
   while (0 < count--)
@@ -1145,9 +1219,12 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
       }
     }
     else {
+      /* literal result element */
       gen_iprintf(gen,"(xslt::construct_elem");
-      if (n->ns)
+      if (n->ns && n->ns->prefix)
         gen_printf(gen," \"%s\" \"%s\" \"%s\" ",n->ns->href,n->ns->prefix,n->name);
+      else if (n->ns)
+        gen_printf(gen," \"%s\" \"\" \"%s\" ",n->ns->href,n->name);
       else
         gen_printf(gen," nil nil \"%s\" ",n->name);
       gen->indent++;

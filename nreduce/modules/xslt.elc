@@ -587,9 +587,21 @@ fn_string_length arg0 =
   (cons (xml::mknumber 0) nil))
 
 fn_node_name0 node =
-(if (== (xml::item_type node) xml::TYPE_ELEMENT)
-  (cons (xml::mkqname (xml::item_nsuri node) (xml::item_nsprefix node) (xml::item_localname node)) nil)
-  nil)
+(letrec
+  type = (xml::item_type node)
+in
+  (if (or (== type xml::TYPE_ELEMENT) (== type xml::TYPE_ATTRIBUTE))
+    (cons
+      (xml::mkqname
+        (xml::item_nsuri node)
+        (xml::item_nsprefix node)
+        (xml::item_localname node))
+      nil)
+  (if (== type xml::TYPE_NAMESPACE)
+    (cons
+      (xml::mkqname nil nil (xml::item_nsprefix node))
+      nil)
+    nil)))
 
 fn_node_name arg0 =
 (if arg0
