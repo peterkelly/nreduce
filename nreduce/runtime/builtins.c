@@ -1764,6 +1764,12 @@ static void b_compile(task *tsk, pntr *argstack)
   source_free(src);
 }
 
+static void b_isspace(task *tsk, pntr *argstack)
+{
+  CHECK_ARG(0,CELL_NUMBER);
+  setbool(tsk,&argstack[0],isspace((int)pntrdouble(argstack[0])));
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1863,5 +1869,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "mkconn",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_mkconn         },
 { "_spawn",         2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_spawn          },
 { "_compile",       2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_compile        },
+
+{ "isspace",        1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_isspace        },
 
 };

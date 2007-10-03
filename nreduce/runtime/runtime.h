@@ -135,7 +135,9 @@ struct gaddr;
 #define B_SPAWN          63
 #define B_COMPILE        64
 
-#define NUM_BUILTINS     65
+#define B_ISSPACE        65
+
+#define NUM_BUILTINS     66
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
