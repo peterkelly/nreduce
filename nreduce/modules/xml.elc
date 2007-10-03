@@ -556,121 +556,108 @@ in
 (prefix n bulkspaces))
 
 //==================================================================================================
-// xml::parse tokens
-//
-// Construct an XML node tree from a stream of input tokens
-//
-// This function implements the second half of the logic necessary to create an XML structure from
-// a data stream. The function xml::tokenizer must be called to create the token stream, and the
-// result passed to this function.
-//
-// The parser starts off by traversing through the list of tokens. When it encounters a
-// START_ELEMENT token, it creates a new element node, with the attributes, namespaces, and
-// children constructed from the tokens that appear immediately afterwards. During parsing, the
-// current depth is kept track of; this increases when a STARTELEM is encountered, and decreases
-// when ENDELEM is encountered. If an ENDELEM token is found and the depth is equal to the current
-// depth, then we know that is the end of the set of tokens that comprise the children of this
-// element.
-//
-// In order to parse the next element at this level in the tree, we must skip over all these tokens.
-// This is taken care of by the skip_level function. The remainingtokens variable is set to the
-// result of this, and the call to parse to create the following sibling of this node is passed
-// this set of tokens.
-//
-// All of the parsing is done lazily. If the caller of this function never accesses parts of the
-// tree later on, then these tree segments will never be constructed, and the tokenizer will never
-// be asked for the tokens, which means that is is not necessary to read the rest of the data
-// stream.
-//==================================================================================================
 
 parse tokens =
 (if tokens
   (letrec
-    children = (parse1 tokens nil doc doc nil 0)
+    pr = (parse1 tokens nil doc doc nil)
+    children = (tail pr)
     doc = (mkdoc children)
    in
     (cons doc nil))
   (error "parse: no tokens"))
 
-parse1 tokens namespaces root parent prev !depth =
+parse1 tokens namespaces root parent prev =
 (if (not tokens)
-  (if (> depth 1)
-    (error "XML parse error: missing close tag at end of input")
-    nil)
-  (letrec
-    cur = (head tokens)
-    rest = (tail tokens)
-    tag = (head cur)
-   in
-    (if (== tag TOKEN_STARTELEM)
-      (letrec
-        augnamespaces = (cons newnamespaces namespaces)
-        children = (skip_attrs rest augnamespaces root elem (+ depth 1))
-        attributes = (parse_attrs rest augnamespaces root parent prev)
-        newnamespaces = (parse_namespaces rest)
-        remainingtokens = (skip_level rest 0)
-        qname = (tail cur)
-        nsprefix = (getnsprefix qname)
-        nsuri = (ns_lookup nsprefix augnamespaces)
-        localname = (getlocalname qname)
-        elem = (mkelem root parent prev next nsuri nsprefix localname attributes newnamespaces children)
-        next = (parse1 remainingtokens namespaces root parent elem depth)
-       in
-        (cons elem next))
-      (if (== tag TOKEN_ENDELEM)
-        nil
-        (if (== tag TOKEN_ATTRNAME)
-          nil
-          (if (== tag TOKEN_TEXT)
-            (letrec
-              text = (mktext2 (tail cur) parent prev next)
-              next = (parse1 rest namespaces root parent text depth)
-             in
-              (cons text next))
-            (if (== tag TOKEN_COMMENT)
-              (letrec
-                comment = (mkcomment2 (tail cur) parent prev next)
-                next = (parse1 rest namespaces root parent comment depth)
-               in
-                (cons comment next))
-              (parse1 rest namespaces root parent nil depth))))))))
+  (cons nil nil)
+(letrec
+  cur = (head tokens)
+  rest = (tail tokens)
+  tag = (head cur)
+in
+  (if (== tag TOKEN_STARTELEM)
+    (letrec
+      newnamespaces = (parse_namespaces rest)
+      augnamespaces = (cons newnamespaces namespaces)
+      qname = (tail cur)
+      nsprefix = (getnsprefix qname)
+      nsuri = (ns_lookup nsprefix augnamespaces)
+      localname = (getlocalname qname)
+      arest = (skip_attrs rest)
+      attributes = (parse_attrs rest augnamespaces root parent nil)
+      cpr = (parse1 arest augnamespaces root elem nil)
+      children = (tail cpr)
+      crest = (head cpr)
+      elem =
+        (mkelem root parent prev next nsuri nsprefix localname attributes newnamespaces children)
+      pr = (parse1 crest namespaces root parent elem)
+      newrest = (head pr)
+      next = (tail pr)
+      lst = (cons elem next)
+    in
+      (cons newrest lst))
+  (if (== tag TOKEN_ENDELEM)
+    (cons rest nil)
+  (if (== tag TOKEN_TEXT)
+    (letrec
+      text = (mktext2 (tail cur) parent prev next)
+      pr = (parse1 rest namespaces root parent text)
+      newrest = (head pr)
+      next = (tail pr)
+      lst = (cons text next)
+    in
+      (cons newrest lst))
+  (if (== tag TOKEN_COMMENT)
+    (letrec
+      text = (mkcomment2 (tail cur) parent prev next)
+      pr = (parse1 rest namespaces root parent text)
+      newrest = (head pr)
+      next = (tail pr)
+      lst = (cons text next)
+    in
+      (cons newrest lst))
+  (error "Invalid tag")))))))
 
-//==================================================================================================
-// xml::skip_attrs tokens namespaces root depth
-//
-// Skip past the ATTRNAME and ATTRVALUE tokens in a token stream.
-//
-// When the tokenizer parses the open tag of an element, it adds one of each of these tokens for
-// each attribute encountered. Any elements, text nodes, comments etc. that are children of the
-// element will appear after the attributes. Thus, to get to the portion of the token stream
-// representing the children of a node, we simply need to skip past these.
-//==================================================================================================
-skip_attrs tokens namespaces root parent !depth =
+skip_attrs tokens =
 (if (not tokens)
   nil
-  (letrec
-    cur = (head tokens)
-    rest = (tail tokens)
-    tag = (head cur)
-   in
-    (if (or (== tag TOKEN_ATTRNAME) (== tag TOKEN_ATTRVALUE))
-      (skip_attrs rest namespaces root parent depth)
-      (parse1 tokens namespaces root parent nil depth))))
+(letrec
+  cur = (head tokens)
+  rest = (tail tokens)
+  tag = (head cur)
+ in
+  (if (== tag TOKEN_ATTRNAME)
+    (skip_attrs (tail (tail tokens)))
+    tokens)))
 
-//==================================================================================================
-// xml::parse_namespaces tokens
-//
-// Constructs a list of namespace mappings based on a set of ATTRNAME and ATTRVALUE tokens.
-//
-// Each attribute name/value pair in the current element is inspected to see if it is an XML
-// namespace declaration, i.e. if it is of the form xmlns:something="..." or xmlns="...". If so,
-// a namespace node containing the prefix and namespace URI is created, and added to the list.
-// Attributes other than namespace declarations are ignored.
-//
-// This function looks no further than the attributes specified for this element. If a tag other
-// than ATTRNAME or ATTRVALUE is encountered, it means that the next part of the token stream
-// corresponds to a child node, or a close tag (the ENDELEM token).
-//==================================================================================================
+parse_attrs tokens namespaces root parent prev =
+(if (not tokens)
+  nil
+(letrec
+  cur = (head tokens)
+  rest = (tail tokens)
+  tag = (head cur)
+ in
+  (if (== tag TOKEN_ATTRNAME)
+    (letrec
+      value = (tail (head rest))
+      rest2 = (tail rest)
+      qname = (tail cur)
+      nsprefix = (getnsprefix qname)
+      nsuri = (if nsprefix (ns_lookup nsprefix namespaces) nil)
+      localname = (getlocalname qname)
+      attr = (mkattr root parent prev next nsuri nsprefix localname value)
+      next = (parse_attrs rest2 namespaces root parent attr)
+     in
+      // Check if it's a namespace attribute; if so, skip this one
+      (if (streq nsprefix "xmlns")
+        (parse_attrs rest2 namespaces root parent prev)
+        (if (and (not nsprefix) (streq localname "xmlns"))
+          (parse_attrs rest2 namespaces root parent prev)
+          // It's a normal attribute; add it to the list
+          (cons attr next))))
+    nil)))
+
 parse_namespaces tokens =
 (if (not tokens)
   nil
@@ -697,76 +684,6 @@ parse_namespaces tokens =
               (parse_namespaces rest2))
             (parse_namespaces rest2))))
       nil)))
-
-//==================================================================================================
-// xml::parse_attrs tokens namespaces
-//
-// Constructs a list of XML attribute nodes corresponding to the ATTRNAME and ATTRVALUE tokens
-// found in a token stream.
-//
-// The token stream is traversed to find the attribute declarations. When a token other than
-// ATTRNAME or ATTRVALUE is encountered, this function knows that it has found all the attributes,
-// since the next token will either be the first child node or the close tag of the current element.
-//
-// For each ATTRNAME/ATTRVALUE pair, an attribute node is created, containing the namespace URI,
-// prefix, localname, and value. The returned list of nodes is used as the attributes property of
-// an element.
-//==================================================================================================
-parse_attrs tokens namespaces root parent prev =
-(if (not tokens)
-  nil
-  (letrec
-    cur = (head tokens)
-    rest = (tail tokens)
-    tag = (head cur)
-   in
-    (if (== tag TOKEN_ATTRNAME)
-      (letrec
-        value = (tail (head rest))
-        rest2 = (tail rest)
-        qname = (tail cur)
-        nsprefix = (getnsprefix qname)
-        nsuri = (if nsprefix (ns_lookup nsprefix namespaces) nil)
-        localname = (getlocalname qname)
-        attr = (mkattr root parent prev next nsuri nsprefix localname value)
-        next = (parse_attrs rest2 namespaces root parent attr)
-       in
-        // Check if it's a namespace attribute; if so, skip this one
-        (if (streq nsprefix "xmlns")
-          (parse_attrs rest2 namespaces root parent prev)
-          (if (and (not nsprefix) (streq localname "xmlns"))
-            (parse_attrs rest2 namespaces root parent prev)
-            // It's a normal attribute; add it to the list
-            (cons
-              attr
-              next))))
-      nil)))
-
-//==================================================================================================
-// xml::skip_level tokens level
-//
-// Skip past the portion of a token stream that contains the tokens for children of a node.
-//
-// This function is used by the parser to obtain the part of the token stream that needs to be
-// parsed for the following sibling of a node. It traverses through the stream, keeping track of
-// the current level, based on the appearance of STARTELEM or ENDELEM tokens. When an ENDELEM token
-// is found, and the current level is 0, then it returns the remainder of the token stream.
-//==================================================================================================
-skip_level tokens level =
-(if tokens
-  (letrec
-    cur = (head tokens)
-    rest = (tail tokens)
-    tag = (head cur)
-   in
-    (if (== tag TOKEN_STARTELEM)
-      (skip_level rest (+ level 1))
-      (if (== tag TOKEN_ENDELEM)
-        (if (== level 0)
-          rest
-          (skip_level rest (- level 1)))
-        (skip_level rest level))))
-  nil)
 
 //==================================================================================================
 
@@ -868,6 +785,7 @@ print_attrs lst next =
     //qname = (if nsuri (cons '{' (append nsuri (cons '}' localname))) localname)
    in
     (append " "
+//        (append (++ "{" (++ nsuri (++ "}" qname)))
       (append qname
         (append "=\""
           (append (item_value attr)
@@ -948,6 +866,7 @@ print_nodes lst next =
        in
         (if children
           (cons '<'
+//            (append (++ "{" (++ nsuri (++ "}" qname)))
             (append qname
               (print_namespaces node namespaces
                 (print_attrs attributes
