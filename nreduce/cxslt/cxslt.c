@@ -1167,19 +1167,27 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
       else if (!xmlStrcmp(n->name,"element")) {
         /* FIXME: complete this, and handle namespaces properly */
         char *name = xmlGetProp(n,"name");
+        char *namespace;
         if (NULL == name)
           return gen_error(gen,"missing name attribute");
+        namespace = xmlGetProp(n,"namespace");
 
         gen_printorig(gen,"element",name);
-        gen_iprintf(gen,"(xslt::construct_elem nil nil ");
+        gen_iprintf(gen,"(xslt::construct_elem1 ");
+
+        if (namespace)
+          r = compile_avt(gen,n,namespace);
+        else
+          gen_iprintf(gen,"nil ");
+
+        r = r && compile_avt(gen,n,name);
+
         gen->indent++;
-        if (!compile_avt(gen,n,name))
-          r = 0;
         gen_printf(gen," nil nil ");
-        if (r && !compile_sequence(gen,n->children))
-          r = 0;
+        r = r && compile_sequence(gen,n->children);
         gen->indent--;
         gen_printf(gen,")");
+        free(namespace);
         free(name);
         return r;
       }
@@ -1214,13 +1222,36 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
         free(select);
         return r;
       }
+      else if (!xmlStrcmp(n->name,"namespace")) {
+        char *select;
+        char *name = xmlGetProp(n,"name");
+        if (NULL == name)
+          return gen_error(gen,"missing name attribute");
+        select = xmlGetProp(n,"select");
+
+        gen_printorig(gen,"namespace",name);
+        gen_iprintf(gen,"(cons (xml::mknamespace (xslt::consimple ");
+
+        if (select)
+          r = compile_expr_string(gen,n,select);
+        else
+          r = compile_sequence(gen,n->children);
+        gen_printf(gen,") ");
+
+        r = r && compile_avt(gen,n,name);
+        gen_printf(gen,") nil)");
+
+        free(name);
+        free(select);
+        return r;
+      }
       else {
         return gen_error(gen,"Unsupported XSLT instruction: %s",n->name);
       }
     }
     else {
       /* literal result element */
-      gen_iprintf(gen,"(xslt::construct_elem");
+      gen_iprintf(gen,"(xslt::construct_elem2 ");
       if (n->ns && n->ns->prefix)
         gen_printf(gen," \"%s\" \"%s\" \"%s\" ",n->ns->href,n->ns->prefix,n->name);
       else if (n->ns)

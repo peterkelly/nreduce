@@ -926,7 +926,43 @@ docorder_sort2 pivot lst before after =
       (docorder_sort2 pivot rest before (cons item after))))
   (append (docorder_sort before) (cons pivot (docorder_sort after))))
 
-construct_elem nsuri nsprefix localpart xa xn content =
+have_nsuri namespaces nsuri =
+(if namespaces
+  (letrec
+    ns = (head namespaces)
+    uri = (xml::item_nsuri ns)
+  in
+    (if (streq uri nsuri)
+      1
+      (have_nsuri (tail namespaces) nsuri)))
+  nil)
+
+/* FIXME: this should also check attributes */
+nsfixup nsuri nsprefix localpart attrs namespaces =
+(if (have_nsuri namespaces nsuri)
+  (cons nsprefix namespaces)
+(if (xml::have_nsprefix nsprefix namespaces)
+  (letrec
+    newprefix = (++ nsprefix "_0")
+  in
+    (cons newprefix (++ namespaces (cons (xml::mknamespace nsuri newprefix) nil))))
+  (cons nsprefix (cons (xml::mknamespace nsuri nsprefix) namespaces))))
+
+construct_elem1 nsuri qname xa xn content =
+(letrec
+  nsprefix1 = (xml::getnsprefix qname)
+  localpart = (xml::getlocalname qname)
+  attrs = (append xa (xslt::get_attributes content))
+  namespaces = (append xn (xslt::get_namespaces content))
+  np = (nsfixup nsuri nsprefix1 localpart attrs namespaces)
+  nsprefix = (head np)
+  rnamespaces = (tail np)
+  children = (xslt::concomplex (xslt::get_children content))
+  elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs rnamespaces children)
+ in
+  (cons elem nil))
+
+construct_elem2 nsuri nsprefix localpart xa xn content =
 (letrec
   attrs = (append xa (xslt::get_attributes content))
   namespaces = (append xn (xslt::get_namespaces content))

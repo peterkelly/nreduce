@@ -786,22 +786,19 @@ print_attrs lst next =
             (append "\"" (print_attrs (tail lst) next)))))))
   next)
 
-have_namespace lst nsprefix nsuri =
+have_namespace lst nsprefix nsuri next =
 (if lst
   (letrec
     cur = (head lst)
   in
     (if (streq nsprefix (item_nsprefix cur))
-      (if (streq nsuri (item_nsuri cur))
-        1
-        (have_namespace (tail lst) nsprefix nsuri))
-      (have_namespace (tail lst) nsprefix nsuri)))
+      (streq nsuri (item_nsuri cur))
+      (have_namespace (tail lst) nsprefix nsuri next)))
   nil)
 
 node_has_namespace node nsprefix nsuri =
 (if node
-  (if (have_namespace (item_namespaces node) nsprefix nsuri)
-    1
+  (have_namespace (item_namespaces node) nsprefix nsuri
     (node_has_namespace (item_parent node) nsprefix nsuri))
   nil)
 
@@ -872,6 +869,7 @@ print_nodes lst next =
                             (append ">"
                               (print_nodes rest next)))))))))))
           (cons '<'
+//            (append (++ "{" (++ nsuri (++ "}" qname)))
             (append qname
               (print_namespaces node namespaces
                 (print_attrs attributes
