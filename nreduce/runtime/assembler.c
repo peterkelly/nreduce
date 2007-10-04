@@ -806,6 +806,19 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         fatal("FSTP64: invalid destination");
       }
       break;
+    case X86_FILD:
+      if (TYPE_REGMEM == dtype) {
+        byte(0xDB);
+        rmem(&ptr,0,dst);
+      }
+      else if (TYPE_MEM == dtype) {
+        byte(0xDB);
+        mem(&ptr,0,dval);
+      }
+      else {
+        fatal("FLD64: invalid destination");
+      }
+      break;
     case X86_FADD:
       if (TYPE_REG == dtype) {
         byte(0xD8);

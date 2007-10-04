@@ -89,6 +89,9 @@
 #define JFALSE(_s,addr)       { EVAL(_s,0); \
                                 addr = array_count(comp->instructions); \
                                 add_instruction(comp,_s,OP_JFALSE,0,0); }
+#define JEQ(_s,addr,v)        { EVAL(_s,0);                            \
+                                addr = array_count(comp->instructions); \
+                                add_instruction(comp,_s,OP_JEQ,0,v); }
 #define JUMP(_s,addr)         { addr = array_count(comp->instructions); \
                                 add_instruction(comp,_s,OP_JUMP,0,0); }
 #define LABEL(addr)           { array_item(comp->instructions,addr,instruction).arg0 = \
@@ -137,6 +140,7 @@ const char *opcodes[OP_COUNT] = {
 "JCMP",
 "CONSN",
 "ITEMN",
+"JEQ",
 "INVALID",
 };
 
@@ -337,6 +341,8 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
     break;
   case OP_JFALSE:
     popstatus(comp->si,1);
+    break;
+  case OP_JEQ:
     break;
   case OP_JUMP:
     break;
@@ -693,21 +699,52 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       app = app->left;
       cond = app->right;
 
-      E(src,comp,cond,p,n);
-      JFALSE(cond->sl,label);
+      if ((SNODE_APPLICATION == cond->type) &&
+          (SNODE_APPLICATION == cond->left->type) &&
+          (SNODE_BUILTIN == cond->left->left->type) &&
+          (B_EQ == cond->left->left->bif) &&
+          (SNODE_NUMBER == cond->right->type) &&
+          (floor(cond->right->num) == cond->right->num)) {
 
-      stackinfo_newswap(&comp->si,&oldsi);
-      E(src,comp,truebranch,p,n);
-      JUMP(cond->sl,end);
-      stackinfo_freeswap(&comp->si,&oldsi);
 
-      LABEL(label);
-      stackinfo_newswap(&comp->si,&oldsi);
-      E(src,comp,falsebranch,p,n);
-      stackinfo_freeswap(&comp->si,&oldsi);
+        E(src,comp,cond->left->right,p,n);
+        JEQ(cond->sl,label,(int)cond->right->num);
 
-      LABEL(end);
-      pushstatus(comp->si,1);
+        stackinfo_newswap(&comp->si,&oldsi);
+        POP(cond->sl,1);
+        E(src,comp,falsebranch,p,n);
+        JUMP(cond->sl,end);
+        stackinfo_freeswap(&comp->si,&oldsi);
+
+        LABEL(label);
+        stackinfo_newswap(&comp->si,&oldsi);
+        POP(cond->sl,1);
+        E(src,comp,truebranch,p,n);
+        stackinfo_freeswap(&comp->si,&oldsi);
+
+        popstatus(comp->si,1); /* for the POP instructions */
+
+        LABEL(end);
+        pushstatus(comp->si,1);
+
+      }
+      else {
+        E(src,comp,cond,p,n);
+        JFALSE(cond->sl,label);
+
+        stackinfo_newswap(&comp->si,&oldsi);
+        E(src,comp,truebranch,p,n);
+        JUMP(cond->sl,end);
+        stackinfo_freeswap(&comp->si,&oldsi);
+
+        LABEL(label);
+        stackinfo_newswap(&comp->si,&oldsi);
+        E(src,comp,falsebranch,p,n);
+        stackinfo_freeswap(&comp->si,&oldsi);
+
+        LABEL(end);
+        pushstatus(comp->si,1);
+      }
     }
     else if ((SNODE_BUILTIN == app->type) &&
         (B_SEQ == app->bif) &&
@@ -882,17 +919,40 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             int label;
             stackinfo *oldsi;
 
-            E(src,comp,cond,p,n);
-            JFALSE(cond->sl,label);
+            if ((SNODE_APPLICATION == cond->type) &&
+                (SNODE_APPLICATION == cond->left->type) &&
+                (SNODE_BUILTIN == cond->left->left->type) &&
+                (B_EQ == cond->left->left->bif) &&
+                (SNODE_NUMBER == cond->right->type) &&
+                (floor(cond->right->num) == cond->right->num)) {
 
-            stackinfo_newswap(&comp->si,&oldsi);
-            R(src,comp,truebranch,p,n);
-            stackinfo_freeswap(&comp->si,&oldsi);
+              E(src,comp,cond->left->right,p,n);
+              JEQ(cond->sl,label,(int)cond->right->num);
 
-            LABEL(label);
-            stackinfo_newswap(&comp->si,&oldsi);
-            R(src,comp,falsebranch,p,n);
-            stackinfo_freeswap(&comp->si,&oldsi);
+              stackinfo_newswap(&comp->si,&oldsi);
+              POP(cond->sl,1);
+              R(src,comp,falsebranch,p,n);
+              stackinfo_freeswap(&comp->si,&oldsi);
+
+              LABEL(label);
+              stackinfo_newswap(&comp->si,&oldsi);
+              POP(cond->sl,1);
+              R(src,comp,truebranch,p,n);
+              stackinfo_freeswap(&comp->si,&oldsi);
+            }
+            else {
+              E(src,comp,cond,p,n);
+              JFALSE(cond->sl,label);
+
+              stackinfo_newswap(&comp->si,&oldsi);
+              R(src,comp,truebranch,p,n);
+              stackinfo_freeswap(&comp->si,&oldsi);
+
+              LABEL(label);
+              stackinfo_newswap(&comp->si,&oldsi);
+              R(src,comp,falsebranch,p,n);
+              stackinfo_freeswap(&comp->si,&oldsi);
+            }
           }
           else if (B_SEQ == app->bif) {
             snode *expr2 = args->data[0];
@@ -1053,6 +1113,19 @@ static void C(source *src, compilation *comp, snode *c, pmap *p, int n)
   comp->cdepth--;
 }
 
+static int is_jump(int opcode)
+{
+  switch (opcode) {
+  case OP_JFALSE:
+  case OP_JUMP:
+  case OP_JCMP:
+  case OP_JEQ:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
 static void peephole(compilation *comp, int start)
 {
   int addr1;
@@ -1062,8 +1135,7 @@ static void peephole(compilation *comp, int start)
   int changed;
 
   for (addr1 = start; addr1 < count; addr1++) {
-    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
-        (OP_JCMP == instrs[addr1].opcode)) {
+    if (is_jump(instrs[addr1].opcode)) {
       instrs[addr1].arg0 += addr1;
       assert(instrs[addr1].arg0 >= start);
       assert(instrs[addr1].arg0 < count);
@@ -1131,25 +1203,86 @@ static void peephole(compilation *comp, int start)
         source += 2;
         changed = 1;
       }
-      else {
-        instrs[dest] = instrs[source];
+      /* JEQ optimisation */
+      else if ((source+3 < count) &&
+               (OP_PUSH == instrs[source].opcode) &&
+               (OP_JEQ == instrs[source+1].opcode) &&
+               (OP_POP == instrs[source+2].opcode) &&
+               (OP_PUSH == instrs[source+3].opcode) &&
+               (instrs[source].arg0 == instrs[source+3].arg0)) {
+
+        int arg0 = instrs[source].arg0;
+
         map[source] = dest;
-        dest++;
-        source++;
+        instrs[dest++] = instrs[source++];
+
+        map[source] = dest;
+        instrs[dest++] = instrs[source++];
+
+        while ((source+2 < count) &&
+               (OP_POP == instrs[source].opcode) &&
+               (OP_PUSH == instrs[source+1].opcode) &&
+               (OP_JEQ == instrs[source+2].opcode) &&
+               (arg0 == instrs[source+1].arg0)) {
+          map[source++] = dest;
+          map[source++] = dest;
+          map[source] = dest;
+          instrs[dest++] = instrs[source++];
+        }
+      }
+      /* JEQ optimisation */
+      else if ((source+4 < count) &&
+               (OP_PUSH == instrs[source].opcode) &&
+               (OP_EVAL == instrs[source+1].opcode) &&
+               (instrs[source+1].arg0 == instrs[source].expcount) &&
+               (OP_JEQ == instrs[source+2].opcode) &&
+               (OP_POP == instrs[source+3].opcode) &&
+               (OP_PUSH == instrs[source+4].opcode) &&
+               (instrs[source].arg0 == instrs[source+4].arg0)) {
+
+        int arg0 = instrs[source].arg0;
+
+        map[source] = dest;
+        instrs[dest++] = instrs[source++];
+
+        map[source] = dest;
+        instrs[dest++] = instrs[source++];
+
+        map[source] = dest;
+        instrs[dest++] = instrs[source++];
+
+        while ((source+3 < count) &&
+               (OP_POP == instrs[source].opcode) &&
+               (OP_PUSH == instrs[source+1].opcode) &&
+               (OP_EVAL == instrs[source+2].opcode) &&
+               (instrs[source+2].arg0 == instrs[source+1].expcount) &&
+               (OP_JEQ == instrs[source+3].opcode) &&
+               (arg0 == instrs[source+1].arg0)) {
+          map[source++] = dest;
+          map[source++] = dest;
+          map[source++] = dest;
+          map[source] = dest;
+          instrs[dest++] = instrs[source++];
+        }
+      }
+      else if (OP_POP == instrs[source].opcode) {
+        map[source++] = dest;
+      }
+      else {
+        map[source] = dest;
+        instrs[dest++] = instrs[source++];
       }
     }
     count = dest;
 
     for (addr1 = start; addr1 < count; addr1++)
-      if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
-          (OP_JCMP == instrs[addr1].opcode))
+      if (is_jump(instrs[addr1].opcode))
         instrs[addr1].arg0 = map[instrs[addr1].arg0];
 
   } while (changed);
 
   for (addr1 = start; addr1 < count; addr1++) {
-    if ((OP_JFALSE == instrs[addr1].opcode) || (OP_JUMP == instrs[addr1].opcode) ||
-        (OP_JCMP == instrs[addr1].opcode)) {
+    if (is_jump(instrs[addr1].opcode)) {
       assert(instrs[addr1].arg0 >= start);
       assert(instrs[addr1].arg0 < count);
       instrs[addr1].arg0 -= addr1;

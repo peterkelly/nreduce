@@ -71,6 +71,7 @@
 #define NATIVE_EVAL
 #define NATIVE_CALL
 #define NATIVE_JCMP
+#define NATIVE_JEQ
 
 typedef void (op_fun)(task *tsk, frame *runnable, const instruction *instr);
 
@@ -101,6 +102,7 @@ void op_call(task *tsk, frame *runnable, const instruction *instr);
 void op_jcmp(task *tsk, frame *runnable, const instruction *instr);
 void op_consn(task *tsk, frame *runnable, const instruction *instr);
 void op_itemn(task *tsk, frame *runnable, const instruction *instr);
+void op_jeq(task *tsk, frame *runnable, const instruction *instr);
 void op_invalid(task *tsk, frame *runnable, const instruction *instr);
 int handle_interrupt(task *tsk);
 
@@ -131,6 +133,7 @@ op_fun *op_handlers[OP_COUNT] = {
   op_jcmp,
   op_consn,
   op_itemn,
+  op_jeq,
   op_invalid,
 };
 
@@ -1564,6 +1567,18 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
       case B_GE: I_JNAE(label(instrlabels[addr+instr->arg0])); break;
       default: abort(); break;
       }
+      break;
+    }
+    #endif
+    #ifdef NATIVE_JEQ
+    case OP_JEQ: {
+      I_FILD(absmem((int)&(instr->arg1)));
+      I_FLD_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+      I_FUCOMPP();
+      I_FNSTSW_AX();
+      I_SAHF();
+      LABEL(bplabels[0][addr]);
+      I_JZ(label(instrlabels[addr+instr->arg0]));
       break;
     }
     #endif

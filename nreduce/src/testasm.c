@@ -1581,6 +1581,54 @@ void testasm(array *cpucode)
   I_FSTP_64(reg(ST6));
   I_FSTP_64(reg(ST7));
 
+  I_FILD(regmem(EAX,0));
+  I_FILD(regmem(ECX,0));
+  I_FILD(regmem(EDX,0));
+  I_FILD(regmem(EBX,0));
+  I_FILD(regmem(ESP,0));
+  I_FILD(regmem(EBP,0));
+  I_FILD(regmem(ESI,0));
+  I_FILD(regmem(EDI,0));
+
+  I_FILD(regmem(EAX,12));
+  I_FILD(regmem(ECX,12));
+  I_FILD(regmem(EDX,12));
+  I_FILD(regmem(EBX,12));
+  I_FILD(regmem(ESP,12));
+  I_FILD(regmem(EBP,12));
+  I_FILD(regmem(ESI,12));
+  I_FILD(regmem(EDI,12));
+
+  I_FILD(regmem(EAX,123456789));
+  I_FILD(regmem(ECX,123456789));
+  I_FILD(regmem(EDX,123456789));
+  I_FILD(regmem(EBX,123456789));
+  I_FILD(regmem(ESP,123456789));
+  I_FILD(regmem(EBP,123456789));
+  I_FILD(regmem(ESI,123456789));
+  I_FILD(regmem(EDI,123456789));
+
+  I_FILD(regmemscaled(EAX,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(ECX,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(EDX,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(EBX,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(ESP,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(EBP,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(ESI,12,SCALE_4,EAX));
+  I_FILD(regmemscaled(EDI,12,SCALE_4,EAX));
+
+  I_FILD(regmemscaled(EAX,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(ECX,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(EDX,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(EBX,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(ESP,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(EBP,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(ESI,123456789,SCALE_8,EDI));
+  I_FILD(regmemscaled(EDI,123456789,SCALE_8,EDI));
+
+  I_FILD(absmem(12));
+  I_FILD(absmem(123456789));
+
   I_FADD(regmem(EAX,0));
   I_FADD(regmem(ECX,12));
   I_FADD(regmem(EDX,123456789));

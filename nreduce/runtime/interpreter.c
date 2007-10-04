@@ -1567,6 +1567,20 @@ inline void op_jcmp(task *tsk, frame *runnable, const instruction *instr)
     runnable->instr += instr->arg0-1;
 }
 
+inline void op_jeq(task *tsk, frame *runnable, const instruction *instr)
+{
+  pntr p = runnable->data[instr->expcount-1];
+
+  if (CELL_NUMBER != pntrtype(p)) {
+    int t = pntrtype(p);
+    set_error(tsk,"==: incompatible argument: (%s)",cell_types[t]);
+    return;
+  }
+
+  if (pntrdouble(p) == (double)instr->arg1)
+    runnable->instr += instr->arg0-1;
+}
+
 inline void op_consn(task *tsk, frame *runnable, const instruction *instr)
 {
   int n = instr->arg0;
@@ -1876,6 +1890,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
         break;
       case OP_JCMP:
         op_jcmp(tsk,runnable,instr);
+        break;
+      case OP_JEQ:
+        op_jeq(tsk,runnable,instr);
         break;
       case OP_CONSN:
         op_consn(tsk,runnable,instr);

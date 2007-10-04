@@ -119,9 +119,15 @@ static void inline_r(source *src, snode *s, int *changed)
     inline_r(src,s->body,changed);
     break;
   }
+  case SNODE_SCREF:
+    if ((0 == s->sc->nargs) && s->sc->caninline) {
+      snode *tmp = snode_copy(s->sc->body);
+      memcpy(s,tmp,sizeof(snode));
+      free(tmp);
+    }
+    break;
   case SNODE_BUILTIN:
   case SNODE_SYMBOL:
-  case SNODE_SCREF:
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
@@ -161,6 +167,14 @@ void inlining(source *src)
     if ((SNODE_SCREF == a->type) && ok && (nargs == a->sc->nargs))
       sc->caninline = 1;
     if ((SNODE_BUILTIN == a->type) && ok && (nargs == builtin_info[a->bif].nargs))
+      sc->caninline = 1;
+    if ((SNODE_NUMBER == a->type) && ok && (0 == nargs))
+      sc->caninline = 1;
+    if ((SNODE_STRING == a->type) && ok && (0 == nargs))
+      sc->caninline = 1;
+    if ((SNODE_NIL == a->type) && ok && (0 == nargs))
+      sc->caninline = 1;
+    if ((SNODE_SCREF == a->type) && ok && (0 == nargs))
       sc->caninline = 1;
   }
 
