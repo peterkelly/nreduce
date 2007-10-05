@@ -140,76 +140,76 @@ extern xmlNodePtr parse_node;
 %type <expr> Top
 %type <expr> AVTLiteral
 %type <expr> TopExprs
-%type <expr> XPathExpr
-%type <expr> XPathExprSingle
-%type <expr> XPathForExpr
-%type <expr> XPathVarIn
-%type <expr> XPathVarInList
-%type <expr> XPathQuantifiedExpr
-%type <expr> XPathIfExpr
-%type <expr> XPathOrExpr
-%type <expr> XPathAndExpr
-%type <expr> XPathComparisonExpr
-%type <expr> XPathRangeExpr
-%type <expr> XPathAdditiveExpr
-%type <expr> XPathMultiplicativeExpr
-%type <expr> XPathUnionExpr
-%type <expr> XPathIntersectExpr
-%type <expr> XPathInstanceofExpr
-%type <expr> XPathTreatExpr
-%type <expr> XPathCastableExpr
-%type <expr> XPathCastExpr
-%type <expr> XPathUnaryExpr
-%type <expr> XPathValueExpr
-%type <stype> XPathGeneralComp
-%type <stype> XPathValueComp
-%type <stype> XPathNodeComp
-%type <expr> XPathPathExpr
-%type <expr> XPathRelativePathExpr
-%type <expr> XPathStepExpr
-%type <expr> XPathForwardAxisStep
-%type <expr> XPathReverseAxisStep
-%type <expr> XPathForwardStep
-%type <axis> XPathForwardAxis
-%type <expr> XPathAbbrevForwardStep
-%type <expr> XPathReverseStep
-%type <axis> XPathReverseAxis
-%type <expr> XPathAbbrevReverseStep
-%type <expr> XPathNodeTest
-%type <expr> XPathNameTest
-%type <qn> XPathWildcard
-%type <expr> XPathFilterExpr
-%type <expr> XPathPredicate
-%type <expr> XPathPrimaryExpr
-%type <expr> XPathLiteral
-%type <expr> XPathNumericLiteral
-%type <expr> XPathStringLiteral
-%type <expr> XPathVarRef
-%type <expr> XPathParenthesizedExpr
-%type <expr> XPathContextItemExpr
-%type <expr> XPathFunctionCallParams
-%type <expr> XPathFunctionCall
-%type <st> XPathSingleType
-%type <st> XPathSequenceType
-%type <c> XPathOccurrenceIndicator
-%type <st> XPathItemType
-%type <st> XPathAtomicType
+%type <expr> Expr
+%type <expr> ExprSingle
+%type <expr> ForExpr
+%type <expr> VarIn
+%type <expr> VarInList
+%type <expr> QuantifiedExpr
+%type <expr> IfExpr
+%type <expr> OrExpr
+%type <expr> AndExpr
+%type <expr> ComparisonExpr
+%type <expr> RangeExpr
+%type <expr> AdditiveExpr
+%type <expr> MultiplicativeExpr
+%type <expr> UnionExpr
+%type <expr> IntersectExpr
+%type <expr> InstanceofExpr
+%type <expr> TreatExpr
+%type <expr> CastableExpr
+%type <expr> CastExpr
+%type <expr> UnaryExpr
+%type <expr> ValueExpr
+%type <stype> GeneralComp
+%type <stype> ValueComp
+%type <stype> NodeComp
+%type <expr> PathExpr
+%type <expr> RelativePathExpr
+%type <expr> StepExpr
+%type <expr> ForwardAxisStep
+%type <expr> ReverseAxisStep
+%type <expr> ForwardStep
+%type <axis> ForwardAxis
+%type <expr> AbbrevForwardStep
+%type <expr> ReverseStep
+%type <axis> ReverseAxis
+%type <expr> AbbrevReverseStep
+%type <expr> NodeTest
+%type <expr> NameTest
+%type <qn> Wildcard
+%type <expr> FilterExpr
+%type <expr> Predicate
+%type <expr> PrimaryExpr
+%type <expr> Literal
+%type <expr> NumericLiteral
+%type <expr> StringLiteral
+%type <expr> VarRef
+%type <expr> ParenthesizedExpr
+%type <expr> ContextItemExpr
+%type <expr> FunctionCallParams
+%type <expr> FunctionCall
+%type <st> SingleType
+%type <st> SequenceType
+%type <c> OccurrenceIndicator
+%type <st> ItemType
+%type <st> AtomicType
 
-%type <expr> XPathKindTest
+%type <expr> KindTest
 
-%type <expr> XPathDocumentTest
-%type <expr> XPathElementTest
-%type <expr> XPathAttributeTest
-%type <expr> XPathSchemaElementTest
-%type <expr> XPathSchemaAttributeTest
-%type <expr> XPathPITest
-%type <expr> XPathCommentTest
-%type <expr> XPathTextTest
-%type <expr> XPathAnyKindTest
+%type <expr> DocumentTest
+%type <expr> ElementTest
+%type <expr> AttributeTest
+%type <expr> SchemaElementTest
+%type <expr> SchemaAttributeTest
+%type <expr> PITest
+%type <expr> CommentTest
+%type <expr> TextTest
+%type <expr> AnyKindTest
 
-%type <qn> XPathAttribNameOrWildcard
-%type <qn> XPathElementNameOrWildcard
-%type <qn> XPathTypeName
+%type <qn> AttribNameOrWildcard
+%type <qn> ElementNameOrWildcard
+%type <qn> TypeName
 
 %%
 
@@ -227,88 +227,82 @@ AVTLiteral:
 TopExprs:
   AVTLiteral                      { $$ = $1; }
 | AVTLiteral TopExprs             { $$ = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
-| AVTLiteral XPathExpr TopExprs   { expression *e = new_expression2(XPATH_AVT_COMPONENT,$2,$3);
+| AVTLiteral Expr TopExprs        { expression *e = new_expression2(XPATH_AVT_COMPONENT,$2,$3);
                                     $$ = new_expression2(XPATH_AVT_COMPONENT,$1,e); }
 ;
 
 Top:
-  XPathExpr                       { parse_expr = $1; }
-| XPathExpr TopExprs              { parse_expr = $1; }
+  Expr                            { parse_expr = $1; }
+| Expr TopExprs                   { parse_expr = $1; }
 | TopExprs                        { parse_expr = $1; }
 ;
 
-XPathExpr:
-  XPathExprSingle                 { $$ = $1; }
-| XPathExprSingle ',' XPathExpr   { $$ = new_expression2(XPATH_SEQUENCE,$1,$3); }
+Expr:
+  ExprSingle                      { $$ = $1; }
+| ExprSingle ',' Expr             { $$ = new_expression2(XPATH_SEQUENCE,$1,$3); }
 ;
 
-XPathExprSingle:
-  XPathForExpr                    { $$ = $1; }
-| XPathQuantifiedExpr             { $$ = $1; }
-| XPathIfExpr                     { $$ = $1; }
-| XPathOrExpr                     { $$ = $1; }
+ExprSingle:
+  ForExpr                         { $$ = $1; }
+| QuantifiedExpr                  { $$ = $1; }
+| IfExpr                          { $$ = $1; }
+| OrExpr                          { $$ = $1; }
 ;
 
-XPathForExpr:
-  FOR XPathVarInList RETURN XPathExprSingle
-                                  { $$ = new_ForExpr($2,$4); }
+ForExpr:
+  FOR VarInList RETURN ExprSingle { $$ = new_ForExpr($2,$4); }
 ;
 
-XPathVarIn:
-  '$' QName IN XPathExprSingle    { $$ = new_VarInExpr($4);
+VarIn:
+  '$' QName IN ExprSingle         { $$ = new_VarInExpr($4);
                                     $$->qn = $2; }
 ;
 
-XPathVarInList:
-  XPathVarIn                      { $$ = $1; }
-| XPathVarInList ',' XPathVarIn   { $$ = new_VarInListExpr($1,$3); }
+VarInList:
+  VarIn                           { $$ = $1; }
+| VarInList ',' VarIn             { $$ = new_VarInListExpr($1,$3); }
 ;
 
-XPathQuantifiedExpr:
-  SOME XPathVarInList SATISFIES XPathExprSingle
+QuantifiedExpr:
+  SOME VarInList SATISFIES ExprSingle
                                   { $$ = new_QuantifiedExpr(XPATH_SOME,$2,$4); }
-| EVERY XPathVarInList SATISFIES XPathExprSingle
+| EVERY VarInList SATISFIES ExprSingle
                                   { $$ = new_QuantifiedExpr(XPATH_EVERY,$2,$4); }
 ;
 
-XPathIfExpr:
-  IF '(' XPathExpr ')' THEN XPathExprSingle ELSE XPathExprSingle
+IfExpr:
+  IF '(' Expr ')' THEN ExprSingle ELSE ExprSingle
                                   { $$ = new_XPathIfExpr($3,$6,$8); }
 ;
 
-XPathOrExpr:
-  XPathAndExpr                    { $$ = $1; }
-| XPathOrExpr OR XPathAndExpr     { $$ = new_expression2(XPATH_OR,$1,$3); }
+OrExpr:
+  AndExpr                         { $$ = $1; }
+| OrExpr OR AndExpr               { $$ = new_expression2(XPATH_OR,$1,$3); }
 ;
 
-XPathAndExpr:
-  XPathComparisonExpr             { $$ = $1; }
-| XPathAndExpr AND XPathComparisonExpr
-                                  { $$ = new_expression2(XPATH_AND,$1,$3); }
+AndExpr:
+  ComparisonExpr                  { $$ = $1; }
+| AndExpr AND ComparisonExpr      { $$ = new_expression2(XPATH_AND,$1,$3); }
 ;
 
-XPathComparisonExpr:
-  XPathRangeExpr                  { $$ = $1; }
-| XPathRangeExpr XPathValueComp XPathRangeExpr
-                                  { $$ = new_expression2($2,$1,$3); }
-| XPathRangeExpr XPathGeneralComp XPathRangeExpr
-                                  { $$ = new_expression2($2,$1,$3); }
-| XPathRangeExpr XPathNodeComp XPathRangeExpr
-                                  { $$ = new_expression2($2,$1,$3); }
+ComparisonExpr:
+  RangeExpr                       { $$ = $1; }
+| RangeExpr ValueComp RangeExpr   { $$ = new_expression2($2,$1,$3); }
+| RangeExpr GeneralComp RangeExpr { $$ = new_expression2($2,$1,$3); }
+| RangeExpr NodeComp RangeExpr    { $$ = new_expression2($2,$1,$3); }
 ;
 
 
-XPathRangeExpr:
-  XPathAdditiveExpr               { $$ = $1; }
-| XPathAdditiveExpr TO XPathAdditiveExpr
-                                  { $$ = new_expression2(XPATH_TO,$1,$3); }
+RangeExpr:
+  AdditiveExpr                    { $$ = $1; }
+| AdditiveExpr TO AdditiveExpr    { $$ = new_expression2(XPATH_TO,$1,$3); }
 ;
 
-XPathAdditiveExpr:
-  XPathMultiplicativeExpr         { $$ = $1; }
-| XPathAdditiveExpr '+' XPathMultiplicativeExpr
+AdditiveExpr:
+  MultiplicativeExpr              { $$ = $1; }
+| AdditiveExpr '+' MultiplicativeExpr
                                   { $$ = new_expression2(XPATH_ADD,$1,$3); }
-| XPathAdditiveExpr '-' XPathMultiplicativeExpr
+| AdditiveExpr '-' MultiplicativeExpr
                                   { $$ = new_expression2(XPATH_SUBTRACT,$1,$3); }
 ;
 
@@ -316,71 +310,67 @@ XPathAdditiveExpr:
    lexer.l we only return this for the word "multiply", which isn't part of the spec
    Currently this has a shift/reduce conflict with wildcard
  */
-XPathMultiplicativeExpr:
-  XPathUnionExpr                  { $$ = $1; }
-| XPathMultiplicativeExpr '*' XPathUnionExpr
+MultiplicativeExpr:
+  UnionExpr                       { $$ = $1; }
+| MultiplicativeExpr '*' UnionExpr
                                   { $$ = new_expression2(XPATH_MULTIPLY,$1,$3); }
-| XPathMultiplicativeExpr DIV XPathUnionExpr
+| MultiplicativeExpr DIV UnionExpr
                                   { $$ = new_expression2(XPATH_DIVIDE,$1,$3); }
-| XPathMultiplicativeExpr IDIV XPathUnionExpr
+| MultiplicativeExpr IDIV UnionExpr
                                   { $$ = new_expression2(XPATH_IDIVIDE,$1,$3); }
-| XPathMultiplicativeExpr MOD XPathUnionExpr
+| MultiplicativeExpr MOD UnionExpr
                                   { $$ = new_expression2(XPATH_MOD,$1,$3); }
 ;
 
-XPathUnionExpr:
-  XPathIntersectExpr              { $$ = $1; }
-| XPathUnionExpr UNION XPathIntersectExpr
-                                  { $$ = new_expression2(XPATH_UNION,$1,$3); }
-| XPathUnionExpr '|' XPathIntersectExpr
-                                  { $$ = new_expression2(XPATH_UNION2,$1,$3); }
+UnionExpr:
+  IntersectExpr                   { $$ = $1; }
+| UnionExpr UNION IntersectExpr   { $$ = new_expression2(XPATH_UNION,$1,$3); }
+| UnionExpr '|' IntersectExpr     { $$ = new_expression2(XPATH_UNION2,$1,$3); }
 ;
 
-XPathIntersectExpr:
-  XPathInstanceofExpr             { $$ = $1; }
-| XPathIntersectExpr INTERSECT XPathInstanceofExpr
+IntersectExpr:
+  InstanceofExpr                  { $$ = $1; }
+| IntersectExpr INTERSECT InstanceofExpr
                                   { $$ = new_expression2(XPATH_INTERSECT,$1,$3); }
-| XPathIntersectExpr EXCEPT XPathInstanceofExpr
+| IntersectExpr EXCEPT InstanceofExpr
                                   { $$ = new_expression2(XPATH_EXCEPT,$1,$3); }
 ;
 
-XPathInstanceofExpr:
-  XPathTreatExpr                  { $$ = $1; }
-| XPathTreatExpr INSTANCE OF XPathSequenceType
+InstanceofExpr:
+  TreatExpr                       { $$ = $1; }
+| TreatExpr INSTANCE OF SequenceType
                                   { $$ = new_TypeExpr(XPATH_INSTANCE_OF,$4,$1); }
 ;
 
-XPathTreatExpr:
-  XPathCastableExpr               { $$ = $1; }
-| XPathCastableExpr TREAT AS XPathSequenceType
+TreatExpr:
+  CastableExpr                    { $$ = $1; }
+| CastableExpr TREAT AS SequenceType
                                   { $$ = new_TypeExpr(XPATH_TREAT,$4,$1); }
 ;
 
-XPathCastableExpr:
-  XPathCastExpr                   { $$ = $1; }
-| XPathCastExpr CASTABLE AS XPathSingleType
-                                  { $$ = new_TypeExpr(XPATH_CASTABLE,$4,$1); }
+CastableExpr:
+  CastExpr                        { $$ = $1; }
+| CastExpr CASTABLE AS SingleType { $$ = new_TypeExpr(XPATH_CASTABLE,$4,$1); }
 ;
 
-XPathCastExpr:
-  XPathUnaryExpr                  { $$ = $1; }
-| XPathUnaryExpr CAST AS XPathSingleType
-                                  { $$ = new_TypeExpr(XPATH_CAST,$4,$1); }
+CastExpr:
+  UnaryExpr                       { $$ = $1; }
+| UnaryExpr CAST AS SingleType    { $$ = new_TypeExpr(XPATH_CAST,$4,$1); }
 ;
 
-XPathUnaryExpr:
-  '-' XPathUnaryExpr              { $$ = new_expression(XPATH_UNARY_MINUS);
+UnaryExpr:
+  '-' UnaryExpr                   { $$ = new_expression(XPATH_UNARY_MINUS);
                                     $$->left = $2; }
-| '+' XPathUnaryExpr              { $$ = new_expression(XPATH_UNARY_PLUS);
+| '+' UnaryExpr                   { $$ = new_expression(XPATH_UNARY_PLUS);
                                     $$->left = $2 }
-| XPathValueExpr                  { $$ = $1; }
+| ValueExpr                       { $$ = $1; }
 ;
 
-XPathValueExpr:
-  XPathPathExpr                   { $$ = $1; }
+ValueExpr:
+  PathExpr                        { $$ = $1; }
 ;
 
-XPathGeneralComp:
+GeneralComp:
   '='                             { $$ = XPATH_GENERAL_EQ; }
 | SYMBOL_NE                       { $$ = XPATH_GENERAL_NE; }
 | '<'                             { $$ = XPATH_GENERAL_LT; }
@@ -389,7 +379,7 @@ XPathGeneralComp:
 | SYMBOL_GE                       { $$ = XPATH_GENERAL_GE; }
 ;
 
-XPathValueComp:
+ValueComp:
   VALUE_EQ                        { $$ = XPATH_VALUE_EQ; }
 | VALUE_NE                        { $$ = XPATH_VALUE_NE; }
 | VALUE_LT                        { $$ = XPATH_VALUE_LT; }
@@ -398,32 +388,30 @@ XPathValueComp:
 | VALUE_GE                        { $$ = XPATH_VALUE_GE; }
 ;
 
-XPathNodeComp:
+NodeComp:
   IS                              { $$ = XPATH_NODE_IS; }
 | NODE_PRECEDES                   { $$ = XPATH_NODE_PRECEDES; }
 | NODE_FOLLOWS                    { $$ = XPATH_NODE_FOLLOWS; }
 ;
 
-XPathPathExpr:
+PathExpr:
   '/'                             { $$ = new_expression2(XPATH_ROOT,NULL,NULL); }
-| '/' XPathRelativePathExpr       { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+| '/' RelativePathExpr            { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
                                     $$ = new_expression2(XPATH_STEP,root,$2); }
-| SLASHSLASH XPathRelativePathExpr
-                                  { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+| SLASHSLASH RelativePathExpr     { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
                                     expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
                                     test->axis = AXIS_DESCENDANT_OR_SELF;
                                     test->kind = KIND_ANY;
                                     step1 = new_expression2(XPATH_STEP,root,test);
                                     $$ = new_expression2(XPATH_STEP,step1,$2); }
-| XPathRelativePathExpr           { $$ = $1; }
+| RelativePathExpr                { $$ = $1; }
 ;
 
-XPathRelativePathExpr:
-  XPathStepExpr                   { $$ = $1; }
-| XPathRelativePathExpr '/' XPathStepExpr
-                                  { $$ = new_expression2(XPATH_STEP,$1,$3); }
-| XPathRelativePathExpr SLASHSLASH XPathStepExpr
+RelativePathExpr:
+  StepExpr                        { $$ = $1; }
+| RelativePathExpr '/' StepExpr   { $$ = new_expression2(XPATH_STEP,$1,$3); }
+| RelativePathExpr SLASHSLASH StepExpr
                                   { expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
                                     test->axis = AXIS_DESCENDANT_OR_SELF;
@@ -432,31 +420,29 @@ XPathRelativePathExpr:
                                     $$ = new_expression2(XPATH_STEP,step1,$3); }
 ;
 
-XPathStepExpr:
-  XPathForwardAxisStep            { $$ = new_expression2(XPATH_FORWARD_AXIS_STEP,$1,NULL); }
-| XPathReverseAxisStep            { $$ = new_expression2(XPATH_REVERSE_AXIS_STEP,$1,NULL); }
-| XPathFilterExpr                 { $$ = $1; }
+StepExpr:
+  ForwardAxisStep                 { $$ = new_expression2(XPATH_FORWARD_AXIS_STEP,$1,NULL); }
+| ReverseAxisStep                 { $$ = new_expression2(XPATH_REVERSE_AXIS_STEP,$1,NULL); }
+| FilterExpr                      { $$ = $1; }
 ;
 
-XPathForwardAxisStep:
-  XPathForwardStep                { $$ = $1; }
-| XPathForwardAxisStep XPathPredicate
-                                  { $$ = new_expression2(XPATH_FILTER,$1,$2); }
+ForwardAxisStep:
+  ForwardStep                     { $$ = $1; }
+| ForwardAxisStep Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$2); }
 ;
 
-XPathReverseAxisStep:
-  XPathReverseStep                { $$ = $1; }
-| XPathReverseAxisStep XPathPredicate
-                                  { $$ = new_expression2(XPATH_FILTER,$1,$2); }
+ReverseAxisStep:
+  ReverseStep                     { $$ = $1; }
+| ReverseAxisStep Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$2); }
 ;
 
-XPathForwardStep:
-  XPathForwardAxis XPathNodeTest  { $$ = $2;
+ForwardStep:
+  ForwardAxis NodeTest            { $$ = $2;
                                     $$->axis = $1; }
-| XPathAbbrevForwardStep          { $$ = $1; }
+| AbbrevForwardStep               { $$ = $1; }
 ;
 
-XPathForwardAxis:
+ForwardAxis:
   CHILD COLONCOLON                { $$ = AXIS_CHILD; }
 | DESCENDANT COLONCOLON           { $$ = AXIS_DESCENDANT; }
 | ATTRIBUTE COLONCOLON            { $$ = AXIS_ATTRIBUTE; }
@@ -467,24 +453,24 @@ XPathForwardAxis:
 | NAMESPACE COLONCOLON            { $$ = AXIS_NAMESPACE; }
 ;
 
-XPathAbbrevForwardStep:
-  XPathNodeTest                   { $$ = $1;
+AbbrevForwardStep:
+  NodeTest                        { $$ = $1;
                                     $$->axis = AXIS_CHILD;
                                     if ((XPATH_KIND_TEST == $$->type) &&
                                         ((KIND_ATTRIBUTE == $$->kind) ||
                                          (KIND_SCHEMA_ATTRIBUTE == $$->kind)))
                                       $$->axis = AXIS_ATTRIBUTE; }
-| '@' XPathNodeTest               { $$ = $2;
+| '@' NodeTest                    { $$ = $2;
                                     $$->axis = AXIS_ATTRIBUTE; }
 ;
 
-XPathReverseStep:
-  XPathReverseAxis XPathNodeTest  { $$ = $2;
+ReverseStep:
+  ReverseAxis NodeTest            { $$ = $2;
                                     $$->axis = $1; }
-| XPathAbbrevReverseStep          { $$ = $1; }
+| AbbrevReverseStep               { $$ = $1; }
 ;
 
-XPathReverseAxis:
+ReverseAxis:
   PARENT COLONCOLON               { $$ = AXIS_PARENT; }
 | ANCESTOR COLONCOLON             { $$ = AXIS_ANCESTOR; }
 | PRECEDING_SIBLING COLONCOLON    { $$ = AXIS_PRECEDING_SIBLING; }
@@ -492,27 +478,27 @@ XPathReverseAxis:
 | ANCESTOR_OR_SELF COLONCOLON     { $$ = AXIS_ANCESTOR_OR_SELF; }
 ;
 
-XPathAbbrevReverseStep:
+AbbrevReverseStep:
   DOTDOT                          { /*$$ = new NodeTestExpr(XPATH_NODE_TEST_SEQUENCETYPE,
                                                           SequenceTypeImpl::node(),
                                                           AXIS_PARENT);*/ }
 ;
 
-XPathNodeTest:
-  XPathKindTest                   { $$ = $1; }
-| XPathNameTest                   { $$ = $1; }
+NodeTest:
+  KindTest                        { $$ = $1; }
+| NameTest                        { $$ = $1; }
 ;
 
-XPathNameTest:
+NameTest:
   QName                           { $$ = new_expression(XPATH_NAME_TEST);
                                     $$->qn = $1; }
-| XPathWildcard                   { $$ = new_expression(XPATH_NAME_TEST);
+| Wildcard                        { $$ = new_expression(XPATH_NAME_TEST);
                                     $$->qn = $1; }
 | ITEM                            { $$ = new_expression(XPATH_NAME_TEST);
                                     $$->qn.localpart = strdup("item"); }
 ;
 
-XPathWildcard:
+Wildcard:
 '*'                               { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = NULL; }
@@ -524,29 +510,29 @@ XPathWildcard:
                                     $$.localpart = $3; }
 ;
 
-XPathFilterExpr:
-  XPathPrimaryExpr                { $$ = $1; }
-| XPathFilterExpr XPathPredicate  { $$ = new_expression2(XPATH_FILTER,$1,$2); }
+FilterExpr:
+  PrimaryExpr                     { $$ = $1; }
+| FilterExpr Predicate            { $$ = new_expression2(XPATH_FILTER,$1,$2); }
 ;
 
-XPathPredicate:
-  '[' XPathExpr ']'               { $$ = $2; }
+Predicate:
+  '[' Expr ']'                    { $$ = $2; }
 ;
 
-XPathPrimaryExpr:
-  XPathLiteral                    { $$ = $1; }
-| XPathVarRef                     { $$ = $1; }
-| XPathParenthesizedExpr          { $$ = $1; }
-| XPathContextItemExpr            { $$ = $1; }
-| XPathFunctionCall               { $$ = $1; }
+PrimaryExpr:
+  Literal                         { $$ = $1; }
+| VarRef                          { $$ = $1; }
+| ParenthesizedExpr               { $$ = $1; }
+| ContextItemExpr                 { $$ = $1; }
+| FunctionCall                    { $$ = $1; }
 ;
 
-XPathLiteral:
-  XPathNumericLiteral             { $$ = $1; }
-| XPathStringLiteral              { $$ = $1; }
+Literal:
+  NumericLiteral                  { $$ = $1; }
+| StringLiteral                   { $$ = $1; }
 ;
 
-XPathNumericLiteral:
+NumericLiteral:
   INTEGER_LITERAL                 { $$ = new_expression(XPATH_INTEGER_LITERAL);
                                     $$->num = $1; }
 | DECIMAL_LITERAL                 { $$ = new_expression(XPATH_DECIMAL_LITERAL);
@@ -555,123 +541,122 @@ XPathNumericLiteral:
                                     $$->num = $1; }
 ;
 
-XPathStringLiteral:
+StringLiteral:
   STRING_LITERAL                  { $$ = new_expression(XPATH_STRING_LITERAL);
                                     $$->str = $1; }
 ;
 
-XPathVarRef:
+VarRef:
 '$' QName                         { $$ = new_expression(XPATH_VAR_REF);
                                     $$->qn = $2; }
 ;
 
-XPathParenthesizedExpr:
+ParenthesizedExpr:
   '(' ')'                         { $$ = new_expression(XPATH_EMPTY); }
-| '(' XPathExpr ')'               { $$ = new_expression(XPATH_PAREN);
+| '(' Expr ')'                    { $$ = new_expression(XPATH_PAREN);
                                     $$->left = $2; }
 ;
 
-XPathContextItemExpr:
+ContextItemExpr:
   '.'                             { $$ = new_expression(XPATH_CONTEXT_ITEM); }
 ;
 
-XPathFunctionCallParams:
-  XPathExprSingle                 { $$ = new_expression2(XPATH_ACTUAL_PARAM,$1,NULL); }
-| XPathExprSingle ',' XPathFunctionCallParams
+FunctionCallParams:
+  ExprSingle                      { $$ = new_expression2(XPATH_ACTUAL_PARAM,$1,NULL); }
+| ExprSingle ',' FunctionCallParams
                                   { $$ = new_expression2(XPATH_ACTUAL_PARAM,$1,$3); }
 ;
 
-XPathFunctionCall:
+FunctionCall:
   QName '(' ')'                   { $$ = new_expression(XPATH_FUNCTION_CALL);
                                     $$->qn = $1; }
-| QName '(' XPathFunctionCallParams ')'
+| QName '(' FunctionCallParams ')'
                                   { $$ = new_expression(XPATH_FUNCTION_CALL);
                                     $$->qn = $1;
                                     $$->left = $3; }
 ;
 
-XPathSingleType:
-  XPathAtomicType                 { $$ = $1; }
-| XPathAtomicType '?'             { /*$$ = SequenceTypeImpl::occurrence($1,OCCURS_OPTIONAL);*/ }
+SingleType:
+  AtomicType                      { $$ = $1; }
+| AtomicType '?'                  { /*$$ = SequenceTypeImpl::occurrence($1,OCCURS_OPTIONAL);*/ }
 ;
 
-XPathSequenceType:
-  XPathItemType                   { $$ = $1; }
-/*FIXME: causes shift/reduce conflict with XPathAdditiveExpr */
-| XPathItemType XPathOccurrenceIndicator
-{ /*$$ = SequenceTypeImpl::occurrence($1,$2);*/ }
+SequenceType:
+  ItemType                        { $$ = $1; }
+/*FIXME: causes shift/reduce conflict with AdditiveExpr */
+| ItemType OccurrenceIndicator    { /*$$ = SequenceTypeImpl::occurrence($1,$2);*/ }
 | VOID '(' ')'                    { /*$$ = new SequenceTypeImpl(SEQTYPE_EMPTY);*/ }
 ;
 
-XPathOccurrenceIndicator:
+OccurrenceIndicator:
   '?'                             { $$ = OCCURS_OPTIONAL; }
 | '*'                             { $$ = OCCURS_ZERO_OR_MORE; }
 | '+'                             { $$ = OCCURS_ONE_OR_MORE; }
 ;
 
-XPathItemType:
-  XPathAtomicType                 { $$ = $1; }
-| XPathKindTest                   { $$ = NULL; /* FIXME $$ = $1;*/ }
+ItemType:
+  AtomicType                      { $$ = $1; }
+| KindTest                        { $$ = NULL; /* FIXME $$ = $1;*/ }
 | ITEM '(' ')'                    { /*$$ = SequenceTypeImpl::item();*/ }
 ;
 
-XPathAtomicType:
+AtomicType:
   QName                           { /*$$ = new SequenceTypeImpl(new ItemType(ITEM_ATOMIC));
                                       $$->itemType()->m_typeref = $1;*/ }
 ;
 
-XPathKindTest:
-  XPathDocumentTest               { $$ = $1; }
-| XPathElementTest                { $$ = $1; }
-| XPathAttributeTest              { $$ = $1; }
-| XPathSchemaElementTest          { $$ = $1; }
-| XPathSchemaAttributeTest        { $$ = $1; }
-| XPathPITest                     { $$ = $1; }
-| XPathCommentTest                { $$ = $1; }
-| XPathTextTest                   { $$ = $1; }
-| XPathAnyKindTest                { $$ = $1; }
+KindTest:
+  DocumentTest                    { $$ = $1; }
+| ElementTest                     { $$ = $1; }
+| AttributeTest                   { $$ = $1; }
+| SchemaElementTest               { $$ = $1; }
+| SchemaAttributeTest             { $$ = $1; }
+| PITest                          { $$ = $1; }
+| CommentTest                     { $$ = $1; }
+| TextTest                        { $$ = $1; }
+| AnyKindTest                     { $$ = $1; }
 ;
 
-XPathDocumentTest:
+DocumentTest:
 DOCUMENT_NODE '(' ')'             { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_DOCUMENT; }
-| DOCUMENT_NODE '(' XPathElementTest ')'
+| DOCUMENT_NODE '(' ElementTest ')'
                                   { assert(!"FIXME: implement"); }
-| DOCUMENT_NODE '(' XPathSchemaElementTest ')'
+| DOCUMENT_NODE '(' SchemaElementTest ')'
                                   { assert(!"FIXME: implement"); }
 ;
  
-XPathElementTest:
+ElementTest:
   ELEMENT '(' ')'                 { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_ELEMENT; }
-| ELEMENT '(' XPathElementNameOrWildcard ')'
+| ELEMENT '(' ElementNameOrWildcard ')'
                                   { assert(!"FIXME: implement"); }
-| ELEMENT '(' XPathElementNameOrWildcard ',' XPathTypeName ')'
+| ELEMENT '(' ElementNameOrWildcard ',' TypeName ')'
                                   { assert(!"FIXME: implement"); }
-| ELEMENT '(' XPathElementNameOrWildcard ',' XPathTypeName '?' ')'
+| ELEMENT '(' ElementNameOrWildcard ',' TypeName '?' ')'
                                   { assert(!"FIXME: implement"); }
 ;
 
-XPathAttributeTest:
+AttributeTest:
   ATTRIBUTE '(' ')'               { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_ATTRIBUTE; }
-| ATTRIBUTE '(' XPathAttribNameOrWildcard ')'
+| ATTRIBUTE '(' AttribNameOrWildcard ')'
                                   { assert(!"FIXME: implement"); }
-| ATTRIBUTE '(' XPathAttribNameOrWildcard ',' XPathTypeName ')'
+| ATTRIBUTE '(' AttribNameOrWildcard ',' TypeName ')'
                                   { assert(!"FIXME: implement"); }
 ;
 
-XPathSchemaElementTest:
+SchemaElementTest:
   SCHEMA_ELEMENT '(' QName ')'    { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_SCHEMA_ELEMENT; }
 ;
 
-XPathSchemaAttributeTest:
+SchemaAttributeTest:
   SCHEMA_ATTRIBUTE '(' QName ')'  { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_SCHEMA_ATTRIBUTE; }
 ;
 
-XPathPITest:
+PITest:
 PROCESSING_INSTRUCTION '(' ')'    { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_PI; }
 | PROCESSING_INSTRUCTION '(' NCName ')'
@@ -680,36 +665,36 @@ PROCESSING_INSTRUCTION '(' ')'    { $$ = new_expression(XPATH_KIND_TEST);
                                   { assert(!"FIXME: implement"); }
 ;
 
-XPathCommentTest:
+CommentTest:
 COMMENT '(' ')'                   { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_COMMENT; }
 ;
 
-XPathTextTest:
+TextTest:
 TEXT '(' ')'                      { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_TEXT; }
 ;
 
-XPathAnyKindTest:
+AnyKindTest:
 NODE '(' ')'                      { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_ANY; }
 ;
 
-XPathAttribNameOrWildcard:
+AttribNameOrWildcard:
   QName                           { $$ = $1; }
 | '*'                             { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = NULL; }
 ;
 
-XPathElementNameOrWildcard:
+ElementNameOrWildcard:
   QName                           { $$ = $1; }
 | '*'                             { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = NULL; }
 ;
 
-XPathTypeName:
+TypeName:
   QName                           { $$ = $1; }
 ;
 
