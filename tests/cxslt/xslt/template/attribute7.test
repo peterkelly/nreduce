@@ -1,0 +1,53 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <foo a="one" b="two" c="three"/>
+  <bar a="four" b="five" c="six"/>
+  <foo a="seven" b="eight" c="nine"/>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:apply-templates select="//attribute::node()"/>
+    </result>
+  </xsl:template>
+
+  <xsl:template match="@a">
+    <a value="{string(.)}"/>
+  </xsl:template>
+
+  <xsl:template match="@b">
+    <b value="{string(.)}"/>
+  </xsl:template>
+
+  <xsl:template match="attribute::c">
+    <c value="{string(.)}"/>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <a value="one"/>
+   <b value="two"/>
+   <c value="three"/>
+   <a value="four"/>
+   <b value="five"/>
+   <c value="six"/>
+   <a value="seven"/>
+   <b value="eight"/>
+   <c value="nine"/>
+</result>
+================================== RETURN CODE =================================
+0

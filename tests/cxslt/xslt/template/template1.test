@@ -1,0 +1,61 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <day name="Monday"/>
+  <day name="Tuesday"/>
+  <day name="Wednesday"/>
+  <day name="Thursday"/>
+  <month name="January"/>
+  <month name="February"/>
+  <month name="March"/>
+  <month name="April"/>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:apply-templates/>
+    </result>
+  </xsl:template>
+
+  <xsl:template match="doc">
+    <found-doc>
+      <xsl:apply-templates/>
+    </found-doc>
+  </xsl:template>
+
+  <xsl:template match="day">
+    <found-day><xsl:value-of select="@name"/></found-day>
+  </xsl:template>
+
+  <xsl:template match="month">
+    <found-month><xsl:value-of select="@name"/></found-month>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <found-doc>
+      <found-day>Monday</found-day>
+      <found-day>Tuesday</found-day>
+      <found-day>Wednesday</found-day>
+      <found-day>Thursday</found-day>
+      <found-month>January</found-month>
+      <found-month>February</found-month>
+      <found-month>March</found-month>
+      <found-month>April</found-month>
+   </found-doc>
+</result>
+================================== RETURN CODE =================================
+0

@@ -578,7 +578,7 @@ in
       nsuri = (ns_lookup nsprefix augnamespaces)
       localname = (getlocalname qname)
       arest = (skip_attrs rest)
-      attributes = (parse_attrs rest augnamespaces root parent nil)
+      attributes = (parse_attrs rest augnamespaces root elem nil)
       cpr = (parse1 arest augnamespaces root elem nil)
       children = (tail cpr)
       crest = (head cpr)
@@ -885,6 +885,20 @@ print_nodes lst next =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+copy_attrs lst root parent prev =
+(if lst
+  (letrec
+    attr = (head lst)
+    next = (copy_attrs (tail lst) root parent copy)
+    copy = (mkattr root parent prev next
+             (item_nsuri attr)
+             (item_nsprefix attr)
+             (item_localname attr)
+             (item_value attr))
+  in
+    (cons copy next))
+  nil)
+
 stripspaces lst root parent prev =
 (if lst
   (letrec
@@ -903,7 +917,7 @@ stripspaces lst root parent prev =
           (item_nsuri cur)
           (item_nsprefix cur)
           (item_localname cur)
-          (item_attributes cur)
+          (copy_attrs (item_attributes cur) root elem nil)
           (item_namespaces cur)
           (stripspaces (item_children cur) root elem nil))
         next =

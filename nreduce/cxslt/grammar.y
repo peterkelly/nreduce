@@ -165,7 +165,6 @@ extern xmlNodePtr parse_node;
 %type <stype> ValueComp
 %type <stype> NodeComp
 %type <expr> PathExpr
-%type <expr> RelativePathExpr
 %type <expr> StepExpr
 %type <expr> ForwardAxisStep
 %type <expr> ReverseAxisStep
@@ -396,22 +395,18 @@ NodeComp:
 
 PathExpr:
   '/'                             { $$ = new_expression2(XPATH_ROOT,NULL,NULL); }
-| '/' RelativePathExpr            { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+| '/' StepExpr                    { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
                                     $$ = new_expression2(XPATH_STEP,root,$2); }
-| SLASHSLASH RelativePathExpr     { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
+| SLASHSLASH StepExpr             { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
                                     expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
                                     test->axis = AXIS_DESCENDANT_OR_SELF;
                                     test->kind = KIND_ANY;
                                     step1 = new_expression2(XPATH_STEP,root,test);
                                     $$ = new_expression2(XPATH_STEP,step1,$2); }
-| RelativePathExpr                { $$ = $1; }
-;
-
-RelativePathExpr:
-  StepExpr                        { $$ = $1; }
-| RelativePathExpr '/' StepExpr   { $$ = new_expression2(XPATH_STEP,$1,$3); }
-| RelativePathExpr SLASHSLASH StepExpr
+| StepExpr                        { $$ = $1; }
+| PathExpr '/' StepExpr           { $$ = new_expression2(XPATH_STEP,$1,$3); }
+| PathExpr SLASHSLASH StepExpr
                                   { expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
                                     test->axis = AXIS_DESCENDANT_OR_SELF;

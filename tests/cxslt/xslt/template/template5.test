@@ -1,0 +1,71 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <book title="Some book">
+    <chapter title="First chapter">
+      <section title="First section"/>
+      <section title="Second section"/>
+      <section title="Third section"/>
+    </chapter>
+    <chapter title="Second chapter">
+      <section title="Fourth section"/>
+      <section title="Fifth section"/>
+    </chapter>
+  </book>
+  <book title="Another book">
+    <chapter title="Introduction">
+      <section title="Sixth section"/>
+      <section title="Seventh section"/>
+    </chapter>
+  </book>
+  <journal title="Some journal">
+    <article title="An article">
+      <section title="Beginning"/>
+      <section title="Middle"/>
+      <section title="End"/>
+    </article>
+  </journal>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:apply-templates/>
+    </result>
+  </xsl:template>
+
+  <xsl:template match="/doc/book/chapter/section">
+    <book-section><xsl:value-of select="@title"/></book-section>
+  </xsl:template>
+
+  <xsl:template match="/doc/journal/article/section">
+    <journal-section><xsl:value-of select="@title"/></journal-section>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <book-section>First section</book-section>
+   <book-section>Second section</book-section>
+   <book-section>Third section</book-section>
+   <book-section>Fourth section</book-section>
+   <book-section>Fifth section</book-section>
+   <book-section>Sixth section</book-section>
+   <book-section>Seventh section</book-section>
+   <journal-section>Beginning</journal-section>
+   <journal-section>Middle</journal-section>
+   <journal-section>End</journal-section>
+</result>
+================================== RETURN CODE =================================
+0

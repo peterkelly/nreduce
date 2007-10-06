@@ -1020,3 +1020,10 @@ ws_arg_list nsuri localpart expr =
 ws_arg nsuri localpart expr =
 (xml::mkelem nil nil nil nil nsuri nil localpart nil nil 
   (xslt::concomplex (xslt::get_children expr)))
+
+check_aos node test =
+(if node
+  (if (test node)
+    node
+    (check_aos (xml::item_parent node) test))
+  nil)

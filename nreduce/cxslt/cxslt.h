@@ -135,6 +135,7 @@
 #define SEQTYPE_CHOICE                5
 #define SEQTYPE_EMPTY                 6
 
+#define KIND_INVALID                  0
 #define KIND_DOCUMENT                 1
 #define KIND_ELEMENT                  2
 #define KIND_ATTRIBUTE                3
@@ -144,6 +145,7 @@
 #define KIND_COMMENT                  7
 #define KIND_TEXT                     8
 #define KIND_ANY                      9
+#define KIND_COUNT                    10
 
 #define OCCURS_ONCE                   0
 #define OCCURS_OPTIONAL               1

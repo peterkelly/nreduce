@@ -1,0 +1,66 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <book title="Some book">
+    <chapter title="First chapter">
+      <section>First section</section>
+      <section>Second section</section>
+      <section>Third section</section>
+    </chapter>
+    <chapter title="Second chapter">
+      <section>Fourth section</section>
+      <section>Fifth section</section>
+    </chapter>
+  </book>
+  <book title="Another book">
+    <chapter title="Introduction">
+      <section>Sixth section</section>
+      <section>Seventh section</section>
+    </chapter>
+  </book>
+  <journal title="Some journal">
+    <article title="An article">
+      <section>Beginning</section>
+      <section>Middle</section>
+      <section>End</section>
+    </article>
+  </journal>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+  
+    
+      First section
+      Second section
+      Third section
+    
+    
+      Fourth section
+      Fifth section
+    
+  
+  
+    
+      Sixth section
+      Seventh section
+    
+  
+  
+    
+      Beginning
+      Middle
+      End
+    
+  
+================================== RETURN CODE =================================
+0

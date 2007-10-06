@@ -1,0 +1,56 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <a><b><c>
+    <a><d><c>
+      <test label="First"/>
+    </c></d></a>
+  </c></b></a>
+  <a><d><c>
+    <a><b><c>
+      <test label="Second"/>
+    </c></b></a>
+  </c></d></a>
+  <a><d><c>
+    <a><d><c>
+      <test label="Third"/>
+    </c></d></a>
+  </c></d></a>
+  <a><b><c>
+    <a><b><c>
+      <test label="Fourth"/>
+    </c></b></a>
+  </c></b></a>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:apply-templates/>
+    </result>
+  </xsl:template>
+
+  <xsl:template match="a/b/c//test">
+    <xsl:sequence select="."/>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <test label="First"/>
+   <test label="Second"/>
+   <test label="Fourth"/>
+</result>
+================================== RETURN CODE =================================
+0

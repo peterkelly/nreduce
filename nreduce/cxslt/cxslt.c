@@ -38,6 +38,36 @@
           The check may be unnecessarily expensive, and the program will probably throw
           an error anyway... */
 
+const char *axis_names[AXIS_COUNT] = {
+  "invalid",
+  "child",
+  "descendant",
+  "attribute",
+  "self",
+  "descendant-or-self",
+  "following-sibling",
+  "following",
+  "namespace",
+  "parent",
+  "ancestor",
+  "preceding-sibling",
+  "preceding",
+  "ancestor-or-self",
+};
+
+const char *kind_names[KIND_COUNT] = {
+  "invalid",
+  "document",
+  "element",
+  "attribute",
+  "schema-element",
+  "schema-attribute",
+  "pi",
+  "comment",
+  "text",
+  "any",
+};
+
 typedef struct x_buffer_state *X_BUFFER_STATE;
 X_BUFFER_STATE x_scan_string(const char *str);
 void x_switch_to_buffer(X_BUFFER_STATE new_buffer);
@@ -496,6 +526,59 @@ static int is_expr_doc_order(xmlNodePtr n, expression *expr)
   return 0;
 }
 
+static int compile_test(elcgen *gen, xmlNodePtr n, expression *expr)
+{
+  assert((XPATH_KIND_TEST == expr->type) || (XPATH_NAME_TEST == expr->type));
+  if (XPATH_KIND_TEST == expr->type) {
+    switch (expr->kind) {
+    case KIND_DOCUMENT:
+      gen_printf(gen,"(xslt::type_test xml::TYPE_DOCUMENT)");
+      break;
+    case KIND_ELEMENT:
+      gen_printf(gen,"(xslt::type_test xml::TYPE_ELEMENT)");
+      break;
+    case KIND_ATTRIBUTE:
+      gen_printf(gen,"(xslt::type_test xml::TYPE_ATTRIBUTE)");
+      break;
+    case KIND_SCHEMA_ELEMENT:
+      return gen_error(gen,"Schema element tests not supported");
+    case KIND_SCHEMA_ATTRIBUTE:
+      return gen_error(gen,"Schema attribute tests not supported");
+    case KIND_PI:
+      return gen_error(gen,"Processing instruction tests not supported");
+      break;
+    case KIND_COMMENT:
+      gen_printf(gen,"(xslt::type_test xml::TYPE_COMMENT)");
+      break;
+    case KIND_TEXT:
+      gen_printf(gen,"(xslt::type_test xml::TYPE_TEXT)");
+      break;
+    case KIND_ANY:
+      gen_printf(gen,"xslt::any_test");
+      break;
+    default:
+      abort();
+    }
+  }
+  else {
+    char *nsuri = expr->qn.uri ? escape1(expr->qn.uri) : NULL;
+    char *localname = expr->qn.localpart ? escape1(expr->qn.localpart) : NULL;
+    char *type = (AXIS_ATTRIBUTE == expr->axis) ? "xml::TYPE_ATTRIBUTE" : "xml::TYPE_ELEMENT";
+
+    if (nsuri && localname)
+      gen_printf(gen,"(xslt::name_test %s \"%s\" \"%s\")",type,nsuri,localname);
+    else if (localname)
+      gen_printf(gen,"(xslt::wildcard_uri_test %s \"%s\")",type,localname);
+    else if (nsuri)
+      gen_printf(gen,"(xslt::wildcard_localname_test %s \"%s\")",type,nsuri);
+    else
+      gen_printf(gen,"(xslt::type_test %s)",type);
+    free(nsuri);
+    free(localname);
+  }
+  return 1;
+}
+
 static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
 {
   switch (expr->type) {
@@ -638,55 +721,11 @@ static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
     break;
   case XPATH_KIND_TEST:
   case XPATH_NAME_TEST:
-    gen_iprintf(gen,"(filter");
+    gen_iprintf(gen,"(filter ");
     gen->indent++;
-    if (XPATH_KIND_TEST == expr->type) {
-      switch (expr->kind) {
-      case KIND_DOCUMENT:
-        gen_iprintf(gen,"(xslt::type_test xml::TYPE_DOCUMENT)");
-        break;
-      case KIND_ELEMENT:
-        gen_iprintf(gen,"(xslt::type_test xml::TYPE_ELEMENT)");
-        break;
-      case KIND_ATTRIBUTE:
-        gen_iprintf(gen,"(xslt::type_test xml::TYPE_ATTRIBUTE)");
-        break;
-      case KIND_SCHEMA_ELEMENT:
-        return gen_error(gen,"Schema element tests not supported");
-      case KIND_SCHEMA_ATTRIBUTE:
-        return gen_error(gen,"Schema attribute tests not supported");
-      case KIND_PI:
-        return gen_error(gen,"Processing instruction tests not supported");
-        break;
-      case KIND_COMMENT:
-        gen_iprintf(gen,"(xslt::type_test xml::TYPE_COMMENT)");
-        break;
-      case KIND_TEXT:
-        gen_iprintf(gen,"(xslt::type_test xml::TYPE_TEXT)");
-        break;
-      case KIND_ANY:
-        gen_iprintf(gen,"xslt::any_test");
-        break;
-      default:
-        abort();
-      }
-    }
-    else {
-      char *nsuri = expr->qn.uri ? escape1(expr->qn.uri) : NULL;
-      char *localname = expr->qn.localpart ? escape1(expr->qn.localpart) : NULL;
-      char *type = (AXIS_ATTRIBUTE == expr->axis) ? "xml::TYPE_ATTRIBUTE" : "xml::TYPE_ELEMENT";
 
-      if (nsuri && localname)
-        gen_iprintf(gen,"(xslt::name_test %s \"%s\" \"%s\")",type,nsuri,localname);
-      else if (localname)
-        gen_iprintf(gen,"(xslt::wildcard_uri_test %s \"%s\")",type,localname);
-      else if (nsuri)
-        gen_iprintf(gen,"(xslt::wildcard_localname_test %s \"%s\")",type,nsuri);
-      else
-        gen_iprintf(gen,"(xslt::type_test %s)",type);
-      free(nsuri);
-      free(localname);
-    }
+    if (!compile_test(gen,n,expr))
+      return 0;
 
     switch (expr->axis) {
     case AXIS_SELF:
@@ -1245,6 +1284,19 @@ static int compile_instruction(elcgen *gen, xmlNodePtr n)
         free(select);
         return r;
       }
+      else if (!xmlStrcmp(n->name,"apply-templates")) {
+        char *select = xmlGetProp(n,"select");
+        gen_printorig(gen,"apply-templates",select ? select : NULL);
+        gen_iprintf(gen,"(apply_templates ");
+        gen->indent++;
+        if (select)
+          compile_expr_string(gen,n,select);
+        else
+          compile_expr_string(gen,n,"child::node()");
+        gen->indent--;
+        gen_printf(gen,")");
+        free(select);
+      }
       else {
         return gen_error(gen,"Unsupported XSLT instruction: %s",n->name);
       }
@@ -1359,11 +1411,11 @@ static int compile_sequence(elcgen *gen, xmlNodePtr first)
   return r;
 }
 
-static int compile_template(elcgen *gen, xmlNodePtr n)
+static int compile_template(elcgen *gen, xmlNodePtr n, int pos)
 {
   int r;
   gen_printf(gen,"\n");
-  gen_printf(gen,"top citem cpos csize = ");
+  gen_printf(gen,"template%d citem cpos csize = ",pos);
   r = compile_sequence(gen,n->children);
   gen_printf(gen,"\n");
   gen_printf(gen,"\n");
@@ -1421,19 +1473,194 @@ static int compile_function(elcgen *gen, xmlNodePtr child)
   return r;
 }
 
+//#define PRINT_PATTERN
+#ifdef PRINT_PATTERN
+static void print_pattern(elcgen *gen, expression *expr)
+{
+  switch (expr->type) {
+  case XPATH_FORWARD_AXIS_STEP:
+    gen_iprintf(gen,"forward");
+    gen->indent++;
+    print_pattern(gen,expr->left);
+    gen->indent--;
+    break;
+  case XPATH_REVERSE_AXIS_STEP:
+    gen_iprintf(gen,"reverse");
+    gen->indent++;
+    print_pattern(gen,expr->left);
+    gen->indent--;
+    break;
+  case XPATH_STEP:
+    gen_iprintf(gen,"step");
+    gen->indent++;
+    print_pattern(gen,expr->left);
+    print_pattern(gen,expr->right);
+    gen->indent--;
+    break;
+  case XPATH_ROOT:
+    gen_iprintf(gen,"root");
+    break;
+  case XPATH_KIND_TEST:
+    gen_iprintf(gen,"kind=%s (%s)",kind_names[expr->kind],axis_names[expr->axis]);
+    break;
+  case XPATH_NAME_TEST:
+    gen_iprintf(gen,"name=%s (%s)",expr->qn.localpart,axis_names[expr->axis]);
+    break;
+  default:
+    gen_iprintf(gen,"unknown %d",expr->type);
+  }
+}
+#endif
+
+static int compile_pattern(elcgen *gen, xmlNodePtr n, expression *expr, int p)
+{
+  switch (expr->type) {
+  case XPATH_FORWARD_AXIS_STEP:
+  case XPATH_REVERSE_AXIS_STEP:
+    return compile_pattern(gen,n,expr->left,p);
+  case XPATH_STEP:
+    gen->indent++;
+    gen_iprintf(gen,"/* step %d/%d */ ",expr->left->type,expr->right->type);
+    if ((XPATH_KIND_TEST == expr->right->type) &&
+        (KIND_ANY == expr->right->kind) &&
+        (AXIS_DESCENDANT_OR_SELF == expr->right->axis)) {
+      gen_iprintf(gen,"(xslt::check_aos p%d (!p%d.",p,p+1);
+      compile_pattern(gen,n,expr->left,p+1);
+      gen_iprintf(gen,"))",p);
+    }
+    else {
+      gen_iprintf(gen,"(letrec r = ");
+      if (!compile_pattern(gen,n,expr->right,p))
+        return 0;
+      gen_printf(gen," in ");
+      gen_iprintf(gen,"(if r ");
+      /* FIXME: need to take into account the case where parent is nil */
+      gen_iprintf(gen,"(letrec p%d = (xml::item_parent p%d) in ",p+1,p);
+      if (!compile_pattern(gen,n,expr->left,p+1))
+        return 0;
+      gen_printf(gen,")");
+      gen_iprintf(gen,"nil))");
+    }
+    gen->indent--;
+    break;
+  case XPATH_ROOT:
+    gen_printf(gen,"(if (== (xml::item_type p%d) xml::TYPE_DOCUMENT) p%d nil)",p,p);
+    break;
+  case XPATH_KIND_TEST:
+  case XPATH_NAME_TEST:
+    switch (expr->axis) {
+    case AXIS_CHILD:
+    case AXIS_ATTRIBUTE:
+      gen_printf(gen,"(if (");
+      if (!compile_test(gen,n,expr))
+        return 0;
+      gen_printf(gen," p%d) p%d nil)",p,p);
+      break;
+    default:
+      return gen_error(gen,"Invalid axis in pattern: %d",expr->axis);
+      break;
+    }
+    break;
+  default:
+    return gen_error(gen,"Unsupported pattern construct: %d",expr->type);
+  }
+  return 1;
+}
+
+static int compile_pattern_str(elcgen *gen, xmlNodePtr n, const char *str, int templateno)
+{
+  int r = 0;
+  expression *expr = parse_xpath(gen,n,str);
+  if (expr) {
+#ifdef PRINT_PATTERN
+    gen_iprintf(gen,"/*");
+    print_pattern(gen,expr);
+    gen_iprintf(gen,"*/");
+    gen_iprintf(gen,"");
+#endif
+    r = compile_pattern(gen,n,expr,0);
+    free_expression(expr);
+  }
+  return r;
+}
+
+static int compile_apply_templates(elcgen *gen, xmlNodePtr n)
+{
+  int templateno = 0;
+  int count = 0;
+  int r = 1;
+  xmlNodePtr child;
+
+  /* TODO: take into account template priorities */
+  /* TODO: test apply-templates with different select values */
+
+  gen_iprintf(gen,"apply_templates lst = (apply_templates1 lst 1 (len lst))");
+  gen_iprintf(gen,"");
+
+  gen_iprintf(gen,"apply_templates1 lst cpos csize = ");
+  gen_iprintf(gen,"(if lst");
+  gen_iprintf(gen,"  (letrec");
+  gen_iprintf(gen,"    p0 = (head lst)");
+  gen_iprintf(gen,"    rest = (tail lst)");
+  gen_iprintf(gen,"  in ");
+  gen_iprintf(gen,"    (append ");
+  gen->indent += 3;
+  for (child = n->children; child && r; child = child->next) {
+    if (is_element(child,XSLT_NAMESPACE,"template")) {
+      char *match = xmlGetProp(child,"match");
+      if (match) {
+        gen_printorig(gen,"template",match);
+        gen_iprintf(gen,"(if ");
+        gen->indent++;
+        r = compile_pattern_str(gen,n,match,templateno);
+        gen->indent--;
+        gen_iprintf(gen,"  (template%d p0 cpos csize)",templateno);
+        count++;
+      }
+      free(match);
+      templateno++;
+    }
+  }
+
+  /* 6.6 Built-in Template Rules */
+  gen_iprintf(gen,"(if (== (xml::item_type p0) xml::TYPE_ELEMENT)");
+  gen_iprintf(gen,"  (apply_templates (xml::item_children p0))");
+  gen_iprintf(gen,"(if (== (xml::item_type p0) xml::TYPE_DOCUMENT)");
+  gen_iprintf(gen,"  (apply_templates (xml::item_children p0))");
+  gen_iprintf(gen,"(if (== (xml::item_type p0) xml::TYPE_TEXT)");
+  gen_iprintf(gen,"  (cons (xml::mktext (xml::item_value p0)) nil)");
+  gen_iprintf(gen,"(if (== (xml::item_type p0) xml::TYPE_ATTRIBUTE)");
+  gen_iprintf(gen,"  (cons (xml::mktext (xml::item_value p0)) nil)");
+  gen_iprintf(gen,"nil))))");
+
+  while (0 < count--)
+    gen_printf(gen,")");
+
+  gen_iprintf(gen,"(apply_templates1 (tail lst) (+ cpos 1) csize)))");
+  gen->indent -= 3;
+  gen_iprintf(gen,"  nil)");
+  gen_iprintf(gen,"");
+
+  return r;
+}
+
 static int process_root(elcgen *gen, xmlNodePtr n)
 {
   xmlNodePtr child;
   int r = 1;
+  int templateno = 0;
   if ((XML_ELEMENT_NODE != n->type) ||
       (NULL == n->ns) || xmlStrcmp(n->ns->href,XSLT_NAMESPACE) ||
       (xmlStrcmp(n->name,"stylesheet") && xmlStrcmp(n->name,"transform")))
     return gen_error(gen,"top-level element must be a xsl:stylesheet or xsl:transform");
 
   gen->toplevel = n;
+
+  r = r && compile_apply_templates(gen,n);
+
   for (child = n->children; child && r; child = child->next) {
     if (is_element(child,XSLT_NAMESPACE,"template"))
-      r = compile_template(gen,child);
+      r = compile_template(gen,child,templateno++);
     else if (is_element(child,XSLT_NAMESPACE,"function"))
       r = compile_function(gen,child);
     else if (is_element(child,XSLT_NAMESPACE,"output") && attr_equals(child,"indent","yes"))
@@ -1441,6 +1668,7 @@ static int process_root(elcgen *gen, xmlNodePtr n)
     else if (is_element(child,XSLT_NAMESPACE,"strip-space") && attr_equals(child,"elements","*"))
       gen->option_strip = 1;
   }
+
   return r;
 }
 
@@ -1477,7 +1705,7 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
                    "        (xml::parsexml STRIPALL stdin)\n"
                    "        (xml::mkdoc nil))\n"
                    "      (xml::parsexml STRIPALL (readb (head args))))\n"
-                   "  result = (top input 1 1)\n"
+                   "  result = (apply_templates (cons input nil))\n"
                    "  doc = (cons (xml::mkdoc (xslt::concomplex result)) nil)\n"
                    "in\n"
                    " (xslt::output INDENT doc))\n");
