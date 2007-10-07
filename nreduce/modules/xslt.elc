@@ -1027,3 +1027,19 @@ check_aos node test =
     node
     (check_aos (xml::item_parent node) test))
   nil)
+
+compute_pos node =
+(letrec
+  prev = (xml::item_prev node)
+in
+  (if prev
+    (+ 1 (compute_pos prev))
+    1))
+
+compute_size node =
+(letrec
+  parent = (xml::item_parent node)
+in
+  (if parent
+    (len (xml::item_children parent))
+    1))

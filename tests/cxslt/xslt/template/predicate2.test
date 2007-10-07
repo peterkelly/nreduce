@@ -1,0 +1,53 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <language name="C" type="imperative"/>
+  <language name="Java" type="imperative"/>
+  <language name="Haskell" type="functional"/>
+  <language name="ML" type="functional"/>
+  <language name="Perl" type="imperative"/>
+  <language name="Python" type="imperative"/>
+  <language name="ELC" type="functional"/>
+  <language name="XSLT" type="functional"/>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:apply-templates/>
+    </result>
+  </xsl:template>
+
+  <xsl:template match="/doc/language[@type='imperative']">
+    <imperative><xsl:value-of select="@name"/></imperative>
+  </xsl:template>
+
+  <xsl:template match="/doc/language[@type='functional']">
+    <functional><xsl:value-of select="@name"/></functional>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <imperative>C</imperative>
+   <imperative>Java</imperative>
+   <functional>Haskell</functional>
+   <functional>ML</functional>
+   <imperative>Perl</imperative>
+   <imperative>Python</imperative>
+   <functional>ELC</functional>
+   <functional>XSLT</functional>
+</result>
+================================== RETURN CODE =================================
+0

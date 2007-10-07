@@ -1497,6 +1497,13 @@ static void print_pattern(elcgen *gen, expression *expr)
     print_pattern(gen,expr->right);
     gen->indent--;
     break;
+  case XPATH_FILTER:
+    gen_iprintf(gen,"filter");
+    gen->indent++;
+    print_pattern(gen,expr->left);
+    print_pattern(gen,expr->right);
+    gen->indent--;
+    break;
   case XPATH_ROOT:
     gen_iprintf(gen,"root");
     break;
@@ -1542,6 +1549,20 @@ static int compile_pattern(elcgen *gen, xmlNodePtr n, expression *expr, int p)
       gen_iprintf(gen,"nil))");
     }
     gen->indent--;
+    break;
+  case XPATH_FILTER:
+    gen_iprintf(gen,"/* predicate %d/%d */ ",expr->left->type,expr->right->type);
+    gen_iprintf(gen,"(letrec ");
+    gen_iprintf(gen,"  citem = p%d",p);
+    gen_iprintf(gen,"  cpos = (xslt::compute_pos p%d)");
+    gen_iprintf(gen,"  csize = (xslt::compute_size p%d)");
+    gen_iprintf(gen,"in");
+    gen_iprintf(gen,"  (xslt::predicate_match cpos ");
+    gen->indent++;
+    if (!compile_expression(gen,n,expr->right))
+      return 0;
+    gen->indent--;
+    gen_printf(gen,"))",p);
     break;
   case XPATH_ROOT:
     gen_printf(gen,"(if (== (xml::item_type p%d) xml::TYPE_DOCUMENT) p%d nil)",p,p);
