@@ -271,7 +271,10 @@ QuantifiedExpr:
 
 IfExpr:
   IF '(' Expr ')' THEN ExprSingle ELSE ExprSingle
-                                  { $$ = new_XPathIfExpr($3,$6,$8); }
+                                  { $$ = new_expression(XPATH_IF);
+                                    $$->test = $3;
+                                    $$->left = $6;
+                                    $$->right = $8; }
 ;
 
 OrExpr:

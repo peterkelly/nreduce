@@ -169,6 +169,7 @@ typedef struct wsarg {
 
 typedef struct expression {
   int type;
+  struct expression *test;
   struct expression *left;
   struct expression *right;
   qname qn;
@@ -191,7 +192,6 @@ expression *new_ForExpr(expression *left, expression *right);
 expression *new_VarInExpr(expression *left);
 expression *new_VarInListExpr(expression *left, expression *right);
 expression *new_QuantifiedExpr(int type, expression *left, expression *right);
-expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch);
 
 typedef struct {
   char *filename;

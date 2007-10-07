@@ -202,12 +202,6 @@ expression *new_QuantifiedExpr(int type, expression *left, expression *right)
   return NULL;
 }
 
-expression *new_XPathIfExpr(expression *cond, expression *tbranch, expression *fbranch)
-{
-  fatal("unsupported: XPathIfExpr");
-  return NULL;
-}
-
 void free_expression(expression *expr)
 {
   if (expr->left)
@@ -582,9 +576,28 @@ static int compile_test(elcgen *gen, xmlNodePtr n, expression *expr)
 static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
 {
   switch (expr->type) {
-  case XPATH_OR:         return compile_binary(gen,n,expr,"or"); /* FIXME: test */
-  case XPATH_AND:        return compile_binary(gen,n,expr,"and"); /* FIXME: test */
-
+  case XPATH_OR:
+    gen_iprintf(gen,"(cons (xml::mkbool (|| ");
+    gen_iprintf(gen,"(xslt::ebv ");
+    if (!compile_expression(gen,n,expr->left))
+      return 0;
+    gen_printf(gen,") ");
+    gen_iprintf(gen,"(xslt::ebv ");
+    if (!compile_expression(gen,n,expr->right))
+      return 0;
+    gen_printf(gen,"))) nil)");
+    break;
+  case XPATH_AND:
+    gen_iprintf(gen,"(cons (xml::mkbool (&& ");
+    gen_iprintf(gen,"(xslt::ebv ");
+    if (!compile_expression(gen,n,expr->left))
+      return 0;
+    gen_printf(gen,") ");
+    gen_iprintf(gen,"(xslt::ebv ");
+    if (!compile_expression(gen,n,expr->right))
+      return 0;
+    gen_printf(gen,"))) nil)");
+    break;
   case XPATH_VALUE_EQ:   return compile_binary(gen,n,expr,"xslt::value_eq");
   case XPATH_VALUE_NE:   return compile_binary(gen,n,expr,"xslt::value_ne");
   case XPATH_VALUE_LT:   return compile_binary(gen,n,expr,"xslt::value_lt");
@@ -617,6 +630,24 @@ static int compile_expression(elcgen *gen, xmlNodePtr n, expression *expr)
     char *esc = escape1(expr->str);
     gen_iprintf(gen,"(cons (xml::mkstring \"%s\") nil)",esc);
     free(esc);
+    break;
+  }
+  case XPATH_IF: {
+    gen_iprintf(gen,"(if ");
+    gen->indent++;
+    gen_iprintf(gen,"(xslt::ebv ");
+    gen->indent++;
+    if (!compile_expression(gen,n,expr->test))
+      return 0;
+    gen->indent--;
+    gen_printf(gen,") ");
+    if (!compile_expression(gen,n,expr->left))
+      return 0;
+    gen_printf(gen," ");
+    if (!compile_expression(gen,n,expr->right))
+      return 0;
+    gen->indent--;
+    gen_printf(gen,")");
     break;
   }
   case XPATH_TO: {
