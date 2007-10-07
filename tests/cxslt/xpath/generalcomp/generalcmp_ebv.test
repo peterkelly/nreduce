@@ -1,0 +1,39 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0" encoding="utf-8"?>
+<empty/>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <xsl:for-each select="1 to 20">
+        <xsl:choose>
+          <xsl:when test="(. > 5) and (. &lt; 15) and ((. mod 2) = 0)">
+            <true><xsl:value-of select="."/></true>
+          </xsl:when>
+        </xsl:choose>
+      </xsl:for-each>
+    </result>
+  </xsl:template>
+
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <true>6</true>
+   <true>8</true>
+   <true>10</true>
+   <true>12</true>
+   <true>14</true>
+</result>
+================================== RETURN CODE =================================
+0
