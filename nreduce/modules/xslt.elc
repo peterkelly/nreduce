@@ -50,10 +50,19 @@ value_le x y = (if (and x y) (cons (xml::mkbool (<= (value_cmp x y) 0)) nil) nil
 value_gt x y = (if (and x y) (cons (xml::mkbool (> (value_cmp x y) 0)) nil) nil)
 value_ge x y = (if (and x y) (cons (xml::mkbool (>= (value_cmp x y) 0)) nil) nil)
 
+value_eq_ebv x y = (if (and x y) (== (value_cmp x y) 0) nil)
+value_ne_ebv x y = (if (and x y) (!= (value_cmp x y) 0) nil)
+value_lt_ebv x y = (if (and x y) (< (value_cmp x y) 0) nil)
+value_le_ebv x y = (if (and x y) (<= (value_cmp x y) 0) nil)
+value_gt_ebv x y = (if (and x y) (> (value_cmp x y) 0) nil)
+value_ge_ebv x y = (if (and x y) (>= (value_cmp x y) 0) nil)
+
 value_cmp x y =
-(if (or (tail x) (tail y))
+(if (tail x)
   (error "XPTY0004: value comparison with sequence of length > 1")
-  (base_cmp (atomize1 (head x)) (atomize1 (head y))))
+(if (tail y)
+  (error "XPTY0004: value comparison with sequence of length > 1")
+  (base_cmp (atomize1 (head x)) (atomize1 (head y)))))
 
 base_cmp x y =
 (letrec
@@ -79,12 +88,12 @@ boolcmp x y =
 
 // General comparison
 
-general_eq x y = (cons (xml::mkbool (general_cmp1 == x y y)) nil)
-general_ne x y = (cons (xml::mkbool (general_cmp1 != x y y)) nil)
-general_lt x y = (cons (xml::mkbool (general_cmp1 < x y y)) nil)
-general_le x y = (cons (xml::mkbool (general_cmp1 <= x y y)) nil)
-general_gt x y = (cons (xml::mkbool (general_cmp1 > x y y)) nil)
-general_ge x y = (cons (xml::mkbool (general_cmp1 >= x y y)) nil)
+general_eq x y = (general_cmp1 == x y y)
+general_ne x y = (general_cmp1 != x y y)
+general_lt x y = (general_cmp1 < x y y)
+general_le x y = (general_cmp1 <= x y y)
+general_gt x y = (general_cmp1 > x y y)
+general_ge x y = (general_cmp1 >= x y y)
 
 general_cmp1 op x y ytop =
 (if x
