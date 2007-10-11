@@ -151,6 +151,13 @@ divide x y = (arithop / x y)
 
 mod x y = (arithop % x y)
 
+seq_to_number seq =
+(if (not seq)
+  (error "seq_to_number: empty sequence")
+(if (tail seq)
+  (error "seq_to_number: more than one item")
+  (tonumber (atomize1 (head seq)))))
+
 arithop op x y =
 (if (and x y)
   (if (or (tail x) (tail y))

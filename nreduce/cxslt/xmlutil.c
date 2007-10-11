@@ -115,3 +115,65 @@ int is_element(xmlNodePtr n, const char *ns, const char *name)
           !xmlStrcmp(n->ns->href,ns) &&
           !xmlStrcmp(n->name,name));
 }
+
+static char *string_to_ident(const char *str)
+{
+  const char *hexdigits = "0123456789ABCDEF";
+  const char *c;
+  int len = 0;
+  int pos = 0;
+  char *ret;
+
+  for (c = str; '\0' != *c; c++) {
+    if ((('A' <= *c) && ('Z' >= *c)) ||
+        (('a' <= *c) && ('z' >= *c)) ||
+        (('0' <= *c) && ('9' >= *c)))
+      len++;
+    else
+      len += 3;
+  }
+
+  ret = (char*)malloc(len+1);
+
+  for (c = str; '\0' != *c; c++) {
+    if ((('A' <= *c) && ('Z' >= *c)) ||
+        (('a' <= *c) && ('z' >= *c)) ||
+        (('0' <= *c) && ('9' >= *c))) {
+      ret[pos++] = *c;
+    }
+    else {
+      ret[pos++] = '_';
+      ret[pos++] = hexdigits[(*c)&0x0F];
+      ret[pos++] = hexdigits[((*c)&0xF0)>>4];
+    }
+  }
+  ret[pos] = '\0';
+
+  return ret;
+}
+
+char *nsname_to_ident(const char *nsuri, const char *localname)
+{
+  if (strcmp(nsuri,"")) {
+    int add = !strncmp(nsuri,"http://",7) ? 7 : 0;
+    char *nsident = string_to_ident(nsuri+add);
+    char *lnident = string_to_ident(localname);
+    char *full = (char*)malloc(1+strlen(nsident)+1+strlen(lnident)+1);
+    sprintf(full,"V%s_%s",nsident,lnident);
+    free(nsident);
+    free(lnident);
+    return full;
+  }
+  else {
+    char *lnident = string_to_ident(localname);
+    char *full = (char*)malloc(1+strlen(lnident)+1);
+    sprintf(full,"V%s",lnident);
+    free(lnident);
+    return full;
+  }
+}
+
+int qname_equals(qname a, qname b)
+{
+  return (!nullstrcmp(a.uri,b.uri) && !nullstrcmp(a.localpart,b.localpart));
+}

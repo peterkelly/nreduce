@@ -111,6 +111,33 @@
 #define XPATH_FORWARD_AXIS_STEP           61
 #define XPATH_REVERSE_AXIS_STEP           62
 
+#define XPATH_COUNT                       63
+
+#define XSLT_INVALID                      0
+#define XSLT_STYLESHEET                   1
+#define XSLT_FUNCTION                     2
+#define XSLT_TEMPLATE                     3
+#define XSLT_VARIABLE                     4
+#define XSLT_SEQUENCE                     5
+#define XSLT_VALUE_OF                     6
+#define XSLT_TEXT                         7
+#define XSLT_FOR_EACH                     8
+#define XSLT_IF                           9
+#define XSLT_CHOOSE                       10
+#define XSLT_ELEMENT                      11
+#define XSLT_ATTRIBUTE                    12
+#define XSLT_INAMESPACE                   13
+#define XSLT_APPLY_TEMPLATES              14
+#define XSLT_LITERAL_RESULT_ELEMENT       15
+#define XSLT_LITERAL_TEXT_NODE            16
+#define XSLT_PARAM                        17
+#define XSLT_OUTPUT                       18
+#define XSLT_STRIP_SPACE                  19
+#define XSLT_WHEN                         20
+#define XSLT_OTHERWISE                    21
+#define XSLT_LITERAL_ATTRIBUTE            22
+#define XSLT_COUNT                        23
+
 #define AXIS_INVALID                      0
 #define AXIS_CHILD                        1
 #define AXIS_DESCENDANT                   2
@@ -127,30 +154,30 @@
 #define AXIS_ANCESTOR_OR_SELF             13
 #define AXIS_COUNT                        14
 
-#define SEQTYPE_INVALID               0
-#define SEQTYPE_ITEM                  1
-#define SEQTYPE_OCCURRENCE            2
-#define SEQTYPE_ALL                   3
-#define SEQTYPE_SEQUENCE              4
-#define SEQTYPE_CHOICE                5
-#define SEQTYPE_EMPTY                 6
+#define SEQTYPE_INVALID                   0
+#define SEQTYPE_ITEM                      1
+#define SEQTYPE_OCCURRENCE                2
+#define SEQTYPE_ALL                       3
+#define SEQTYPE_SEQUENCE                  4
+#define SEQTYPE_CHOICE                    5
+#define SEQTYPE_EMPTY                     6
 
-#define KIND_INVALID                  0
-#define KIND_DOCUMENT                 1
-#define KIND_ELEMENT                  2
-#define KIND_ATTRIBUTE                3
-#define KIND_SCHEMA_ELEMENT           4
-#define KIND_SCHEMA_ATTRIBUTE         5
-#define KIND_PI                       6
-#define KIND_COMMENT                  7
-#define KIND_TEXT                     8
-#define KIND_ANY                      9
-#define KIND_COUNT                    10
+#define KIND_INVALID                      0
+#define KIND_DOCUMENT                     1
+#define KIND_ELEMENT                      2
+#define KIND_ATTRIBUTE                    3
+#define KIND_SCHEMA_ELEMENT               4
+#define KIND_SCHEMA_ATTRIBUTE             5
+#define KIND_PI                           6
+#define KIND_COMMENT                      7
+#define KIND_TEXT                         8
+#define KIND_ANY                          9
+#define KIND_COUNT                        10
 
-#define OCCURS_ONCE                   0
-#define OCCURS_OPTIONAL               1
-#define OCCURS_ZERO_OR_MORE           2
-#define OCCURS_ONE_OR_MORE            3
+#define OCCURS_ONCE                       0
+#define OCCURS_OPTIONAL                   1
+#define OCCURS_ZERO_OR_MORE               2
+#define OCCURS_ONE_OR_MORE                3
 
 #define QNAME_NULL { uri: NULL, prefix : NULL, localpart : NULL }
 
@@ -177,14 +204,33 @@ typedef struct expression {
   double num;
   char *str;
   int kind;
+  struct xsltnode *target;
 } expression;
+
+typedef struct xsltnodelist {
+  struct xsltnode *first;
+  struct xsltnode *last;
+} xsltnodelist;
+
+typedef struct xsltnode {
+  int type;
+  xmlNodePtr n;
+  qname name_qn;
+  char *name_ident;
+  xsltnodelist children;
+  xsltnodelist attributes;
+  struct xsltnode *next;
+  struct xsltnode *prev;
+  struct xsltnode *parent;
+  expression *expr;
+  expression *name_avt;
+  expression *value_avt;
+  expression *namespace_avt;
+} xsltnode;
 
 typedef struct seqtype {
 } seqtype;
 
-expression *new_expression(int type);
-expression *new_expression2(int type, expression *left, expression *right);
-void free_expression(expression *expr);
 const char *lookup_nsuri(xmlNodePtr n, const char *prefix);
 
 expression *new_TypeExpr(int type, seqtype *st, expression *right);
@@ -209,11 +255,31 @@ typedef struct {
   const char *parse_filename;
   char *error;
   int indent;
+  xsltnode *root;
 } elcgen;
 
 void free_wsarg_ptr(void *a);
 
 int gen_error(elcgen *gen, const char *format, ...);
+void gen_printf(elcgen *gen, const char *format, ...);
+void gen_iprintf(elcgen *gen, const char *format, ...);
+
+/* tree */
+
+expression *new_expression(int type);
+expression *new_expression2(int type, expression *left, expression *right);
+void free_expression(expression *expr);
+xsltnode *new_xsltnode(xmlNodePtr n, int type);
+void free_xsltnode(xsltnode *xn);
+xsltnode *lookup_function(elcgen *gen, qname qn);
+
+int parse_xslt(elcgen *gen, xmlNodePtr parent, xsltnode *pnode);
+int xslt_resolve_vars(elcgen *gen, xsltnode *xn);
+int exclude_namespace(elcgen *gen, xsltnode *xn2, const char *uri);
+
+/* analyse */
+
+int is_expr_doc_order(xsltnode *xn, expression *expr);
 
 /* xmlutil */
 
@@ -223,6 +289,8 @@ void free_qname(qname qn);
 int nullstrcmp(const char *a, const char *b);
 qname get_qname_attr(xmlNodePtr n, const char *attrname);
 int is_element(xmlNodePtr n, const char *ns, const char *name);
+char *nsname_to_ident(const char *nsuri, const char *localname);
+int qname_equals(qname a, qname b);
 
 /* wsdl */
 
@@ -236,5 +304,12 @@ int wsdl_get_operation_messages(elcgen *gen,
                                 wsdlfile *wf, const char *opname,
                                 qname *inqn, qname *outqn,
                                 list **inargs, list **outargs);
+
+#ifndef _TREE_C
+extern const char *xpath_names[XPATH_COUNT];
+extern const char *xslt_names[XSLT_COUNT];
+extern const char *axis_names[AXIS_COUNT];
+extern const char *kind_names[KIND_COUNT];
+#endif
 
 #endif
