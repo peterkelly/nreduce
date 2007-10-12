@@ -40,6 +40,8 @@
 
 static int compile_sequence(elcgen *gen, xsltnode *xfirst);
 static int compile_expression(elcgen *gen, xsltnode *xn, expression *expr);
+static int compile_num_expression(elcgen *gen, xsltnode *xn, expression *expr);
+static int compile_num_sequence(elcgen *gen, xsltnode *xfirst);
 
 int gen_error(elcgen *gen, const char *format, ...)
 {
@@ -377,10 +379,26 @@ static int compile_binary(elcgen *gen, xsltnode *xn, expression *expr, const cha
   return r;
 }
 
+static int compile_num_binary(elcgen *gen, xsltnode *xn, expression *expr, const char *fun)
+{
+  int r = 1;
+  gen_iprintf(gen,"(%s ",fun);
+  gen->indent++;
+  r = r && compile_num_expression(gen,xn,expr->left);
+  gen_printf(gen," ");
+  r = r && compile_num_expression(gen,xn,expr->right);
+  gen_printf(gen,")");
+  gen->indent--;
+  return r;
+}
+
 static int compile_ebv_binary(elcgen *gen, xsltnode *xn, expression *expr, const char *fun,
                               const char *op)
 {
-  return compile_binary(gen,xn,expr,fun);
+  if ((RESTYPE_NUMBER == expr->left->restype) && (RESTYPE_NUMBER == expr->right->restype))
+    return compile_num_binary(gen,xn,expr,op);
+  else
+    return compile_binary(gen,xn,expr,fun);
 }
 
 static int compile_ebv_expression(elcgen *gen, xsltnode *xn, expression *expr)
@@ -430,24 +448,51 @@ static int compile_ebv_expression(elcgen *gen, xsltnode *xn, expression *expr)
 static int compile_user_function_call(elcgen *gen, xsltnode *xn,
                                       xmlNodePtr n, expression *expr, int fromnum)
 {
-  char *ident = nsname_to_ident(expr->qn.uri,expr->qn.localpart);
-  expression *p;
   int pnum = 0;
 
+  assert(expr->target);
   assert(xn->n == n);
+  if (!fromnum && (RESTYPE_NUMBER == expr->target->restype)) {
+    gen_iprintf(gen,"(cons (xml::mknumber ");
+    gen->indent++;
+  }
 
-  gen_iprintf(gen,"(%s",ident);
+  gen_iprintf(gen,"(%s",expr->target->name_ident);
   gen->indent++;
-  for (p = expr->left; p; p = p->right) {
-    assert(XPATH_ACTUAL_PARAM == p->type);
+
+  expression *ap = expr->left;
+  xsltnode *fp = expr->target->children.first;
+
+
+  for (; ap; ap = ap->right, fp = fp->next) {
+    assert(XPATH_ACTUAL_PARAM == ap->type);
+    assert(fp && (XSLT_PARAM == fp->type));
     gen_printf(gen," ");
-    if (!compile_expression(gen,xn,p->left))
-      return 0;
+    if (RESTYPE_NUMBER == fp->restype) {
+      if (RESTYPE_NUMBER == ap->left->restype) {
+        if (!compile_num_expression(gen,xn,ap->left))
+          return 0;
+      }
+      else {
+        gen_iprintf(gen,"(xslt::seq_to_number");
+        if (!compile_expression(gen,xn,ap->left))
+          return 0;
+        gen_printf(gen,")");
+      }
+    }
+    else {
+      if (!compile_expression(gen,xn,ap->left))
+        return 0;
+    }
     pnum++;
   }
   gen->indent--;
   gen_printf(gen,")");
-  free(ident);
+
+  if (!fromnum && (RESTYPE_NUMBER == expr->target->restype)) {
+    gen_iprintf(gen,") nil)");
+    gen->indent--;
+  }
 
   return 1;
 }
@@ -500,10 +545,61 @@ static int compile_builtin_function_call(elcgen *gen, xsltnode *xn,
   return 1;
 }
 
+static int compile_num_expression(elcgen *gen, xsltnode *xn, expression *expr)
+{
+  int r = 1;
+  assert((RESTYPE_NUMBER == expr->restype) || (RESTYPE_RECURSIVE == expr->restype));
+  switch (expr->type) {
+  case XPATH_ADD:        return compile_num_binary(gen,xn,expr,"+");
+  case XPATH_SUBTRACT:   return compile_num_binary(gen,xn,expr,"-");
+  case XPATH_MULTIPLY:   return compile_num_binary(gen,xn,expr,"*");
+  case XPATH_DIVIDE:     return compile_num_binary(gen,xn,expr,"/");
+  case XPATH_IDIVIDE:    return gen_error(gen,"idivide not yet supported");
+  case XPATH_MOD:        return compile_num_binary(gen,xn,expr,"%");
+  case XPATH_INTEGER_LITERAL:
+  case XPATH_DECIMAL_LITERAL:
+  case XPATH_DOUBLE_LITERAL:
+    gen_iprintf(gen,"%f",expr->num);
+    break;
+  case XPATH_PAREN:
+    return compile_num_expression(gen,xn,expr->left);
+  case XPATH_IF: {
+    gen_iprintf(gen,"(if ");
+    gen->indent++;
+    r = r && compile_ebv_expression(gen,xn,expr->test);
+    gen_printf(gen," ");
+    r = r && compile_num_expression(gen,xn,expr->left);
+    gen_printf(gen," ");
+    r = r && compile_num_expression(gen,xn,expr->right);
+    gen->indent--;
+    gen_printf(gen,")");
+    break;
+  }
+  case XPATH_VAR_REF:
+    gen_printf(gen,"%s",expr->target->name_ident);
+    break;
+  case XPATH_FUNCTION_CALL:
+    return compile_user_function_call(gen,xn,xn->n,expr,1);
+  case XPATH_CONTEXT_ITEM:
+    gen_iprintf(gen,"(xml::item_value citem)");
+    break;
+  default:
+    return gen_error(gen,"Unsupported numeric expression type: %d",expr->type);
+  }
+  return r;
+}
+
 static int compile_expression(elcgen *gen, xsltnode *xn, expression *expr)
 {
   xmlNodePtr n = xn->n;
   int r = 1;
+
+  if (RESTYPE_NUMBER == expr->restype) {
+    gen_iprintf(gen,"(cons (xml::mknumber ");
+    r = compile_num_expression(gen,xn,expr);
+    gen_printf(gen,") nil)");
+    return r;
+  }
 
   switch (expr->type) {
   case XPATH_OR:
@@ -562,6 +658,7 @@ static int compile_expression(elcgen *gen, xsltnode *xn, expression *expr)
     break;
   }
   case XPATH_TO: {
+    /* FIXME: need the checks specified in XPath 2.0 section 3.3.1 */
     gen_iprintf(gen,"(xslt::range ");
     gen->indent++;
     gen_iprintf(gen,"(xslt::getnumber ");
@@ -706,7 +803,7 @@ static int compile_expression(elcgen *gen, xsltnode *xn, expression *expr)
   case XPATH_FUNCTION_CALL:
     if (!strcmp(expr->qn.prefix,""))
       return compile_builtin_function_call(gen,xn,n,expr);
-    else if (lookup_function(gen,expr->qn))
+    else if (expr->target)
       return compile_user_function_call(gen,xn,n,expr,0);
     else if (!strncmp(expr->qn.uri,"wsdl-",5))
       return compile_ws_call(gen,xn,expr,expr->qn.uri+5);
@@ -1022,6 +1119,79 @@ static int compile_variable(elcgen *gen, xsltnode *xchild)
   return r;
 }
 
+static int compile_num_instruction(elcgen *gen, xsltnode *xn)
+{
+  int r = 1;
+  switch (xn->type) {
+  case XSLT_SEQUENCE: {
+    gen_printorig(gen,"sequence",xn,"select");
+    r = compile_num_expression(gen,xn,xn->expr);
+    return r;
+  }
+  case XSLT_CHOOSE: {
+    xsltnode *xchild;
+    int count = 0;
+    int otherwise = 0;
+
+    gen_printorig(gen,"choose",NULL,NULL);
+
+    for (xchild = xn->children.first; xchild && r; xchild = xchild->next) {
+      switch (xchild->type) {
+      case XSLT_WHEN:
+        gen_printorig(gen,"when",xchild,"test");
+        gen_iprintf(gen,"(if ");
+        gen->indent++;
+        r = r && compile_ebv_expression(gen,xchild,xchild->expr);
+        gen_printf(gen," ");
+        r = r && compile_num_sequence(gen,xchild->children.first);
+        gen_printf(gen," ");
+        gen->indent--;
+        count++;
+        break;
+      case XSLT_OTHERWISE:
+        gen_printorig(gen,"otherwise",NULL,NULL);
+        r = r && compile_num_sequence(gen,xchild->children.first);
+        otherwise = 1;
+        break;
+      default:
+        r = gen_error(gen,"Invalid element in choose: %s\n",xslt_names[xchild->type]);
+        break;
+      }
+    }
+
+    assert(otherwise);
+    while (0 < count--)
+      gen_printf(gen,")");
+    return r;
+  }
+  default:
+    abort(); /* should not encounter any other instruction here */
+  }
+  return r;
+}
+
+static int compile_num_sequence(elcgen *gen, xsltnode *xfirst)
+{
+  xsltnode *xchild;
+  int count = 0;
+  int r = 1;
+
+  for (xchild = xfirst; xchild && (XSLT_VARIABLE == xchild->type); xchild = xchild->next) {
+    if (!compile_variable(gen,xchild))
+      return 0;
+    count++;
+  }
+
+  assert(xchild);
+  assert(NULL == xchild->next);
+
+  r = compile_num_instruction(gen,xchild);
+
+  while (0 < count--)
+    gen_printf(gen,")");
+  return r;
+}
+
 static int compile_sequence(elcgen *gen, xsltnode *xfirst)
 {
   xsltnode *xchild;
@@ -1077,11 +1247,18 @@ static int compile_function(elcgen *gen, xsltnode *xn)
     gen_printf(gen," %s",pxn->name_ident);
   gen_printf(gen," = ");
 
-  gen_iprintf(gen,"(xslt::reparent ");
-  gen->indent++;
-  r = compile_sequence(gen,pxn);
-  gen->indent--;
-  gen_iprintf(gen,"  nil nil nil)");
+  if (RESTYPE_NUMBER == xn->restype) {
+    gen->indent++;
+    r = compile_num_sequence(gen,pxn);
+    gen->indent--;
+  }
+  else {
+    gen_iprintf(gen,"(xslt::reparent ");
+    gen->indent++;
+    r = compile_sequence(gen,pxn);
+    gen->indent--;
+    gen_iprintf(gen,"  nil nil nil)");
+  }
 
   return r;
 }
@@ -1267,6 +1444,7 @@ static int process_root(elcgen *gen, xmlNodePtr n)
   int templateno = 0;
 
   xsltnode *root;
+  xsltnode *c;
 
   if ((XML_ELEMENT_NODE != n->type) ||
       (NULL == n->ns) || xmlStrcmp(n->ns->href,XSLT_NAMESPACE) ||
@@ -1282,6 +1460,15 @@ static int process_root(elcgen *gen, xmlNodePtr n)
   if (!xslt_resolve_vars(gen,root))
     return 0;
 
+  for (c = root->children.first; c; c = c->next) {
+    if (XSLT_TEMPLATE == c->type)
+      xslt_compute_restype(gen,c,RESTYPE_GENERAL);
+  }
+
+  gen_iprintf(gen,"/* tree:");
+  xslt_print_tree(gen,root);
+  gen_iprintf(gen,"*/");
+
   r = r && compile_apply_templates(gen,root);
 
   for (child = root->children.first; child && r; child = child->next) {
@@ -1290,7 +1477,8 @@ static int process_root(elcgen *gen, xmlNodePtr n)
       r = compile_template(gen,child,templateno++);
       break;
     case XSLT_FUNCTION:
-      r = compile_function(gen,child);
+      if (child->called)
+        r = compile_function(gen,child);
       break;
     case XSLT_OUTPUT:
       if (attr_equals(child->n,"indent","yes"))
@@ -1315,6 +1503,7 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
   int r = 0;
 
   gen->buf = array_new(1,0);
+  gen->typestack = stack_new();
 
   *result = NULL;
   if (NULL == (doc = xmlReadMemory(xslt,strlen(xslt),NULL,NULL,0))) {
@@ -1359,6 +1548,7 @@ int cxslt(const char *xslt, const char *xslturl, char **result)
     array_free(gen->buf);
     *result = gen->error;
   }
+  stack_free(gen->typestack);
   free(gen);
 
   return r;

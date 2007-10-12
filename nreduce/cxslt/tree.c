@@ -169,6 +169,14 @@ const char *kind_names[KIND_COUNT] = {
   "any",
 };
 
+const char *restype_names[RESTYPE_COUNT] = {
+  "UNKNOWN",
+  "RECURSIVE",
+  "GENERAL",
+  "NUMBER",
+  "NUMLIST",
+};
+
 static int ignore_node(xmlNodePtr n)
 {
   const char *c;
@@ -507,14 +515,36 @@ xsltnode *lookup_function(elcgen *gen, qname qn)
   return NULL;
 }
 
-static int xpath_resolve_vars(elcgen *gen, xsltnode *xn, expression *expr)
+static int xpath_semantic_check(elcgen *gen, expression *expr)
 {
-  int r = 1;
-  if (NULL == expr)
-    return 1;
-  r = r && xpath_resolve_vars(gen,xn,expr->test);
-  r = r && xpath_resolve_vars(gen,xn,expr->left);
-  r = r && xpath_resolve_vars(gen,xn,expr->right);
+  switch (expr->type) {
+  case XPATH_FUNCTION_CALL:
+    if (expr->target) {
+      int formalparams = 0;
+      int actualparams = 0;
+      xsltnode *fp;
+      expression *ap;
+      for (ap = expr->left; ap; ap = ap->right) {
+        assert(XPATH_ACTUAL_PARAM == ap->type);
+        actualparams++;
+      }
+      for (fp = expr->target->children.first; fp; fp = fp->next) {
+        if (XSLT_PARAM == fp->type)
+          formalparams++;
+        else
+          break;
+      }
+      if (formalparams != actualparams)
+        return gen_error(gen,"Insufficient arguments to function {%s}%s\n",
+                         expr->target->name_qn.uri,expr->target->name_qn.localpart);
+    }
+    break;
+  }
+  return 1;
+}
+
+static int xpath_resolve_ref(elcgen *gen, xsltnode *xn, expression *expr)
+{
   if (XPATH_VAR_REF == expr->type) {
     expr->target = lookup_var_ref(xn,expr->qn);
     if (NULL == expr->target) {
@@ -528,6 +558,19 @@ static int xpath_resolve_vars(elcgen *gen, xsltnode *xn, expression *expr)
     expr->target = lookup_function(gen,expr->qn);
     /* failed lookup is ok, might be to built-in function or web service */
   }
+  return 1;
+}
+
+static int xpath_resolve_vars(elcgen *gen, xsltnode *xn, expression *expr)
+{
+  int r = 1;
+  if (NULL == expr)
+    return 1;
+  r = r && xpath_resolve_vars(gen,xn,expr->test);
+  r = r && xpath_resolve_vars(gen,xn,expr->left);
+  r = r && xpath_resolve_vars(gen,xn,expr->right);
+  r = r && xpath_resolve_ref(gen,xn,expr);
+  r = r && xpath_semantic_check(gen,expr);
   return r;
 }
 
@@ -621,4 +664,111 @@ int exclude_namespace(elcgen *gen, xsltnode *xn2, const char *uri)
     }
   }
   return found;
+}
+
+static void xpath_print_tree(elcgen *gen, xsltnode *xn, expression *expr)
+{
+  if (NULL == expr)
+    return;
+  gen_iprintf(gen,"%s",xpath_names[expr->type]);
+  if (expr->qn.localpart && expr->qn.uri && expr->qn.localpart) { /* null means wildcard */
+    if (!strcmp(expr->qn.uri,""))
+      gen_printf(gen," %s",expr->qn.localpart);
+    else
+      gen_printf(gen," {%s}%s",expr->qn.uri,expr->qn.localpart);
+  }
+  if (RESTYPE_UNKNOWN != expr->restype)
+    gen_printf(gen," [%s]",restype_names[expr->restype]);
+  gen->indent++;
+  xpath_print_tree(gen,xn,expr->test);
+  xpath_print_tree(gen,xn,expr->left);
+  xpath_print_tree(gen,xn,expr->right);
+  gen->indent--;
+}
+
+void xslt_print_tree(elcgen *gen, xsltnode *xn)
+{
+  xsltnode *c;
+  if (NULL == xn)
+    return;
+  gen_iprintf(gen,"%s",xslt_names[xn->type]);
+  if (xn->name_qn.localpart) {
+    if (!strcmp(xn->name_qn.uri,""))
+      gen_printf(gen," %s",xn->name_qn.localpart);
+    else
+      gen_printf(gen," {%s}%s",xn->name_qn.uri,xn->name_qn.localpart);
+  }
+  if (RESTYPE_UNKNOWN != xn->restype)
+    gen_printf(gen," [%s]",restype_names[xn->restype]);
+  if ((XSLT_FUNCTION == xn->type) && !xn->called)
+    gen_printf(gen," -- not called");
+  gen->indent++;
+  xpath_print_tree(gen,xn,xn->expr);
+  xpath_print_tree(gen,xn,xn->name_avt);
+  xpath_print_tree(gen,xn,xn->value_avt);
+  xpath_print_tree(gen,xn,xn->namespace_avt);
+  for (c = xn->children.first; c; c = c->next)
+    xslt_print_tree(gen,c);
+  for (c = xn->attributes.first; c; c = c->next)
+    xslt_print_tree(gen,c);
+  gen->indent--;
+}
+
+expression *copy_expression(elcgen *gen, expression *orig, xsltnode *xn)
+{
+  expression *copy = (expression*)calloc(1,sizeof(expression));
+  copy->type = orig->type;
+  copy->test = orig->test ? copy_expression(gen,orig->test,xn) : NULL;
+  copy->left = orig->left ? copy_expression(gen,orig->left,xn) : NULL;
+  copy->right = orig->right ? copy_expression(gen,orig->right,xn) : NULL;
+  copy->qn = copy_qname(orig->qn);
+  copy->axis = orig->axis;
+  copy->num = orig->num;
+  copy->str = orig->str ? strdup(orig->str) : NULL;
+  copy->kind = orig->kind;
+
+  if ((XPATH_VAR_REF == copy->type) || (XPATH_FUNCTION_CALL == copy->type)) {
+    int r = xpath_resolve_ref(gen,xn,copy);
+    if (!r) {
+      fprintf(stderr,"unexpected error: %s\n",gen->error);
+    }
+    assert(r); /* should always succeed, since we checked the ref earlier */
+  }
+
+  copy->restype = RESTYPE_UNKNOWN;
+  return copy;
+}
+
+xsltnode *copy_xsltnode(elcgen *gen, xsltnode *orig, xsltnode *copyparent, int attr)
+{
+  xsltnode *copy = (xsltnode*)calloc(1,sizeof(xsltnode));
+  xsltnode *oc;
+
+  if (attr) {
+    llist_append(&copyparent->attributes,copy);
+  }
+  else {
+    llist_append(&copyparent->children,copy);
+  }
+  copy->parent = copyparent;
+
+  copy->type = orig->type;
+  copy->n = orig->n;
+  copy->name_qn = copy_qname(orig->name_qn);
+  copy->name_ident = orig->name_ident ? strdup(orig->name_ident) : NULL;
+  for (oc = orig->children.first; oc; oc = oc->next)
+    copy_xsltnode(gen,oc,copy,0);
+  for (oc = orig->attributes.first; oc; oc = oc->next)
+    copy_xsltnode(gen,oc,copy,1);
+
+  copy->expr = orig->expr ? copy_expression(gen,orig->expr,copy) : NULL;
+  copy->name_avt = orig->name_avt ? copy_expression(gen,orig->name_avt,copy) : NULL;
+  copy->value_avt = orig->value_avt ? copy_expression(gen,orig->value_avt,copy) : NULL;
+  copy->namespace_avt = orig->namespace_avt ? copy_expression(gen,orig->namespace_avt,copy) : NULL;
+
+  /* don't want to copy these properties - they're unique to the instance */
+  copy->restype = RESTYPE_UNKNOWN;
+  copy->derivatives = NULL;
+  copy->called = 0;
+  return copy;
 }

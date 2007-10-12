@@ -281,6 +281,12 @@ void stack_push(stack *s, void *c)
   s->data[s->count++] = c;
 }
 
+void *stack_pop(stack *s)
+{
+  assert(0 < s->count);
+  return s->data[--s->count];
+}
+
 static int getsignbit(double d)
 {
   char tmp[100];

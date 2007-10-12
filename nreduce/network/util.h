@@ -122,6 +122,7 @@ void list_remove_ptr(list **l, void *ptr);
 stack *stack_new(void);
 void stack_free(stack *s);
 void stack_push(stack *s, void *c);
+void *stack_pop(stack *s);
 
 void format_double(char *str, int size, double d);
 void print_double(FILE *f, double d);

@@ -179,6 +179,13 @@
 #define OCCURS_ZERO_OR_MORE               2
 #define OCCURS_ONE_OR_MORE                3
 
+#define RESTYPE_UNKNOWN                   0
+#define RESTYPE_RECURSIVE                 1
+#define RESTYPE_GENERAL                   2
+#define RESTYPE_NUMBER                    3
+#define RESTYPE_NUMLIST                   4
+#define RESTYPE_COUNT                     5
+
 #define QNAME_NULL { uri: NULL, prefix : NULL, localpart : NULL }
 
 typedef struct qname {
@@ -205,6 +212,7 @@ typedef struct expression {
   char *str;
   int kind;
   struct xsltnode *target;
+  int restype;
 } expression;
 
 typedef struct xsltnodelist {
@@ -226,6 +234,9 @@ typedef struct xsltnode {
   expression *name_avt;
   expression *value_avt;
   expression *namespace_avt;
+  int restype;
+  list *derivatives;
+  int called;
 } xsltnode;
 
 typedef struct seqtype {
@@ -256,6 +267,7 @@ typedef struct {
   char *error;
   int indent;
   xsltnode *root;
+  stack *typestack;
 } elcgen;
 
 void free_wsarg_ptr(void *a);
@@ -276,10 +288,13 @@ xsltnode *lookup_function(elcgen *gen, qname qn);
 int parse_xslt(elcgen *gen, xmlNodePtr parent, xsltnode *pnode);
 int xslt_resolve_vars(elcgen *gen, xsltnode *xn);
 int exclude_namespace(elcgen *gen, xsltnode *xn2, const char *uri);
+void xslt_print_tree(elcgen *gen, xsltnode *xn);
+xsltnode *copy_xsltnode(elcgen *gen, xsltnode *orig, xsltnode *copyparent, int attr);
 
 /* analyse */
 
 int is_expr_doc_order(xsltnode *xn, expression *expr);
+void xslt_compute_restype(elcgen *gen, xsltnode *xn, int ctxtype);
 
 /* xmlutil */
 
@@ -291,6 +306,7 @@ qname get_qname_attr(xmlNodePtr n, const char *attrname);
 int is_element(xmlNodePtr n, const char *ns, const char *name);
 char *nsname_to_ident(const char *nsuri, const char *localname);
 int qname_equals(qname a, qname b);
+qname copy_qname(qname orig);
 
 /* wsdl */
 
@@ -310,6 +326,7 @@ extern const char *xpath_names[XPATH_COUNT];
 extern const char *xslt_names[XSLT_COUNT];
 extern const char *axis_names[AXIS_COUNT];
 extern const char *kind_names[KIND_COUNT];
+extern const char *restype_names[RESTYPE_COUNT];
 #endif
 
 #endif

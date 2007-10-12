@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     return 0;
   }
   else {
-    fprintf(stderr,"%s",compresult);
+    fprintf(stderr,"%s\n",compresult);
     free(compresult);
     return 1;
   }

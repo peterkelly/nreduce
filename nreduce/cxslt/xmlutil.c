@@ -177,3 +177,12 @@ int qname_equals(qname a, qname b)
 {
   return (!nullstrcmp(a.uri,b.uri) && !nullstrcmp(a.localpart,b.localpart));
 }
+
+qname copy_qname(qname orig)
+{
+  qname copy;
+  copy.uri = orig.uri ? strdup(orig.uri) : NULL;
+  copy.prefix = orig.prefix ? strdup(orig.prefix) : NULL;
+  copy.localpart = orig.localpart ? strdup(orig.localpart) : NULL;
+  return copy;
+}
