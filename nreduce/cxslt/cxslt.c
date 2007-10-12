@@ -1465,9 +1465,9 @@ static int process_root(elcgen *gen, xmlNodePtr n)
       xslt_compute_restype(gen,c,RESTYPE_GENERAL);
   }
 
-  gen_iprintf(gen,"/* tree:");
-  xslt_print_tree(gen,root);
-  gen_iprintf(gen,"*/");
+/*   gen_iprintf(gen,"/\* tree:"); */
+/*   xslt_print_tree(gen,root); */
+/*   gen_iprintf(gen,"*\/"); */
 
   r = r && compile_apply_templates(gen,root);
 
