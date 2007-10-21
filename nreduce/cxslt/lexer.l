@@ -99,6 +99,15 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
                            while ( *yptr )
                              *string_buf_ptr++ = *yptr++; }
 
+#E:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_EXPRESSION; }
+#F:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_FORWARD_AXIS; }
+#R:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_REVERSE_AXIS; }
+#N:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_NUMERIC; }
+#S:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_STRING; }
+#Q:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_QNAME; }
+#T:{DIGIT}?:[a-zA-Z]?      { xlval.string = strdup(yytext+1); return DSVAR_NODETEST; }
+#axis:                   { return DSTYPE_AXIS; }
+#nodetest:               { return DSTYPE_NODETEST; }
 "$"                      { return '$'; }
 "("                      { return '('; }
 ")"                      { return ')'; }
@@ -116,7 +125,6 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 "]"                      { return ']'; }
 "|"                      { return '|'; }
 "%"                      { return '%'; }
-"#"                      { return '#'; }
 ";"                      { return ';'; }
 ":"                      { return ':'; }
 "?"                      { return '?'; }
@@ -188,9 +196,9 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 "key"                    { return KEY; }
 "void"                   { return VOID; }
 
-{INTEGER}                { xlval.inumber = atoi(xtext); return INTEGER_LITERAL; }
-{DECIMAL}                { xlval.number = atof(xtext); return DECIMAL_LITERAL; }
-{DOUBLE}                 { xlval.number = atof(xtext); return DOUBLE_LITERAL; }
+{INTEGER}                { xlval.number = atof(xtext); return NUMERIC_LITERAL; }
+{DECIMAL}                { xlval.number = atof(xtext); return NUMERIC_LITERAL; }
+{DOUBLE}                 { xlval.number = atof(xtext); return NUMERIC_LITERAL; }
 {NCNAME}                 { xlval.string = strdup(xtext); return NCNAME; }
 
 " "

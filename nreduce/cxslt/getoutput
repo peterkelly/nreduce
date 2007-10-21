@@ -1,0 +1,5 @@
+#!/bin/bash
+for i in `find tests/ -name '*.test'`; do
+  echo $i
+  COMPILE=1 runtests $i > $i.out
+done

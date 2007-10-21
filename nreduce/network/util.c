@@ -397,7 +397,7 @@ void print_double_escaped(FILE *f, const char *str)
   }
 }
 
-char *unescape(char *chars)
+char *unescape(const char *chars)
 {
   int len = strlen(chars);
   char *unescaped = (char*)malloc(len+1);
@@ -426,7 +426,7 @@ char *unescape(char *chars)
   return unescaped;
 }
 
-char *escape(char *chars)
+char *escape(const char *chars)
 {
   int len = strlen(chars);
   char *escaped = (char*)malloc(len*2+1);

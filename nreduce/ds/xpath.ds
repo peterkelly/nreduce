@@ -1,0 +1,149 @@
+: N compile_num_expression;
+: B compile_ebv_expression;
+: P compile_predicate;
+: X compile_expression;
+: T compile_test;
+: A compile_axis;
+
+X[[ E::n ]]                   = "\n(cons (xml::mknumber " N[[E::n]] ") nil)";
+X[[ N ]]                      = "\n(cons (xml::mknumber " N ") nil)";
+X[[ S ]]                      = "\n(cons (xml::mkstring \"" S "\") nil)";
+X[[ "$" Q ]]                  = Q;
+X[[ E:1 " and " E:2 ]]        = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " or " E:2 ]]         = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+
+X[[ E:1 " = " E:2 ]]          = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " != " E:2 ]]         = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " < " E:2 ]]          = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " <= " E:2 ]]         = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " > " E:2 ]]          = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+X[[ E:1 " >= " E:2 ]]         = "\n(cons (xml::mkbool " B[[*]] ") nil)";
+
+X[[ E:1 " eq " E:2 ]]         = "\n(xslt::value_eq " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " ne " E:2 ]]         = "\n(xslt::value_ne " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " lt " E:2 ]]         = "\n(xslt::value_lt " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " le " E:2 ]]         = "\n(xslt::value_le " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " gt " E:2 ]]         = "\n(xslt::value_gt " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " ge " E:2 ]]         = "\n(xslt::value_ge " +X[[E:1]] " " +X[[E:2]] ")";
+
+X[[ E:1 " + " E:2 ]]          = "\n(xslt::add " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " - " E:2 ]]          = "\n(xslt::subtract " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " * " E:2 ]]          = "\n(xslt::multiply " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " div " E:2 ]]        = "\n(xslt::divide " +X[[E:1]] " " +X[[E:2]] ")";
+// FIXME: test
+X[[ E:1 " idiv " E:2 ]]       = "\n(xslt::idivide " +X[[E:1]] " " +X[[E:2]] ")";
+X[[ E:1 " mod " E:2 ]]        = "\n(xslt::mod " +X[[E:1]] " " +X[[E:2]] ")";
+X[["-" E]]                    = "\n(xslt::uminus " +X[[E]] ")";
+X[["+" E]]                    = "\n(xslt::uplus " +X[[E]] ")";
+
+X[["if (" E:1 ") then " E:2
+   " else " E:3]]             = "\n(if " +B[[E:1]] " " +X[[E:2]] " " +X[[E:3]] ")";
+// FIXME: need the checks specified in XPath 2.0 section 3.3.1
+X[[ E:1 " to " E:2 ]]         = "\n(xslt::range " "\n  (xslt::getnumber " ++X[[E:1]] ") "
+                                "\n  (xslt::getnumber " ++X[[E:2]] "))";
+X[["."]]                      = "\n(cons citem nil)";
+X[["/"]] = "(cons (xml::item_root citem) nil)";
+X[["()"]]                     = "nil";
+X[[ E:1 ", " E:2 ]]           = "\n(append " X[[E:1]] " " X[[E:2]]")";
+X[[ E:1 "/" E:2 ]]            = "\n(xslt::path_result_sort"
+                                "\n  (xslt::apmap3 (!citem.!cpos.!csize."
+                                ++X[[E:2]] ") " ++X[[E:1]] "))";
+X[[ F "::" T ]]               = "\n(filter " +T[[T]] +A[[F]] ")";
+X[[ R "::" T ]]               = "\n(reverse " "\n  (filter " ++T[[T]] ++A[[R]] ")" ")";
+X[[ F "::" T "[" E "]" ]]   = "\n(xslt::filter3" "\n  (!citem.!cpos.!csize." +P[[E]] ") "
+                                "\n  (filter " ++T[[T]] ++A[[F]] ")" ")";
+X[[ R "::" T "[" E "]" ]]   = "\n(reverse " "\n  (xslt::filter3"
+                                "\n    (!citem.!cpos.!csize." ++P[[E]] ") "
+                                "\n    (filter " +++T[[T]] +++A[[R]] ")" ")" ")";
+X[[ E:1  "[" E:2 "]" ]]       = "\n(xslt::filter3" "\n  (!citem.!cpos.!csize."
+                                +P[[E:2]] ") " +X[[E:1]] ")";
+
+
+
+P[[ E:1 "][" E:2 ]]           = "\n(if (xslt::predicate_match cpos " +X[[E:1]] ") "
+                                 +P[[E:2]] " nil)";
+P[[ E ]]                      = "\n(xslt::predicate_match cpos " +X[[E]] ")";
+
+
+
+A[[ "#axis:self" ]]                = "\n(cons citem nil)";
+A[[ "#axis:child" ]]               = "\n(xml::item_children citem)";
+A[[ "#axis:descendant" ]]          = "\n(xslt::node_descendants citem)";
+A[[ "#axis:descendant-or-self" ]]  = "\n(cons citem (xslt::node_descendants citem))";
+A[[ "#axis:parent" ]]              = "\n(xslt::node_parent_list citem)";
+A[[ "#axis:ancestor" ]]            = "\n(xslt::node_ancestors citem)";
+A[[ "#axis:ancestor-or-self" ]]    = "\n(xslt::node_ancestors_or_self citem)";
+A[[ "#axis:preceding-sibling" ]]   = "\n(xslt::node_preceding_siblings citem)";
+A[[ "#axis:following-sibling" ]]   = "\n(xslt::node_following_siblings citem)";
+A[[ "#axis:preceding" ]]           = "\n(xslt::node_preceding citem)";
+A[[ "#axis:following" ]]           = "\n(xslt::node_following citem)";
+A[[ "#axis:attribute" ]]           = "\n(xml::item_attributes citem)";
+A[[ "#axis:namespace" ]]           = "\n(xml::item_namespaces citem)";
+
+T[[ "#nodetest:document-node()" ]] = "(xslt::type_test xml::TYPE_DOCUMENT)";
+T[[ "#nodetest:element()" ]]       = "(xslt::type_test xml::TYPE_ELEMENT)";
+T[[ "#nodetest:attribute()" ]]     = "(xslt::type_test xml::TYPE_ATTRIBUTE)";
+T[[ "#nodetest:comment()" ]]       = "(xslt::type_test xml::TYPE_COMMENT)";
+T[[ "#nodetest:text()" ]]          = "(xslt::type_test xml::TYPE_TEXT)";
+T[[ "#nodetest:node()" ]]          = "xslt::any_test";
+// schema-element : not supported
+// schema-attribute : not supported
+// processing-instruction : not supported
+
+
+
+
+
+
+
+
+
+
+
+
+
+B[[E:1 " and " E:2]]          = "(&& " +B[[E:1]] " " +B[[E:2]] ")";
+B[[E:1 " or " E:2]]           = "(|| " +B[[E:1]] " " +B[[E:2]] ")";
+
+B[[E:1:n " = " E:2:n]]        = "\n(== " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " != " E:2:n]]       = "\n(!= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " < " E:2:n]]        = "\n(< " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " <= " E:2:n]]       = "\n(<= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " > " E:2:n]]        = "\n(> " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " >= " E:2:n]]       = "\n(>= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+
+B[[E:1:n " eq " E:2:n]]       = "\n(== " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " ne " E:2:n]]       = "\n(!= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " lt " E:2:n]]       = "\n(< " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " le " E:2:n]]       = "\n(<= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " gt " E:2:n]]       = "\n(> " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+B[[E:1:n " ge " E:2:n]]       = "\n(>= " +N[[E:1:n]] " " +N[[E:2:n]] ")";
+
+B[[E:1 " = " E:2]]            = "\n(xslt::general_eq " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " != " E:2]]           = "\n(xslt::general_ne " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " < " E:2]]            = "\n(xslt::general_lt " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " <= " E:2]]           = "\n(xslt::general_le " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " > " E:2]]            = "\n(xslt::general_gt " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " >= " E:2]]           = "\n(xslt::general_ge " +X[[E:1]] " " +X[[E:2]] ")";
+
+B[[E:1 " eq " E:2]]           = "\n(xslt::value_eq_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " ne " E:2]]           = "\n(xslt::value_ne_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " lt " E:2]]           = "\n(xslt::value_lt_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " le " E:2]]           = "\n(xslt::value_le_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " gt " E:2]]           = "\n(xslt::value_gt_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+B[[E:1 " ge " E:2]]           = "\n(xslt::value_ge_ebv " +X[[E:1]] " " +X[[E:2]] ")";
+
+B[[E]]                        = "\n(xslt::ebv " X[[E]] ")";
+
+N[[E:1 " + " E:2]]            = "\n(+ " +N[[E:1]] " " +N[[E:2]] ")";
+N[[E:1 " - " E:2]]            = "\n(- " +N[[E:1]] " " +N[[E:2]] ")";
+N[[E:1 " * " E:2]]            = "\n(* " +N[[E:1]] " " +N[[E:2]] ")";
+N[[E:1 " div " E:2]]          = "\n(/ " +N[[E:1]] " " +N[[E:2]] ")";
+N[[E:1 " idiv " E:2]]         = "\n(idiv " +N[[E:1]] " " +N[[E:2]] ")";
+N[[E:1 " mod " E:2]]          = "\n(%% " +N[[E:1]] " " +N[[E:2]] ")";
+N[["if (" E:1 ") then " E:2
+   " else " E:3]]             = "\n(if " +B[[E:1]] " " +N[[E:2]] " " +N[[E:3]] ")";
+N[["."]]                      = "\n(xml::item_value citem)";
+N[[ N ]]                      = "\n" N;
+N[[ "$" Q ]]                  = Q;
+//N[[ "x()" ]]                 = a; // FIXME: do this properly

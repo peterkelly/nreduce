@@ -89,9 +89,9 @@ const char *xpath_names[XPATH_COUNT] = {
   "unary-plus",
   "root",
   "string-literal",
-  "integer-literal",
-  "decimal-literal",
-  "double-literal",
+  "numeric-literal",
+  "last-predicate",
+  "predicate",
   "var-ref",
   "empty",
   "context-item",
@@ -109,8 +109,15 @@ const char *xpath_names[XPATH_COUNT] = {
   "name-test",
 
   "avt-component",
-  "forward-axis-step",
-  "reverse-axis-step",
+  "node-test",
+  "unused2",
+
+  "dsvar",
+  "dsvar-numeric",
+  "dsvar-string",
+  "dsvar-var-ref",
+  "dsvar-nodetest",
+  "axis",
 };
 
 const char *xslt_names[XSLT_COUNT] = {
@@ -154,6 +161,8 @@ const char *axis_names[AXIS_COUNT] = {
   "preceding-sibling",
   "preceding",
   "ancestor-or-self",
+  "dsvar-forward",
+  "dsvar-reverse",
 };
 
 const char *kind_names[KIND_COUNT] = {
@@ -246,7 +255,7 @@ int parse_firstline = 0;
 expression *parse_expr = NULL;
 xmlNodePtr parse_node = NULL;
 
-static expression *parse_xpath(elcgen *gen, xmlNodePtr n, const char *str)
+expression *parse_xpath(elcgen *gen, xmlNodePtr n, const char *str)
 {
   X_BUFFER_STATE bufstate;
   int r;
@@ -666,11 +675,11 @@ int exclude_namespace(elcgen *gen, xsltnode *xn2, const char *uri)
   return found;
 }
 
-static void xpath_print_tree(elcgen *gen, xsltnode *xn, expression *expr)
+static void xpath_print_tree(elcgen *gen, int indent, xsltnode *xn, expression *expr)
 {
   if (NULL == expr)
     return;
-  gen_iprintf(gen,"%s",xpath_names[expr->type]);
+  gen_iprintf(gen,indent,"%s",xpath_names[expr->type]);
   if (expr->qn.localpart && expr->qn.uri && expr->qn.localpart) { /* null means wildcard */
     if (!strcmp(expr->qn.uri,""))
       gen_printf(gen," %s",expr->qn.localpart);
@@ -679,19 +688,17 @@ static void xpath_print_tree(elcgen *gen, xsltnode *xn, expression *expr)
   }
   if (RESTYPE_UNKNOWN != expr->restype)
     gen_printf(gen," [%s]",restype_names[expr->restype]);
-  gen->indent++;
-  xpath_print_tree(gen,xn,expr->test);
-  xpath_print_tree(gen,xn,expr->left);
-  xpath_print_tree(gen,xn,expr->right);
-  gen->indent--;
+  xpath_print_tree(gen,indent+1,xn,expr->test);
+  xpath_print_tree(gen,indent+1,xn,expr->left);
+  xpath_print_tree(gen,indent+1,xn,expr->right);
 }
 
-void xslt_print_tree(elcgen *gen, xsltnode *xn)
+void xslt_print_tree(elcgen *gen, int indent, xsltnode *xn)
 {
   xsltnode *c;
   if (NULL == xn)
     return;
-  gen_iprintf(gen,"%s",xslt_names[xn->type]);
+  gen_iprintf(gen,indent,"%s",xslt_names[xn->type]);
   if (xn->name_qn.localpart) {
     if (!strcmp(xn->name_qn.uri,""))
       gen_printf(gen," %s",xn->name_qn.localpart);
@@ -702,16 +709,14 @@ void xslt_print_tree(elcgen *gen, xsltnode *xn)
     gen_printf(gen," [%s]",restype_names[xn->restype]);
   if ((XSLT_FUNCTION == xn->type) && !xn->called)
     gen_printf(gen," -- not called");
-  gen->indent++;
-  xpath_print_tree(gen,xn,xn->expr);
-  xpath_print_tree(gen,xn,xn->name_avt);
-  xpath_print_tree(gen,xn,xn->value_avt);
-  xpath_print_tree(gen,xn,xn->namespace_avt);
+  xpath_print_tree(gen,indent+1,xn,xn->expr);
+  xpath_print_tree(gen,indent+1,xn,xn->name_avt);
+  xpath_print_tree(gen,indent+1,xn,xn->value_avt);
+  xpath_print_tree(gen,indent+1,xn,xn->namespace_avt);
   for (c = xn->children.first; c; c = c->next)
-    xslt_print_tree(gen,c);
+    xslt_print_tree(gen,indent+1,c);
   for (c = xn->attributes.first; c; c = c->next)
-    xslt_print_tree(gen,c);
-  gen->indent--;
+    xslt_print_tree(gen,indent+1,c);
 }
 
 expression *copy_expression(elcgen *gen, expression *orig, xsltnode *xn)

@@ -41,9 +41,7 @@ extern xmlNodePtr parse_node;
 %}
 
 %union {
-  int axis;
   char *string;
-  int inumber;
   double number;
   expression *expr;
   int flags;
@@ -56,6 +54,16 @@ extern xmlNodePtr parse_node;
 
 %debug
 %start Top
+
+%token <string> DSVAR_EXPRESSION
+%token <string> DSVAR_FORWARD_AXIS
+%token <string> DSVAR_REVERSE_AXIS
+%token <string> DSVAR_NUMERIC
+%token <string> DSVAR_STRING
+%token <string> DSVAR_QNAME
+%token <string> DSVAR_NODETEST
+%token DSTYPE_AXIS
+%token DSTYPE_NODETEST
 
 %token DOTDOT
 %token SLASHSLASH
@@ -131,9 +139,7 @@ extern xmlNodePtr parse_node;
 %token <string> NCNAME
 %token <string> STRING_LITERAL
 %token <string> AVT_LITERAL
-%token <inumber> INTEGER_LITERAL
-%token <number> DECIMAL_LITERAL
-%token <number> DOUBLE_LITERAL
+%token <number> NUMERIC_LITERAL
 
 %type <qn> QName
 
@@ -166,18 +172,17 @@ extern xmlNodePtr parse_node;
 %type <stype> NodeComp
 %type <expr> PathExpr
 %type <expr> StepExpr
-%type <expr> ForwardAxisStep
-%type <expr> ReverseAxisStep
 %type <expr> ForwardStep
-%type <axis> ForwardAxis
+%type <expr> ForwardAxis
 %type <expr> AbbrevForwardStep
 %type <expr> ReverseStep
-%type <axis> ReverseAxis
+%type <expr> ReverseAxis
 %type <expr> AbbrevReverseStep
 %type <expr> NodeTest
 %type <expr> NameTest
 %type <qn> Wildcard
 %type <expr> FilterExpr
+%type <expr> VarPredicate
 %type <expr> Predicate
 %type <expr> PrimaryExpr
 %type <expr> Literal
@@ -234,6 +239,7 @@ Top:
   Expr                            { parse_expr = $1; }
 | Expr TopExprs                   { parse_expr = $1; }
 | TopExprs                        { parse_expr = $1; }
+| VarPredicate                    { parse_expr = $1; }
 ;
 
 Expr:
@@ -403,88 +409,108 @@ PathExpr:
 | SLASHSLASH StepExpr             { expression *root = new_expression2(XPATH_ROOT,NULL,NULL);
                                     expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
-                                    test->axis = AXIS_DESCENDANT_OR_SELF;
+                                    expression *axis = new_expression(XPATH_AXIS);
+                                    expression *nt = new_expression2(XPATH_NODE_TEST,axis,test);
+                                    axis->axis = AXIS_DESCENDANT_OR_SELF;
                                     test->kind = KIND_ANY;
-                                    step1 = new_expression2(XPATH_STEP,root,test);
+                                    step1 = new_expression2(XPATH_STEP,root,nt);
                                     $$ = new_expression2(XPATH_STEP,step1,$2); }
 | StepExpr                        { $$ = $1; }
 | PathExpr '/' StepExpr           { $$ = new_expression2(XPATH_STEP,$1,$3); }
 | PathExpr SLASHSLASH StepExpr
                                   { expression *step1;
                                     expression *test = new_expression(XPATH_KIND_TEST);
-                                    test->axis = AXIS_DESCENDANT_OR_SELF;
+                                    expression *axis = new_expression(XPATH_AXIS);
+                                    expression *nt = new_expression2(XPATH_NODE_TEST,axis,test);
+                                    axis->axis = AXIS_DESCENDANT_OR_SELF;
                                     test->kind = KIND_ANY;
-                                    step1 = new_expression2(XPATH_STEP,$1,test);
+                                    step1 = new_expression2(XPATH_STEP,$1,nt);
                                     $$ = new_expression2(XPATH_STEP,step1,$3); }
 ;
 
 StepExpr:
-  ForwardAxisStep                 { $$ = new_expression2(XPATH_FORWARD_AXIS_STEP,$1,NULL); }
-| ReverseAxisStep                 { $$ = new_expression2(XPATH_REVERSE_AXIS_STEP,$1,NULL); }
+  ForwardStep                     { $$ = $1; }
+| ForwardStep '[' Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$3); }
+| ReverseStep                     { $$ = $1; }
+| ReverseStep '[' Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$3); }
 | FilterExpr                      { $$ = $1; }
 ;
 
-ForwardAxisStep:
-  ForwardStep                     { $$ = $1; }
-| ForwardAxisStep Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$2); }
-;
-
-ReverseAxisStep:
-  ReverseStep                     { $$ = $1; }
-| ReverseAxisStep Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$2); }
-;
-
 ForwardStep:
-  ForwardAxis NodeTest            { $$ = $2;
-                                    $$->axis = $1; }
+  ForwardAxis COLONCOLON NodeTest { $$ = $3;
+                                    $$->left = $1; }
 | AbbrevForwardStep               { $$ = $1; }
 ;
 
 ForwardAxis:
-  CHILD COLONCOLON                { $$ = AXIS_CHILD; }
-| DESCENDANT COLONCOLON           { $$ = AXIS_DESCENDANT; }
-| ATTRIBUTE COLONCOLON            { $$ = AXIS_ATTRIBUTE; }
-| SELF COLONCOLON                 { $$ = AXIS_SELF; }
-| DESCENDANT_OR_SELF COLONCOLON   { $$ = AXIS_DESCENDANT_OR_SELF; }
-| FOLLOWING_SIBLING COLONCOLON    { $$ = AXIS_FOLLOWING_SIBLING; }
-| FOLLOWING COLONCOLON            { $$ = AXIS_FOLLOWING; }
-| NAMESPACE COLONCOLON            { $$ = AXIS_NAMESPACE; }
+  CHILD                           { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_CHILD; }
+| DESCENDANT                      { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_DESCENDANT; }
+| ATTRIBUTE                       { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_ATTRIBUTE; }
+| SELF                            { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_SELF; }
+| DESCENDANT_OR_SELF              { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_DESCENDANT_OR_SELF; }
+| FOLLOWING_SIBLING               { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_FOLLOWING_SIBLING; }
+| FOLLOWING                       { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_FOLLOWING; }
+| NAMESPACE                       { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_NAMESPACE; }
+| DSVAR_FORWARD_AXIS              { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_DSVAR_FORWARD;
+                                    $$->str = $1; }
 ;
 
 AbbrevForwardStep:
   NodeTest                        { $$ = $1;
-                                    $$->axis = AXIS_CHILD;
-                                    if ((XPATH_KIND_TEST == $$->type) &&
-                                        ((KIND_ATTRIBUTE == $$->kind) ||
-                                         (KIND_SCHEMA_ATTRIBUTE == $$->kind)))
-                                      $$->axis = AXIS_ATTRIBUTE; }
+                                    $$->left = new_expression(XPATH_AXIS);
+                                    $$->left->axis = AXIS_CHILD;
+                                    if ((XPATH_KIND_TEST == $$->right->type) &&
+                                        ((KIND_ATTRIBUTE == $$->right->kind) ||
+                                         (KIND_SCHEMA_ATTRIBUTE == $$->right->kind)))
+                                      $$->left->axis = AXIS_ATTRIBUTE; }
 | '@' NodeTest                    { $$ = $2;
-                                    $$->axis = AXIS_ATTRIBUTE; }
+                                    $$->left = new_expression(XPATH_AXIS);
+                                    $$->left->axis = AXIS_ATTRIBUTE; }
 ;
 
 ReverseStep:
-  ReverseAxis NodeTest            { $$ = $2;
-                                    $$->axis = $1; }
+  ReverseAxis COLONCOLON NodeTest { $$ = $3;
+                                    $$->left = $1; }
 | AbbrevReverseStep               { $$ = $1; }
 ;
 
 ReverseAxis:
-  PARENT COLONCOLON               { $$ = AXIS_PARENT; }
-| ANCESTOR COLONCOLON             { $$ = AXIS_ANCESTOR; }
-| PRECEDING_SIBLING COLONCOLON    { $$ = AXIS_PRECEDING_SIBLING; }
-| PRECEDING COLONCOLON            { $$ = AXIS_PRECEDING; }
-| ANCESTOR_OR_SELF COLONCOLON     { $$ = AXIS_ANCESTOR_OR_SELF; }
+  PARENT                          { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_PARENT; }
+| ANCESTOR                        { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_ANCESTOR; }
+| PRECEDING_SIBLING               { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_PRECEDING_SIBLING; }
+| PRECEDING                       { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_PRECEDING; }
+| ANCESTOR_OR_SELF                { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_ANCESTOR_OR_SELF; }
+| DSVAR_REVERSE_AXIS              { $$ = new_expression(XPATH_AXIS);
+                                    $$->axis = AXIS_DSVAR_REVERSE;
+                                    $$->str = $1; }
 ;
 
 AbbrevReverseStep:
-  DOTDOT                          { /*$$ = new NodeTestExpr(XPATH_NODE_TEST_SEQUENCETYPE,
+  DOTDOT                          { abort();
+                                    /*$$ = new NodeTestExpr(XPATH_NODE_TEST_SEQUENCETYPE,
                                                           SequenceTypeImpl::node(),
                                                           AXIS_PARENT);*/ }
 ;
 
 NodeTest:
-  KindTest                        { $$ = $1; }
-| NameTest                        { $$ = $1; }
+  KindTest                        { $$ = new_expression2(XPATH_NODE_TEST,NULL,$1); }
+| NameTest                        { $$ = new_expression2(XPATH_NODE_TEST,NULL,$1); }
+| DSVAR_NODETEST                  { $$ = new_expression(XPATH_DSVAR_NODETEST);
+                                    $$->str = $1; }
 ;
 
 NameTest:
@@ -508,13 +534,24 @@ Wildcard:
                                     $$.localpart = $3; }
 ;
 
+
 FilterExpr:
   PrimaryExpr                     { $$ = $1; }
-| FilterExpr Predicate            { $$ = new_expression2(XPATH_FILTER,$1,$2); }
+| PrimaryExpr '[' Predicate       { $$ = new_expression2(XPATH_FILTER,$1,$3); }
 ;
 
 Predicate:
-  '[' Expr ']'                    { $$ = $2; }
+  Expr ']'                        { $$ = $1; }
+| Expr ']' '[' Predicate          { $$ = new_expression2(XPATH_PREDICATE,$1,$4); }
+;
+
+VarPredicate:
+  DSVAR_EXPRESSION ']' '[' DSVAR_EXPRESSION
+                                  { expression *dsvar1 = new_expression(XPATH_DSVAR);
+                                    expression *dsvar2 = new_expression(XPATH_DSVAR);
+                                    dsvar1->str = $1;
+                                    dsvar2->str = $4;
+                                    $$ = new_expression2(XPATH_PREDICATE,dsvar1,dsvar2); }
 ;
 
 PrimaryExpr:
@@ -523,6 +560,12 @@ PrimaryExpr:
 | ParenthesizedExpr               { $$ = $1; }
 | ContextItemExpr                 { $$ = $1; }
 | FunctionCall                    { $$ = $1; }
+| DSVAR_EXPRESSION                { $$ = new_expression(XPATH_DSVAR);
+                                    $$->str = $1; }
+| DSTYPE_AXIS ForwardAxis         { $$ = $2; }
+| DSTYPE_AXIS ReverseAxis         { $$ = $2; }
+| DSTYPE_NODETEST KindTest        { $$ = $2; }
+| DSTYPE_NODETEST NameTest        { $$ = $2; }
 ;
 
 Literal:
@@ -531,28 +574,29 @@ Literal:
 ;
 
 NumericLiteral:
-  INTEGER_LITERAL                 { $$ = new_expression(XPATH_INTEGER_LITERAL);
+  NUMERIC_LITERAL                 { $$ = new_expression(XPATH_NUMERIC_LITERAL);
                                     $$->num = $1; }
-| DECIMAL_LITERAL                 { $$ = new_expression(XPATH_DECIMAL_LITERAL);
-                                    $$->num = $1; }
-| DOUBLE_LITERAL                  { $$ = new_expression(XPATH_DOUBLE_LITERAL);
-                                    $$->num = $1; }
+| DSVAR_NUMERIC                   { $$ = new_expression(XPATH_DSVAR_NUMERIC);
+                                    $$->str = $1; }
 ;
 
 StringLiteral:
   STRING_LITERAL                  { $$ = new_expression(XPATH_STRING_LITERAL);
+                                    $$->str = $1; }
+| DSVAR_STRING                    { $$ = new_expression(XPATH_DSVAR_STRING);
                                     $$->str = $1; }
 ;
 
 VarRef:
 '$' QName                         { $$ = new_expression(XPATH_VAR_REF);
                                     $$->qn = $2; }
+| '$' DSVAR_QNAME                 { $$ = new_expression(XPATH_DSVAR_VAR_REF);
+                                    $$->str = $2; }
 ;
 
 ParenthesizedExpr:
   '(' ')'                         { $$ = new_expression(XPATH_EMPTY); }
-| '(' Expr ')'                    { $$ = new_expression(XPATH_PAREN);
-                                    $$->left = $2; }
+| '(' Expr ')'                    { $$ = $2; }
 ;
 
 ContextItemExpr:

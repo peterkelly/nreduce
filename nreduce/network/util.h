@@ -128,8 +128,8 @@ void format_double(char *str, int size, double d);
 void print_double(FILE *f, double d);
 void print_escaped(FILE *f, const char *str);
 void print_double_escaped(FILE *f, const char *str);
-char *unescape(char *chars);
-char *escape(char *chars);
+char *unescape(const char *chars);
+char *escape(const char *chars);
 char *mkstring(const char *data, int len);
 char *substring(const char *str, int begin, int end);
 

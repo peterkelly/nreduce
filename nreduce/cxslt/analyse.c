@@ -44,14 +44,14 @@ int is_expr_doc_order(xsltnode *xn, expression *expr)
 {
   switch (expr->type) {
   case XPATH_STEP:
-  case XPATH_FORWARD_AXIS_STEP:
-  case XPATH_REVERSE_AXIS_STEP:
+  case XPATH_NODE_TEST:
   case XPATH_KIND_TEST:
   case XPATH_NAME_TEST:
   case XPATH_ROOT:
     return 1;
-  case XPATH_PAREN:
-    return is_expr_doc_order(xn,expr->left);
+  case XPATH_FILTER:
+    return (XPATH_NODE_TEST == expr->left->type);
+    break;
   case XPATH_VAR_REF: {
     xsltnode *var = lookup_variable(xn,expr->qn);
     return (var && (XSLT_VARIABLE == var->type) && !xmlHasProp(var->n,"select"));
@@ -146,7 +146,6 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
 
   expr->restype = RESTYPE_GENERAL;
   stack_push(gen->typestack,expr);
-  gen->indent++;
 
   switch (expr->type) {
   case XPATH_ADD:
@@ -179,14 +178,8 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
     else
       expr->restype = unify_conditional_types(expr->left->restype,expr->right->restype);
     break;
-  case XPATH_INTEGER_LITERAL:
-  case XPATH_DECIMAL_LITERAL:
-  case XPATH_DOUBLE_LITERAL:
+  case XPATH_NUMERIC_LITERAL:
     expr->restype = RESTYPE_NUMBER;
-    break;
-  case XPATH_PAREN:
-    xpath_compute_restype(gen,expr->left,RESTYPE_GENERAL);
-    expr->restype = expr->left->restype;
     break;
   case XPATH_TO:
     xpath_compute_restype(gen,expr->left,ctxtype);
@@ -237,7 +230,6 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
     expr->restype = RESTYPE_GENERAL;
     break;
   }
-  gen->indent--;
   stack_pop(gen->typestack);
   assert(RESTYPE_UNKNOWN != expr->restype);
 }
@@ -250,7 +242,6 @@ void xslt_compute_restype(elcgen *gen, xsltnode *xn, int ctxtype)
     return;
 
   stack_push(gen->typestack,xn);
-  gen->indent++;
 
   xn->restype = RESTYPE_GENERAL;
 
@@ -327,7 +318,6 @@ void xslt_compute_restype(elcgen *gen, xsltnode *xn, int ctxtype)
     break;
   }
 
-  gen->indent--;
   stack_pop(gen->typestack);
   assert(RESTYPE_UNKNOWN != xn->restype);
 }

@@ -1,5 +1,10 @@
 #!/bin/bash
 XML=$1
 XSLT=$2
-./compile $XSLT > out.elc || exit 1
-../src/nreduce out.elc $XML
+if [ -z "$COMPILE" ]; then
+  ./compile $XSLT > out.elc || exit 1
+  ../src/nreduce out.elc $XML
+else
+  ./compile $XSLT
+fi
+
