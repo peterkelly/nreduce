@@ -102,7 +102,7 @@ static void gen_tests(FILE *f, int first, const char *base, const char *suffix, 
     gen_tests(f,0,exprname,"->right",expr->right);
   }
   else {
-    char *def = get_define("XPATH_",xpath_names,expr->type);
+    char *def = get_define("XPATH_",expr_names,expr->type);
     fprintf(f,"(%s == %s->type)",def,exprname);
     free(def);
 
@@ -183,7 +183,7 @@ static char *get_symref(const char *base, const char *suffix,
 
   exprname = concat_str(base,suffix);
   if (!strcmp(name,"R::"))
-    printf("get_symref: %s %s\n",exprname,xpath_names[expr->type]);
+    printf("get_symref: %s %s\n",exprname,expr_names[expr->type]);
 
   if ((XPATH_DSVAR_VAR_REF == expr->type) && (!strcmp(expr->str,name)))
     ref = strdup(exprname);
@@ -245,7 +245,6 @@ static char *flatten_syntax(syntax *a)
 static void c_print_rules(FILE *f, rule *r, mapping *mappings)
 {
   xmlDocPtr doc;
-  xmlNodePtr root;
   elcgen *gen = (elcgen*)calloc(1,sizeof(elcgen));
   char *docstr = "<empty/>";
   int firstif = 1;
@@ -257,14 +256,13 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings)
     exit(1);
   }
   gen->parse_doc = doc;
-  root = xmlDocGetRootElement(doc);
 
   for (; r; r = r->next) {
     char *strpattern = flatten_syntax(r->pattern);
     if ('<' == strpattern[0]) {
     }
     else if (0 < strlen(strpattern)) {
-      expression *expr = parse_xpath(gen,root,strpattern);
+      expression *expr = parse_xpath(gen,NULL,strpattern);
       if (NULL == expr) {
         fprintf(stderr,"%s\n",gen->error);
         exit(1);
@@ -317,14 +315,14 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings)
           expression *v = get_symexpr("expr","",expr,a->str);
           char *ref = get_symref("expr","",expr,a->str);
           assert(v);
-          printf("  action: var %s (type %s)\n",a->str,xpath_names[v->type]);
+          printf("  action: var %s (type %s)\n",a->str,expr_names[v->type]);
           switch (v->type) {
           case XPATH_DSVAR_VAR_REF: {
-            fprintf(f,"    gen_printf(gen,\"%%s\",%s->target->name_ident);\n",ref);
+            fprintf(f,"    gen_printf(gen,\"%%s\",%s->target->ident);\n",ref);
             break;
           }
           case XPATH_FUNCTION_CALL:
-            fprintf(f,"    r = r && compile_user_function_call(gen,indent,xn,xn->n,expr,1);\n");
+            fprintf(f,"    r = r && compile_user_function_call(gen,indent,expr,1);\n");
             break;
           case XPATH_DSVAR_NUMERIC: {
             fprintf(f,"    gen_printf(gen,\"%%f\",%s->num);\n",ref);
@@ -337,7 +335,7 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings)
             break;
           }
           default:
-            fprintf(stderr,"unexpected type in pattern: %s\n",xpath_names[v->type]);
+            fprintf(stderr,"unexpected type in pattern: %s\n",expr_names[v->type]);
             abort();
             break;
           }
@@ -353,9 +351,9 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings)
           }
 
           if (0 < a->indent)
-            fprintf(f,"    r = r && %s(gen,indent+%d,xn,",m->fun,a->indent);
+            fprintf(f,"    r = r && %s(gen,indent+%d,",m->fun,a->indent);
           else
-            fprintf(f,"    r = r && %s(gen,indent,xn,",m->fun);
+            fprintf(f,"    r = r && %s(gen,indent,",m->fun);
 
           if (!strcmp(a->vn->name,"*")) {
             fprintf(f,"expr");
@@ -391,7 +389,7 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings)
   if (!havedefault) {
     fprintf(f,"  else {\n");
     fprintf(f,"    return gen_error(gen,\"Unexpected expression type: %%s\","
-            "xpath_names[expr->type]);\n");
+            "expr_names[expr->type]);\n");
     fprintf(f,"  }\n");
   }
   fprintf(f,"  return r;\n");
@@ -631,7 +629,7 @@ int main(int argc, char **argv)
         exit(1);
       }
 
-      fprintf(cf,"\nint %s(elcgen *gen, int indent, xsltnode *xn, expression *expr)\n",m->fun);
+      fprintf(cf,"\nint %s(elcgen *gen, int indent, expression *expr)\n",m->fun);
       fprintf(cf,"{\n");
       fprintf(cf,"  int r = 1;\n");
       fprintf(cf,"\n");

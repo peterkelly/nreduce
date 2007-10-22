@@ -118,32 +118,30 @@
 #define XPATH_DSVAR_NODETEST              67
 #define XPATH_AXIS                        68
 
-#define XPATH_COUNT                       69
+#define XSLT_STYLESHEET                   69
+#define XSLT_FUNCTION                     70
+#define XSLT_TEMPLATE                     71
+#define XSLT_VARIABLE                     72
+#define XSLT_SEQUENCE                     73
+#define XSLT_VALUE_OF                     74
+#define XSLT_TEXT                         75
+#define XSLT_FOR_EACH                     76
+#define XSLT_IF                           77
+#define XSLT_CHOOSE                       78
+#define XSLT_ELEMENT                      79
+#define XSLT_ATTRIBUTE                    80
+#define XSLT_INAMESPACE                   81
+#define XSLT_APPLY_TEMPLATES              82
+#define XSLT_LITERAL_RESULT_ELEMENT       83
+#define XSLT_LITERAL_TEXT_NODE            84
+#define XSLT_PARAM                        85
+#define XSLT_OUTPUT                       86
+#define XSLT_STRIP_SPACE                  87
+#define XSLT_WHEN                         88
+#define XSLT_OTHERWISE                    89
+#define XSLT_LITERAL_ATTRIBUTE            90
 
-#define XSLT_INVALID                      0
-#define XSLT_STYLESHEET                   1
-#define XSLT_FUNCTION                     2
-#define XSLT_TEMPLATE                     3
-#define XSLT_VARIABLE                     4
-#define XSLT_SEQUENCE                     5
-#define XSLT_VALUE_OF                     6
-#define XSLT_TEXT                         7
-#define XSLT_FOR_EACH                     8
-#define XSLT_IF                           9
-#define XSLT_CHOOSE                       10
-#define XSLT_ELEMENT                      11
-#define XSLT_ATTRIBUTE                    12
-#define XSLT_INAMESPACE                   13
-#define XSLT_APPLY_TEMPLATES              14
-#define XSLT_LITERAL_RESULT_ELEMENT       15
-#define XSLT_LITERAL_TEXT_NODE            16
-#define XSLT_PARAM                        17
-#define XSLT_OUTPUT                       18
-#define XSLT_STRIP_SPACE                  19
-#define XSLT_WHEN                         20
-#define XSLT_OTHERWISE                    21
-#define XSLT_LITERAL_ATTRIBUTE            22
-#define XSLT_COUNT                        23
+#define XPATH_COUNT                       91
 
 #define AXIS_INVALID                      0
 #define AXIS_CHILD                        1
@@ -210,43 +208,42 @@ typedef struct wsarg {
   char *localpart;
 } wsarg;
 
+typedef struct expressionlist {
+  struct expression *first;
+  struct expression *last;
+} expressionlist;
+
 typedef struct expression {
   int type;
-  struct expression *test;
-  struct expression *left;
-  struct expression *right;
   qname qn;
+  int restype;
+  char *ident;
+
   int axis;
   double num;
   char *str;
   int kind;
-  struct xsltnode *target;
-  int restype;
-} expression;
-
-typedef struct xsltnodelist {
-  struct xsltnode *first;
-  struct xsltnode *last;
-} xsltnodelist;
-
-typedef struct xsltnode {
-  int type;
+  struct expression *target;
   xmlNodePtr n;
-  qname name_qn;
-  char *name_ident;
-  xsltnodelist children;
-  xsltnodelist attributes;
-  struct xsltnode *next;
-  struct xsltnode *prev;
-  struct xsltnode *parent;
-  expression *expr;
-  expression *name_avt;
-  expression *value_avt;
-  expression *namespace_avt;
-  int restype;
+
   list *derivatives;
   int called;
-} xsltnode;
+
+  struct expression *test;
+  struct expression *left;
+  struct expression *right;
+
+  struct expression *name_avt;
+  struct expression *value_avt;
+  struct expression *namespace_avt;
+
+  struct expression *children;
+  struct expression *attributes;
+
+  struct expression *next;
+  struct expression *prev;
+  struct expression *parent;
+} expression;
 
 typedef struct seqtype {
 } seqtype;
@@ -277,7 +274,7 @@ typedef struct {
   xmlDocPtr parse_doc;
   const char *parse_filename;
   char *error;
-  xsltnode *root;
+  expression *root;
   stack *typestack;
 } elcgen;
 
@@ -286,28 +283,28 @@ void free_wsarg_ptr(void *a);
 int gen_error(elcgen *gen, const char *format, ...);
 void gen_printf(elcgen *gen, const char *format, ...);
 void gen_iprintf(elcgen *gen, int indent, const char *format, ...);
-void gen_printorig(elcgen *gen, int indent, const char *name, xsltnode *xn, const char *attr);
+void gen_printorig(elcgen *gen, int indent, const char *name, expression *expr, const char *attr);
 
 /* tree */
 
 expression *new_expression(int type);
 expression *new_expression2(int type, expression *left, expression *right);
 void free_expression(expression *expr);
-xsltnode *new_xsltnode(xmlNodePtr n, int type);
-void free_xsltnode(xsltnode *xn);
-xsltnode *lookup_function(elcgen *gen, qname qn);
+expression *new_xsltnode(xmlNodePtr n, int type);
+expression *lookup_function(elcgen *gen, qname qn);
 
-expression *parse_xpath(elcgen *gen, xmlNodePtr n, const char *str);
-int parse_xslt(elcgen *gen, xmlNodePtr parent, xsltnode *pnode);
-int xslt_resolve_vars(elcgen *gen, xsltnode *xn);
-int exclude_namespace(elcgen *gen, xsltnode *xn2, const char *uri);
-void xslt_print_tree(elcgen *gen, int indent, xsltnode *xn);
-xsltnode *copy_xsltnode(elcgen *gen, xsltnode *orig, xsltnode *copyparent, int attr);
+void expr_set_parents(expression *expr, expression *parent);
+expression *parse_xpath(elcgen *gen, expression *pnode, const char *str);
+int parse_xslt(elcgen *gen, xmlNodePtr parent, expression *pnode);
+int expr_resolve_vars(elcgen *gen, expression *expr);
+int exclude_namespace(elcgen *gen, expression *expr, const char *uri);
+void expr_print_tree(elcgen *gen, int indent, expression *expr);
+expression *expr_copy(expression *orig);
 
 /* analyse */
 
-int is_expr_doc_order(xsltnode *xn, expression *expr);
-void xslt_compute_restype(elcgen *gen, xsltnode *xn, int ctxtype);
+int is_expr_doc_order(expression *expr);
+void expr_compute_restype(elcgen *gen, expression *expr, int ctxtype);
 
 /* xmlutil */
 
@@ -336,31 +333,28 @@ int wsdl_get_operation_messages(elcgen *gen,
 
 /* rules */
 
-int compile_ws_call(elcgen *gen, int indent, xsltnode *xn, expression *expr, const char *wsdlurl);
-int compile_test(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_ebv_expression(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_user_function_call(elcgen *gen, int indent, xsltnode *xn,
-                               xmlNodePtr n, expression *expr, int fromnum);
-int compile_builtin_function_call(elcgen *gen, int indent, xsltnode *xn,
-                                  xmlNodePtr n, expression *expr);
-int compile_num_expression(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_predicate(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_expression(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_axis(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_avt_component(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_avt(elcgen *gen, int indent, xsltnode *xn, expression *expr);
-int compile_attributes(elcgen *gen, int indent, xsltnode *xn);
-int compile_namespaces(elcgen *gen, int indent, xsltnode *xn);
-int compile_instruction(elcgen *gen, int indent, xsltnode *xn);
-int compile_variable(elcgen *gen, int indent, xsltnode *xchild);
-int compile_num_instruction(elcgen *gen, int indent, xsltnode *xn);
-int compile_num_sequence(elcgen *gen, int indent, xsltnode *xfirst);
-int compile_sequence(elcgen *gen, int indent, xsltnode *xfirst);
+int compile_ws_call(elcgen *gen, int indent, expression *expr, const char *wsdlurl);
+int compile_test(elcgen *gen, int indent, expression *expr);
+int compile_ebv_expression(elcgen *gen, int indent, expression *expr);
+int compile_user_function_call(elcgen *gen, int indent, expression *expr, int fromnum);
+int compile_builtin_function_call(elcgen *gen, int indent, expression *expr);
+int compile_num_expression(elcgen *gen, int indent, expression *expr);
+int compile_predicate(elcgen *gen, int indent, expression *expr);
+int compile_expression(elcgen *gen, int indent, expression *expr);
+int compile_axis(elcgen *gen, int indent, expression *expr);
+int compile_avt_component(elcgen *gen, int indent, expression *expr);
+int compile_avt(elcgen *gen, int indent, expression *expr);
+int compile_attributes(elcgen *gen, int indent, expression *expr);
+int compile_namespaces(elcgen *gen, int indent, expression *expr);
+int compile_instruction(elcgen *gen, int indent, expression *expr);
+int compile_variable(elcgen *gen, int indent, expression *xchild);
+int compile_num_instruction(elcgen *gen, int indent, expression *expr);
+int compile_num_sequence(elcgen *gen, int indent, expression *xfirst);
+int compile_sequence(elcgen *gen, int indent, expression *xfirst);
 
 
 #ifndef _TREE_C
-extern const char *xpath_names[XPATH_COUNT];
-extern const char *xslt_names[XSLT_COUNT];
+extern const char *expr_names[XPATH_COUNT];
 extern const char *axis_names[AXIS_COUNT];
 extern const char *kind_names[KIND_COUNT];
 extern const char *restype_names[RESTYPE_COUNT];

@@ -28,19 +28,7 @@
 #include <libxml/parser.h>
 #include "cxslt.h"
 
-static xsltnode *lookup_variable(xsltnode *xn, qname qn)
-{
-  for (; xn; xn = xn->parent) {
-    xsltnode *xv;
-    for (xv = xn->prev; xv; xv = xv->prev) {
-      if ((XSLT_VARIABLE == xv->type) && qname_equals(xv->name_qn,qn))
-        return xv;
-    }
-  }
-  return NULL;
-}
-
-int is_expr_doc_order(xsltnode *xn, expression *expr)
+int is_expr_doc_order(expression *expr)
 {
   switch (expr->type) {
   case XPATH_STEP:
@@ -53,8 +41,7 @@ int is_expr_doc_order(xsltnode *xn, expression *expr)
     return (XPATH_NODE_TEST == expr->left->type);
     break;
   case XPATH_VAR_REF: {
-    xsltnode *var = lookup_variable(xn,expr->qn);
-    return (var && (XSLT_VARIABLE == var->type) && !xmlHasProp(var->n,"select"));
+    return ((XSLT_VARIABLE == expr->target->type) && !xmlHasProp(expr->target->n,"select"));
     break;
   }
   default:
@@ -90,7 +77,7 @@ static int unify_conditional_types(int a, int b)
   return RESTYPE_GENERAL;
 }
 
-static xsltnode *find_derivative(xsltnode *fun, expression *call)
+static expression *find_derivative(expression *fun, expression *call)
 {
   list *l;
   expression *ap;
@@ -104,9 +91,9 @@ static xsltnode *find_derivative(xsltnode *fun, expression *call)
     return fun;
 
   for (l = fun->derivatives; l; l = l->next) {
-    xsltnode *d = (xsltnode*)l->data;
+    expression *d = (expression*)l->data;
     int match = 1;
-    xsltnode *fp = d->children.first;
+    expression *fp = d->children;
     for (ap = call->left; ap && match; ap = ap->right, fp = fp->next) {
       assert(fp && (XSLT_PARAM == fp->type));
       if (ap->restype != fp->restype)
@@ -118,12 +105,22 @@ static xsltnode *find_derivative(xsltnode *fun, expression *call)
   return NULL;
 }
 
-static xsltnode *add_derivative(elcgen *gen, xsltnode *fun, expression *call)
+static expression *add_derivative(elcgen *gen, expression *fun, expression *call)
 {
-  xsltnode *d = copy_xsltnode(gen,fun,gen->root,0);
+  expression *d = expr_copy(fun);
   expression *ap = call->left;
-  xsltnode *fp = d->children.first;
+  expression *fp = d->children;
   char *newname;
+  int r;
+  expression **cptr;
+  expr_set_parents(d,gen->root);
+  for (cptr = &gen->root->children; *cptr; cptr = &((*cptr)->next))
+    d->prev = *cptr;
+  *cptr = d;
+  r = expr_resolve_vars(gen,d);
+  if (!r)
+    fprintf(stderr,"unexpected error: %s\n",gen->error);
+  assert(r); /* checks already done on the original */
   for (; ap; ap = ap->right, fp = fp->next) {
     assert(fp && (XSLT_PARAM == fp->type));
     fp->restype = ap->restype;
@@ -131,16 +128,18 @@ static xsltnode *add_derivative(elcgen *gen, xsltnode *fun, expression *call)
 
   list_append(&fun->derivatives,d);
 
-  newname = (char*)malloc(strlen(d->name_ident)+20);
-  sprintf(newname,"%s%d",d->name_ident,list_count(fun->derivatives));
-  free(d->name_ident);
-  d->name_ident = newname;
+  newname = (char*)malloc(strlen(d->ident)+20);
+  sprintf(newname,"%s%d",d->ident,list_count(fun->derivatives));
+  free(d->ident);
+  d->ident = newname;
 
   return d;
 }
 
-static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
+void expr_compute_restype(elcgen *gen, expression *expr, int ctxtype)
 {
+  expression *c;
+
   if ((NULL == expr) || (RESTYPE_UNKNOWN != expr->restype))
     return;
 
@@ -156,8 +155,8 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
   case XPATH_MOD: {
     int left;
     int right;
-    xpath_compute_restype(gen,expr->left,ctxtype);
-    xpath_compute_restype(gen,expr->right,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
+    expr_compute_restype(gen,expr->right,ctxtype);
     left = expr->left->restype;
     right = expr->right->restype;
 
@@ -170,9 +169,9 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
     break;
   }
   case XPATH_IF:
-    xpath_compute_restype(gen,expr->test,ctxtype);
-    xpath_compute_restype(gen,expr->left,ctxtype);
-    xpath_compute_restype(gen,expr->right,ctxtype);
+    expr_compute_restype(gen,expr->test,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
+    expr_compute_restype(gen,expr->right,ctxtype);
     if (RESTYPE_RECURSIVE == expr->test->restype)
       expr->restype = RESTYPE_RECURSIVE;
     else
@@ -182,20 +181,20 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
     expr->restype = RESTYPE_NUMBER;
     break;
   case XPATH_TO:
-    xpath_compute_restype(gen,expr->left,ctxtype);
-    xpath_compute_restype(gen,expr->right,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
+    expr_compute_restype(gen,expr->right,ctxtype);
     expr->restype = RESTYPE_NUMLIST;
     break;
   case XPATH_CONTEXT_ITEM:
     expr->restype = ctxtype;
     break;
   case XPATH_FUNCTION_CALL:
-    xpath_compute_restype(gen,expr->left,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
     if (NULL == expr->target) {
       expr->restype = RESTYPE_GENERAL;
     }
     else {
-      xsltnode *d = find_derivative(expr->target,expr);
+      expression *d = find_derivative(expr->target,expr);
       if (NULL == d) {
         if (2 > list_count(expr->target->derivatives))
           d = add_derivative(gen,expr->target,expr);
@@ -208,116 +207,94 @@ static void xpath_compute_restype(elcgen *gen, expression *expr, int ctxtype)
         expr->restype = RESTYPE_RECURSIVE;
       }
       else {
-        xslt_compute_restype(gen,expr->target,RESTYPE_GENERAL);
+        expr_compute_restype(gen,expr->target,RESTYPE_GENERAL);
         expr->restype = expr->target->restype;
         expr->target->called = 1;
       }
     }
     break;
   case XPATH_ACTUAL_PARAM: 	
-    xpath_compute_restype(gen,expr->left,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
     expr->restype = expr->left->restype;
-    xpath_compute_restype(gen,expr->right,ctxtype);
+    expr_compute_restype(gen,expr->right,ctxtype);
     break;
   case XPATH_VAR_REF:
-    xslt_compute_restype(gen,expr->target,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->target,RESTYPE_GENERAL);
     expr->restype = expr->target->restype;
     break;
-  default:
-    xpath_compute_restype(gen,expr->test,RESTYPE_GENERAL);
-    xpath_compute_restype(gen,expr->left,RESTYPE_GENERAL);
-    xpath_compute_restype(gen,expr->right,RESTYPE_GENERAL);
-    expr->restype = RESTYPE_GENERAL;
-    break;
-  }
-  stack_pop(gen->typestack);
-  assert(RESTYPE_UNKNOWN != expr->restype);
-}
-
-void xslt_compute_restype(elcgen *gen, xsltnode *xn, int ctxtype)
-{
-  xsltnode *c;
-
-  if ((NULL == xn) || (RESTYPE_UNKNOWN != xn->restype))
-    return;
-
-  stack_push(gen->typestack,xn);
-
-  xn->restype = RESTYPE_GENERAL;
-
-  switch (xn->type) {
   case XSLT_FUNCTION:
-    for (c = xn->children.first; c; c = c->next)
-      xslt_compute_restype(gen,c,RESTYPE_GENERAL);
+    for (c = expr->children; c; c = c->next)
+      expr_compute_restype(gen,c,RESTYPE_GENERAL);
 
-    c = xn->children.first;
+    c = expr->children;
     while (c && (XSLT_PARAM == c->type))
       c = c->next;
     if ((NULL != c) && (NULL == c->next))
-      xn->restype = c->restype;
+      expr->restype = c->restype;
     else
-      xn->restype = RESTYPE_GENERAL;
+      expr->restype = RESTYPE_GENERAL;
     break;
   case XSLT_WHEN:
   case XSLT_OTHERWISE:
-    xpath_compute_restype(gen,xn->expr,ctxtype);
-    for (c = xn->children.first; c; c = c->next)
-      xslt_compute_restype(gen,c,ctxtype);
+    expr_compute_restype(gen,expr->left,ctxtype);
+    for (c = expr->children; c; c = c->next)
+      expr_compute_restype(gen,c,ctxtype);
 
-    if ((NULL != xn->children.first) && (NULL == xn->children.first->next))
-      xn->restype = xn->children.first->restype;
+    if ((NULL != expr->children) && (NULL == expr->children->next))
+      expr->restype = expr->children->restype;
     else
-      xn->restype = RESTYPE_GENERAL;
+      expr->restype = RESTYPE_GENERAL;
     break;
   case XSLT_SEQUENCE:
-    xpath_compute_restype(gen,xn->expr,ctxtype);
-    xn->restype = xn->expr->restype;
+    expr_compute_restype(gen,expr->left,ctxtype);
+    expr->restype = expr->left->restype;
     break;
   case XSLT_FOR_EACH:
-    xpath_compute_restype(gen,xn->expr,RESTYPE_GENERAL);
-    for (c = xn->children.first; c; c = c->next) {
-      if (RESTYPE_NUMLIST == xn->expr->restype)
-        xslt_compute_restype(gen,c,RESTYPE_NUMBER);
+    expr_compute_restype(gen,expr->left,RESTYPE_GENERAL);
+    for (c = expr->children; c; c = c->next) {
+      if (RESTYPE_NUMLIST == expr->left->restype)
+        expr_compute_restype(gen,c,RESTYPE_NUMBER);
       else
-        xslt_compute_restype(gen,c,RESTYPE_GENERAL);
+        expr_compute_restype(gen,c,RESTYPE_GENERAL);
     }
     break;
   case XSLT_CHOOSE: {
-    xsltnode *xchild;
+    expression *xchild;
     int latest = RESTYPE_UNKNOWN;
     int otherwise = 0;
 
-    for (c = xn->children.first; c; c = c->next)
-      xslt_compute_restype(gen,c,ctxtype);
+    for (c = expr->children; c; c = c->next)
+      expr_compute_restype(gen,c,ctxtype);
 
-    for (xchild = xn->children.first; xchild; xchild = xchild->next) {
+    for (xchild = expr->children; xchild; xchild = xchild->next) {
       latest = unify_conditional_types(latest,xchild->restype);
 
       if (XSLT_OTHERWISE == xchild->type)
         otherwise = 1;
     }
     if (otherwise)
-      xn->restype = latest;
+      expr->restype = latest;
     else
-      xn->restype = RESTYPE_GENERAL;
+      expr->restype = RESTYPE_GENERAL;
     break;
   }
   default:
+    expr_compute_restype(gen,expr->test,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->left,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->right,RESTYPE_GENERAL);
 
-    xpath_compute_restype(gen,xn->expr,RESTYPE_GENERAL);
-    xpath_compute_restype(gen,xn->name_avt,RESTYPE_GENERAL);
-    xpath_compute_restype(gen,xn->value_avt,RESTYPE_GENERAL);
-    xpath_compute_restype(gen,xn->namespace_avt,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->name_avt,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->value_avt,RESTYPE_GENERAL);
+    expr_compute_restype(gen,expr->namespace_avt,RESTYPE_GENERAL);
 
-    for (c = xn->children.first; c; c = c->next)
-      xslt_compute_restype(gen,c,RESTYPE_GENERAL);
-    for (c = xn->attributes.first; c; c = c->next)
-      xslt_compute_restype(gen,c,RESTYPE_GENERAL);
+    for (c = expr->children; c; c = c->next)
+      expr_compute_restype(gen,c,RESTYPE_GENERAL);
+    for (c = expr->attributes; c; c = c->next)
+      expr_compute_restype(gen,c,RESTYPE_GENERAL);
 
-    xn->restype = RESTYPE_GENERAL;
+    expr->restype = RESTYPE_GENERAL;
     break;
   }
-
   stack_pop(gen->typestack);
-  assert(RESTYPE_UNKNOWN != xn->restype);
+  assert(RESTYPE_UNKNOWN != expr->restype);
 }
