@@ -133,7 +133,7 @@ const char *expr_names[XPATH_COUNT] = {
   "choose",
   "element",
   "attribute",
-  "inamespace",
+  "namespace",
   "apply-templates",
   "literal-result-element",
   "literal-text-node",
@@ -143,6 +143,11 @@ const char *expr_names[XPATH_COUNT] = {
   "when",
   "otherwise",
   "literal-attribute",
+
+  "dsvar-instruction",
+  "dsvar-text",
+  "dsvar-litelem",
+  "dsvar-textinstr",
 };
 
 const char *axis_names[AXIS_COUNT] = {
@@ -185,6 +190,17 @@ const char *restype_names[RESTYPE_COUNT] = {
   "NUMLIST",
 };
 
+const char *expr_refnames[EXPR_REFCOUNT] = {
+  "->r.test",
+  "->r.left",
+  "->r.right",
+  "->r.name_avt",
+  "->r.value_avt",
+  "->r.namespace_avt",
+  "->r.children",
+  "->r.attributes",
+};
+
 static int ignore_node(xmlNodePtr n)
 {
   const char *c;
@@ -208,8 +224,8 @@ expression *new_expression(int type)
 expression *new_expression2(int type, expression *left, expression *right)
 {
   expression *expr = new_expression(type);
-  expr->left = left;
-  expr->right = right;
+  expr->r.left = left;
+  expr->r.right = right;
   return expr;
 }
 
@@ -223,18 +239,19 @@ void free_expression(expression *expr)
   free_qname(expr->qn);
   free(expr->str);
   free(expr->ident);
+  free(expr->orig);
 
-  free_expression(expr->test);
-  free_expression(expr->left);
-  free_expression(expr->right);
+  free_expression(expr->r.test);
+  free_expression(expr->r.left);
+  free_expression(expr->r.right);
 
-  free_expression(expr->name_avt);
-  free_expression(expr->value_avt);
-  free_expression(expr->namespace_avt);
+  free_expression(expr->r.name_avt);
+  free_expression(expr->r.value_avt);
+  free_expression(expr->r.namespace_avt);
 
-  for (c = expr->children; c; c = c->next)
+  for (c = expr->r.children; c; c = c->next)
     free_expression(c);
-  for (c = expr->attributes; c; c = c->next)
+  for (c = expr->r.attributes; c; c = c->next)
     free_expression(c);
 
   free(expr);
@@ -243,7 +260,7 @@ void free_expression(expression *expr)
 expression *new_xsltnode(xmlNodePtr n, int type)
 {
   expression *expr = (expression*)calloc(1,sizeof(expression));
-  expr->n = n;
+  expr->xmlnode = n;
   expr->type = type;
   return expr;
 }
@@ -262,16 +279,16 @@ void expr_set_parents(expression *expr, expression *parent)
     expr->parent = parent;
     expr->prev = prev;
 
-    expr_set_parents(expr->test,expr);
-    expr_set_parents(expr->left,expr);
-    expr_set_parents(expr->right,expr);
+    expr_set_parents(expr->r.test,expr);
+    expr_set_parents(expr->r.left,expr);
+    expr_set_parents(expr->r.right,expr);
 
-    expr_set_parents(expr->name_avt,expr);
-    expr_set_parents(expr->value_avt,expr);
-    expr_set_parents(expr->namespace_avt,expr);
+    expr_set_parents(expr->r.name_avt,expr);
+    expr_set_parents(expr->r.value_avt,expr);
+    expr_set_parents(expr->r.namespace_avt,expr);
 
-    expr_set_parents(expr->children,expr);
-    expr_set_parents(expr->attributes,expr);
+    expr_set_parents(expr->r.children,expr);
+    expr_set_parents(expr->r.attributes,expr);
 
     prev = expr;
     expr = expr->next;
@@ -286,7 +303,7 @@ expression *parse_xpath(elcgen *gen, expression *pnode, const char *str)
 
   pthread_mutex_lock(&xpath_lock);
 
-  parse_node = pnode ? pnode->n : NULL;
+  parse_node = pnode ? pnode->xmlnode : NULL;
   parse_firstline = parse_node ? parse_node->line : 0;
   parse_expr = NULL;
   lex_lineno = 0;
@@ -324,7 +341,7 @@ static int parse_expr_attr(elcgen *gen, xmlNodePtr n, const char *attr,
                            expression **expr, int required, expression *pnode)
 {
   char *value;
-  assert(pnode->n == n);
+  assert(pnode->xmlnode == n);
   if (!xmlHasProp(n,attr)) {
     *expr = NULL;
     if (required)
@@ -345,7 +362,7 @@ static int parse_avt(elcgen *gen, xmlNodePtr n, const char *attr,
 {
   char *value;
   char *tmp;
-  assert(pnode->n == n);
+  assert(pnode->xmlnode == n);
   if (!xmlHasProp(n,attr)) {
     *expr = NULL;
     if (required)
@@ -355,10 +372,16 @@ static int parse_avt(elcgen *gen, xmlNodePtr n, const char *attr,
   }
 
   value = xmlGetProp(n,attr);
-  tmp = (char*)malloc(strlen(value)+3);
-  sprintf(tmp,"}%s{",value);
-  *expr = parse_xpath(gen,pnode,tmp);
-  free(tmp);
+  if (gen->ispattern && (!strncmp(value,"#E",2))) {
+    *expr = new_expression(XPATH_DSVAR);
+    (*expr)->str = strdup(value+1);
+  }
+  else {
+    tmp = (char*)malloc(strlen(value)+3);
+    sprintf(tmp,"}%s{",value);
+    *expr = parse_xpath(gen,pnode,tmp);
+    free(tmp);
+  }
   free(value);
 
   return (NULL != *expr);
@@ -385,15 +408,15 @@ static int parse_name(elcgen *gen, xmlNodePtr n, expression *expr, int required)
 static int parse_attributes(elcgen *gen, xmlNodePtr elem, expression *pnode)
 {
   xmlAttrPtr attr;
-  expression **aptr = &pnode->attributes;
+  expression **aptr = &pnode->r.attributes;
 
-  for (attr = pnode->n->properties; attr; attr = attr->next) {
-    if ((attr->ns && strcmp((char*)attr->ns->href,XSLT_NAMESPACE)) ||
+  for (attr = pnode->xmlnode->properties; attr; attr = attr->next) {
+    if ((attr->ns && strcmp((char*)attr->ns->href,XSLT_NS)) ||
         (NULL == attr->ns)) {
       char *value = xmlNodeListGetString(gen->parse_doc,attr->children,1);
       char *tmp = (char*)malloc(strlen(value)+3);
 
-      expression *newnode = new_xsltnode(pnode->n,XSLT_LITERAL_ATTRIBUTE);
+      expression *newnode = new_xsltnode(pnode->xmlnode,XSLT_LITERAL_ATTRIBUTE);
       *aptr = newnode;
       aptr = &newnode->next;
 
@@ -402,11 +425,11 @@ static int parse_attributes(elcgen *gen, xmlNodePtr elem, expression *pnode)
       newnode->qn.uri = attr->ns ? strdup((char*)attr->ns) : strdup("");
       newnode->qn.localpart = strdup((char*)attr->name);
       newnode->ident = nsname_to_ident(newnode->qn.uri,newnode->qn.localpart);
-      newnode->value_avt  = parse_xpath(gen,newnode,tmp);
+      newnode->r.value_avt  = parse_xpath(gen,newnode,tmp);
       free(tmp);
       free(value);
 
-      if (NULL == newnode->value_avt)
+      if (NULL == newnode->r.value_avt)
         return 0;
     }
 
@@ -418,13 +441,13 @@ int parse_xslt(elcgen *gen, xmlNodePtr parent, expression *pnode)
 {
   xmlNodePtr n;
   int r = 1;
-  expression **cptr = &pnode->children;
+  expression **cptr = &pnode->r.children;
   for (n = parent->children; n && r; n = n->next) {
     expression *newnode = NULL;
     if (ignore_node(n))
       continue;
     if (XML_ELEMENT_NODE == n->type) {
-      if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NAMESPACE)) {
+      if (n->ns && !xmlStrcmp(n->ns->href,XSLT_NS)) {
         if (!xmlStrcmp(n->name,"output")) {
           newnode = new_xsltnode(n,XSLT_OUTPUT);
         }
@@ -437,7 +460,8 @@ int parse_xslt(elcgen *gen, xmlNodePtr parent, expression *pnode)
         }
         else if (!xmlStrcmp(n->name,"template")) {
           newnode = new_xsltnode(n,XSLT_TEMPLATE);
-          r = r && parse_expr_attr(gen,n,"match",&newnode->left,0,newnode);
+          newnode->orig = xmlGetProp(n,"match");
+          r = r && parse_expr_attr(gen,n,"match",&newnode->r.left,0,newnode);
           r = r && parse_name(gen,n,newnode,0);
         }
         else if (!xmlStrcmp(n->name,"param")) {
@@ -446,56 +470,78 @@ int parse_xslt(elcgen *gen, xmlNodePtr parent, expression *pnode)
         }
         else if (!xmlStrcmp(n->name,"when")) {
           newnode = new_xsltnode(n,XSLT_WHEN);
-          r = r && parse_expr_attr(gen,n,"test",&newnode->left,1,newnode);
+          newnode->orig = xmlGetProp(n,"test");
+          r = r && parse_expr_attr(gen,n,"test",&newnode->r.left,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"otherwise")) {
           newnode = new_xsltnode(n,XSLT_OTHERWISE);
         }
         else if (!xmlStrcmp(n->name,"variable")) {
           newnode = new_xsltnode(n,XSLT_VARIABLE);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,0,newnode);
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,0,newnode);
           r = r && parse_name(gen,n,newnode,1);
         }
         else if (!xmlStrcmp(n->name,"sequence")) {
           newnode = new_xsltnode(n,XSLT_SEQUENCE);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,1,newnode);
+          newnode->orig = xmlGetProp(n,"select");
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"value-of")) {
           newnode = new_xsltnode(n,XSLT_VALUE_OF);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,0,newnode);
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,0,newnode);
         }
         else if (!xmlStrcmp(n->name,"text")) {
-          newnode = new_xsltnode(n,XSLT_TEXT);
+          char *str = xmlNodeListGetString(gen->parse_doc,n->children,1);
+          if (!strncmp(str,"#S",2) && gen->ispattern) {
+            newnode = new_xsltnode(n,XSLT_DSVAR_TEXTINSTR);
+            newnode->str = strdup((char*)str+1);
+            free(str);
+          }
+          else {
+            newnode = new_xsltnode(n,XSLT_TEXT);
+            newnode->str = str;
+          }
         }
         else if (!xmlStrcmp(n->name,"for-each")) {
           newnode = new_xsltnode(n,XSLT_FOR_EACH);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,1,newnode);
+          newnode->orig = xmlGetProp(n,"select");
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"if")) {
           newnode = new_xsltnode(n,XSLT_IF);
-          r = r && parse_expr_attr(gen,n,"test",&newnode->left,1,newnode);
+          newnode->orig = xmlGetProp(n,"test");
+          r = r && parse_expr_attr(gen,n,"test",&newnode->r.left,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"choose")) {
           newnode = new_xsltnode(n,XSLT_CHOOSE);
         }
         else if (!xmlStrcmp(n->name,"element")) {
           newnode = new_xsltnode(n,XSLT_ELEMENT);
-          r = r && parse_avt(gen,n,"name",&newnode->name_avt,1,newnode);
-          r = r && parse_avt(gen,n,"namespace",&newnode->namespace_avt,0,newnode);
+          newnode->orig = xmlGetProp(n,"name");
+          r = r && parse_avt(gen,n,"name",&newnode->r.name_avt,1,newnode);
+          r = r && parse_avt(gen,n,"namespace",&newnode->r.namespace_avt,0,newnode);
         }
         else if (!xmlStrcmp(n->name,"attribute")) {
           newnode = new_xsltnode(n,XSLT_ATTRIBUTE);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,0,newnode);
-          r = r && parse_avt(gen,n,"name",&newnode->name_avt,1,newnode);
+          newnode->orig = xmlGetProp(n,"name");
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,0,newnode);
+          r = r && parse_avt(gen,n,"name",&newnode->r.name_avt,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"namespace")) {
-          newnode = new_xsltnode(n,XSLT_INAMESPACE);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,0,newnode);
-          r = r && parse_avt(gen,n,"name",&newnode->name_avt,1,newnode);
+          newnode = new_xsltnode(n,XSLT_NAMESPACE);
+          newnode->orig = xmlGetProp(n,"name");
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,0,newnode);
+          r = r && parse_avt(gen,n,"name",&newnode->r.name_avt,1,newnode);
         }
         else if (!xmlStrcmp(n->name,"apply-templates")) {
           newnode = new_xsltnode(n,XSLT_APPLY_TEMPLATES);
-          r = r && parse_expr_attr(gen,n,"select",&newnode->left,0,newnode);
+          newnode->orig = xmlGetProp(n,"select");
+          r = r && parse_expr_attr(gen,n,"select",&newnode->r.left,0,newnode);
+        }
+        else if (!strncmp((char*)n->name,"_Y",2) && gen->ispattern) {
+          newnode = new_xsltnode(n,XSLT_DSVAR_LITELEM);
+/*           newnode->str = strdup((char*)n->name+1); */
+          newnode->str = strdup("Y::"); /* FIXME: hack */
         }
         else {
           r = gen_error(gen,"Unsupported XSLT instruction: %s",n->name);
@@ -503,19 +549,35 @@ int parse_xslt(elcgen *gen, xmlNodePtr parent, expression *pnode)
       }
       else {
         newnode = new_xsltnode(n,XSLT_LITERAL_RESULT_ELEMENT);
+        newnode->qn.uri = n->ns ? strdup((char*)n->ns->href) : strdup("");
+        newnode->qn.prefix = (n->ns && n->ns->prefix) ? strdup((char*)n->ns->prefix) : strdup("");
+        newnode->qn.localpart = strdup((char*)n->name);
         r = r && parse_attributes(gen,n,newnode);
       }
     }
     else if (XML_TEXT_NODE == n->type) {
-      newnode = new_xsltnode(n,XSLT_LITERAL_TEXT_NODE);
+      if (!strncmp((char*)n->content,"#I",2) && gen->ispattern) {
+        newnode = new_xsltnode(n,XSLT_DSVAR_INSTRUCTION);
+        newnode->str = strdup((char*)n->content+1);
+      }
+      else if (!strncmp((char*)n->content,"#S",2) && gen->ispattern) {
+        newnode = new_xsltnode(n,XSLT_DSVAR_TEXT);
+        newnode->str = strdup((char*)n->content+1);
+      }
+      else {
+        newnode = new_xsltnode(n,XSLT_LITERAL_TEXT_NODE);
+        newnode->str = strdup((char*)n->content);
+      }
     }
     if (newnode) {
 
       *cptr = newnode;
       cptr = &newnode->next;
 
-      if (!parse_xslt(gen,n,newnode))
-        return 0;
+      if ((XSLT_TEXT != newnode->type) && (XSLT_DSVAR_TEXTINSTR != newnode->type)) {
+        if (!parse_xslt(gen,n,newnode))
+          return 0;
+      }
     }
   }
   return r;
@@ -537,7 +599,7 @@ static expression *lookup_var_ref(expression *expr, qname qn)
 expression *lookup_function(elcgen *gen, qname qn)
 {
   expression *c;
-  for (c = gen->root->children; c; c = c->next)
+  for (c = gen->root->r.children; c; c = c->next)
     if ((XSLT_FUNCTION == c->type) && qname_equals(c->qn,qn))
       return c;
   return NULL;
@@ -571,11 +633,11 @@ static int expr_semantic_check(elcgen *gen, expression *expr)
       int actualparams = 0;
       expression *fp;
       expression *ap;
-      for (ap = expr->left; ap; ap = ap->right) {
+      for (ap = expr->r.left; ap; ap = ap->r.right) {
         assert(XPATH_ACTUAL_PARAM == ap->type);
         actualparams++;
       }
-      for (fp = expr->target->children; fp; fp = fp->next) {
+      for (fp = expr->target->r.children; fp; fp = fp->next) {
         if (XSLT_PARAM == fp->type)
           formalparams++;
         else
@@ -590,11 +652,13 @@ static int expr_semantic_check(elcgen *gen, expression *expr)
     expression *xchild;
     int otherwise = 0;
     int whencount = 0;
-    for (xchild = expr->children; xchild; xchild = xchild->next) {
+    for (xchild = expr->r.children; xchild; xchild = xchild->next) {
       if (otherwise)
         return gen_error(gen,"choose contains an element after otherwise: %s",
                          expr_names[xchild->type]);
-      if ((XSLT_WHEN != xchild->type) && (XSLT_OTHERWISE != xchild->type))
+      if ((XSLT_WHEN != xchild->type) &&
+          (XSLT_OTHERWISE != xchild->type) &&
+          (XSLT_DSVAR_INSTRUCTION != xchild->type))
         return gen_error(gen,"choose element contains invalid child: %s",
                          expr_names[xchild->type]);
       if (XSLT_WHEN == xchild->type)
@@ -602,7 +666,7 @@ static int expr_semantic_check(elcgen *gen, expression *expr)
       if (XSLT_OTHERWISE == xchild->type)
         otherwise = 1;
     }
-    if (0 == whencount)
+    if ((0 == whencount) && !gen->ispattern)
       return gen_error(gen,"choose must contain at least one when");
     break;
   }
@@ -617,17 +681,17 @@ int expr_resolve_vars(elcgen *gen, expression *expr)
   if (NULL == expr)
     return 1;
 
-  r = r && expr_resolve_vars(gen,expr->test);
-  r = r && expr_resolve_vars(gen,expr->left);
-  r = r && expr_resolve_vars(gen,expr->right);
+  r = r && expr_resolve_vars(gen,expr->r.test);
+  r = r && expr_resolve_vars(gen,expr->r.left);
+  r = r && expr_resolve_vars(gen,expr->r.right);
 
-  r = r && expr_resolve_vars(gen,expr->left);
-  r = r && expr_resolve_vars(gen,expr->name_avt);
-  r = r && expr_resolve_vars(gen,expr->value_avt);
-  r = r && expr_resolve_vars(gen,expr->namespace_avt);
-  for (c = expr->children; c && r; c = c->next)
+  r = r && expr_resolve_vars(gen,expr->r.left);
+  r = r && expr_resolve_vars(gen,expr->r.name_avt);
+  r = r && expr_resolve_vars(gen,expr->r.value_avt);
+  r = r && expr_resolve_vars(gen,expr->r.namespace_avt);
+  for (c = expr->r.children; c && r; c = c->next)
     r = r && expr_resolve_vars(gen,c);
-  for (c = expr->attributes; c && r; c = c->next)
+  for (c = expr->r.attributes; c && r; c = c->next)
     r = r && expr_resolve_vars(gen,c);
   r = r && expr_resolve_ref(gen,expr);
   r = r && expr_semantic_check(gen,expr);
@@ -639,15 +703,15 @@ int exclude_namespace(elcgen *gen, expression *expr, const char *uri)
   int found = 0;
   expression *xp;
 
-  if (!strcmp(uri,XSLT_NAMESPACE))
+  if (!strcmp(uri,XSLT_NS))
     return 1;
 
   for (xp = expr; xp && !found; xp = xp->parent) {
     char *str;
-    if (xp->n->ns && !strcmp((char*)xp->n->ns->href,XSLT_NAMESPACE))
-      str = xmlGetNsProp(xp->n,"exclude-result-prefixes",NULL);
+    if (xp->xmlnode->ns && !strcmp((char*)xp->xmlnode->ns->href,XSLT_NS))
+      str = xmlGetNsProp(xp->xmlnode,"exclude-result-prefixes",NULL);
     else
-      str = xmlGetNsProp(xp->n,"exclude-result-prefixes",XSLT_NAMESPACE);
+      str = xmlGetNsProp(xp->xmlnode,"exclude-result-prefixes",XSLT_NS);
     if (str) {
       int end = 0;
       char *start = str;
@@ -661,13 +725,13 @@ int exclude_namespace(elcgen *gen, expression *expr, const char *uri)
             *c = '\0';
 
             if (!strcmp(start,"#all")) {
-              found = (NULL != xmlSearchNsByHref(gen->parse_doc,xp->n,(xmlChar*)uri));
+              found = (NULL != xmlSearchNsByHref(gen->parse_doc,xp->xmlnode,(xmlChar*)uri));
             }
             else if (!strcmp(start,"#default")) {
-              found = ((NULL != xp->n->ns) && !strcmp((char*)xp->n->ns->href,uri));
+              found = ((NULL != xp->xmlnode->ns) && !strcmp((char*)xp->xmlnode->ns->href,uri));
             }
             else {
-              ns = xmlSearchNs(gen->parse_doc,xp->n,(xmlChar*)start);
+              ns = xmlSearchNs(gen->parse_doc,xp->xmlnode,(xmlChar*)start);
               found = ((NULL != ns) && !strcmp((char*)ns->href,uri));
             }
           }
@@ -692,20 +756,25 @@ void expr_print_tree(elcgen *gen, int indent, expression *expr)
     else
       gen_printf(gen," {%s}%s",expr->qn.uri,expr->qn.localpart);
   }
+  if (expr->str) {
+    char *esc = escape(expr->str);
+    gen_printf(gen," \"%s\"",esc);
+    free(esc);
+  }
   if (RESTYPE_UNKNOWN != expr->restype)
     gen_printf(gen," [%s]",restype_names[expr->restype]);
   if ((XSLT_FUNCTION == expr->type) && !expr->called)
     gen_printf(gen," -- not called");
-  expr_print_tree(gen,indent+1,expr->test);
-  expr_print_tree(gen,indent+1,expr->left);
-  expr_print_tree(gen,indent+1,expr->right);
+  expr_print_tree(gen,indent+1,expr->r.test);
+  expr_print_tree(gen,indent+1,expr->r.left);
+  expr_print_tree(gen,indent+1,expr->r.right);
 
-  expr_print_tree(gen,indent+1,expr->name_avt);
-  expr_print_tree(gen,indent+1,expr->value_avt);
-  expr_print_tree(gen,indent+1,expr->namespace_avt);
-  for (c = expr->children; c; c = c->next)
+  expr_print_tree(gen,indent+1,expr->r.name_avt);
+  expr_print_tree(gen,indent+1,expr->r.value_avt);
+  expr_print_tree(gen,indent+1,expr->r.namespace_avt);
+  for (c = expr->r.children; c; c = c->next)
     expr_print_tree(gen,indent+1,c);
-  for (c = expr->attributes; c; c = c->next)
+  for (c = expr->r.attributes; c; c = c->next)
     expr_print_tree(gen,indent+1,c);
 }
 
@@ -722,31 +791,32 @@ expression *expr_copy(expression *orig)
   copy = (expression*)calloc(1,sizeof(expression));
   copy->type = orig->type;
   copy->qn = copy_qname(orig->qn);
-  copy->n = orig->n;
+  copy->xmlnode = orig->xmlnode;
   copy->ident = orig->ident ? strdup(orig->ident) : NULL;
   copy->axis = orig->axis;
   copy->num = orig->num;
   copy->str = orig->str ? strdup(orig->str) : NULL;
+  copy->orig = orig->orig ? strdup(orig->orig) : NULL;
   copy->kind = orig->kind;
 
   /* branches */
-  copy->test = expr_copy(orig->test);
-  copy->left = expr_copy(orig->left);
-  copy->right = expr_copy(orig->right);
+  copy->r.test = expr_copy(orig->r.test);
+  copy->r.left = expr_copy(orig->r.left);
+  copy->r.right = expr_copy(orig->r.right);
 
-  copy->name_avt = expr_copy(orig->name_avt);
-  copy->value_avt = expr_copy(orig->value_avt);
-  copy->namespace_avt = expr_copy(orig->namespace_avt);
+  copy->r.name_avt = expr_copy(orig->r.name_avt);
+  copy->r.value_avt = expr_copy(orig->r.value_avt);
+  copy->r.namespace_avt = expr_copy(orig->r.namespace_avt);
 
   /* children and attributes */
-  cptr = &copy->children;
-  for (oc = orig->children; oc; oc = oc->next) {
+  cptr = &copy->r.children;
+  for (oc = orig->r.children; oc; oc = oc->next) {
     *cptr = expr_copy(oc);
     cptr = &(*cptr)->next;
   }
 
-  cptr = &copy->attributes;
-  for (oc = orig->attributes; oc; oc = oc->next) {
+  cptr = &copy->r.attributes;
+  for (oc = orig->r.attributes; oc; oc = oc->next) {
     *cptr = expr_copy(oc);
     cptr = &(*cptr)->next;
   }

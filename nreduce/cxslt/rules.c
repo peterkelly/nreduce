@@ -68,114 +68,114 @@ int compile_expression(elcgen *gen, int indent, expression *expr)
   }
   else if ((XPATH_VALUE_EQ == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_eq ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_NE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_ne ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_lt ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_le ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_gt ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_ge ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_ADD == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::add ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_SUBTRACT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::subtract ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_MULTIPLY == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::multiply ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_DIVIDE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::divide ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_IDIVIDE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::idivide ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_MOD == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::mod ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_UNARY_MINUS == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::uminus ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen,")");
   }
   else if ((XPATH_UNARY_PLUS == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::uplus ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen,")");
   }
   else if ((XPATH_IF == expr->type)) {
     gen_iprintf(gen,indent,"(if ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->test);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.test);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_TO == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::range ");
     gen_iprintf(gen,indent,"  (xslt::getnumber ");
-    r = r && compile_expression(gen,indent+2,expr->left);
+    r = r && compile_expression(gen,indent+2,expr->r.left);
     gen_printf(gen,") ");
     gen_iprintf(gen,indent,"  (xslt::getnumber ");
-    r = r && compile_expression(gen,indent+2,expr->right);
+    r = r && compile_expression(gen,indent+2,expr->r.right);
     gen_printf(gen,"))");
   }
   else if ((XPATH_CONTEXT_ITEM == expr->type)) {
@@ -189,66 +189,70 @@ int compile_expression(elcgen *gen, int indent, expression *expr)
   }
   else if ((XPATH_SEQUENCE == expr->type)) {
     gen_iprintf(gen,indent,"(append ");
-    r = r && compile_expression(gen,indent,expr->left);
+    r = r && compile_expression(gen,indent,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent,expr->right);
+    r = r && compile_expression(gen,indent,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_STEP == expr->type)) {
-    if (is_expr_doc_order(expr->left) && is_expr_doc_order(expr->right))
+    if (is_expr_doc_order(expr->r.left) && is_expr_doc_order(expr->r.right))
       gen_iprintf(gen,indent,"(xslt::path_result");
     else
       gen_iprintf(gen,indent,"(xslt::path_result_sort");
     gen_iprintf(gen,indent,"  (xslt::apmap3 (!citem.!cpos.!csize.");
-    r = r && compile_expression(gen,indent+2,expr->right);
+    r = r && compile_expression(gen,indent+2,expr->r.right);
     gen_printf(gen,") ");
-    r = r && compile_expression(gen,indent+2,expr->left);
+    r = r && compile_expression(gen,indent+2,expr->r.left);
     gen_printf(gen,"))");
   }
   else if ((XPATH_NODE_TEST == expr->type) &&
-           (XPATH_AXIS == expr->left->type) &&
-           is_forward_axis(expr->left->axis)) {
+           (XPATH_AXIS == expr->r.left->type) &&
+           is_forward_axis(expr->r.left->axis)) {
     gen_iprintf(gen,indent,"(filter ");
     r = r && compile_test(gen,indent+1,expr);
-    r = r && compile_axis(gen,indent+1,expr->left);
+    gen_printf(gen," ");
+    r = r && compile_axis(gen,indent+1,expr->r.left);
     gen_printf(gen,")");
   }
   else if ((XPATH_NODE_TEST == expr->type) &&
-           (XPATH_AXIS == expr->left->type) &&
-           is_reverse_axis(expr->left->axis)) {
+           (XPATH_AXIS == expr->r.left->type) &&
+           is_reverse_axis(expr->r.left->axis)) {
     gen_iprintf(gen,indent,"(reverse ");
     gen_iprintf(gen,indent,"  (filter ");
     r = r && compile_test(gen,indent+2,expr);
-    r = r && compile_axis(gen,indent+2,expr->left);
+    gen_printf(gen," ");
+    r = r && compile_axis(gen,indent+2,expr->r.left);
     gen_printf(gen,")");
     gen_printf(gen,")");
   }
   else if ((XPATH_FILTER == expr->type) &&
-           (XPATH_NODE_TEST == expr->left->type) &&
-           (XPATH_AXIS == expr->left->left->type) &&
-           is_forward_axis(expr->left->left->axis)) {
+           (XPATH_NODE_TEST == expr->r.left->type) &&
+           (XPATH_AXIS == expr->r.left->r.left->type) &&
+           is_forward_axis(expr->r.left->r.left->axis)) {
     gen_iprintf(gen,indent,"(xslt::filter3");
     gen_iprintf(gen,indent,"  (!citem.!cpos.!csize.");
-    r = r && compile_predicate(gen,indent+1,expr->right);
+    r = r && compile_predicate(gen,indent+1,expr->r.right);
     gen_printf(gen,") ");
     gen_iprintf(gen,indent,"  (filter ");
-    r = r && compile_test(gen,indent+2,expr->left);
-    r = r && compile_axis(gen,indent+2,expr->left->left);
+    r = r && compile_test(gen,indent+2,expr->r.left);
+    gen_printf(gen," ");
+    r = r && compile_axis(gen,indent+2,expr->r.left->r.left);
     gen_printf(gen,")");
     gen_printf(gen,")");
   }
   else if ((XPATH_FILTER == expr->type) &&
-           (XPATH_NODE_TEST == expr->left->type) &&
-           (XPATH_AXIS == expr->left->left->type) &&
-           is_reverse_axis(expr->left->left->axis)) {
+           (XPATH_NODE_TEST == expr->r.left->type) &&
+           (XPATH_AXIS == expr->r.left->r.left->type) &&
+           is_reverse_axis(expr->r.left->r.left->axis)) {
     gen_iprintf(gen,indent,"(reverse ");
     gen_iprintf(gen,indent,"  (xslt::filter3");
     gen_iprintf(gen,indent,"    (!citem.!cpos.!csize.");
-    r = r && compile_predicate(gen,indent+2,expr->right);
+    r = r && compile_predicate(gen,indent+2,expr->r.right);
     gen_printf(gen,") ");
     gen_iprintf(gen,indent,"    (filter ");
-    r = r && compile_test(gen,indent+3,expr->left);
-    r = r && compile_axis(gen,indent+3,expr->left->left);
+    r = r && compile_test(gen,indent+3,expr->r.left);
+    gen_printf(gen," ");
+    r = r && compile_axis(gen,indent+3,expr->r.left->r.left);
     gen_printf(gen,")");
     gen_printf(gen,")");
     gen_printf(gen,")");
@@ -267,9 +271,9 @@ int compile_expression(elcgen *gen, int indent, expression *expr)
   else if ((XPATH_FILTER == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::filter3");
     gen_iprintf(gen,indent,"  (!citem.!cpos.!csize.");
-    r = r && compile_predicate(gen,indent+1,expr->right);
+    r = r && compile_predicate(gen,indent+1,expr->r.right);
     gen_printf(gen,") ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen,")");
   }
   else {
@@ -284,9 +288,9 @@ int compile_predicate(elcgen *gen, int indent, expression *expr)
 
   if ((XPATH_PREDICATE == expr->type)) {
     gen_iprintf(gen,indent,"(if (xslt::predicate_match cpos ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen,") ");
-    r = r && compile_predicate(gen,indent+1,expr->right);
+    r = r && compile_predicate(gen,indent+1,expr->r.right);
     gen_printf(gen," nil)");
   }
   else {
@@ -362,12 +366,12 @@ int compile_axis(elcgen *gen, int indent, expression *expr)
 int compile_test(elcgen *gen, int indent, expression *expr)
 {
   assert(XPATH_NODE_TEST == expr->type);
-  assert(expr->right);
-  assert(expr->left);
-  assert(XPATH_AXIS == expr->left->type);
-  assert(AXIS_INVALID != expr->left->axis);
-  expression *axis = expr->left;
-  expr = expr->right;
+  assert(expr->r.right);
+  assert(expr->r.left);
+  assert(XPATH_AXIS == expr->r.left->type);
+  assert(AXIS_INVALID != expr->r.left->axis);
+  expression *axis = expr->r.left;
+  expr = expr->r.right;
   assert((XPATH_KIND_TEST == expr->type) || (XPATH_NAME_TEST == expr->type));
 
   int r = 1;
@@ -424,208 +428,208 @@ int compile_ebv_expression(elcgen *gen, int indent, expression *expr)
 
   if ((XPATH_AND == expr->type)) {
     gen_printf(gen,"(&& ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->left);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->right);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_OR == expr->type)) {
     gen_printf(gen,"(|| ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->left);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->right);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_EQ == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(== ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_NE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(!= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_LT == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(< ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_LE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(<= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_GT == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(> ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_GE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(>= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_EQ == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(== ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_NE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(!= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LT == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(< ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(<= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GT == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(> ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GE == expr->type) &&
-           (RESTYPE_NUMBER == expr->left->restype) &&
-           (RESTYPE_NUMBER == expr->right->restype)) {
+           (RESTYPE_NUMBER == expr->r.left->restype) &&
+           (RESTYPE_NUMBER == expr->r.right->restype)) {
     gen_iprintf(gen,indent,"(>= ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_EQ == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_eq ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_NE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_ne ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_LT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_lt ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_LE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_le ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_GT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_gt ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_GENERAL_GE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::general_ge ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_EQ == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_eq_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_NE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_ne_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_lt_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_LE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_le_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_gt_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_VALUE_GE == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::value_ge_ebv ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_expression(gen,indent+1,expr->right);
+    r = r && compile_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else {
@@ -642,53 +646,53 @@ int compile_num_expression(elcgen *gen, int indent, expression *expr)
 
   if ((XPATH_ADD == expr->type)) {
     gen_iprintf(gen,indent,"(+ ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_SUBTRACT == expr->type)) {
     gen_iprintf(gen,indent,"(- ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_MULTIPLY == expr->type)) {
     gen_iprintf(gen,indent,"(* ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_DIVIDE == expr->type)) {
     gen_iprintf(gen,indent,"(/ ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_IDIVIDE == expr->type)) {
     gen_iprintf(gen,indent,"(idiv ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_MOD == expr->type)) {
     gen_iprintf(gen,indent,"(%% ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_IF == expr->type)) {
     gen_iprintf(gen,indent,"(if ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->test);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.test);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->left);
+    r = r && compile_num_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_num_expression(gen,indent+1,expr->right);
+    r = r && compile_num_expression(gen,indent+1,expr->r.right);
     gen_printf(gen,")");
   }
   else if ((XPATH_CONTEXT_ITEM == expr->type)) {
@@ -710,31 +714,64 @@ int compile_num_expression(elcgen *gen, int indent, expression *expr)
   return r;
 }
 
-int compile_choose(elcgen *gen, int indent, expression *xchild)
+int compile_avt(elcgen *gen, int indent, expression *expr)
 {
   int r = 1;
 
-  if ((NULL == xchild)) {
-    gen_printf(gen,"nil");
-  }
-  else if ((XSLT_WHEN == xchild->type)) {
-    gen_printorig(gen,indent,"when",xchild,"test");
-    gen_iprintf(gen,indent,"(if ");
-    r = r && compile_ebv_expression(gen,indent+1,xchild->left);
+  if ((XPATH_AVT_COMPONENT == expr->type)) {
+    gen_printf(gen,"(append ");
+    r = r && compile_avt(gen,indent,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_sequence(gen,indent+1,xchild->children);
-    gen_printf(gen," ");
-    r = r && compile_choose(gen,indent,xchild->next);
+    r = r && compile_avt(gen,indent,expr->r.right);
     gen_printf(gen,")");
   }
-  else if ((XSLT_OTHERWISE == xchild->type)) {
-    gen_printorig(gen,indent,"otherwise",NULL,NULL);
-    r = r && compile_sequence(gen,indent,xchild->children);
+  else if ((XPATH_STRING_LITERAL == expr->type)) {
+    gen_printf(gen,"\"");
+    char *esc = escape(expr->str);
+    gen_printf(gen,"%s",esc);
+    free(esc);
+    gen_printf(gen,"\"");
   }
   else {
-    r = gen_error(gen,"Invalid element in choose: %s\n",expr_names[xchild->type]);
+    gen_printf(gen,"(xslt::consimple ");
+    r = r && compile_expression(gen,indent,expr);
+    gen_printf(gen,")");
   }
+  return r;
+}
 
+int compile_choose(elcgen *gen, int indent, expression *expr)
+{
+  int r = 1;
+
+  if ((XSLT_WHEN == expr->type) &&
+           (NULL != expr->r.left) &&
+           (NULL != expr->next)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(if ");
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.left);
+    gen_printf(gen," ");
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
+    gen_printf(gen," ");
+    r = r && compile_choose(gen,indent,expr->next);
+    gen_printf(gen,")");
+  }
+  else if ((XSLT_WHEN == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(if ");
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.left);
+    gen_printf(gen," ");
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
+    gen_printf(gen," nil)");
+  }
+  else if ((XSLT_OTHERWISE == expr->type)) {
+    gen_printorig(gen,indent,expr);
+    r = r && compile_sequence(gen,indent,expr->r.children);
+  }
+  else {
+    return gen_error(gen,"Unexpected expression type: %s",expr_names[expr->type]);
+  }
   return r;
 }
 
@@ -742,179 +779,143 @@ int compile_instruction(elcgen *gen, int indent, expression *expr)
 {
   int r = 1;
 
-  if ((XSLT_SEQUENCE == expr->type)) {
-    gen_printorig(gen,indent,"sequence",expr,"select");
-    r = r && compile_expression(gen,indent,expr->left);
+  if ((XSLT_SEQUENCE == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_printorig(gen,indent,expr);
+    r = r && compile_expression(gen,indent,expr->r.left);
+  }
+  else if ((XSLT_VALUE_OF == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_iprintf(gen,indent,"(xslt::construct_value_of ");
+    r = r && compile_expression(gen,indent,expr->r.left);
+    gen_printf(gen,")");
   }
   else if ((XSLT_VALUE_OF == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::construct_value_of ");
-    if (expr->left)
-      r = r && compile_expression(gen,indent,expr->left);
-    else
-      r = r && compile_sequence(gen,indent,expr->children);
+    r = r && compile_sequence(gen,indent,expr->r.children);
     gen_printf(gen,")");
   }
-  else if ((XSLT_TEXT == expr->type)) {
-    char *str = xmlNodeListGetString(gen->parse_doc,expr->n->children,1);
-    char *esc = escape(str);
-    gen_iprintf(gen,indent,"(xslt::construct_text \"%s\")",esc);
-    free(esc);
-    free(str);
+  else if ((XSLT_VALUE_OF == expr->type)) {
+    gen_iprintf(gen,indent,"(xslt::construct_value_of nil)");
   }
-  else if ((XSLT_FOR_EACH == expr->type)) {
-    gen_printorig(gen,indent,"for-each",expr,"select");
+  else if ((XSLT_TEXT == expr->type)) {
+    gen_iprintf(gen,indent,"(xslt::construct_text \"");
+    char *esc = escape(expr->str);
+    gen_printf(gen,"%s",esc);
+    free(esc);
+    gen_printf(gen,"\")");
+  }
+  else if ((XSLT_FOR_EACH == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_printorig(gen,indent,expr);
     gen_iprintf(gen,indent,"(xslt::foreach3 ");
-    r = r && compile_expression(gen,indent+1,expr->left);
+    r = r && compile_expression(gen,indent+1,expr->r.left);
     gen_iprintf(gen,indent,"  (!citem.!cpos.!csize.");
-    r = r && compile_sequence(gen,indent+2,expr->children);
+    r = r && compile_sequence(gen,indent+2,expr->r.children);
     gen_printf(gen,"))");
   }
-  else if ((XSLT_IF == expr->type)) {
-    gen_printorig(gen,indent,"if",expr,"test");
+  else if ((XSLT_IF == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_printorig(gen,indent,expr);
     gen_iprintf(gen,indent,"(if ");
-    r = r && compile_ebv_expression(gen,indent+1,expr->left);
+    r = r && compile_ebv_expression(gen,indent+1,expr->r.left);
     gen_printf(gen," ");
-    r = r && compile_sequence(gen,indent+1,expr->children);
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
     gen_iprintf(gen,indent,"  nil)");
   }
   else if ((XSLT_CHOOSE == expr->type)) {
-    gen_printorig(gen,indent,"choose",NULL,NULL);
-    r = r && compile_choose(gen,indent,expr->children);
+    gen_printorig(gen,indent,expr);
+    r = r && compile_choose(gen,indent,expr->r.children);
   }
-  else if ((XSLT_ELEMENT == expr->type)) {
-    /* FIXME: complete this, and handle namespaces properly */
-    gen_printorig(gen,indent,"element",expr,"name");
+  else if ((XSLT_ELEMENT == expr->type) &&
+           (NULL != expr->r.name_avt) &&
+           (NULL != expr->r.namespace_avt)) {
+    gen_printorig(gen,indent,expr);
     gen_iprintf(gen,indent,"(xslt::construct_elem1 ");
-
-    if (expr->namespace_avt)
-      r = r && compile_avt(gen,indent,expr->namespace_avt);
-    else
-      gen_iprintf(gen,indent,"nil ");
-
-    r = r && compile_avt(gen,indent,expr->name_avt);
-
+    r = r && compile_avt(gen,indent,expr->r.namespace_avt);
+    r = r && compile_avt(gen,indent,expr->r.name_avt);
     gen_printf(gen," nil nil ");
-    r = r && compile_sequence(gen,indent+1,expr->children);
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
     gen_printf(gen,")");
   }
-  else if ((XSLT_ATTRIBUTE == expr->type)) {
-    /* FIXME: handle namespaces properly */
-    gen_printorig(gen,indent,"attribute",expr,"name");
-    gen_iprintf(gen,indent,"(cons (xml::mkattr nil nil nil nil ");
-    gen_printf(gen,"nil "); // nsuri
-    gen_printf(gen,"nil "); // nsprefix
-
-    // localname
-    r = r && compile_avt(gen,indent+1,expr->name_avt);
-    // value
+  else if ((XSLT_ELEMENT == expr->type) &&
+           (NULL != expr->r.name_avt)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(xslt::construct_elem1 ");
+    gen_iprintf(gen,indent,"nil ");
+    r = r && compile_avt(gen,indent,expr->r.name_avt);
+    gen_printf(gen," nil nil ");
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
+    gen_printf(gen,")");
+  }
+  else if ((XSLT_ATTRIBUTE == expr->type) &&
+           (NULL != expr->r.left) &&
+           (NULL != expr->r.name_avt)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(cons (xml::mkattr nil nil nil nil nil nil ");
+    r = r && compile_avt(gen,indent+1,expr->r.name_avt);
     gen_printf(gen,"(xslt::consimple ");
-    if (expr->left)
-      r = r && compile_expression(gen,indent+1,expr->left);
-    else
-      r = r && compile_sequence(gen,indent+1,expr->children);
-    gen_printf(gen,")");
+    r = r && compile_expression(gen,indent+1,expr->r.left);
+    gen_printf(gen,")) nil)");
+  }
+  else if ((XSLT_ATTRIBUTE == expr->type) &&
+           (NULL != expr->r.name_avt)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(cons (xml::mkattr nil nil nil nil nil nil ");
+    r = r && compile_avt(gen,indent+1,expr->r.name_avt);
+    gen_printf(gen,"(xslt::consimple ");
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
+    gen_printf(gen,")) nil)");
+  }
+  else if ((XSLT_NAMESPACE == expr->type) &&
+           (NULL != expr->r.left) &&
+           (NULL != expr->r.name_avt)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(cons (xml::mknamespace (xslt::consimple ");
+    r = r && compile_expression(gen,indent,expr->r.left);
+    gen_printf(gen,") ");
+    r = r && compile_avt(gen,indent,expr->r.name_avt);
     gen_printf(gen,") nil)");
   }
-  else if ((XSLT_INAMESPACE == expr->type)) {
-    gen_printorig(gen,indent,"namespace",expr,"name");
+  else if ((XSLT_NAMESPACE == expr->type) &&
+           (NULL != expr->r.name_avt)) {
+    gen_printorig(gen,indent,expr);
     gen_iprintf(gen,indent,"(cons (xml::mknamespace (xslt::consimple ");
-
-    if (expr->left)
-      r = r && compile_expression(gen,indent,expr->left);
-    else
-      r = r && compile_sequence(gen,indent,expr->children);
+    r = r && compile_sequence(gen,indent,expr->r.children);
     gen_printf(gen,") ");
-
-    r = r && compile_avt(gen,indent,expr->name_avt);
+    r = r && compile_avt(gen,indent,expr->r.name_avt);
     gen_printf(gen,") nil)");
+  }
+  else if ((XSLT_APPLY_TEMPLATES == expr->type) &&
+           (NULL != expr->r.left)) {
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(apply_templates ");
+    r = r && compile_expression(gen,indent+1,expr->r.left);
+    gen_printf(gen,")");
   }
   else if ((XSLT_APPLY_TEMPLATES == expr->type)) {
-    gen_printorig(gen,indent,"apply-templates",expr,"select");
-    gen_iprintf(gen,indent,"(apply_templates ");
-    if (expr->left)
-      r = r && compile_expression(gen,indent+1,expr->left);
-    else
-      gen_printf(gen,"(xml::item_children citem)");
-    gen_printf(gen,")");
+    gen_printorig(gen,indent,expr);
+    gen_iprintf(gen,indent,"(apply_templates (xml::item_children citem))");
   }
   else if ((XSLT_LITERAL_RESULT_ELEMENT == expr->type)) {
-    /* literal result element */
     gen_iprintf(gen,indent,"(xslt::construct_elem2 ");
-    if (expr->n->ns && expr->n->ns->prefix)
-      gen_printf(gen," \"%s\" \"%s\" \"%s\" ",expr->n->ns->href,expr->n->ns->prefix,expr->n->name);
-    else if (expr->n->ns)
-      gen_printf(gen," \"%s\" \"\" \"%s\" ",expr->n->ns->href,expr->n->name);
-    else
-      gen_printf(gen," nil nil \"%s\" ",expr->n->name);
+    gen_printf(gen," \"%s\" \"%s\" \"%s\" ",expr->qn.uri,expr->qn.prefix,expr->qn.localpart);
     r = r && compile_attributes(gen,indent+1,expr);
     gen_printf(gen," ");
     r = r && compile_namespaces(gen,indent+1,expr);
     gen_printf(gen," ");
-    r = r && compile_sequence(gen,indent+1,expr->children);
+    r = r && compile_sequence(gen,indent+1,expr->r.children);
     gen_printf(gen,")");
   }
   else if ((XSLT_LITERAL_TEXT_NODE == expr->type)) {
-    char *esc = escape((const char*)expr->n->content);
-    gen_iprintf(gen,indent,"(xslt::construct_text \"%s\")",esc);
+    gen_iprintf(gen,indent,"(xslt::construct_text \"");
+    char *esc = escape(expr->str);
+    gen_printf(gen,"%s",esc);
     free(esc);
+    gen_printf(gen,"\")");
   }
   else {
-    return gen_error(gen,"Invalid XSLT node: %d\n",expr->type);
+    return gen_error(gen,"Unexpected expression type: %s",expr_names[expr->type]);
   }
-
-  return r;
-}
-
-int compile_num_sequence(elcgen *gen, int indent, expression *xfirst)
-{
-  expression *xchild;
-  int count = 0;
-  int r = 1;
-
-  for (xchild = xfirst; xchild && (XSLT_VARIABLE == xchild->type); xchild = xchild->next) {
-    if (!compile_variable(gen,indent,xchild))
-      return 0;
-    count++;
-  }
-
-  assert(xchild);
-  assert(NULL == xchild->next);
-
-  r = compile_num_instruction(gen,indent,xchild);
-
-  while (0 < count--)
-    gen_printf(gen,")");
-  return r;
-}
-
-int compile_sequence(elcgen *gen, int indent, expression *xfirst)
-{
-  expression *xchild;
-  int count = 0;
-  int r = 1;
-
-  if (NULL == xfirst) {
-    gen_printf(gen,"nil");
-    return 1;
-  }
-
-  if (NULL == xfirst->next)
-    return compile_instruction(gen,indent,xfirst);
-
-  for (xchild = xfirst; xchild && r; xchild = xchild->next) {
-    if (XSLT_VARIABLE == xchild->type) {
-      /* FIXME: support top-level variables as well */
-      r = compile_variable(gen,indent,xchild);
-    }
-    else {
-      gen_printf(gen,"(append ");
-      r = compile_instruction(gen,indent,xchild);
-      gen_printf(gen," ");
-    }
-    count++;
-  }
-  gen_printf(gen,"nil");
-  while (0 < count--)
-    gen_printf(gen,")");
   return r;
 }

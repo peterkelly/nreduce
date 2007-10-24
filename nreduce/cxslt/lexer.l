@@ -61,8 +61,13 @@ NCNAME ([a-zA-Z]|_)([a-zA-Z0-9]|\.|-|_)*
 \}                       { string_buf_ptr = string_buf; BEGIN(avt); }
 <avt>\{                  { BEGIN(INITIAL);
                            *string_buf_ptr = '\0';
-                           xlval.string = strdup(string_buf);
-                           return AVT_LITERAL; }
+                           if (0 < strlen(string_buf)) {
+                             xlval.string = strdup(string_buf);
+                             return AVT_LITERAL;
+                           }
+                           else {
+                             return AVT_EMPTY;
+                           } }
 <avt>"{{"                { *string_buf_ptr++ = '{'; }
 <avt>"}}"                { *string_buf_ptr++ = '}'; }
 <avt>.                   { *string_buf_ptr++ = xtext[0]; }

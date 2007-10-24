@@ -87,6 +87,7 @@ CHAR                     \'.\'
 ";"                      { return ';'; }
 ":"                      { return ':'; }
 "*"                      { return '*'; }
+"@"                      { return '@'; }
 "+"                      { return PLUS; }
 "++"                     { return PLUSPLUS; }
 "+++"                    { return PLUSPLUSPLUS; }

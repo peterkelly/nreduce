@@ -84,6 +84,8 @@ SyntaxPart:
                                     $$->type = SYNTAX_VAR;
                                     $$->vn = $1;
                                     $$->str = varname_str($1); }
+| '@'                             { $$ = (syntax*)calloc(1,sizeof(syntax));
+                                    $$->type = SYNTAX_PRINTORIG; }
 | Call                            { $$ = $1; }
 | PLUS Call                       { $$ = $2;
                                     $$->indent = 1; }
@@ -115,9 +117,10 @@ Rules:
 ;
 
 Mapping:
-  ':' IDENT IDENT ';'             { $$ = (mapping*)calloc(1,sizeof(mapping));
+  ':' IDENT IDENT IDENT ';'       { $$ = (mapping*)calloc(1,sizeof(mapping));
                                     $$->name = $2;
-                                    $$->fun = $3; }
+                                    $$->language = $3;
+                                    $$->fun = $4; }
 ;
 
 Mappings:

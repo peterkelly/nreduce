@@ -30,7 +30,7 @@
 
 static int is_wsdl_element(xmlNodePtr n, const char *name)
 {
-  return is_element(n,WSDL_NAMESPACE,name);
+  return is_element(n,WSDL_NS,name);
 }
 
 int process_wsdl(elcgen *gen, const char *filename, wsdlfile **wfout)
@@ -99,7 +99,7 @@ static xmlNodePtr get_child(xmlNodePtr parent, const char *elemns, const char *e
 
 static xmlNodePtr get_object(xmlNodePtr wsdlroot, const char *type, const char *name)
 {
-  return get_child(wsdlroot,WSDL_NAMESPACE,type,"name",name);
+  return get_child(wsdlroot,WSDL_NS,type,"name",name);
 }
 
 int wsdl_get_style(elcgen *gen, xmlNodePtr wsdlroot, int *styleout)
@@ -110,13 +110,13 @@ int wsdl_get_style(elcgen *gen, xmlNodePtr wsdlroot, int *styleout)
   xmlNodePtr soapb;
 
   *styleout = 0;
-  if ((NULL != (service = get_child(wsdlroot,WSDL_NAMESPACE,"service",NULL,NULL))) &&
-      (NULL != (port = get_child(service,WSDL_NAMESPACE,"port",NULL,NULL))) &&
+  if ((NULL != (service = get_child(wsdlroot,WSDL_NS,"service",NULL,NULL))) &&
+      (NULL != (port = get_child(service,WSDL_NS,"port",NULL,NULL))) &&
       xmlHasProp(port,"binding")) {
 
     qname bqn = get_qname_attr(port,"binding");
-    if ((NULL != (binding = get_child(wsdlroot,WSDL_NAMESPACE,"binding","name",bqn.localpart))) &&
-        (NULL != (soapb = get_child(binding,WSDLSOAP_NAMESPACE,"binding",NULL,NULL))) &&
+    if ((NULL != (binding = get_child(wsdlroot,WSDL_NS,"binding","name",bqn.localpart))) &&
+        (NULL != (soapb = get_child(binding,WSDLSOAP_NS,"binding",NULL,NULL))) &&
         xmlHasProp(soapb,"style")) {
 
       char *style = xmlGetProp(soapb,"style");
@@ -144,8 +144,8 @@ int wsdl_get_url(elcgen *gen, wsdlfile *wf, char **urlout)
   xmlNodePtr address;
 
   if ((NULL != (service = get_object(wf->root,"service",NULL))) &&
-      (NULL != (port = get_child(service,WSDL_NAMESPACE,"port",NULL,NULL))) &&
-      (NULL != (address = get_child(port,WSDLSOAP_NAMESPACE,"address",NULL,NULL)))) {
+      (NULL != (port = get_child(service,WSDL_NS,"port",NULL,NULL))) &&
+      (NULL != (address = get_child(port,WSDLSOAP_NS,"address",NULL,NULL)))) {
     if (xmlHasProp(address,"location")) {
 /*       printf("service name = %s\n",xmlGetProp(service,"name")); */
 /*       printf("port name = %s\n",xmlGetProp(port,"name")); */
@@ -161,12 +161,12 @@ static xmlNodePtr get_element_r(xmlNodePtr schema, const char *elemname)
 {
   xmlNodePtr n;
   for (n = schema->children; n; n = n->next) {
-    if (is_element(n,XMLSCHEMA_NAMESPACE,"element")) {
+    if (is_element(n,XMLSCHEMA_NS,"element")) {
       char *name = xmlGetProp(n,"name");
       if (!strcmp(name,elemname))
         return n;
     }
-    else if (is_element(n,XMLSCHEMA_NAMESPACE,"schema")) {
+    else if (is_element(n,XMLSCHEMA_NS,"schema")) {
       xmlNodePtr element;
       if (NULL != (element = get_element_r(n,elemname)))
         return element;
@@ -195,7 +195,7 @@ static xmlNodePtr get_element(wsdlfile *wf, const char *elemname)
     return NULL;
 
   for (n = types->children; n; n = n->next) {
-    if (is_element(n,XMLSCHEMA_NAMESPACE,"schema")) {
+    if (is_element(n,XMLSCHEMA_NS,"schema")) {
       if (NULL != (element = get_element_r(n,elemname)))
         return element;
     }
@@ -209,13 +209,13 @@ static xmlNodePtr get_complex_type(xmlNodePtr root, qname name)
   xmlNodePtr sn;
   xmlNodePtr type = NULL;
   for (sn = root->children; sn && (NULL == type); sn = sn->next) {
-    if (is_element(sn,XMLSCHEMA_NAMESPACE,"schema")) {
+    if (is_element(sn,XMLSCHEMA_NS,"schema")) {
 
       char *targetNamespace = xmlGetProp(sn,"targetNamespace");
       if (!nullstrcmp(targetNamespace,name.uri)) {
         xmlNodePtr tn;
         for (tn = sn->children; tn && (NULL == type); tn = tn->next) {
-          if (is_element(tn,XMLSCHEMA_NAMESPACE,"complexType")) {
+          if (is_element(tn,XMLSCHEMA_NS,"complexType")) {
             char *typename = xmlGetProp(tn,"name");
             if (typename && !strcmp(typename,name.localpart))
               type = tn;
@@ -242,7 +242,7 @@ static char *element_namespace(xmlNodePtr elem)
   if (attr_equals(elem,"form","qualified"))
     qualified = 1;
   n = elem;
-  while (n && !is_element(n,XMLSCHEMA_NAMESPACE,"schema"))
+  while (n && !is_element(n,XMLSCHEMA_NS,"schema"))
     n = n->parent;
   if (n) {
     if (attr_equals(n,"elementFormDefault","qualified"))
@@ -258,7 +258,7 @@ static int has_simple_type(xmlNodePtr n)
   int simple = 0;
   if (xmlHasProp(n,"type")) {
     qname qn = get_qname_attr(n,"type");
-    if (!strcmp(qn.uri,XMLSCHEMA_NAMESPACE))
+    if (!strcmp(qn.uri,XMLSCHEMA_NS))
       simple = 1;
     free_qname(qn);
   }
@@ -284,20 +284,20 @@ static int get_element_args(elcgen *gen, xmlNodePtr types, xmlNodePtr elem, list
   }
   else {
     complexType = elem->children;
-    while (complexType && !is_element(complexType,XMLSCHEMA_NAMESPACE,"complexType"))
+    while (complexType && !is_element(complexType,XMLSCHEMA_NS,"complexType"))
       complexType = complexType->next;
     if (NULL == complexType)
       return gen_error(gen,"no complex type");
   }
 
   sequence = complexType->children;
-  while (sequence && !is_element(sequence,XMLSCHEMA_NAMESPACE,"sequence"))
+  while (sequence && !is_element(sequence,XMLSCHEMA_NS,"sequence"))
     sequence = sequence->next;
   if (NULL == sequence)
     return 1;
 
   for (arg = sequence->children; arg; arg = arg->next) {
-    if (is_element(arg,XMLSCHEMA_NAMESPACE,"element") && xmlHasProp(arg,"name")) {
+    if (is_element(arg,XMLSCHEMA_NS,"element") && xmlHasProp(arg,"name")) {
       wsarg *wa = (wsarg*)calloc(1,sizeof(wsarg));
       wa->simple = has_simple_type(arg);
       wa->list = 0;

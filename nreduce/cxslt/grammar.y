@@ -139,13 +139,14 @@ extern xmlNodePtr parse_node;
 %token <string> NCNAME
 %token <string> STRING_LITERAL
 %token <string> AVT_LITERAL
+%token AVT_EMPTY
 %token <number> NUMERIC_LITERAL
 
 %type <qn> QName
 
 %type <expr> Top
 %type <expr> AVTLiteral
-%type <expr> TopExprs
+%type <expr> AVTExpr
 %type <expr> Expr
 %type <expr> ExprSingle
 %type <expr> ForExpr
@@ -228,17 +229,23 @@ AVTLiteral:
                                     $$->str = $1; }
 ;
 
-TopExprs:
+AVTExpr:
   AVTLiteral                      { $$ = $1; }
-| AVTLiteral TopExprs             { $$ = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
-| AVTLiteral Expr TopExprs        { expression *e = new_expression2(XPATH_AVT_COMPONENT,$2,$3);
+| AVTLiteral Expr                 { $$ = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
+| AVTLiteral AVTExpr              { $$ = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
+| AVTLiteral Expr AVTExpr         { expression *e = new_expression2(XPATH_AVT_COMPONENT,$2,$3);
                                     $$ = new_expression2(XPATH_AVT_COMPONENT,$1,e); }
+| AVT_EMPTY                       { $$ = new_expression(XPATH_STRING_LITERAL);
+                                    $$->str = strdup(""); }
+| AVT_EMPTY Expr                  { $$ = $2; }
+| AVT_EMPTY AVTExpr               { $$ = $2; }
+| AVT_EMPTY Expr AVTExpr          { $$ = new_expression2(XPATH_AVT_COMPONENT,$2,$3); }
 ;
 
 Top:
   Expr                            { parse_expr = $1; }
-| Expr TopExprs                   { parse_expr = $1; }
-| TopExprs                        { parse_expr = $1; }
+| AVTExpr                         { parse_expr = $1; }
+| Expr AVTExpr                    { parse_expr = new_expression2(XPATH_AVT_COMPONENT,$1,$2); }
 | VarPredicate                    { parse_expr = $1; }
 ;
 
@@ -278,9 +285,9 @@ QuantifiedExpr:
 IfExpr:
   IF '(' Expr ')' THEN ExprSingle ELSE ExprSingle
                                   { $$ = new_expression(XPATH_IF);
-                                    $$->test = $3;
-                                    $$->left = $6;
-                                    $$->right = $8; }
+                                    $$->r.test = $3;
+                                    $$->r.left = $6;
+                                    $$->r.right = $8; }
 ;
 
 OrExpr:
@@ -368,9 +375,9 @@ CastExpr:
 
 UnaryExpr:
   '-' UnaryExpr                   { $$ = new_expression(XPATH_UNARY_MINUS);
-                                    $$->left = $2; }
+                                    $$->r.left = $2; }
 | '+' UnaryExpr                   { $$ = new_expression(XPATH_UNARY_PLUS);
-                                    $$->left = $2 }
+                                    $$->r.left = $2 }
 | ValueExpr                       { $$ = $1; }
 ;
 
@@ -438,7 +445,7 @@ StepExpr:
 
 ForwardStep:
   ForwardAxis COLONCOLON NodeTest { $$ = $3;
-                                    $$->left = $1; }
+                                    $$->r.left = $1; }
 | AbbrevForwardStep               { $$ = $1; }
 ;
 
@@ -466,20 +473,20 @@ ForwardAxis:
 
 AbbrevForwardStep:
   NodeTest                        { $$ = $1;
-                                    $$->left = new_expression(XPATH_AXIS);
-                                    $$->left->axis = AXIS_CHILD;
-                                    if ((XPATH_KIND_TEST == $$->right->type) &&
-                                        ((KIND_ATTRIBUTE == $$->right->kind) ||
-                                         (KIND_SCHEMA_ATTRIBUTE == $$->right->kind)))
-                                      $$->left->axis = AXIS_ATTRIBUTE; }
+                                    $$->r.left = new_expression(XPATH_AXIS);
+                                    $$->r.left->axis = AXIS_CHILD;
+                                    if ((XPATH_KIND_TEST == $$->r.right->type) &&
+                                        ((KIND_ATTRIBUTE == $$->r.right->kind) ||
+                                         (KIND_SCHEMA_ATTRIBUTE == $$->r.right->kind)))
+                                      $$->r.left->axis = AXIS_ATTRIBUTE; }
 | '@' NodeTest                    { $$ = $2;
-                                    $$->left = new_expression(XPATH_AXIS);
-                                    $$->left->axis = AXIS_ATTRIBUTE; }
+                                    $$->r.left = new_expression(XPATH_AXIS);
+                                    $$->r.left->axis = AXIS_ATTRIBUTE; }
 ;
 
 ReverseStep:
   ReverseAxis COLONCOLON NodeTest { $$ = $3;
-                                    $$->left = $1; }
+                                    $$->r.left = $1; }
 | AbbrevReverseStep               { $$ = $1; }
 ;
 
@@ -615,7 +622,7 @@ FunctionCall:
 | QName '(' FunctionCallParams ')'
                                   { $$ = new_expression(XPATH_FUNCTION_CALL);
                                     $$->qn = $1;
-                                    $$->left = $3; }
+                                    $$->r.left = $3; }
 ;
 
 SingleType:

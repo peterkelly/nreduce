@@ -1,9 +1,15 @@
-: N compile_num_expression;
-: B compile_ebv_expression;
-: P compile_predicate;
-: X compile_expression;
-: T compile_test;
-: A compile_axis;
+: N xpath compile_num_expression;
+: B xpath compile_ebv_expression;
+: P xpath compile_predicate;
+: X xpath compile_expression;
+: T xpath compile_test;
+: A xpath compile_axis;
+: L xslt compile_instruction;
+: S xslt compile_sequence;
+: C xslt compile_choose;
+: V xpath compile_avt;
+: CA xslt compile_attributes;
+: CN xslt compile_namespaces;
 
 X[[ E::n ]]                   = "\n(cons (xml::mknumber " N[[E::n]] ") nil)";
 X[[ N ]]                      = "\n(cons (xml::mknumber " N ") nil)";
@@ -48,13 +54,13 @@ X[[ E:1 ", " E:2 ]]           = "\n(append " X[[E:1]] " " X[[E:2]]")";
 X[[ E:1 "/" E:2 ]]            = "\n(xslt::path_result_sort"
                                 "\n  (xslt::apmap3 (!citem.!cpos.!csize."
                                 ++X[[E:2]] ") " ++X[[E:1]] "))";
-X[[ F "::" T ]]               = "\n(filter " +T[[T]] +A[[F]] ")";
-X[[ R "::" T ]]               = "\n(reverse " "\n  (filter " ++T[[T]] ++A[[R]] ")" ")";
+X[[ F "::" T ]]               = "\n(filter " +T[[T]] " " +A[[F]] ")";
+X[[ R "::" T ]]               = "\n(reverse " "\n  (filter " ++T[[T]] " " ++A[[R]] ")" ")";
 X[[ F "::" T "[" E "]" ]]   = "\n(xslt::filter3" "\n  (!citem.!cpos.!csize." +P[[E]] ") "
-                                "\n  (filter " ++T[[T]] ++A[[F]] ")" ")";
+                                "\n  (filter " ++T[[T]] " " ++A[[F]] ")" ")";
 X[[ R "::" T "[" E "]" ]]   = "\n(reverse " "\n  (xslt::filter3"
                                 "\n    (!citem.!cpos.!csize." ++P[[E]] ") "
-                                "\n    (filter " +++T[[T]] +++A[[R]] ")" ")" ")";
+                                "\n    (filter " +++T[[T]] " " +++A[[R]] ")" ")" ")";
 X[[ E:1  "[" E:2 "]" ]]       = "\n(xslt::filter3" "\n  (!citem.!cpos.!csize."
                                 +P[[E:2]] ") " +X[[E:1]] ")";
 
@@ -147,3 +153,65 @@ N[["."]]                      = "\n(xml::item_value citem)";
 N[[ N ]]                      = "\n" N;
 N[[ "$" Q ]]                  = Q;
 //N[[ "x()" ]]                 = a; // FIXME: do this properly
+
+
+V[[ E:1 "}{" E:2 ]]           = "(append " V[[E:1]] " " V[[E:2]]")";
+V[[ S ]]                      = "\"" S "\"";
+V[[ E ]]                      = "(xslt::consimple " X[[E]] ")";
+
+C[[ "<when test=\"" E "\">" I:1 "</when>" I:2 ]]
+                              = @ "\n(if " +B[[E]] " " +S[[I:1]] " " C[[I:2]] ")";
+C[[ "<when test=\"" E "\">" I:1 "</when>" ]]
+                              = @ "\n(if " +B[[E]] " " +S[[I:1]] " nil)";
+C[[ "<otherwise>" I "</otherwise>" ]]
+                              = @ S[[I]];
+
+L[[ "<sequence select=\"" E "\"/>" ]]
+                              = @ X[[E]];
+L[[ "<value-of select=\"" E "\"/>" ]]
+                              = "\n(xslt::construct_value_of " X[[E]] ")";
+L[[ "<value-of>" I "</value-of>" ]]
+                              = "\n(xslt::construct_value_of " S[[I]] ")";
+L[[ "<value-of/>" ]]          = "\n(xslt::construct_value_of nil)";
+
+L[[ "<text>" S "</text>" ]]   = "\n(xslt::construct_text \"" S "\")";
+
+L[[ "<for-each select=\"" E "\">" I "</for-each>" ]]
+                              = @ "\n(xslt::foreach3 " +X[[E]]
+                                "\n  (!citem.!cpos.!csize." ++S[[I]] "))";
+
+L[[ "<if test=\"" E "\">" I "</if>" ]]
+                              = @ "\n(if " +B[[E]] " " +S[[I]] "\n  nil)";
+
+L[[ "<choose>" I "</choose>" ]]   = @ C[[I]];
+
+/* FIXME: complete this, and handle namespaces properly */
+L[[ "<element name=\"" E:1 "\" namespace=\"" E:2 "\">" I "</element>" ]]
+= @ "\n(xslt::construct_elem1 " V[[E:2]] V[[E:1]] " nil nil " +S[[I]] ")";
+
+L[[ "<element name=\"" E "\">" I "</element>" ]]
+= @ "\n(xslt::construct_elem1 " "\nnil " V[[E]] " nil nil " +S[[I]] ")";
+
+/* FIXME: handle namespaces properly */
+L[[ "<attribute name=\"" E:1 "\" select=\"" E:2 "\"/>" ]]
+= @ "\n(cons (xml::mkattr nil nil nil nil nil nil " +V[[E:1]]
+    "(xslt::consimple " +X[[E:2]] ")) nil)";
+
+L[[ "<attribute name=\"" E "\">" I "</attribute>" ]]
+= @ "\n(cons (xml::mkattr nil nil nil nil nil nil " +V[[E]] "(xslt::consimple " +S[[I]] ")) nil)";
+
+L[[ "<namespace name=\"" E:1 "\" select=\"" E:2 "\"/>" ]]
+= @ "\n(cons (xml::mknamespace (xslt::consimple " X[[E:2]] ") " V[[E:1]] ") nil)";
+
+L[[ "<namespace name=\"" E "\">" I "</namespace>" ]]
+= @ "\n(cons (xml::mknamespace (xslt::consimple " S[[I]] ") " V[[E]] ") nil)";
+
+L[[ "<apply-templates select=\"" E "\"/>" ]]
+= @ "\n(apply_templates " +X[[E]] ")";
+
+L[[ "<apply-templates/>" ]]
+= @ "\n(apply_templates (xml::item_children citem))";
+
+L[[ "<" Y ">" I "</" Y ">" ]] = "(xslt::construct_elem2 " +CA[[Y]] " " +CN[[Y]] " " +S[[I]] ")";
+
+L[[ S ]] = "\n(xslt::construct_text \"" S "\")";
