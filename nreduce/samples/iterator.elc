@@ -1,0 +1,33 @@
+binary_iterator fun x y =
+(if (and x y)
+  (cons
+    (fun (head x) (head y))
+    (binary_iterator fun (tail x) (tail y)))
+  nil)
+
+add_iterator = (binary_iterator +)
+
+times_iterator = (binary_iterator *)
+
+single_num_iterator n =
+(cons n nil)
+
+infinite_num_iterator n =
+(cons n (infinite_num_iterator n))
+
+inc_num_iterator n =
+(cons n (inc_num_iterator (+ n 1)))
+
+print_numlist lst =
+(if lst
+  (++ (numtostring (head lst))
+  (++ "\n" (print_numlist (tail lst))))
+  nil)
+
+main =
+(print_numlist
+  (add_iterator
+    (infinite_num_iterator 4)
+    (times_iterator
+      (inc_num_iterator 5)
+      (infinite_num_iterator 2))))
