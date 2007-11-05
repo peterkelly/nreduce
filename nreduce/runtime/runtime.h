@@ -520,7 +520,6 @@ typedef struct task {
   jmp_buf jbuf;
 
   /* native execution */
-  void **instraddrs;
   unsigned char **bpaddrs[2];
   void *code;
   int codesize;

@@ -240,6 +240,8 @@ op_fun *op_handlers[OP_COUNT] = {
 #define WAITQUEUE_FRAMES ((int)&((waitqueue*)0)->frames)
 #define WAITQUEUE_FETCHERS ((int)&((waitqueue*)0)->fetchers)
 
+#define INSTR_CODE ((int)&((instruction*)0)->code)
+
 #define CARRAY_ELEMENTS ((int)&((carray*)0)->elements[0])
 #define CARRAY_SIZE ((int)&((carray*)0)->size)
 #define CARRAY_TAIL ((int)&((carray*)0)->tail)
@@ -500,9 +502,9 @@ void handle_trap(task *tsk, void *eip)
 
   assert(((void*)eip == tsk->bpaddrs[0][bcaddr]) ||
          ((void*)eip == tsk->bpaddrs[1][bcaddr]));
-  assert((eip >= tsk->instraddrs[bcaddr]) || (0 == bcaddr));
+  assert((eip >= program_ops[bcaddr].code) || (0 == bcaddr));
   assert((bcaddr == bch->nops-1) ||
-         (eip <= tsk->instraddrs[bcaddr+1]));
+         (eip <= program_ops[bcaddr+1].code));
 
   /* Clear the breakpoint(s), by restoring the previous values that were at the start of the
      relevant machine instrucitons. These were temporarily set to 0xCC in native_sigusr1() */
@@ -659,7 +661,6 @@ void swap_in_error(task *tsk)
 /* Update the native code EIP for the current runnable list head */
 void swap_in(task *tsk, x86_assembly *as, int lab)
 {
-  const instruction *program_ops = bc_instructions(tsk->bcdata);
   int Lnotnull = as->labels++;
   int Ljump = as->labels++;
 
@@ -691,14 +692,7 @@ void swap_in(task *tsk, x86_assembly *as, int lab)
 
   I_MOV(reg(EAX),regmem(EBP,FRAME_INSTR)); // get current instruction
   I_MOV(regmem(EBP,FRAME_INSTR),imm(0)); // set frame's instruction to 0
-  I_SUB(reg(EAX),imm((int)program_ops)); // compute position of instr relative to start
-
-  I_MOV(reg(EDX),imm(0));
-  I_MOV(reg(ECX),imm(sizeof(instruction)));
-  I_IDIV(reg(ECX)); // compute bytecode address
-
-  I_MOV(reg(EBX),imm((int)tsk->instraddrs));
-  I_MOV(reg(EAX),regmemscaled(EBX,0,SCALE_4,EAX));
+  I_MOV(reg(EAX),regmem(EAX,INSTR_CODE)); // get the code address for the current instruction
 
   /* Jump to the next instruction */
   if (lab)
@@ -885,7 +879,7 @@ void asm_copy_stack(task *tsk, x86_assembly *as, int expcount, int fno, int n)
 void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
 {
   x86_assembly *as = x86_assembly_new();
-  const instruction *program_ops = bc_instructions(bcdata);
+  instruction *program_ops = (instruction*)&tsk->bcdata[sizeof(bcheader)];
   const instruction *instr;
   int addr;
   bcheader *bch = (bcheader*)bcdata;
@@ -901,7 +895,6 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   int *bplabels[2];
   bplabels[0] = (int*)calloc(bch->nops,sizeof(int));
   bplabels[1] = (int*)calloc(bch->nops,sizeof(int));
-  tsk->instraddrs = (void**)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[0] = (unsigned char**)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[1] = (unsigned char**)calloc(bch->nops,sizeof(int));
 
@@ -1778,7 +1771,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
     int cpuaddr = as->instructions[tempaddrs[addr]].addr;
     int bplabel1 = bplabels[0][addr];
     int bplabel2 = bplabels[1][addr];
-    tsk->instraddrs[addr] = (void*)(((char*)cpucode->data)+cpuaddr);
+    program_ops[addr].code = (void*)(((char*)cpucode->data)+cpuaddr);
 
     assert(as->labeladdrs[bplabel1]);
     tsk->bpaddrs[0][addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel1];

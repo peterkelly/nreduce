@@ -292,6 +292,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   else {
     instr->expcount = -1;
   }
+  instr->code = 0;
 
   #ifdef DEBUG_BYTECODE_COMPILATION
   if (comp->si && (0 <= comp->cdepth)) {

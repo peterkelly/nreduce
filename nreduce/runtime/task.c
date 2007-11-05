@@ -529,7 +529,6 @@ void task_free(task *tsk)
   free(tsk->bcaddr_to_fno);
   free(tsk->bcdata);
 
-  free(tsk->instraddrs);
   free(tsk->bpaddrs[0]);
   free(tsk->bpaddrs[1]);
   free(tsk->cpu_to_bcaddr);

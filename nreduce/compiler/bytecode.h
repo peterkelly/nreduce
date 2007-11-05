@@ -66,6 +66,7 @@ typedef struct instruction {
   int fileno;
   int lineno;
   int expcount;
+  void *code;
 } instruction;
 
 typedef struct funinfo {
