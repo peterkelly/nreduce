@@ -68,14 +68,11 @@ extern const char *parse_modname;
 %token<s> STRING
 
 %type <c> SingleExpr
-%type <c> ListExpr
-%type <c> SingleLambda
 %type <c> Lambdas
 %type <c> AppliedExpr
 %type <c> LetrecValue
 %type <lr> Letrec
 %type <lr> Letrecs
-%type <c> Expr
 %type <s> Argument
 %type <l> Arguments
 
@@ -100,52 +97,33 @@ SingleExpr:
                                     $$->name = make_varname($1);
                                     free($1);
                                   }
-| '(' Expr ')'                    { $$ = $2; }
-;
-
-ListExpr:
-  SingleExpr                      { $$ = $1; }
-| SingleExpr ',' ListExpr         { snode *cons;
-                                    snode *app1;
-
-                                    cons = snode_new(yyfileno,@$.first_line);
-                                    cons->type = SNODE_SYMBOL;
-                                    cons->name = strdup("cons");
-
-                                    app1 = snode_new(yyfileno,@$.first_line);
-                                    app1->type = SNODE_APPLICATION;
-                                    app1->left = cons;
-                                    app1->right = $1;
-
-                                    $$ = snode_new(yyfileno,@$.first_line);
-                                    $$->type = SNODE_APPLICATION;
-                                    $$->left = app1;
-                                    $$->right = $3; }
-;
-
-SingleLambda:
-  LAMBDA SYMBOL  '.'              { $$ = snode_new(yyfileno,@$.first_line);
-                                    $$->type = SNODE_LAMBDA;
-                                    $$->name = make_varname($2);
-                                    free($2);
-                                    $$->body = NULL; }
+| '(' Lambdas ')'                 { $$ = $2; }
+| '(' LETREC Letrecs IN SingleExpr ')'
+                                  { $$ = snode_new(yyfileno,@$.first_line);
+                                    $$->type = SNODE_LETREC;
+                                    $$->bindings = $3;
+                                    $$->body = $5; }
 ;
 
 Lambdas:
-  SingleLambda                    { $$ = $1; }
-| SingleLambda Lambdas            { $$ = $1; $$->body = $2; }
+  LAMBDA SYMBOL  '.' Lambdas      { $$ = snode_new(yyfileno,@$.first_line);
+                                    $$->type = SNODE_LAMBDA;
+                                    $$->name = make_varname($2);
+                                    free($2);
+                                    $$->body = $4; }
+| AppliedExpr                     { $$ = $1; }
 ;
 
 AppliedExpr:
-  ListExpr                        { $$ = $1; }
-| AppliedExpr ListExpr            { $$ = snode_new(yyfileno,@$.first_line);
+  SingleExpr                      { $$ = $1; }
+| AppliedExpr SingleExpr          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_APPLICATION;
                                     $$->left = $1;
                                     $$->right = $2; }
 ;
 
 LetrecValue:
-  '=' ListExpr                    { $$ = $2; }
+  '=' SingleExpr                  { $$ = $2; }
 | SYMBOL LetrecValue              { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_LAMBDA;
                                     $$->name = make_varname($1);
@@ -171,18 +149,6 @@ Letrecs:
                                     $$->next = $2; }
 ;
 
-Expr:
-  AppliedExpr                     { $$ = $1; }
-| Lambdas AppliedExpr             { snode *c = $1;
-                                    while (c->body)
-                                      c = c->body;
-                                    c->body = $2; }
-| LETREC Letrecs IN ListExpr      { $$ = snode_new(yyfileno,@$.first_line);
-                                    $$->type = SNODE_LETREC;
-                                    $$->bindings = $2;
-                                    $$->body = $4; }
-;
-
 Argument:
   SYMBOL                          { $$ = make_varname($1);
                                     free($1); }
@@ -199,7 +165,7 @@ Arguments:
 ;
 
 Definition:
-  Arguments '=' ListExpr          { snode *body = $3;
+  Arguments '=' SingleExpr        { snode *body = $3;
                                     char *name = (char*)$1->data;
                                     list *argnames = $1->next;
                                     int r = create_scomb(parse_src,parse_modname,name,

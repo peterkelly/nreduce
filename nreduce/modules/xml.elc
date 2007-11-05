@@ -33,7 +33,13 @@ TOKEN_ATTRNAME = 3
 TOKEN_ATTRVALUE = 4
 TOKEN_COMMENT = 5
 
-TOKEN_NAMES = "STARTELEM", "ENDELEM", "TEXT", "ATTRNAME", "ATTRVALUE", "COMMENT", nil
+TOKEN_NAMES = 
+(cons "STARTELEM"
+(cons "ENDELEM"
+(cons "TEXT"
+(cons "ATTRNAME"
+(cons "ATTRVALUE"
+(cons "COMMENT" nil))))))
 
 //==================================================================================================
 // Items
