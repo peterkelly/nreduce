@@ -142,9 +142,9 @@ op_fun *op_handlers[OP_COUNT] = {
 #define UC_EBP(uc) (uc->uc_mcontext.gregs[REG_EBP])
 #define UC_EIP(uc) (uc->uc_mcontext.gregs[REG_EIP])
 #else
-#define UC_ESP(uc) (uc->uc_mcontext->ss.esp)
-#define UC_EBP(uc) (uc->uc_mcontext->ss.ebp)
-#define UC_EIP(uc) (uc->uc_mcontext->ss.eip)
+#define UC_ESP(uc) (uc->uc_mcontext->__ss.__esp)
+#define UC_EBP(uc) (uc->uc_mcontext->__ss.__ebp)
+#define UC_EIP(uc) (uc->uc_mcontext->__ss.__eip)
 #endif
 
 #define STACK_ALIGNMENT 16

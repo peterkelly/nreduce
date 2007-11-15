@@ -26,7 +26,8 @@ ucontext_includes="\
 AC_CHECK_MEMBERS([mcontext_t.gregs],,,[$ucontext_includes])
 
 AC_MSG_CHECKING([for yylex_destroy])
-echo -e "%%\n%%" > conftest.l
+echo "%%" > conftest.l
+echo "%%" >> conftest.l
 flex conftest.l
 if grep yylex_destroy > /dev/null lex.yy.c
 then
