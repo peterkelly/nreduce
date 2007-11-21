@@ -24,3 +24,4 @@ saxonwebapp: SaxonServlet.java
 
 clean:
 	rm -f parsh showload nobuftail runtests measure saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
+	rm -rf *.DSYM
