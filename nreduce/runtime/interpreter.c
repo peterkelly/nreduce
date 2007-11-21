@@ -1775,9 +1775,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     struct timeval start;
     struct timeval end;
 
-    array *cpucode = array_new(1,0);
     gettimeofday(&start,NULL);
-    native_compile(tsk->bcdata,tsk->bcsize,cpucode,tsk);
+    native_compile(tsk->bcdata,tsk->bcsize,tsk);
     gettimeofday(&end,NULL);
 
     tsk->endpt->signal = 1;
@@ -1790,7 +1789,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     pthread_kill(pthread_self(),SIGUSR1);
     tsk->usr1setup = 1;
     ((native_fun*)tsk->code)();;
-    array_free(cpucode);
   }
   else if (0 != setjmp(tsk->jbuf)) {
     /* skip any futher interpretation */

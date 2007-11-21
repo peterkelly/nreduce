@@ -42,6 +42,7 @@
 #include <ucontext.h>
 #include <unistd.h>
 #include <fenv.h>
+#include <sys/mman.h>
 
 #ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
@@ -876,7 +877,7 @@ void asm_copy_stack(task *tsk, x86_assembly *as, int expcount, int fno, int n)
   }
 }
 
-void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
+void native_compile(char *bcdata, int bcsize, task *tsk)
 {
   x86_assembly *as = x86_assembly_new();
   instruction *program_ops = (instruction*)&tsk->bcdata[sizeof(bcheader)];
@@ -893,6 +894,7 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   int *instrlabels;
   int i;
   int *bplabels[2];
+  array *cpucode;
   bplabels[0] = (int*)calloc(bch->nops,sizeof(int));
   bplabels[1] = (int*)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[0] = (unsigned char**)calloc(bch->nops,sizeof(int));
@@ -1763,20 +1765,29 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
   I_JMP(label(Lfinished));
 
   /* Done compiling; now assemble */
+  cpucode = array_new(1,0);
   x86_assemble(as,cpucode);
-  tsk->cpu_to_bcaddr = (int*)calloc(cpucode->nbytes,sizeof(int));
+/*   dump_asm(tsk,"output.s",cpucode); */
+
+  tsk->codesize = cpucode->nbytes;
+  tsk->code = (char*)valloc(tsk->codesize);
+  memcpy(tsk->code,cpucode->data,tsk->codesize);
+  mprotect(tsk->code,tsk->codesize,PROT_READ|PROT_WRITE|PROT_EXEC);
+  array_free(cpucode);
+
+  tsk->cpu_to_bcaddr = (int*)calloc(tsk->codesize,sizeof(int));
   int last = 0;
 
   for (addr = 0; addr < bch->nops; addr++) {
     int cpuaddr = as->instructions[tempaddrs[addr]].addr;
     int bplabel1 = bplabels[0][addr];
     int bplabel2 = bplabels[1][addr];
-    program_ops[addr].code = (void*)(((char*)cpucode->data)+cpuaddr);
+    program_ops[addr].code = (void*)(((char*)tsk->code)+cpuaddr);
 
     assert(as->labeladdrs[bplabel1]);
-    tsk->bpaddrs[0][addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel1];
+    tsk->bpaddrs[0][addr] = ((unsigned char*)tsk->code)+as->labeladdrs[bplabel1];
     if (as->labeladdrs[bplabel2]) {
-      tsk->bpaddrs[1][addr] = ((unsigned char*)cpucode->data)+as->labeladdrs[bplabel2];
+      tsk->bpaddrs[1][addr] = ((unsigned char*)tsk->code)+as->labeladdrs[bplabel2];
 
       /* ensure sufficient space between breakpoint addresses to insert CALL */
       assert(5 <= abs(as->labeladdrs[bplabel2]-as->labeladdrs[bplabel1]));
@@ -1792,18 +1803,14 @@ void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk)
     }
     last = cpuaddr;
   }
-  for (i = last; i < cpucode->nbytes; i++)
+  for (i = last; i < tsk->codesize; i++)
     tsk->cpu_to_bcaddr[i] = addr-1;
 
-  tsk->bcend_addr = cpucode->data+as->labeladdrs[Lbcend];
-  tsk->trap_addr = cpucode->data+as->labeladdrs[Ltrap];
-  tsk->caperror_addr = cpucode->data+as->labeladdrs[Lcaperror];
-  tsk->argerror_addr = cpucode->data+as->labeladdrs[Largerror];
+  tsk->bcend_addr = tsk->code+as->labeladdrs[Lbcend];
+  tsk->trap_addr = tsk->code+as->labeladdrs[Ltrap];
+  tsk->caperror_addr = tsk->code+as->labeladdrs[Lcaperror];
+  tsk->argerror_addr = tsk->code+as->labeladdrs[Largerror];
 
-  tsk->code = cpucode->data;
-  tsk->codesize = cpucode->nbytes;
-
-/*   dump_asm(tsk,"output.s",cpucode); */
   free(tempaddrs);
   free(bplabels[0]);
   free(bplabels[1]);

@@ -526,6 +526,7 @@ void task_free(task *tsk)
   free(tsk->inflight_addrs);
   free(tsk->unack_msg_acount);
 
+  free(tsk->code);
   free(tsk->bcaddr_to_fno);
   free(tsk->bcdata);
 

@@ -768,7 +768,7 @@ void trace_step(task *tsk, pntr target, int allapps, const char *format, ...);
 void native_sigusr1(int sig, siginfo_t *ino, void *uc1);
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void native_sigsegv(int sig, siginfo_t *ino, void *uc1);
-void native_compile(char *bcdata, int bcsize, array *cpucode, task *tsk);
+void native_compile(char *bcdata, int bcsize, task *tsk);
 
 /* taskman */
 
