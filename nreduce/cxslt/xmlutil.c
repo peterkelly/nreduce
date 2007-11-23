@@ -47,8 +47,9 @@ const char *lookup_nsuri(xmlNodePtr n, const char *prefix)
   for (; n && (XML_ELEMENT_NODE == n->type); n = n->parent) {
 /*     array_printf(gen->buf,"node: %p %s\n",n,n->name); */
     for (ns = n->nsDef; ns; ns = ns->next) {
+      char *nsprefix = ns->prefix ? (char*)ns->prefix : "";
 /*       array_printf(gen->buf,"ns: %s %s\n",ns->prefix,ns->href); */
-      if (!xmlStrcmp(ns->prefix,prefix)) {
+      if (!xmlStrcmp(nsprefix,prefix)) {
         return (const char*)ns->href;
       }
     }

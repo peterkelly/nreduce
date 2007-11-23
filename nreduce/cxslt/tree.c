@@ -40,6 +40,7 @@ int xlex_destroy(void);
 
 extern FILE *xin;
 extern int lex_lineno;
+extern int x_first_token;
 int xparse();
 
 const char *expr_names[XPATH_COUNT] = {
@@ -270,6 +271,7 @@ static pthread_mutex_t xpath_lock = PTHREAD_MUTEX_INITIALIZER;
 int parse_firstline = 0;
 expression *parse_expr = NULL;
 xmlNodePtr parse_node = NULL;
+elcgen *parse_gen = NULL;
 
 void expr_set_parents(expression *expr, expression *parent)
 {
@@ -306,11 +308,13 @@ expression *parse_xpath(elcgen *gen, expression *pnode, const char *str)
   parse_node = pnode ? pnode->xmlnode : NULL;
   parse_firstline = parse_node ? parse_node->line : 0;
   parse_expr = NULL;
+  parse_gen = gen;
   lex_lineno = 0;
 
   bufstate = x_scan_string(str);
   x_switch_to_buffer(bufstate);
 
+  x_first_token = 1;
   r = xparse();
 
   x_delete_buffer(bufstate);
@@ -318,8 +322,9 @@ expression *parse_xpath(elcgen *gen, expression *pnode, const char *str)
   xlex_destroy();
 #endif
 
-  if (0 != r) {
-    gen_error(gen,"XPath parse error");
+  if ((0 != r) || gen->error) {
+    if (NULL == gen->error)
+      gen_error(gen,"XPath parse error");
     pthread_mutex_unlock(&xpath_lock);
     return NULL;
   }

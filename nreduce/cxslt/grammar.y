@@ -27,9 +27,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-/* FIXME: need to handle reserved words properly, e.g. using them as variable names.
-This requires special handling in the lexer; see the document from the W3C on this */
-
 extern int lex_lineno;
 int yylex();
 int yyerror(const char *err);
@@ -37,6 +34,7 @@ int yyerror(const char *err);
 extern expression *parse_expr;
 extern int parse_firstline;
 extern xmlNodePtr parse_node;
+extern elcgen *parse_gen;
 
 %}
 
@@ -130,13 +128,10 @@ extern xmlNodePtr parse_node;
 %token SCHEMA_ELEMENT
 %token ITEM
 %token ELEMENT
-%token MULTIPLY
-%token ID1
-%token KEY
-%token VOID
 
-%type <string> NCName
 %token <string> NCNAME
+%token <qn> QNAME
+%token <qn> WILDCARD
 %token <string> STRING_LITERAL
 %token <string> AVT_LITERAL
 %token AVT_EMPTY
@@ -217,12 +212,6 @@ extern xmlNodePtr parse_node;
 %type <qn> TypeName
 
 %%
-
- /* FIXME: need to include other keywords here. Expect a lot of shift/reduce conflicts :( */
-NCName:
-  NCNAME                          { $$ = $1; }
-| RETURN                          { $$ = strdup("return"); }
-;
 
 AVTLiteral:
   AVT_LITERAL                     { $$ = new_expression(XPATH_STRING_LITERAL);
@@ -525,20 +514,16 @@ NameTest:
                                     $$->qn = $1; }
 | Wildcard                        { $$ = new_expression(XPATH_NAME_TEST);
                                     $$->qn = $1; }
-| ITEM                            { $$ = new_expression(XPATH_NAME_TEST);
-                                    $$->qn.localpart = strdup("item"); }
 ;
 
 Wildcard:
-'*'                               { $$.uri = NULL;
+  '*'                             { $$.uri = NULL;
                                     $$.prefix = NULL;
                                     $$.localpart = NULL; }
-| NCName ':' '*'                  { $$.uri = strdup(lookup_nsuri(parse_node,$1));
-                                    $$.prefix = $1;
-                                    $$.localpart = NULL; }
-| '*' ':' NCName                  { $$.uri = NULL;
-                                    $$.prefix = NULL;
-                                    $$.localpart = $3; }
+| WILDCARD                        { /*printf("wildcard: uri \"%s\"\n",$$.uri);
+                                    printf("wildcard: prefix \"%s\"\n",$$.prefix);
+                                    printf("wildcard: localpart \"%s\"\n",$$.localpart);*/
+                                    $$ = $1; }
 ;
 
 
@@ -634,7 +619,6 @@ SequenceType:
   ItemType                        { $$ = $1; }
 /*FIXME: causes shift/reduce conflict with AdditiveExpr */
 | ItemType OccurrenceIndicator    { /*$$ = SequenceTypeImpl::occurrence($1,$2);*/ }
-| VOID '(' ')'                    { /*$$ = new SequenceTypeImpl(SEQTYPE_EMPTY);*/ }
 ;
 
 OccurrenceIndicator:
@@ -708,7 +692,7 @@ SchemaAttributeTest:
 PITest:
 PROCESSING_INSTRUCTION '(' ')'    { $$ = new_expression(XPATH_KIND_TEST);
                                     $$->kind = KIND_PI; }
-| PROCESSING_INSTRUCTION '(' NCName ')'
+| PROCESSING_INSTRUCTION '(' NCNAME ')'
                                   { assert(!"FIXME: implement"); }
 | PROCESSING_INSTRUCTION '(' STRING_LITERAL ')'
                                   { assert(!"FIXME: implement"); }
@@ -748,12 +732,7 @@ TypeName:
 ;
 
 QName:
-  NCName                          { $$.uri = strdup(lookup_nsuri(parse_node,""));
-                                    $$.prefix = strdup("");
-                                    $$.localpart = $1; }
-| NCName ':' NCName               { $$.uri = strdup(lookup_nsuri(parse_node,$1));
-                                    $$.prefix = $1;
-                                    $$.localpart = $3; }
+  QNAME                           { $$ = $1; }
 ;
 
 
@@ -761,6 +740,6 @@ QName:
 
 int yyerror(const char *err)
 {
-  fprintf(stderr,"Parse error at line %d: %s\n",parse_firstline+lex_lineno,err);
+  gen_error(parse_gen,"Parse error at line %d: %s",parse_firstline+lex_lineno,err);
   return 1;
 }
