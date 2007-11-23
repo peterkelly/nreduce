@@ -1,0 +1,186 @@
+=================================== PROGRAM ====================================
+gridxslt runtests.tmp/in.xml runtests.tmp/test.xsl
+===================================== FILE =====================================
+in.xml
+<?xml version="1.0"?>
+<doc>
+   <and>Contents of and</and>
+   <comment>Contents of comment</comment>
+   <div>Contents of div</div>
+   <idiv>Contents of idiv</idiv>
+   <mod>Contents of mod</mod>
+   <node>Contents of node</node>
+   <or>Contents of or</or>
+   <processing-instruction>Contents of processing-instruction</processing-instruction>
+   <text>Contents of text</text>
+   <ancestor>Contents of ancestor</ancestor>
+   <ancestor-or-self>Contents of ancestor-or-self</ancestor-or-self>
+   <attribute>Contents of attribute</attribute>
+   <child>Contents of child</child>
+   <descendant>Contents of descendant</descendant>
+   <descendant-or-self>Contents of descendant-or-self</descendant-or-self>
+   <following>Contents of following</following>
+   <following-sibling>Contents of following-sibling</following-sibling>
+   <namespace>Contents of namespace</namespace>
+   <parent>Contents of parent</parent>
+   <preceding>Contents of preceding</preceding>
+   <preceding-sibling>Contents of preceding-sibling</preceding-sibling>
+   <self>Contents of self</self>
+   <if>Contents of if</if>
+   <to>Contents of to</to>
+   <return>Contents of return</return>
+   <for>Contents of for</for>
+   <in>Contents of in</in>
+   <some>Contents of some</some>
+   <every>Contents of every</every>
+   <satisfies>Contents of satisfies</satisfies>
+   <then>Contents of then</then>
+   <else>Contents of else</else>
+   <union>Contents of union</union>
+   <intersect>Contents of intersect</intersect>
+   <except>Contents of except</except>
+   <instance>Contents of instance</instance>
+   <of>Contents of of</of>
+   <treat>Contents of treat</treat>
+   <as>Contents of as</as>
+   <castable>Contents of castable</castable>
+   <cast>Contents of cast</cast>
+   <eq>Contents of eq</eq>
+   <ne>Contents of ne</ne>
+   <lt>Contents of lt</lt>
+   <le>Contents of le</le>
+   <gt>Contents of gt</gt>
+   <ge>Contents of ge</ge>
+   <is>Contents of is</is>
+   <document-node>Contents of document-node</document-node>
+   <schema-attribute>Contents of schema-attribute</schema-attribute>
+   <schema-element>Contents of schema-element</schema-element>
+   <item>Contents of item</item>
+   <element>Contents of element</element>
+</doc>
+===================================== FILE =====================================
+test.xsl
+<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+		version="2.0">
+
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:strip-space elements="*"/>
+
+  <xsl:template match="/">
+    <result>
+      <and><xsl:sequence select="/doc/and/text()"/></and>
+      <comment><xsl:sequence select="/doc/comment/text()"/></comment>
+      <div><xsl:sequence select="/doc/div/text()"/></div>
+      <idiv><xsl:sequence select="/doc/idiv/text()"/></idiv>
+      <mod><xsl:sequence select="/doc/mod/text()"/></mod>
+      <node><xsl:sequence select="/doc/node/text()"/></node>
+      <or><xsl:sequence select="/doc/or/text()"/></or>
+      <processing-instruction><xsl:sequence select="/doc/processing-instruction/text()"/></processing-instruction>
+      <text><xsl:sequence select="/doc/text/text()"/></text>
+      <ancestor><xsl:sequence select="/doc/ancestor/text()"/></ancestor>
+      <ancestor-or-self><xsl:sequence select="/doc/ancestor-or-self/text()"/></ancestor-or-self>
+      <attribute><xsl:sequence select="/doc/attribute/text()"/></attribute>
+      <child><xsl:sequence select="/doc/child/text()"/></child>
+      <descendant><xsl:sequence select="/doc/descendant/text()"/></descendant>
+      <descendant-or-self><xsl:sequence select="/doc/descendant-or-self/text()"/></descendant-or-self>
+      <following><xsl:sequence select="/doc/following/text()"/></following>
+      <following-sibling><xsl:sequence select="/doc/following-sibling/text()"/></following-sibling>
+      <namespace><xsl:sequence select="/doc/namespace/text()"/></namespace>
+      <parent><xsl:sequence select="/doc/parent/text()"/></parent>
+      <preceding><xsl:sequence select="/doc/preceding/text()"/></preceding>
+      <preceding-sibling><xsl:sequence select="/doc/preceding-sibling/text()"/></preceding-sibling>
+      <self><xsl:sequence select="/doc/self/text()"/></self>
+      <if><xsl:sequence select="/doc/if/text()"/></if>
+      <to><xsl:sequence select="/doc/to/text()"/></to>
+      <return><xsl:sequence select="/doc/return/text()"/></return>
+      <for><xsl:sequence select="/doc/for/text()"/></for>
+      <in><xsl:sequence select="/doc/in/text()"/></in>
+      <some><xsl:sequence select="/doc/some/text()"/></some>
+      <every><xsl:sequence select="/doc/every/text()"/></every>
+      <satisfies><xsl:sequence select="/doc/satisfies/text()"/></satisfies>
+      <then><xsl:sequence select="/doc/then/text()"/></then>
+      <else><xsl:sequence select="/doc/else/text()"/></else>
+      <union><xsl:sequence select="/doc/union/text()"/></union>
+      <intersect><xsl:sequence select="/doc/intersect/text()"/></intersect>
+      <except><xsl:sequence select="/doc/except/text()"/></except>
+      <instance><xsl:sequence select="/doc/instance/text()"/></instance>
+      <of><xsl:sequence select="/doc/of/text()"/></of>
+      <treat><xsl:sequence select="/doc/treat/text()"/></treat>
+      <as><xsl:sequence select="/doc/as/text()"/></as>
+      <castable><xsl:sequence select="/doc/castable/text()"/></castable>
+      <cast><xsl:sequence select="/doc/cast/text()"/></cast>
+      <eq><xsl:sequence select="/doc/eq/text()"/></eq>
+      <ne><xsl:sequence select="/doc/ne/text()"/></ne>
+      <lt><xsl:sequence select="/doc/lt/text()"/></lt>
+      <le><xsl:sequence select="/doc/le/text()"/></le>
+      <gt><xsl:sequence select="/doc/gt/text()"/></gt>
+      <ge><xsl:sequence select="/doc/ge/text()"/></ge>
+      <is><xsl:sequence select="/doc/is/text()"/></is>
+      <document-node><xsl:sequence select="/doc/document-node/text()"/></document-node>
+      <schema-attribute><xsl:sequence select="/doc/schema-attribute/text()"/></schema-attribute>
+      <schema-element><xsl:sequence select="/doc/schema-element/text()"/></schema-element>
+      <item><xsl:sequence select="/doc/item/text()"/></item>
+      <element><xsl:sequence select="/doc/element/text()"/></element>
+    </result>
+  </xsl:template>
+</xsl:stylesheet>
+==================================== OUTPUT ====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+   <and>Contents of and</and>
+   <comment>Contents of comment</comment>
+   <div>Contents of div</div>
+   <idiv>Contents of idiv</idiv>
+   <mod>Contents of mod</mod>
+   <node>Contents of node</node>
+   <or>Contents of or</or>
+   <processing-instruction>Contents of processing-instruction</processing-instruction>
+   <text>Contents of text</text>
+   <ancestor>Contents of ancestor</ancestor>
+   <ancestor-or-self>Contents of ancestor-or-self</ancestor-or-self>
+   <attribute>Contents of attribute</attribute>
+   <child>Contents of child</child>
+   <descendant>Contents of descendant</descendant>
+   <descendant-or-self>Contents of descendant-or-self</descendant-or-self>
+   <following>Contents of following</following>
+   <following-sibling>Contents of following-sibling</following-sibling>
+   <namespace>Contents of namespace</namespace>
+   <parent>Contents of parent</parent>
+   <preceding>Contents of preceding</preceding>
+   <preceding-sibling>Contents of preceding-sibling</preceding-sibling>
+   <self>Contents of self</self>
+   <if>Contents of if</if>
+   <to>Contents of to</to>
+   <return>Contents of return</return>
+   <for>Contents of for</for>
+   <in>Contents of in</in>
+   <some>Contents of some</some>
+   <every>Contents of every</every>
+   <satisfies>Contents of satisfies</satisfies>
+   <then>Contents of then</then>
+   <else>Contents of else</else>
+   <union>Contents of union</union>
+   <intersect>Contents of intersect</intersect>
+   <except>Contents of except</except>
+   <instance>Contents of instance</instance>
+   <of>Contents of of</of>
+   <treat>Contents of treat</treat>
+   <as>Contents of as</as>
+   <castable>Contents of castable</castable>
+   <cast>Contents of cast</cast>
+   <eq>Contents of eq</eq>
+   <ne>Contents of ne</ne>
+   <lt>Contents of lt</lt>
+   <le>Contents of le</le>
+   <gt>Contents of gt</gt>
+   <ge>Contents of ge</ge>
+   <is>Contents of is</is>
+   <document-node>Contents of document-node</document-node>
+   <schema-attribute>Contents of schema-attribute</schema-attribute>
+   <schema-element>Contents of schema-element</schema-element>
+   <item>Contents of item</item>
+   <element>Contents of element</element>
+</result>
+================================== RETURN CODE =================================
+0
