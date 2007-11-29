@@ -115,6 +115,7 @@ void run_shell(char *host, int argc, char **argv)
       args[argno++] = argv[i];
     args[argno++] = NULL;
 
+    close(STDIN_FILENO);
     dup2(fds[1],STDOUT_FILENO);
     dup2(fds[1],STDERR_FILENO);
     close(fds[0]);
