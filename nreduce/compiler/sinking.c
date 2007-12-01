@@ -162,6 +162,11 @@ static void sink_single(source *src, snode *s, int *changed)
     snode *hu = NULL;
     int nusers = 0;
 
+    if ((*recptr)->strict) {
+      recptr = &((*recptr)->next);
+      continue;
+    }
+
     if ((*recptr)->users) {
       hu = (*recptr)->users;
       nusers = 1;
