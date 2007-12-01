@@ -18,8 +18,7 @@ sparklist lst =
 
 parlist lst =
 (if lst
-  (seq (par (head lst) nil)
-    (parlist (tail lst)))
+  (par (head lst) (parlist (tail lst)))
   nil)
 
 spark val =
