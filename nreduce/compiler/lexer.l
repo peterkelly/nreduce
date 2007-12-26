@@ -44,9 +44,9 @@ DIGITS                  {DIGIT}+
 HEXDIGIT                [0-9a-fA-F]
 HEXDIGITS               {HEXDIGIT}+
 
-INTEGER                  {DIGITS}
+INTEGER                  -?{DIGITS}
 HEX                      0[xX]{HEXDIGIT}+
-DOUBLE                   {DIGITS}\.{DIGITS}
+DOUBLE                   -?{DIGITS}\.{DIGITS}
 IDCHAR                   [a-zA-Z_?:]
 IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 CHAR                     \'.\'

@@ -329,10 +329,15 @@ void format_double(char *str, int size, double d)
     pos = strlen(tmp)-1;
     while ((2+start < pos) && ('0' == tmp[pos]))
       tmp[pos--] = '\0';
-    assert('0' == tmp[start]);
-    assert('.' == tmp[start+1]);
+    if (!strcmp(tmp,"1.0")) {
+      snprintf(str,size,"1.0");
+    }
+    else {
+      assert('0' == tmp[start]);
+      assert('.' == tmp[start+1]);
 
-    snprintf(str,size,"%d.%s",ipart,tmp+start+2);
+      snprintf(str,size,"%d.%s",ipart,tmp+start+2);
+    }
   }
   else if (0.0 == d) {
     snprintf(str,size,"0");
