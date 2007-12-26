@@ -311,39 +311,22 @@ void format_double(char *str, int size, double d)
     else
       snprintf(str,size,"%.0f",d);
   }
-  else if ((0.000001 < fabs(d)) && (1000000.0 > fabs(d))) {
-    int ipart = (int)d;
-    double fraction;
-    int start;
-    char tmp[100];
-    int pos;
-
-    if (0.0 < d)
-      fraction = d - floor(d);
-    else
-      fraction = d - ceil(d);
-
-    start = getsignbit(d) ? 1 : 0;
-
-    sprintf(tmp,"%f",fraction);
-    pos = strlen(tmp)-1;
-    while ((2+start < pos) && ('0' == tmp[pos]))
-      tmp[pos--] = '\0';
-    if (!strcmp(tmp,"1.0")) {
-      snprintf(str,size,"1.0");
-    }
-    else {
-      assert('0' == tmp[start]);
-      assert('.' == tmp[start+1]);
-
-      snprintf(str,size,"%d.%s",ipart,tmp+start+2);
-    }
-  }
   else if (0.0 == d) {
     snprintf(str,size,"0");
   }
   else {
+    int dotpos;
+    int len;
+    char *dot;
     snprintf(str,size,"%f",d);
+    dot = strchr(str,'.');
+    assert(dot);
+    dotpos = dot-str;
+    len = strlen(str);
+    while ((len > dotpos+2) && ('0' == str[len-1])) {
+      str[len-1] = '\0';
+      len--;
+    }
   }
 }
 

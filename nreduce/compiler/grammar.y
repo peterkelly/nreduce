@@ -63,8 +63,7 @@ extern const char *parse_modname;
 %token IMPORT
 %token LETREC
 %token IN
-%token<i> INTEGER
-%token<d> DOUBLE
+%token<d> NUMBER
 %token<s> STRING
 
 %type <c> SingleExpr
@@ -83,10 +82,7 @@ extern const char *parse_modname;
 SingleExpr:
   NIL                             { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_NIL; }
-| INTEGER                         { $$ = snode_new(yyfileno,@$.first_line);
-                                    $$->type = SNODE_NUMBER;
-                                    $$->num = (double)($1); }
-| DOUBLE                          { $$ = snode_new(yyfileno,@$.first_line);
+| NUMBER                          { $$ = snode_new(yyfileno,@$.first_line);
                                     $$->type = SNODE_NUMBER;
                                     $$->num = $1; }
 | STRING                          { $$ = snode_new(yyfileno,@$.first_line);

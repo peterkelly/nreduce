@@ -124,21 +124,18 @@ CHAR                     \'.\'
 "&&"                     { yylval.s = strdup("and"); return SYMBOL; }
 "||"                     { yylval.s = strdup("or"); return SYMBOL; }
 "++"                     { yylval.s = strdup("append"); return SYMBOL; }
-"'\\\"'"                 { yylval.d = (double)'\"'; return DOUBLE; }
-"'\\\''"                 { yylval.d = (double)'\''; return DOUBLE; }
-"'\\n'"                  { yylval.d = (double)'\n'; return DOUBLE; }
-"'\\t'"                  { yylval.d = (double)'\t'; return DOUBLE; }
-"'\\r'"                  { yylval.d = (double)'\r'; return DOUBLE; }
-"'\\b'"                  { yylval.d = (double)'\b'; return DOUBLE; }
-"'\\g'"                  { yylval.d = (double)'\f'; return DOUBLE; }
+"'\\\"'"                 { yylval.d = (double)'\"'; return NUMBER; }
+"'\\\''"                 { yylval.d = (double)'\''; return NUMBER; }
+"'\\n'"                  { yylval.d = (double)'\n'; return NUMBER; }
+"'\\t'"                  { yylval.d = (double)'\t'; return NUMBER; }
+"'\\r'"                  { yylval.d = (double)'\r'; return NUMBER; }
+"'\\b'"                  { yylval.d = (double)'\b'; return NUMBER; }
+"'\\g'"                  { yylval.d = (double)'\f'; return NUMBER; }
 {IDENT}                  { yylval.s = strdup(yytext); return SYMBOL; }
-{CHAR}                   { yylval.d = (double)yytext[1]; return DOUBLE; }
-{HEX}                    { yylval.i = strtol(yytext,NULL,0); return INTEGER; }
-{DOUBLE}                 { yylval.d = atof(yytext); return DOUBLE; }
-{INTEGER}                { char *endptr = NULL; yylval.i = strtol(yytext,&endptr,0); 
-                           if ('\0' != *endptr)
-                             return -1;
-                           return INTEGER; }
+{CHAR}                   { yylval.d = (double)yytext[1]; return NUMBER; }
+{HEX}                    { yylval.d = (double)strtol(yytext,NULL,0); return NUMBER; }
+{DOUBLE}                 { yylval.d = atof(yytext); return NUMBER; }
+{INTEGER}                { yylval.d = atof(yytext); return NUMBER; }
 
 (" "|\n|\t)+             { char *c;
                            for (c = yytext; *c; c++)

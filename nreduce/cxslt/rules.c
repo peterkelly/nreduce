@@ -13,7 +13,7 @@ int compile_expression(elcgen *gen, int indent, expression *expr)
   }
   else if ((XPATH_NUMERIC_LITERAL == expr->type)) {
     gen_iprintf(gen,indent,"(cons (xml::mknumber ");
-    gen_printf(gen,"%f",expr->num);
+    gen_printf(gen,"%.15f",expr->num);
     gen_printf(gen,") nil)");
   }
   else if ((XPATH_STRING_LITERAL == expr->type)) {
@@ -700,7 +700,7 @@ int compile_num_expression(elcgen *gen, int indent, expression *expr)
   }
   else if ((XPATH_NUMERIC_LITERAL == expr->type)) {
     gen_iprintf(gen,indent,"");
-    gen_printf(gen,"%f",expr->num);
+    gen_printf(gen,"%.15f",expr->num);
   }
   else if ((XPATH_VAR_REF == expr->type)) {
     gen_printf(gen,"%s",expr->target->ident);
