@@ -12,16 +12,11 @@ int nfib(int n)
 int main(int argc, char **argv)
 {
   int i;
-  int max;
+  int n = 24;
+  if (2 <= argc)
+    n = atoi(argv[1]);
 
-  if (2 > argc) {
-    fprintf(stderr,"no max value supplied\n");
-    return -1;
-  }
-
-  max = atoi(argv[1]);
-
-  for (i = 0; i <= max; i++)
+  for (i = 0; i <= n; i++)
     printf("nfib(%d) = %d\n",i,nfib(i));
   return 0;
 }

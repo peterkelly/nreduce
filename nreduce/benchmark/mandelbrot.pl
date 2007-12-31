@@ -2,26 +2,26 @@
 
 sub mandel
 {
-  my ($Cr,$Ci,$iterations) = @_;
+  my ($Cr,$Ci) = @_;
   my $Zr = 0.0;
   my $Zi = 0.0;
-  for (my $r = 0; $r < $iterations; $r++) {
+  my $res;
+  for ($res = 0; $res < 4096; $res++) {
     $newZr = ($Zr*$Zr) - ($Zi*$Zi) + $Cr;
     $newZi = (2.0*($Zr*$Zi)) + $Ci;
     $mag = sqrt(($newZr*$newZr)+($newZi*$newZi));
     if ($mag > 2.0) {
-      return $r;
+      return $res;
     }
     $Zr = $newZr;
     $Zi = $newZi;
   }
-  return $iterations;
+  return $res;
 }
-
 
 sub printcell
 {
-  my $num = $_[0];
+  my ($num) = @_;
   if ($num > 40) {
     print "  ";
   }
@@ -41,19 +41,16 @@ sub printcell
 
 sub mloop
 {
-  my ($minx,$maxx,$xincr,$miny,$maxy,$yincr) = @_;
-  $maxx += $xincr;
-  for ($y = $miny; $y <= $maxy; $y += $yincr) {
-    for ($x = $minx; $x <= $maxx; $x += $xincr) {
-      printcell(mandel($x,$y,4096));
+  my ($minx,$maxx,$miny,$maxy,$incr) = @_;
+  for ($y = $miny; $y < $maxy; $y += $incr) {
+    for ($x = $minx; $x < $maxx; $x += $incr) {
+      printcell(mandel($x,$y));
     }
     print "\n";
   }
 }
 
-$incr = 0.01;
-if (0 <= $#ARGV) {
-  $incr = $ARGV[0];
-}
-print "incr = $incr\n";
-mloop(-1.5,0.5,$incr,-1.0,1.0,$incr);
+my $n = ($#ARGV < 0) ? 32 : $ARGV[0];
+my $incr = 2.0/$n;
+
+mloop(-1.5,0.5,-1.0,1.0,$incr);

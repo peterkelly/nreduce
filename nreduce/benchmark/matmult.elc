@@ -1,0 +1,83 @@
+for i max f =
+(if (< i max)
+  (cons (f i) (for (+ i 1) max f))
+  nil)
+
+sum lst =
+(if lst
+  (+ (head lst) (sum (tail lst)))
+  0)
+
+mkrow n val =
+(if (== n 0)
+  nil
+  (cons (% val 23) (mkrow (- n 1) (+ val 1))))
+
+mkmatrix width height val =
+(if (== height 0)
+  nil
+  (cons (mkrow width val) (mkmatrix width (- height 1) (+ val width))))
+
+
+dosum !x !aptr !bptr !total =
+(if aptr
+  (dosum x (tail aptr) (tail bptr)
+    (+ total (* (head aptr)
+                (item x (head bptr)))))
+  total)
+
+multiply a b =
+(letrec
+  arows = (len a)
+  acols = (len (head a))
+  bcols = (len (head b))
+  maxi = (- acols 1)
+in
+  (for 0 arows (!y.
+    (for 0 bcols (!x.
+      (dosum x (item y a) b 0))))))
+
+pad n =
+(if (<= n 0)
+  nil
+  (++ " " (pad (- n 1))))
+
+padnum n width =
+(letrec
+  str = (numtostring n)
+in
+  (++ (pad (- width (len str))) str))
+
+printrow row =
+(if row
+  (++ (padnum (head row) 5) (++ " " (printrow (tail row))))
+  "\n")
+
+printmatrix matrix =
+(if matrix
+  (++ (printrow (head matrix)) (printmatrix (tail matrix)))
+  nil)
+
+matsum matrix =
+(sum (map sum matrix))
+
+main args =
+(letrec
+  size = (if args
+            (stringtonum (head args))
+            10)
+  print = (>= (len args) 1)
+  a = (mkmatrix size size 1)
+  b = (mkmatrix size size 2)
+  c = (multiply a b)
+in
+  (if (!= (len args) 1)
+    (++ (printmatrix a)
+      (++ "--\n"
+      (++ (printmatrix b)
+      (++ "--\n"
+      (++ (printmatrix c)
+      (++ "\nsum = "
+      (++ (numtostring (matsum c)) "\n")))))))
+    (++ "sum = "
+      (++ (numtostring (matsum c)) "\n"))))

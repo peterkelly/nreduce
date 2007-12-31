@@ -2,11 +2,11 @@
 import math
 import sys
 
-def mandel(Cr,Ci,iterations):
-  Zr = 0
-  Zi = 0
+def mandel(Cr,Ci):
+  Zr = 0.0
+  Zi = 0.0
   res = 0
-  while res < iterations:
+  while res < 4096:
     newZr = (Zr*Zr) - (Zi*Zi) + Cr
     newZi = (2.0*(Zr*Zi)) + Ci
     mag = math.sqrt((newZr*newZr)+(newZi*newZi))
@@ -31,19 +31,21 @@ def printcell(num):
   else:
     sys.stdout.write("##")
 
-def mloop(minx,maxx,xincr,miny,maxy,yincr):
+def mloop(minx,maxx,miny,maxy,incr):
   y = miny
-  maxx += xincr;
-  while y <= maxy:
+  while y < maxy:
+
     x = minx
     while x < maxx:
-      printcell(mandel(x,y,4096))
-      x = x + xincr
-    sys.stdout.write("\n")
-    y = y + yincr
+      printcell(mandel(x,y))
+      x = x+incr
 
-incr = 0.01
-if (2 <= len(sys.argv)):
-  incr = float(sys.argv[1])
-print "incr =", incr
-mloop(-1.5,0.5,incr,-1.0,1.0,incr);
+    sys.stdout.write("\n")
+    y = y+incr
+
+n = 32
+if (len(sys.argv) >= 2):
+  n = int(sys.argv[1])
+
+incr = 2.0/n
+mloop(-1.5,0.5,-1.0,1.0,incr);

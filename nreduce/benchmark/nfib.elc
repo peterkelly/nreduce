@@ -14,6 +14,9 @@ loop n max =
             (loop (+ n 1) max)))))))
 
 main args =
-(if args
-  (loop 0 (stringtonum (head args)))
-  "Please specify maximum value\n")
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        24)
+in
+  (loop 0 n))

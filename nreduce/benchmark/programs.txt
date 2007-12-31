@@ -1,0 +1,9 @@
+            ELC    C      Java   Perl   Python Javascript
+
+bintree     YES    YES    YES    YES    YES    YES
+matmult     YES    YES    YES    YES    YES    YES
+nsieve      YES    YES    YES    YES    YES    YES
+quicksort   YES    YES    YES    YES    YES    YES
+mergesort   YES    YES    YES    YES    YES    YES
+nfib        YES    YES    YES    YES    YES    YES
+mandelbrot  YES    YES    YES    YES    YES    YES

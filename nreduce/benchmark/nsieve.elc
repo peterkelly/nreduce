@@ -1,0 +1,30 @@
+filtermult n lst !start !count =
+(if lst
+  (if (if (== 0 (% (head lst) n)) (!= (head lst) n) nil)
+    (++ (prefix count start) (filtermult n (tail lst) (tail lst) 0))
+    (filtermult n (tail lst) start (+ count 1)))
+  (prefix count start))
+
+numlist i max =
+(if (<= i max)
+  (cons i (numlist (+ i 1) max))
+  nil)
+
+go i sqrtm !primes =
+(if (<= i sqrtm)
+  (go (+ i 1) sqrtm (filtermult i primes primes 0))
+  (len primes))
+
+nsieve m =
+(go 2 (sqrt m) (numlist 2 m))
+
+showprimes n =
+(++ "Primes up to " (++ (numtostring n) (++ ": " (++ (numtostring (nsieve n)) "\n"))))
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        10000)
+in
+  (showprimes n))

@@ -1,0 +1,20 @@
+bintree depth max =
+(if (== depth max)
+  nil
+  (cons (bintree (+ depth 1) max)
+        (bintree (+ depth 1) max)))
+
+countnodes tree =
+(if tree
+  (+ 1 (+ (countnodes (head tree)) (countnodes (tail tree))))
+  0)
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        16)
+  tree = (bintree 0 n)
+  count = (countnodes tree)
+in
+  (++ (numtostring count) "\n"))

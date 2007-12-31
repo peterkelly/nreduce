@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-double mandel(double Zr, double Zi, double Cr, double Ci, double iterations)
+double mandel(double Cr, double Ci)
 {
   double res;
+  double Zr = 0.0;
+  double Zi = 0.0;
   for (res = 0; res < 4096; res++) {
     double newZr = ((Zr * Zr) - (Zi * Zi)) + Cr;
     double newZi = (2.0 * (Zr * Zi)) + Ci;
@@ -15,11 +17,6 @@ double mandel(double Zr, double Zi, double Cr, double Ci, double iterations)
     Zi = newZi;
   }
   return res;
-}
-
-double mandel0(double Cr, double Ci, double iterations)
-{
-  return mandel(0.0,0.0,Cr,Ci,iterations);
 }
 
 void printcell(double num)
@@ -36,28 +33,25 @@ void printcell(double num)
     printf("##");
 }
 
-void mloop(double minx, double maxx, double xincr, double miny, double maxy, double yincr)
+void mloop(double minx, double maxx, double miny, double maxy, double incr)
 {
   double x;
   double y;
-  for (y = miny; y < maxy; y += yincr) {
-    for (x = minx; x < maxx; x += xincr) {
-      printcell(mandel0(x,y,4096));
-    }
+  for (y = miny; y < maxy; y += incr) {
+    for (x = minx; x < maxx; x += incr)
+      printcell(mandel(x,y));
     printf("\n");
   }
 }
 
-void mandelrange(double minx, double maxx, double xincr, double miny, double maxy, double yincr)
-{
-  mloop(minx,maxx+xincr,xincr,miny,maxy,yincr);
-}
-
 int main(int argc, char **argv)
 {
-  double incr = 0.01;
+  int n = 32;
+  double incr;
   if (2 <= argc)
-    incr = atof(argv[1]);
-  printf("incr = %f\n",incr);
-  mandelrange(-1.5,0.5,incr,-1.0,1.0,incr);
+    n = atoi(argv[1]);
+
+  incr = 2.0/((double)n);
+  mloop(-1.5,0.5,-1.0,1.0,incr);
+  return 0;
 }

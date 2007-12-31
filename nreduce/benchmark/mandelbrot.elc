@@ -1,5 +1,5 @@
-mandel Zr Zi Cr Ci iterations res =
-(if (== res iterations)
+mandel Zr Zi Cr Ci res =
+(if (== res 4096)
     res
     (letrec
       newZr = (+ (- (* Zr Zr) (* Zi Zi)) Cr)
@@ -8,9 +8,9 @@ mandel Zr Zi Cr Ci iterations res =
      in
       (if (> mag 2.0)
           res
-          (mandel newZr newZi Cr Ci iterations (+ res 1)))))
+          (mandel newZr newZi Cr Ci (+ res 1)))))
 
-mandel0 Cr Ci iterations = (mandel 0.0 0.0 Cr Ci iterations 0)
+mandel0 Cr Ci = (mandel 0.0 0.0 Cr Ci 0)
 
 printcell num =
 (if (> num 40) "  "
@@ -19,12 +19,11 @@ printcell num =
 (if (> num 10) "**" "##"))))
 
 mloop minx maxx miny maxy incr x y =
-(++ (printcell (mandel0 x y 4096))
-(if (> x maxx)
-    (if (> (+ y incr) maxy)
-        (++ "\n" nil)
-        (++ "\n" 
-          (mloop minx maxx miny maxy incr minx (+ y incr))))
+(if (>= x maxx)
+    (if (>= (+ y incr) maxy)
+        "\n"
+        (++ "\n" (mloop minx maxx miny maxy incr minx (+ y incr))))
+(++ (printcell (mandel0 x y))
     (mloop minx maxx miny maxy incr (+ x incr) y)))
 
 mandelrange minx maxx miny maxy incr =
@@ -33,7 +32,9 @@ mandelrange minx maxx miny maxy incr =
 
 main args =
 (letrec
-  incr = (if args (stringtonum (head args)) 0.01)
+  n = (if args
+        (stringtonum (head args))
+        32)
+  incr = (/ 2 n)
 in
-  (++ "incr = " (++ (numtostring incr) (++ "\n"
-  (mandelrange -1.5 0.5 -1.0 1.0 incr)))))
+  (mandelrange -1.5 0.5 -1.0 1.0 incr))
