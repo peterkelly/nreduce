@@ -1,1 +1,1 @@
-SUBDIRS = nreduce
+SUBDIRS = nreduce util

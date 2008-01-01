@@ -334,6 +334,7 @@ static void handle_write(node *n, connection *conn)
       return;
     }
 
+    conn->totalwritten += w;
     array_remove_data(conn->sendbuf,w);
   }
 

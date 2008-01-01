@@ -114,10 +114,36 @@ void got_message(node *n, const msgheader *hdr, endpointid source,
   endpoint_add_message(endpt,newmsg);
 }
 
+static void add_connection_stats(node *n, connection *conn)
+{
+  list *l;
+  netstats *ns = NULL;
+  assert(NODE_ALREADY_LOCKED(n));
+
+  for (l = n->p->stats; l; l = l->next) {
+    netstats *tmp = (netstats*)l->data;
+    if ((tmp->ip == conn->ip) && (tmp->port == conn->port)) {
+      ns = tmp;
+      break;
+    }
+  }
+
+  if (NULL == ns) {
+    ns = (netstats*)calloc(1,sizeof(netstats));
+    ns->ip = conn->ip;
+    ns->port = conn->port;
+    list_push(&n->p->stats,ns);
+  }
+
+  ns->totalread += conn->totalread;
+  ns->totalwritten += conn->totalwritten;
+}
+
 void remove_connection(node *n, connection *conn)
 {
   assert(NODE_ALREADY_LOCKED(n));
   node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
+  add_connection_stats(n,conn);
   list_push(&n->p->toclose,(void*)conn->sock);
   llist_remove(&n->p->connections,conn);
   free(conn->hostname);
@@ -230,6 +256,7 @@ static void node_free(node *n)
     unlock_node(n);
   }
   node_close_pending(n);
+  list_free(n->p->stats,free);
   assert(NULL == n->p->endpoints.first);
   assert(NULL == n->p->listeners.first);
 
@@ -261,12 +288,28 @@ node *node_start(int loglevel, int port)
   return n;
 }
 
+static void node_show_netstats(node *n)
+{
+  list *l;
+  node_log(n,LOG_INFO,"Network stats:");
+  node_log(n,LOG_INFO,"         %-21s %-9s %-9s","IP/Port","Sent","Received");
+  node_log(n,LOG_INFO,"         %-21s %-9s %-9s",
+           "---------------------","---------","---------");
+  for (l = n->p->stats; l; l = l->next) {
+    netstats *ns = (netstats*)l->data;
+    char ipstr[100];
+    sprintf(ipstr,IP_FORMAT":%u",IP_ARGS(ns->ip),ns->port);
+    node_log(n,LOG_INFO,"NETSTATS %-21s %-9u %-9u",ipstr,ns->totalwritten,ns->totalread);
+  }
+}
+
 void node_run(node *n)
 {
   if (0 != pthread_join(n->p->iothread,NULL))
     fatal("pthread_join: %s",strerror(errno));
   node_close_endpoints(n);
   node_close_connections(n);
+  node_show_netstats(n);
   node_free(n);
 }
 

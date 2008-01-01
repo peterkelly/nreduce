@@ -53,6 +53,13 @@ typedef struct endpoint_private {
   endpoint_threadfun fun;
 } endpoint_private;
 
+typedef struct netstats {
+  in_addr_t ip;
+  uint16_t port;
+  int totalread;
+  int totalwritten;
+} netstats;
+
 typedef struct connection {
   socketid sockid;
   char *hostname;
@@ -76,6 +83,7 @@ typedef struct connection {
   int frameids[FRAMEADDR_COUNT];
   int dontread;
   int totalread;
+  int totalwritten;
 
   int canread;
   int canwrite;
@@ -133,6 +141,7 @@ typedef struct node_private {
   int loglevel;
   pthread_cond_t closecond;
   list *toclose;
+  list *stats;
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);
