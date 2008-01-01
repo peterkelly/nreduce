@@ -11,7 +11,7 @@ matmulti: matmulti.c
 	gcc -Wall -O3 -o matmulti matmulti.c
 
 matmultd: matmultd.c
-	gcc -Wall -O3 -o matmultd matmultd.c
+	gcc -Wall -O3 -o matmultd matmultd.c -lm
 
 bintree: bintree.c
 	gcc -Wall -O3 -o bintree bintree.c
