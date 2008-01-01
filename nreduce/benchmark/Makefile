@@ -32,7 +32,7 @@ nfib: nfib.c
 	gcc -Wall -O3 -o nfib nfib.c
 
 mandelbrot: mandelbrot.c
-	gcc -Wall -O3 -o mandelbrot mandelbrot.c
+	gcc -Wall -O3 -o mandelbrot mandelbrot.c -lm
 
 %.class: %.java
 	javac $<
