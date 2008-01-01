@@ -1,4 +1,4 @@
-package util
+package util;
 
 import java.util.*;
 import java.util.regex.*;
@@ -148,7 +148,7 @@ public class CollateNetStats
     public static void main(String[] args)
         throws Exception
     {
-        Collate c = new Collate();
-        c.run(args);
+        CollateNetStats cns = new CollateNetStats();
+        cns.run(args);
     }
 }
