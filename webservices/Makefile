@@ -6,12 +6,14 @@ all:
 	wsgen -cp . -wsdl service.calcdw.CalcDW
 	wsgen -cp . -wsdl service.peoplerpc.PeopleRPC
 	wsgen -cp . -wsdl service.peopledw.PeopleDW
+	wsgen -cp . -wsdl service.mandelbrot.Mandelbrot
 	wsimport -p proxy.hellorpc HelloRPCService.wsdl
 	wsimport -p proxy.hellodw HelloDWService.wsdl
 	wsimport -p proxy.calcrpc CalcRPCService.wsdl
 	wsimport -p proxy.calcdw CalcDWService.wsdl
 	wsimport -p proxy.peoplerpc PeopleRPCService.wsdl
 	wsimport -p proxy.peopledw PeopleDWService.wsdl
+	wsimport -p proxy.mandelbrot MandelbrotService.wsdl
 	javac client/*.java
 
 clean:
