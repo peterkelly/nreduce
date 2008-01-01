@@ -1,6 +1,6 @@
 import java.util.*;
 
-public class mergesort_inplace
+public class mergesort2
 {
   static String[] genlist(int max)
   {

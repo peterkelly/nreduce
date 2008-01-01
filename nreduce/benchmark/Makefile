@@ -1,17 +1,17 @@
-objects = nsieve nsieve.class matmulti matmulti.class matmultd matmultd.class bintree bintree.class \
-	quicksort quicksort.class quicksort_inplace.class quicksort_inplace mergesort mergesort.class \
-	mergesort_inplace mergesort_inplace.class nfib nfib.class mandelbrot mandelbrot.class
+objects = nsieve nsieve.class matmult2 matmult2.class matmult matmult.class bintree bintree.class \
+	quicksort quicksort.class quicksort2.class quicksort2 mergesort mergesort.class \
+	mergesort2 mergesort2.class nfib nfib.class mandelbrot mandelbrot.class ProcessResults.class
 
 all: $(objects)
 
 nsieve: nsieve.c
 	gcc -Wall -O3 -o nsieve nsieve.c
 
-matmulti: matmulti.c
-	gcc -Wall -O3 -o matmulti matmulti.c
+matmult2: matmult2.c
+	gcc -Wall -O3 -o matmult2 matmult2.c
 
-matmultd: matmultd.c
-	gcc -Wall -O3 -o matmultd matmultd.c -lm
+matmult: matmult.c
+	gcc -Wall -O3 -o matmult matmult.c -lm
 
 bintree: bintree.c
 	gcc -Wall -O3 -o bintree bintree.c
@@ -19,14 +19,14 @@ bintree: bintree.c
 quicksort: quicksort.c
 	gcc -Wall -O3 -o quicksort quicksort.c
 
-quicksort_inplace: quicksort_inplace.c
-	gcc -Wall -O3 -o quicksort_inplace quicksort_inplace.c
+quicksort2: quicksort2.c
+	gcc -Wall -O3 -o quicksort2 quicksort2.c
 
 mergesort: mergesort.c
 	gcc -Wall -O3 -o mergesort mergesort.c
 
-mergesort_inplace: mergesort_inplace.c
-	gcc -Wall -O3 -o mergesort_inplace mergesort_inplace.c
+mergesort2: mergesort2.c
+	gcc -Wall -O3 -o mergesort2 mergesort2.c
 
 nfib: nfib.c
 	gcc -Wall -O3 -o nfib nfib.c
@@ -39,3 +39,4 @@ mandelbrot: mandelbrot.c
 
 clean:
 	rm -f $(objects)
+	rm -f *.class

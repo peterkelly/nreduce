@@ -1,6 +1,6 @@
 import java.util.*;
 
-public class quicksort_inplace
+public class quicksort2
 {
   static String[] genlist(int max)
   {

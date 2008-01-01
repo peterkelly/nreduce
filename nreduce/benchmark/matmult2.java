@@ -1,4 +1,4 @@
-public class matmulti
+public class matmult2
 {
   static int[][] createMatrix(int height, int width, int val)
   {

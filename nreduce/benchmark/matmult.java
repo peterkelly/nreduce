@@ -1,4 +1,4 @@
-public class matmultd
+public class matmult
 {
   static double[][] createMatrix(double height, double width, double val)
   {
