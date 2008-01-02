@@ -39,6 +39,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 unsigned char NULL_PNTR_BITS[8] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF };
 
@@ -553,6 +554,11 @@ void local_collect(task *tsk)
 {
   int h;
   global *glo;
+  struct timeval start;
+  struct timeval end;
+  int ms;
+
+  gettimeofday(&start,NULL);
 
   #ifdef PROFILING
   tsk->stats.gcs++;
@@ -574,6 +580,11 @@ void local_collect(task *tsk)
 
   /* sweep */
   sweep(tsk,0);
+
+  gettimeofday(&end,NULL);
+  ms = timeval_diffms(start,end);
+  node_log(tsk->n,LOG_INFO,"Garbage collection took %dms",ms);
+  tsk->gcms += ms;
 }
 
 void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners)

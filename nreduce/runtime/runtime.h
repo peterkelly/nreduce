@@ -505,6 +505,7 @@ typedef struct task {
   int alloc_bytes;
   int framesize;
   int framesperblock;
+  int gcms;
 
   /* startup info (used by manager) */
   int haveidmap;

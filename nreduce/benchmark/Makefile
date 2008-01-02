@@ -1,6 +1,7 @@
 objects = nsieve nsieve.class matmult2 matmult2.class matmult matmult.class bintree bintree.class \
 	quicksort quicksort.class quicksort2.class quicksort2 mergesort mergesort.class \
-	mergesort2 mergesort2.class nfib nfib.class mandelbrot mandelbrot.class ProcessResults.class
+	mergesort2 mergesort2.class nfib nfib.class mandelbrot mandelbrot.class ProcessResults.class \
+	GenScripts.class
 
 all: $(objects)
 

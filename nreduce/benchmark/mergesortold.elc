@@ -8,31 +8,31 @@ flatten lst =
   (++ (head lst) (++ "\n" (flatten (tail lst))))
   nil)
 
-mergesort m =
+mergesort cmp m =
 (if (<= (len m) 1)
   m
   (letrec
     middle = (floor (/ (len m) 2))
     left = (prefix middle m)
     right = (skip middle m)
-    left2 = (mergesort left)
-    right2 = (mergesort right)
+    left2 = (mergesort cmp left)
+    right2 = (mergesort cmp right)
   in
-    (merge left2 right2 nil)))
+    (merge cmp left2 right2 nil)))
 
-merge xlst ylst out =
+merge cmp xlst ylst out =
 (if xlst
   (if ylst
     (letrec
       x = (head xlst)
       y = (head ylst)
      in
-      (if (> (strcmp x y) 0)
-        (merge xlst (tail ylst) (cons y out))
-        (merge (tail xlst) ylst (cons x out))))
-    (merge (tail xlst) ylst (cons (head xlst) out)))
+      (if (> (cmp x y) 0)
+        (merge cmp xlst (tail ylst) (cons y out))
+        (merge cmp (tail xlst) ylst (cons x out))))
+    (merge cmp (tail xlst) ylst (cons (head xlst) out)))
   (if ylst
-    (merge xlst (tail ylst) (cons (head ylst) out))
+    (merge cmp xlst (tail ylst) (cons (head ylst) out))
     (reverse out)))
 
 main args =
@@ -41,6 +41,6 @@ main args =
         (stringtonum (head args))
         1000)
   input = (genlist 0 n)
-  sorted = (mergesort input)
+  sorted = (mergesort strcmp input)
 in
   (flatten sorted))

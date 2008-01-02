@@ -104,7 +104,7 @@ public class ProcessResults
     for (Program p : programs.values()) {
       Test[] pt = p.tests.values().toArray(new Test[]{});
       Test last = pt[pt.length-1];
-      dataOut.format("%-30s ","\""+p.name+" "+last.n+"\"");
+      dataOut.format("%-30s ","\""+p.name+"\\n"+last.n+"\"");
       for (String lang : languages) {
         Implementation impl = last.impls.get(lang);
         if (null == impl) {
@@ -122,6 +122,7 @@ public class ProcessResults
     plotOut.println("set title \"All programs\"");
     plotOut.println("set style data histograms");
     plotOut.println("set style fill solid 1.0 border -1");
+    plotOut.println("set xtics rotate by 90");
 
     plotOut.println("plot \\");
     for (int i = 0; i < languages.length; i++) {
@@ -304,7 +305,7 @@ public class ProcessResults
     Test[] tests = new Test[programs.size()];
     int pos = 0;
     for (Program p : programs.values()) {
-      Test[] pt = p.tests.values().toArray(tests);
+      Test[] pt = p.tests.values().toArray(new Test[]{});
       tests[pos++] = pt[pt.length-1];
     }
 
@@ -312,14 +313,20 @@ public class ProcessResults
     List<String> languages = new ArrayList<String>();
     for (Implementation impl : tests[0].impls.values())
       languages.add(impl.language);
-    languages.add("foo"); // FIXME: remove
-    languages.add("bar"); // FIXME: remove
 
     // Remove any languages that aren't used by all tests
     for (int i = 1; i < tests.length; i++) {
       int lang = 0;
       while (lang < languages.size()) {
         String cur = languages.get(lang);
+
+        if (tests[i] == null)
+          System.out.println("tests[i] == null");
+        else if (tests[i].impls == null)
+          System.out.println("tests[i].impls == null");
+        else if (cur == null)
+          System.out.println("cur == null");
+
         if (!tests[i].impls.containsKey(cur))
           languages.remove(lang);
         else
@@ -333,12 +340,15 @@ public class ProcessResults
   public void run(String[] args)
     throws IOException
   {
-    if (args.length < 1) {
-      System.err.println("No results dir specified");
+    if (args.length < 2) {
+      System.err.println("Usage: ProcessResults <resultsdir> <plotsdir>");
       System.exit(-1);
     }
 
-    File resultsDir = new File(args[0]);
+    String results = args[0];
+    String plots = args[1];
+
+    File resultsDir = new File(results);
     File[] files = resultsDir.listFiles();
     for (File f : files) {
       if (f.isDirectory()) {
@@ -360,10 +370,10 @@ public class ProcessResults
     }
 
     for (Program p : programs.values()) {
-      p.dataNvsUser("plots/"+p.name);
+      p.dataNvsUser(plots+"/"+p.name);
     }
 
-    programHist("plots/hist");
+    programHist(plots+"/hist");
   }
 
   public static void main(String[] args)

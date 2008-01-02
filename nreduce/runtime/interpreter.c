@@ -1735,6 +1735,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   frame *runnable;
   const instruction *instr;
   char semdata = 0;
+  struct timeval start;
+  struct timeval end;
   #ifdef PROFILING
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   #endif
@@ -1759,6 +1761,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->rtemp = NULL;
   tsk->runptr = &runnable;
 
+  gettimeofday(&start,NULL);
+
   if (0 == tsk->tid) {
     frame *initial = frame_new(tsk,1);
     initial->instr = bc_instructions(tsk->bcdata);
@@ -1772,12 +1776,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   }
 
   if (ENGINE_NATIVE == engine_type) {
-    struct timeval start;
-    struct timeval end;
 
-    gettimeofday(&start,NULL);
     native_compile(tsk->bcdata,tsk->bcsize,tsk);
-    gettimeofday(&end,NULL);
 
     tsk->endpt->signal = 1;
 
@@ -1908,7 +1908,15 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     }
   }
 
-  node_log(tsk->n,LOG_INFO,"Task completed");
+  gettimeofday(&end,NULL);
+
+  int totalms = timeval_diffms(start,end);
+  int gcms = tsk->gcms;
+  int runms = totalms-gcms;
+  double gcpct = 100.0*((double)gcms)/((double)totalms);
+
+  node_log(tsk->n,LOG_INFO,"Task completed; total %d run %d gc %d gcpct %.3f%",
+           totalms,runms,gcms,gcpct);
   #ifdef PROFILING
   if (ENGINE_INTERPRETER == engine_type)
     print_profile(tsk);
