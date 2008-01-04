@@ -47,7 +47,7 @@
 
 #define FISH_DELAY_MS 250
 #define GC_DELAY 2500
-#define NSPARKS_REQUESTED 50
+#define NSPARKS_REQUESTED 1
 
 inline void op_begin(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
@@ -486,6 +486,35 @@ static void interpreter_jcmd_response(task *tsk, jcmd_response_msg *m, endpointi
       f2->data[f2->instr->expcount-2] = obj;
     }
   }
+}
+
+static void interpreter_get_stats(task *tsk, get_stats_msg *m)
+{
+  get_stats_response_msg gsrm;
+  frameblock *fb;
+  int i;
+  int connections;
+  int listeners;
+  memset(&gsrm,0,sizeof(gsrm));
+  gsrm.epid = tsk->endpt->epid;
+
+  /* frame statistics */
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      switch (f->state) {
+      case STATE_SPARKED: gsrm.sparked++; break;
+      case STATE_RUNNING: gsrm.running++; break;
+      case STATE_BLOCKED: gsrm.blocked++; break;
+      default: break;
+      }
+    }
+  }
+
+  /* memory statistics */
+  memusage(tsk,&gsrm.cells,&gsrm.bytes,&gsrm.alloc,&connections,&listeners);
+
+  endpoint_send(tsk->endpt,m->sender,MSG_GET_STATS_RESPONSE,&gsrm,sizeof(gsrm));
 }
 
 static int get_idmap_index(task *tsk, endpointid epid)
@@ -998,6 +1027,10 @@ static void handle_message(task *tsk, message *msg)
   case MSG_JCMD_RESPONSE:
     assert(sizeof(jcmd_response_msg) <= msg->size);
     interpreter_jcmd_response(tsk,(jcmd_response_msg*)msg->data,msg->source);
+    break;
+  case MSG_GET_STATS:
+    assert(sizeof(get_stats_msg) <= msg->size);
+    interpreter_get_stats(tsk,(get_stats_msg*)msg->data);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");

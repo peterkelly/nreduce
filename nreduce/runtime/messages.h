@@ -83,6 +83,10 @@
 #define MSG_INSERT              709
 #define MSG_SET_NEXT            710
 
+/* Monitoring */
+#define MSG_GET_STATS           800
+#define MSG_GET_STATS_RESPONSE  801
+
 typedef struct newtask_msg {
   int tid;
   int groupsize;
@@ -142,5 +146,21 @@ typedef struct {
   int len;
   char data[0];
 } __attribute__ ((__packed__)) jcmd_response_msg;
+
+typedef struct get_stats_msg {
+  endpointid sender;
+} __attribute__ ((__packed__)) get_stats_msg;
+
+typedef struct get_stats_response_msg {
+  endpointid epid;
+  /* frames */
+  int sparked;
+  int running;
+  int blocked;
+  /* memory */
+  int cells;
+  int bytes;
+  int alloc;
+} __attribute__ ((__packed__)) get_stats_response_msg;
 
 #endif

@@ -517,6 +517,7 @@ static list *find_nodes(node *n, endpointid initial, int want, int print)
 
 typedef struct {
   list *chordids;
+  list *tmpret;
 } find_tasks_data;
 
 static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
@@ -542,8 +543,11 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
       get_tasks_response_msg *gtrm = (get_tasks_response_msg*)msg->data;
       assert(sizeof(get_tasks_response_msg) <= msg->size);
       assert(sizeof(get_tasks_response_msg)+gtrm->count*sizeof(endpointid) == msg->size);
-      for (i = 0; i < gtrm->count; i++)
-        printf("Task: "EPID_FORMAT"\n",EPID_ARGS(gtrm->tasks[i]));
+      for (i = 0; i < gtrm->count; i++) {
+        endpointid *copy = (endpointid*)malloc(sizeof(endpointid));
+        memcpy(copy,&gtrm->tasks[i],sizeof(endpointid));
+        list_push(&ftd->tmpret,copy);
+      }
       done++;
       break;
     }
@@ -555,12 +559,124 @@ static void find_tasks_thread(node *n, endpoint *endpt, void *arg)
   }
 }
 
-static void find_tasks(node *n, list *chordids)
+static list *find_tasks(node *n, list *chordids)
 {
   pthread_t thread;
   find_tasks_data ftd;
   ftd.chordids = chordids;
+  ftd.tmpret = NULL;
   node_add_thread(n,"find_tasks",find_tasks_thread,&ftd,&thread);
+  if (0 != pthread_join(thread,NULL))
+    fatal("pthread_join: %s",strerror(errno));
+  return ftd.tmpret;
+}
+
+typedef struct {
+  list *epids;
+} monitor_data;
+
+static void monitor_thread(node *n, endpoint *endpt, void *arg)
+{
+  monitor_data *md = (monitor_data*)arg;
+  get_stats_msg gsm;
+  list *l;
+  int count = list_count(md->epids);
+  endpointid *epids = (endpointid*)calloc(count,sizeof(endpointid));
+  char *got = (char*)calloc(count,1);
+  get_stats_response_msg *messages =
+    (get_stats_response_msg*)malloc(count*sizeof(get_stats_response_msg));
+  int i;
+  int remaining = 0;
+  struct timeval monstart;
+  struct timeval next;
+  memset(&gsm,0,sizeof(gsm));
+  gsm.sender = endpt->epid;
+
+  i = 0;
+  for (l = md->epids; l; l = l->next)
+    epids[i++] = *(endpointid*)l->data;
+
+  gettimeofday(&monstart,NULL);
+  next = monstart;
+
+  while (1) {
+    struct timeval loopstart;
+    struct timeval loopend;
+    struct timeval diff;
+    struct timespec sleep_time;
+
+    gettimeofday(&loopstart,NULL);
+    memset(got,0,count);
+    memset(messages,0,count*sizeof(get_stats_response_msg*));
+    remaining = count;
+    for (i = 0; i < count; i++) {
+      endpoint_send(endpt,epids[i],MSG_GET_STATS,&gsm,sizeof(gsm));
+    }
+
+    while (0 < remaining) {
+      message *msg = endpoint_receive(endpt,-1);
+      switch (msg->tag) {
+      case MSG_GET_STATS_RESPONSE: {
+        get_stats_response_msg *gtrm = (get_stats_response_msg*)msg->data;
+
+        int index = -1;
+        for (i = 0; i < count; i++) {
+          if (endpointid_equals(&gtrm->epid,&epids[i]))
+            index = i;
+        }
+        if (0 > index) {
+          printf("error: endpointid "EPID_FORMAT" not in list\n",EPID_ARGS(gtrm->epid));
+        }
+        else if (got[index]) {
+          printf("error: already have response for "EPID_FORMAT"\n",EPID_ARGS(gtrm->epid));
+        }
+        else {
+          got[index] = 1;
+          memcpy(&messages[index],gtrm,sizeof(get_stats_response_msg));
+          remaining--;
+        }
+        break;
+      }
+      default:
+        fatal("Invalid message: %d",msg->tag);
+        break;
+      }
+      message_free(msg);
+    }
+
+
+    printf("%-30s %-10s %-10s %-10s %-10s %-10s %-10s\n",
+           "Task","Sparked","Running","Blocked","Cells","Bytes","Allocated");
+    for (i = 0; i < count; i++) {
+      char tmp[100];
+      snprintf(tmp,100,EPID_FORMAT,EPID_ARGS(messages[i].epid));
+      printf("%-30s %-10d %-10d %-10d %-10d %-10d %-10d\n",
+             tmp,messages[i].sparked,messages[i].running,messages[i].blocked,
+             messages[i].cells,messages[i].bytes,messages[i].alloc);
+    }
+
+    gettimeofday(&loopend,NULL);
+    printf("getstats took %dms\n",timeval_diffms(loopstart,loopend));
+    printf("\n");
+
+    next = timeval_addms(next,1000);
+    diff = timeval_diff(loopend,next);
+    sleep_time.tv_sec = diff.tv_sec;
+    sleep_time.tv_nsec = diff.tv_usec * 1000;
+    nanosleep(&sleep_time,NULL);
+  }
+
+  free(epids);
+  free(got);
+  free(messages);
+}
+
+static void monitor(node *n, list *epids)
+{
+  pthread_t thread;
+  monitor_data md;
+  md.epids = epids;
+  node_add_thread(n,"monitor",monitor_thread,&md,&thread);
   if (0 != pthread_join(thread,NULL))
     fatal("pthread_join: %s",strerror(errno));
 }
@@ -590,9 +706,22 @@ int do_client(char *initial_str, int argc, const char **argv)
     list_free(nodes,free);
   }
   else if (!strcmp(cmd,"findtasks")) {
-    list *nodes = find_nodes(n,initial,0,1);
-    find_tasks(n,nodes);
+    list *nodes = find_nodes(n,initial,0,0);
+    list *tasks = find_tasks(n,nodes);
+    list *l;
+    for (l = tasks; l; l = l->next) {
+      endpointid *epid = (endpointid*)l->data;
+      printf("Task: "EPID_FORMAT"\n",EPID_ARGS(*epid));
+    }
     list_free(nodes,free);
+    list_free(tasks,free);
+  }
+  else if (!strcmp(cmd,"monitor")) {
+    list *nodes = find_nodes(n,initial,0,0);
+    list *tasks = find_tasks(n,nodes);
+    monitor(n,tasks);
+    list_free(nodes,free);
+    list_free(tasks,free);
   }
   else if (!strcmp(cmd,"run")) {
     if (3 > argc) {
