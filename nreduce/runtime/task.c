@@ -45,7 +45,7 @@
 extern const module_info *modules;
 
 pthread_key_t task_key;
-int engine_type = ENGINE_INTERPRETER;
+int engine_type = ENGINE_NATIVE;
 
 global *pntrhash_lookup(task *tsk, pntr p)
 {
