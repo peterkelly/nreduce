@@ -245,7 +245,7 @@ static void java_connect_response(node *n, javath *jth, endpoint *endpt, connect
 
 /* for notifying of error communicating with JVM */
 static void java_connection_closed(node *n, javath *jth, endpoint *endpt,
-                                      connection_event_msg *m)
+                                      connection_closed_msg *m)
 {
   send_java_errors(n,jth,endpt);
 }
@@ -331,8 +331,8 @@ void java_thread(node *n, endpoint *endpt, void *arg)
       java_connect_response(n,&jth,endpt,(connect_response_msg*)msg->data);
       break;
     case MSG_CONNECTION_CLOSED:
-      assert(sizeof(connection_event_msg) == msg->size);
-      java_connection_closed(n,&jth,endpt,(connection_event_msg*)msg->data);
+      assert(sizeof(connection_closed_msg) == msg->size);
+      java_connection_closed(n,&jth,endpt,(connection_closed_msg*)msg->data);
       break;
     case MSG_READ_RESPONSE:
       assert(sizeof(read_response_msg) <= msg->size);

@@ -118,7 +118,7 @@ void notify_read(node *n, connection *conn)
 void notify_closed(node *n, connection *conn, int error)
 {
   if (0 != conn->owner.localid) {
-    connection_event_msg cem;
+    connection_closed_msg cem;
     cem.sockid = conn->sockid;
     cem.error = error;
     memcpy(cem.errmsg,conn->errmsg,sizeof(cem.errmsg));

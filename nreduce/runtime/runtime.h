@@ -136,8 +136,9 @@ struct gaddr;
 #define B_COMPILE        64
 
 #define B_ISSPACE        65
+#define B_LOOKUP         66
 
-#define NUM_BUILTINS     66
+#define NUM_BUILTINS     67
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -261,6 +262,7 @@ typedef struct {
 
 typedef struct sysobject {
   int type;
+  int ownertid;
   int fd;
   char *hostname;
   int port;
@@ -277,8 +279,6 @@ typedef struct sysobject {
   javaid jid;
   cell *c;
   pntr p;
-  int newclosed;
-  int newerror;
   int frameids[FRAMEADDR_COUNT];
 } sysobject;
 
@@ -417,8 +417,11 @@ typedef struct global {
   int fetching;
   waitqueue wq;
   int flags;
-  struct global *pntrnext;
-  struct global *addrnext;
+  struct global *targetnext; /* for targethash entries */
+  struct global *physnext; /* for physhash entries */
+  struct global *addrnext; /* for addrhash entries */
+  struct global *next; /* for tsk->globals */
+  struct global *prev; /* for tsk->globals */
 } global;
 
 /* task */
@@ -461,8 +464,13 @@ typedef struct task {
   endpointid *idmap;
 
   /* distributed memory management */
-  global **pntrhash;
+  global **targethash;
+  global **physhash;
   global **addrhash;
+  struct {
+    global *first;
+    global *last;
+  } globals;
   int naddrsread;
   array **distmarks;
   endpointid gc;
@@ -550,18 +558,17 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
 void task_free(task *tsk);
 void print_profile(task *tsk);
 
-global *pntrhash_lookup(task *tsk, pntr p);
+global *targethash_lookup(task *tsk, pntr p);
+global *physhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);
-void pntrhash_add(task *tsk, global *glo);
+void targethash_add(task *tsk, global *glo);
 void addrhash_add(task *tsk, global *glo);
-void pntrhash_remove(task *tsk, global *glo);
+void targethash_remove(task *tsk, global *glo);
+void physhash_remove(task *tsk, global *glo);
 void addrhash_remove(task *tsk, global *glo);
 
-global *add_global(task *tsk, gaddr addr, pntr p);
-pntr global_lookup_existing(task *tsk, gaddr addr);
-pntr global_lookup(task *tsk, gaddr addr, pntr val);
-global *make_global(task *tsk, pntr p);
-gaddr global_addressof(task *tsk, pntr p);
+global *add_target(task *tsk, gaddr addr, pntr p);
+gaddr get_physical_address(task *tsk, pntr p);
 
 void add_gaddr(list **l, gaddr addr);
 void remove_gaddr(task *tsk, list **l, gaddr addr);
@@ -615,6 +622,7 @@ typedef struct reader {
 
 #define CHAR_TAG   0x44912234
 #define INT_TAG    0xA492BC09
+#define UINT_TAG   0x9415C132
 #define DOUBLE_TAG 0x44ABC92F
 #define STRING_TAG 0x93EB1123
 #define BINARY_TAG 0x559204A3
@@ -624,6 +632,7 @@ typedef struct reader {
 reader read_start(task *tsk, const char *data, int size);
 void read_char(reader *rd, char *c);
 void read_int(reader *rd, int *i);
+void read_uint(reader *rd, unsigned int *i);
 void read_double(reader *rd, double *d);
 void read_string(reader *rd, char **s);
 void read_binary(reader *rd, char *b, int len);
@@ -635,6 +644,7 @@ array *write_start(void);
 void write_tag(array *wr, int tag);
 void write_char(array *wr, char c);
 void write_int(array *wr, int i);
+void write_uint(array *wr, unsigned int i);
 void write_double(array *wr, double d);
 void write_string(array *wr, char *s);
 void write_binary(array *wr, const void *b, int len);
@@ -711,7 +721,10 @@ void cap_dealloc(cap *c);
 
 /* interpreter */
 
+void add_waiter_frame(waitqueue *wq, frame *f);
+void schedule_frame(task *tsk, frame *f, int desttsk, array *msg);
 void eval_remoteref(task *tsk, frame *f2, pntr p);
+void resume_local_waiters(task *tsk, waitqueue *wq);
 void resume_fetchers(task *tsk, waitqueue *wq, pntr obj);
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
 void add_pending_mark(task *tsk, gaddr addr);

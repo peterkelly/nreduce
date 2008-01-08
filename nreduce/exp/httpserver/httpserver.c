@@ -311,9 +311,9 @@ static void http_thread(node *n, endpoint *endpt, void *arg)
       /* ignore */
       break;
     case MSG_CONNECTION_CLOSED: {
-      connection_event_msg *cem = (connection_event_msg*)msg->data;
+      connection_closed_msg *cem = (connection_closed_msg*)msg->data;
       httpconn *hc;
-      assert(sizeof(connection_event_msg) <= msg->size);
+      assert(sizeof(connection_closed_msg) <= msg->size);
       hc = find_connection(&connections,cem->sockid);
       assert(hc);
 

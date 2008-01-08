@@ -78,6 +78,11 @@ void read_int(reader *rd, int *i)
   read_tagged_bytes(rd,INT_TAG,i,sizeof(int));
 }
 
+void read_uint(reader *rd, unsigned int *i)
+{
+  read_tagged_bytes(rd,UINT_TAG,i,sizeof(unsigned int));
+}
+
 void read_double(reader *rd, double *d)
 {
   read_tagged_bytes(rd,DOUBLE_TAG,d,sizeof(double));
@@ -135,11 +140,23 @@ void read_pntr(reader *rd, pntr *pout)
   }
   else if (CELL_REMOTEREF == type) {
     gaddr addr;
+    global *glo;
     read_gaddr(rd,&addr);
-    *pout = global_lookup(tsk,addr,NULL_PNTR);
+    if (NULL != (glo = addrhash_lookup(tsk,addr))) {
+      *pout = glo->p;
+    }
+    else {
+      cell *c;
+      assert(addr.tid != tsk->tid);
+      c = alloc_cell(tsk);
+      c->type = CELL_REMOTEREF;
+      make_pntr(*pout,c);
+      make_pntr(c->field1,add_target(tsk,addr,*pout));
+    }
   }
   else {
     gaddr addr;
+    global *existing;
     read_gaddr(rd,&addr);
 
     switch (type) {
@@ -190,6 +207,7 @@ void read_pntr(reader *rd, pntr *pout)
       int i;
       int count;
       int address;
+      int nfetchers;
 
       fr->c = alloc_cell(tsk);
       fr->c->type = CELL_FRAME;
@@ -198,6 +216,14 @@ void read_pntr(reader *rd, pntr *pout)
 
       read_int(rd,&address);
       fr->instr = bc_instructions(tsk->bcdata)+address;
+
+      /* Read fetchers */
+      read_int(rd,&nfetchers);
+      for (i = 0; i < nfetchers; i++) {
+        gaddr *addr = (gaddr*)malloc(sizeof(gaddr));
+        read_gaddr(rd,addr);
+        list_push(&fr->wq.fetchers,addr);
+      }
 
       count = fr->instr->expcount;
       for (i = 0; i < count; i++)
@@ -228,21 +254,40 @@ void read_pntr(reader *rd, pntr *pout)
         read_pntr(rd,&cp->data[i]);
       break;
     }
-    case CELL_SYSOBJECT:
-      /* FIXME: these should't migrate... how to handle them? */
-      fatal("FIXME: can't receive sysobject");
+    case CELL_SYSOBJECT: {
+      int type;
+      read_int(rd,&type);
+      sysobject *so = new_sysobject(tsk,type);
+      read_int(rd,&so->ownertid);
+
+      assert(so->ownertid != tsk->tid);
+      assert(so->c);
+      make_pntr(*pout,so->c);
+
       break;
+    }
     default:
       fatal("read_pntr: got unexpected cell type %d",type);
     }
 
-    if (NULL == addrhash_lookup(tsk,addr)) {
-/*       printf("%d: read_pntr: Storing %s with addr %d.%d", */
-/*              tsk->tid,cell_types[type],addr.tid,addr.lid); */
-      add_global(tsk,addr,*pout);
+    if (NULL == (existing = addrhash_lookup(tsk,addr))) {
+      assert(addr.tid != tsk->tid);
+      assert(addr.lid >= 0);
+      assert(NULL == targethash_lookup(tsk,*pout));
+      add_target(tsk,addr,*pout);
+    }
+    else if (CELL_REMOTEREF == pntrtype(existing->p)) {
+      cell *refcell = get_pntr(existing->p);
+      refcell->type = CELL_IND;
+      refcell->field1 = *pout;
+      targethash_remove(tsk,existing);
+      existing->p = *pout;
+      targethash_add(tsk,existing);
     }
     else {
-/*       printf("%d: read_pntr: Received %s that I already have",tsk->tid,cell_types[type]); */
+      *pout = existing->p;
+      /* FIXME: work out if it's possible for us to receive a copy of an object we already have
+         that differs from our existing copy, and if this can cause problems */
     }
 
     /*
@@ -297,6 +342,12 @@ void write_int(array *wr, int i)
   array_append(wr,&i,sizeof(int));
 }
 
+void write_uint(array *wr, unsigned int i)
+{
+  write_tag(wr,UINT_TAG);
+  array_append(wr,&i,sizeof(unsigned int));
+}
+
 void write_double(array *wr, double d)
 {
   write_tag(wr,DOUBLE_TAG);
@@ -348,14 +399,37 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     write_gaddr(arr,tsk,pglobal(p)->addr);
   }
   else if ((CELL_REMOTEREF == pntrtype(p)) ||
-           (CELL_HOLE == pntrtype(p)) || /* FIXME: should attach waiter instead? */
-           refonly) {
-    global *glo = make_global(tsk,p);
+           (CELL_HOLE == pntrtype(p))) { /* FIXME: should attach waiter instead? */
+    /* FIXME: need to test the case of HOLE */
+
+    /* We have a remote reference that does not yet have a target address set. Send the
+       physical address of the reference. */
+    gaddr physaddr = get_physical_address(tsk,p);
     write_int(arr,CELL_REMOTEREF);
-    write_gaddr(arr,tsk,glo->addr);
+    write_gaddr(arr,tsk,physaddr);
+  }
+  else if (refonly) {
+    /* We don't want to send the actual object, only a reference. We've handled the case above
+       where the object is a remoteref (in which case the target is set), and also numbers and
+       nil (which are trivial to send and don't have addresses). */
+
+    global *glo = targethash_lookup(tsk,p);
+    if (NULL != glo) {
+      /* The object is a replica, since the original is in another heap */
+      assert(glo->addr.tid != tsk->tid);
+      assert(glo->addr.lid >= 0);
+      write_int(arr,CELL_REMOTEREF);
+      write_gaddr(arr,tsk,glo->addr);
+    }
+    else {
+      /* The object is an original */
+      gaddr addr = get_physical_address(tsk,p);
+      write_int(arr,CELL_REMOTEREF);
+      write_gaddr(arr,tsk,addr);
+    }
   }
   else {
-    gaddr addr = global_addressof(tsk,p);
+    gaddr addr = get_physical_address(tsk,p);
     write_int(arr,pntrtype(p));
     write_gaddr(arr,tsk,addr);
 
@@ -391,12 +465,43 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
       int i;
       int count = f->instr->expcount;
       int address = f->instr-bc_instructions(tsk->bcdata);
+      int nfetchers = list_count(f->wq.fetchers);
+      list *l;
 
-      /* FIXME: if frame is sparked, schedule it; if frame is running, just send a ref (and
-         add waiter?) */
-      assert(STATE_NEW == f->state);
+      assert((STATE_NEW == f->state) || (STATE_DONE == f->state));
+      assert(NULL == f->retp);
+      assert(NULL == f->wq.frames);
+
+      if (STATE_DONE == f->state) {
+        int fno = frame_fno(tsk,f);
+        int startaddr = bc_funinfo(tsk->bcdata)[fno].address;
+        /* We can only migrate a running frame if it's a BIF wrapper... this is because the
+           destination will restart evaluation from the beginning of the function to ensure
+           all necessary stack positions are evaluated */
+        assert(NUM_BUILTINS > fno);
+        address = startaddr+1; /* skip GLOBSTART */
+      }
 
       write_int(arr,address);
+
+      assert(f->c);
+
+      /* Idea: when the recipient gets the frame, have it send RESPOND messages to
+         all the fetchers, telling them that the result object is a remoteref that
+         points to the new addres. I think this might lead to a race condition though,
+         beacuse these RESPOND messages could arrive in arbitrary order. Perhaps it's
+         safest to just send back one RESPOND message when the actual value is known. */
+
+      /* Transfer fetchers */
+      write_int(arr,nfetchers);
+      for (l = f->wq.fetchers; l; l = l->next) {
+        gaddr *addr = (gaddr*)l->data;
+        write_gaddr(arr,tsk,*addr);
+      }
+      list_free(f->wq.fetchers,free);
+      f->wq.fetchers = NULL;
+
+      /* Transfer data */
       for (i = 0; i < count; i++)
         write_ref(arr,tsk,f->data[i]);
       break;
@@ -414,10 +519,12 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
         write_ref(arr,tsk,cp->data[i]);
       break;
     }
-    case CELL_SYSOBJECT:
-      /* FIXME: these should't migrate... how to handle them? */
-      fatal("FIXME: can't send sysobject");
+    case CELL_SYSOBJECT: {
+      sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
+      write_int(arr,so->type);
+      write_int(arr,so->ownertid);
       break;
+    }
     default:
       fatal("write: invalid pntr type %d",pntrtype(p));
       break;

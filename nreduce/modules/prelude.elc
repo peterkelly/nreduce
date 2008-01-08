@@ -56,7 +56,7 @@ streamcon so =
 
 connect host port out =
 (letrec
-  con = (_connect (forcelist host) port (printer con out))
+  con = (_connect (_lookup (forcelist host)) port (printer con out))
  in
   (streamcon con))
 

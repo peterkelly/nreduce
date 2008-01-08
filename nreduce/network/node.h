@@ -255,7 +255,7 @@ typedef struct {
   socketid sockid;
   int error;
   char errmsg[ERRMSG_MAX+1];
-} __attribute__ ((__packed__)) connection_event_msg;
+} __attribute__ ((__packed__)) connection_closed_msg;
 
 typedef struct {
   socketid sockid;

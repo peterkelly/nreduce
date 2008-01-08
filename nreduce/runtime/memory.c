@@ -90,6 +90,7 @@ static void mark_frame(task *tsk, frame *f, short bit);
 
 void mark_global(task *tsk, global *glo, short bit)
 {
+  assert(glo);
   if (glo->flags & bit) {
     assert(!is_pntr(glo->p) || (get_pntr(glo->p)->flags & bit));
     return;
@@ -150,6 +151,7 @@ static void mark(task *tsk, pntr p, short bit)
 
   while (0 < tsk->markstack->count) {
     int cont = 0;
+    global *target;
 
     p = tsk->markstack->data[--tsk->markstack->count];
 
@@ -161,6 +163,8 @@ static void mark(task *tsk, pntr p, short bit)
         break;
       }
       c->flags |= bit;
+      if ((FLAG_DMB == bit) && (NULL != (target = targethash_lookup(tsk,p))))
+        mark_global(tsk,target,bit);
 
       if (CELL_AREF == pntrtype(p)) {
         carray *arr = (carray*)get_pntr(c->field1);
@@ -195,6 +199,8 @@ static void mark(task *tsk, pntr p, short bit)
       continue;
 
     c->flags |= bit;
+    if ((FLAG_DMB == bit) && (NULL != (target = targethash_lookup(tsk,p))))
+      mark_global(tsk,target,bit);
     switch (pntrtype(p)) {
     case CELL_IND:
       mark(tsk,c->field1,bit);
@@ -273,6 +279,7 @@ sysobject *new_sysobject(task *tsk, int type)
 {
   sysobject *so = (sysobject*)calloc(1,sizeof(sysobject));
   so->type = type;
+  so->ownertid = tsk->tid;
   so->c = alloc_cell(tsk);
   make_pntr(so->p,so->c);
   so->c->type = CELL_SYSOBJECT;
@@ -315,42 +322,43 @@ void free_global(task *tsk, global *glo)
 
 static void free_sysobject(task *tsk, sysobject *so)
 {
-  switch (so->type) {
-  case SYSOBJECT_FILE:
-    close(so->fd);
-    break;
-  case SYSOBJECT_CONNECTION: {
-    if (!socketid_isnull(&so->sockid))
-      send_delete_connection(tsk->endpt,so->sockid);
-    if (!tsk->done) {
-      assert(0 == so->frameids[CONNECT_FRAMEADDR]);
-      assert(0 == so->frameids[READ_FRAMEADDR]);
-      assert(0 == so->frameids[WRITE_FRAMEADDR]);
-      assert(0 == so->frameids[LISTEN_FRAMEADDR]);
-      assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
+  if (so->ownertid == tsk->tid) {
+    switch (so->type) {
+    case SYSOBJECT_FILE:
+      close(so->fd);
+      break;
+    case SYSOBJECT_CONNECTION: {
+      if (!socketid_isnull(&so->sockid))
+        send_delete_connection(tsk->endpt,so->sockid);
+      if (!tsk->done) {
+        assert(0 == so->frameids[CONNECT_FRAMEADDR]);
+        assert(0 == so->frameids[READ_FRAMEADDR]);
+        assert(0 == so->frameids[WRITE_FRAMEADDR]);
+        assert(0 == so->frameids[LISTEN_FRAMEADDR]);
+        assert(0 == so->frameids[ACCEPT_FRAMEADDR]);
+      }
+      break;
     }
-    free(so->hostname);
-    free(so->buf);
-    break;
+    case SYSOBJECT_LISTENER: {
+      if (!socketid_isnull(&so->sockid))
+        send_delete_listener(tsk->endpt,so->sockid);
+      break;
+    }
+    case SYSOBJECT_JAVA: {
+      /* This could be improved by releasing all garbage java objects in a single message */
+      array *arr = array_new(1,0);
+      array_printf(arr,"release @%d",so->jid.jid);
+      send_jcmd(tsk->endpt,1,1,arr->data,arr->nbytes);
+      array_free(arr);
+      break;
+    }
+    default:
+      fatal("Invalid sysobject type %d",so->type);
+      break;
+    }
   }
-  case SYSOBJECT_LISTENER: {
-    if (!socketid_isnull(&so->sockid))
-      send_delete_listener(tsk->endpt,so->sockid);
-    free(so->hostname);
-    break;
-  }
-  case SYSOBJECT_JAVA: {
-    /* This could be improved by releasing all garbage java objects in a single message */
-    array *arr = array_new(1,0);
-    array_printf(arr,"release @%d",so->jid.jid);
-    send_jcmd(tsk->endpt,1,1,arr->data,arr->nbytes);
-    array_free(arr);
-    break;
-  }
-  default:
-    fatal("Invalid sysobject type %d",so->type);
-    break;
-  }
+  free(so->hostname);
+  free(so->buf);
   free(so);
 }
 
@@ -392,16 +400,14 @@ void clear_marks(task *tsk, short bit)
 {
   block *bl;
   int i;
-  int h;
   global *glo;
 
   for (bl = tsk->blocks; bl; bl = bl->next)
     for (i = 0; i < BLOCK_SIZE; i++)
       bl->values[i].flags &= ~bit;
 
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
-      glo->flags &= ~bit;
+  for (glo = tsk->globals.first; glo; glo = glo->next)
+    glo->flags &= ~bit;
 }
 
 void mark_roots(task *tsk, short bit)
@@ -463,68 +469,48 @@ void mark_roots(task *tsk, short bit)
   /* mark any remote references that are currently being fetched (and any frames waiting
      on them */
   for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
+    for (glo = tsk->targethash[h]; glo; glo = glo->targetnext)
       if (glo->fetching)
-        mark_global(tsk,glo,FLAG_MARKED);
+        mark_global(tsk,glo,bit);
 }
 
-void sweep(task *tsk, int all)
+static int global_needed(global *glo)
+{
+  if ((glo->flags & FLAG_MARKED) || (glo->flags & FLAG_DMB)) {
+    return 1;
+  }
+  else if (is_pntr(glo->p)) {
+    cell *c = checkcell(get_pntr(glo->p));
+    if ((c->flags & FLAG_MARKED) || (c->flags & FLAG_DMB))
+      return 1;
+  }
+  return 0;
+}
+
+static void sweep_globals(task *tsk, int all)
+{
+  global *glo;
+  global *next;
+
+  for (glo = tsk->globals.first; glo; glo = next) {
+    next = glo->next;
+    if (all || !global_needed(glo)) {
+      /* Remove from hash tables */
+      addrhash_remove(tsk,glo);
+      targethash_remove(tsk,glo);
+      physhash_remove(tsk,glo);
+      /* Remove from linked list of all globals */
+      llist_remove(&tsk->globals,glo);
+      /* Free memory */
+      free_global(tsk,glo);
+    }
+  }
+}
+
+static void sweep_cells(task *tsk, int all)
 {
   block *bl;
   int i;
-
-  global **gptr;
-  int h;
-  global *glo;
-
-
-  /* Treat all new globals and cells that were created during this garbage collection cycle
-     as rools that also need to be marked */
-  if (tsk->indistgc) {
-    for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-      for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
-        if (glo->flags & FLAG_NEW)
-          mark_global(tsk,glo,FLAG_MARKED);
-
-    for (bl = tsk->blocks; bl; bl = bl->next) {
-      for (i = 0; i < BLOCK_SIZE; i++) {
-        if ((CELL_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
-          pntr p;
-          make_pntr(p,&bl->values[i]);
-          mark(tsk,p,FLAG_MARKED);
-        }
-      }
-    }
-  }
-
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    gptr = &tsk->pntrhash[h];
-    while (*gptr) {
-      int needed = 0;
-      glo = *gptr;
-
-      if ((glo->flags & FLAG_MARKED) || (glo->flags & FLAG_DMB)) {
-        needed = 1;
-      }
-      else if (is_pntr(glo->p)) {
-        cell *c = get_pntr(glo->p);
-        checkcell(c);
-        if ((c->flags & FLAG_MARKED) || (c->flags & FLAG_DMB))
-          needed = 1;
-      }
-
-      if (!needed) {
-        *gptr = (*gptr)->pntrnext;
-
-        addrhash_remove(tsk,glo);
-        free_global(tsk,glo);
-      }
-      else {
-        gptr = &(*gptr)->pntrnext;
-      }
-    }
-  }
-
   if (all) {
     for (bl = tsk->blocks; bl; bl = bl->next)
       for (i = 0; i < BLOCK_SIZE; i++)
@@ -550,6 +536,34 @@ void sweep(task *tsk, int all)
   }
 }
 
+void sweep(task *tsk, int all)
+{
+  global *glo;
+  block *bl;
+  int i;
+
+  /* Treat all new globals and cells that were created during this garbage collection cycle
+     as rools that also need to be marked */
+  if (tsk->indistgc) {
+    for (glo = tsk->globals.first; glo; glo = glo->next)
+      if (glo->flags & FLAG_NEW)
+        mark_global(tsk,glo,FLAG_MARKED);
+
+    for (bl = tsk->blocks; bl; bl = bl->next) {
+      for (i = 0; i < BLOCK_SIZE; i++) {
+        if ((CELL_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
+          pntr p;
+          make_pntr(p,&bl->values[i]);
+          mark(tsk,p,FLAG_MARKED);
+        }
+      }
+    }
+  }
+
+  sweep_globals(tsk,all);
+  sweep_cells(tsk,all);
+}
+
 void local_collect(task *tsk)
 {
   int h;
@@ -573,10 +587,13 @@ void local_collect(task *tsk)
   mark_roots(tsk,FLAG_MARKED);
 
   /* treat any objects referenced from other tasks as roots */
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
-      if (tsk->tid == glo->addr.tid)
-        mark_global(tsk,glo,FLAG_MARKED);
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = tsk->physhash[h]; glo; glo = glo->physnext) {
+      assert(glo->addr.tid == tsk->tid);
+      assert(glo->addr.lid >= 0);
+      mark_global(tsk,glo,FLAG_MARKED);
+    }
+  }
 
   /* sweep */
   sweep(tsk,0);

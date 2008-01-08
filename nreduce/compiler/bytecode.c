@@ -779,11 +779,18 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
       }
 
       if (m == k) {
-
         if (SNODE_BUILTIN == app->type) {
-          BIF(app->sl,fno);
-          if (!builtin_info[fno].reswhnf)
-            SPARK(app->sl,0);
+          /* Only execute the BIF instruction directly if the function is pure; otherwise, it
+             may be a function that can migrate, and must always be called from a wrapper frame */
+          if (builtin_info[fno].pure) {
+            BIF(app->sl,fno);
+            if (!builtin_info[fno].reswhnf)
+              SPARK(app->sl,0);
+          }
+          else {
+            MKFRAME(app->sl,fno,k);
+            EVAL(app->sl,0);
+          }
         }
         else {
           MKFRAME(app->sl,fno,k);
@@ -975,7 +982,16 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
             for (argno = 0; argno < bi->nstrict; argno++)
               assert(STATUS_SPARKED <= statusat(comp->si,comp->si->count-1-argno));
 
-            BIF(app->sl,bif);
+            /* Only execute the BIF instruction directly if the function is pure; otherwise, it
+               may be a function that can migrate, and must always be called from a wrapper frame */
+            if (!builtin_info[bif].pure) {
+              MKFRAME(app->sl,bif,builtin_info[bif].nargs);
+              EVAL(app->sl,0);
+            }
+            else {
+              BIF(app->sl,bif);
+            }
+
             if (0 < n)
               SQUEEZE(app->sl,1,n);
             assert(1 == comp->si->count);
@@ -1168,6 +1184,7 @@ static void peephole(compilation *comp, int start)
           (OP_MKFRAME == instrs[source].opcode) &&
           (OP_EVAL == instrs[source+1].opcode) &&
           (instrs[source+1].expcount-1 == instrs[source+1].arg0)) {
+        instrs[dest] = instrs[source];
         instrs[dest].opcode = OP_CALL;
         map[source] = dest;
         dest++;

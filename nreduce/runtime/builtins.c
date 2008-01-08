@@ -945,6 +945,11 @@ static void b_readchunk(task *tsk, pntr *argstack)
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
+  /* FIXME: add migration check here? */
+  if (so->ownertid != tsk->tid) {
+    fatal("readchunk: should migrate to task %d",so->ownertid);
+  }
+
   r = read(so->fd,buf,DEFAULT_IOSIZE);
   if (0 == r) {
     argstack[0] = tsk->globnilpntr;
@@ -1129,6 +1134,21 @@ static int suspend_current_frame(task *tsk, frame *f)
   return ioid;
 }
 
+static void migrate_to(task *tsk, int desttsk)
+{
+  frame *curf = *tsk->runptr;
+  array *newmsg;
+
+  curf->instr--;
+  done_frame(tsk,curf);
+  check_runnable(tsk);
+
+  newmsg = write_start();
+  schedule_frame(tsk,curf,desttsk,newmsg);
+  msg_send(tsk,desttsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
+  write_end(newmsg);
+}
+
 static void b_connect(task *tsk, pntr *argstack)
 {
   frame *curf = *tsk->runptr;
@@ -1139,12 +1159,36 @@ static void b_connect(task *tsk, pntr *argstack)
     char *hostname;
     sysobject *so;
     int ioid;
+    in_addr_t ip;
+    struct in_addr ipt;
 
     CHECK_ARG(1,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
 
     if (0 > array_to_string(hostnamepntr,&hostname)) {
       set_error(tsk,"connect: hostname is not a string");
+      return;
+    }
+    if (1 != inet_aton(hostname,&ipt)) {
+      set_error(tsk,"connect: invalid IP %s",hostname);
+      free(hostname);
+      return;
+    }
+    ip = ipt.s_addr;
+
+    char ipstr[100];
+    snprintf(ipstr,100,IP_FORMAT,IP_ARGS(tsk->endpt->epid.ip));
+
+    int i;
+    int found = -1;
+    for (i = 0; i < tsk->groupsize; i++) {
+      if (ip == tsk->idmap[i].ip) {
+        found = i;
+      }
+    }
+    if ((0 <= found) && (found != tsk->tid)) {
+      migrate_to(tsk,found);
+      free(hostname);
       return;
     }
 
@@ -1172,6 +1216,7 @@ static void b_connect(task *tsk, pntr *argstack)
     assert(CELL_SYSOBJECT == pntrtype(argstack[2]));
     c = get_pntr(argstack[2]);
     so = (sysobject*)get_pntr(c->field1);
+    assert(so->ownertid == tsk->tid);
     assert(SYSOBJECT_CONNECTION == so->type);
     curf->resume = 0;
 
@@ -1188,8 +1233,20 @@ static void b_connect(task *tsk, pntr *argstack)
       printer = resolve_pntr(argstack[0]);
       node_log(tsk->n,LOG_DEBUG2,"connect %s:%d: printer is %s",
                so->hostname,so->port,cell_types[pntrtype(printer)]);
-      if (CELL_FRAME == pntrtype(printer))
+      if (CELL_FRAME == pntrtype(printer)) {
         run_frame(tsk,pframe(printer));
+      }
+      else if (CELL_REMOTEREF == pntrtype(printer)) {
+        /* Send a FETCH request for the printer, so it will migrate here and start running,
+           but don't need to block the current frame since they're supposed to run concurrently */
+        global *target = (global*)get_pntr(get_pntr(printer)->field1);
+        assert(target->addr.tid != tsk->tid);
+
+        gaddr storeaddr = get_physical_address(tsk,printer);
+        assert(storeaddr.tid == tsk->tid);
+        msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
+        target->fetching = 1;
+      }
 
       /* Return the sysobject */
       argstack[0] = argstack[2];
@@ -1234,6 +1291,13 @@ static void b_readcon(task *tsk, pntr *argstack)
 
   CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
   so = psysobject(sopntr);
+
+  /* Migration check */
+  if (so->ownertid != tsk->tid) {
+    migrate_to(tsk,so->ownertid);
+    return;
+  }
+
   assert(so->connected);
 
   if (so->closed) {
@@ -1308,6 +1372,7 @@ static void b_listen(task *tsk, pntr *argstack)
     sysobject *so;
     CHECK_SYSOBJECT_ARG(0,SYSOBJECT_LISTENER);
     so = psysobject(argstack[0]);
+    assert(so->ownertid == tsk->tid);
     curf->resume = 0;
     if (so->error) {
       set_error(tsk,"listen: %s",so->errmsg);
@@ -1327,6 +1392,11 @@ static void b_accept(task *tsk, pntr *argstack)
   c = get_pntr(sopntr);
   so = psysobject(sopntr);
 
+  /* FIXME: add migration check here? */
+  if (so->ownertid != tsk->tid) {
+    fatal("accept: should migrate to task %d",so->ownertid);
+  }
+
   if (0 == curf->resume) {
     int ioid = suspend_current_frame(tsk,curf);
     send_accept(tsk->endpt,so->sockid,ioid);
@@ -1340,6 +1410,8 @@ static void b_accept(task *tsk, pntr *argstack)
     sysobject *newso = so->newso;
     assert(newso);
     so->newso = NULL;
+    assert(so->ownertid == tsk->tid);
+    assert(newso->ownertid == tsk->tid);
     node_log(tsk->n,LOG_DEBUG1,"accept %s:%d: Got new connection",so->hostname,so->port);
 
     /* Start printing output to the connection */
@@ -1371,6 +1443,13 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
 
   c = (cell*)get_pntr(destpntr);
   so = (sysobject*)get_pntr(c->field1);
+
+  /* Migration check */
+  if (so->ownertid != tsk->tid) {
+    migrate_to(tsk,so->ownertid);
+    return;
+  }
+
   if (SYSOBJECT_CONNECTION != so->type) {
     set_error(tsk,"write_data: first arg must be CONNECTION, got %s",sysobject_types[so->type]);
     return;
@@ -1770,6 +1849,30 @@ static void b_isspace(task *tsk, pntr *argstack)
   setbool(tsk,&argstack[0],isspace((int)pntrdouble(argstack[0])));
 }
 
+static void b_lookup(task *tsk, pntr *argstack)
+{
+  pntr hostnamepntr = argstack[0];
+  char *hostname;
+  in_addr_t ip;
+  int error;
+  char ipstr[100];
+
+  if (0 > array_to_string(hostnamepntr,&hostname)) {
+    set_error(tsk,"lookup: hostname is not a string");
+    return;
+  }
+
+  if (0 > lookup_address(hostname,&ip,&error)) {
+    set_error(tsk,"lookup: %s",hstrerror(error));
+    free(hostname);
+    return;
+  }
+
+  snprintf(ipstr,100,IP_FORMAT,IP_ARGS(ip));
+  argstack[0] = string_to_array(tsk,ipstr);
+  free(hostname);
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -1871,5 +1974,6 @@ const builtin builtin_info[NUM_BUILTINS] = {
 { "_compile",       2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_compile        },
 
 { "isspace",        1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_isspace        },
+{ "_lookup",        1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_lookup         },
 
 };

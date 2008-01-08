@@ -47,12 +47,21 @@ extern const module_info *modules;
 pthread_key_t task_key;
 int engine_type = ENGINE_NATIVE;
 
-global *pntrhash_lookup(task *tsk, pntr p)
+global *targethash_lookup(task *tsk, pntr p)
 {
   int h = hash(&p,sizeof(pntr));
-  global *g = tsk->pntrhash[h];
+  global *g = tsk->targethash[h];
   while (g && !pntrequal(g->p,p))
-    g = g->pntrnext;
+    g = g->targetnext;
+  return g;
+}
+
+global *physhash_lookup(task *tsk, pntr p)
+{
+  int h = hash(&p,sizeof(pntr));
+  global *g = tsk->physhash[h];
+  while (g && !pntrequal(g->p,p))
+    g = g->physnext;
   return g;
 }
 
@@ -65,36 +74,60 @@ global *addrhash_lookup(task *tsk, gaddr addr)
   return g;
 }
 
-void pntrhash_add(task *tsk, global *glo)
+void targethash_add(task *tsk, global *glo)
 {
   int h = hash(&glo->p,sizeof(pntr));
-  assert(NULL == glo->pntrnext);
-  glo->pntrnext = tsk->pntrhash[h];
-  tsk->pntrhash[h] = glo;
+  assert(NULL == glo->targetnext);
+  assert(NULL == targethash_lookup(tsk,glo->p));
+  glo->targetnext = tsk->targethash[h];
+  tsk->targethash[h] = glo;
+}
+
+void physhash_add(task *tsk, global *glo)
+{
+  int h = hash(&glo->p,sizeof(pntr));
+  assert(NULL == glo->physnext);
+  assert(NULL == physhash_lookup(tsk,glo->p));
+  glo->physnext = tsk->physhash[h];
+  tsk->physhash[h] = glo;
 }
 
 void addrhash_add(task *tsk, global *glo)
 {
   int h = hash(&glo->addr,sizeof(gaddr));
   assert(NULL == glo->addrnext);
+  assert(0 <= glo->addr.lid);
+  assert(NULL == addrhash_lookup(tsk,glo->addr));
   glo->addrnext = tsk->addrhash[h];
   tsk->addrhash[h] = glo;
 }
 
-void pntrhash_remove(task *tsk, global *glo)
+void targethash_remove(task *tsk, global *glo)
 {
   int h = hash(&glo->p,sizeof(pntr));
-  global **ptr = &tsk->pntrhash[h];
+  global **ptr = &tsk->targethash[h];
 
   assert(glo);
-  while (*ptr != glo) {
-    assert(*ptr);
-    ptr = &(*ptr)->pntrnext;
+  while (*ptr && (*ptr != glo))
+    ptr = &(*ptr)->targetnext;
+  if (*ptr == glo) {
+    *ptr = glo->targetnext;
+    glo->targetnext = NULL;
   }
-  assert(*ptr);
+}
 
-  *ptr = glo->pntrnext;
-  glo->pntrnext = NULL;
+void physhash_remove(task *tsk, global *glo)
+{
+  int h = hash(&glo->p,sizeof(pntr));
+  global **ptr = &tsk->physhash[h];
+
+  assert(glo);
+  while (*ptr && (*ptr != glo))
+    ptr = &(*ptr)->physnext;
+  if (*ptr == glo) {
+    *ptr = glo->physnext;
+    glo->physnext = NULL;
+  }
 }
 
 void addrhash_remove(task *tsk, global *glo)
@@ -103,92 +136,52 @@ void addrhash_remove(task *tsk, global *glo)
   global **ptr = &tsk->addrhash[h];
 
   assert(glo);
-  while (*ptr != glo) {
-    assert(*ptr);
+  while (*ptr && (*ptr != glo))
     ptr = &(*ptr)->addrnext;
+  if (*ptr == glo) {
+    *ptr = glo->addrnext;
+    glo->addrnext = NULL;
   }
-  assert(*ptr);
-
-  *ptr = glo->addrnext;
-  glo->addrnext = NULL;
 }
 
-global *add_global(task *tsk, gaddr addr, pntr p)
+/* Returns the physical address associated with the object p, creating a new GAT entry if needed */
+gaddr get_physical_address(task *tsk, pntr p)
 {
-  global *glo = (global*)calloc(1,sizeof(global));
-  glo->addr = addr;
-  glo->p = p;
-  glo->flags = tsk->indistgc ? FLAG_NEW : 0;
-
-  pntrhash_add(tsk,glo);
-  addrhash_add(tsk,glo);
-  return glo;
-}
-
-pntr global_lookup_existing(task *tsk, gaddr addr)
-{
-  global *glo;
-  if (NULL != (glo = addrhash_lookup(tsk,addr)))
-    return glo->p;
-  return NULL_PNTR;
-}
-
-pntr global_lookup(task *tsk, gaddr addr, pntr val)
-{
-  cell *c;
-  global *glo;
-
-  if (NULL != (glo = addrhash_lookup(tsk,addr)))
-    return glo->p;
-
-  if (!is_nullpntr(val)) {
-    glo = add_global(tsk,addr,val);
+  global *glo = physhash_lookup(tsk,p);
+  if (NULL == glo) {
+    glo = (global*)calloc(1,sizeof(global));
+    llist_append(&tsk->globals,glo);
+    glo->addr.tid = tsk->tid;
+    glo->addr.lid = tsk->nextlid++;
+    glo->p = p;
+    glo->flags = tsk->indistgc ? FLAG_NEW : 0;
+    physhash_add(tsk,glo);
+    addrhash_add(tsk,glo);
   }
   else {
-    pntr p;
-    c = alloc_cell(tsk);
-    make_pntr(p,c);
-    glo = add_global(tsk,addr,p);
-
-    c->type = CELL_REMOTEREF;
-    make_pntr(c->field1,glo);
+    assert(glo->addr.tid == tsk->tid);
+    assert(glo->addr.tid >= 0);
+    assert(pntrequal(glo->p,p));
+    assert(addrhash_lookup(tsk,glo->addr) == glo);
   }
-  return glo->p;
-}
-
-gaddr global_addressof(task *tsk, pntr p)
-{
-  global *glo;
-  gaddr addr;
-
-  /* If this object is registered in the global address map, return the address
-     that it corresponds to */
-  glo = pntrhash_lookup(tsk,p);
-  if (glo && (0 <= glo->addr.lid))
-    return glo->addr;
-
-  /* It's a local object; give it a global address */
-  addr.tid = tsk->tid;
-  addr.lid = tsk->nextlid++; /* FIXME: what happens when this wraps around? could be bad... */
-  glo = add_global(tsk,addr,p);
   return glo->addr;
 }
 
-/* Obtain a global address for the specified local object. Differs from global_addressof()
-   in that if p is a remoteref, then make_global() will return the address of the *actual
-   reference*, not the thing that it points to */
-global *make_global(task *tsk, pntr p)
+global *add_target(task *tsk, gaddr addr, pntr p)
 {
   global *glo;
-  gaddr addr;
-
-  glo = pntrhash_lookup(tsk,p);
-  if (glo && (glo->addr.tid == tsk->tid))
-    return glo;
-
-  addr.tid = tsk->tid;
-  addr.lid = tsk->nextlid++;
-  glo = add_global(tsk,addr,p);
+  assert(addr.tid != tsk->tid);
+  assert(NULL == addrhash_lookup(tsk,addr));
+  assert(NULL == targethash_lookup(tsk,p));
+  glo = (global*)calloc(1,sizeof(global));
+  llist_append(&tsk->globals,glo);
+  glo->addr = addr;
+  glo->p = p;
+  glo->flags = tsk->indistgc ? FLAG_NEW : 0;
+  /* Can't store targets with lid < 0 in addrhash, since there may be more than one of them */
+  if (0 <= addr.lid)
+    addrhash_add(tsk,glo);
+  targethash_add(tsk,glo);
   return glo;
 }
 
@@ -379,7 +372,8 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   if (is_pntr(tsk->globtruepntr))
     get_pntr(tsk->globtruepntr)->flags |= FLAG_PINNED;
 
-  tsk->pntrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  tsk->targethash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+  tsk->physhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->addrhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->idmap = (endpointid*)calloc(groupsize,sizeof(endpointid));
 
@@ -481,14 +475,14 @@ void task_free(task *tsk)
 
   sweep(tsk,1);
 
+  /* Make sure all globals are deleted; this should be handled by sweep */
   for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    global *glo = tsk->pntrhash[h];
-    while (glo) {
-      global *next = glo->pntrnext;
-      free_global(tsk,glo);
-      glo = next;
-    }
+    assert(NULL == tsk->addrhash[h]);
+    assert(NULL == tsk->targethash[h]);
+    assert(NULL == tsk->physhash[h]);
   }
+  assert(NULL == tsk->globals.first);
+  assert(NULL == tsk->globals.last);
 
   bl = tsk->blocks;
   while (bl) {
@@ -520,7 +514,8 @@ void task_free(task *tsk)
   free(tsk->gcsent);
   free(tsk->error);
   free(tsk->distmarks);
-  free(tsk->pntrhash);
+  free(tsk->targethash);
+  free(tsk->physhash);
   free(tsk->addrhash);
 
   free(tsk->inflight_addrs);

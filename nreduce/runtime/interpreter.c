@@ -149,35 +149,41 @@ void handle_error(task *tsk)
   tsk->done = 1;
 }
 
-static void add_waiter_frame(waitqueue *wq, frame *f)
+void add_waiter_frame(waitqueue *wq, frame *f)
 {
   assert(NULL == f->waitlnk);
   f->waitlnk = wq->frames;
   wq->frames = f;
 }
 
-void resume_fetchers(task *tsk, waitqueue *wq, pntr obj)
+void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from native code */
 {
   list *l;
   obj = resolve_pntr(obj);
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
     assert(CELL_FRAME != pntrtype(obj));
-    msg_fsend(tsk,ft->tid,MSG_RESPOND,"pa",obj,*ft);
+    msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
   list_free(wq->fetchers,free);
   wq->fetchers = NULL;
 }
 
-void resume_waiters(task *tsk, waitqueue *wq, pntr obj) /* Can be called from native code */
+void resume_local_waiters(task *tsk, waitqueue *wq)
 {
   while (wq->frames) {
     frame *f = wq->frames;
+    assert((OP_EVAL == f->instr->opcode) || (OP_CALL == f->instr->opcode));
     wq->frames = f->waitlnk;
     f->waitglo = NULL;
     f->waitlnk = NULL;
     unblock_frame_toend(tsk,f);
   }
+}
+
+void resume_waiters(task *tsk, waitqueue *wq, pntr obj)
+{
+  resume_local_waiters(tsk,wq);
 
   if (wq->fetchers)
     resume_fetchers(tsk,wq,obj);
@@ -205,35 +211,45 @@ void frame_return(task *tsk, frame *curf, pntr val)
   frame_free(tsk,curf);
 }
 
-static void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
+void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 {
-  global *glo;
-  global *refglo;
-  pntr fcp;
-  gaddr addr;
-  gaddr refaddr;
+  pntr p;
+
+  if (NULL == f->c) {
+    f->c = alloc_cell(tsk);
+    f->c->type = CELL_FRAME;
+    make_pntr(f->c->field1,f);
+
+    make_pntr(p,f->c);
+    assert(f->retp);
+    *(f->retp) = p;
+    f->retp = NULL;
+  }
+  else {
+    make_pntr(p,f->c);
+  }
 
   /* Remove the frame from the sparked queue */
-  unspark_frame(tsk,f);
+  if (STATE_SPARKED == f->state)
+    unspark_frame(tsk,f);
 
-  /* Create remote reference which will point to the frame on desttsk once an ACK is sent back */
+  /* Get the physical address of the frame's cell, which is about to become a remote reference */
+  gaddr refaddr = get_physical_address(tsk,p);
 
-  assert(f->c);
-  make_pntr(fcp,f->c);
-  addr.tid = desttsk;
-  addr.lid = -1;
-  glo = add_global(tsk,addr,fcp);
-
-  refaddr.tid = tsk->tid;
-  refaddr.lid = tsk->nextlid++;
-  refglo = add_global(tsk,refaddr,fcp);
+  /* We can't convert waiting frames to fetchers, since the target address is currently unknown.
+     Wake them up instead, so they'll handle it as a normal remote reference. */
+  resume_local_waiters(tsk,&f->wq);
+  assert(NULL == f->wq.frames);
 
   /* Transfer the frame to the destination, and tell it to notfy us of the global address it
-     assigns to the frame (which we'll store in newref) */
-  write_format(msg,tsk,"pa",glo->p,refglo->addr);
+     assigns to the frame (which we'll store in the new target) */
+  write_format(msg,tsk,"pa",p,refaddr);
 
+  /* Create a target that will hold the address of the frame once it arrives, and convert
+     the frame's cell into a remote reference that points to this target */
+  gaddr blankaddr = { tid: -1, lid: -1 };
   f->c->type = CELL_REMOTEREF;
-  make_pntr(f->c->field1,glo);
+  make_pntr(f->c->field1,add_target(tsk,blankaddr,p));
 
   /* Delete the local copy of the frame */
   f->c = NULL;
@@ -444,7 +460,7 @@ static void interpreter_write_response(task *tsk, write_response_msg *m)
   so->frameids[WRITE_FRAMEADDR] = 0;
 }
 
-static void interpreter_connection_event(task *tsk, connection_event_msg *m)
+static void interpreter_connection_closed(task *tsk, connection_closed_msg *m)
 {
   sysobject *so = find_sysobject(tsk,&m->sockid);
   if (NULL != so) {
@@ -588,36 +604,38 @@ static void interpreter_fetch(task *tsk, message *msg)
 {
   pntr obj;
   gaddr storeaddr;
-  gaddr objaddr;
+  gaddr targetaddr;
   reader rd;
+  global *fetchglo;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
   rd = read_start(tsk,msg->data,msg->size);
 
-  /* FETCH (objaddr) (storeaddr)
+  /* FETCH (targetaddr) (storeaddr)
      Request to send the requested object (or a copy of it) to another task
 
-     (objaddr)   is the global address of the object *in this task* that is to be sent
+     (targetaddr)   is the physical address of the object *in this task* that is to be sent
 
-     (storeaddr) is the global address of a remote reference *in the other task*, which
+     (storeaddr) is the physical address of a remote reference *in the other task*, which
      points to the requested object. When we send the response, the other address
      will store the object in the p field of the relevant "global" structure. */
 
   start_address_reading(tsk,from,msg->tag);
-  read_gaddr(&rd,&objaddr);
+  read_gaddr(&rd,&targetaddr);
   read_gaddr(&rd,&storeaddr);
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
-  assert(objaddr.tid == tsk->tid);
+  assert(targetaddr.tid == tsk->tid);
   assert(storeaddr.tid == from);
-  obj = global_lookup_existing(tsk,objaddr);
+  fetchglo = addrhash_lookup(tsk,targetaddr);
 
-  if (is_nullpntr(obj))
-    fatal("Request for deleted global %d@%d, from task %d",objaddr.lid,objaddr.tid,from);
+  if (NULL == fetchglo)
+    fatal("Request for deleted global %d@%d, from task %d",targetaddr.lid,targetaddr.tid,from);
 
-  assert(!is_nullpntr(obj)); /* we should only be asked for a cell we actually have */
+  obj = fetchglo->p;
+  assert(!is_nullpntr(obj));
   obj = resolve_pntr(obj);
 
   if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
@@ -631,78 +649,98 @@ static void interpreter_fetch(task *tsk, message *msg)
            ((STATE_SPARKED == pframe(obj)->state) ||
             (STATE_NEW == pframe(obj)->state))) {
     frame *f = pframe(obj);
-    pntr ref;
-    global *glo;
     pntr fcp;
+    global *storeglo;
+    assert(f->c);
+    make_pntr(fcp,f->c);
 
     /* Remove the frame from the sparked queue */
     unspark_frame(tsk,f);
 
     /* Send the actual frame */
-    msg_fsend(tsk,from,MSG_RESPOND,"pa",obj,storeaddr);
+    msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
 
-    /* Check that we don't already have a reference to the remote addr
-       (FIXME: is this safe?) */
-    /* FIXME: there is a crash here... only happens rarely */
-    ref = global_lookup_existing(tsk,storeaddr);
-    assert(is_nullpntr(ref));
+    if (NULL != (storeglo = addrhash_lookup(tsk,storeaddr))) {
+      /* We could already have a target for this storeaddr if a reference has bene
+         passed back to us due to another function that is running in this task */
+      assert(CELL_REMOTEREF == pntrtype(storeglo->p));
+      f->c->type = CELL_IND;
+      f->c->field1 = storeglo->p;
+    }
+    else {
+      /* No target global for the store address yet... create one and make the frame's
+         cell a remote reference */
+      storeglo = add_target(tsk,storeaddr,fcp);
+      f->c->type = CELL_REMOTEREF;
+      make_pntr(f->c->field1,storeglo);
+    }
 
-    /* Replace our copy of a frame to a reference to the remote object */
-    assert(f->c);
-    make_pntr(fcp,f->c);
-    glo = add_global(tsk,storeaddr,fcp);
-
-    f->c->type = CELL_REMOTEREF;
-    make_pntr(f->c->field1,glo);
     f->c = NULL;
     frame_free(tsk,f);
   }
   else {
-    msg_fsend(tsk,from,MSG_RESPOND,"pa",obj,storeaddr);
+    msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
   }
 }
 
 static void interpreter_respond(task *tsk, message *msg)
 {
   pntr obj;
-  pntr ref;
   gaddr storeaddr;
-  cell *refcell;
-  global *objglo;
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
   rd = read_start(tsk,msg->data,msg->size);
-
   start_address_reading(tsk,from,msg->tag);
-  read_pntr(&rd,&obj);
+
+  /* Read the store address */
   read_gaddr(&rd,&storeaddr);
+  assert(storeaddr.tid == tsk->tid);
+  assert(storeaddr.lid >= 0);
+
+  /* Look up the local reference object, whose physical address is storeaddr */
+  global *reference = addrhash_lookup(tsk,storeaddr);
+  assert(reference);
+  assert(reference->addr.tid == storeaddr.tid);
+  assert(reference->addr.lid == storeaddr.lid);
+  assert(!is_nullpntr(reference->p));
+  assert(CELL_REMOTEREF == pntrtype(reference->p));
+  assert(physhash_lookup(tsk,reference->p) == reference);
+
+  /* Look up the target global that the reference points to */
+  global *target = pglobal(reference->p);
+  assert(target != reference);
+  assert(target->addr.tid != tsk->tid);
+  assert(target->fetching);
+  target->fetching = 0;
+
+  /* Read the object. read_pntr() will update the reference global with the received object. */
+  read_pntr(&rd,&obj);
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
-  ref = global_lookup_existing(tsk,storeaddr);
+  global *objglo = targethash_lookup(tsk,obj);
+  if (objglo && (target != objglo)) {
+    assert(NULL == objglo->wq.frames);
+    assert(NULL == objglo->wq.fetchers);
+  }
 
-  assert(storeaddr.tid == tsk->tid);
-  if (is_nullpntr(ref))
-    fatal("Respond tried to store in deleted global %d@%d",storeaddr.lid,storeaddr.tid);
-  assert(!is_nullpntr(ref));
-  assert(CELL_REMOTEREF == pntrtype(ref));
+  if (target != objglo) {
+      /* The object we got back has a different physical address to what we requested. Make the
+         original target an indirection cell that points to it. In this case there shouldn't
+         be anything waiting on the new object. */
+    assert(CELL_REMOTEREF == pntrtype(target->p));
+    cell *refcell = get_pntr(target->p);
+    refcell->type = CELL_IND;
+    refcell->field1 = obj;
+  }
 
-  objglo = pglobal(ref);
-  assert(objglo->fetching);
-  objglo->fetching = 0;
-  assert(objglo->addr.tid == from);
-  assert(objglo->addr.lid >= 0);
-  assert(pntrequal(objglo->p,ref));
+  /* Respond to any FETCH requests for the reference that were made by other tasks */
+  resume_waiters(tsk,&target->wq,obj);
 
-  refcell = get_pntr(ref);
-  refcell->type = CELL_IND;
-  refcell->field1 = obj;
-
-  resume_waiters(tsk,&objglo->wq,obj);
-
+  /* If the received object is a frame, start it running */
   if (CELL_FRAME == pntrtype(obj))
     run_frame_toend(tsk,pframe(obj));
 }
@@ -711,7 +749,6 @@ static void interpreter_schedule(task *tsk, message *msg)
 {
   pntr framep;
   gaddr tellsrc;
-  global *frameglo;
   array *urmsg;
   int count = 0;
 
@@ -725,12 +762,14 @@ static void interpreter_schedule(task *tsk, message *msg)
 
   start_address_reading(tsk,from,msg->tag);
   while (rd.pos < rd.size) {
+    gaddr frameaddr;
     read_pntr(&rd,&framep);
     read_gaddr(&rd,&tellsrc);
 
     assert(CELL_FRAME == pntrtype(framep));
-    frameglo = make_global(tsk,framep);
-    write_format(urmsg,tsk,"aa",tellsrc,frameglo->addr);
+
+    frameaddr = get_physical_address(tsk,framep);
+    write_format(urmsg,tsk,"aa",tellsrc,frameaddr);
 
     run_frame_toend(tsk,pframe(framep));
 
@@ -748,39 +787,54 @@ static void interpreter_schedule(task *tsk, message *msg)
 
 static void interpreter_updateref(task *tsk, message *msg)
 {
-  pntr ref;
   gaddr refaddr;
   gaddr remoteaddr;
-  global *glo;
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  rd = read_start(tsk,msg->data,msg->size);
+  /* FIXME: possible race condition:
+     1. A SCHEDULEs frame to B
+     2. B sends back UPDATEREF with the address, but message does not yet reach A
+     3. frame migrates to C
+     4. C sends back RESPOND with return value of frame, and it is processed b A
+     5. UPDATEREF finally arrives from B; it's not longer a reference
+        and we'll have an assertion failure */
 
   start_address_reading(tsk,from,msg->tag);
+  rd = read_start(tsk,msg->data,msg->size);
   while (rd.pos < rd.size) {
+    /* Read the reference address and target address */
     read_gaddr(&rd,&refaddr);
     read_gaddr(&rd,&remoteaddr);
-
-    ref = global_lookup_existing(tsk,refaddr);
-
     assert(refaddr.tid == tsk->tid);
-    assert(!is_nullpntr(ref));
-    assert(CELL_REMOTEREF == pntrtype(ref));
-
-    glo = pglobal(ref);
-    assert(glo->addr.tid == from);
-    assert(glo->addr.lid == -1);
-    assert(pntrequal(glo->p,ref));
+    assert(refaddr.lid >= 0);
     assert(remoteaddr.tid == from);
+    assert(remoteaddr.tid != tsk->tid);
+    assert(remoteaddr.lid >= 0);
 
-    addrhash_remove(tsk,glo);
-    glo->addr.lid = remoteaddr.lid;
-    addrhash_add(tsk,glo);
+    /* Obtain the reference object to be upated */
+    global *reference = addrhash_lookup(tsk,refaddr);
+    assert(reference);
+    assert(reference->addr.tid == refaddr.tid);
+    assert(reference->addr.lid == refaddr.lid);
+    assert(!is_nullpntr(reference->p));
+    assert(CELL_REMOTEREF == pntrtype(reference->p));
+    assert(physhash_lookup(tsk,reference->p) == reference);
 
-    resume_waiters(tsk,&glo->wq,glo->p);
+    /* Get the target of this reference, which should currently have its lid set to -1 */
+    global *target = pglobal(reference->p);
+    assert(target != reference);
+    assert(target->addr.tid == -1);
+    assert(target->addr.lid == -1);
+    assert(NULL == addrhash_lookup(tsk,target->addr)); /* since lid == -1 */
+
+    /* Now the have the correct address of the target, assign it */
+    target->addr = remoteaddr;
+    addrhash_add(tsk,target);
+
+    resume_waiters(tsk,&target->wq,reference->p);
   }
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
@@ -885,11 +939,14 @@ static void interpreter_markroots(task *tsk)
   }
 
   /* make sure that for all marked globals, the pointer is also marked */
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (glo = tsk->pntrhash[h]; glo; glo = glo->pntrnext)
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = tsk->targethash[h]; glo; glo = glo->targetnext)
       if (glo->flags & FLAG_DMB)
         mark_global(tsk,glo,FLAG_DMB);
-
+    for (glo = tsk->physhash[h]; glo; glo = glo->physnext)
+      if (glo->flags & FLAG_DMB)
+        mark_global(tsk,glo,FLAG_DMB);
+  }
 
   tsk->gcsent[tsk->tid]--;
   send_mark_messages(tsk);
@@ -1021,8 +1078,8 @@ static void handle_message(task *tsk, message *msg)
     interpreter_write_response(tsk,(write_response_msg*)msg->data);
     break;
   case MSG_CONNECTION_CLOSED:
-    assert(sizeof(connection_event_msg) == msg->size);
-    interpreter_connection_event(tsk,(connection_event_msg*)msg->data);
+    assert(sizeof(connection_closed_msg) == msg->size);
+    interpreter_connection_closed(tsk,(connection_closed_msg*)msg->data);
     break;
   case MSG_JCMD_RESPONSE:
     assert(sizeof(jcmd_response_msg) <= msg->size);
@@ -1465,7 +1522,8 @@ inline void op_bif(task *tsk, frame *runnable, const instruction *instr)
   builtin_info[bif].f(tsk,&runnable->data[instr->expcount-nargs]);
 
   #ifndef NDEBUG
-  assert(!builtin_info[bif].reswhnf ||
+  assert((STATE_DONE == f2->state) ||
+         !builtin_info[bif].reswhnf ||
          (CELL_IND != pntrtype(f2->data[instr->expcount-nargs])) ||
          (0 != f2->resume));
   #endif
@@ -1495,16 +1553,16 @@ inline void op_error(task *tsk, frame *runnable, const instruction *instr)
   handle_error(tsk);
 }
 
-void eval_remoteref(task *tsk, frame *f2, pntr px) /* Can be called from native code */
+void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native code */
 {
-  global *target = (global*)get_pntr(get_pntr(px)->field1);
+  global *target = (global*)get_pntr(get_pntr(ref)->field1);
   assert(target->addr.tid != tsk->tid);
 
   if (!target->fetching && (0 <= target->addr.lid)) {
-    global *refglo = make_global(tsk,px);
-    assert(refglo->addr.tid == tsk->tid);
-    msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,refglo->addr);
-
+    assert(CELL_REMOTEREF == pntrtype(ref));
+    gaddr storeaddr = get_physical_address(tsk,ref);
+    assert(storeaddr.tid == tsk->tid);
+    msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
     target->fetching = 1;
   }
   f2->waitglo = target;
