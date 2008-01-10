@@ -429,9 +429,21 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     }
   }
   else {
-    gaddr addr = get_physical_address(tsk,p);
+    global *target;
+
     write_int(arr,pntrtype(p));
-    write_gaddr(arr,tsk,addr);
+
+    if (NULL != (target = targethash_lookup(tsk,p))) {
+      /* This object is a replica of an object in another task... send the address of the
+         master copy, rather than our own */
+      assert(0 <= target->addr.lid);
+      assert(target->addr.tid != tsk->tid);
+      write_gaddr(arr,tsk,target->addr);
+    }
+    else {
+      /* We have the master copy of the object... send the physical address */
+      write_gaddr(arr,tsk,get_physical_address(tsk,p));
+    }
 
     switch (pntrtype(p)) {
     case CELL_AREF: {
