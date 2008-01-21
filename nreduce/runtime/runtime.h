@@ -280,6 +280,10 @@ typedef struct sysobject {
   cell *c;
   pntr p;
   int frameids[FRAMEADDR_COUNT];
+  int done_reading;
+  int done_writing;
+  int local;
+  struct timeval start;
 } sysobject;
 
 typedef struct carray {
@@ -477,6 +481,7 @@ typedef struct task {
   int gciter;
   array **inflight_addrs;
   array **unack_msg_acount;
+  int nfetching;
 
   /* I/O requests */
   int ioalloc;
@@ -496,6 +501,7 @@ typedef struct task {
   sourceloc errorsl;
   frame *freeframe;
   unsigned int nextid;
+  int svcbusy;
 
   /* memory */
   block *blocks;
@@ -692,6 +698,8 @@ int worker(int port, const char *initial_str);
 /* cell */
 
 cell *alloc_cell(task *tsk);
+void sysobject_done_reading(sysobject *so);
+void sysobject_done_writing(sysobject *so);
 sysobject *new_sysobject(task *tsk, int type);
 sysobject *find_sysobject(task *tsk, const socketid *sockid);
 void free_global(task *tsk, global *glo);

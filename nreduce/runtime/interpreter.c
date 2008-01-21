@@ -47,7 +47,7 @@
 
 #define FISH_DELAY_MS 250
 #define GC_DELAY 2500
-#define NSPARKS_REQUESTED 1
+#define NSPARKS_REQUESTED 4
 
 inline void op_begin(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
@@ -777,6 +777,11 @@ static void interpreter_respond(task *tsk, message *msg)
     refcell->field1 = obj;
   }
 
+  frame *w;
+  for (w = target->wq.frames; w; w = w->waitlnk)
+    tsk->nfetching--;
+  assert(0 <= tsk->nfetching);
+
   /* Respond to any FETCH requests for the reference that were made by other tasks */
   resume_waiters(tsk,&target->wq,obj);
 
@@ -880,6 +885,11 @@ static void interpreter_updateref(task *tsk, message *msg)
     /* Now the have the correct address of the target, assign it */
     target->addr = remoteaddr;
     addrhash_add(tsk,target);
+
+    frame *w;
+    for (w = target->wq.frames; w; w = w->waitlnk)
+      tsk->nfetching--;
+    assert(0 <= tsk->nfetching);
 
     resume_waiters(tsk,&target->wq,reference->p);
   }
@@ -1197,18 +1207,56 @@ int handle_interrupt(task *tsk)
     frameblock *fb;
     int i;
 
+    /* Standalone: no runnable or blocked frames means we can exist */
+    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
+      return 1;
+
+    node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d",
+             tsk->tid,tsk->svcbusy,tsk->nfetching);
+
+    assert(0 <= tsk->svcbusy);
+
+    int doreturn = 0;
+
+    while ((NULL == *tsk->runptr) && ((1 < tsk->svcbusy) || (1 < tsk->nfetching))) {
+      /* We've got stuff in progress; don't request any more work */
+      msg = endpoint_receive(tsk->endpt,-1);
+      handle_message(tsk,msg);
+      doreturn = 1;
+    }
+
+#if 0
+    if (NULL != *tsk->runptr) {
+      node_log(tsk->n,LOG_DEBUG1,"%d: runnable frame is %s\n",tsk->tid,
+               bc_function_name(tsk->bcdata,frame_fno(tsk,*tsk->runptr)));
+    }
+#endif
+
+    if (doreturn) {
+      endpoint_interrupt(tsk->endpt);
+      return 0;
+    }
+
+    /* We really have nothing to do; run a sparked frame if we have one, otherwise send
+       out a work request */
+
     for (fb = tsk->frameblocks; fb; fb = fb->next) {
       for (i = 0; i < tsk->framesperblock; i++) {
         frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
         if (STATE_SPARKED == f->state) {
+#if 0
+          pntr fp;
+          assert(f->c);
+          make_pntr(fp,f->c);
+          char *tmp = pntr_to_string(tsk,fp);
+          node_log(tsk->n,LOG_DEBUG1,"%d: RUNSPARK %s",tsk->tid,tmp);
+          free(tmp);
+#endif
           run_frame(tsk,f);
           return 0;
         }
       }
     }
-
-    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
-      return 1;
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);
@@ -1618,6 +1666,8 @@ void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
     target->fetching = 1;
   }
+  assert(0 <= tsk->nfetching);
+  tsk->nfetching++;
   f2->waitglo = target;
   add_waiter_frame(&target->wq,f2);
   f2->instr--;

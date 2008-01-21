@@ -288,6 +288,34 @@ sysobject *new_sysobject(task *tsk, int type)
   return so;
 }
 
+static void sysobject_check_finished(sysobject *so)
+{
+  if (so->local && so->done_reading && so->done_writing) {
+    int duration;
+    so->tsk->svcbusy--;
+    assert(0 <= so->tsk->svcbusy);
+    struct timeval now;
+    gettimeofday(&now,NULL);
+    duration = timeval_diffms(so->start,now);
+    node_log(so->tsk->n,LOG_DEBUG1,"%d: CONNECT3 (%s:%d) lasted %d, now svcbusy = %d",
+             so->tsk->tid,so->hostname,so->port,duration,so->tsk->svcbusy);
+  }
+}
+
+void sysobject_done_reading(sysobject *so)
+{
+  assert(!so->done_reading);
+  so->done_reading = 1;
+  sysobject_check_finished(so);
+}
+
+void sysobject_done_writing(sysobject *so)
+{
+  assert(!so->done_writing);
+  so->done_writing = 1;
+  sysobject_check_finished(so);
+}
+
 sysobject *find_sysobject(task *tsk, const socketid *sockid)
 {
   block *bl;
@@ -329,6 +357,10 @@ static void free_sysobject(task *tsk, sysobject *so)
       close(so->fd);
       break;
     case SYSOBJECT_CONNECTION: {
+      if (!so->done_reading)
+        sysobject_done_reading(so);
+      if (!so->done_writing)
+        sysobject_done_writing(so);
       if (!socketid_isnull(&so->sockid))
         send_delete_connection(tsk->endpt,so->sockid);
       if (!tsk->done) {

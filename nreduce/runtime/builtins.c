@@ -1201,9 +1201,17 @@ static void b_connect(task *tsk, pntr *argstack)
     so->port = port;
     so->len = 0;
 
+    gettimeofday(&so->start,NULL);
+    so->local = !strcmp(hostname,"127.0.0.1");
+    if (so->local) {
+      assert(0 <= so->tsk->svcbusy);
+      tsk->svcbusy++;
+    }
+
     make_pntr(argstack[2],so->c);
 
-    node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT1 (%s:%d)",tsk->tid,hostname,port);
+    node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT1 (%s:%d) svcbusy = %d",
+             tsk->tid,hostname,port,tsk->svcbusy);
 
     ioid = suspend_current_frame(tsk,*tsk->runptr);
     send_connect(tsk->endpt,tsk->n->iothid,hostname,port,tsk->endpt->epid,ioid);
@@ -1226,6 +1234,8 @@ static void b_connect(task *tsk, pntr *argstack)
     if (!so->connected) {
       node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
       set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
+      sysobject_done_reading(so);
+      sysobject_done_writing(so);
       return;
     }
     else {
@@ -1249,6 +1259,8 @@ static void b_connect(task *tsk, pntr *argstack)
                  tsk->tid,target->addr.tid,
                  target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
         msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
+        assert(0 <= tsk->nfetching);
+        tsk->nfetching++;
         target->fetching = 1;
       }
 
@@ -1309,6 +1321,7 @@ static void b_readcon(task *tsk, pntr *argstack)
       set_error(tsk,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
     else
       argstack[0] = tsk->globnilpntr;
+    sysobject_done_reading(so);
     curf->resume = 0;
     return;
   }
@@ -1324,6 +1337,7 @@ static void b_readcon(task *tsk, pntr *argstack)
     curf->resume = 0;
     if (0 == so->len) {
       argstack[0] = tsk->globnilpntr;
+      sysobject_done_reading(so);
     }
     else {
       carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
@@ -1472,6 +1486,8 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   if (curf->resume) {
     argstack[0] = tsk->globnilpntr; /* normal return */
     curf->resume = 0;
+    if (0 == len)
+      sysobject_done_writing(so);
   }
   else {
     int ioid = suspend_current_frame(tsk,curf);

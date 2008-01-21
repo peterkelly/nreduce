@@ -1,0 +1,39 @@
+/* This version does not exhibit the blocking problem, because once the frames are scheduled
+to machines they are able to access the services directly, without requesting further values.
+The problem with the earlier version was that f was passed as a parameter to parmap, and thus
+had to be transferred to the destination host when the scheduled frame started executing. */
+
+parmap lst =
+(if lst
+  (letrec
+    elem = (callcompute (head lst))
+    rest = (parmap (tail lst))
+  in
+    (par elem
+    (par rest
+    (cons elem rest))))
+  nil)
+
+range min max =
+(if (> min max)
+  nil
+  (cons min (range (+ min 1) max)))
+
+/* "Strict" version of connect. Forces the entire response stream to be traversed before
+any data is returned to the caller. Designed for use in situations where the service call
+must complete as soon as possible, so that the connection can be closed, enabling subsequent
+connections to be established. */
+strict_connect host port out =
+(forcelist (connect host port out))
+
+callcompute n =
+(strict_connect "localhost" 1234 (++ (numtostring n) " 20\n"))
+
+flatten lst =
+(if lst
+  (++ (head lst) (flatten (tail lst)))
+  nil)
+
+main =
+(flatten
+(parmap (range 1 100)))
