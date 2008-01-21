@@ -532,6 +532,102 @@ void task_free(task *tsk)
   free(tsk);
 }
 
+void print_pntr(task *tsk, array *arr, pntr p, int depth)
+{
+  p = resolve_pntr(p);
+  switch (pntrtype(p)) {
+  case CELL_AREF: {
+    char *str = NULL;
+    if (0 <= array_to_string(p,&str)) {
+      char *esc = escape(str);
+      array_printf(arr,"\"%s\"",esc);
+      free(esc);
+      free(str);
+    }
+    else {
+      array_printf(arr,"%s",cell_types[pntrtype(p)]);
+    }
+    break;
+  }
+  case CELL_NUMBER: {
+    char tmp[100];
+    format_double(tmp,100,pntrdouble(p));
+    array_printf(arr,"%s",tmp);
+    break;
+  }
+  case CELL_FRAME: {
+    frame *f = pframe(p);
+    int fno = frame_fno(tsk,f);
+    if (depth > 0) {
+      int i;
+      if (0 < f->instr->expcount)
+        array_printf(arr,"(");
+      array_printf(arr,"%s",bc_function_name(tsk->bcdata,fno));
+      for (i = f->instr->expcount-1; i >= 0; i--) {
+        array_printf(arr," ");
+        print_pntr(tsk,arr,f->data[i],depth-1);
+      }
+      if (0 < f->instr->expcount)
+        array_printf(arr,")");
+    }
+    else {
+      array_printf(arr,"(%s ...)",bc_function_name(tsk->bcdata,fno));
+    }
+    break;
+  }
+  case CELL_CAP: {
+    cell *capval = get_pntr(p);
+    cap *cp = (cap*)get_pntr(capval->field1);
+    int i;
+    if (0 < cp->count)
+      array_printf(arr,"(");
+    array_printf(arr,"%s",bc_function_name(tsk->bcdata,cp->fno));
+    for (i = cp->count-1; i >= 0; i--) {
+      array_printf(arr," ");
+      print_pntr(tsk,arr,cp->data[i],depth-1);
+    }
+    if (0 < cp->count)
+      array_printf(arr,")");
+    break;
+  }
+  case CELL_REMOTEREF: {
+    global *target = pglobal(p);
+    array_printf(arr,"%d@%d",target->addr.lid,target->addr.tid);
+    break;
+  }
+  case CELL_CONS: {
+    if (depth > 0) {
+      cell *c = get_pntr(p);
+      array_printf(arr,"(cons ");
+      print_pntr(tsk,arr,c->field1,depth-1);
+      array_printf(arr," ");
+      print_pntr(tsk,arr,c->field2,depth-1);
+      array_printf(arr,")");
+    }
+    else {
+      array_printf(arr,"CONS");
+    }
+    break;
+  }
+  case CELL_NIL:
+    array_printf(arr,"nil");
+    break;
+  default:
+    array_printf(arr,"%s",cell_types[pntrtype(p)]);
+    break;
+  }
+}
+
+char *pntr_to_string(task *tsk, pntr p)
+{
+  array *arr = array_new(1,0);
+  char *ret;
+  print_pntr(tsk,arr,p,1);
+  ret = strdup(arr->data);
+  array_free(arr);
+  return ret;
+}
+
 static array *get_lines(const char *data, int len)
 {
   int pos;

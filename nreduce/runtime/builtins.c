@@ -1143,6 +1143,9 @@ static void migrate_to(task *tsk, int desttsk)
   done_frame(tsk,curf);
   check_runnable(tsk);
 
+  node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) SCHEDULE (migration: %s)",tsk->tid,desttsk,
+           bc_function_name(tsk->bcdata,frame_fno(tsk,curf)));
+
   newmsg = write_start();
   schedule_frame(tsk,curf,desttsk,newmsg);
   msg_send(tsk,desttsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
@@ -1200,7 +1203,7 @@ static void b_connect(task *tsk, pntr *argstack)
 
     make_pntr(argstack[2],so->c);
 
-    node_log(tsk->n,LOG_DEBUG1,"connect %s:%d: Initiated connection",hostname,port);
+    node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT1 (%s:%d)",tsk->tid,hostname,port);
 
     ioid = suspend_current_frame(tsk,*tsk->runptr);
     send_connect(tsk->endpt,tsk->n->iothid,hostname,port,tsk->endpt->epid,ioid);
@@ -1221,18 +1224,16 @@ static void b_connect(task *tsk, pntr *argstack)
     curf->resume = 0;
 
     if (!so->connected) {
-      node_log(tsk->n,LOG_DEBUG1,"connect %s:%d: Connection failed",so->hostname,so->port);
+      node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
       set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
       return;
     }
     else {
       pntr printer;
-      node_log(tsk->n,LOG_DEBUG1,"connect %s:%d: Connection successful",so->hostname,so->port);
+      node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) connected",tsk->tid,so->hostname,so->port);
 
       /* Start printing output to the connection */
       printer = resolve_pntr(argstack[0]);
-      node_log(tsk->n,LOG_DEBUG2,"connect %s:%d: printer is %s",
-               so->hostname,so->port,cell_types[pntrtype(printer)]);
       if (CELL_FRAME == pntrtype(printer)) {
         run_frame(tsk,pframe(printer));
       }
@@ -1244,6 +1245,9 @@ static void b_connect(task *tsk, pntr *argstack)
 
         gaddr storeaddr = get_physical_address(tsk,printer);
         assert(storeaddr.tid == tsk->tid);
+        node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d (connect)",
+                 tsk->tid,target->addr.tid,
+                 target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
         msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
         target->fetching = 1;
       }
@@ -1301,14 +1305,10 @@ static void b_readcon(task *tsk, pntr *argstack)
   assert(so->connected);
 
   if (so->closed) {
-    if (so->error) {
-      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
+    if (so->error)
       set_error(tsk,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
-    }
-    else {
-      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Connection is closed",so->hostname,so->port);
+    else
       argstack[0] = tsk->globnilpntr;
-    }
     curf->resume = 0;
     return;
   }
@@ -1319,13 +1319,10 @@ static void b_readcon(task *tsk, pntr *argstack)
 
     assert(0 == so->frameids[READ_FRAMEADDR]);
     so->frameids[READ_FRAMEADDR] = ioid;
-
-    node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Waiting for data",so->hostname,so->port);
   }
   else {
     curf->resume = 0;
     if (0 == so->len) {
-      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Finished reading",so->hostname,so->port);
       argstack[0] = tsk->globnilpntr;
     }
     else {
@@ -1333,7 +1330,6 @@ static void b_readcon(task *tsk, pntr *argstack)
       make_aref_pntr(argstack[0],arr->wrapper,0);
       carray_append(tsk,&arr,so->buf,so->len,1);
       arr->tail = nextpntr;
-      node_log(tsk->n,LOG_DEBUG1,"readcon %s:%d: Read %d bytes",so->hostname,so->port,so->len);
       free(so->buf);
       so->buf = NULL;
       so->len = 0;
@@ -1359,7 +1355,6 @@ static void b_listen(task *tsk, pntr *argstack)
     so = new_sysobject(tsk,SYSOBJECT_LISTENER);
     so->hostname = strdup("0.0.0.0");
     so->port = port;
-    so->tsk = tsk;
 
     make_pntr(argstack[0],so->c);
 
@@ -1412,11 +1407,10 @@ static void b_accept(task *tsk, pntr *argstack)
     so->newso = NULL;
     assert(so->ownertid == tsk->tid);
     assert(newso->ownertid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG1,"accept %s:%d: Got new connection",so->hostname,so->port);
 
     /* Start printing output to the connection */
     printer = resolve_pntr(argstack[0]);
-    node_log(tsk->n,LOG_DEBUG2,"accept %s:%d: printer is %s",
+    node_log(tsk->n,LOG_DEBUG1,"accept %s:%d: printer is %s",
              so->hostname,so->port,cell_types[pntrtype(printer)]);
     if (CELL_FRAME == pntrtype(printer))
       run_frame(tsk,pframe(printer));

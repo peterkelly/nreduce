@@ -1,0 +1,41 @@
+#!/bin/bash
+scp pmk@titan.sapac.edu.au:showload.log /tmp
+MACHINES=`awk '{print $1}' /tmp/showload.log | sort | uniq`
+
+count=0
+for i in $MACHINES; do
+  ((count++))
+done
+
+cat >/tmp/plotfile <<HERE
+#!/usr/bin/gnuplot
+set terminal postscript solid color
+set out "/tmp/usage.ps"
+
+set xlabel "Time (s)"
+set ylabel "Node"
+set view map
+set style data pm3d
+set palette gray negative
+set pm3d corners2color c1
+set ytics offset first 0,0.5
+set cbrange [0:100]
+
+splot "/tmp/usage.dat" using 3:2:4 : yticlabels(1) notitle
+HERE
+
+
+count=0
+
+echo '' > /tmp/usage.dat
+for i in $MACHINES; do
+  grep $i /tmp/showload.log | perl -pe 's/^(\w+)\s+((\d|\.)+)\s+(\w+)$/$1 '$count' $2 $4/' \
+       >> /tmp/usage.dat
+  echo "" >> /tmp/usage.dat
+  ((count++))
+done
+grep $i /tmp/showload.log | perl -pe 's/^(\w+)\s+((\d|\.)+)\s+(\w+)$/. '$count' $2 $4/' \
+     >> /tmp/usage.dat
+echo "" >> /tmp/plotfile
+gnuplot /tmp/plotfile
+open /tmp/usage.ps

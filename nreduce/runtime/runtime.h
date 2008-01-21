@@ -556,6 +556,8 @@ typedef struct task {
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
                socketid out_sockid, endpointid *epid);
 void task_free(task *tsk);
+void print_pntr(task *tsk, array *arr, pntr p, int depth);
+char *pntr_to_string(task *tsk, pntr p);
 void print_profile(task *tsk);
 
 global *targethash_lookup(task *tsk, pntr p);

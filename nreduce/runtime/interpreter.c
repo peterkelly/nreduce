@@ -162,7 +162,14 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from n
   obj = resolve_pntr(obj);
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
+    char *tmp;
     assert(CELL_FRAME != pntrtype(obj));
+
+    tmp = pntr_to_string(tsk,obj);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (resume_fetchers)",
+             tsk->tid,ft->tid,ft->lid,ft->tid,tmp);
+    free(tmp);
+
     msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
   list_free(wq->fetchers,free);
@@ -550,6 +557,7 @@ static void interpreter_fish(task *tsk, message *msg)
   int reqtsk, age, nframes;
   int scheduled = 0;
   array *newmsg;
+  array *names = array_new(1,0);
   int from = get_idmap_index(tsk,msg->source);
   int done = 0;
 
@@ -567,6 +575,7 @@ static void interpreter_fish(task *tsk, message *msg)
   if (reqtsk == tsk->tid)
     return;
 
+  array_printf(names,"send(%d->%d) SCHEDULE",tsk->tid,reqtsk);
   newmsg = write_start();
 
   for (fb = tsk->frameblocks; fb && !done; fb = fb->next) {
@@ -574,6 +583,12 @@ static void interpreter_fish(task *tsk, message *msg)
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
       if (STATE_SPARKED == f->state) {
         if (1 <= nframes--) {
+          pntr p;
+          assert(f->c);
+          make_pntr(p,f->c);
+          array_printf(names," ");
+          print_pntr(tsk,names,p,1);
+
           schedule_frame(tsk,f,reqtsk,newmsg);
           scheduled++;
         }
@@ -584,9 +599,12 @@ static void interpreter_fish(task *tsk, message *msg)
     }
   }
 
-  if (0 < scheduled)
+  if (0 < scheduled) {
+    node_log(tsk->n,LOG_DEBUG1,"%s",names->data);
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
+  }
   write_end(newmsg);
+  array_free(names);
 
   if (!scheduled && (0 < (age)--)) {
     int dest;
@@ -607,6 +625,7 @@ static void interpreter_fetch(task *tsk, message *msg)
   gaddr targetaddr;
   reader rd;
   global *fetchglo;
+  char *tmp;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
@@ -638,6 +657,11 @@ static void interpreter_fetch(task *tsk, message *msg)
   assert(!is_nullpntr(obj));
   obj = resolve_pntr(obj);
 
+  tmp = pntr_to_string(tsk,obj);
+  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d obj=%s",
+           from,tsk->tid,targetaddr.lid,targetaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
+  free(tmp);
+
   if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
     add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
   }
@@ -658,6 +682,11 @@ static void interpreter_fetch(task *tsk, message *msg)
     unspark_frame(tsk,f);
 
     /* Send the actual frame */
+    tmp = pntr_to_string(tsk,obj);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (interpreter_fetch 1)",
+             tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
+    free(tmp);
+
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
 
     if (NULL != (storeglo = addrhash_lookup(tsk,storeaddr))) {
@@ -679,6 +708,11 @@ static void interpreter_fetch(task *tsk, message *msg)
     frame_free(tsk,f);
   }
   else {
+    tmp = pntr_to_string(tsk,obj);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (interpreter_fetch 2)",
+             tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
+    free(tmp);
+
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
   }
 }
@@ -687,6 +721,7 @@ static void interpreter_respond(task *tsk, message *msg)
 {
   pntr obj;
   gaddr storeaddr;
+  char *tmp;
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
@@ -721,6 +756,11 @@ static void interpreter_respond(task *tsk, message *msg)
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
+  tmp = pntr_to_string(tsk,obj);
+  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) RESPOND storeaddr=%d@%d obj=%s",
+           from,tsk->tid,storeaddr.lid,storeaddr.tid,tmp);
+  free(tmp);
+
   global *objglo = targethash_lookup(tsk,obj);
   if (objglo && (target != objglo)) {
     assert(NULL == objglo->wq.frames);
@@ -747,10 +787,10 @@ static void interpreter_respond(task *tsk, message *msg)
 
 static void interpreter_schedule(task *tsk, message *msg)
 {
-  pntr framep;
   gaddr tellsrc;
   array *urmsg;
   int count = 0;
+  array *names = array_new(1,0);
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
@@ -760,11 +800,17 @@ static void interpreter_schedule(task *tsk, message *msg)
 
   urmsg = write_start();
 
+  array_printf(names,"recv(%d->%d) SCHEDULE",from,tsk->tid);
+
   start_address_reading(tsk,from,msg->tag);
   while (rd.pos < rd.size) {
+    pntr framep;
     gaddr frameaddr;
     read_pntr(&rd,&framep);
     read_gaddr(&rd,&tellsrc);
+
+    array_printf(names," ");
+    print_pntr(tsk,names,framep,1);
 
     assert(CELL_FRAME == pntrtype(framep));
 
@@ -777,11 +823,12 @@ static void interpreter_schedule(task *tsk, message *msg)
   }
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
+  node_log(tsk->n,LOG_DEBUG1,"%s",names->data);
+  array_free(names);
 
   msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
   write_end(urmsg);
 
-  printf("Got %d new frames\n",count);
   tsk->newfish = 1;
 }
 
@@ -1179,6 +1226,9 @@ int handle_interrupt(task *tsk)
         dest = rand() % tsk->groupsize;
       } while (dest == tsk->tid);
 
+      node_log(tsk->n,LOG_DEBUG1,"%d: IDLE sending out FISH (requested: %d)",
+               tsk->tid,NSPARKS_REQUESTED);
+
       msg_fsend(tsk,dest,MSG_FISH,
                 "iii",tsk->tid,tsk->groupsize,NSPARKS_REQUESTED);
       tsk->newfish = 0;
@@ -1562,6 +1612,9 @@ void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native
     assert(CELL_REMOTEREF == pntrtype(ref));
     gaddr storeaddr = get_physical_address(tsk,ref);
     assert(storeaddr.tid == tsk->tid);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d (EVAL)",
+             tsk->tid,target->addr.tid,
+             target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
     target->fetching = 1;
   }

@@ -1,0 +1,28 @@
+#!/bin/bash
+scp pmk@titan.sapac.edu.au:showload.log /tmp
+MACHINES=`awk '{print $1}' /tmp/showload.log | sort | uniq`
+
+cat >/tmp/plotfile <<HERE
+#!/usr/bin/gnuplot
+set terminal postscript solid color
+set out "/tmp/usage.ps"
+
+set xlabel "Time (s)"
+set ylabel "Utilization (%)"
+set yr [0:105]
+HERE
+
+echo -n "plot " >> /tmp/plotfile
+
+count=0
+
+for i in $MACHINES; do
+  if ((count>0)); then
+    echo -n , >> /tmp/plotfile
+  fi
+  echo -n \"\< grep $i /tmp/showload.log\" using 2:3 title \'$i\' with lines " " >> /tmp/plotfile
+  ((count++))
+done
+echo "" >> /tmp/plotfile
+gnuplot /tmp/plotfile
+open /tmp/usage.ps

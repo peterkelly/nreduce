@@ -278,6 +278,7 @@ cell *alloc_cell(task *tsk)
 sysobject *new_sysobject(task *tsk, int type)
 {
   sysobject *so = (sysobject*)calloc(1,sizeof(sysobject));
+  so->tsk = tsk;
   so->type = type;
   so->ownertid = tsk->tid;
   so->c = alloc_cell(tsk);

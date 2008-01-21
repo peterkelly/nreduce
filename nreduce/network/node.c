@@ -76,6 +76,9 @@ void got_message(node *n, const msgheader *hdr, endpointid source,
   endpoint *endpt;
   message *newmsg;
 
+  if (n->clock < hdr->timestamp+1)
+    n->clock = hdr->timestamp+1;
+
   if (NULL == (endpt = find_endpoint(n,hdr->destlocalid))) {
 
     /* This handles the case where a link message is sent but the destination has
@@ -323,8 +326,9 @@ void node_log(node *n, int level, const char *format, ...)
   assert(LOG_COUNT > level);
 
   /* Use only a single vfprintf call to avoid interleaving of messages from different threads */
-  newfmt = (char*)malloc(8+1+strlen(format)+1+1);
-  sprintf(newfmt,"%-8s %s\n",log_levels[level],format);
+  newfmt = (char*)malloc(100+strlen(format));
+  sprintf(newfmt,"%08u %8s %s\n",n->clock,log_levels[level],format);
+  n->clock++;
   va_start(ap,format);
   vfprintf(n->p->logfile,newfmt,ap);
   va_end(ap);
@@ -626,6 +630,7 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
   hdr.destlocalid = destendpointid.localid;
   hdr.size1 = size;
   hdr.tag1 = tag;
+  hdr.timestamp = n->clock++;
 
   if ((destendpointid.ip == n->listenip) &&
       (destendpointid.port == n->listenport)) {
@@ -695,7 +700,7 @@ void done_reading(node *n, connection *conn)
   if (!conn->canread)
     return;
   assert(conn->canread);
-  if (0 > shutdown(conn->sock,SHUT_RD))
+  if ((0 > shutdown(conn->sock,SHUT_RD)) && (ENOTCONN != errno))
     node_log(n,LOG_WARNING,"shutdown(SHUT_RD) on %s:%d failed: %s",
              conn->hostname,conn->port,strerror(errno));
   conn->canread = 0;

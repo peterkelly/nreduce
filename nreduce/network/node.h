@@ -70,6 +70,7 @@ typedef struct msgheader {
   uint32_t destlocalid;
   uint32_t size1;
   uint32_t tag1;
+  uint32_t timestamp;
 } __attribute__ ((__packed__)) msgheader;
 
 typedef struct message {
@@ -113,6 +114,7 @@ typedef struct node {
   unsigned short listenport;
   endpointid iothid;
   int iosize;
+  unsigned int clock;
   struct node_private *p;
 } node;
 
