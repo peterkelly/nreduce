@@ -55,22 +55,12 @@ public class Plot2D extends Plot
 
     for (int i = 0; i < ntests; i++) {
       double t1 = getUserTime(testdirs[i],maxr,1,0,false).avg;
-
-      PrintWriter dataOut = new PrintWriter(outdir+"/"+testnames[i]+".dat");
-      dataOut.format("%8s %8s %10s %10s %10s %10s %10s %10s\n",
-                     "#n","v","min","max","avg","ideal","speedup","efficiency");
-      for (Integer nval : nvalues) {
-        int n = nval.intValue();
-
+      PrintWriter dataOut = openData(outdir+"/"+testnames[i]+".dat");
+      for (int n : nvalues) {
         Result rn = getUserTime(testdirs[i],maxr,n,0,false);
-        double tn = rn.avg;
-        double ideal = t1/n;
-        double speedup = t1/tn;
-        double efficiency = speedup/n;
-        dataOut.format("%8d %8d %10.3f %10.3f %10.3f %10.3f %10.3f %10.3f\n",
-                       n,0,rn.min,rn.max,rn.avg,ideal,speedup,efficiency);
+        printData(dataOut,n,0,rn,t1);
       }
-      dataOut.close();
+      closeData(dataOut);
     }
 
     // Generate plots

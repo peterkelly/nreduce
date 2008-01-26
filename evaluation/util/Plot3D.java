@@ -64,33 +64,21 @@ public class Plot3D extends Plot
 
       double[] t1 = new double[vvalues.size()];
       int vnum = 0;
-      for (Integer vval : vvalues) {
-        int v = vval.intValue();
+      for (int v : vvalues)
         t1[vnum++] = getUserTime(testdirs[i],maxr,1,v,true).avg;
-      }
 
-      PrintWriter dataOut = new PrintWriter(outdir+"/"+testnames[i]+".dat");
-      dataOut.format("%8s %8s %10s %10s %10s %10s %10s %10s\n",
-                     "#n","v","min","max","avg","ideal","speedup","efficiency");
+      PrintWriter dataOut = openData(outdir+"/"+testnames[i]+".dat");
       for (Integer nval : nvalues) {
         int n = nval.intValue();
-
         vnum = 0;
-        for (Integer vval : vvalues) {
-          int v = vval.intValue();
-
+        for (int v : vvalues) {
           Result rn = getUserTime(testdirs[i],maxr,n,v,true);
-          double tn = rn.avg;
-          double ideal = t1[vnum]/n;
-          double speedup = t1[vnum]/tn;
-          double efficiency = speedup/n;
-          dataOut.format("%8d %8d %10.3f %10.3f %10.3f %10.3f %10.3f %10.3f\n",
-                         n,v,rn.min,rn.max,rn.avg,ideal,speedup,efficiency);
+          printData(dataOut,n,v,rn,t1[vnum]);
           vnum++;
         }
         dataOut.format("\n");
       }
-      dataOut.close();
+      closeData(dataOut);
     }
 
     // Generate plots

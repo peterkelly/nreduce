@@ -142,4 +142,27 @@ public abstract class Plot
     }
   }
 
+  protected PrintWriter openData(String filename)
+    throws IOException
+  {
+    PrintWriter out = new PrintWriter(filename);
+    out.format("%8s %8s %10s %10s %10s %10s %10s %10s\n",
+               "#n","v","min","max","avg","ideal","speedup","efficiency");
+    return out;
+  }
+
+  protected void closeData(PrintWriter out)
+  {
+    out.close();
+  }
+
+  protected void printData(PrintWriter out, int n, int v, Result rn, double t1)
+  {
+    double tn = rn.avg;
+    double ideal = t1/n;
+    double speedup = t1/tn;
+    double efficiency = speedup/n;
+    out.format("%8d %8d %10.3f %10.3f %10.3f %10.3f %10.3f %10.3f\n",
+               n,v,rn.min,rn.max,rn.avg,ideal,speedup,efficiency);
+  }
 }
