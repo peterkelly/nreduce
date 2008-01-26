@@ -9,11 +9,8 @@ public class Plot3D extends Plot
   public void genPlot(String name, String title, int col, String zlabel)
     throws IOException
   {
-    String plotFilename = outdir+"/"+name+".plot";
-    PrintWriter plotOut = new PrintWriter(plotFilename);
-
-    plotOut.println("set terminal postscript eps color");
-    plotOut.println("set out \""+outdir+"/"+name+".eps\"");
+    StringWriter sw = new StringWriter();
+    PrintWriter plotOut = new PrintWriter(sw);
 
     plotOut.println("set title \""+title+"\"");
     plotOut.println("set xlabel \"# nodes\"");
@@ -40,7 +37,7 @@ public class Plot3D extends Plot
 
     plotOut.close();
 
-    runGnuplot(plotFilename);
+    makePlot(name,sw.toString());
   }
 
   public void run(String[] args)

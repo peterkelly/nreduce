@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.io.PrintWriter;
 import java.util.SortedSet;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
@@ -36,6 +37,25 @@ public abstract class Plot
     catch (InterruptedException ex) {
       System.out.println("Interrupted");
     }
+  }
+
+  protected void makePlot(String name, String plotCommands)
+    throws IOException
+  {
+    String x11PlotFilename = outdir+"/"+name+"-x11.plot";
+    String epsPlotFilename = outdir+"/"+name+"-eps.plot";
+
+    PrintWriter w = new PrintWriter(x11PlotFilename);
+    w.print(plotCommands);
+    w.close();
+
+    w = new PrintWriter(epsPlotFilename);
+    w.println("set terminal postscript eps color");
+    w.println("set out \""+outdir+"/"+name+".eps\"");
+    w.print(plotCommands);
+    w.close();
+
+    runGnuplot(epsPlotFilename);
   }
 
   public static Result getUserTime(String dirName, int maxr, int n, int v, boolean usev)

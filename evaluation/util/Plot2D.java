@@ -9,18 +9,14 @@ public class Plot2D extends Plot
   public void genPlot(String name, String title, int col, String ylabel)
     throws IOException
   {
-    String plotFilename = outdir+"/"+name+".plot";
-    PrintWriter plotOut = new PrintWriter(plotFilename);
+    StringWriter sw = new StringWriter();
+    PrintWriter plotOut = new PrintWriter(sw);
 
     String options = " with lines linewidth 2";
-
-    plotOut.println("set terminal postscript eps color");
-    plotOut.println("set out \""+outdir+"/"+name+".eps\"");
 
     plotOut.println("set title \""+title+"\"");
     plotOut.println("set xlabel \"# nodes\"");
     plotOut.println("set ylabel \""+ylabel+"\"");
-
     plotOut.println("set yrange [0:]");
 
     plotOut.println("plot \\");
@@ -35,7 +31,7 @@ public class Plot2D extends Plot
 
     plotOut.close();
 
-    runGnuplot(plotFilename);
+    makePlot(name,sw.toString());
   }
 
   public void run(String[] args)
