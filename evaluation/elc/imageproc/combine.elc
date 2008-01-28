@@ -1,0 +1,16 @@
+foldr f base lst =
+(if lst
+  (f (head lst) (foldr f base (tail lst)))
+  base)
+
+combine images =
+(connect "localhost" 1234
+(++ "combine " (++ (numtostring (len images)) (++ "\n"
+(foldr ++ nil
+  (map (!image.++ (numtostring (len image)) (++ "\n" image))
+       images))))))
+
+main args =
+(if (< (len args) 1)
+  "Usage: combine <filenames...>\n"
+  (combine (map readb args)))

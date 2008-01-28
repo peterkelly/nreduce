@@ -1,0 +1,16 @@
+resize width height image =
+(connect "localhost" 1234
+(++ "resize " (++ (numtostring width) (++ " " (++ (numtostring height) (++ "\n"
+(++ (numtostring (len image)) (++ "\n" image))))))))
+
+
+main args =
+(if (< (len args) 3)
+  "Usage: resize <filename> <width> <height>\n"
+(letrec
+  filename = (item 0 args)
+  image = (readb filename)
+  width = (stringtonum (item 1 args))
+  height = (stringtonum (item 2 args))
+in
+  (resize width height image)))

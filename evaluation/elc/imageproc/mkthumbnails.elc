@@ -1,0 +1,21 @@
+foldr f base lst =
+(if lst
+  (f (head lst) (foldr f base (tail lst)))
+  base)
+
+resize width height image =
+(connect "localhost" 1234
+(++ "resize " (++ (numtostring width) (++ " " (++ (numtostring height) (++ "\n"
+(++ (numtostring (len image)) (++ "\n" image))))))))
+
+combine images =
+(connect "localhost" 1234
+(++ "combine " (++ (numtostring (len images)) (++ "\n"
+(foldr ++ nil
+  (map (!image.++ (numtostring (len image)) (++ "\n" image))
+       images))))))
+
+main args =
+(if (< (len args) 1)
+  "Usage: mkthumbnails <filenames...>\n"
+(combine (map (resize 75 75) (map readb args))))

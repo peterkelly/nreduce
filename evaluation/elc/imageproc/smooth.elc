@@ -1,0 +1,15 @@
+smooth iterations image =
+(connect "localhost" 1234
+(++ "smooth " (++ (numtostring iterations)
+(++ "\n" (++ (numtostring (len image))
+(++ "\n" image))))))
+
+main args =
+(if (< (len args) 2)
+  "Usage: smooth <filename> <iterations>\n"
+(letrec
+  filename = (item 0 args)
+  image = (readb filename)
+  iterations = (stringtonum (item 1 args))
+in
+(smooth iterations image)))

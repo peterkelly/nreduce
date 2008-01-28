@@ -1,0 +1,39 @@
+parse1 str start count =
+(if str
+  (if (isspace (head str))
+    (cons (stringtonum (prefix count start)) (parse1 (tail str) (tail str) 0))
+    (parse1 (tail str) start (+ count 1)))
+  (if (> count 0)
+    (cons (stringtonum (prefix count start)) nil)
+    nil))
+
+parse str = (parse1 str str 0)
+
+analyze image =
+(parse
+(connect "localhost" 1234
+(++ "analyze\n"
+(++ (numtostring (len image)) (++ "\n" image)))))
+
+get_width fields = (item 0 fields)
+get_height fields = (item 1 fields)
+get_hue fields = (item 2 fields)
+get_saturation fields = (item 3 fields)
+get_value fields = (item 4 fields)
+get_whue fields = (item 5 fields)
+
+main args =
+(if (!= (len args) 1)
+  "Usage: analyze <filename>\n"
+(letrec
+  filename = (head args)
+  image = (readb filename)
+  fields = (analyze image)
+in
+(++ "width = " (++ (numtostring (get_width fields))
+(++ "\nheight = " (++ (numtostring (get_height fields))
+(++ "\nhue = " (++ (numtostring (get_hue fields))
+(++ "\nsatuation = " (++ (numtostring (get_saturation fields))
+(++ "\nvalue = " (++ (numtostring (get_value fields))
+(++ "\nweighted hue = " (++ (numtostring (get_whue fields))
+    "\n"))))))))))))))
