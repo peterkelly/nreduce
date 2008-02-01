@@ -563,8 +563,6 @@ void init_servers(const char *filename)
   fclose(f);
 }
 
-FILE *slavelog = NULL;
-
 int getload()
 {
   static unsigned long long int oldtotal = 0;
@@ -596,9 +594,6 @@ int getload()
 
   total = user+nice+system+idle+iowait+irq+softirq;
 
-  fprintf(slavelog,"total=%lld, idle=%lld, %lld %lld %lld %lld %lld %lld %lld\n",
-          total,idle,user,nice,system,idle,iowait,irq,softirq);
-
   if (0 > total) {
     oldtotal = total;
     oldidle = idle;
@@ -618,16 +613,11 @@ int getload()
     return -1;
 
   load = 100-100*idlediff/totaldiff;
-  if (load > 100)
-    fprintf(slavelog,"BAD\n");
   return (int)load;
 }
 
 void slave()
 {
-  slavelog = fopen("/tmp/slave.log","w");
-  assert(slavelog);
-  setbuf(slavelog,NULL);
   while (1) {
     int load = getload();
     char c = (char)load;
