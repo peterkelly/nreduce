@@ -374,7 +374,7 @@ void init_servers(const char *filename)
   FILE *f;
   char name[257];
   if (NULL == (f = fopen(filename,"r")))
-    fatal("filename: %s",strerror(errno));
+    fatal("%s: %s",filename,strerror(errno));
   while (1 == fscanf(f,"%256s",name)) {
     char *colon = strchr(name,':');
     if (NULL == colon)
