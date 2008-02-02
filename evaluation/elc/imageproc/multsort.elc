@@ -74,7 +74,7 @@ valcmp x y =
 
 main args =
 (if (< (len args) 1)
-  "Usage: mkthumbnails <filenames...>\n"
+  "Usage: multsort <filenames...>\n"
 (letrec
   images = (map readb args)
   resized = (map (resize 60 60) images)

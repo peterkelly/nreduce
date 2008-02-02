@@ -71,7 +71,7 @@ huecmp x y =
 
 main args =
 (if (< (len args) 1)
-  "Usage: mkthumbnails <filenames...>\n"
+  "Usage: sortbyhue <filenames...>\n"
 (letrec
   images = (map readb args)
   resized = (map (resize 75 75) images)

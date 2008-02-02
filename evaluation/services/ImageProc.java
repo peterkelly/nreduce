@@ -27,6 +27,9 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 public class ImageProc
 {
+  static int MAX_THREADS = 3;
+  int nthreads = 0;
+
   static void writeJpeg(BufferedImage img, OutputStream out)
     throws IOException
   {
@@ -82,18 +85,10 @@ public class ImageProc
       }
     }
 
-    System.out.println("totalHue = "+totalHue);
-    System.out.println("totalSaturation = "+totalSaturation);
-    System.out.println("totalValue = "+totalValue);
-
     double hue = totalHue/(double)(width*height);
     double saturation = totalSaturation/(double)(width*height);
     double value = totalValue/(double)(width*height);
     double weightedHue = (totalWeight == 0.0) ? 0.0 : totalWeightedHue/totalWeight;
-    System.out.println("hue = "+hue);
-    System.out.println("saturation = "+saturation);
-    System.out.println("variance = "+value);
-    System.out.println("weighted hue = "+weightedHue);
 
     PrintWriter writer = new PrintWriter(out,true);
     writer.format("%d %d %.3f %.3f %.3f %.3f\n",
@@ -109,7 +104,6 @@ public class ImageProc
     int height = w.getHeight();
     byte[] pixels = ((DataBufferByte)w.getDataBuffer()).getData();
 
-    long startTime = System.currentTimeMillis();
     byte[] result = new byte[pixels.length];
     for (int i = 0; i < iterations; i++) {
       for (int y = 0; y < height; y++) {
@@ -155,8 +149,6 @@ public class ImageProc
       }
       System.arraycopy(result,0,pixels,0,pixels.length);
     }
-    long endTime = System.currentTimeMillis();
-    System.out.println(iterations+" smoothing iterations took "+(endTime-startTime)+" ms");
 
     writeJpeg(img,out);
   }
@@ -169,8 +161,6 @@ public class ImageProc
     int inWidth = w.getWidth();
     int inHeight = w.getHeight();
     byte[] data = ((DataBufferByte)w.getDataBuffer()).getData();
-    System.out.println("resize: inWidth="+inWidth+", inHeight="+inHeight+
-                       ", data.length="+data.length);
 
     long startTime = System.currentTimeMillis();
     byte[] resized = new byte[outWidth*outHeight*3];
@@ -239,7 +229,6 @@ public class ImageProc
     }
 
     long endTime = System.currentTimeMillis();
-    System.out.println("resize took "+(endTime-startTime)+" ms");
 
     WritableRaster rw = createRaster(outWidth,outHeight,resized,img);
     BufferedImage mod = new BufferedImage(img.getColorModel(),rw,false,null);
@@ -251,7 +240,6 @@ public class ImageProc
   {
 
     int size = (int)Math.ceil(Math.sqrt(inputs.length));
-    System.out.println("inputs.length = "+inputs.length+", rowscols = "+size);
 
     // Read image
     BufferedImage[][] grid = new BufferedImage[size][size];
@@ -259,7 +247,6 @@ public class ImageProc
     int y = 0;
     for (int i = 0; i < inputs.length; i++) {
       grid[y][x] = ImageIO.read(inputs[i]);
-      System.out.println("done reading "+inputs[i]);
       x++;
       if (x >= size) {
         y++;
@@ -282,15 +269,10 @@ public class ImageProc
     // Determine total output size
     int outWidth = 0;
     int outHeight = 0;
-    for (x = 0; x < size; x++) {
-      System.out.println("colWidths["+x+"] = "+colWidths[x]);
+    for (x = 0; x < size; x++)
       outWidth += colWidths[x];
-    }
-    for (y = 0; y < size; y++) {
-      System.out.println("rowHeights["+y+"] = "+rowHeights[y]);
+    for (y = 0; y < size; y++)
       outHeight += rowHeights[y];
-    }
-    System.out.println("outWidth = "+outWidth+", outHeight = "+outHeight);
 
     // Draw images on grid
     byte[] pixels = new byte[outWidth*outHeight*3];
@@ -328,36 +310,45 @@ public class ImageProc
     writeJpeg(mod,out);
   }
 
-  static void handle(Socket c, int id) throws Exception
+  static void handle(Socket c, int id, String imageDir) throws Exception
   {
     try {
       InputStream cin = c.getInputStream();
       OutputStream cout = c.getOutputStream();
-
-      int r;
-      byte[] buf = new byte[1024];
-      ByteArrayOutputStream bout = new ByteArrayOutputStream();
-      while (0 <= (r = cin.read(buf)))
-        bout.write(buf,0,r);
-
-      byte[] data = bout.toByteArray();
-      CommInput input = new CommInput(data);
+      long startTime = System.currentTimeMillis();
+      CommInput input = new CommInput(cin);
       String line = input.readLine();
       String[] args = line.trim().split("\\s+");
-      System.out.println("request: \""+line+"\"");
 
-      if ((1 == args.length) && (args[0].equals("analyze"))) {
+      if ((1 == args.length) && (args[0].equals("list"))) {
+        File dir = new File(imageDir);
+        File[] contents = dir.listFiles();
+        PrintWriter writer = new PrintWriter(cout);
+        for (File f : contents) {
+          if (f.getName().toLowerCase().endsWith(".jpg"))
+            writer.println(f.getName());
+        }
+        writer.flush();
+      }
+      else if ((2 == args.length) && (args[0].equals("get"))) {
+        String path = imageDir+"/"+args[1];
+        FileInputStream fin = new FileInputStream(path);
+        int r;
+        byte[] buf = new byte[1024];
+        while (0 <= (r = fin.read(buf)))
+          cout.write(buf,0,r);
+        fin.close();
+      }
+      else if ((1 == args.length) && (args[0].equals("analyze"))) {
         InputStream in = input.readData();
         analyze(in,cout);
         in.close();
-        System.out.println("Analyze done");
       }
       else if ((2 == args.length) && (args[0].equals("smooth"))) {
         int iterations = Integer.parseInt(args[1]);
         InputStream in = input.readData();
         smooth(in,iterations,cout);
         in.close();
-        System.out.println("Smooth done");
       }
       else if ((3 == args.length) && (args[0].equals("resize"))) {
         int outWidth = Integer.parseInt(args[1]);
@@ -365,7 +356,6 @@ public class ImageProc
         InputStream in = input.readData();
         resize(in,outWidth,outHeight,cout);
         in.close();
-        System.out.println("Resize done");
       }
       else if ((2 == args.length) && (args[0].equals("combine"))) {
         int nimages = Integer.parseInt(args[1]);
@@ -382,17 +372,25 @@ public class ImageProc
         writer.println("Invalid request: "+line);
         writer.flush();
       }
+      long endTime = System.currentTimeMillis();
+      System.out.format("%-60s %d\n",line,(endTime-startTime));
     }
     catch (Exception e) {
       e.printStackTrace();
     }
     finally {
       c.close();
-      System.out.println(id+": connection closed");
     }
   }
 
-  static void server(int port)
+  int getNthreads()
+  {
+    synchronized (this) { 
+      return nthreads;
+    }
+  }
+
+  void server(int port, final String imageDir)
     throws IOException
   {
     byte[] b = new byte[]{0,0,0,0};
@@ -400,11 +398,32 @@ public class ImageProc
     ServerSocket s = new ServerSocket(port,100,addr);
     System.out.println("Started server socket on port "+port);
     for (int nextid = 0; true; nextid++) {
+
+      synchronized (ImageProc.this) {
+        while (nthreads+1 > MAX_THREADS) {
+          try {
+            System.out.println("nthreads = "+getNthreads()+", waiting");
+            ImageProc.this.wait();
+          }
+          catch (InterruptedException e) {}
+        }
+        nthreads++;
+      }
+
       final Socket c = s.accept();
       final int id = nextid;
-      System.out.println(id+": accepted connection");
+
+//       System.out.println(id+": connection opened: nthreads = "+getNthreads());
+
       new Thread() { public void run() {
-        try { handle(c,id); } catch (Exception e) { }
+        try {
+          handle(c,id,imageDir);
+          synchronized (ImageProc.this) {
+            nthreads--;
+            ImageProc.this.notifyAll();
+          }
+//           System.out.println(id+": connection closed: nthreads = "+getNthreads());
+        } catch (Exception e) { }
       } }.start();
     }
   }
@@ -444,7 +463,10 @@ public class ImageProc
         s.close();
     }
     else if (1 == args.length) {
-      server(Integer.parseInt(args[0]));
+      new ImageProc().server(Integer.parseInt(args[0]),null);
+    }
+    else if (2 == args.length) {
+      new ImageProc().server(Integer.parseInt(args[0]),args[1]);
     }
     else {
       System.out.println("Usage: services.ImageProc <port>");
