@@ -1,0 +1,137 @@
+/* ========================================================================== */
+/* Utility functions */
+
+foldr f base lst =
+(if lst
+  (f (head lst) (foldr f base (tail lst)))
+  base)
+
+mergesort cmp m =
+(if (<= (len m) 1)
+  m
+  (letrec
+    middle = (floor (/ (len m) 2))
+    left = (prefix middle m)
+    right = (skip middle m)
+    left2 = (mergesort cmp left)
+    right2 = (mergesort cmp right)
+  in
+    (merge cmp left2 right2 nil)))
+
+merge cmp xlst ylst out =
+(if xlst
+  (if ylst
+    (letrec
+      x = (head xlst)
+      y = (head ylst)
+     in
+      (if (> (cmp x y) 0)
+        (merge cmp xlst (tail ylst) (cons y out))
+        (merge cmp (tail xlst) ylst (cons x out))))
+    (merge cmp (tail xlst) ylst (cons (head xlst) out)))
+  (if ylst
+    (merge cmp xlst (tail ylst) (cons (head ylst) out))
+    (reverse out)))
+
+split1 str start count =
+(if str
+  (if (isspace (head str))
+    (cons (prefix count start) (split1 (tail str) (tail str) 0))
+    (split1 (tail str) start (+ count 1)))
+  (if (> count 0)
+    (cons (prefix count start) nil)
+    nil))
+
+split str = (split1 str str 0)
+
+/* ========================================================================== */
+/* Data structure accessors */
+
+get_width fields = (item 0 fields)
+get_height fields = (item 1 fields)
+get_hue fields = (item 2 fields)
+get_saturation fields = (item 3 fields)
+get_value fields = (item 4 fields)
+get_whue fields = (item 5 fields)
+
+/* ========================================================================== */
+/* Service operations */
+
+finconnect host port out =
+(letrec
+  instream = (connect host port (++ out (seq (len instream) nil)))
+in
+  instream)
+
+base_resize !host !port !width !height !image =
+(finconnect host port
+(++ "resize " (++ (numtostring width) (++ " " (++ (numtostring height) (++ "\n"
+(++ (numtostring (len image)) (++ "\n" image))))))))
+
+strict_resize !host !port !width !height !image =
+(base_resize host port width height (forcelist image))
+
+base_combine !host !port !images =
+(finconnect host port
+(++ "combine " (++ (numtostring (len images)) (++ "\n"
+(foldr ++ nil
+  (map (!image.++ (numtostring (len image)) (++ "\n" image))
+       images))))))
+
+strict_combine host port images =
+(base_combine host port (forcelist (map forcelist images)))
+
+base_analyze !host !port !image =
+(map stringtonum
+(split
+(finconnect host port
+(++ "analyze\n"
+(++ (numtostring (len image)) (++ "\n" image))))))
+
+strict_analyze !host !port !image =
+(base_analyze host port (forcelist image))
+
+base_get !host !port !name =
+(finconnect host port (++ "get " (++ name "\n")))
+
+strict_get !host !port !name =
+(base_get host port (forcelist name))
+
+base_list !host !port = (split (finconnect host port "list\n"))
+
+strict_list !host !port =
+(base_list host port)
+
+/* ========================================================================== */
+/* Sort functions */
+
+huecmp x y =
+(- (get_whue (head x)) (get_whue (head y)))
+
+/* ========================================================================== */
+/* Workflow */
+
+main args =
+(if (< (len args) 2)
+  "Usage: sort2strict.elc <host> <port>\n"
+(letrec
+
+  host = (item 0 args)
+  port = (stringtonum (item 1 args))
+
+  resize = (strict_resize host port)
+  combine = (strict_combine host port)
+  analyze = (strict_analyze host port)
+  get = (strict_get host port)
+  list = (strict_list host port)
+
+  analyzed =
+    (map (!name.
+           (letrec image = (get name)
+            in (cons (analyze image)
+                     (resize 75 75 image))))
+         list)
+  sorted = (mergesort huecmp analyzed)
+  simages = (map tail sorted)
+in
+  (combine simages)))
