@@ -221,6 +221,7 @@ void update(host *hosts, int nhosts, int h, int load)
               hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000,load);
     }
   }
+  move(0,0);
 
   refresh();
 }
@@ -268,11 +269,11 @@ void loop(host *hosts, int nhosts)
   }
 }
 
-
 int getload()
 {
   static unsigned long long int oldtotal = 0;
   static unsigned long long int oldidle = 0;
+  static unsigned long long int load = 0;
 
   FILE *f;
   int count;
@@ -286,7 +287,6 @@ int getload()
   unsigned long long int total;
   unsigned long long int totaldiff;
   unsigned long long int idlediff;
-  unsigned long long int res;
 
   if (NULL == (f = fopen("/proc/stat","r")))
     return -1;
@@ -306,6 +306,9 @@ int getload()
     return -1;
   }
 
+  if ((total < oldtotal) || (idle < oldidle))
+    return load; /* happens sometimes; rounding error in kernel? */
+
   totaldiff = total-oldtotal;
   idlediff = idle-oldidle;
 
@@ -315,8 +318,8 @@ int getload()
   if (0 == totaldiff)
     return -1;
 
-  res = 100-100*idlediff/totaldiff;
-  return (int)res;
+  load = 100-100*idlediff/totaldiff;
+  return (int)load;
 }
 
 void slave()

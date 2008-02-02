@@ -7,7 +7,7 @@ showload: showload.c
 	gcc -g -Wall -o showload showload.c -lncurses
 
 loadbal: loadbal.c
-	gcc -g -Wall -o loadbal loadbal.c -lncurses
+	gcc -g -Wall -o loadbal loadbal.c
 
 nobuftail: nobuftail.c
 	gcc -g -Wall -o nobuftail nobuftail.c
