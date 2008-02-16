@@ -153,6 +153,11 @@ Argument:
                                     sprintf($$,"!%s",name);
                                     free(name);
                                     free($2); }
+| '@' SYMBOL                      { char *name = make_varname($2);
+                                    $$ = (char*)malloc(strlen(name)+2);
+                                    sprintf($$,"@%s",name);
+                                    free(name);
+                                    free($2); }
 ;
 
 Arguments:

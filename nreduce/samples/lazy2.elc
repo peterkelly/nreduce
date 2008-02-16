@@ -1,0 +1,29 @@
+/* Example of a program that won't work with strict evaluation. This creates a data structure
+which contains a pointer to itself. This is what happens when constructing an XML tree (a
+parent element contains a list of children, each of which have a pointer back to the parent).
+
+Strict evaluation won't work in this case because when constructing the data structure we have
+to store a pointer to the (currently unevaluated) cell which will be updated with the result
+when construction completes. For this to work, either the b or c parameters to mkobj would have
+to be marked lazy, with the lazy version of cons used:
+
+  mkobj a @b c =
+  (cons a (lcons b (cons c nil)))
+
+  mkobj a b @c =
+  (cons a (cons b (lcons c nil)))
+*/
+
+mkobj a b c =
+(cons a (cons b (cons c nil)))
+
+mktree n =
+(letrec
+  res = (mkobj 1 (mkobj 3 4 (mkobj 5 6 res)) 2)
+in
+  res)
+
+main =
+(if (mktree 1)
+  "yes\n"
+  "no\n")

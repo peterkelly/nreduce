@@ -1164,6 +1164,65 @@ static void handle_message(task *tsk, message *msg)
   message_free(msg);
 }
 
+static int find_frame(task *tsk, stack *s, frame *f, frame *lookingfor)
+{
+  frame *w;
+  int i;
+  for (i = 0; i < s->count; i++)
+    if (s->data[i] == f)
+      return 0;
+  stack_push(s,f);
+  for (w = f->wq.frames; w; w = w->waitlnk) {
+    if ((w == lookingfor) || find_frame(tsk,s,w,lookingfor)) {
+      stack_pop(s);
+      return 1;
+    }
+  }
+  stack_pop(s);
+  return 0;
+}
+
+static int graph_trace(task *tsk, stack *s, frame *f, int depth)
+{
+  frame *w;
+  int i;
+  for (i = 0; i < s->count; i++)
+    if (s->data[i] == f)
+      return 0;
+
+  for (i = 0; i < depth; i++)
+    printf("  ");
+  printf("%p (%s)\n",f,bc_function_name(tsk->bcdata,frame_fno(tsk,f)));
+
+  stack_push(s,f);
+  for (w = f->wq.frames; w; w = w->waitlnk)
+    graph_trace(tsk,s,w,depth+1);
+  stack_pop(s);
+  return 0;
+}
+
+static void find_recursion(task *tsk)
+{
+  frameblock *fb;
+  int i;
+  stack *s = stack_new();
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if (STATE_BLOCKED == f->state) {
+        assert(0 == s->count);
+        if (find_frame(tsk,s,f,f)) {
+          printf("%p (%s): blocked on self\n",
+                 f,bc_function_name(tsk->bcdata,frame_fno(tsk,f)));
+          graph_trace(tsk,s,f,0);
+          printf("\n");
+        }
+      }
+    }
+  }
+  stack_free(s);
+}
+
 /* Note: handle_interrupt() should never change the frame at the head of the runnable queue
    unless the queue is empty. This is because when handle_trap() returns, it will go back to
    an EIP which is within the code for the current frame. If the current frame changes, EBP
@@ -1207,9 +1266,12 @@ int handle_interrupt(task *tsk)
     frameblock *fb;
     int i;
 
-    /* Standalone: no runnable or blocked frames means we can exist */
-    if ((1 == tsk->groupsize) && (0 == tsk->netpending))
+    /* Standalone: no runnable or blocked frames means we can exit */
+    if ((1 == tsk->groupsize) && (0 == tsk->netpending)) {
+      printf("Out of runnable frames!\n");
+      find_recursion(tsk);
       return 1;
+    }
 
     node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d",
              tsk->tid,tsk->svcbusy,tsk->nfetching);

@@ -290,6 +290,10 @@ int main(int argc, char **argv)
   assert(0 == ((int)&((block*)0)->values)%8);
   assert(0 == ((int)&((carray*)0)->elements)%8);
 
+  strict_evaluation = (getenv("STRICT") != 0);
+  if (strict_evaluation)
+    builtin_info[B_CONS].nstrict = builtin_info[B_CONS].nargs;
+
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
 

@@ -579,6 +579,7 @@ static void lift_if_complex(source *src, snode **k, scomb *sc)
       scomb *newsc = lift_expr(src,k,sc);
       int changed = 0;
       newsc->strictin = (int*)calloc(newsc->nargs,sizeof(int));
+      newsc->lazyin = (int*)calloc(newsc->nargs,sizeof(int));
       check_strictness(newsc,&changed);
       newsc->nospark = 1;
       nonstrict_lift_r(src,&newsc->body,newsc);

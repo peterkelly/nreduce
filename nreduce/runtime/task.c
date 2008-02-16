@@ -46,6 +46,7 @@ extern const module_info *modules;
 
 pthread_key_t task_key;
 int engine_type = ENGINE_NATIVE;
+int strict_evaluation = 1;
 
 global *targethash_lookup(task *tsk, pntr p)
 {

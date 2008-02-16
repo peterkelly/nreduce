@@ -393,10 +393,10 @@ void print_scomb_code(source *src, FILE *f, scomb *sc)
   for (i = 0; i < sc->nargs; i++) {
     const char *argname = real_varname(src,sc->argnames[i]);
     if (strcmp(argname,"__args") && strcmp(argname,"__stdin")) {
-      if (sc->strictin) {
-        if (sc->strictin[i])
-          col += fprintf(f,"!");
-      }
+      if (sc->strictin && sc->strictin[i])
+        col += fprintf(f,"!");
+      else if (sc->lazyin && sc->lazyin[i])
+        col += fprintf(f,"@");
       col += fprintf(f,"%s ",argname);
     }
   }

@@ -138,7 +138,9 @@ struct gaddr;
 #define B_ISSPACE        65
 #define B_LOOKUP         66
 
-#define NUM_BUILTINS     67
+#define B_LCONS          67
+
+#define NUM_BUILTINS     68
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -807,7 +809,7 @@ void send_jcmd(endpoint *endpt, int ioid, int oneway, const char *data, int cmdl
 void java_thread(node *n, endpoint *endpt, void *arg);
 
 #ifndef BUILTINS_C
-extern const builtin builtin_info[NUM_BUILTINS];
+extern builtin builtin_info[NUM_BUILTINS];
 #endif
 
 #ifndef MEMORY_C
@@ -820,6 +822,7 @@ extern const char *frame_states[5];
 #ifndef TASK_C
 extern pthread_key_t task_key;
 extern int engine_type;
+extern int strict_evaluation;
 #endif
 
 #endif

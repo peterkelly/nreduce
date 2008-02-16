@@ -110,6 +110,7 @@ void scomb_free(scomb *sc)
   free(sc->argnames);
 
   free(sc->strictin);
+  free(sc->lazyin);
   free(sc);
 }
 

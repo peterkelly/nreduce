@@ -91,6 +91,7 @@ CHAR                     \'.\'
 "letrec"                 { return LETREC; }
 "in"                     { return IN; }
 "!"                      { return LAMBDA; }
+"@"                      { return '@'; }
 "nil"                    { return NIL; }
 "import"                 { return IMPORT; }
 "."                      { return '.'; }

@@ -1,0 +1,17 @@
+/* Example of a program that won't work with strict evaluation. This creates an infinite list
+and then access the first 10 elements. This simply results in the program going into an infinite
+loop. */
+
+nextpart n =
+(allnumbers (+ n 1))
+
+allnumbers n =
+(cons n (allnumbers (+ n 1)))
+
+printlist lst =
+(if lst
+  (++ (numtostring (head lst)) (printlist (tail lst)))
+  nil)
+
+main =
+(printlist (prefix 10 (allnumbers 4)))

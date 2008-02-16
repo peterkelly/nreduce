@@ -1519,7 +1519,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       /* Transfer the arguments to the new frame's data area */
       asm_copy_stack(tsk,as,instr->expcount,fno,n);
 
-      /* Update the curren't frames instruction pointer to refer to the next instruction
+      /* Update the current frames instruction pointer to refer to the next instruction
          after this one. */
       I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
 
@@ -1529,7 +1529,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       // newf->wq.frames = curf;
       I_MOV(regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES),reg(EBP));
 
-      /* But the current frame into the blocked state and remove it from the run queue.
+      /* Put the current frame into the blocked state and remove it from the run queue.
          Add the new frame on to the run queue. Note: the state of the new frame was
          already initialised to STATE_NEW when we created the frame above. */
       I_MOV(reg(EAX),regmem(EBP,FRAME_RNEXT));
@@ -1636,6 +1636,9 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         I_JNE(label(Lfallback));
 
         I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+        I_CMP(regmem(EAX,CELL_TYPE),imm(CELL_AREF));
+        I_JNE(label(Lfallback));
+
         I_MOV(reg(EAX),regmem(EAX,CELL_FIELD1));
 
         // if (sizeof(pntr) == arr->elemsize)

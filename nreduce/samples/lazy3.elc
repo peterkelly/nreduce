@@ -1,0 +1,11 @@
+/* Example of a program that won't work with strict evaluation. This creates an infinite data
+structure, and will fail when ++ tries to evaluate its second argument, which is a call
+itself.
+
+This code was originally used to generate spaces for indenting purposes in the XML code. */
+
+main =
+(letrec
+  spaces = (++ "             " spaces)
+in
+  spaces)

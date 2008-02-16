@@ -86,6 +86,7 @@ typedef struct scomb {
   snode *body;
   int index;
   int *strictin;
+  int *lazyin;
   sourceloc sl;
   char *modname;
   int used;

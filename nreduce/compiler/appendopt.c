@@ -125,9 +125,14 @@ static void make_append_version(source *src, scomb *sc)
 
   if (sc->strictin) {
     newsc->strictin = (int*)malloc(newsc->nargs*sizeof(int));
-    for (i = 0; i < sc->nargs; i++)
-      newsc->strictin[i] = sc->strictin[i];
-    newsc->strictin[i] = 0;
+    memcpy(newsc->strictin,sc->strictin,sc->nargs*sizeof(int));
+    newsc->strictin[sc->nargs] = 0;
+  }
+
+  if (sc->lazyin) {
+    newsc->lazyin = (int*)malloc(newsc->nargs*sizeof(int));
+    memcpy(newsc->lazyin,sc->lazyin,sc->nargs*sizeof(int));
+    newsc->lazyin[sc->nargs] = 0;
   }
 
   sym->type = SNODE_SYMBOL;

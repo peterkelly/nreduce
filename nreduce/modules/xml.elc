@@ -66,23 +66,13 @@ Document    type                                                                
 mkatom type value =
 (cons type (cons value nil))
 
-/*
-mkitem type value root parent prev next nsuri nsprefix localname attributes namespaces children =
-(cons type (cons value
-(cons root
-(cons parent (cons prev (cons next
-(cons nsuri (cons nsprefix (cons localname
-(cons attributes (cons namespaces (cons children
-(cons (genid nil) nil)))))))))))))
-*/
-
-mkitem type value root parent prev next nsuri nsprefix localname attributes namespaces children =
-(cons type (cons value
-(cons root
-(cons parent (cons prev (cons next
-(cons nsuri (cons nsprefix (cons localname
-(cons attributes (cons namespaces (cons children
-(cons (genid nil) (cons (compute_index prev parent) nil))))))))))))))
+mkitem type value @root @parent @prev @next nsuri nsprefix localname @attributes @namespaces @children =
+(lcons type (lcons value
+(lcons root
+(lcons parent (lcons prev (lcons next
+(lcons nsuri (lcons nsprefix (lcons localname
+(lcons attributes (lcons namespaces (lcons children
+(lcons (genid nil) (lcons (compute_index prev parent) nil))))))))))))))
 
 item_type x       = (head x)
 item_value x      = (item 1 x)
@@ -116,29 +106,29 @@ mknumber num =
 mkbool b =
 (mkatom TYPE_BOOLEAN b)
 
-mkelem root parent prev next nsuri nsprefix localname attributes namespaces children =
+mkelem @root @parent @prev @next nsuri nsprefix localname @attributes @namespaces @children =
 (mkitem TYPE_ELEMENT nil root parent prev next nsuri nsprefix localname attributes namespaces children)
 
 /* FIXME: should text and comment nodes have a root pointer as well? */
-mktext2 value parent prev next =
+mktext2 value @parent @prev @next =
 (mkitem TYPE_TEXT value nil parent prev next nil nil nil nil nil nil)
 
 mktext value =
 (mktext2 value nil nil nil)
 
-mkcomment2 value parent prev next =
+mkcomment2 value @parent @prev @next =
 (mkitem TYPE_COMMENT value nil parent prev next nil nil nil nil nil nil)
 
 mkcomment value =
 (mkcomment2 value nil nil nil)
 
-mkattr root parent prev next nsuri nsprefix localname value =
+mkattr @root @parent @prev @next nsuri nsprefix localname value =
 (mkitem TYPE_ATTRIBUTE value root parent prev next nsuri nsprefix localname nil nil nil)
 
 mknamespace nsuri nsprefix =
 (mkitem TYPE_NAMESPACE nil nil nil nil nil nsuri nsprefix nil nil nil nil)
 
-mkdoc children =
+mkdoc @children =
 (letrec
   doc = (mkitem TYPE_DOCUMENT nil doc nil nil nil nil nil nil nil nil children)
  in
@@ -436,7 +426,7 @@ print_token val =
 add_whitespace nodes =
 (add_whitespace1 0 nodes nil 0 nil)
 
-add_whitespace1 depth lst needindent haveindent parent =
+add_whitespace1 depth lst needindent haveindent @parent =
 (if lst
   (letrec
     this = (head lst)
@@ -551,9 +541,11 @@ maybe_indent depth needindent haveindent rest =
 //==================================================================================================
 spaces n =
 (letrec
-  bulkspaces = (append "                                                            " bulkspaces)
+  some = "                                                                                "
 in
-(prefix n bulkspaces))
+  (if (> n 80)
+    (++ some (spaces (- n 80)))
+    (prefix n some)))
 
 //==================================================================================================
 
@@ -567,7 +559,7 @@ parse tokens =
     (cons doc nil))
   (error "parse: no tokens"))
 
-parse1 tokens namespaces root parent prev =
+parse1 tokens @namespaces @root @parent @prev =
 (if (not tokens)
   (cons nil nil)
 (letrec
@@ -630,7 +622,7 @@ skip_attrs tokens =
     (skip_attrs (tail (tail tokens)))
     tokens)))
 
-parse_attrs tokens namespaces root parent prev =
+parse_attrs tokens @namespaces @root @parent @prev =
 (if (not tokens)
   nil
 (letrec
@@ -891,7 +883,7 @@ print_nodes lst next =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-copy_attrs lst root parent prev =
+copy_attrs lst @root @parent @prev =
 (if lst
   (letrec
     attr = (head lst)
@@ -905,7 +897,7 @@ copy_attrs lst root parent prev =
     (cons copy next))
   nil)
 
-stripspaces lst root parent prev =
+stripspaces lst @root @parent @prev =
 (if lst
   (letrec
     cur = (head lst)

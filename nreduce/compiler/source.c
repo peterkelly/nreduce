@@ -153,7 +153,8 @@ static int check_for_main(source *src)
       }
       else if (2 > sc->nargs) {
         char **newargnames = (char**)malloc(2*sizeof(char*));
-        int *newstrictin = (int*)malloc(2*sizeof(int));
+        int *newstrictin = (int*)calloc(2,sizeof(int));
+        int *newlazyin = (int*)calloc(2,sizeof(int));
         newargnames[0] = (1 == sc->nargs) ? sc->argnames[0] : strdup("__args");
         newargnames[1] = strdup("__stdin");
         newstrictin[0] = (1 == sc->nargs) ? sc->strictin[0] : 0;
@@ -161,8 +162,10 @@ static int check_for_main(source *src)
 
         free(sc->argnames);
         free(sc->strictin);
+        free(sc->lazyin);
         sc->argnames = newargnames;
         sc->strictin = newstrictin;
+        sc->lazyin = newlazyin;
         sc->nargs = 2;
       }
     }
@@ -328,6 +331,16 @@ int source_process(source *src, int stopafterlambda, int nosink, int disstrict, 
     return -1;
 
   sccount = array_count(src->scombs);
+
+  if (strict_evaluation) {
+    for (scno = 0; scno < sccount; scno++) {
+      scomb *sc = array_item(src->scombs,scno,scomb*);
+      int argno;
+      for (argno = 0; argno < sc->nargs; argno++)
+        if (!sc->lazyin[argno])
+          sc->strictin[argno] = 1;
+    }
+  }
 
   compile_stage(src,"Variable renaming"); /* renaming.c */
   for (scno = 0; scno < sccount; scno++) {
@@ -498,6 +511,7 @@ int create_scomb(source *src, const char *modname, char *name, list *argnames,
   sc->nargs = list_count(argnames);
   sc->argnames = (char**)calloc(sc->nargs,sizeof(char*));
   sc->strictin = (int*)calloc(sc->nargs,sizeof(int));
+  sc->lazyin = (int*)calloc(sc->nargs,sizeof(int));
   if (0 < strlen(modname))
     sc->modname = strdup(modname);
   for (l = argnames; l; l = l->next) {
@@ -505,6 +519,10 @@ int create_scomb(source *src, const char *modname, char *name, list *argnames,
     if ('!' == argname[0]) {
       argname++;
       sc->strictin[argno] = 1;
+    }
+    else if ('@' == argname[0]) {
+      argname++;
+      sc->lazyin[argno] = 1;
     }
     sc->argnames[argno++] = strdup(argname);
   }

@@ -82,7 +82,7 @@ static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0
     return;                                                             \
   }
 
-const builtin builtin_info[NUM_BUILTINS];
+builtin builtin_info[NUM_BUILTINS];
 
 static void setnumber(pntr *cptr, double val)
 {
@@ -1892,7 +1892,7 @@ int get_builtin(const char *name)
   return -1;
 }
 
-const builtin builtin_info[NUM_BUILTINS] = {
+builtin builtin_info[NUM_BUILTINS] = {
 /* Arithmetic operations */
 { "+",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_add            },
 { "-",              2, 2, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_subtract       },
@@ -1985,5 +1985,7 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "isspace",        1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_isspace        },
 { "_lookup",        1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_lookup         },
+
+{ "lcons",          2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
 
 };
