@@ -1214,7 +1214,7 @@ static void b_connect(task *tsk, pntr *argstack)
              tsk->tid,hostname,port,tsk->svcbusy);
 
     ioid = suspend_current_frame(tsk,*tsk->runptr);
-    send_connect(tsk->endpt,tsk->n->iothid,hostname,port,tsk->endpt->epid,ioid);
+    send_connect(tsk->endpt,tsk->n->iothid,ip,port,tsk->endpt->epid,ioid);
     so->frameids[CONNECT_FRAMEADDR] = ioid;
 
     free(hostname);

@@ -35,6 +35,8 @@
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
 
+#define MAX_OPENING 3
+
 typedef struct messagelist {
   message *first;
   message *last; 
@@ -85,14 +87,15 @@ typedef struct connection {
   int totalread;
   int totalwritten;
 
-  int canread;
-  int canwrite;
-
   endpointid owner;
 
   struct connection *prev;
   struct connection *next;
   char errmsg[ERRMSG_MAX+1];
+  int iswaiting;
+  int isaccepted;
+  int state;
+  int haderror;
 } connection;
 
 typedef struct listener {
@@ -142,6 +145,8 @@ typedef struct node_private {
   pthread_cond_t closecond;
   list *toclose;
   list *stats;
+  int nopening;
+  int naccepted;
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);
@@ -158,19 +163,15 @@ void node_close_pending(node *n);
 void node_start_iothread(node *n);
 void node_close_endpoints(node *n);
 void node_close_connections(node *n);
-connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
-                                int port, int othernode, char *errmsg, int errlen);
 void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m);
 void node_notify(node *n);
-void done_writing(node *n, connection *conn);
-void done_reading(node *n, connection *conn);
-void remove_connection(node *n, connection *conn);
+void connect_pending(node *n);
 void start_console(node *n, connection *conn);
 void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid,
                       uint32_t tag, const void *data, uint32_t size);
 void got_message(node *n, const msgheader *hdr, endpointid source,
                  uint32_t tag, uint32_t size, const void *data);
-connection *add_connection(node *n, const char *hostname, int sock, listener *l);
+connection *add_connection(node *n, const char *hostname, listener *l);
 void endpoint_link_locked(endpoint *endpt, endpointid to);
 void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
@@ -188,5 +189,49 @@ void notify_connect(node *n, connection *conn, int error);
 void notify_read(node *n, connection *conn);
 void notify_closed(node *n, connection *conn, int error);
 void notify_write(node *n, connection *conn);
+
+/* connection.c */
+
+#define CS_MIN                      100
+#define CS_START                    100
+#define CS_WAITING                  101
+#define CS_READY                    102
+#define CS_FAILED                   103
+#define CS_CONNECTING               104
+#define CS_CONNECTED                105
+#define CS_CONNECTED_DONE_WRITING   106
+#define CS_ACCEPTED                 107
+#define CS_ACCEPTED_DONE_WRITING    108
+#define CS_ACCEPTED_DONE_READING    109
+#define CS_FINISHED                 110
+#define CS_END                      111
+
+#define CE_MIN                      200
+#define CE_AUTO                     200
+#define CE_REQUESTED                201
+#define CE_SLOT_AVAILABLE           202
+#define CE_ATTEMPT_FAILED           203
+#define CE_ASYNC_STARTED            204
+#define CE_ASYNC_FAILED             205
+#define CE_ASYNC_OK                 206
+#define CE_FINWRITE                 207
+#define CE_FINREAD                  208
+#define CE_ERROR                    209
+#define CE_DELETE                   210
+#define CE_READ                     211
+#define CE_CLIENT_CONNECTED         212
+
+#define CANREAD(conn) \
+  ((CS_CONNECTED == (conn)->state) || \
+   (CS_CONNECTED_DONE_WRITING == (conn)->state) || \
+   (CS_ACCEPTED == (conn)->state) || \
+   (CS_ACCEPTED_DONE_WRITING == (conn)->state))
+
+#define CANWRITE(conn) \
+  ((CS_CONNECTED == (conn)->state) || \
+   (CS_ACCEPTED == (conn)->state) || \
+   (CS_ACCEPTED_DONE_READING == (conn)->state))
+
+void connection_fsm(connection *conn, int event);
 
 #endif

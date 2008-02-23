@@ -191,7 +191,7 @@ typedef struct {
 } __attribute__ ((__packed__)) accept_msg;
 
 typedef struct {
-  char hostname[HOSTNAME_MAX+1];
+  in_addr_t ip;
   int port;
   endpointid owner;
   int ioid;
@@ -276,7 +276,7 @@ void send_listen(endpoint *endpt, endpointid epid, in_addr_t ip, int port,
                  endpointid owner, int ioid);
 void send_accept(endpoint *endpt, socketid sockid, int ioid);
 void send_connect(endpoint *endpt, endpointid epid,
-                  const char *hostname, int port, endpointid owner, int ioid);
+                  in_addr_t ip, int port, endpointid owner, int ioid);
 void send_connpair(endpoint *endpt, endpointid epid, int ioid);
 void send_read(endpoint *endpt, socketid sid, int ioid);
 void send_write(endpoint *endpt, socketid sockid, int ioid, const char *data, int len);

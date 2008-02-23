@@ -320,6 +320,8 @@ public class ImageProc
       String line = input.readLine();
       String[] args = line.trim().split("\\s+");
 
+      cout.write(65);
+
       if ((1 == args.length) && (args[0].equals("list"))) {
         File dir = new File(imageDir);
         File[] contents = dir.listFiles();
@@ -395,7 +397,7 @@ public class ImageProc
   {
     byte[] b = new byte[]{0,0,0,0};
     InetAddress addr = InetAddress.getByAddress(b);
-    ServerSocket s = new ServerSocket(port,100,addr);
+    ServerSocket s = new ServerSocket(port,5,addr);
     System.out.println("Started server socket on port "+port);
     for (int nextid = 0; true; nextid++) {
 

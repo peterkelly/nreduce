@@ -117,42 +117,19 @@ void got_message(node *n, const msgheader *hdr, endpointid source,
   endpoint_add_message(endpt,newmsg);
 }
 
-static void add_connection_stats(node *n, connection *conn)
+void connect_pending(node *n)
 {
-  list *l;
-  netstats *ns = NULL;
+  connection *conn = NULL;
   assert(NODE_ALREADY_LOCKED(n));
+  if (MAX_OPENING <= n->p->nopening)
+    return;
 
-  for (l = n->p->stats; l; l = l->next) {
-    netstats *tmp = (netstats*)l->data;
-    if ((tmp->ip == conn->ip) && (tmp->port == conn->port)) {
-      ns = tmp;
-      break;
+  for (conn = n->p->connections.first; conn; conn = conn->next) {
+    if (CS_WAITING == conn->state) {
+      connection_fsm(conn,CE_SLOT_AVAILABLE);
+      return;
     }
   }
-
-  if (NULL == ns) {
-    ns = (netstats*)calloc(1,sizeof(netstats));
-    ns->ip = conn->ip;
-    ns->port = conn->port;
-    list_push(&n->p->stats,ns);
-  }
-
-  ns->totalread += conn->totalread;
-  ns->totalwritten += conn->totalwritten;
-}
-
-void remove_connection(node *n, connection *conn)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
-  add_connection_stats(n,conn);
-  list_push(&n->p->toclose,(void*)conn->sock);
-  llist_remove(&n->p->connections,conn);
-  free(conn->hostname);
-  array_free(conn->recvbuf);
-  array_free(conn->sendbuf);
-  free(conn);
 }
 
 void start_console(node *n, connection *conn)
@@ -185,7 +162,7 @@ static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nod
   }
 }
 
-connection *add_connection(node *n, const char *hostname, int sock, listener *l)
+connection *add_connection(node *n, const char *hostname, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
   assert(NODE_ALREADY_LOCKED(n));
@@ -194,15 +171,13 @@ connection *add_connection(node *n, const char *hostname, int sock, listener *l)
   conn->sockid.sid = n->p->nextsid++;
   conn->hostname = strdup(hostname);
   conn->ip = 0;
-  conn->sock = sock;
+  conn->sock = -1;
   conn->l = l;
   conn->n = n;
-/*   conn->readfd = -1; */
   conn->port = -1;
   conn->recvbuf = array_new(1,n->iosize*2);
   conn->sendbuf = array_new(1,n->iosize*2);
-  conn->canread = 1;
-  conn->canwrite = 1;
+  conn->state = CS_START;
   if (l == n->p->mainl)
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->p->connections,conn);
@@ -418,10 +393,8 @@ void node_remove_listener(node *n, listener *l)
   conn = n->p->connections.first;
   while (conn) {
     connection *next = conn->next;
-    if (conn->l == l) {
-      notify_closed(n,conn,0);
-      remove_connection(n,conn);
-    }
+    if (conn->l == l)
+      connection_fsm(conn,CE_DELETE);
     conn = next;
   }
 
@@ -475,10 +448,8 @@ void node_close_endpoints(node *n)
 void node_close_connections(node *n)
 {
   lock_node(n);
-  while (n->p->connections.first) {
-    notify_closed(n,n->p->connections.first,0);
-    remove_connection(n,n->p->connections.first);
-  }
+  while (n->p->connections.first)
+    connection_fsm(n->p->connections.first,CE_DELETE);
   unlock_node(n);
 }
 
@@ -511,86 +482,6 @@ int set_keepalive(node *n, int sock, int s, char *errmsg, int errlen)
 }
 #endif
 
-connection *node_connect_locked(node *n, const char *dest, in_addr_t destaddr,
-                                int port, int othernode, char *errmsg, int errlen)
-{
-  struct sockaddr_in addr;
-  int sock;
-  int connected = 0;
-  connection *conn;
-  char *hostname;
-  int r;
-
-  assert(NODE_ALREADY_LOCKED(n));
-
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  memset(&addr.sin_zero,0,8);
-
-  if (dest) {
-    int error = 0;
-    if (0 > lookup_address(dest,&addr.sin_addr.s_addr,&error)) {
-      snprintf(errmsg,errlen,"%s",hstrerror(error));
-      return NULL;
-    }
-  }
-  else {
-    addr.sin_addr.s_addr = destaddr;
-  }
-
-  if (0 > (sock = socket(AF_INET,SOCK_STREAM,0))) {
-    snprintf(errmsg,errlen,"socket: %s",strerror(errno));
-    perror("socket");
-    return NULL;
-  }
-
-  if (0 > set_non_blocking(sock)) {
-    snprintf(errmsg,errlen,"cannot set non-blocking socket");
-    return NULL;
-  }
-
-  /* We expect the connect() call to not succeed immediately, because the socket is in
-     non-blocking mode */
-  r = connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr));
-  assert(0 > r);
-  if (EINPROGRESS != errno) {
-    snprintf(errmsg,errlen,"connect: %s",strerror(errno));
-    return NULL;
-  }
-
-#ifdef DEBUG_SHORT_KEEPALIVE
-  /* Set a small keepalive interval so connection timeouts can be tested easily */
-  if (0 > set_keepalive(n,sock,2,errmsg,errlen)) {
-    return NULL;
-  }
-#endif
-
-  hostname = lookup_hostname(addr.sin_addr.s_addr);
-
-  if (othernode) {
-    assert(n->listenport == n->p->mainl->port);
-    conn = add_connection(n,hostname,sock,n->p->mainl);
-    array_append(conn->sendbuf,&n->listenport,sizeof(unsigned short));
-  }
-  else {
-    conn = add_connection(n,hostname,sock,NULL);
-    conn->isreg = 1;
-  }
-
-  free(hostname);
-  conn->connected = connected;
-  conn->ip = addr.sin_addr.s_addr;
-  conn->port = port;
-  conn->outgoing = 1;
-
-  if (conn->connected)
-    notify_connect(n,conn,0);
-
-  node_notify(n);
-
-  return conn;
-}
-
 void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m)
 {
   connection *conn;
@@ -601,7 +492,7 @@ void node_handle_endpoint_exit(node *n, endpoint_exit_msg *m)
     connection *next = conn->next;
     /* no need to notify here; since the owner has exited */
     if (!endpointid_isnull(&conn->owner) && endpointid_equals(&conn->owner,&m->epid))
-      remove_connection(n,conn);
+      connection_fsm(conn,CE_DELETE);
     conn = next;
   }
 
@@ -639,23 +530,31 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
   }
   else {
     if (NULL == (conn = find_connection(n,destendpointid.ip,destendpointid.port))) {
-      char errmsg[ERRMSG_MAX+1];
+      char *hostname;
       unsigned char *addrbytes = (unsigned char*)&destendpointid.ip;
       node_log(n,LOG_INFO,"No connection yet to %u.%u.%u.%u:%d; establishing",
                addrbytes[0],addrbytes[1],addrbytes[2],addrbytes[3],destendpointid.port);
-      conn = node_connect_locked(n,NULL,destendpointid.ip,destendpointid.port,1,errmsg,ERRMSG_MAX);
-      if (NULL == conn) {
-        if (MSG_LINK == tag) {
-          endpointid epid = { ip: n->listenip, port: n->listenport, localid: sourcelocalid };
-          endpoint_exit_msg eem = { epid: destendpointid, reason: 0 };
-          node_send_locked(n,sourcelocalid,epid,MSG_ENDPOINT_EXIT,&eem,sizeof(eem));
-        }
-        return;
-      }
-    }
 
-    array_append(conn->sendbuf,&hdr,sizeof(msgheader));
-    array_append(conn->sendbuf,data,size);
+
+      hostname = lookup_hostname(destendpointid.ip);
+      conn = add_connection(n,hostname,n->p->mainl);
+      free(hostname);
+      conn->ip = destendpointid.ip;
+      conn->port = destendpointid.port;
+
+      assert(n->listenport == n->p->mainl->port);
+      array_append(conn->sendbuf,&n->listenport,sizeof(unsigned short));
+
+      array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+      array_append(conn->sendbuf,data,size);
+
+      connection_fsm(conn,CE_REQUESTED);
+      connection_fsm(conn,CE_SLOT_AVAILABLE);
+    }
+    else {
+      array_append(conn->sendbuf,&hdr,sizeof(msgheader));
+      array_append(conn->sendbuf,data,size);
+    }
     node_notify(n);
   }
 }
@@ -675,38 +574,6 @@ void node_notify(node *n)
   if (!n->p->notified) {
     write(n->p->ioready_writefd,&c,1);
     n->p->notified = 1;
-  }
-}
-
-void done_writing(node *n, connection *conn)
-{
-  if (!conn->canwrite)
-    return;
-  assert(NODE_ALREADY_LOCKED(n));
-  assert(conn->canwrite);
-  if (0 > shutdown(conn->sock,SHUT_WR))
-    node_log(n,LOG_WARNING,"shutdown(SHUT_WR) on %s:%d failed: %s",
-             conn->hostname,conn->port,strerror(errno));
-  conn->canwrite = 0;
-  if (!conn->canread && !conn->canwrite) {
-    notify_closed(n,conn,0);
-    remove_connection(n,conn);
-  }
-}
-
-void done_reading(node *n, connection *conn)
-{
-  assert(NODE_ALREADY_LOCKED(n));
-  if (!conn->canread)
-    return;
-  assert(conn->canread);
-  if ((0 > shutdown(conn->sock,SHUT_RD)) && (ENOTCONN != errno))
-    node_log(n,LOG_WARNING,"shutdown(SHUT_RD) on %s:%d failed: %s",
-             conn->hostname,conn->port,strerror(errno));
-  conn->canread = 0;
-  if (!conn->canread && !conn->canwrite) {
-    notify_closed(n,conn,0);
-    remove_connection(n,conn);
   }
 }
 

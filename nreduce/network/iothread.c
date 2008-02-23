@@ -108,25 +108,21 @@ static void iothread_accept(node *n, endpoint *endpt, accept_msg *m, endpointid 
 static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointid source)
 {
   connection *conn;
-  connect_response_msg crm;
+  char hostname[HOSTNAME_MAX+1];
 
   endpoint_link_locked(endpt,m->owner);
+  sprintf(hostname,IP_FORMAT,IP_ARGS(m->ip));
+  conn = add_connection(n,hostname,NULL);
+  conn->isreg = 1;
+  conn->ip = m->ip;
+  conn->port = m->port;
+  assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
+  conn->frameids[CONNECT_FRAMEADDR] = m->ioid;
+  conn->dontread = 1;
+  conn->owner = m->owner;
+  connection_fsm(conn,CE_REQUESTED);
 
-  conn = node_connect_locked(n,m->hostname,INADDR_ANY,m->port,0,crm.errmsg,ERRMSG_MAX);
-  if (conn) {
-    assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
-    conn->frameids[CONNECT_FRAMEADDR] = m->ioid;
-    conn->dontread = 1;
-    conn->owner = m->owner;
-  }
-
-  if (NULL == conn) {
-    crm.errmsg[ERRMSG_MAX] = '\0';
-    crm.ioid = m->ioid;
-    crm.error = 1;
-    memset(&crm.sockid,0,sizeof(crm.sockid));
-    endpoint_send_locked(endpt,source,MSG_CONNECT_RESPONSE,&crm,sizeof(crm));
-  }
+  connect_pending(n);
 }
 
 static void iothread_connpair(node *n, endpoint *endpt, connpair_msg *m, endpointid source)
@@ -146,20 +142,23 @@ static void iothread_connpair(node *n, endpoint *endpt, connpair_msg *m, endpoin
     crm.errmsg[ERRMSG_MAX] = '\0';
   }
   else {
-    connection *ca = add_connection(n,"(internal)",fds[0],NULL);
-    connection *cb = add_connection(n,"(internal)",fds[1],NULL);
+    connection *ca = add_connection(n,"(internal)",NULL);
+    connection *cb = add_connection(n,"(internal)",NULL);
+    ca->sock = fds[0];
+    cb->sock = fds[1];
     crm.a = ca->sockid;
     crm.b = cb->sockid;
 
-    ca->connected = 1;
     ca->dontread = 1;
     ca->isreg = 1;
     ca->owner = source;
 
-    cb->connected = 1;
     cb->dontread = 1;
     cb->isreg = 1;
     cb->owner = source;
+
+    connection_fsm(ca,CE_CLIENT_CONNECTED);
+    connection_fsm(cb,CE_CLIENT_CONNECTED);
 
     node_notify(n);
   }
@@ -173,7 +172,7 @@ static void iothread_read(node *n, endpoint *endpt, read_msg *m, endpointid sour
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
      receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = get_connection(n,m->sockid))) {
-    if (!conn->canread)
+    if (CS_ACCEPTED_DONE_READING == conn->state)
       fatal("READ request for socket that has finished reading");
     assert(!conn->collected);
     assert(conn->dontread);
@@ -249,7 +248,7 @@ static void iothread_delete_connection(node *n, endpoint *endpt,
       conn->finwrite = 1;
       node_notify(n);
     }
-    done_reading(n,conn);
+    connection_fsm(conn,CE_FINREAD);
   }
 }
 
@@ -320,8 +319,7 @@ static void handle_write(node *n, connection *conn)
                conn->hostname,conn->port,strerror(errno));
       snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
       conn->errmsg[ERRMSG_MAX] = '\0';
-      notify_closed(n,conn,1);
-      remove_connection(n,conn);
+      connection_fsm(conn,CE_ERROR);
       return;
     }
 
@@ -329,8 +327,7 @@ static void handle_write(node *n, connection *conn)
       node_log(n,LOG_WARNING,"write() to %s:%d failed: connection closed",
                conn->hostname,conn->port);
       snprintf(conn->errmsg,ERRMSG_MAX,"connection closed");
-      notify_closed(n,conn,1);
-      remove_connection(n,conn);
+      connection_fsm(conn,CE_ERROR);
       return;
     }
 
@@ -341,7 +338,7 @@ static void handle_write(node *n, connection *conn)
   notify_write(n,conn);
 
   if ((0 == conn->sendbuf->nbytes) && conn->finwrite)
-    done_writing(n,conn);
+    connection_fsm(conn,CE_FINWRITE);
 }
 
 void handle_disconnection(node *n, connection *conn)
@@ -470,7 +467,7 @@ static void handle_read(node *n, connection *conn)
   int r;
   array *buf = conn->recvbuf;
 
-  assert(conn->canread);
+  assert(CANREAD(conn));
 
   array_mkroom(conn->recvbuf,n->iosize);
   r = TEMP_FAILURE_RETRY(read(conn->sock,
@@ -482,8 +479,7 @@ static void handle_read(node *n, connection *conn)
              conn->hostname,conn->port,strerror(errno));
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
     conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_closed(n,conn,1);
-    remove_connection(n,conn);
+    connection_fsm(conn,CE_ERROR);
     return;
   }
 
@@ -499,10 +495,12 @@ static void handle_read(node *n, connection *conn)
        because we may still need to send more data. In other cases, if the console client or
        another node disconnects, we are done with the connection. */
     if (!conn->isreg)
-      done_writing(n,conn);
-    done_reading(n,conn);
+      connection_fsm(conn,CE_FINWRITE);
+    connection_fsm(conn,CE_FINREAD);
     return;
   }
+
+  connection_fsm(conn,CE_READ);
 
   conn->recvbuf->nbytes += r;
   conn->totalread += r;
@@ -517,33 +515,29 @@ static int handle_connected(node *n, connection *conn)
   if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
     snprintf(conn->errmsg,ERRMSG_MAX,"getsockopt SO_ERROR: %s",strerror(errno));
     conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_connect(n,conn,1);
-    remove_connection(n,conn);
+    connection_fsm(conn,CE_ASYNC_FAILED);
     return -1;
   }
 
   if (0 == err) {
     int yes = 1;
-    conn->connected = 1;
     node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
     if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt TCP_NODELAY: %s",strerror(errno));
       conn->errmsg[ERRMSG_MAX] = '\0';
-      notify_connect(n,conn,1);
-      remove_connection(n,conn);
+      connection_fsm(conn,CE_ASYNC_FAILED);
       return -1;
     }
 
-    notify_connect(n,conn,0);
+    connection_fsm(conn,CE_ASYNC_OK);
   }
   else {
     node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
              conn->hostname,conn->port,strerror(err));
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
     conn->errmsg[ERRMSG_MAX] = '\0';
-    notify_connect(n,conn,1);
-    remove_connection(n,conn);
+    connection_fsm(conn,CE_ASYNC_FAILED);
     return -1;
   }
 
@@ -576,11 +570,13 @@ static void handle_new_connection(node *n, listener *l)
 
   hostname = lookup_hostname(remote_addr.sin_addr.s_addr);
   node_log(n,LOG_INFO,"Got connection from %s",hostname);
-  conn = add_connection(n,hostname,clientfd,l);
+  conn = add_connection(n,hostname,l);
+  conn->sock = clientfd;
   free(hostname);
 
-  conn->connected = 1;
   conn->ip = remote_addr.sin_addr.s_addr;
+
+  connection_fsm(conn,CE_CLIENT_CONNECTED);
 
   notify_accept(n,conn);
 }
@@ -595,7 +591,6 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     fd_set writefds;
     connection *conn;
     connection *next;
-    int havewrite = 0;
     listener *l;
 
     FD_ZERO(&readfds);
@@ -613,17 +608,18 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
       highest = n->p->ioready_readfd;
 
     for (conn = n->p->connections.first; conn; conn = conn->next) {
-      assert(0 <= conn->sock);
+      if (0 > conn->sock)
+        continue;
       if (highest < conn->sock)
         highest = conn->sock;
 
-      if (conn->canread && !conn->dontread)
+      if (CANREAD(conn) && !conn->dontread)
         FD_SET(conn->sock,&readfds);
 
-      if (conn->canwrite && ((0 < conn->sendbuf->nbytes) || !conn->connected || conn->finwrite)) {
+      if (CANWRITE(conn) && ((0 < conn->sendbuf->nbytes) || conn->finwrite))
         FD_SET(conn->sock,&writefds);
-        havewrite = 1;
-      }
+      else if (CS_CONNECTING == conn->state)
+        FD_SET(conn->sock,&writefds);
 
       /* Note: it is possible that we did not find any data waiting to be written at this point,
          but some will become avaliable either just after we release the lock, or while the select
@@ -668,18 +664,18 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     /* Do all the writing we can */
     for (conn = n->p->connections.first; conn; conn = next) {
       next = conn->next;
-      if (FD_ISSET(conn->sock,&writefds)) {
-        if (conn->connected)
-          handle_write(n,conn);
-        else
+      if ((0 <= conn->sock) && FD_ISSET(conn->sock,&writefds)) {
+        if (CS_CONNECTING == conn->state)
           handle_connected(n,conn);
+        else
+          handle_write(n,conn);
       }
     }
 
     /* Read data */
     for (conn = n->p->connections.first; conn; conn = next) {
       next = conn->next;
-      if (FD_ISSET(conn->sock,&readfds) && conn->canread)
+      if ((0 <= conn->sock) && FD_ISSET(conn->sock,&readfds) && CANREAD(conn))
         handle_read(n,conn);
     }
 

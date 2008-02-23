@@ -49,10 +49,10 @@ void send_accept(endpoint *endpt, socketid sockid, int ioid)
 }
 
 void send_connect(endpoint *endpt, endpointid epid,
-                  const char *hostname, int port, endpointid owner, int ioid)
+                  in_addr_t ip, int port, endpointid owner, int ioid)
 {
   connect_msg cm;
-  snprintf(cm.hostname,HOSTNAME_MAX,hostname);
+  cm.ip = ip;
   cm.port = port;
   cm.owner = owner;
   cm.ioid = ioid;

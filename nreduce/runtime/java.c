@@ -301,7 +301,10 @@ static void java_jcmd(node *n, javath *jth, endpoint *endpt, message *msg)
   list_append(&jth->jcmds,jc);
 
   if (!jth->jconnected && !jth->jconnecting) {
-    send_connect(endpt,endpt->n->iothid,"127.0.0.1",JBRIDGE_PORT,endpt->epid,1);
+    struct in_addr ipt;
+    if (1 != inet_aton("127.0.0.1",&ipt))
+      fatal("Can't convert \"127.0.0.1\" to ip");
+    send_connect(endpt,endpt->n->iothid,ipt.s_addr,JBRIDGE_PORT,endpt->epid,1);
     jth->jconnecting = 1;
     return;
   }
