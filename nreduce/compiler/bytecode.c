@@ -782,6 +782,9 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
         if (SNODE_BUILTIN == app->type) {
           /* Only execute the BIF instruction directly if the function is pure; otherwise, it
              may be a function that can migrate, and must always be called from a wrapper frame */
+          /* FIXME: don't do this for par, because it prevents parlist from releasing references
+             to earlier parts of the list, making garbage collection less effective... see for
+             example what happens with samples/httpclient.elc */
           if (builtin_info[fno].pure) {
             BIF(app->sl,fno);
             if (!builtin_info[fno].reswhnf)

@@ -613,6 +613,8 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
       if (highest < conn->sock)
         highest = conn->sock;
 
+      /* FIXME: we should also test for readability if we have yet to read any data at all over
+         the connection, so we can tell when it has been accepted */
       if (CANREAD(conn) && !conn->dontread)
         FD_SET(conn->sock,&readfds);
 
