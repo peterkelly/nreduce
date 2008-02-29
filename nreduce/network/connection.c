@@ -78,8 +78,8 @@ const char *connection_events[13] = {
 static void do_shutdown(node *n, connection *conn, int how, const char *howstr)
 {
   if (0 > shutdown(conn->sock,how))
-    node_log(n,LOG_WARNING,"shutdown(howstr) on %s:%d failed: %s",
-             conn->hostname,conn->port,strerror(errno));
+    node_log(n,LOG_WARNING,"shutdown(%s) on %s:%d failed: %s",
+             howstr,conn->hostname,conn->port,strerror(errno));
 }
 
 static void add_connection_stats(node *n, connection *conn)
