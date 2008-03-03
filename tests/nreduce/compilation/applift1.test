@@ -1,5 +1,5 @@
 =================================== PROGRAM ====================================
-nreduce -n -o runtests.tmp/test.l
+nreduce -v lazy -n -o runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo f =

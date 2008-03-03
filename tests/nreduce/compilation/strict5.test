@@ -20,7 +20,7 @@ a, b, i, j, and l are not strict as they do not appear in the supercombinator
 body at all
 
 =================================== PROGRAM ====================================
-nreduce -n -r runtests.tmp/test.l
+nreduce -v lazy -n -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo a b c d e f g h i j k l =

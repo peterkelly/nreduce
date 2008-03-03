@@ -1,5 +1,5 @@
 =================================== PROGRAM ====================================
-nreduce --appopt-debug runtests.tmp/test.l
+nreduce -v lazy --appopt-debug runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 rule3 x y z = (append (append x y) z)

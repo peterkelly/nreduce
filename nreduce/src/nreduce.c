@@ -70,6 +70,7 @@ struct arguments {
   char *client;
   int chordtest;
   array *extra;
+  char *evaluation;
 };
 
 struct arguments args;
@@ -89,6 +90,7 @@ static void usage()
 "  -e, --engine ENGINE      Use execution engine:\n"
 "                           (r)educer|(i)nterpreter|(n)ative\n"
 "                           (default: interpreter)\n"
+"  -v, --evaluation MODE    Use strict or lazy evaluation mode\n"
 "  -w, --worker             Run as worker\n"
 "  -p, --port PORT          Worker mode: listen on the specified port\n"
 "  -i, --initial HOST:PORT  Worker/client mode: initial node to connect to\n"
@@ -147,6 +149,11 @@ void parse_args(int argc, char **argv)
       if (++i >= argc)
         usage();
       set_engine(argv[i]);
+    }
+    else if (!strcmp(argv[i],"-v") || !strcmp(argv[i],"--evaluation")) {
+      if (++i >= argc)
+        usage();
+      args.evaluation = argv[i];
     }
     else if (!strcmp(argv[i],"-r") || !strcmp(argv[i],"--strictness-debug")) {
       args.strictdebug = 1;
@@ -264,6 +271,28 @@ static void sigsegv(int sig)
   exit(1);
 }
 
+static void init_evaluation()
+{
+  char *evaluation = args.evaluation;
+  if (NULL == evaluation)
+    evaluation = getenv("EVALUATION");
+  if (NULL != evaluation) {
+    if (!strcasecmp(evaluation,"strict")) {
+      strict_evaluation = 1;
+    }
+    else if (!strcasecmp(evaluation,"lazy")) {
+      strict_evaluation = 0;
+    }
+    else {
+      fprintf(stderr,"Invalid evaluation mode: %s\n",evaluation);
+      exit(1);
+    }
+  }
+
+  if (strict_evaluation)
+    builtin_info[B_CONS].nstrict = builtin_info[B_CONS].nargs;
+}
+
 int main(int argc, char **argv)
 {
   source *src;
@@ -290,10 +319,6 @@ int main(int argc, char **argv)
   assert(0 == ((int)&((block*)0)->values)%8);
   assert(0 == ((int)&((carray*)0)->elements)%8);
 
-  strict_evaluation = (getenv("STRICT") != 0);
-  if (strict_evaluation)
-    builtin_info[B_CONS].nstrict = builtin_info[B_CONS].nargs;
-
   gettimeofday(&time,NULL);
   srand(time.tv_usec);
 
@@ -303,6 +328,8 @@ int main(int argc, char **argv)
   memset(&args,0,sizeof(args));
   args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);
+
+  init_evaluation();
 
   if (ENGINE_NATIVE == engine_type) {
     struct sigaction act;

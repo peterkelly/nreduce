@@ -1,5 +1,5 @@
 =================================== PROGRAM ====================================
-nreduce --appopt-debug runtests.tmp/test.l
+nreduce -v lazy --appopt-debug runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 rule4 a b c d = (append (if a b c) (reverse d))

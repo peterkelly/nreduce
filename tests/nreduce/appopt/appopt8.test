@@ -1,6 +1,6 @@
 Use of rules *, 2, and 1
 =================================== PROGRAM ====================================
-nreduce --appopt-debug runtests.tmp/test.l
+nreduce -v lazy --appopt-debug runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 test a b = (cons '<' nil)

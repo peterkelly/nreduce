@@ -1,5 +1,5 @@
 =================================== PROGRAM ====================================
-nreduce -n -r runtests.tmp/test.l
+nreduce -v lazy -n -r runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo a b c d e f g = (+ b (+ d (+ e f)))

@@ -14,7 +14,7 @@ something that can safely be passed to append.
 In this case we have to keep the old version of test around for non-append
 uses.
 =================================== PROGRAM ====================================
-nreduce --appopt-debug runtests.tmp/test.l
+nreduce -v lazy --appopt-debug runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 test a b = (if a "hello" (* 3 b))

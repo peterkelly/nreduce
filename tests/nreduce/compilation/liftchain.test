@@ -6,7 +6,7 @@ of them requires the others to be checked again. The old lambda lifting
 algorithm which operated on graphs instead of letrecs could not cope with this
 type of situation.
 =================================== PROGRAM ====================================
-nreduce -l runtests.tmp/test.l
+nreduce -v lazy -l runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
 foo a b c d e = (letrec 
