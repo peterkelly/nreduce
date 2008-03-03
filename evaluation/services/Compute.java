@@ -1,12 +1,18 @@
 package services;
 
-import java.net.*;
-import java.io.*;
-import java.util.*;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.util.Scanner;
 
-public class Compute
+public class Compute extends Server
 {
-  static int nfib(int n)
+  public Compute(int maxThreads, int port)
+  {
+    super(maxThreads,port);
+  }
+
+  private int nfib(int n)
   {
     if (n <= 1)
       return 1;
@@ -14,39 +20,30 @@ public class Compute
       return nfib(n-2)+nfib(n-1);
   }
 
-  static void compute(int delay)
+  private void compute(int delay)
   {
     for (int i = 0; i < delay; i++)
       nfib(32);
   }
 
-  public static void handle(Socket c, int id) throws Exception
+  public void process(InputStream cin, OutputStream cout) throws Exception
   {
-    try {
-      InputStream cin = c.getInputStream();
-      OutputStream cout = c.getOutputStream();
-      PrintWriter writer = new PrintWriter(cout);
-      InputStreamReader reader = new InputStreamReader(cin);
+    PrintWriter writer = new PrintWriter(cout);
+    writer.println("Welcome");
+    writer.flush();
 
-      String line = new BufferedReader(reader).readLine();
-      System.out.println(line);
-      String[] tokens = line.split("\\s+");
-      int value = Integer.parseInt(tokens[0]);
-      int delay = Integer.parseInt(tokens[1]);
-      long start = System.nanoTime();
-      compute(delay);
-      long end = System.nanoTime();
-      int ms = (int)((end-start)/1000000);
-      writer.println("done: "+ms+" ("+value+")");
-      writer.flush();
-    }
-    catch (Exception e) {
-      System.out.println(e);
-    }
-    finally {
-      c.close();
-      System.out.println(id+": connection closed");
-    }
+    Scanner scanner = new Scanner(cin);
+    String line = scanner.nextLine();
+    System.out.println(line);
+    String[] tokens = line.split("\\s+");
+    int value = Integer.parseInt(tokens[0]);
+    int delay = Integer.parseInt(tokens[1]);
+    long start = System.nanoTime();
+    compute(delay);
+    long end = System.nanoTime();
+    int ms = (int)((end-start)/1000000);
+    writer.println("done: "+ms+" ("+value+")");
+    writer.flush();
   }
 
   public static void main(String[] args) throws Exception
@@ -57,18 +54,7 @@ public class Compute
     }
 
     int port = Integer.parseInt(args[0]);
-
-    byte[] b = new byte[]{0,0,0,0};
-    InetAddress addr = InetAddress.getByAddress(b);
-    ServerSocket s = new ServerSocket(port,100,addr);
-    System.out.println("Started server socket on port "+port);
-    for (int nextid = 0; true; nextid++) {
-      final Socket c = s.accept();
-      final int id = nextid;
-      System.out.println(id+": accepted connection");
-      new Thread() { public void run() {
-        try { handle(c,id); } catch (Exception e) { }
-      } }.start();
-    }
+    Compute comp = new Compute(3,port);
+    comp.serve();
   }
 }

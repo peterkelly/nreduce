@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.File;
 import java.awt.Point;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -16,19 +19,17 @@ import javax.imageio.ImageWriter;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.IIOImage;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
-
-import java.net.*;
-import java.io.*;
-import java.awt.image.*;
-import java.awt.Point;
-import javax.imageio.*;
-import java.util.*;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 
-public class ImageProc
+public class ImageProc extends Server
 {
-  static int MAX_THREADS = 3;
-  int nthreads = 0;
+  private String imageDir;
+
+  public ImageProc(int maxThreads, int port, String imageDir)
+  {
+    super(maxThreads,port);
+    this.imageDir = imageDir;
+  }
 
   static void writeJpeg(BufferedImage img, OutputStream out)
     throws IOException
@@ -310,124 +311,69 @@ public class ImageProc
     writeJpeg(mod,out);
   }
 
-  static void handle(Socket c, int id, String imageDir) throws Exception
+  public void process(InputStream cin, OutputStream cout) throws Exception
   {
-    try {
-      InputStream cin = c.getInputStream();
-      OutputStream cout = c.getOutputStream();
-      long startTime = System.currentTimeMillis();
-      CommInput input = new CommInput(cin);
-      String line = input.readLine();
-      String[] args = line.trim().split("\\s+");
+    long startTime = System.currentTimeMillis();
+    CommInput input = new CommInput(cin);
+    String line = input.readLine();
+    String[] args = line.trim().split("\\s+");
 
-      cout.write(65);
+    cout.write(65);
 
-      if ((1 == args.length) && (args[0].equals("list"))) {
-        File dir = new File(imageDir);
-        File[] contents = dir.listFiles();
-        PrintWriter writer = new PrintWriter(cout);
-        for (File f : contents) {
-          if (f.getName().toLowerCase().endsWith(".jpg"))
-            writer.println(f.getName());
-        }
-        writer.flush();
+    if ((1 == args.length) && (args[0].equals("list"))) {
+      File dir = new File(imageDir);
+      File[] contents = dir.listFiles();
+      PrintWriter writer = new PrintWriter(cout);
+      for (File f : contents) {
+        if (f.getName().toLowerCase().endsWith(".jpg"))
+          writer.println(f.getName());
       }
-      else if ((2 == args.length) && (args[0].equals("get"))) {
-        String path = imageDir+"/"+args[1];
-        FileInputStream fin = new FileInputStream(path);
-        int r;
-        byte[] buf = new byte[1024];
-        while (0 <= (r = fin.read(buf)))
-          cout.write(buf,0,r);
-        fin.close();
-      }
-      else if ((1 == args.length) && (args[0].equals("analyze"))) {
-        InputStream in = input.readData();
-        analyze(in,cout);
-        in.close();
-      }
-      else if ((2 == args.length) && (args[0].equals("smooth"))) {
-        int iterations = Integer.parseInt(args[1]);
-        InputStream in = input.readData();
-        smooth(in,iterations,cout);
-        in.close();
-      }
-      else if ((3 == args.length) && (args[0].equals("resize"))) {
-        int outWidth = Integer.parseInt(args[1]);
-        int outHeight = Integer.parseInt(args[2]);
-        InputStream in = input.readData();
-        resize(in,outWidth,outHeight,cout);
-        in.close();
-      }
-      else if ((2 == args.length) && (args[0].equals("combine"))) {
-        int nimages = Integer.parseInt(args[1]);
-        InputStream[] inputs = new InputStream[nimages];
-        for (int i = 0; i < nimages; i++)
-          inputs[i] = input.readData();
-
-        combine(cout,inputs);
-        for (InputStream s : inputs)
-          s.close();
-      }
-      else {
-        PrintWriter writer = new PrintWriter(cout);
-        writer.println("Invalid request: "+line);
-        writer.flush();
-      }
-      long endTime = System.currentTimeMillis();
-      System.out.format("%-60s %d\n",line,(endTime-startTime));
+      writer.flush();
     }
-    catch (Exception e) {
-      e.printStackTrace();
+    else if ((2 == args.length) && (args[0].equals("get"))) {
+      String path = imageDir+"/"+args[1];
+      FileInputStream fin = new FileInputStream(path);
+      int r;
+      byte[] buf = new byte[1024];
+      while (0 <= (r = fin.read(buf)))
+        cout.write(buf,0,r);
+      fin.close();
     }
-    finally {
-      c.close();
+    else if ((1 == args.length) && (args[0].equals("analyze"))) {
+      InputStream in = input.readData();
+      analyze(in,cout);
+      in.close();
     }
-  }
-
-  int getNthreads()
-  {
-    synchronized (this) { 
-      return nthreads;
+    else if ((2 == args.length) && (args[0].equals("smooth"))) {
+      int iterations = Integer.parseInt(args[1]);
+      InputStream in = input.readData();
+      smooth(in,iterations,cout);
+      in.close();
     }
-  }
-
-  void server(int port, final String imageDir)
-    throws IOException
-  {
-    byte[] b = new byte[]{0,0,0,0};
-    InetAddress addr = InetAddress.getByAddress(b);
-    ServerSocket s = new ServerSocket(port,5,addr);
-    System.out.println("Started server socket on port "+port);
-    for (int nextid = 0; true; nextid++) {
-
-      synchronized (ImageProc.this) {
-        while (nthreads+1 > MAX_THREADS) {
-          try {
-            System.out.println("nthreads = "+getNthreads()+", waiting");
-            ImageProc.this.wait();
-          }
-          catch (InterruptedException e) {}
-        }
-        nthreads++;
-      }
-
-      final Socket c = s.accept();
-      final int id = nextid;
-
-//       System.out.println(id+": connection opened: nthreads = "+getNthreads());
-
-      new Thread() { public void run() {
-        try {
-          handle(c,id,imageDir);
-          synchronized (ImageProc.this) {
-            nthreads--;
-            ImageProc.this.notifyAll();
-          }
-//           System.out.println(id+": connection closed: nthreads = "+getNthreads());
-        } catch (Exception e) { }
-      } }.start();
+    else if ((3 == args.length) && (args[0].equals("resize"))) {
+      int outWidth = Integer.parseInt(args[1]);
+      int outHeight = Integer.parseInt(args[2]);
+      InputStream in = input.readData();
+      resize(in,outWidth,outHeight,cout);
+      in.close();
     }
+    else if ((2 == args.length) && (args[0].equals("combine"))) {
+      int nimages = Integer.parseInt(args[1]);
+      InputStream[] inputs = new InputStream[nimages];
+      for (int i = 0; i < nimages; i++)
+        inputs[i] = input.readData();
+
+      combine(cout,inputs);
+      for (InputStream s : inputs)
+        s.close();
+    }
+    else {
+      PrintWriter writer = new PrintWriter(cout);
+      writer.println("Invalid request: "+line);
+      writer.flush();
+    }
+    long endTime = System.currentTimeMillis();
+    System.out.format("%-60s %d\n",line,(endTime-startTime));
   }
 
   public static void main(String[] args) throws Exception
@@ -464,11 +410,12 @@ public class ImageProc
       for (InputStream s : inputs)
         s.close();
     }
-    else if (1 == args.length) {
-      new ImageProc().server(Integer.parseInt(args[0]),null);
-    }
     else if (2 == args.length) {
-      new ImageProc().server(Integer.parseInt(args[0]),args[1]);
+      int port = Integer.parseInt(args[0]);
+      String imageDir = args[1];
+      int maxThreads = 3;
+      ImageProc ip = new ImageProc(maxThreads,port,imageDir);
+      ip.serve();
     }
     else {
       System.out.println("Usage: services.ImageProc <port>");
