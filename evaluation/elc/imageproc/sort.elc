@@ -55,81 +55,57 @@ get_value fields = (item 4 fields)
 get_whue fields = (item 5 fields)
 
 /* ========================================================================== */
+/* Sort functions */
+
+huecmp x y =
+(- (get_whue (head x)) (get_whue (head y)))
+
+
+main args =
+(if (< (len args) 2)
+  "Usage: sort2strict.elc <host> <port>\n"
+(letrec
+  host = (item 0 args)
+  port = (stringtonum (item 1 args))
+
+
+/* ========================================================================== */
 /* Service operations */
 
-finconnect host port out =
-(letrec
-  instream = (connect host port (++ out (seq (len instream) nil)))
-in
-  instream)
+finconnect host port out = (tail (connect host port out))
 
-base_resize !host !port !width !height !image =
+resize width height image =
 (finconnect host port
 (++ "resize " (++ (numtostring width) (++ " " (++ (numtostring height) (++ "\n"
 (++ (numtostring (len image)) (++ "\n" image))))))))
 
-strict_resize !host !port !width !height !image =
-(base_resize host port width height (forcelist image))
-
-base_combine !host !port !images =
+combine images =
 (finconnect host port
 (++ "combine " (++ (numtostring (len images)) (++ "\n"
 (foldr ++ nil
   (map (!image.++ (numtostring (len image)) (++ "\n" image))
        images))))))
 
-strict_combine host port images =
-(base_combine host port (forcelist (map forcelist images)))
-
-base_analyze !host !port !image =
+analyze image =
 (map stringtonum
 (split
 (finconnect host port
 (++ "analyze\n"
 (++ (numtostring (len image)) (++ "\n" image))))))
 
-strict_analyze !host !port !image =
-(base_analyze host port (forcelist image))
-
-base_get !host !port !name =
+get name =
 (finconnect host port (++ "get " (++ name "\n")))
 
-strict_get !host !port !name =
-(base_get host port (forcelist name))
-
-base_list !host !port = (split (finconnect host port "list\n"))
-
-strict_list !host !port =
-(base_list host port)
-
-/* ========================================================================== */
-/* Sort functions */
-
-huecmp x y =
-(- (get_whue (head x)) (get_whue (head y)))
+list = (split (finconnect host port "list\n"))
 
 /* ========================================================================== */
 /* Workflow */
-
-main args =
-(if (< (len args) 2)
-  "Usage: sort2strict.elc <host> <port>\n"
-(letrec
-
-  host = (item 0 args)
-  port = (stringtonum (item 1 args))
-
-  resize = (strict_resize host port)
-  combine = (strict_combine host port)
-  analyze = (strict_analyze host port)
-  get = (strict_get host port)
-  list = (strict_list host port)
 
   analyzed =
     (map (!name.
            (letrec image = (get name)
             in (cons (analyze image)
-                     (resize 75 75 image))))
+                        (resize 75 75 image))))
          list)
   sorted = (mergesort huecmp analyzed)
   simages = (map tail sorted)

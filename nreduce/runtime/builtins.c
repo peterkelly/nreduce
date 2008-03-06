@@ -1302,7 +1302,7 @@ static void b_readcon(task *tsk, pntr *argstack)
 {
   frame *curf = *tsk->runptr;
   pntr sopntr = argstack[1];
-  pntr nextpntr = argstack[0];
+  pntr nextpntr = resolve_pntr(argstack[0]);
   sysobject *so;
 
   CHECK_SYSOBJECT_ARG(1,SYSOBJECT_CONNECTION);
@@ -1347,6 +1347,12 @@ static void b_readcon(task *tsk, pntr *argstack)
       free(so->buf);
       so->buf = NULL;
       so->len = 0;
+
+      if (strict_evaluation) {
+        /* Force the next part of the stream to be read immediately */
+        assert(CELL_FRAME == pntrtype(nextpntr));
+        run_frame(tsk,pframe(nextpntr));
+      }
     }
   }
 }

@@ -81,6 +81,7 @@ typedef struct proxy {
 
   int clientfd;
   int serverfd;
+  int haderror;
 
   relay client_to_server;
   relay server_to_client;
@@ -185,6 +186,18 @@ void remove_proxy(proxy *p)
   debug("remove_proxy");
   p->s->connections--;
   llist_remove(&proxies,p);
+
+  if (p->haderror) {
+    /* abortive close */
+    struct linger li;
+    li.l_onoff = 1;
+    li.l_linger = 0;
+    if (0 > setsockopt(p->clientfd,SOL_SOCKET,SO_LINGER,&li,sizeof(li)))
+      fatal("setsockopt SOL_SOCKET: %s",strerror(errno));
+    if (0 > setsockopt(p->serverfd,SOL_SOCKET,SO_LINGER,&li,sizeof(li)))
+      fatal("setsockopt SOL_SOCKET: %s",strerror(errno));
+  }
+
   close(p->clientfd);
   close(p->serverfd);
   free(p);
@@ -275,8 +288,11 @@ void main_loop()
 
       if (p->connected) {
         if (check_action(&p->client_to_server,&readfds,&writefds,"c2s") ||
-            check_action(&p->server_to_client,&readfds,&writefds,"s2c") ||
-            (p->client_to_server.eof && p->server_to_client.eof)) {
+            check_action(&p->server_to_client,&readfds,&writefds,"s2c")) {
+          p->haderror = 1;
+          remove_proxy(p);
+        }
+        else if (p->client_to_server.eof && p->server_to_client.eof) {
           remove_proxy(p);
         }
       }

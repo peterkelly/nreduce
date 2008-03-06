@@ -28,6 +28,16 @@ public abstract class Server
       OutputStream cout = c.getOutputStream();
 
       process(cin,cout);
+
+      /* Make sure we read all remaining data from the client before closing the connection.
+         Otherwise if there is outstanding data or a FIN sent by the client, closing the socket
+         on our end will result in a RST being sent to the client, aborting the connection and
+         potentially causing the client to miss some of the data we've sent back.
+      See http://java.sun.com/javase/6/docs/technotes/guides/net/articles/connection_release.html */
+      byte[] buf = new byte[1024];
+      while (0 < cin.read(buf)) {
+        // repeat
+      }
     }
     catch (Exception e) {
       e.printStackTrace();
