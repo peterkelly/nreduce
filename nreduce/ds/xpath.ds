@@ -10,6 +10,7 @@
 : V xpath compile_avt;
 : CA xslt compile_attributes;
 : CN xslt compile_namespaces;
+: CQ xslt compile_qname;
 
 X[[ E::n ]]                   = "\n(cons (xml::mknumber " N[[E::n]] ") nil)";
 X[[ N ]]                      = "\n(cons (xml::mknumber " N ") nil)";
@@ -72,19 +73,19 @@ P[[ E ]]                      = "\n(xslt::predicate_match cpos " +X[[E]] ")";
 
 
 
-A[[ "#axis:self" ]]                = "\n(cons citem nil)";
-A[[ "#axis:child" ]]               = "\n(xml::item_children citem)";
-A[[ "#axis:descendant" ]]          = "\n(xslt::node_descendants citem)";
-A[[ "#axis:descendant-or-self" ]]  = "\n(cons citem (xslt::node_descendants citem))";
-A[[ "#axis:parent" ]]              = "\n(xslt::node_parent_list citem)";
-A[[ "#axis:ancestor" ]]            = "\n(xslt::node_ancestors citem)";
-A[[ "#axis:ancestor-or-self" ]]    = "\n(xslt::node_ancestors_or_self citem)";
-A[[ "#axis:preceding-sibling" ]]   = "\n(xslt::node_preceding_siblings citem)";
-A[[ "#axis:following-sibling" ]]   = "\n(xslt::node_following_siblings citem)";
-A[[ "#axis:preceding" ]]           = "\n(xslt::node_preceding citem)";
-A[[ "#axis:following" ]]           = "\n(xslt::node_following citem)";
-A[[ "#axis:attribute" ]]           = "\n(xml::item_attributes citem)";
-A[[ "#axis:namespace" ]]           = "\n(xml::item_namespaces citem)";
+A[[ "#axis:self::" ]]                = "\n(cons citem nil)";
+A[[ "#axis:child::" ]]               = "\n(xml::item_children citem)";
+A[[ "#axis:descendant::" ]]          = "\n(xslt::node_descendants citem)";
+A[[ "#axis:descendant-or-self::" ]]  = "\n(cons citem (xslt::node_descendants citem))";
+A[[ "#axis:parent::" ]]              = "\n(xslt::node_parent_list citem)";
+A[[ "#axis:ancestor::" ]]            = "\n(xslt::node_ancestors citem)";
+A[[ "#axis:ancestor-or-self::" ]]    = "\n(xslt::node_ancestors_or_self citem)";
+A[[ "#axis:preceding-sibling::" ]]   = "\n(xslt::node_preceding_siblings citem)";
+A[[ "#axis:following-sibling::" ]]   = "\n(xslt::node_following_siblings citem)";
+A[[ "#axis:preceding::" ]]           = "\n(xslt::node_preceding citem)";
+A[[ "#axis:following::" ]]           = "\n(xslt::node_following citem)";
+A[[ "#axis:attribute::" ]]           = "\n(xml::item_attributes citem)";
+A[[ "#axis:namespace::" ]]           = "\n(xml::item_namespaces citem)";
 
 T[[ "#nodetest:document-node()" ]] = "(xslt::type_test xml::TYPE_DOCUMENT)";
 T[[ "#nodetest:element()" ]]       = "(xslt::type_test xml::TYPE_ELEMENT)";
@@ -212,6 +213,6 @@ L[[ "<apply-templates select=\"" E "\"/>" ]]
 L[[ "<apply-templates/>" ]]
 = @ "\n(apply_templates (xml::item_children citem))";
 
-L[[ "<" Y ">" I "</" Y ">" ]] = "(xslt::construct_elem2 " +CA[[Y]] " " +CN[[Y]] " " +S[[I]] ")";
+L[[ "<" Y ">" I "</" Y ">" ]] = "\n(xslt::construct_elem2 " CQ[[Y]] +CA[[Y]] " " +CN[[Y]] " " +S[[I]] ")";
 
 L[[ S ]] = "\n(xslt::construct_text \"" S "\")";

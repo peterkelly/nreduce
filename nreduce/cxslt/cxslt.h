@@ -361,6 +361,7 @@ int compile_attributes(elcgen *gen, int indent, expression *expr);
 int compile_namespaces(elcgen *gen, int indent, expression *expr);
 int compile_instruction(elcgen *gen, int indent, expression *expr);
 int compile_variable(elcgen *gen, int indent, expression *xchild);
+int compile_qname(elcgen *gen, int indent, expression *expr);
 int compile_num_instruction(elcgen *gen, int indent, expression *expr);
 int compile_num_sequence(elcgen *gen, int indent, expression *xfirst);
 int compile_sequence(elcgen *gen, int indent, expression *xfirst);

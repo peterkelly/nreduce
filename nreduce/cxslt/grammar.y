@@ -554,8 +554,8 @@ PrimaryExpr:
 | FunctionCall                    { $$ = $1; }
 | DSVAR_EXPRESSION                { $$ = new_expression(XPATH_DSVAR);
                                     $$->str = $1; }
-| DSTYPE_AXIS ForwardAxis         { $$ = $2; }
-| DSTYPE_AXIS ReverseAxis         { $$ = $2; }
+| DSTYPE_AXIS ForwardAxis COLONCOLON { $$ = $2; }
+| DSTYPE_AXIS ReverseAxis COLONCOLON { $$ = $2; }
 | DSTYPE_NODETEST KindTest        { $$ = $2; }
 | DSTYPE_NODETEST NameTest        { $$ = $2; }
 ;

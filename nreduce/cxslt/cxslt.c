@@ -474,6 +474,12 @@ int compile_variable(elcgen *gen, int indent, expression *xchild)
   return r;
 }
 
+int compile_qname(elcgen *gen, int indent, expression *expr)
+{
+  gen_printf(gen," \"%s\" \"%s\" \"%s\" ",expr->qn.uri,expr->qn.prefix,expr->qn.localpart);
+  return 1;
+}
+
 int compile_num_instruction(elcgen *gen, int indent, expression *expr)
 {
   int r = 1;

@@ -70,7 +70,7 @@ static void c_print_action_var(FILE *f, expression *expr, syntax *a)
     fprintf(f,"    r = r && compile_user_function_call(gen,indent,expr,1);\n");
     break;
   case XPATH_DSVAR_NUMERIC: {
-    fprintf(f,"    gen_printf(gen,\"%%f\",%s->num);\n",ref);
+    fprintf(f,"    gen_printf(gen,\"%%.15f\",%s->num);\n",ref);
     break;
   }
   case XPATH_DSVAR_STRING:
@@ -170,6 +170,12 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings, char *language)
     expression *expr;
     syntax *a;
     int nulltests = 0;
+
+    printf("\n");
+    printf("--------------------------------------------------------------------------------\n");
+    printf("language: %s, rule name: %s, pattern: %s\n\n",language,r->name,strpattern);
+
+    gen->buf->nbytes = 0;
     if (!strcmp(language,"xslt")) {
       expr = parse_xslt_str(gen,strpattern);
       nulltests = 1;
@@ -181,16 +187,16 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings, char *language)
       fatal("Unknown source language: %s",language);
     }
 
+    printf("pattern syntax tree:");
     expr_print_tree(gen,0,expr);
-    printf("\n%s\n\n",gen->buf->data);
+    printf("%s\n",gen->buf->data);
+    printf("\n");
 
     if (NULL == expr)
       fatal("%s",gen->error);
 
     if (havedefault)
       fatal("%s: Default rule is not at end",r->name);
-
-    printf("%s: %s\n",r->name,strpattern);
 
     if ((XPATH_DSVAR == expr->type) && !have_dsvar_type(expr->str)) {
       fprintf(f,"  else {\n");
@@ -208,6 +214,7 @@ static void c_print_rules(FILE *f, rule *r, mapping *mappings, char *language)
       fprintf(f,") {\n");
     }
 
+    printf("actions:\n");
     for (a = r->action; a; a = a->next) {
       switch (a->type) {
       case SYNTAX_STRING:

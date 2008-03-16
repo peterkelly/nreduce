@@ -899,7 +899,7 @@ int compile_instruction(elcgen *gen, int indent, expression *expr)
   }
   else if ((XSLT_LITERAL_RESULT_ELEMENT == expr->type)) {
     gen_iprintf(gen,indent,"(xslt::construct_elem2 ");
-    gen_printf(gen," \"%s\" \"%s\" \"%s\" ",expr->qn.uri,expr->qn.prefix,expr->qn.localpart);
+    r = r && compile_qname(gen,indent,expr);
     r = r && compile_attributes(gen,indent+1,expr);
     gen_printf(gen," ");
     r = r && compile_namespaces(gen,indent+1,expr);

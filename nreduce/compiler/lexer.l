@@ -86,7 +86,7 @@ CHAR                     \'.\'
 <string>\\f              { char c = '\f'; array_append(lexstring,&c,1); }
 
 <string>\\(.|\n)         { array_append(lexstring,&yytext[1],1); }
-<string>[^\\\n\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
+<string>[^\\\"]+       { array_append(lexstring,yytext,strlen(yytext)); }
 
 "letrec"                 { return LETREC; }
 "in"                     { return IN; }

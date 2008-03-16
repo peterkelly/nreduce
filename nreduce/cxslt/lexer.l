@@ -183,13 +183,20 @@ WS         [ \t\r\n]*
   "]"                              { return ']'; }
 }
 
-#E:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_EXPRESSION; }
+#E:{DIGIT}?:[a-zA-Z]?              { BEGIN(OPERATOR);
+                                     xlval.string = strdup(yytext+1);
+                                     return DSVAR_EXPRESSION; }
 #F:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_FORWARD_AXIS; }
 #R:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_REVERSE_AXIS; }
-#N:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_NUMERIC; }
-#S:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_STRING; }
-#Q:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_QNAME; }
-#T:{DIGIT}?:[a-zA-Z]?              { xlval.string = strdup(yytext+1); return DSVAR_NODETEST; }
+#N:{DIGIT}?:[a-zA-Z]?              { BEGIN(OPERATOR);
+                                     xlval.string = strdup(yytext+1);
+                                     return DSVAR_NUMERIC; }
+#S:{DIGIT}?:[a-zA-Z]?              { BEGIN(OPERATOR);
+                                     xlval.string = strdup(yytext+1);
+                                     return DSVAR_STRING; }
+#T:{DIGIT}?:[a-zA-Z]?              { BEGIN(OPERATOR);
+                                     xlval.string = strdup(yytext+1);
+                                     return DSVAR_NODETEST; }
 #axis:                             { return DSTYPE_AXIS; }
 #nodetest:                         { return DSTYPE_NODETEST; }
 "]"                                { return ']'; }
@@ -247,6 +254,11 @@ WS         [ \t\r\n]*
 <INITIAL,VARNAME>{QNAME}           { BEGIN(OPERATOR); 
                                      xlval.qn = string_to_qname(xtext,parse_node);
                                      return QNAME; }
+
+<INITIAL,VARNAME>#Q:{DIGIT}?:[a-zA-Z]? { BEGIN(OPERATOR);
+                                    xlval.string = strdup(yytext+1);
+                                    return DSVAR_QNAME; }
+
 ")"                                { BEGIN(OPERATOR); return ')'; }
 {NCNAME}":*"                       { BEGIN(OPERATOR); 
                                      char *prefix = strdup(xtext);
