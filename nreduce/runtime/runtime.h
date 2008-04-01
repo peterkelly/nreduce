@@ -222,7 +222,6 @@ typedef struct cell {
 pntr resolve_pntr(pntr p);
 #endif
 
-
 #define check_global(_g) (assert(!(_g)->freed))
 
 typedef struct waitqueue {
