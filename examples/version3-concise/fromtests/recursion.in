@@ -1,0 +1,4 @@
+letrec
+  f = (!x.f)
+in
+  f

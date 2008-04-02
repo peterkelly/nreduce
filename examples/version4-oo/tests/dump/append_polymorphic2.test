@@ -1,0 +1,69 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+  appints = (append (cons 1 nil) (cons 3 nil))
+  appbools = (append (cons true nil) (cons false nil))
+in
+  (pair appints appbools)
+==================================== OUTPUT ====================================
+0      block                                                        (int list) x bool list
+1      |-- rec                                                      
+2      |   |-- def append                                           append: (a list) -> (a list) -> a list
+3      |   |   `-- lambda x                                         (a list) -> (a list) -> a list
+4      |   |       `-- lambda y                                     (a list) -> a list
+5      |   |           `-- if                                       a list
+6      |   |               |-- @                                    bool
+7      |   |               |   |-- null                             (a list) -> bool
+8      |   |               |   `-- x                                a list
+9      |   |               |-- y                                    a list
+10     |   |               `-- @                                    a list
+11     |   |                   |-- @                                (a list) -> a list
+12     |   |                   |   |-- cons                         a -> (a list) -> a list
+13     |   |                   |   `-- @                            a
+14     |   |                   |       |-- hd                       (a list) -> a
+15     |   |                   |       `-- x                        a list
+16     |   |                   `-- @                                a list
+17     |   |                       |-- @                            (a list) -> a list
+18     |   |                       |   |-- append                   (a list) -> (a list) -> a list
+19     |   |                       |   `-- @                        a list
+20     |   |                       |       |-- tl                   (a list) -> a list
+21     |   |                       |       `-- x                    a list
+22     |   |                       `-- y                            a list
+23     |   |-- def appints                                          appints: int list
+24     |   |   `-- @                                                int list
+25     |   |       |-- @                                            (int list) -> int list
+26     |   |       |   |-- append                                   (int list) -> (int list) -> int list
+27     |   |       |   `-- @                                        int list
+28     |   |       |       |-- @                                    (int list) -> int list
+29     |   |       |       |   |-- cons                             int -> (int list) -> int list
+30     |   |       |       |   `-- 1                                int
+31     |   |       |       `-- nil                                  int list
+32     |   |       `-- @                                            int list
+33     |   |           |-- @                                        (int list) -> int list
+34     |   |           |   |-- cons                                 int -> (int list) -> int list
+35     |   |           |   `-- 3                                    int
+36     |   |           `-- nil                                      int list
+37     |   `-- def appbools                                         appbools: bool list
+38     |       `-- @                                                bool list
+39     |           |-- @                                            (bool list) -> bool list
+40     |           |   |-- append                                   (bool list) -> (bool list) -> bool list
+41     |           |   `-- @                                        bool list
+42     |           |       |-- @                                    (bool list) -> bool list
+43     |           |       |   |-- cons                             bool -> (bool list) -> bool list
+44     |           |       |   `-- true                             bool
+45     |           |       `-- nil                                  bool list
+46     |           `-- @                                            bool list
+47     |               |-- @                                        (bool list) -> bool list
+48     |               |   |-- cons                                 bool -> (bool list) -> bool list
+49     |               |   `-- false                                bool
+50     |               `-- nil                                      bool list
+51     `-- @                                                        (int list) x bool list
+52         |-- @                                                    (bool list) -> (int list) x bool list
+53         |   |-- pair                                             (int list) -> (bool list) -> (int list) x bool list
+54         |   `-- appints                                          int list
+55         `-- appbools                                             bool list
+================================== RETURN CODE =================================
+0

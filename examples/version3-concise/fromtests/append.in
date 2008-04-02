@@ -1,0 +1,4 @@
+letrec
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+in
+  append

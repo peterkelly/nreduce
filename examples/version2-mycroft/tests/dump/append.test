@@ -1,0 +1,35 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+in
+  append
+==================================== OUTPUT ====================================
+0      block                                                        (a list) -> (a list) -> a list
+1      |-- rec                                                      
+2      |   `-- def append                                           append: (b list) -> (b list) -> b list
+3      |       `-- lambda x                                         (b list) -> (b list) -> b list
+4      |           `-- lambda y                                     (b list) -> b list
+5      |               `-- if                                       b list
+6      |                   |-- @                                    bool
+7      |                   |   |-- null                             (b list) -> bool
+8      |                   |   `-- x                                b list
+9      |                   |-- y                                    b list
+10     |                   `-- @                                    b list
+11     |                       |-- @                                (b list) -> b list
+12     |                       |   |-- cons                         b -> (b list) -> b list
+13     |                       |   `-- @                            b
+14     |                       |       |-- hd                       (b list) -> b
+15     |                       |       `-- x                        b list
+16     |                       `-- @                                b list
+17     |                           |-- @                            (b list) -> b list
+18     |                           |   |-- append                   (b list) -> (b list) -> b list
+19     |                           |   `-- @                        b list
+20     |                           |       |-- tl                   (b list) -> b list
+21     |                           |       `-- x                    b list
+22     |                           `-- y                            b list
+23     `-- append                                                   (a list) -> (a list) -> a list
+================================== RETURN CODE =================================
+0

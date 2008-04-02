@@ -1,0 +1,136 @@
+PARSER_BEGIN(Parser)
+
+public class Parser {
+}
+
+PARSER_END(Parser)
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+}
+
+TOKEN :
+{
+  <LBRACE: "{">
+| <RBRACE: "}">
+| <IF: "if">
+| <THEN: "then">
+| <ELSE: "else">
+| <LETREC: "letrec">
+| <IN: "in">
+| < IDENTIFIER: <LETTER> (<LETTER>|<DIGIT>)* >
+| < OPERATOR: "+"|"-"|"*"|"/"|"%"|"=="|"!="|"<"|"<="|">"|">=" >
+| < INTEGER: (<DIGIT>)+ >
+| < #LETTER: ["_","a"-"z","A"-"Z"] >
+| < #DIGIT: ["0"-"9"] >
+}
+
+HindleyMilner.Exp Expression() :
+{ HindleyMilner.Exp e; }
+{
+  ( e = Application() | e = Conditional() | e = Lambda() | e = Letrec() )
+  { return e; }
+}
+
+HindleyMilner.Exp Letrec() :
+{ 
+  HindleyMilner.Exp tmp = null;
+  HindleyMilner.Exp e = null;
+  HindleyMilner.Decl dlist = null;
+  HindleyMilner.Decl first = null;
+  Token name;
+  HindleyMilner.Exp value; }
+{
+
+  <LETREC>
+  ( name = <IDENTIFIER> "=" value = SimpleExpression()
+    {
+    HindleyMilner.Decl newdl = Inference.inst.declList(name.image,value);
+
+    if (dlist == null) {
+      first = dlist = newdl;
+    }
+    else {
+      dlist.next = newdl;
+      dlist = newdl;
+    }
+    }
+  )+ <IN> e = Expression()
+  { return Inference.inst.block(first,e); }
+}
+
+HindleyMilner.Exp Lambda() :
+{ 
+  HindleyMilner.Exp e;
+  Token name; }
+{
+  "!" name = <IDENTIFIER> "." e = Expression()
+  { return Inference.inst.lambda(name.image,e); }
+}
+
+HindleyMilner.Exp Application() :
+{ 
+  HindleyMilner.Exp tmp = null;
+  HindleyMilner.Exp e = null; }
+{
+  ( tmp = SimpleExpression()
+    { 
+      if (e == null)
+        e = tmp;
+      else
+        e = Inference.inst.app(e,tmp);
+    } )+
+  { return e; }
+}
+
+HindleyMilner.Exp Conditional() :
+{ 
+  HindleyMilner.Exp test = null;
+  HindleyMilner.Exp ifTrue = null;
+  HindleyMilner.Exp ifFalse = null; }
+{
+  <IF> "(" test = Expression() ")" <THEN>
+    ifTrue = SimpleExpression() <ELSE> ifFalse = SimpleExpression()
+  { return Inference.inst.cond(test,ifTrue,ifFalse); }
+}
+
+HindleyMilner.Exp SimpleExpression() :
+{ HindleyMilner.Exp e; }
+{
+  ( e = Int() | e = Ide() | "(" e = Expression() ")" )
+  { return e; }
+}
+
+HindleyMilner.Exp Int() :
+{ Token t; }
+{
+  t = <INTEGER>
+  { return Inference.inst.intv(Integer.parseInt(t.image)); }
+}
+
+HindleyMilner.Exp Ide() :
+{ Token t; }
+{
+  ( t = <IDENTIFIER> | t = <OPERATOR> )
+  { return Inference.inst.ident(t.image); }
+}
+
+
+HindleyMilner.Exp Input() :
+{ int count; }
+{
+  count=MatchedBraces() <EOF>
+  { System.out.println("The levels of nesting is " + count);
+    return Inference.inst.intv(4); }
+}
+
+int MatchedBraces() :
+{ int nested_count=0; }
+{
+  <LBRACE> [ nested_count=MatchedBraces() ] <RBRACE>
+  { return ++nested_count; }
+}

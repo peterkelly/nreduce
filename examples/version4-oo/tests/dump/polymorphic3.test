@@ -1,0 +1,28 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  g = (pair (f true) (f 3))
+  f = (!a.a)
+in
+  g
+==================================== OUTPUT ====================================
+0      block                                                        bool x int
+1      |-- rec                                                      
+2      |   |-- def g                                                g: bool x int
+3      |   |   `-- @                                                bool x int
+4      |   |       |-- @                                            int -> bool x int
+5      |   |       |   |-- pair                                     bool -> int -> bool x int
+6      |   |       |   `-- @                                        bool
+7      |   |       |       |-- f                                    bool -> bool
+8      |   |       |       `-- true                                 bool
+9      |   |       `-- @                                            int
+10     |   |           |-- f                                        int -> int
+11     |   |           `-- 3                                        int
+12     |   `-- def f                                                f: a -> a
+13     |       `-- lambda a                                         a -> a
+14     |           `-- a                                            a
+15     `-- g                                                        bool x int
+================================== RETURN CODE =================================
+0

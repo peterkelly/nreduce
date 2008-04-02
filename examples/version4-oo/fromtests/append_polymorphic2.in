@@ -1,0 +1,6 @@
+letrec
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+  appints = (append (cons 1 nil) (cons 3 nil))
+  appbools = (append (cons true nil) (cons false nil))
+in
+  (pair appints appbools)

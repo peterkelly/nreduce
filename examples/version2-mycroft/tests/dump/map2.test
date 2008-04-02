@@ -1,0 +1,50 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  map = (!f.!lst.if (null lst) then nil else (cons (f (hd lst)) (map f (tl lst))))
+  gt5 = (!x.> x 5)
+in
+  !nums.map gt5 nums
+==================================== OUTPUT ====================================
+0      block                                                        (int list) -> bool list
+1      |-- rec                                                      
+2      |   |-- def map                                              map: (a -> b) -> (a list) -> b list
+3      |   |   `-- lambda f                                         (a -> b) -> (a list) -> b list
+4      |   |       `-- lambda lst                                   (a list) -> b list
+5      |   |           `-- if                                       b list
+6      |   |               |-- @                                    bool
+7      |   |               |   |-- null                             (a list) -> bool
+8      |   |               |   `-- lst                              a list
+9      |   |               |-- nil                                  b list
+10     |   |               `-- @                                    b list
+11     |   |                   |-- @                                (b list) -> b list
+12     |   |                   |   |-- cons                         b -> (b list) -> b list
+13     |   |                   |   `-- @                            b
+14     |   |                   |       |-- f                        a -> b
+15     |   |                   |       `-- @                        a
+16     |   |                   |           |-- hd                   (a list) -> a
+17     |   |                   |           `-- lst                  a list
+18     |   |                   `-- @                                b list
+19     |   |                       |-- @                            (a list) -> b list
+20     |   |                       |   |-- map                      (a -> b) -> (a list) -> b list
+21     |   |                       |   `-- f                        a -> b
+22     |   |                       `-- @                            a list
+23     |   |                           |-- tl                       (a list) -> a list
+24     |   |                           `-- lst                      a list
+25     |   `-- def gt5                                              gt5: int -> bool
+26     |       `-- lambda x                                         int -> bool
+27     |           `-- @                                            bool
+28     |               |-- @                                        int -> bool
+29     |               |   |-- >                                    int -> int -> bool
+30     |               |   `-- x                                    int
+31     |               `-- 5                                        int
+32     `-- lambda nums                                              (int list) -> bool list
+33         `-- @                                                    bool list
+34             |-- @                                                (int list) -> bool list
+35             |   |-- map                                          (int -> bool) -> (int list) -> bool list
+36             |   `-- gt5                                          int -> bool
+37             `-- nums                                             int list
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,143 @@
+PARSER_BEGIN(Parser)
+
+public class Parser {
+
+  public static void main(String args[]) throws ParseException {
+    Parser parser = new Parser(System.in);
+    Exp a = parser.Input();
+    System.out.println("val = "+a.val);
+  }
+
+}
+
+PARSER_END(Parser)
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+}
+
+TOKEN :
+{
+  <LBRACE: "{">
+| <RBRACE: "}">
+| <IF: "if">
+| <THEN: "then">
+| <ELSE: "else">
+| <LETREC: "letrec">
+| <IN: "in">
+| < IDENTIFIER: <LETTER> (<LETTER>|<DIGIT>)* >
+| < OPERATOR: "+"|"-"|"*"|"/"|"%"|"=="|"!="|"<"|"<="|">"|">=" >
+| < INTEGER: (<DIGIT>)+ >
+| < #LETTER: ["_","a"-"z","A"-"Z"] >
+| < #DIGIT: ["0"-"9"] >
+}
+
+Exp Expression() :
+{ Exp e; }
+{
+  ( e = Application() | e = Conditional() | e = Lambda() | e = Letrec() )
+  { return e; }
+}
+
+Exp Letrec() :
+{ 
+  Exp tmp = null;
+  Exp e = null;
+  Decl dlist = null;
+  Decl first = null;
+  Token name;
+  Exp value; }
+{
+
+  <LETREC>
+  ( name = <IDENTIFIER> "=" value = SimpleExpression()
+    {
+    Decl newdl = Inference.inst.declList(name.image,value);
+
+    if (dlist == null) {
+      first = dlist = newdl;
+    }
+    else {
+      dlist.next = newdl;
+      dlist = newdl;
+    }
+    }
+  )+ <IN> e = Expression()
+  { return Inference.inst.block(first,e); }
+}
+
+Exp Lambda() :
+{ 
+  Exp e;
+  Token name; }
+{
+  "!" name = <IDENTIFIER> "." e = Expression()
+  { return Inference.inst.lambda(name.image,e); }
+}
+
+Exp Application() :
+{ 
+  Exp tmp = null;
+  Exp e = null; }
+{
+  ( tmp = SimpleExpression()
+    { 
+      if (e == null)
+        e = tmp;
+      else
+        e = Inference.inst.app(e,tmp);
+    } )+
+  { return e; }
+}
+
+Exp Conditional() :
+{ 
+  Exp test = null;
+  Exp ifTrue = null;
+  Exp ifFalse = null; }
+{
+  <IF> "(" test = Expression() ")" <THEN>
+    ifTrue = SimpleExpression() <ELSE> ifFalse = SimpleExpression()
+  { return Inference.inst.cond(test,ifTrue,ifFalse); }
+}
+
+Exp SimpleExpression() :
+{ Exp e; }
+{
+  ( e = Int() | e = Ide() | "(" e = Expression() ")" )
+  { return e; }
+}
+
+Exp Int() :
+{ Token t; }
+{
+  t = <INTEGER>
+  { return Inference.inst.intv(Integer.parseInt(t.image)); }
+}
+
+Exp Ide() :
+{ Token t; }
+{
+  ( t = <IDENTIFIER> | t = <OPERATOR> )
+  { return Inference.inst.ident(t.image); }
+}
+
+
+Exp Input() :
+{ int count; }
+{
+  count=MatchedBraces() <EOF>
+  { System.out.println("The levels of nesting is " + count);
+    return Inference.inst.intv(4); }
+}
+
+int MatchedBraces() :
+{ int nested_count=0; }
+{
+  <LBRACE> [ nested_count=MatchedBraces() ] <RBRACE>
+  { return ++nested_count; }
+}

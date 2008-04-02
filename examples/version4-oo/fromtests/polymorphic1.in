@@ -1,0 +1,4 @@
+letrec
+  f = (!a.a)
+in
+  (pair (f true) (f 3))
