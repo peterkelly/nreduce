@@ -37,6 +37,7 @@
 #define SNODE_STRING      0x09
 #define SNODE_WRAP        0x0A
 #define SNODE_COUNT       0x0B
+#define SNODE_EXTFUNC     0x0C
 
 #define MODULE_EXTENSION ".elc"
 #define MODULE_FILENAME_PREFIX "(module) "
@@ -49,8 +50,9 @@ typedef struct sourceloc {
   int lineno;
 } sourceloc;
 
+//// snode: (s)upercombinator (node)
 typedef struct snode {
-  int type;
+  int type;	//// see the above type definition, like SNODE_APPLICATION
 
   struct snode *left;
   struct snode *right;
@@ -60,8 +62,9 @@ typedef struct snode {
   struct letrec *bindings;
   struct snode *body;
   struct scomb *sc;
-  int bif;
-  double num;
+  int bif;	//// (b)uild(i)n (f)unction
+  int extf; //// external functions
+  double num;	//// the number value (type: double), used when the snode is a number node
   int strict;
   sourceloc sl;
   struct snode *target;
@@ -80,10 +83,10 @@ typedef struct letrec {
 } letrec;
 
 typedef struct scomb {
-  char *name;
-  int nargs;
-  char **argnames;
-  snode *body;
+  char *name;		   //// name of this supercombinator, like "main"
+  int nargs;           //// number of arguments for this supercombinator
+  char **argnames;	   //// arg+names: names of all arguments
+  snode *body;         //// the body of this supercombinator (type snode)
   int index;
   int *strictin;
   sourceloc sl;
@@ -97,13 +100,13 @@ typedef struct scomb {
 } scomb;
 
 typedef struct source {
-  scomb *schash[GLOBAL_HASH_SIZE];
-  int varno;
+  scomb *schash[GLOBAL_HASH_SIZE];    ////sc (supercombinator) hash
+  int varno;	//// variable NO
   array *scombs;
   array *oldnames;
-  array *parsedfiles;
-  list *imports;
-  list *newimports;
+  array *parsedfiles;	//// source files that have been parsed
+  list *imports;	//// modules have been imported 
+  list *newimports;	//// the imported modules, like prelude modules
   char *curmodname;
 } source;
 
@@ -132,6 +135,7 @@ void print_sourceloc(source *src, FILE *f, sourceloc sl);
 char *make_varname(const char *want);
 int create_scomb(source *src, const char *modname, char *name, list *argnames,
                  snode *body, int fileno, int lineno);
+////Make a symbol, used in Yacc
 snode *makesym(int fileno, int lineno, const char *name);
 
 /* resolve */

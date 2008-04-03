@@ -58,6 +58,7 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
     if (!found) {
       scomb *sc = NULL;
       int bif;
+      int extf;
       char *scname;
 
       if (modname && (NULL == strstr(sym,"::"))) {
@@ -81,6 +82,12 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
         c->name = NULL;
         c->type = SNODE_BUILTIN;
         c->bif = bif;
+      }
+      else if ( (extf = get_extfunc(sym)) >= 0){
+      	free(c->name);
+      	c->name = NULL;
+      	c->type = SNODE_EXTFUNC;
+      	c->extf = extf;
       }
       else {
         unboundvar *ubv = (unboundvar*)calloc(1,sizeof(unboundvar));

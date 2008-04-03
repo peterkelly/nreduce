@@ -1,0 +1,67 @@
+for min max f = (map f (range min max))
+
+range min max = (if (== min max) (cons min nil) (cons min (range (+ min 1) max)))
+
+creategrid rows cols = (map (!n.map (!n.0) (range 1 rows)) (range 1 cols))
+
+printcell cell = (if (== cell 1) "##" "--")
+
+printrow row = (if row (append (printcell (head row)) (printrow (tail row))) (append "\n" nil))
+printgrid grid = (if grid (append (printrow (head grid)) (printgrid (tail grid))) nil)
+
+grows grid = (len grid)
+gcols grid = (len (head grid))
+gcell grid row col = (item col (item row grid))
+
+makegrid pat rows cols =
+            (letrec
+               startrow = (floor (/ (- rows (grows pat)) 2))
+               endrow   = (+ startrow (grows pat))
+               startcol = (floor (/ (- cols (gcols pat)) 2))
+               endcol   = (+ startcol (gcols pat))
+             in
+            (for 0 (- rows 1) (!row.
+              (for 0 (- cols 1) (!col.
+                (if (and (>= row startrow) (and (< row endrow)
+                    (and (>= col startcol) (< col endcol))))
+                    (gcell pat (- row startrow) (- col startcol)) 0))))))
+
+dolife grid =
+            (letrec nrows = (grows grid)
+                    ncols  = (gcols grid)
+             in
+            (for 0 (- nrows 1) (!row.
+              (for 0 (- ncols 1) (!col.
+                (letrec curvalue = (gcell grid row col)
+                        count    = (sumnb grid row col)
+                 in
+                     (if (and (== curvalue 0) (== count 3))
+                         1
+                     (if (and (== curvalue 1) (or (== count 2) (== count 3)))
+                         1
+                         0))))))))
+sumnb g row col =
+            (letrec maxrow = (- (grows g) 1)
+                    maxcol = (- (gcols g) 1)
+             in
+            ((+ (if (and (> row 0) (> col 0))        (gcell g (- row 1) (- col 1)) 0)
+             (+ (if (> row 0)                       (gcell g (- row 1) col)       0)
+             (+ (if (and (> row 0) (< col maxcol))   (gcell g (- row 1) (+ col 1)) 0)
+             (+ (if (> col 0)                       (gcell g row       (- col 1)) 0)
+             (+ (if (< col maxcol)                  (gcell g row       (+ col 1)) 0)
+             (+ (if (and (< row maxrow) (> col 0))   (gcell g (+ row 1) (- col 1)) 0)
+             (+ (if (< row maxrow)                  (gcell g (+ row 1) col)       0)
+             (if (and (< row maxrow) (< col maxcol)) (gcell g (+ row 1) (+ col 1)) 0))))))))))
+
+start =     (listn 3 (listn 3 0 1 1)
+                     (listn 3 1 1 0)
+                     (listn 3 0 1 0))
+
+loop iter grid =
+            (if (> iter 0)
+                (appendn 3 (printgrid grid)
+                           "\n"
+                           (loop (- iter 1) (dolife grid)))
+                nil)
+
+main = (loop 30 (makegrid start 20 20))

@@ -31,16 +31,20 @@
 #define STACK_LIMIT 10240
 
 typedef struct list list;
+
+////list like cons:  list = (data, pointer), 
+////using (void *) for the data type to implement typeless data, so list can hold any type of data
 struct list {
   void *data;
   list *next;
 };
 
+//// array of any type of data
 typedef struct array {
-  int elemsize;
-  int alloc;
-  int nbytes;
-  char *data;
+  int elemsize;  //// the size for each element
+  int alloc;     //// the total allocated space
+  int nbytes;    //// used space
+  char *data;    //// actual data
 } array;
 
 typedef struct stack {
@@ -58,6 +62,8 @@ void array_append(array *arr, const void *data, int size);
 int array_count(array *arr);
 void array_free(array *arr);
 
+//// function pointer, it specifys the pointer to function list_d_t, which accept (void *) argument
+//// and returns (void *)
 typedef void (*list_d_t)(void *a);
 
 list *list_new(void *data, list *next);

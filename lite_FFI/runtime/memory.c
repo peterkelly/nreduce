@@ -113,6 +113,7 @@ static void mark(task *tsk, pntr p, short bit)
     case CELL_NIL:
     case CELL_NUMBER:
     case CELL_HOLE:
+    case CELL_EXTFUNC:
       break;
     default:
       fatal("Invalid pntr type %d",pntrtype(p));
@@ -125,34 +126,41 @@ static void mark(task *tsk, pntr p, short bit)
   tsk->markstack = NULL;
 }
 
+//// allocate an free cell from the task (tsk), if there is no free cell in the tsk, create new block containing cells.
 cell *alloc_cell(task *tsk)
 {
   cell *v;
   assert(tsk);
-  if ((cell*)1 == tsk->freeptr) { /* 64 bit pntrs use 1 in second byte for null */
-    block *bl = (block*)calloc(1,sizeof(block));
+  //// if (tsk->freeprt == 0x0000001) is true, then the task dosen't have free cells, so creat a new block
+  if (tsk->freeptr == (cell*)1) { /* 64 bit pntrs use 1 in second byte for null */
+    block *bl = (block*)calloc(1,sizeof(block));	//// create a new block of cells
     int i;
-    bl->next = tsk->blocks;
-    tsk->blocks = bl;
+    bl->next = tsk->blocks;	//// link the new block to the head of existing block
+    tsk->blocks = bl;	//// replace the original blocks in the task (tsk)
     for (i = 0; i < BLOCK_SIZE-1; i++)
-      make_pntr(bl->values[i].field1,&bl->values[i+1]);
-    bl->values[i].field1 = NULL_PNTR;
+      //// here, make_pntr is an macro, because the BLOCK_SIZE is large, it would be much slow if using function call.
+      make_pntr(bl->values[i].field1,&bl->values[i+1]);	//// initialize all the cells in the block
+      													//// initially, CELL(n)(field1) points to CELL(n+1)
+    bl->values[i].field1 = NULL_PNTR;	//// the last cell in the block should points to NULL
 
-    tsk->freeptr = &bl->values[0];
+    tsk->freeptr = &bl->values[0];	//// the first free pointer is initialized
   }
   v = tsk->freeptr;
   v->flags = tsk->newcellflags;
-  tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
-  tsk->alloc_bytes += sizeof(cell);
+  tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);	//// redirect free pntr to next cell, since current free cell will be used
+  tsk->alloc_bytes += sizeof(cell);	//// adjust the used space for this task
   return v;
 }
 
+//// clear marks for all the cells in all the blocks in the task (tsk)
 void clear_marks(task *tsk, short bit)
 {
   block *bl;
   int i;
 
+	//// traverse all the blocks in the task
   for (bl = tsk->blocks; bl; bl = bl->next)
+  	//// traverse all the cells in the block
     for (i = 0; i < BLOCK_SIZE; i++)
       bl->values[i].flags &= ~bit;
 }
@@ -187,6 +195,7 @@ void sweep(task *tsk, int all)
   }
 }
 
+////
 void local_collect(task *tsk)
 {
   tsk->alloc_bytes = 0;
@@ -201,32 +210,37 @@ void local_collect(task *tsk)
   sweep(tsk,0);
 }
 
+//// creat a new pointer stack, Return the pointer to the pntrstack
 pntrstack *pntrstack_new(void)
 {
   pntrstack *s = (pntrstack*)calloc(1,sizeof(pntrstack));
-  s->alloc = 1;
-  s->count = 0;
-  s->data = (pntr*)malloc(sizeof(pntr));
+  s->alloc = 1;   ////Initially, 1 pointer is allowed
+  s->count = 0;   
+  s->data = (pntr*)malloc(sizeof(pntr));	//// allocate space for the pointer (s->alloc)
   s->limit = STACK_LIMIT;
   return s;
 }
 
+//// push pointer p into the top of pointer stack s
 void pntrstack_push(pntrstack *s, pntr p)
 {
+	////Test to see if the stack s is full, allocate 
   if (s->count == s->alloc) {
-    if ((0 <= s->limit) && (s->count >= s->limit)) {
+    if ((s->limit >= 0) && (s->count >= s->limit)) {
       fprintf(stderr,"Out of stack space\n");
       exit(1);
     }
+    ////Double the pointer stack s
     pntrstack_grow(&s->alloc,&s->data,s->alloc*2);
   }
   s->data[s->count++] = p;
 }
 
+////Return the pointer at (pos), which starts from 0
 pntr pntrstack_at(pntrstack *s, int pos)
 {
-  assert(0 <= pos);
-  assert(pos < s->count);
+  assert( pos >= 0);
+  assert( s->count > pos);
   return resolve_pntr(s->data[pos]);
 }
 
@@ -242,16 +256,20 @@ pntr pntrstack_top(pntrstack *s)
   return resolve_pntr(s->data[s->count]);
 }
 
+//// free the pntr stack (s)
 void pntrstack_free(pntrstack *s)
 {
   free(s->data);
   free(s);
 }
 
+//// grow the pointer stack space to the specified (size)
 void pntrstack_grow(int *alloc, pntr **data, int size)
 {
+	//// make sure the requested (size) is larger than original size
   if (*alloc < size) {
     *alloc = size;
-    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
+    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));	//// remove the original (data) to the new stack space
   }
+  
 }

@@ -1,0 +1,4 @@
+
+fac n = (if (== n 1) 1 (* n (fac (- n 1))))
+
+main = (append (numtostring (fac 5)) "\n")

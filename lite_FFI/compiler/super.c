@@ -37,6 +37,7 @@
 #include <stdarg.h>
 #include <math.h>
 
+//// get the supercombinator from the src->schash, based on the hash index
 scomb *get_scomb(source *src, const char *name)
 {
   int h = hash(name,strlen(name));

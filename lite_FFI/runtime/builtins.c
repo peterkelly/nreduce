@@ -26,47 +26,20 @@
 
 #define BUILTINS_C
 
-#include "src/nreduce.h"
-#include "compiler/source.h"
-#include "compiler/util.h"
-#include "runtime.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <ctype.h>
-#include <stdarg.h>
-#include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-#include <dirent.h>
+#include "runtime/builtins.h"
 
-static const char *numnames[4] = {"first", "second", "third", "fourth"};
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
 
-static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF };
-
-#define CHECK_ARG(_argno,_type) {                                       \
-    if ((_type) != pntrtype(argstack[(_argno)])) {                      \
-      invalid_arg(tsk,argstack[(_argno)],0,(_argno),(_type));           \
-      return;                                                           \
-    }                                                                   \
-  }
-
-#define CHECK_NUMERIC_ARGS(bif)                                         \
-  if ((CELL_NUMBER != pntrtype(argstack[1])) ||                         \
-      (CELL_NUMBER != pntrtype(argstack[0]))) {                         \
-    invalid_binary_args(tsk,argstack,bif);                              \
-    return;                                                             \
-  }
+const char *numnames[4] = {"first", "second", "third", "fourth"};
+unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF };
 
 const builtin builtin_info[NUM_BUILTINS];
 
-static void setnumber(pntr *cptr, double val)
+void setnumber(pntr *cptr, double val)
 {
-  if (isnan(val))
+  if (isnan(val))	//// nan: NotANumber, which is a c func
     *cptr = *(pntr*)NAN_BITS;
   else
     set_pntrdouble(*cptr,val);
@@ -265,6 +238,10 @@ int pntr_is_char(pntr p)
   return 0;
 }
 
+//// make list using embeded cons with the given data
+//// e.g. str == (cons str[0] (cons str[1] (cons str[2] nil)))
+//// return a pntr, pointing to the list
+
 pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
 {
   pntr p = tsk->globnilpntr;
@@ -274,18 +251,20 @@ pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
     cell *ch = alloc_cell(tsk);
     ch->type = CELL_CONS;
     set_pntrdouble(ch->field1,data[i]);
-    make_pntr(*prev,ch);
-    prev = &ch->field2;
+    make_pntr(*prev,ch); //// when i==0, *prev == p, then p is pointing to the result list
+    prev = &ch->field2;	//// ch->field2 will be used as the address of next cons, or the tail 
   }
   *prev = tail;
   return p;
 }
 
+//// convert a string into array list (cons cons...)
 pntr string_to_array(task *tsk, const char *str)
 {
   return data_to_list(tsk,str,strlen(str),tsk->globnilpntr);
 }
 
+//// convert a list(cons') to a string
 int array_to_string(pntr refpntr, char **str)
 {
   pntr p = refpntr;
@@ -295,7 +274,7 @@ int array_to_string(pntr refpntr, char **str)
 
   *str = NULL;
 
-  while (0 > badtype) {
+  while (badtype < 0) {
 
     if (CELL_CONS == pntrtype(p)) {
       cell *c = get_pntr(p);
@@ -320,7 +299,7 @@ int array_to_string(pntr refpntr, char **str)
     }
   }
 
-  if (0 <= badtype) {
+  if (badtype >= 0) {
     *str = NULL;
     free(buf->data);
   }
@@ -378,7 +357,7 @@ static void b_numtostring(task *tsk, pntr *argstack)
 
   CHECK_ARG(0,CELL_NUMBER);
   format_double(str,100,pntrdouble(p));
-  assert(0 < strlen(str));
+  assert(strlen(str) > 0);
   argstack[0] = string_to_array(tsk,str);
 }
 
@@ -438,6 +417,15 @@ int get_builtin(const char *name)
   return -1;
 }
 
+//// a generate random number
+static void b_randomnum(task *tsk, pntr *argstack)
+{
+	CHECK_ARG(0, CELL_NUMBER);
+	setnumber(&argstack[0], Uniform(1.0, 9.0));
+//    setnumber(&argstack[0], zzip_file_real(3));
+}
+
+//// Initialization of builtin functions' information
 const builtin builtin_info[NUM_BUILTINS] = {
 /* Arithmetic operations */
 { "+",              2, 2, b_add            },
@@ -488,5 +476,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "abs",            1, 1, b_abs            },
 { "iscons",         1, 1, b_iscons         },
-};
 
+//// my builtin functions
+{ "randomnum",      1, 1, b_randomnum      },
+
+};

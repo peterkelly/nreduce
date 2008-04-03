@@ -1,0 +1,82 @@
+read_lines1 stream start !count =
+(if stream
+  (letrec
+    c = (head stream)
+    rest = (tail stream)
+   in
+    (if (== c '\n')
+      (cons
+        (prefix count start)
+        (read_lines1 rest rest 0))
+      (read_lines1 rest start (+ count 1))))
+  (if (> count 0)
+    (cons (prefix count start) nil)
+    nil))
+
+read_lines stream = (read_lines1 stream stream 0)
+
+printstrings lst =
+(if lst
+  (append (head lst)
+    (cons '\n'
+      (printstrings (tail lst))))
+  nil)
+
+
+
+
+mergesort cmp lst =
+(mergesort2 cmp (wrap lst))
+
+mergesort2 cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (mergesort2 cmp (merge_pairs cmp pairs))
+    (head pairs))
+  nil)
+
+merge_pairs cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (letrec
+      xs = (head pairs)
+      ys = (head (tail pairs))
+      xss = (tail (tail pairs))
+     in
+      (cons (merge cmp xs ys) (merge_pairs cmp xss)))
+    pairs)
+  nil)
+
+merge cmp xlst ylst =
+(if xlst
+  (if ylst
+    (letrec
+      x = (head xlst)
+      y = (head ylst)
+     in
+      (if (> (cmp x y) 0)
+        (cons y (merge cmp xlst (tail ylst)))
+        (cons x (merge cmp (tail xlst) ylst))
+        ))
+    xlst)
+  ylst)
+
+wrap lst =
+(if lst
+  (cons
+    (cons (head lst) nil)
+    (wrap (tail lst)))
+  nil)
+
+main =
+(letrec
+  strings = (cons "Elephant"
+            (cons "Door"
+            (cons "Banana"
+            (cons "Abacus"
+            (cons "Castle"
+            (cons "Gasp"
+            (cons "Friend" nil)))))))
+  sorted = (mergesort strcmp strings)
+ in
+  (printstrings sorted))

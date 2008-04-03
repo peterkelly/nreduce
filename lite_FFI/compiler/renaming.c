@@ -125,6 +125,7 @@ static void rename_variables_r(source *src, snode *c, stack *mappings)
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
+  case SNODE_EXTFUNC:
     break;
   default:
     abort();

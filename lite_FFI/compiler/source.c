@@ -118,6 +118,7 @@ void snode_free(snode *c)
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
+  case SNODE_EXTFUNC:
     break;
   default:
     abort();
@@ -134,7 +135,7 @@ source *source_new()
   list_push(&src->newimports,strdup("prelude"));
   return src;
 }
-
+//// check if main supercombinator exist
 static int check_for_main(source *src)
 {
   int gotmain = 0;
@@ -150,12 +151,12 @@ static int check_for_main(source *src)
         fprintf(stderr,"Supercombinator \"main\" must take either 0 or 1 arguments\n");
         return -1;
       }
-      else if (0 == sc->nargs) {
+      else if (0 == sc->nargs) {	//// add an predefined argument to main supercombinator, if no arguments is specified
         sc->nargs = 1;
         free(sc->argnames);
         free(sc->strictin);
         sc->argnames = (char**)malloc(sizeof(char*));
-        sc->argnames[0] = strdup("__args");
+        sc->argnames[0] = strdup("__args");	//// the added argument
         sc->strictin = (int*)malloc(sizeof(int));
         sc->strictin[0] = 0;
       }
@@ -204,7 +205,7 @@ int source_parse_file(source *src, const char *filename, const char *modname)
   }
 
   yyfilename = filename;
-  yyfileno = add_parsedfile(src,filename);
+  yyfileno = add_parsedfile(src,filename);    ////yyfileno is the index in the src->parsedfiles
   yylloc.first_line = 1;
 
   bufstate = yy_create_buffer(yyin,YY_BUF_SIZE);
@@ -234,7 +235,7 @@ void add_import(source *src, const char *name)
       return;
   list_push(&src->newimports,strdup(name));
 }
-
+//// process the imported modules
 static int process_imports(source *src)
 {
   int r = 0;
@@ -371,10 +372,11 @@ const char *lookup_parsedfile(source *src, int fileno)
   return array_item(src->parsedfiles,fileno,char*);
 }
 
+//// add the pointer of parsed file to src
 int add_parsedfile(source *src, const char *filename)
 {
   char *copy = strdup(filename);
-  if (NULL == src->parsedfiles)
+  if (src->parsedfiles == NULL)
     src->parsedfiles = array_new(sizeof(char*),0);
   array_append(src->parsedfiles,&copy,sizeof(char*));
   return array_count(src->parsedfiles)-1;

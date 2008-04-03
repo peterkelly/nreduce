@@ -59,6 +59,13 @@ int set_error(task *tsk, const char *format, ...)
   return 0;
 }
 
+/*
+//// create a new task
+//// Arguments: tid: task id; 
+                groupsize:
+                bcdata: bytecode data
+                bcsize:
+*/
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
@@ -70,13 +77,13 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize)
   globnilvalue->type = CELL_NIL;
   globnilvalue->flags |= FLAG_PINNED;
 
-  make_pntr(tsk->globnilpntr,globnilvalue);
+  make_pntr(tsk->globnilpntr,globnilvalue);	//// initialize the global NIL pntr
   set_pntrdouble(tsk->globtruepntr,1.0);
 
   if (is_pntr(tsk->globtruepntr))
     get_pntr(tsk->globtruepntr)->flags |= FLAG_PINNED;
 
-  if (NULL == bcdata)
+  if (bcdata == NULL)
     return tsk; /* no bytecode; we must be using the reduction engine */
 
   return tsk;
