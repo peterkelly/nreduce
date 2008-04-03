@@ -1,0 +1,40 @@
+AC_INIT(src/nreduce.c)
+AM_CONFIG_HEADER(config.h)
+AM_INIT_AUTOMAKE(nreduce, 0.1)
+
+AC_PROG_CC
+AC_PROG_INSTALL
+AC_PROG_LIBTOOL
+AC_CHECK_LIB(m,sqrt)
+AC_CHECK_FUNCS(feenableexcept)
+AC_CHECK_HEADERS(execinfo.h)
+ucontext_includes="\
+#include <ucontext.h>
+"
+AC_CHECK_MEMBERS([mcontext_t.gregs],,,[$ucontext_includes])
+
+AC_MSG_CHECKING([for yylex_destroy])
+echo -e "%%\n%%" > conftest.l
+flex conftest.l
+if grep yylex_destroy > /dev/null lex.yy.c
+then
+  AC_MSG_RESULT([yes])
+  AC_DEFINE([HAVE_YYLEX_DESTROY],[1],[Whether or not flex generates the yylex_destroy function])
+else
+  AC_MSG_RESULT([no])
+fi
+rm -f conftest.l lex.yy.c
+
+ALL_LIBS="-lpthread"
+ALL_INCLUDES=""
+AC_SUBST(ALL_LIBS)
+LDFLAGS="-rdynamic"
+
+CFLAGS="-ggdb3 -Wall -O0"
+
+# Hide some warnings that icc gives
+if $CC --version | grep '^icc '; then
+  CFLAGS="$CFLAGS -wd279,1418,1419,869,1684,1572,193,111,810"
+fi
+
+AC_OUTPUT(Makefile src/Makefile modules/Makefile compiler/Makefile runtime/Makefile)

@@ -1,0 +1,33 @@
+#!/bin/bash
+
+ELCFILES=`echo *.elc`
+NAMES=''
+COUNT=0
+for i in $ELCFILES; do
+  NAME=`basename $i .elc`
+  NAMES="$NAMES $NAME"
+done
+
+for i in $NAMES; do
+  echo name is $i
+  ((COUNT++))
+done
+
+rm -f modules.c
+
+echo "#include \"modules.h\"" >> modules.c
+
+for i in $NAMES; do
+  echo "#define ${i}_module \\" >> modules.c
+  cat $i.elc | sed -e 's/\\/\\\\/g' -e 's/\"/\\"/g' -e 's/^/\"/' -e 's/$/\\n\"\\/' >> modules.c
+  echo '" "' >> modules.c
+done
+
+echo "const module_info module_defs[$((COUNT+1))] = {" >> modules.c
+for i in $NAMES; do
+  echo "{ \"$i\", \"(module) $i.elc\", ${i}_module }," >> modules.c
+done
+echo "{ 0, 0, 0 }," >> modules.c
+echo "};" >> modules.c
+
+echo "const module_info *modules = module_defs;" >> modules.c
