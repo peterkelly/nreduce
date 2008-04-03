@@ -1,0 +1,98 @@
+len1 !total lst =
+(if lst
+  (len1 (+ total 1) (tail lst))
+  total)
+
+len lst =
+(len1 0 lst)
+
+skip n lst =
+(if (<= n 0)
+  lst
+  (skip (- n 1) (tail lst)))
+
+item n lst = (head (skip n lst))
+
+prefix n lst =
+(if (<= n 0)
+  nil
+  (cons (head lst) (prefix (- n 1) (tail lst))))
+
+sub !start !count lst =
+(prefix count (skip start lst))
+
+append a b =
+(if a
+  (cons (head a) (append (tail a) b))
+  b)
+
+appendn n a b =
+(if (== n 2)
+  (append a b)
+  (appendn (- n 1) (append a b)))
+
+append1 a b =
+(append a (cons b nil))
+
+forcelist1 lst =
+(if lst
+  (seq (head lst) (forcelist1 (tail lst)))
+  nil)
+
+forcelist lst =
+(seq (forcelist1 lst) lst)
+
+listn n a =
+(if (== n 1)
+  (cons a nil)
+  (consn n (cons a nil)))
+
+consn n a b =
+(if (== n 2)
+  (append1 a b)
+  (consn (- n 1) (append1 a b)))
+
+strcmp a b =
+(strcmpcons a b)
+
+strcmpcons a b =
+(if a
+  (if b
+    (if (== (head a) (head b))
+      (strcmp (tail a) (tail b))
+      (- (head a) (head b)))
+    1)
+  (if b
+    (- 0 1)
+    0))
+
+
+streq a b = (== (strcmp a b) 0)
+
+map f lst =
+(if lst
+  (cons (f (head lst))
+    (map f (tail lst)))
+  nil)
+
+filter f lst =
+(if lst
+  (if (f (head lst))
+    (cons (head lst) (filter f (tail lst)))
+    (filter f (tail lst)))
+  nil)
+
+reverse1 lst rev =
+(if lst
+  (reverse1 (tail lst) (cons (head lst) rev))
+  rev)
+
+reverse lst =
+(reverse1 lst nil)
+
+
+stringtonum str =
+(stringtonum1 (forcelist str))
+
+error str =
+(error1 (forcelist str))
