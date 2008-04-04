@@ -1,0 +1,4 @@
+mkfilename base ext = (append base (append "." ext))
+
+main = (readfile (mkfilename "test" "txt"))
+

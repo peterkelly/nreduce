@@ -74,8 +74,9 @@ struct task;
 #define B_ERROR1         30
 #define B_ABS            31
 #define B_ISCONS         32
+#define B_READFILE       33
 
-#define NUM_BUILTINS     33
+#define NUM_BUILTINS     34
 
 #define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
                           fatal("access to free'd cell %p",(_c)); \

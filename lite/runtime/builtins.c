@@ -429,6 +429,53 @@ static void b_iscons(task *tsk, pntr *argstack)
   setbool(tsk,&argstack[0],CELL_CONS == pntrtype(argstack[0]));
 }
 
+static char *readfile(char *filename)
+{
+  FILE *f = fopen(filename,"r");
+  if (NULL == f) {
+    return NULL;
+  }
+
+  array *arr = array_new(1,0);
+  char buf[1024];
+  int r;
+  while (0 < (r = fread(buf,1,1024,f))) {
+    array_append(arr,buf,r);
+  }
+  fclose(f);
+
+  char *content = (char*)malloc(arr->nbytes+1);
+  memcpy(content,arr->data,arr->nbytes);
+  content[arr->nbytes] = '\0';
+
+  array_free(arr);
+  return content;
+}
+
+static void b_readfile(task *tsk, pntr *argstack)
+{
+  pntr p = argstack[0];
+  int badtype;
+  char *filename;
+
+  if (0 <= (badtype = array_to_string(p,&filename))) {
+    set_error(tsk,"stringtonum1: argument is not a string (contains non-char: %s)",
+              cell_types[badtype]);
+    return;
+  }
+
+  char *content = readfile(filename);
+  if (NULL == content) {
+    set_error(tsk,"Error in readfile %s",filename);
+    free(filename);
+    return;
+  }
+
+  argstack[0] = string_to_array(tsk,content);
+
+  free(filename);
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -488,6 +535,8 @@ const builtin builtin_info[NUM_BUILTINS] = {
 
 { "abs",            1, 1, b_abs            },
 { "iscons",         1, 1, b_iscons         },
+
+{ "_readfile",       1, 1, b_readfile       },
 
 };
 

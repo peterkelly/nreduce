@@ -96,3 +96,6 @@ stringtonum str =
 
 error str =
 (error1 (forcelist str))
+
+readfile filename =
+(_readfile (forcelist filename))
