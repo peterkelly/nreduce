@@ -56,7 +56,7 @@ char* cell_type(pntr cell_pntr){
 		case 7: cell_type_str = "CELL_NIL"; break;
 		case 8: cell_type_str = "CELL_NUMBER"; break;
 		case 9: cell_type_str = "CELL_COUNT"; break;
-		case 10: cell_type_str = "CELL_EXTFUNC"; break;
+//		case 10: cell_type_str = "CELL_EXTFUNC"; break;
 		default: break;
 	}
 	return cell_type_str;
@@ -104,7 +104,7 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
   }
   case SNODE_SYMBOL: {
     int pos;
-    for (pos = names->count-1; 0 <= pos; pos--) {
+    for (pos = names->count-1; pos>=0; pos--) {
       if (!strcmp((char*)names->data[pos],source->name)) {
         dest = alloc_cell(tsk);
         dest->type = CELL_IND;
@@ -149,13 +149,14 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
     make_pntr(dest->field1,source->bif);
     make_pntr(p,dest);
     return p;
-  case SNODE_EXTFUNC:
+/*  case SNODE_EXTFUNC:
     //// creat a cell of extension function
     dest = alloc_cell(tsk);
     dest->type = CELL_EXTFUNC;
     make_pntr(dest->field1, source->extf);
     make_pntr(p, dest);
     return p;
+*/
   case SNODE_SCREF: {
     return makescref(tsk,source->sc);
   }
@@ -337,24 +338,45 @@ void reduce(task *tsk, pntrstack *s)
          arguments the expression is in WHNF so STOP. Otherwise evaluate any arguments required,
          execute the built-in function and overwrite the root of the redex with the result. */
     case CELL_BUILTIN: {
-    	
       int bif = (int)get_pntr(get_pntr(target)->field1);	//// get the build in function(bif) index
+      int isExtFunc = -1;
+      if(bif >= MAX_BUILTINS){
+          isExtFunc = 1;
+          bif = bif - MAX_BUILTINS; //// external functions also start from 0.
+      }
       int reqargs;		//// number of arguments required
       int strictargs;	//// number of must-have arguments
       int i;
       int strictok = 0;
       assert(bif >= 0);
-      assert(NUM_BUILTINS > bif);
+      
+      if(isExtFunc){
+          assert(NUM_EXTFUNCS > bif);
+      } else {
+          assert(NUM_BUILTINS > bif);
+      }
 
-      reqargs = builtin_info[bif].nargs;
-      strictargs = builtin_info[bif].nstrict;
+      //// Check if it is a builtin function or a external function
+      if(isExtFunc){
+        	reqargs = extfunc_info[bif].nargs;
+        	strictargs = extfunc_info[bif].nstrict;
+      } else {
+    	  reqargs = builtin_info[bif].nargs;
+    	  strictargs = builtin_info[bif].nstrict;
+      }
 
 	  //// make sure the number of arguments is sufficient
 	  //// 1 is the builtin cell itself, so should be deducted
       if (s->count-1-oldtop < reqargs) {
-        fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
-                builtin_info[bif].name,reqargs,s->count-1-oldtop);
-        exit(1);
+          if(isExtFunc){
+              fprintf(stderr,"External function %s requires %d args; have only %d\n",
+                      extfunc_info[bif].name,reqargs,s->count-1-oldtop);
+              exit(1);
+    	  } else {
+    		  fprintf(stderr,"Built-in function %s requires %d args; have only %d\n",
+    				  builtin_info[bif].name,reqargs,s->count-1-oldtop);
+    		  exit(1);
+    	  }
       }
 
       /* Replace application cells on stack with the corresponding arguments */
@@ -370,7 +392,7 @@ void reduce(task *tsk, pntrstack *s)
 
       /* Reduce arguments */
       //// reduce arguments from the outermost application cell, which closest to the tip of the graph
-      //// until all the arguments are available
+      //// until all the RESTRICT arguments are available (This is also lazy evaluation)
       for (i = 0; i < strictargs; i++)
         reduce_single(tsk,s,s->data[s->count-1-i]);
 
@@ -385,11 +407,16 @@ void reduce(task *tsk, pntrstack *s)
           strictok++;	//// count the number of valid arguments which are stored on stack
         }
         else {
+        	printf("non-reduced arguments.");
           break;
         }
       }
-
-      builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);	//// the address of first arguments on stack is used
+      
+      if(isExtFunc){
+    	  extfunc_info[bif].f(tsk,&s->data[s->count-reqargs]);
+      } else {
+    	  builtin_info[bif].f(tsk,&s->data[s->count-reqargs]);	//// the address of first arguments on stack is used
+      }
       if (tsk->error)
         fatal("%s",tsk->error);
       s->count -= (reqargs-1);	//// only keep arg[0], in which it stores the result of performing builtin func
@@ -409,6 +436,7 @@ void reduce(task *tsk, pntrstack *s)
       break;
     }
     //// Very much similar to the case CELL_BUILTIN
+/*
     case CELL_EXTFUNC: {
 	    int extf = (int)get_pntr(get_pntr(target)->field1);	//// get the build in function(bif) index
  	    int reqargs;		//// number of arguments required
@@ -429,8 +457,6 @@ void reduce(task *tsk, pntrstack *s)
         	exit(1);
      	}
 
-		/* Replace application cells on stack with the corresponding arguments */
-  	    //// note the corresponding arguments may also be application cells 
  	    for (i = s->count-1; i >= s->count-reqargs; i--) {
 			pntr arg = pntrstack_at(s,i-1);
       		assert(i > oldtop);
@@ -440,17 +466,12 @@ void reduce(task *tsk, pntrstack *s)
 		//  printf("type:%i ", pntrtype(s->data[i]));
       	}
 
-      	/* Reduce arguments */
-      	//// reduce arguments from the outermost application cell, which closest to the tip of the graph
-     	 //// until all the arguments are available
       	for (i = 0; i < strictargs; i++)
         	reduce_single(tsk,s,s->data[s->count-1-i]);
 
-      	/* Ensure all stack items are values (not indirection cells) */
       	for (i = 0; i < strictargs; i++)
         	s->data[s->count-1-i] = resolve_pntr(s->data[s->count-1-i]);
 
-      	/* Are any strict arguments not yet reduced? */
       	for (i = 0; i < strictargs; i++) {
         	pntr argval = resolve_pntr(s->data[s->count-1-i]);
         	if (CELL_APPLICATION != pntrtype(argval)) {
@@ -460,12 +481,10 @@ void reduce(task *tsk, pntrstack *s)
         	}
       	}
 
-      	extfunc_info[extf].f(tsk,&s->data[s->count-reqargs]);	//// the address of first arguments on stack is used
+      	extfunc_info[extf].f(tsk,&s->data[s->count-reqargs]);	
       	if (tsk->error)
         	fatal("%s",tsk->error);
-      	s->count -= (reqargs-1);	//// only keep arg[0], in which it stores the result of performing builtin func
-
-      	/* UPDATE */
+      	s->count -= (reqargs-1);	
 
       	s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
@@ -479,7 +498,7 @@ void reduce(task *tsk, pntrstack *s)
      	 s->count--;
       	break;
     }
- 
+*/
     default:
       fprintf(stderr,"Encountered %s\n",cell_types[pntrtype(target)]);
       abort();

@@ -113,7 +113,7 @@ static void mark(task *tsk, pntr p, short bit)
     case CELL_NIL:
     case CELL_NUMBER:
     case CELL_HOLE:
-    case CELL_EXTFUNC:
+//    case CELL_EXTFUNC:
       break;
     default:
       fatal("Invalid pntr type %d",pntrtype(p));

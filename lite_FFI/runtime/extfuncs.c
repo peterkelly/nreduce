@@ -11,7 +11,7 @@ int get_extfunc(const char *name)
   return -1;
 }
 
-/* util functions */
+/******** util functions *********/
 //// similar to b_cons(), which returns a pntr pointing to a cell
 pntr make_cons(task *tsk, pntr head, pntr tail)
 {

@@ -279,7 +279,12 @@ int array_to_string(pntr refpntr, char **str)
     if (CELL_CONS == pntrtype(p)) {
       cell *c = get_pntr(p);
       pntr head = resolve_pntr(c->field1);
+//      cell *headcell = get_pntr(head);
+//      cell *Lheadcell = get_pntr(headcell->field1);
+//      cell *LLheadcell = get_pntr(Lheadcell->field1);
       pntr tail = resolve_pntr(c->field2);
+//      cell *tailcell = get_pntr(tail);
+//      cell *Rtailcell = get_pntr(tailcell->field2);
       if (pntr_is_char(head)) {
         char cc = (char)pntrdouble(head);
         array_append(buf,&cc,1);

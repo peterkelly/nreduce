@@ -25,6 +25,8 @@
 #include "runtime/rvgs.h"
 
 
+#define MAX_BUILTINS 100
+
 void setnumber(pntr *cptr, double val);
 void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
 void invalid_binary_args(task *tsk, pntr *argstack, int bif);

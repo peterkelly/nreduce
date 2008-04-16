@@ -25,6 +25,7 @@
 
 #include "src/nreduce.h"
 #include "compiler/source.h"
+//#include "extfuncs.h"
 #include <stdio.h>
 #include <sys/time.h>
 #include <netdb.h>
@@ -118,7 +119,7 @@ typedef struct {
 #define CELL_NIL         0x07  /*  NULL CELL                                       */
 #define CELL_NUMBER      0x08  //// cell containing a number, rather than pntr
 #define CELL_COUNT       0x09
-#define CELL_EXTFUNC	 0x0A  //// extension function
+//#define CELL_EXTFUNC	 0x0A  //// extension function
 
 typedef struct cell {
   int type;		//// the type of cell, see the above cell types, like CELL_APPLICATION

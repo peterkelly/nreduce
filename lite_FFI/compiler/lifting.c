@@ -218,7 +218,7 @@ static void create_scombs(source *src, stack *boundvars, snode **k,
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
-  case SNODE_EXTFUNC:
+//  case SNODE_EXTFUNC:
     break;
   default:
     abort();
@@ -275,7 +275,7 @@ static void replace_usage(snode **k, const char *fun, list *args)
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
-  case SNODE_EXTFUNC:
+//  case SNODE_EXTFUNC:
     break;
   default:
     abort();
@@ -367,7 +367,7 @@ static void capture(stack *boundvars, snode **k, list *noabsvars, snode **lambda
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
-  case SNODE_EXTFUNC:
+//  case SNODE_EXTFUNC:
     break;
   default:
     abort();
@@ -426,7 +426,7 @@ static void find_vars(snode *c, list **names, stack *ignore)
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
-  case SNODE_EXTFUNC:
+//  case SNODE_EXTFUNC:
     break;
   case SNODE_LETREC: {
     int oldcount = ignore->count;

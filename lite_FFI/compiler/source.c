@@ -118,7 +118,7 @@ void snode_free(snode *c)
   case SNODE_NIL:
   case SNODE_NUMBER:
   case SNODE_STRING:
-  case SNODE_EXTFUNC:
+//  case SNODE_EXTFUNC:
     break;
   default:
     abort();

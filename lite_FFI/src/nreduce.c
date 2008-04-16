@@ -56,10 +56,10 @@ int main(int argc, char **argv)
 
   src = source_new();
 
-  if (0 != source_parse_file(src,filename,""))
+  if (source_parse_file(src,filename,"") != 0)
     return -1;
 
-  if (0 != source_process(src))
+  if (source_process(src) != 0)
     return -1;
 
   run_reduction(src);

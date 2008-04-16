@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FUNCDEF SYSTEM "nreduce_FFI.dtd">
+<FUNCDEF>
+	<INTERFACE name="zzip">
+		<METHOD name="readFile">
+			<RESULT name ="content" type="String" ></RESULT>
+			<PARAMETER name="fileName" type="String"></PARAMETER>
+			<PARAMETER name="length" type="int" />
+		</METHOD>
+		<METHOD name="getFileInfo">
+			<RESULT name="content" type="struct_FileInfo" ></RESULT>
+			<PARAMETER name="fileName" type="String" />
+		</METHOD>
+		<METHOD name="getNumChar">
+			<RESULT name="numChar" type="int" ></RESULT>
+		</METHOD>
+	</INTERFACE>
+	<STRUCT name="struct_FileInfo">
+		<CTYPE type="String" ></CTYPE>
+		<CTYPE type="String" />
+		<CTYPE type="String" />
+	</STRUCT>
+</FUNCDEF>

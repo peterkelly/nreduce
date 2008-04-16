@@ -27,6 +27,7 @@
 #include "src/nreduce.h"
 #include "source.h"
 #include "runtime/runtime.h"
+#include "runtime/builtins.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -58,7 +59,6 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
     if (!found) {
       scomb *sc = NULL;
       int bif;
-      int extf;
       char *scname;
 
       if (modname && (NULL == strstr(sym,"::"))) {
@@ -83,11 +83,11 @@ static void resolve_refs_r(source *src, snode *c, stack *bound, list **unbound,
         c->type = SNODE_BUILTIN;
         c->bif = bif;
       }
-      else if ( (extf = get_extfunc(sym)) >= 0){
+      else if ( (bif = get_extfunc(sym)) >= 0){
       	free(c->name);
       	c->name = NULL;
-      	c->type = SNODE_EXTFUNC;
-      	c->extf = extf;
+      	c->type = SNODE_BUILTIN;
+      	c->bif =  bif + MAX_BUILTINS;
       }
       else {
         unboundvar *ubv = (unboundvar*)calloc(1,sizeof(unboundvar));

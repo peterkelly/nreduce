@@ -1,8 +1,0 @@
-# function name, return type, parameter types
-# user should indicate the corresponding c types
-zzip_open ZZIP_FILE* zzip_char_t* int
-p s i
-zzip_read zzip_ssize_t ZZIP_FILE* char* zzip_size_t
-i p s i
-zzip_close int ZZIP_FILE*
-i p

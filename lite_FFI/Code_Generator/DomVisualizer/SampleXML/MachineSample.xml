@@ -1,0 +1,183 @@
+<?xml version="1.0"?>
+<!DOCTYPE SYSTEM-SPEC SYSTEM "Machine-v2.dtd">
+
+<SYSTEM-SPEC >
+  <!-- Here are the generic INTERFACE declarations for a standard prelude -->
+  <INTERFACE name="Process" >  	<!-- generic process - do we hide this? -->
+    <METHOD name="occurrence">		<!-- occurrence of an EVENT -->
+      <RESULT type="void"/>
+      <PARAMETER name="when" type="float"/>   	<!-- the time of the EVENT -->
+      <PARAMETER name="evt" type="Event"/>		<!-- the EVENT type -->
+    </METHOD>
+  </INTERFACE>
+
+  <INTERFACE name="Scheduler" >	<!-- generic process - do we hide this? -->
+    <METHOD name="schedule" >
+      <RESULT type="void" />
+      <PARAMETER name="when" type="float" />	<!-- (simulated) time of the EVENT -->
+      <PARAMETER name="proc" type="Process" />	<!-- receiver (process) of the EVENT -->
+      <PARAMETER name="evt" type="Event" />	<!-- the EVENT -->
+    </METHOD>
+    <METHOD name="cancel" >
+      <RESULT type="void" />
+      <PARAMETER name="when" type="float" />	<!-- (simulated) time of the EVENT -->
+      <PARAMETER name="proc" type="Process" />	<!-- receiver (process) of the EVENT -->
+      <PARAMETER name="evt" type="Event" />	<!-- the EVENT -->
+    </METHOD>    
+  </INTERFACE>
+
+  <!-- Here are the specific INTERFACE declarations for this system -->
+  <INTERFACE name="Switch" >
+    <PARENT name="Process"/>		<!-- seems superflous to say this - hide it? -->
+    <METHOD name="isOn" >
+      <RESULT type="boolean" />
+    </METHOD>
+    <METHOD name="isOff" >
+      <RESULT type="boolean" />
+    </METHOD>
+    <METHOD name="setLight" >
+      <RESULT type="void" />
+      <PARAMETER name="lt" type="Light" />
+    </METHOD>
+    <METHOD name="theLight">
+      <RESULT type="Light" />
+    </METHOD>
+  </INTERFACE>
+  
+  <INTERFACE name="Light" >
+    <PARENT name="Process"/>		<!-- seems superflous to say this - hide it? -->
+    <METHOD name="isOn" >
+      <RESULT type="boolean" />
+    </METHOD>
+    <METHOD name="isOff" >
+      <RESULT type="boolean" />
+    </METHOD>
+  </INTERFACE>
+  
+  <INTERFACE name="Driver" >		<!-- Something to get us started -->
+    <!-- no PARENTs required -->
+    <METHOD name="create">		<!-- somehow we need a constructor to tie things together -->
+      <RESULT type="void" />
+      <PARAMETER name="sw" type="Switch" />
+      <PARAMETER name="lt" type="Light" />
+    </METHOD>
+    <METHOD name="theSwitch">
+      <RESULT type="Switch" />
+    </METHOD>
+    <METHOD name="theLight">
+      <RESULT type="Light" />
+    </METHOD>
+  </INTERFACE>
+  
+  <!-- Here are the CLASS declarations -->
+  <CLASS name="Switch-State" implements="Switch"/>
+  <CLASS name="Light-State" implements="Light"/>
+  <CLASS name="Driver-State" implements="Driver"/>
+  
+  <!-- Here are the MACHINE declarations -->
+  <MACHINE name="Switch-Active" extends="Switch-State" >
+
+    <!-- A new section for EVENTs added - better here than some generic INTERFACE definition -->
+    <EVENTDEF name="turnOn" >
+      <!-- specify PARAMETER types here, as required -->
+    </EVENTDEF>
+    <EVENTDEF name="turnOff" >
+      <!-- specify PARAMETER types here, as required -->
+    </EVENTDEF>
+    
+    <!-- Now the declaration of the STATEs -->
+    <!-- Do we assume that the first listed STATE is the initial one, or do we declare it? -->
+    <STATE name="s1" >
+      <ACTION> System.Out.println("Entering switch state s1") </ACTION>
+      <OUTGOING trans="t1"/>
+      <OUTGOING trans="t2"/>
+    </STATE>
+    <STATE name="s2" >
+      <ACTION> System.Out.println("Entering switch state s2"); </ACTION>
+      <OUTGOING trans="t3"/>
+      <OUTGOING trans="t4"/>
+    </STATE>
+    
+    <!-- Now the declaration of the TRANSITIONs -->
+    <TRANSITION name="t1" >
+      <SOURCE state="s1" />
+      <TARGET state="s1" />
+      <EVENT name="turnOff" />
+      <GUARD> true </GUARD>
+    </TRANSITION>
+    <TRANSITION name="t2" >
+      <SOURCE state="s1" />
+      <TARGET state="s2" />
+      <EVENT name="turnOn" />
+      <GUARD> true </GUARD>
+      <ACTION> send(0.0, theLight(), Light-Active.turnOn() </ACTION>
+    </TRANSITION>
+    <TRANSITION name="t3" >
+      <SOURCE state="s2" />
+      <TARGET state="s2" />
+      <EVENT name="turnOn" />
+      <GUARD> true </GUARD>
+    </TRANSITION>
+    <TRANSITION name="t4" >
+      <SOURCE state="s2" />
+      <TARGET state="s1" />
+      <EVENT name="turnOff" />
+      <GUARD> true </GUARD>
+      <ACTION> send(0.0, theLight(), Light-Active.turnOff() </ACTION>
+    </TRANSITION>
+  </MACHINE>
+
+  <MACHINE name="Light-Active" extends="Light-State" >
+
+    <!-- A new section for EVENTs added - better here than some generic INTERFACE definition -->
+    <EVENTDEF name="turnOn" >
+      <!-- specify PARAMETER types here, as required -->
+    </EVENTDEF>
+    <EVENTDEF name="turnOff" >
+      <!-- specify PARAMETER types here, as required -->
+    </EVENTDEF>
+    
+    <!-- Now the declaration of the STATEs -->
+    <!-- Do we assume that the first listed STATE is the initial one, or do we declare it? -->
+    <STATE name="s1" >
+      <ACTION> System.Out.println("Entering light state s1") </ACTION>
+      <OUTGOING trans="t2"/>
+    </STATE>
+    <STATE name="s2" >
+      <ACTION> System.Out.println("Entering light state s2"); </ACTION>
+      <OUTGOING trans="t4"/>
+    </STATE>
+    
+    <!-- Now the declaration of the TRANSITIONs -->
+    <TRANSITION name="t2" >
+      <SOURCE state="s1" />
+      <TARGET state="s2" />
+      <EVENT name="turnOn" />
+      <GUARD> true </GUARD>
+    </TRANSITION>
+    <TRANSITION name="t4" >
+      <SOURCE state="s2" />
+      <TARGET state="s1" />
+      <EVENT name="turnOff" />
+      <GUARD> true </GUARD>
+    </TRANSITION>
+    
+  </MACHINE>
+  
+  <MACHINE name="Driver-Active" extends="Driver-State" >
+    <STATE name="s1" >
+      <ACTION> theSwitch().setLight(theLight()) </ACTION>
+      <ACTION> send(0.0, theSwitch(), Switch-Active.turnOn() </ACTION>
+    </STATE>
+  </MACHINE>
+  
+  <!-- Here are the INSTANCE declarations - determine main by name or by being last?-->
+  <INSTANCE name="sw1" kind="Switch-Active" >
+  </INSTANCE>					<!-- no ARGUMENTs - default constructor -->
+  <INSTANCE name="lt1" kind="Light-Active" >
+  </INSTANCE>					<!-- no ARGUMENTs - default constructor -->
+  <INSTANCE name="main" kind="Driver-Active" >
+    <ARGUMENT> sw1 </ARGUMENT>			<!-- constructor ARGUMENTs -->
+    <ARGUMENT> lt1 </ARGUMENT>
+  </INSTANCE>
+</SYSTEM-SPEC >

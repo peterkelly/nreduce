@@ -37,7 +37,7 @@
 #define SNODE_STRING      0x09
 #define SNODE_WRAP        0x0A
 #define SNODE_COUNT       0x0B
-#define SNODE_EXTFUNC     0x0C
+//#define SNODE_EXTFUNC     0x0C
 
 #define MODULE_EXTENSION ".elc"
 #define MODULE_FILENAME_PREFIX "(module) "
@@ -63,7 +63,6 @@ typedef struct snode {
   struct snode *body;
   struct scomb *sc;
   int bif;	//// (b)uild(i)n (f)unction
-  int extf; //// external functions
   double num;	//// the number value (type: double), used when the snode is a number node
   int strict;
   sourceloc sl;
