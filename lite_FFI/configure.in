@@ -25,7 +25,7 @@ else
 fi
 rm -f conftest.l lex.yy.c
 
-ALL_LIBS="-lpthread"
+ALL_LIBS="-lpthread -lzzip"
 ALL_INCLUDES=""
 AC_SUBST(ALL_LIBS)
 LDFLAGS="-rdynamic"
