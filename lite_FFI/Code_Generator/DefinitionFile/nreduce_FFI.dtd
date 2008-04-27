@@ -16,11 +16,11 @@
 
 <!-- user-defined c struct -->
 <!ELEMENT STRUCT ((STRUCTCOM|STRUCTDEC)*)>
-<!ATTLIST STRUCT type NMTOKEN #REQUIRED>
+<!ATTLIST STRUCT type NMTOKENS #REQUIRED>
 
 <!-- c struct declare -->
 <!ELEMENT STRUCTDEC EMPTY>
-<!ATTLIST STRUCTDEC name NMTOKEN #REQUIRED type NMTOKEN #REQUIRED>
+<!ATTLIST STRUCTDEC name NMTOKEN #REQUIRED type NMTOKENS #REQUIRED>
 
 <!-- c struct component, containing c types such as int, String -->
 <!ELEMENT STRUCTCOM EMPTY>

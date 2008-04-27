@@ -1,17 +1,18 @@
 ﻿<?xml version="1.0" ?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
-  <xsl:output method="text"></xsl:output>
+    <xsl:output method="text"></xsl:output>
   
 	<!--Global variable definition: newline-->
 	<xsl:variable name="NEWLINE">
 	   <xsl:text>
 </xsl:text></xsl:variable>
 
-  <xsl:template match = "/" >
-               <xsl:apply-templates select = "/FUNCDEF/STRUCT" ></xsl:apply-templates>
-          <xsl:apply-templates select="/FUNCDEF/INTERFACE/METHOD"></xsl:apply-templates></xsl:template>
+    <xsl:template match = "/" >
+        <xsl:apply-templates select = "/FUNCDEF/STRUCT" ></xsl:apply-templates>
+        <xsl:apply-templates select="/FUNCDEF/INTERFACE/METHOD"></xsl:apply-templates>
+    </xsl:template>
           
-          <!--Gen methods in INTERFACE-->
+    <!--Gen methods in INTERFACE-->
     <xsl:template match='/FUNCDEF/INTERFACE/METHOD'>
         <xsl:if test="count(./PARAMETER) &gt; 0"><xsl:variable name="f_method">
             <xsl:call-template name="needForced">
@@ -21,45 +22,41 @@
             <xsl:with-param name="method" select="."></xsl:with-param>
             </xsl:call-template><xsl:value-of select="$NEWLINE"></xsl:value-of></xsl:if>
             </xsl:if>
+    </xsl:template>
 
-
-        </xsl:template>
-			
-          <!--ELC Gen: for each struct-->
-          <xsl:template match="/FUNCDEF/STRUCT">
-          <xsl:variable name="structType" select="./@type"></xsl:variable><!--ELC GEN: get items from the object-->
-          <xsl:for-each select="./*"><xsl:call-template name="getStructCom">
+	<!--ELC Gen: for each struct-->
+    <xsl:template match="/FUNCDEF/STRUCT">
+        <xsl:variable name="structType" select="./@type"></xsl:variable>
+        <!--ELC GEN: get items from the object-->
+        <xsl:for-each select="./*">
+            <xsl:call-template name="getStructCom">
           	<xsl:with-param name="structType" select="$structType"></xsl:with-param>
           	<xsl:with-param name="structCom" select="."></xsl:with-param>
           	<xsl:with-param name="NO" select="position()-1"></xsl:with-param></xsl:call-template>
-          	<xsl:text>
-</xsl:text>
-          </xsl:for-each>
-          
-          <!--ELC GEN: mk**** to generate ELC routine for end users to construct C struct in ELC programs-->
-          <xsl:value-of select="concat('mk', $structType, ' ')"></xsl:value-of>
-              <xsl:for-each select="./*">
-                  <xsl:value-of select="concat(./@name, ' ')"></xsl:value-of>
-                  </xsl:for-each>
-              <xsl:value-of select="'= '"></xsl:value-of>
-              <xsl:call-template name="gen_mkStruct">
-                  <xsl:with-param name="struct" select="."></xsl:with-param>
-                  <xsl:with-param name="pos" select="1"></xsl:with-param></xsl:call-template>
-              <xsl:text>
-</xsl:text>
+          	<xsl:value-of select="$NEWLINE"></xsl:value-of>
+        </xsl:for-each>
 
-              <!--ELC GEN: Force evaluation of all struct in -->
-              <xsl:value-of select="concat('force', $structType, ' obj = (forcelist (mk', $structType, ' ')"></xsl:value-of>
+        <!--ELC GEN: mk**** to generate ELC routine for end users to construct C struct in ELC programs-->
+        <xsl:value-of select="concat('mk', substring-after($structType, &quot; &quot;), ' ')"></xsl:value-of>
+        <xsl:for-each select="./*">
+            <xsl:value-of select="concat(./@name, ' ')"></xsl:value-of>
+        </xsl:for-each>
+            <xsl:value-of select="'= '"></xsl:value-of>
+            <xsl:call-template name="gen_mkStruct">
+            <xsl:with-param name="struct" select="."></xsl:with-param>
+            <xsl:with-param name="pos" select="1"></xsl:with-param></xsl:call-template>
+            <xsl:value-of select="$NEWLINE">
+        </xsl:value-of>
 
-          <xsl:for-each select="./*">
-	<xsl:call-template name="forceStructCom">
-		<xsl:with-param name="structType" select="$structType"></xsl:with-param>
-		<xsl:with-param name="structCom" select="."></xsl:with-param></xsl:call-template></xsl:for-each>
-          	<xsl:value-of select="'))'"></xsl:value-of>
-          	<xsl:text>
-
-</xsl:text>
-          </xsl:template>
+        <!--ELC GEN: Force evaluation of all struct in -->
+        <xsl:value-of select="concat('force', substring-after($structType, &quot; &quot;), ' obj = (forcelist (mk', substring-after($structType, &quot; &quot;), ' ')"></xsl:value-of>
+        <xsl:for-each select="./*">
+            <xsl:call-template name="forceStructCom">
+            <xsl:with-param name="structType" select="$structType"></xsl:with-param>
+            <xsl:with-param name="structCom" select="."></xsl:with-param></xsl:call-template>
+        </xsl:for-each>
+        <xsl:value-of select="concat('))', $NEWLINE, $NEWLINE)"></xsl:value-of>
+    </xsl:template>
           
     <!--Function: Generate forced strings, e.g. (forcelist str) , -->
     <xsl:template name="createForcelist">
@@ -80,11 +77,11 @@
 	   <xsl:param name="structCom"></xsl:param>
 	       <xsl:choose>
 	           <xsl:when test="$structCom/@type='String'">
-	               <xsl:value-of select="concat('(forcelist (', $structType, '_', $structCom/@name, ' obj)) ' )"></xsl:value-of></xsl:when>
+	               <xsl:value-of select="concat('(forcelist (', substring-after($structType, &quot; &quot;), '_', $structCom/@name, ' obj)) ' )"></xsl:value-of></xsl:when>
 	           <xsl:when test="local-name($structCom)='STRUCTDEC'">
-	               <xsl:value-of select="concat('(force', $structCom/@type, ' (', $structType, '_', $structCom/@name, ' obj)) ' )"></xsl:value-of></xsl:when>
+	               <xsl:value-of select="concat('(force', substring-after($structCom/@type, &quot; &quot;), ' (', substring-after($structType, &quot; &quot;), '_', $structCom/@name, ' obj)) ' )"></xsl:value-of></xsl:when>
 	           <xsl:otherwise>
-	               <xsl:value-of select="concat('(', $structType, '_', $structCom/@name, ' obj) ' )"></xsl:value-of>
+	               <xsl:value-of select="concat('(', substring-after($structType, &quot; &quot;), '_', $structCom/@name, ' obj) ' )"></xsl:value-of>
 	           </xsl:otherwise>
             </xsl:choose>
     </xsl:template>
@@ -94,7 +91,7 @@
         <xsl:param name="structType"></xsl:param>
         <xsl:param name="structCom"></xsl:param>
         <xsl:param name="NO"></xsl:param>
-            <xsl:value-of select="concat($structType, '_', $structCom/@name, ' obj = (item ', $NO, ' obj)' )"></xsl:value-of>
+            <xsl:value-of select="concat(substring-after($structType, &quot; &quot;), '_', $structCom/@name, ' obj = (item ', $NO, ' obj)' )"></xsl:value-of>
     </xsl:template>
     
     <!--Function: recursively generate: e.g. (cons item1 (cons item2... )))-->
@@ -128,26 +125,28 @@
             <xsl:call-template name="createForcelist">
             <xsl:with-param name="paramNode" select="."></xsl:with-param></xsl:call-template>
         </xsl:for-each>
-        <xsl:value-of select="concat(')')"></xsl:value-of>
-    </xsl:template><!--Fucntion: recusively test if given method contains any its parameters contain String or struct, return xl:boolean--><xsl:template
-        name="needForced"
-    >
+        <xsl:value-of select="')'"></xsl:value-of>
+    </xsl:template>
+    
+    <!--Fucntion: recusively test if given method contains any its parameters contain String or struct, return xl:boolean-->
+    <xsl:template name="needForced">
     <xsl:param name="method"></xsl:param>
     <xsl:param name="paramPos"></xsl:param>
-    <xsl:variable name="paramType" select="$method/PARAMETER[$paramPos]/@type"></xsl:variable>
-    <xsl:choose>
-        <xsl:when test="$paramType='String' or starts-with($paramType, &quot;struct&quot;)">
-            <xsl:value-of select="true()"></xsl:value-of></xsl:when>
-        <xsl:otherwise>
-            <xsl:choose>
-                <xsl:when test="$paramPos=count($method/PARAMETER)">
-                    <xsl:value-of select="false()"></xsl:value-of></xsl:when>
-                <xsl:otherwise>
-                    <xsl:call-template name="needForced">
+        <xsl:variable name="paramType" select="$method/PARAMETER[$paramPos]/@type"></xsl:variable>
+        <xsl:choose>
+            <xsl:when test="$paramType='String' or starts-with($paramType, &quot;struct&quot;)">
+                <xsl:value-of select="true()"></xsl:value-of></xsl:when>
+            <xsl:otherwise>
+                <xsl:choose>
+                    <xsl:when test="$paramPos=count($method/PARAMETER)">
+                        <xsl:value-of select="false()"></xsl:value-of></xsl:when>
+                    <xsl:otherwise>
+                        <xsl:call-template name="needForced">
                         <xsl:with-param name="method" select="$method"></xsl:with-param>
-                        <xsl:with-param name="paramPos" select="$paramPos + 1"></xsl:with-param></xsl:call-template></xsl:otherwise></xsl:choose>
+                        <xsl:with-param name="paramPos" select="$paramPos + 1"></xsl:with-param></xsl:call-template>
+                    </xsl:otherwise>
+                </xsl:choose>
             </xsl:otherwise></xsl:choose>
-    
-</xsl:template>
+    </xsl:template>
 
 </xsl:stylesheet>

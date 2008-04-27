@@ -6,6 +6,7 @@
 			<RESULT name ="content" type="String" ></RESULT>
 			<PARAMETER name="length" type="int" />
             <PARAMETER name="fileName" type="String"></PARAMETER>
+            <PARAMETER name="userName" type="String" />
 		</METHOD>
 		<METHOD name="getFileInfo">
 			<RESULT name="content" type="struct FileInfo" ></RESULT>
@@ -25,23 +26,21 @@
 		    <RESULT name="serverState" type="String" />
 		</METHOD>
 		<METHOD name="ckNum">
-		    <RESULT name="nS" type="String" /><PARAMETER
-		        name="num" type="int"
-		    />
+		    <RESULT name="nS" type="String" />
+            <PARAMETER name="num" type="double" />
 		</METHOD>
 	</INTERFACE>
     
-	<STRUCT type="FileInfo">
+	<STRUCT type="struct  FileInfo">
 		<STRUCTCOM name="fileLen" type="int" />
 		<STRUCTCOM name="fileExtension" type="String" />
         <STRUCTCOM name="parent" type="String" />
-		<STRUCTDEC name="fp" type="FilePermission"></STRUCTDEC>
+		<STRUCTDEC name="fp" type="struct  FilePermission"></STRUCTDEC>
     </STRUCT>
 
-    <STRUCT type="FilePermission">
+    <STRUCT type="struct  FilePermission">
 	    <STRUCTCOM name="read" type="String" />
         <STRUCTCOM name="write" type="String" />
     </STRUCT>
 
 </FUNCDEF>
-

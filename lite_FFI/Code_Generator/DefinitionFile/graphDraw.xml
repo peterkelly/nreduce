@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FUNCDEF SYSTEM "nreduce_FFI.dtd">
+<FUNCDEF>
+    <INTERFACE name="graph">
+        <METHOD name="drawRectangles">
+            <RESULT name="numRect" type="int" />
+            <PARAMETER name="userName" type="String" />
+            <PARAMETER name="xPos" type="double" />
+            <PARAMETER name="yPos" type="int" />
+            <PARAMETER name="rect" type="struct Rectangle" />
+        </METHOD>
+        <METHOD name="enlargeRect">
+            <RESULT name="rect_return" type="struct Rectangle" />
+            <PARAMETER name="originalRect" type="struct Rectangle" />
+            <PARAMETER name="times" type="int" />
+        </METHOD>
+    </INTERFACE>
+
+    <STRUCT type="struct Rectangle">
+        <STRUCTCOM name="width" type="int" />
+        <STRUCTCOM name="creator" type="String" />
+        <STRUCTCOM name="height" type="int" ></STRUCTCOM>
+        <STRUCTDEC name="col" type="struct Color" />
+    </STRUCT>
+
+    <STRUCT type="struct Color">
+        <STRUCTCOM name="red" type="int" />
+        <STRUCTCOM name="blue" type="int" />
+        <STRUCTCOM name="green" type="int" />
+        <STRUCTDEC name="cg" type="struct gray" />
+    </STRUCT>
+    
+    <STRUCT type="struct gray">
+        <STRUCTCOM name="country" type="String" />
+        <STRUCTCOM name="grayCode" type="int" /></STRUCT>
+
+</FUNCDEF>
