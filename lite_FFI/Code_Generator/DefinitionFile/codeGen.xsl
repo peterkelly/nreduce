@@ -75,7 +75,12 @@
         <xsl:call-template name="returnResult">
         <xsl:with-param name="method" select="."></xsl:with-param>
         </xsl:call-template>
-        <xsl:value-of select="concat('}', $NEWLINE)"></xsl:value-of>
+        <!--free return struct pointer-->
+        <xsl:if test='starts-with(./RESULT/@type, "struct")'>
+            <xsl:value-of select="concat($NEWLINE, $INDENT, '/* Free the return struct */', $NEWLINE)"></xsl:value-of>
+            <xsl:value-of select="concat($INDENT, 'free_', substring-after(./RESULT/@type, &quot; &quot;), '(', ./RESULT/@name, ');', $NEWLINE)"></xsl:value-of>
+        </xsl:if>
+        <xsl:value-of select="concat('}', $NEWLINE, $NEWLINE)"></xsl:value-of>
     </xsl:template>
       
 
