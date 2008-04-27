@@ -95,11 +95,11 @@ public class DomVisualizer extends JPanel {
         JTree tree = new JTree(new DomToTreeModelAdapter());
 
 //        JTree tree = new JTree();
-        
+
         // Iterate over the tree and make nodes visible
         // (Otherwise, the tree shows up fully collapsed)
         //TreePath nodePath = ???;
-        //  tree.expandPath(nodePath); 
+        //  tree.expandPath(nodePath);
         JScrollPane treeView = new JScrollPane(tree);
         treeView.setPreferredSize(new Dimension(leftWidth, windowHeight));
 
@@ -131,7 +131,7 @@ public class DomVisualizer extends JPanel {
 
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 
-        //factory.setValidating(true);   
+        //factory.setValidating(true);
         //factory.setNamespaceAware(true);
         try {
             DocumentBuilder builder = factory.newDocumentBuilder();
@@ -255,7 +255,7 @@ public class DomVisualizer extends JPanel {
         }
 
         public AdapterNode child(int searchIndex) {
-            //Note: JTree index is zero-based. 
+            //Note: JTree index is zero-based.
             org.w3c.dom.Node node = domNode.getChildNodes()
                                            .item(searchIndex);
 
@@ -268,8 +268,8 @@ public class DomVisualizer extends JPanel {
         }
     }
 
-    // This adapter converts the current Document (a DOM) into 
-    // a JTree model. 
+    // This adapter converts the current Document (a DOM) into
+    // a JTree model.
     public class DomToTreeModelAdapter implements javax.swing.tree.TreeModel {
         /*
          * Use these methods to add and remove event listeners.

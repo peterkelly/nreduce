@@ -96,3 +96,26 @@ stringtonum str =
 
 error str =
 (error1 (forcelist str))
+
+
+Rectangle_width obj = (item 0 obj)
+Rectangle_creator obj = (item 1 obj)
+Rectangle_height obj = (item 2 obj)
+Rectangle_col obj = (item 3 obj)
+mkRectangle width creator height col = (cons width (cons creator (cons height (cons col nil))))
+forceRectangle obj = (forcelist (mkRectangle (Rectangle_width obj) (forcelist (Rectangle_creator obj)) (Rectangle_height obj) (forceColor (Rectangle_col obj)) ))
+
+Color_red obj = (item 0 obj)
+Color_blue obj = (item 1 obj)
+Color_green obj = (item 2 obj)
+Color_cg obj = (item 3 obj)
+mkColor red blue green cg = (cons red (cons blue (cons green (cons cg nil))))
+forceColor obj = (forcelist (mkColor (Color_red obj) (Color_blue obj) (Color_green obj) (forcegray (Color_cg obj)) ))
+
+gray_country obj = (item 0 obj)
+gray_grayCode obj = (item 1 obj)
+mkgray country grayCode = (cons country (cons grayCode nil))
+forcegray obj = (forcelist (mkgray (forcelist (gray_country obj)) (gray_grayCode obj) ))
+
+drawRectangles userName xPos yPos rect = (drawRectangles1 (forcelist userName) xPos yPos (forceRectangle rect) )
+enlargeRect originalRect times = (enlargeRect1 (forceRectangle originalRect) times )

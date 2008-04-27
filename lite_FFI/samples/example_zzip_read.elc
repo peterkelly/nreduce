@@ -1,0 +1,12 @@
+
+
+main = (letrec
+           filename = "/home/smaxll/workspace/nreduce_lite2008/src/test/README"
+         in
+           (zzip_read filename))
+
+
+
+
+
+

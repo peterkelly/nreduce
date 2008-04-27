@@ -32,7 +32,7 @@
 
 /*** head files end ***/
 
-#define NUM_EXTFUNCS     4
+#define NUM_EXTFUNCS     6
 
 
 extern const extfunc extfunc_info[NUM_EXTFUNCS];
