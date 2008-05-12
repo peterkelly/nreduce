@@ -1,0 +1,7 @@
+//import zzip
+
+g = (mkgray "China" 99)
+oriRectangle = (mkRectangle 10 "CoC" 15 (mkColor 100 150 200 g))
+newRect = (enlargeRect oriRectangle 2)
+
+main = (gray_country (Color_cg (Rectangle_col newRect)))
