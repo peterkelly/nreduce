@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FUNCDEF SYSTEM "nreduce_FFI.dtd">
+<FUNCDEF>
+    <INTERFACE name="imagemagick">
+        <METHOD name="magickResizeImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="columns" type="int" />
+            <PARAMETER name="rows" type="int" />
+            <PARAMETER name="magickFilter" type="int" ></PARAMETER>
+            <PARAMETER name="blur" type="double" />
+        </METHOD>
+        
+        <METHOD name="magickRotateImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="degree" type="double" />
+        </METHOD>
+        
+        <METHOD name="magickChopImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="width" type="int" />
+            <PARAMETER name="height" type="int" />
+            <PARAMETER name="xPos" type="int" />
+            <PARAMETER name="yPos" type="int" ></PARAMETER>
+        </METHOD>
+        
+        <METHOD name="magickCompressImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="format" type="String" />
+            <PARAMETER name="compressionType" type="int" />
+            <PARAMETER name="compressionRate" type="double" />
+        </METHOD>
+        
+        <METHOD name="magickUnsharpMaskImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="radius" type="double" />
+            <PARAMETER name="sigma" type="double" />
+            <PARAMETER name="amount" type="double" />
+            <PARAMETER name="threshold" type="double" />
+        </METHOD>
+        
+        <METHOD name="magickThumbnailImage">
+            <RESULT name="result" type="int" ></RESULT>
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="columns" type="int" />
+            <PARAMETER name="rows" type="int" />
+        </METHOD>
+        
+        <METHOD name="magickMotionBlurImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="radius" type="double" />
+            <PARAMETER name="sigma" type="double" />
+            <PARAMETER name="angle" type="double" />
+        </METHOD>
+
+        <METHOD name="magickModulateImage">
+            <RESULT name="result" type="int" />
+            <PARAMETER name="imageFile" type="String" />
+            <PARAMETER name="outputImage" type="String" />
+            <PARAMETER name="brightness" type="double" />
+            <PARAMETER name="saturation" type="double" />
+            <PARAMETER name="hue" type="double" />
+        </METHOD>
+    </INTERFACE>
+</FUNCDEF>
+

@@ -1,0 +1,8 @@
+magickResizeImage imageFile outputImage columns rows magickFilter blur = (magickResizeImage1 (forcelist imageFile) (forcelist outputImage) columns rows magickFilter blur )
+magickRotateImage imageFile outputImage degree = (magickRotateImage1 (forcelist imageFile) (forcelist outputImage) degree )
+magickChopImage imageFile outputImage width height xPos yPos = (magickChopImage1 (forcelist imageFile) (forcelist outputImage) width height xPos yPos )
+magickCompressImage imageFile outputImage format compressionType compressionRate = (magickCompressImage1 (forcelist imageFile) (forcelist outputImage) (forcelist format) compressionType compressionRate )
+magickUnsharpMaskImage imageFile outputImage radius sigma amount threshold = (magickUnsharpMaskImage1 (forcelist imageFile) (forcelist outputImage) radius sigma amount threshold )
+magickThumbnailImage imageFile outputImage columns rows = (magickThumbnailImage1 (forcelist imageFile) (forcelist outputImage) columns rows )
+magickMotionBlurImage imageFile outputImage radius sigma angle = (magickMotionBlurImage1 (forcelist imageFile) (forcelist outputImage) radius sigma angle )
+magickModulateImage imageFile outputImage brightness saturation hue = (magickModulateImage1 (forcelist imageFile) (forcelist outputImage) brightness saturation hue )

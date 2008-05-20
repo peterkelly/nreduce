@@ -1,0 +1,18 @@
+import imagemagick
+       
+//main = (numtostring (imagemagick::magickResizeImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_resize" 80 106 5 1.0))
+
+//main = (numtostring (imagemagick::magickRotateImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_rotate.png" 2.0))
+       
+//main = (numtostring (imagemagick::magickChopImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_chop.jpg" 0 0 50 50))
+
+//main = (numtostring (imagemagick::magickCompressImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_compression" "JPG" 1 21.0))
+         
+//main = (numtostring (imagemagick::magickThumbnailImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_Thumbnail" 80 100))
+       
+//main = (numtostring (imagemagick::magickUnsharpMaskImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_Unsharp" 4.5 4.0 4.5 0.02))
+
+//main = (numtostring (imagemagick::magickMotionBlurImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_MotionBlur" 20 30.5 150))
+
+main = (numtostring (imagemagick::magickModulateImage "/home/smaxll/temp/jg.JPG" "/home/smaxll/temp/jg_out_MOdulate" 140 50 100))
+
