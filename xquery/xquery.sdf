@@ -1,0 +1,508 @@
+module xquery
+exports 
+
+  sorts OpenB CloseB Colon CommentPart BlockComment
+  lexical syntax
+    [\ \t\n\r]    -> LAYOUT
+    BlockComment -> LAYOUT
+
+    "(:" CommentPart* ":)" -> BlockComment
+    ~[\)\:]      -> CommentPart
+    Colon        -> CommentPart
+    OpenB        -> CommentPart
+    CloseB        -> CommentPart
+    BlockComment -> CommentPart 
+    [\(] -> OpenB
+    [\)] -> CloseB
+    [\:] -> Colon
+
+  lexical restrictions
+    Colon -/- [\)]
+    OpenB -/- [\:]
+
+  context-free restrictions
+    LAYOUT? -/- [\ \t\n\r]
+    LAYOUT? -/- [\(].[\:]
+    NCName -/- [A-Za-z0-9\.\-\_]
+    QName -/- [A-Za-z0-9\.\-\_]
+
+context-free start-symbols Module
+
+%% --------------------------- Declarations ------------------------------
+
+sorts Module Prolog Setter Import
+sorts VersionDecl ModuleDecl NamespaceDecl BoundarySpaceDecl DefaultNamespaceDecl
+sorts OptionDecl OrderingModeDecl EmptyOrderDecl CopyNamespacesDecl DefaultCollationDecl
+sorts PreserveMode InheritMode BaseURIDecl SchemaImport SchemaPrefix ModuleImport
+sorts VarDecl ConstructionDecl FunctionDecl Param
+sorts AtURILiterals
+sorts PrologPart1 PrologPart2
+
+context-free syntax
+
+VersionDecl? ModuleDecl Prolog      -> Module {cons("LibraryModule")}              %% [1],[4]
+VersionDecl? Prolog QueryBody       -> Module {cons("MainModule")}                 %% [1],[3]
+"xquery" "version" StringLiteral
+("encoding" StringLiteral)? ";"     -> VersionDecl {cons("VersionDecl")}           %% [2]
+"module" "namespace"
+NCName "=" URILiteral ";"           -> ModuleDecl {cons("ModuleDecl")}             %% [5]
+PrologPart1* PrologPart2*
+                                    -> Prolog {cons("Prolog")}                     %% [6]
+DefaultNamespaceDecl                -> PrologPart1                                 %% [6]
+Setter                              -> PrologPart1                                 %% [6]
+NamespaceDecl                       -> PrologPart1                                 %% [6]
+Import                              -> PrologPart1                                 %% [6]
+VarDecl                             -> PrologPart2                                 %% [6]
+FunctionDecl                        -> PrologPart2                                 %% [6]
+OptionDecl                          -> PrologPart2                                 %% [6]
+
+BoundarySpaceDecl                   -> Setter                                      %% [7]
+DefaultCollationDecl                -> Setter                                      %% [7]
+BaseURIDecl                         -> Setter                                      %% [7]
+ConstructionDecl                    -> Setter                                      %% [7]
+OrderingModeDecl                    -> Setter                                      %% [7]
+EmptyOrderDecl                      -> Setter                                      %% [7]
+CopyNamespacesDecl                  -> Setter                                      %% [7]
+
+SchemaImport                        -> Import                                      %% [8]
+ModuleImport                        -> Import                                      %% [8]
+
+"declare" "namespace" NCName "=" URILiteral ";"
+                                    -> NamespaceDecl {cons("NamespaceDecl")}       %% [10]
+"declare" "boundary-space" ("preserve" | "strip") ";"
+                                    -> BoundarySpaceDecl {cons("BoundarySpaceDecl")}  %% [11]
+"declare" "default" "element" "namespace" URILiteral ";"
+                                    -> DefaultNamespaceDecl {cons("DefaultElemNS")} %% [12]
+"declare" "default" "function" "namespace" URILiteral ";"
+                                    -> DefaultNamespaceDecl {cons("DefaultFunNS")} %% [12]
+"declare" "option" QName StringLiteral ";"
+                                    -> OptionDecl {cons("OptionDecl")}             %% [13]
+"declare" "ordering" ("ordered" | "unordered") ";"
+                                    -> OrderingModeDecl {cons("OrderingModeDecl")} %% [14]
+"declare" "default" "order" "empty" ("greatest" | "least") ";"
+                                    -> EmptyOrderDecl {cons("EmptyOrderDecl")}     %% [15]
+"declare" "copy-namespaces" PreserveMode "," InheritMode ";"
+                                    -> CopyNamespacesDecl {cons("CopyNamespacesDecl")}  %% [16]
+"preserve" | "no-preserve"          -> PreserveMode {cons("PreserveMode")}         %% [17]
+"inherit" | "no-inherit"            -> InheritMode {cons("InheritMode")}           %% [18]
+"declare" "default" "collation" URILiteral ";"
+                                    -> DefaultCollationDecl {cons("DefaultCollationDecl")}  %% [19]
+"declare" "base-uri" URILiteral ";" -> BaseURIDecl {cons("BaseURIDecl")}           %% [20]
+
+"import" "schema" SchemaPrefix? URILiteral AtURILiterals? ";"
+                                    -> SchemaImport {cons("SchemaImport")}         %% [21]
+("at" {URILiteral ","}+)            -> AtURILiterals {cons("URIs")}
+"namespace" NCName "="              -> SchemaPrefix {cons("SchemaPrefix")}         %% [22]
+"default" "element" "namespace"     -> SchemaPrefix {cons("DefaultSchemaPrefix")}  %% [22]
+"import" "module" ("namespace" NCName "=")? URILiteral AtURILiterals? ";"
+                                    -> ModuleImport {cons("ModuleImport")}         %% [23]
+"declare" "variable" "$" QName TypeDeclaration? (":=" Expr) ";"
+                                    -> VarDecl {cons("VarDecl")}                   %% [24]
+"declare" "variable" "$" QName TypeDeclaration? "external" ";"
+                                    -> VarDecl {cons("ExternalVarDecl")}           %% [24]
+"declare" "construction" ("strip" | "preserve") ";"
+                                    -> ConstructionDecl {cons("Construction")}     %% [25]
+
+"declare" "function" QName "(" {Param ","}* ")" ("as" SequenceType)? EnclosedExpr ";"
+                                    -> FunctionDecl {cons("Function")}             %% [26]
+
+"declare" "function" QName "(" {Param ","}* ")" ("as" SequenceType)? "external" ";"
+                                    -> FunctionDecl {cons("ExternalFunction")}     %% [26]
+
+"$" QName TypeDeclaration?          -> Param {cons("Param")}                       %% [28]
+
+%% --------------------------- Expressions ------------------------------
+
+sorts ValidationMode Pragma
+sorts QueryBody EnclosedExpr Expr
+sorts ForClause ForPart LetClause LetPart PositionalVar
+sorts WhereClause OrderByClause OrderSpec OrderModifier CaseClause
+sorts ForwardStep AbbrevForwardStep ReverseStep AbbrevReverseStep
+sorts Call FunctionName Predicate
+
+context-free syntax
+
+"lax" | "strict"                    -> ValidationMode {cons("ValidationMode")}     %% [64]
+"(#" S? QName (S PragmaContents)? "#)"
+                                    -> Pragma {cons("Pragma")}                    %% [66]
+
+%% FIXME: ExprSingle handling
+
+"{" Expr "}"                        -> EnclosedExpr {cons("Enclosed")}             %% [29]
+Expr                                -> QueryBody                                   %% [30]
+
+"for" {ForPart ","}+                -> ForClause{cons("For")}                      %% [34]
+"$" VarName TypeDeclaration? PositionalVar? "in" Expr
+                                    -> ForPart {cons("ForPart")}                   %% [34]
+"let" {LetPart ","}+                -> LetClause {cons("Let")}                    %% [36]
+"$" VarName TypeDeclaration? ":=" Expr
+                                    -> LetPart {cons("LetPart")}                  %% [36]
+"at" "$" VarName                    -> PositionalVar {cons("PositionalVar")}       %% [35]
+"where" Expr                        -> WhereClause {cons("Where")}                 %% [37]
+"order" "by" {OrderSpec ","}+       -> OrderByClause {cons("OrderBy")}             %% [38]
+"stable" "order" "by" {OrderSpec ","}+
+                                    -> OrderByClause {cons("StableOrderBy")}      %% [38]
+("ascending" | "descending")? ("empty" ("greatest" | "least"))? ("collation" URILiteral)?
+                                    -> OrderModifier {cons("OrderModifier")}       %% [41]
+"case" SequenceType "return" Expr   -> CaseClause {cons("Case1")}                  %% [44]
+"case" "$" VarName "as" SequenceType "return" Expr
+                                    -> CaseClause {cons("Case2")}                  %% [44]
+
+ForwardAxis NodeTest                -> ForwardStep {cons("ForwardStep")}           %% [72]
+AbbrevForwardStep                   -> ForwardStep                                 %% [72]
+NodeTest                            -> AbbrevForwardStep {cons("ForwardStepChild")} %% [74]
+"@" NodeTest                        -> AbbrevForwardStep {cons("ForwardStepAttr")} %% [74]
+ReverseAxis NodeTest                -> ReverseStep {cons("ReverseStep")}           %% [75]
+AbbrevReverseStep                   -> ReverseStep                                 %% [75]
+".."                                -> AbbrevReverseStep {cons("ReverseStepParent")}    %% [77]
+StringLiteral                       -> Expr {cons("String")}                       %% [85]
+IntegerLiteral                      -> Expr {cons("Integer")}                      %% [85],[86]
+DecimalLiteral                      -> Expr {cons("Decimal")}                      %% [85],[86]
+DoubleLiteral                       -> Expr {cons("Double")}                       %% [85],[86]
+"$" VarName                         -> Expr {cons("VarRef")}                       %% [87]
+"(" ")"                             -> Expr {cons("EmptySeq")}                     %% [89]
+"(" Expr ")"                        -> Expr {bracket}                              %% [89]
+"."                                 -> Expr {cons("ContextItem")}                  %% [90]
+FunctionName "(" {Expr ","}* ")"    -> Call {cons("Call")}                         %% [93]
+QName                               -> FunctionName
+Call                                -> Expr
+"ordered" "{" Expr "}"              -> Expr {cons("Ordered")}                      %% [91]
+"unordered" "{" Expr "}"            -> Expr {cons("Unordered")}                    %% [92]
+Constructor                         -> Expr                                        %% [84]
+"[" Expr "]"                        -> Predicate {cons("Predicate")}
+
+context-free priorities
+  { Expr Predicate                  -> Expr {cons("Filter")} }
+> { ForwardStep Predicate           -> ForwardStep {cons("Filter")}
+    ReverseStep Predicate           -> ReverseStep {cons("Filter")}
+    ForwardStep                     -> Expr {cons("ForwardAxisStep")}
+    ReverseStep                     -> Expr {cons("ReverseAxisStep")} }
+> { right:
+    Expr "/" Expr                   -> Expr {cons("Step"),right}                   %% [69]
+    Expr "/" "/" Expr               -> Expr {cons("Step2"),right}                } %% [69]
+> { "validate" ValidationMode? "{" Expr "}"
+                                    -> Expr {cons("Validate")}                 } %% [63]
+> { Pragma+ "{" Expr? "}"           -> Expr {cons("Extension")}                  } %% [65]
+> { non-assoc:
+    "/"                             -> Expr {cons("Root")}                         %% [68]
+    "/" Expr                        -> Expr {cons("RootPath"),non-assoc}           %% [68]
+    "//" Expr                       -> Expr {cons("RootPath2"),non-assoc}        } %% [68]
+> { non-assoc:
+    "-" Expr                        -> Expr {cons("UnaryMinus"),non-assoc}         %% [58]
+    "+" Expr                        -> Expr {cons("UnaryPlus"),non-assoc}        } %% [58]
+> { non-assoc: Expr ("cast" "as" SingleType)
+                                    -> Expr {cons("Cast"),non-assoc}             } %% [57]
+> { non-assoc: Expr ("castable" "as" SingleType)
+                                    -> Expr {cons("Castable"),non-assoc}         } %% [56]
+> { non-assoc: Expr ("treat" "as" SequenceType)
+                                    -> Expr {cons("Treat"),non-assoc}            } %% [55]
+> { non-assoc: Expr ("instance" "of" SequenceType)
+                                    -> Expr {cons("InstanceOf"),non-assoc}       } %% [54]
+> { left:
+    Expr "intersect" Expr           -> Expr {cons("Intersect"),left}               %% [53]
+    Expr "except" Expr              -> Expr {cons("Except"),left}                } %% [53]
+> { left:
+    Expr "union" Expr               -> Expr {cons("Union"),left}                   %% [52]
+    Expr "|" Expr                   -> Expr {cons("Union"),left}                 } %% [52]
+> { left:
+    Expr "*" Expr                   -> Expr {cons("Mul"),left}                     %% [51]
+    Expr "div" Expr                 -> Expr {cons("Div"),left}                     %% [51]
+    Expr "idiv" Expr                -> Expr {cons("IDiv"),left}                    %% [51]
+    Expr "mod" Expr                 -> Expr {cons("Mod"),left}                   } %% [51]
+> { left:
+    Expr "+" Expr                   -> Expr {cons("Add"),left}                 %% [50]
+    Expr "-" Expr                   -> Expr {cons("Sub"),left}               } %% [50]
+> { non-assoc:
+    Expr "to" Expr                  -> Expr {cons("Range"),non-assoc}        } %% [49]
+%% note: comparison operators below are actually supposed to be non-associative,
+%% but using non-assoc here is expensive and generates a huge parse table
+> { left: Expr "=" Expr             -> Expr {cons("GeneralEq"),non-assoc}        } %% [48],[60]
+> { left: Expr "!=" Expr            -> Expr {cons("GeneralNe"),non-assoc}        } %% [48],[60]
+> { left: Expr "<" Expr             -> Expr {cons("GeneralLt"),non-assoc}        } %% [48],[60]
+> { left: Expr "<=" Expr            -> Expr {cons("GeneralLe"),non-assoc}        } %% [48],[60]
+> { left: Expr ">" Expr             -> Expr {cons("GeneralGt"),non-assoc}        } %% [48],[60]
+> { left: Expr ">=" Expr            -> Expr {cons("GeneralGe"),non-assoc}        } %% [48],[60]
+> { left: Expr "eq" Expr            -> Expr {cons("ValueEq"),non-assoc}          } %% [48],[61]
+> { left: Expr "ne" Expr            -> Expr {cons("ValueNe"),non-assoc}          } %% [48],[61]
+> { left: Expr "lt" Expr            -> Expr {cons("ValueLt"),non-assoc}          } %% [48],[61]
+> { left: Expr "le" Expr            -> Expr {cons("ValueLe"),non-assoc}          } %% [48],[61]
+> { left: Expr "gt" Expr            -> Expr {cons("ValueGt"),non-assoc}          } %% [48],[61]
+> { left: Expr "ge" Expr            -> Expr {cons("ValueGe"),non-assoc}          } %% [48],[61]
+> { left: Expr "is" Expr            -> Expr {cons("Is"),non-assoc}               } %% [48],[62]
+> { left: Expr "<<" Expr            -> Expr {cons("Precedes"),non-assoc}         } %% [48],[62]
+> { left: Expr ">>" Expr            -> Expr {cons("Follows"),non-assoc}          } %% [48],[62]
+> { left: Expr "and" Expr           -> Expr {cons("And"),left}                   } %% [47]
+> { left: Expr "or" Expr            -> Expr {cons("Or"),left}                    } %% [46]
+> { non-assoc:
+    (ForClause | LetClause)+ WhereClause? OrderByClause? "return" Expr
+                                    -> Expr {cons("FLWOR")}                        %% [33]
+    "some" {("$" VarName TypeDeclaration? "in" Expr) ","}+ "satisfies" Expr
+                                    -> Expr {cons("Some")}                         %% [42]
+    "every" {("$" VarName TypeDeclaration? "in" Expr) ","}+ "satisfies" Expr
+                                    -> Expr {cons("Every")}                        %% [42]
+    "typeswitch" "(" Expr ")" CaseClause+ "default" ("$" VarName)? "return" Expr
+                                    -> Expr {cons("TypeSwitch")}                   %% [43]
+    "if" "(" Expr ")" "then" Expr "else" Expr
+                                    -> Expr {cons("If")}                           %% [45]
+Expr OrderModifier                  -> OrderSpec {cons("OrderSpec")}               %% [40]
+}
+> { right:
+    Expr "," Expr                   -> Expr{cons("Comma"),right}                 } %% [31]
+
+  %% function call parameters
+context-free priorities
+  { non-assoc:
+    Expr                            -> {Expr ","}+
+    Expr "," Expr                   -> Expr{cons("Comma"),right} }
+
+%% --------------------------- Constructors ------------------------------
+
+sorts Constructor DirectConstructor DirElemConstructor DirAttribute DirAttributes
+sorts QuotAttrValueContent AposAttrValueContent DirElemContent CommonContent
+sorts ComputedConstructor CompDocConstructor CompElemConstructor ContentExpr
+sorts CompAttrConstructor CompTextConstructor CompCommentConstructor CompPIConstructor
+sorts QuotAttrValues AposAttrValues QuotAttrValueString AposAttrValueString
+sorts DirElemContents
+
+context-free syntax
+
+DirectConstructor                   -> Constructor                                 %% [94]
+ComputedConstructor                 -> Constructor                                 %% [94]
+
+DirElemConstructor                  -> DirectConstructor                           %% [95]
+DirCommentConstructor               -> DirectConstructor                           %% [95]
+DirPIConstructor                    -> DirectConstructor                           %% [95]
+
+"<" QName DirAttributes "/>"
+                                    -> DirElemConstructor {cons("DirElemConstructor1")} %% [96]
+"<" QName DirAttributes ">" DirElemContents "</" QName ">"
+                                    -> DirElemConstructor {cons("DirElemConstructor2")} %% [96]
+
+DirElemContent*                     -> DirElemContents {cons("DirElemContents")}
+
+DirAttribute*                       -> DirAttributes {cons("DirAttributes")}
+
+QName "=" "\"" QuotAttrValues "\""
+                                    -> DirAttribute {cons("DirAttribute")}   %% [97],[98]
+QName "=" "'" AposAttrValues "'"
+                                    -> DirAttribute {cons("DirAttribute")}   %% [97],[98]
+
+(EscapeQuot | QuotAttrValueContent)* -> QuotAttrValues {cons("AttrValues")}
+(EscapeApos | AposAttrValueContent)* -> AposAttrValues {cons("AttrValues")}
+
+QuotAttrValueString                 -> QuotAttrValueContent {cons("AttrString")}   %% [99]
+AposAttrValueString                 -> AposAttrValueContent {cons("AttrString")}   %% [100]
+
+QuotAttrContentChars                -> QuotAttrValueString                         %% [99]
+CommonContent                       -> QuotAttrValueContent                        %% [99]
+
+AposAttrContentChars                -> AposAttrValueString                         %% [100]
+CommonContent                       -> AposAttrValueContent                        %% [100]
+
+DirectConstructor                   -> DirElemContent                              %% [101]
+CDataSection                        -> DirElemContent                              %% [101]
+CommonContent                       -> DirElemContent                              %% [101]
+ElementContentChars                 -> DirElemContent {cons("Text")}               %% [101]
+
+PredefinedEntityRef                 -> CommonContent                               %% [102]
+CharRef                             -> CommonContent                               %% [102]
+"{{"                                -> CommonContent {cons("LCurly")}              %% [102]
+"}}"                                -> CommonContent {cons("RCurly")}              %% [102]
+EnclosedExpr                        -> CommonContent                               %% [102]
+
+CompDocConstructor                  -> ComputedConstructor                         %% [109]
+CompElemConstructor                 -> ComputedConstructor                         %% [109]
+CompAttrConstructor                 -> ComputedConstructor                         %% [109]
+CompTextConstructor                 -> ComputedConstructor                         %% [109]
+CompCommentConstructor              -> ComputedConstructor                         %% [109]
+CompPIConstructor                   -> ComputedConstructor                         %% [109]
+
+"document" "{" Expr "}"             -> CompDocConstructor {cons("CompDoc")}        %% [110]
+
+"element" QName "{" ContentExpr? "}"
+                                    -> CompElemConstructor {cons("CompElem1")}     %% [111]
+"element" "{" Expr "}" "{" ContentExpr? "}"
+                                    -> CompElemConstructor {cons("CompElem2")}     %% [111]
+
+Expr                                -> ContentExpr            %% [112]
+"attribute" (QName | ("{" Expr "}")) "{" Expr? "}"
+                                    -> CompAttrConstructor {cons("CompAttr")}      %% [113]
+"text" "{" Expr "}"                 -> CompTextConstructor {cons("CompText")}      %% [114]
+"comment" "{" Expr "}"              -> CompCommentConstructor {cons("CompComment")} %% [115]
+"processing-instruction" (NCName | ("{" Expr "}"))  "{" Expr? "}"
+                                    -> CompPIConstructor {cons("CompPI")}          %% [116]
+
+%% --------------------------- Node tests ------------------------------
+
+sorts SingleType TypeDeclaration SequenceType ItemTypeQ ItemType AtomicType
+sorts ForwardAxis
+sorts ReverseAxis
+sorts NodeTest NameTest Wildcard VarName
+sorts KindTest AnyKindTest DocumentTest TextTest CommentTest PITest
+sorts AttributeTest SchemaAttributeTest ElementTest SchemaElementTest
+sorts AttribNameOrWildcard AttributeDeclaration
+sorts ElementNameType ElementType ElementTypeQ ElementNameOrWildcard
+sorts ElementDeclaration AttributeName ElementName TypeName URILiteral
+
+context-free syntax
+
+AtomicType                          -> SingleType {cons("SingleType")}         %% [117]
+AtomicType "?"                      -> SingleType {cons("SingleTypeQ")}         %% [117]
+"as" SequenceType                   -> TypeDeclaration {cons("TypeDeclaration")}  %% [118]
+"empty-sequence" "(" ")"            -> SequenceType {cons("EmptySeqType")}     %% [119]
+ItemType                            -> SequenceType                            %% [119]
+ItemType ItemTypeQ                  -> SequenceType {cons("OccursType")}       %% [119],[120]
+("?" | "*" | "+")                   -> ItemTypeQ {cons("ItemTypeQ")}
+KindTest                            -> ItemType                                %% [121]
+"item" "(" ")"                      -> ItemType {cons("Item")}                 %% [121]
+AtomicType                          -> ItemType                                %% [121]
+QName                               -> AtomicType                              %% [122]
+
+"child" "::"                        -> ForwardAxis {cons("AxisChild")}             %% [73]
+"descendant" "::"                   -> ForwardAxis {cons("AxisDescendant")}        %% [73]
+"attribute" "::"                    -> ForwardAxis {cons("AxisAttribute")}         %% [73]
+"self" "::"                         -> ForwardAxis {cons("AxisSelf")}              %% [73]
+"descendant-or-self" "::"           -> ForwardAxis {cons("AxisDescendantOrSelf")}  %% [73]
+"following-sibling" "::"            -> ForwardAxis {cons("AxisFollowingSibling")}  %% [73]
+"following" "::"                    -> ForwardAxis {cons("AxisFollowing")}         %% [73]
+"parent" "::"                       -> ReverseAxis {cons("AxisParent")}            %% [76]
+"ancestor" "::"                     -> ReverseAxis {cons("AxisAncestor")}          %% [76]
+"preceding-sibling" "::"            -> ReverseAxis {cons("AxisPrecedingSibling")}  %% [76]
+"preceding" "::"                    -> ReverseAxis {cons("AxisPreceding")}         %% [76]
+"ancestor-or-self" "::"             -> ReverseAxis {cons("AxisAncestorOrSelf")}    %% [76]
+
+KindTest                            -> NodeTest                                    %% [78]
+NameTest                            -> NodeTest                                    %% [78]
+
+QName                               -> NameTest {cons("NameTest")}                 %% [79]
+Wildcard                            -> NameTest {cons("NameTest")}                 %% [79]
+"*"                                 -> Wildcard {cons("Wildcard1")}                %% [80]
+(NCName ":" "*")                    -> Wildcard {cons("Wildcard2")}                %% [80]
+("*" ":" NCName)                    -> Wildcard {cons("Wildcard3")}                %% [80]
+QName                               -> VarName {cons("VarName")}                   %% [88]
+
+AnyKindTest                         -> KindTest {prefer}                       %% [123]
+DocumentTest                        -> KindTest {prefer}                       %% [123]
+TextTest                            -> KindTest {prefer}                       %% [123]
+CommentTest                         -> KindTest {prefer}                       %% [123]
+PITest                              -> KindTest {prefer}                       %% [123]
+AttributeTest                       -> KindTest {prefer}                       %% [123]
+SchemaAttributeTest                 -> KindTest {prefer}                       %% [123]
+ElementTest                         -> KindTest {prefer}                       %% [123]
+SchemaElementTest                   -> KindTest {prefer}                       %% [123]
+
+"node" "(" ")"                      -> AnyKindTest {cons("AnyKindTest")}       %% [124]
+"document-node" "(" (ElementTest | SchemaElementTest)? ")"
+                                    -> DocumentTest {cons("DocumentTest")}     %% [125]
+"text" "(" ")"                      -> TextTest {cons("TextTest")}             %% [126]
+"comment" "(" ")"                   -> CommentTest {cons("CommentTest")}       %% [127]
+"processing-instruction" "(" (NCName | StringLiteral)? ")"
+                                    -> PITest {cons("PITest")}                 %% [128]
+"attribute" "(" (AttribNameOrWildcard ("," TypeName)?)? ")"  
+                                    -> AttributeTest {cons("AttributeTest")}   %% [129]
+AttributeName                       -> AttribNameOrWildcard {cons("AttribName")}  %% [130]
+"*"                                 -> AttribNameOrWildcard {cons("Wildcard")}    %% [130]
+"schema-attribute" "(" AttributeDeclaration ")"   
+                                    -> SchemaAttributeTest
+                                       {cons("SchemaAttributeTest")}           %% [131]
+AttributeName                       -> AttributeDeclaration                    %% [132]
+"element" "(" ElementNameType? ")"  -> ElementTest {cons("ElementTest")}       %% [133]
+ElementNameOrWildcard ElementType?  -> ElementNameType {cons("Opt1")}
+"," TypeName ElementTypeQ?          -> ElementType {cons("Opt2")}
+"?"                                 -> ElementTypeQ {cons("Opt3")}
+ElementName                         -> ElementNameOrWildcard {cons("ElementName")} %% [134]
+"*"                                 -> ElementNameOrWildcard {cons("Wildcard")}    %% [134]
+"schema-element" "(" ElementDeclaration ")"
+                                    -> SchemaElementTest {cons("SchemaElementTest")}  %% [135]
+ElementName                         -> ElementDeclaration                      %% [136]
+QName                               -> AttributeName                           %% [137]
+QName                               -> ElementName                             %% [138]
+QName                               -> TypeName                                %% [139]
+StringLiteral                       -> URILiteral                              %% [140]
+
+%% --------------------------- Terminal symbols ------------------------------
+
+sorts StringLiteral IntegerLiteral DecimalLiteral DoubleLiteral
+sorts StringContent1 StringContent2 PredefinedEntityRef
+sorts EscapeQuot EscapeApos ElementContentChar QuotAttrContentChar AposAttrContentChar
+sorts CharRef QName NCName S Char Digits
+sorts Letter Digit NameChar NCNameChar NCNameStartChar
+sorts QuotAttrContentChars AposAttrContentChars ElementContentChars
+
+lexical restrictions
+QuotAttrContentChars -/- [\t\n\r\32-\127] /\ ~[\"\{\}\<\&]
+AposAttrContentChars -/- [\t\n\r\32-\127] /\ ~[\'\{\}\<\&]
+ElementContentChars -/- [\t\n\r\32-\127] /\ ~[\{\}\<\&]
+
+context-free syntax
+
+"\"" StringContent1 "\""            -> StringLiteral {cons("Chars")}           %% [144]
+"'" StringContent2 "'"              -> StringLiteral {cons("Chars")}           %% [144]
+
+NCName                              -> QName {cons("UQName")}                  %% [154]
+NCName ":" NCName                   -> QName {cons("PQName")}                  %% [154]
+
+lexical syntax
+
+Digits                              -> IntegerLiteral         %% [141]
+("." Digits) | (Digits "." [0-9]*)  -> DecimalLiteral         %% [142]
+(("." Digits) | (Digits ("." [0-9]*)?)) [eE] [\+\-]? Digits
+                                    -> DoubleLiteral          %% [143]
+
+(PredefinedEntityRef | CharRef | EscapeQuot | ~[\"\&])*
+                                    -> StringContent1         %% [144]
+(PredefinedEntityRef | CharRef | EscapeApos | ~[\'\&])*
+                                    -> StringContent2         %% [144]
+
+"&" ("lt" | "gt" | "amp" | "quot" | "apos") ";"      -> PredefinedEntityRef    %% [145]
+'""'                                -> EscapeQuot                              %% [146]
+"''"                                -> EscapeApos                              %% [147]
+ElementContentChar+                 -> ElementContentChars
+[\t\n\r\32-\127] /\ ~[\{\}\<\&]     -> ElementContentChar                      %% [148]
+
+QuotAttrContentChar+                -> QuotAttrContentChars
+AposAttrContentChar+                -> AposAttrContentChars
+
+[\t\n\r\32-\127] /\ ~[\"\{\}\<\&]   -> QuotAttrContentChar                     %% [149]
+[\t\n\r\32-\127] /\ ~[\'\{\}\<\&]   -> AposAttrContentChar                     %% [150]
+"&#" [0-9]+ ";"                     -> CharRef                                 %% [153]
+"&#x" [0-9a-fA-F]+ ";"              -> CharRef                                 %% [153]
+NCNameStartChar NCNameChar*         -> NCName                                  %% [155]
+[ \t\r\n]                           -> S                                       %% [156]
+[\t\n\r\32-\127]                    -> Char                                    %% [157]
+Digit+                              -> Digits                                  %% [158]
+
+%% from XML & XML Namespaces
+
+[A-Za-z]                            -> Letter
+[0-9]                               -> Digit
+[A-Za-z0-9\.\-\_\:]                 -> NameChar
+[A-Za-z0-9\.\-\_]                   -> NCNameChar
+[A-Za-z\_]                          -> NCNameStartChar
+
+
+%% --------------------------- To do ------------------------------
+
+%% [67]     PragmaContents ::= (Char* - (Char* '#)' Char*))
+%% [103]    DirCommentConstructor ::= "<!--" DirCommentContents "-->" /* ws: explicit */
+%% [104]    DirCommentContents ::= ((Char - '-') | ('-' (Char - '-')))* /* ws: explicit */
+%% [105]    DirPIConstructor ::= "<?" PITarget (S DirPIContents)? "?>" /* ws: explicit */
+%% [106]    DirPIContents ::= (Char* - (Char* '?>' Char*)) /* ws: explicit */
+%% [107]    CDataSection ::= "<![CDATA[" CDataSectionContents "]]>" /* ws: explicit */
+%% [108]    CDataSectionContents ::= (Char* - (Char* ']]>' Char*)) /* ws: explicit */
+%% [151]    Comment ::= "(:" (CommentContents | Comment)* ":)" /* ws: explicit */
+%% [152]    PITarget ::= [http://www.w3.org/TR/REC-xml#NT-PITarget] XML /* xgs: xml-version *
+%% [159]    CommentContents ::= (Char+ - (Char* ('(:' | ':)') Char*))
+
+  sorts CDataSection
+  sorts DirCommentConstructor
+  sorts DirPIConstructor
+  sorts PragmaContents
+
+  context-free syntax
+
+"xxxxxxxxxxxxxxxxxxxxxxxxxxx" -> CDataSection {cons("CDataSection")}
+"xxxxxxxxxxxxxxxxxxxxxxxxxxx" -> DirCommentConstructor {cons("DirCommentConstructor")}
+"xxxxxxxxxxxxxxxxxxxxxxxxxxx" -> DirPIConstructor {cons("DirPIConstructor")}
+"xxxxxxxxxxxxxxxxxxxxxxxxxxx" -> PragmaContents {cons("PragmaContents")}
+

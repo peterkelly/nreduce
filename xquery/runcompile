@@ -1,0 +1,2 @@
+#!/bin/bash
+sglri -p xquery.tbl -i $1 | ./compile | ./elc-parenthesize | ast2text -p elc-pretty.pp

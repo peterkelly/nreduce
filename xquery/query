@@ -1,0 +1,9 @@
+#!/bin/bash
+QUERYFILE=$1
+INPUTFILE=$2
+./runcompile $QUERYFILE > out.elc || exit 1
+if [ ! -z "$INPUTFILE" ]; then
+  nreduce out.elc "$INPUTFILE"
+else
+  nreduce out.elc
+fi

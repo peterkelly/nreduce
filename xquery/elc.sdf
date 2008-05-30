@@ -1,0 +1,72 @@
+module elc
+exports 
+
+  sorts Symbol Int StrChars StrChar
+  lexical syntax
+    [A-Za-z\.\-\_][A-Za-z0-9\-\_\:\+]* -> Symbol
+    [0-9]+                 -> Int
+    StrChar*               -> StrChars
+    ~[\"\\\n]              -> StrChar
+    [\\][\"\\n]            -> StrChar
+    "import"               -> Symbol {reject}
+    "nil"                  -> Symbol {reject}
+  lexical restrictions
+    Symbol -/- [A-Za-z0-9\-\_\:\+]
+    Int -/- [0-9]
+
+  lexical syntax
+    [\ \t\n\r]    -> LAYOUT
+  context-free restrictions
+    LAYOUT? -/- [\ \t\n\r]
+
+  sorts Expression SComb ELCProgram Binding Import
+
+  lexical syntax
+    "+"                                 -> Symbol
+    "-"                                 -> Symbol
+    "*"                                 -> Symbol
+    "/"                                 -> Symbol
+    "%"
+
+    "="                                 -> Symbol
+    "=="                                -> Symbol
+    "!="                                -> Symbol
+    "<"                                 -> Symbol
+    "<="                                -> Symbol
+    ">"                                 -> Symbol
+    ">="                                -> Symbol
+
+    "<<"                                -> Symbol
+    ">>"                                -> Symbol
+    "&"                                 -> Symbol
+    "|"                                 -> Symbol
+    "^"                                 -> Symbol
+    "~"                                 -> Symbol
+
+    "&&"                                -> Symbol
+    "||"                                -> Symbol
+    "++"                                -> Symbol
+
+  context-free syntax
+    "\"" StrChars "\""                  -> Expression {cons("Str")}
+
+    Symbol                              -> Expression {cons("Sym")}
+    "nil"                               -> Expression {cons("Nl")}
+    Int                                 -> Expression {cons("Number")}
+    "(" Expression ")"                  -> Expression {bracket}
+    Expression Expression               -> Expression {cons("App"),left}
+    "!" Symbol "." Expression           -> Expression {cons("Lambda")}
+    Symbol "=" Expression               -> Binding {cons("Binding")}
+    "letrec" Binding+ "in" Expression   -> Expression {cons("Letrec")}
+
+    Import* SComb*                      -> ELCProgram {cons("Program")}
+
+  context-free priorities
+    { "import" Symbol                   -> Import {cons("Import")} }
+  > { Symbol Symbol* "=" Expression     -> SComb {cons("SComb")} }
+  > { Expression Expression             -> Expression }
+  > { "!" Symbol "." Expression         -> Expression }
+  > { "letrec" Binding+ "in" Expression -> Expression }
+
+
+  context-free start-symbols ELCProgram

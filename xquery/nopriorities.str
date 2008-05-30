@@ -1,0 +1,23 @@
+module nopriorities
+imports Sdf2 libstratego-lib
+
+rules
+
+E : n#([unparameterized(name),x,y]) ->
+    n#([unparameterized(<conc-strings>(name,"-fixed")),x,y])
+  where <equal>(n,"module")
+
+E : context-free-priorities([chain(x)]) ->
+    context-free-syntax(y)
+  where <mapconcat(getprod)>x => y
+
+strategies
+  main = io-wrap(fix-sdf)
+
+  getprod = getprod1 <+ getprod2 <+ getprod3 <+ getprod4
+  getprod1 = ?assoc-group(_,a);!a
+  getprod2 = ?prods-group(a);!a
+  getprod3 = ?with-arguments(assoc-group(_,a),_);!a
+  getprod4 = ?with-arguments(prods-group(a),_);!a
+
+  fix-sdf = topdown(try(E))

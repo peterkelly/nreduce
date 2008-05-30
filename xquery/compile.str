@@ -1,0 +1,406 @@
+module compile
+imports xquery elc libstratego-lib
+
+rules
+
+/* ---------------------------- Namespace variables ----------------------------------- */
+
+isnsattr = ?DirAttribute(PQName("xmlns",_),_) <+ ?DirAttribute(UQName("xmlns"),_)
+
+process_nsattrs(|attrs) =
+  <filter(isnsattr)>attrs => nsattrs;
+  <filter(not(isnsattr))>attrs => regattrs;
+  <map(nsattr2binding)>nsattrs => nsbindings;
+  <map(nsattr2pair)>nsattrs => strings;
+  <foldr(!|{ (cons namespaces nil) }|,\(e1,e2) -> |{ (cons e1 e2) }|\)>strings => conslist;
+  !Binding("namespaces",conslist) => newns;
+  ![newns|nsbindings] => bindings;
+  !(bindings,regattrs)
+
+bind_nsdecls:
+  DirElemConstructor2(x,DirAttributes(attrs),e,x) ->
+  Letrec([Binding("oldns",Sym("namespaces"))],
+  Letrec(bindings,DirElemConstructor2(x,DirAttributes(regattrs),e,x)))
+  where process_nsattrs(|attrs) => (bindings,regattrs)
+
+bind_nsdecls:
+  DirElemConstructor1(x,DirAttributes(attrs)) ->
+  Letrec([Binding("oldns",Sym("namespaces"))],
+  Letrec(bindings,DirElemConstructor1(x,DirAttributes(regattrs))))
+  where process_nsattrs(|attrs) => (bindings,regattrs)
+
+nsattr2binding : DirAttribute(PQName("xmlns",prefix),e) ->
+                 Binding(<conc-strings>("ns_",prefix),e)
+
+nsattr2binding : DirAttribute(UQName("xmlns"),e) ->
+                 Binding("def_ns",e)
+
+nsattr2pair : DirAttribute(PQName("xmlns",n),s) ->
+                 |{ (cons ~s:n ns_#n) }|
+
+nsattr2pair : DirAttribute(UQName("xmlns"),s) ->
+                 |{ (cons "" def_ns) }|
+
+/* ---------------------------- Node constructors ------------------------------------- */
+
+E : DirAttribute(UQName(n),vs) -> |{ (xml::mknpattr def_ns  "" ~s:n ~vs) }|
+E : DirAttribute(PQName(n1,n2),vs) -> |{ (xml::mknpattr ns_#n1 ~s:n1 ~s:n2 ~vs) }|
+E : AttrValues(x) -> <foldr(!Nl(),\(e1,e2) -> |{ (++ (xq::consimple e1) e2) }|\)>x
+E : DirAttributes(x) -> <toconslist>x
+E : DirElemContents(x) -> <toappendlist>x
+
+
+E : |[ <n a*/> ]|                 -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  a*  nil nil) }|
+E : |[ <n a*>     ~e </n> ]|      -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  a*  nil e)   }|
+E : |[ <n1:n2 a*/> ]|             -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 a*  nil nil) }|
+E : |[ <n1:n2 a*> ~e </n1:n2> ]|  -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 a*  nil e)   }|
+E : |[ element n { } ]|           -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  nil nil nil) }|
+E : |[ element n { e } ]|         -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  nil nil e)   }|
+E : |[ element n1:n2 { } ]|       -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 nil nil nil) }|
+E : |[ element n1:n2 { e } ]|     -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 nil nil e)   }|
+
+E : |[ element { e1 } { } ]|      -> |{ (letrec x1 = (xq::consimple e1)
+                                                x2 = (xml::getnsprefix x1)
+                                        in (xq::construct_elem2
+                                             (xq::resolve x2 namespaces) x2
+                                             (xml::getlocalname x1) nil nil nil)) }|
+  where new => x1; new => x2
+E : |[ element { e1 } { e2 } ]|   -> |{ (letrec x1 = (xq::consimple e1)
+                                                x2 = (xml::getnsprefix x1)
+                                        in (xq::construct_elem2
+                                             (xq::resolve x2 namespaces) x2
+                                             (xml::getlocalname x1) nil nil e2)) }|
+  where new => x1; new => x2
+
+
+
+
+/* ---------------------------- Expressions ------------------------------------------- */
+
+// FIXME: support type declaration and positional
+E : |[ for $n in e1 return e2 ]|   -> |{ (xq::foreach e1 (!n.e2)) }|
+E : |[ for $n1:n2 in e1 return e2 ]| -> |{ (xq::foreach e1 (!n1#_#n2.e2)) }|
+
+E : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
+E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
+E : |[ let $n1:n2 := e1 return e2 ]| -> |{ (letrec n1#_#n2 = e1 in e2) }|
+
+E : |[ $n ]|                      -> |{ n }|
+E : |[ $n1:n2 ]|                  -> |{ n1#_#n2 }|
+
+
+
+E : |[ declare default element namespace s; ]|
+                                  -> |{ def_ns = s }|
+E : |[ declare default function namespace s; ]|
+                                  -> |{ fun_ns = s }|
+E : |[ declare namespace n = s; ]|
+                                  -> |{ ns_#n = s }|
+
+E : NameTest(UQName(n))           -> |{ (xq::name_test xml::TYPE_ELEMENT def_ns ~s:n) }|
+E : NameTest(PQName(n1,n2))       -> |{ (xq::name_test xml::TYPE_ELEMENT ns_#n1 ~s:n2) }|
+
+E : ConcatSymbol(x1,x2) -> <conc-strings>(x1,x2)
+
+E : Enclosed(e) -> e
+
+E : ForwardAxisStep(e) -> e
+E : ReverseAxisStep(e) -> Call(VarRef("reverse"),[e])
+
+E : |[ e1[e2] ]|                  -> |{ (xq::filter3
+                                          (!citem.!cpos.!csize.
+                                            (xq::predicate_match cpos e2))
+                                        e1) }|
+
+E : |[ document-node() ]|         -> |{ (xq::type_test xml::TYPE_DOCUMENT) }|
+E : |[ element() ]|               -> |{ (xq::type_test xml::TYPE_ELEMENT) }|
+E : |[ attribute() ]|             -> |{ (xq::type_test xml::TYPE_ATTRIBUTE) }|
+E : |[ comment() ]|               -> |{ (xq::type_test xml::TYPE_COMMENT) }|
+E : |[ text() ]|                  -> |{ (xq::type_test xml::TYPE_TEXT) }|
+E : |[ node() ]|                  -> |{ (!node.1) }|
+
+E : |[ self::t ]|                 -> |{ (filter t (cons citem nil)) }|
+E : |[ child::t ]|                -> |{ (filter t (xml::item_children citem)) }|
+E : |[ descendant::t ]|           -> |{ (filter t (xq::node_descendants citem)) }|
+E : |[ descendant-or-self::t ]|   -> |{ (filter t (cons citem (xq::node_descendants citem))) }|
+E : |[ parent::t ]|               -> |{ (filter t (xq::node_parent_list citem)) }|
+E : |[ ancestor::t ]|             -> |{ (filter t (xq::node_ancestors citem)) }|
+E : |[ ancestor-or-self::t ]|     -> |{ (filter t (xq::node_ancestors_or_self citem)) }|
+E : |[ preceding-sibling::t ]|    -> |{ (filter t (xq::node_preceding_siblings citem)) }|
+E : |[ following-sibling::t ]|    -> |{ (filter t (xq::node_following_siblings citem)) }|
+E : |[ preceding::t ]|            -> |{ (filter t (xq::node_preceding citem)) }|
+E : |[ following::t ]|            -> |{ (filter t (xq::node_following citem)) }|
+E : |[ attribute::t ]|            -> |{ (filter t (xml::item_attributes citem)) }|
+
+// FIXME: sort, but only where appropriate
+//E : |[ e1/e2 ]|                   -> |{ (xq::path_result_sort
+//                                          (xq::foreach3 e1 (!citem.!cpos.!csize.e2))) }|
+E : |[ e1/e2 ]|                   -> |{ (xq::foreach3 e1 (!citem.!cpos.!csize.e2)) }|
+
+// Function calls
+E : |[ e1() ]|                    -> |{ e1 }|
+E : |[ e1(e2) ]|                  -> |{ e1 e2 }|
+E : |[ e1(e2,e3*) ]|              -> |[ e1(e2)(e3*) ]|
+    where <notempty>e3*
+
+// Simple expressions
+E : |[ . ]|                       -> |{ (cons citem nil) }|
+E : |[ () ]|                      -> |{ nil }|
+E : |[ e1 + e2 ]|                 -> |{ (xq::add e1 e2) }|
+E : |[ e1 - e2 ]|                 -> |{ (xq::subtract e1 e2) }|
+E : |[ e1 * e2 ]|                 -> |{ (xq::multiply e1 e2) }|
+E : |[ e1 div e2 ]|               -> |{ (xq::divide e1 e2) }|
+E : |[ e1 idiv e2 ]|              -> |{ (xq::idivide e1 e2) }|
+E : |[ e1 mod e2 ]|               -> |{ (xq::mod e1 e2) }|
+E : |[ e1 eq e2 ]|                -> |{ (xq::value_eq e1 e2) }|
+E : |[ e1 ne e2 ]|                -> |{ (xq::value_ne e1 e2) }|
+E : |[ e1 lt e2 ]|                -> |{ (xq::value_lt e1 e2) }|
+E : |[ e1 le e2 ]|                -> |{ (xq::value_le e1 e2) }|
+E : |[ e1 gt e2 ]|                -> |{ (xq::value_gt e1 e2) }|
+E : |[ e1 ge e2 ]|                -> |{ (xq::value_ge e1 e2) }|
+E : |[ if (e1) then e2 else e3 ]| -> |{ (if (xq::ebv e1) e2 e3) }|
+E : |[ e1, e2 ]|                  -> |{ (++ e1 e2) }|
+E : |[ e1 to e2 ]|                -> |{ (xq::range (xq::getnumber e1) (xq::getnumber e2)) }|
+E : |[ -e ]|                      -> |{ (xq::uminus e) }|
+
+E : |{ position }|                -> |{ (cons (xml::mknumber cpos) nil) }|
+E : |{ last }|                    -> |{ (cons (xml::mknumber csize) nil) }|
+
+// Abbreviated steps
+
+S1 : |[ @t ]|                     -> |[ attribute::t ]|
+S1 : |[ .. ]|                     -> |[ parent::node() ]|
+S1 : |[ e1/ /e2 ]|                -> |[ e1/descendant-or-self::node()/e2 ]|
+S1 : |[ t ]|                      -> |[ child::t ]|
+     where not(!t;?AttributeTest(_)); not(!t;?SchemaAttributeTest(_))
+S1 : ForwardStepChild(AttributeTest(x))
+                                  -> ForwardStep(AxisAttribute(),AttributeTest(x))
+S1 : ForwardStepChild(SchemaAttributeTest(x))
+                                  -> ForwardStep(AxisAttribute(),SchemaAttributeTest(x))
+
+// Simplify XQuery expressions
+
+simplify_xquery = S0 <+ S1
+
+// Built-in functions with no parameters
+S0 : |[ string() ]|                -> |[ string(.) ]|
+
+S1 : Call(x,p) -> Call(VarRef(x),p)
+  where not(!x;?VarRef(_))
+
+
+// Convert a complex FLWOR expression into a nested set of simple FLWOR expressions
+// (where each has only one for or one let)
+// Note: We do not deal with order by yet
+
+S1 : FLWOR(f,Some(Where(x)),o,b) -> FLWOR(f,None(),o,If(x,b,EmptySeq()))
+
+S1 : FLWOR([p|rest],None(),o,b) ->
+    FLWOR([p],None(),None(),FLWOR(rest,None(),o,b))
+    where <notempty>rest
+
+S1 : FLWOR([For([p|rest])],None(),o,b) ->
+    FLWOR([For([p])],None(),None(), FLWOR([For(rest)],None(),o,b))
+    where <notempty>rest
+
+S1 : FLWOR([Let([p|rest])],None(),o,b) ->
+    FLWOR([Let([p])],None(),None(),FLWOR([Let(rest)],None(),o,b))
+    where <notempty>rest
+
+
+
+/* ---------------------------- Misc -------------------------------------------------- */
+
+
+//E : MainModule(_,Prolog([],[]),e) ->
+//    Program([],[SComb("query",["citem","cpos","csize"],e)])
+//E : MainModule(_,Prolog([],[x|y]),e) ->
+//    Program([],<conc>([x|y],[SComb("query",["citem","cpos","csize"],e)]))
+
+E : MainModule(_,Prolog(a,b),e) ->
+    Program([],<concat>[a,b,[SComb("query",["citem","cpos","csize"],e)]])
+
+E : Integer(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : Decimal(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : Double(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : String(Chars(n)) -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(n))),Nl())
+E : AttrString(n) -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(n))),Nl())
+
+E : LCurly() -> String(Chars("{"))
+E : RCurly() -> String(Chars("}"))
+
+E : Function(x,p,_,e) -> SComb(x,p,e)
+E : Param(n,t) -> n
+
+E : Text(s) -> App(App(Sym("cons"),App(Sym("xml::mktext"),Str(<escape>s))),Nl())
+
+
+/* ---------------------------- Optimisation and simplification ----------------------- */
+
+// ELC code optimisation (XQuery-specific)
+
+OX : |{ xq::consimple (cons (xml::mkstring e) nil) }| -> |{ e }|
+OX : |{ xq::consimple nil }| -> |{ nil }|
+
+// ELC code optimisation (general)
+
+O1 : |{ (filter (!x.1) e) }|      -> |{ e }|
+
+O1 : |{ (++ nil e) }|             -> |{ e }|
+O1 : |{ (++ (++ e1 e2) e3) }|     -> |{ ++ e1 (++ e2 e3) }|
+
+O2 : |{ (++ (cons e1 nil) e2) }|  -> |{ cons e1 e2 }|
+O2 : |{ (++ s nil) }|             -> |{ s }|
+O2 : |{ (++ s1 s2) }|             -> |{ s3 }|
+     where s3 := <conc-strings>(s1,s2)
+
+// Map XQuery functions to functions in xq ELC module
+FO : |{ (string e) }|             -> |{ (xq::fn_string e) }|
+FO : |{ (count e) }|              -> |{ (xq::fn_count e) }|
+
+fixapp1 : SComb(n,[],Str(x))      -> SCombConst(n,[],Str(x))
+fixapp1 : SComb(n,[],Sym(x))      -> SCombConst(n,[],Sym(x))
+fixapp1 : SComb(n,[],Number(x))   -> SCombConst(n,[],Number(x))
+fixapp1 : SComb(n,[],Nl())        -> SCombConst(n,[],Nl())
+
+fixapp1 : App(x,y)                -> ListApp([x,y])
+fixapp1 : ListApp([ListApp(x),y]) -> ListApp(<conc>(x,[y]))
+fixapp1 : Lambda(x,z)             -> ListLambda([Entry(x)],z)
+  where not(!z;?Lambda(_,_)); not(!z;?ListLambda(_,_))
+fixapp1 : Lambda(x,Lambda(y,z))   -> ListLambda([Entry(x),y],z)
+fixapp1 : Lambda(x,ListLambda(y,z))
+                                  -> ListLambda([Entry(x)|y],z)
+fixapp2 : ListApp([Sym("cons"),x,Nl()])
+                                  -> SmallApp([Sym("cons"),x,Nl()])
+fixapp2 : ListApp([Sym(x)|args])  -> SmallApp([Sym(x)|args])
+  where <map(?Sym(_) <+ ?Str(_) <+ ?Number(_) <+ ?Nl())>args
+fixapp2 : SComb(x,y,ListApp(z))   -> SCombNB(x,y,ListApp(z))
+fixapp2 : SComb(x,y,SmallApp(z))  -> SCombNB(x,y,ListApp(z))
+fixapp3 : ListApp(x)              -> Parenthetical(ListApp(x))
+
+addmain:
+  Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[m|funcs])
+  where m := |{ main args stdin = (xq::main args stdin query) }|
+
+buildns: [NamespaceDecl(s1,Chars(s2))|e] -> |{ (cons (cons s1 s2) e) }|
+buildns: [] -> |{ nil }|
+
+
+/* ---------------------------- Variable namespace consolidation ---------------------- */
+
+names_to_uris =
+     NameToURI
+  <+ (?|[ declare namespace n = s; ]| <+ ?|[ xmlns:n="s" ]|);
+     rules(NameToURI: VarName(PQName(n,local)) -> VarName(RQName(s,local)))
+  <+ ?DirElemConstructor1(_,_); {| NameToURI: all(names_to_uris) |}
+  <+ ?DirElemConstructor2(_,_,_,_); {| NameToURI: all(names_to_uris) |}
+  <+ all(names_to_uris)
+
+uris_to_names =
+  (?|[ declare namespace n = s; ]| <+ ?|[ xmlns:n="s" ]|);
+  where(new => proxy);
+  rules(URIToName: VarName(RQName(s,n2)) -> VarName(UQName(name))
+        where name := <concat-strings>[proxy,"_",n2])
+  <+ all(uris_to_names)
+
+fixvarnames = names_to_uris; uris_to_names; topdown(try(URIToName))
+
+/* ---------------------------- Unique variables names -------------------------------- */
+
+rename = rec rn(
+  RenameVar
+  <+ |[ for $<id> in <rn> return <id> ]|;
+     {| RenameVar: RenameFor; |[ for $<id> in <id> return <rn> ]| |}
+  <+ |[ let $<id> := <rn> return <id> ]|;
+     {| RenameVar: RenameLet; |[ let $<id> := <id> return <rn> ]| |}
+  <+ all(rn))
+
+RenameFor : |[ for $n1 in e1 return e2 ]| -> |[ for $n2 in e1 return e2 ]|
+  where <newvar>n1 => n2
+
+RenameLet : |[ let $n1 := e1 return e2 ]| -> |[ let $n2 := e1 return e2 ]|
+  where <newvar>n1 => n2
+
+newvar : n1 -> n2
+  where if <RenameVar>|[ $n1 ]| then new else !n1 end => n2;
+        rules(RenameVar : |[ $n1 ]| -> |[ $n2 ]|)
+
+
+addnamespaces(|e):
+  Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[n|funcs])
+  where n := |{ namespaces = e }|
+
+def_elem: Prolog(decls,r)         -> Prolog([defe|decls],r)
+  where not(<some(?DefaultElemNS(_))>decls);
+        defe := |[ declare default element namespace ""; ]|
+
+def_fun: Prolog(decls,r)          -> Prolog([deff|decls],r)
+  where not(<some(?DefaultFunNS(_))>decls);
+        deff := |[ declare default function namespace "http://www.w3.org/2005/xpath-functions"; ]|
+
+/* ---------------------------- Top-level strategies ---------------------------------- */
+
+strategies
+  main = io-wrap(Option("--simplify",
+                        <set-config>(Simplify(),"on"),
+                        !"--simplify       Just run XQuery simplification"),
+                 top)
+
+  toconslist = foldr(!Nl(),\(e1,e2) -> |{ (cons e1 e2) }|\)
+  toappendlist = foldr(!Nl(),\(e1,e2) -> |{ (++ e1 e2) }|\)
+
+  notempty = ?[_|_]
+
+  mknscons : (|[ declare namespace n1 = s1; ]|,e) -> |{ (cons (cons ~s:n1 n2) e) }|
+             where <conc-strings>("ns_",n1) => n2
+
+  findnamespaces =
+  oncetd(?Prolog(decls,r); <filter(?NamespaceDecl(_,_))>decls => ns);
+  <foldr(!Nl(),mknscons)>ns
+
+  fixapp =
+  innermost(fixapp1)
+; innermost(fixapp2)
+; bottomup(try(fixapp3))
+
+  simplify =
+    innermost(simplify_xquery)
+  ; fixvarnames
+  ; rename
+
+  compile =
+    where(findnamespaces => ns)    // Search for namespace declarations
+  //; where(!ns; debug(!"got namespaces: "))
+  ; bottomup(try(bind_nsdecls))
+  ; innermost(def_elem <+ def_fun) // Define default function/element namespace
+  ; innermost(E)                   // Main compilation routines
+  ; innermost(FO)                  // Map XQuery functions to functions in xq ELC module
+  ; innermost(OX)                  // ELC code optimisation (XQuery-specific)
+  ; innermost(O1) ; innermost(O2)  // ELC code optimisation (general)
+  ; addmain                        // Add main function
+  ; addnamespaces(|ns)             // Add in-scope namespaces variable
+  ; fixapp                         // Convert ELC constructs to pretty-print forms
+
+  top =
+  if <get-config> Simplify() then
+    simplify
+  else
+    simplify
+  ; compile
+  end
+
+signature
+  constructors
+    Parenthetical : Unknown -> Unknown
+    Entry      : Id -> Entry
+    ListLambda : List(Entry) * Expression -> Expression
+    SmallApp   : List(Expression) -> Expression
+    ListApp    : List(Expression) -> Expression
+    SCombNB : Id * List(Id) * Expression -> SComb
+    ConcatSymbol     : Symbol * Symbol -> Symbol
+
+    SCombConst   : Symbol * List(Symbol) * Expression -> SComb
+
+    Simplify : Unknown
+
+    RQName     : String * NCName -> QName

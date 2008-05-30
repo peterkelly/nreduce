@@ -5,7 +5,10 @@ output indent raw =
 (letrec
   nodes = (if indent (xml::add_whitespace raw) raw)
  in
-  (append xml::XML_DECL (xml::print_nodes nodes nil)))
+  (xml::print_nodes nodes nil))
+
+// omit xml declaration for now (required by XQuery test suite)
+//  (append xml::XML_DECL (xml::print_nodes nodes nil)))
 
 //==================================================================================================
 // Functions to abstract specific node types from sequences
@@ -405,6 +408,12 @@ getnumber x =
 
 range min max = (if (<= min max) (cons (xml::mknumber min) (range (+ min 1) max)) nil)
 
+foreach lst f =
+(if lst
+  (++ (f (cons (head lst) nil))
+      (foreach (tail lst) f))
+  nil)
+
 foreach3 lst f = (apmap3 f lst)
 
 apmap3 f lst = (apmap3a f lst 1 0)
@@ -581,16 +590,8 @@ fn_root arg0 =
     (fn_root0 (head arg0)))
   (error "root: argument is an empty list"))
 
-fn_string0 node =
-(cons (xml::mkstring (node_to_string node)) nil)
-
 fn_string arg0 =
-(if arg0
-  (if (tail arg0)
-    (error "string: argument is a list of length > 1")
-    (fn_string0 (head arg0)))
-  (error "string: argument is an empty list"))
-
+(cons (xml::mkstring (consimple arg0)) nil)
 
 fn_string_length0 node =
 (cons (xml::mknumber (len (node_to_string node))) nil)
@@ -974,7 +975,7 @@ construct_elem1 nsuri qname xa xn content =
   nsprefix = (head np)
   rnamespaces = (tail np)
   children = (concomplex (get_children content))
-  elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs rnamespaces children)
+  elem = (xml::mknpelem nsuri nsprefix localpart attrs rnamespaces children)
  in
   (cons elem nil))
 
@@ -983,7 +984,7 @@ construct_elem2 nsuri nsprefix localpart xa xn content =
   attrs = (append xa (get_attributes content))
   namespaces = (append xn (get_namespaces content))
   children = (concomplex (get_children content))
-  elem = (xml::mkelem nil nil nil nil nsuri nsprefix localpart attrs namespaces children)
+  elem = (xml::mknpelem nsuri nsprefix localpart attrs namespaces children)
  in
   (cons elem nil))
 
@@ -1059,3 +1060,55 @@ in
   (if parent
     (len (xml::item_children parent))
     1))
+
+itemsort2 pivot lst before after =
+(if lst
+  (letrec
+    item = (head lst)
+    rest = (tail lst)
+   in
+    (if (value_gt (head item) pivot)
+      (itemsort2 pivot rest before (cons item after))
+      (itemsort2 pivot rest (cons item before) after)))
+  (append (itemsort before) (cons pivot (itemsort after))))
+
+itemsort lst =
+(if lst
+  (letrec
+    pivot = (head (head lst))
+   in
+    (itemsort2 pivot (tail lst) nil nil))
+  nil)
+
+ordered sortby body =
+(cons sortby body)
+
+sortseq lst =
+(map tail lst)
+
+main args stdin query =
+(letrec
+  STRIPALL = 1
+  INDENT = 1
+  input =
+    (if (== (len args) 0)
+      (if stdin
+        (xml::parsexml STRIPALL stdin)
+        (xml::mkdoc nil))
+      (xml::parsexml STRIPALL (readb (head args))))
+  result = (query input 1 1)
+  doc = (cons (xml::mkdoc (concomplex result)) nil)
+in
+ (output INDENT doc))
+
+resolve pre namespaces =
+(if namespaces
+  (letrec
+    cur = (head namespaces)
+    nsprefix = (head cur)
+    nsuri = (tail cur)
+  in
+    (if (streq pre nsprefix)
+      nsuri
+      (resolve pre (tail namespaces))))
+  (error (++ "Namespace prefix not bound: " pre)))

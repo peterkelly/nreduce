@@ -109,6 +109,9 @@ mkbool b =
 mkelem @root @parent @prev @next nsuri nsprefix localname @attributes @namespaces @children =
 (mkitem TYPE_ELEMENT nil root parent prev next nsuri nsprefix localname attributes namespaces children)
 
+mknpelem nsuri nsprefix localname @attributes @namespaces @children =
+(mkelem nil nil nil nil nsuri nsprefix localname attributes namespaces children)
+
 /* FIXME: should text and comment nodes have a root pointer as well? */
 mktext2 value @parent @prev @next =
 (mkitem TYPE_TEXT value nil parent prev next nil nil nil nil nil nil)
@@ -124,6 +127,9 @@ mkcomment value =
 
 mkattr @root @parent @prev @next nsuri nsprefix localname value =
 (mkitem TYPE_ATTRIBUTE value root parent prev next nsuri nsprefix localname nil nil nil)
+
+mknpattr nsuri nsprefix localname value =
+(mkattr nil nil nil nil nsuri nsprefix localname value)
 
 mknamespace nsuri nsprefix =
 (mkitem TYPE_NAMESPACE nil nil nil nil nil nsuri nsprefix nil nil nil nil)

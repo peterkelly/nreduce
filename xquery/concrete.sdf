@@ -1,0 +1,73 @@
+module concrete
+imports xquery elc StrategoRenamed
+exports
+
+  sorts MetaExpression MetaSymbol MetaString String
+
+  variables
+
+  %% For use in XQuery
+
+  [e][0-9]* -> Expr {prefer}
+  [e][0-9]* -> Call {prefer}
+  [e][0-9]* "*" -> {Expr ","}* {prefer}
+  [x][0-9]* -> QName {prefer}
+  [p][0-9]* -> Predicate {prefer}
+  [p][0-9]* "*" -> Predicate* {prefer}
+
+  [a][0-9]* -> DirAttribute {prefer}
+  [a][0-9]* "*" -> DirAttributes {prefer}
+
+  [n][0-9]* -> NCName {prefer}
+
+  [t][0-9]* -> NodeTest {prefer}
+
+  %% For use in ELC
+  [et][0-9]* -> MetaExpression {prefer}
+  [xn][0-9]* -> MetaSymbol {prefer}
+  [s][0-9]* -> MetaString {prefer}
+  [a][0-9]* -> MetaExpression {prefer}
+  [a][0-9]* "*" -> MetaExpression {prefer}
+
+  context-free restrictions
+  MetaExpression -/- [A-Za-z0-9\-\_\:\+\*]
+%%  MetaExpression* -/- [A-Za-z0-9\-\_\:\+\*]
+  MetaSymbol -/- [A-Za-z0-9\-\_\:\+\*]
+  MetaString -/- [A-Za-z0-9\-\_\:\+\*]
+  DirAttribute* -/- [A-Za-z0-9\-\_\:\+\*]
+
+  context-free syntax
+  "|[" Expr "]|"           -> StrategoStrategy{cons("ToStrategy"),prefer}
+
+  "|[" DirAttribute "]|"   -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" PrologPart1 "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" PrologPart2 "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" Expr "]|"           -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" ForwardStep "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" ReverseStep "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" KindTest "]|"       -> StrategoTerm{cons("ToTerm"),prefer}
+  "|{" Expression "}|"     -> StrategoTerm{cons("ToTerm"),prefer}
+  "|{" SComb "}|"          -> StrategoTerm{cons("ToTerm"),prefer}
+
+  "<" StrategoStrategy ">" -> VarName {cons("FromStrategy"),prefer}
+  "<" StrategoStrategy ">" -> Expr {cons("FromStrategy"),prefer}
+
+  "~" StrategoTerm         -> VarName {cons("FromTerm"),prefer}
+  "~" StrategoTerm         -> DirElemContents {cons("FromTerm"),prefer}
+  "~" StrategoTerm         -> Expr {cons("FromTerm"),prefer}
+  "~" StrategoTerm         -> Expression {cons("FromTerm"),prefer}
+  "~" StrategoTerm         -> SequenceType {cons("FromTerm"),prefer}
+  "~s:" StrategoTerm       -> String {cons("FromTerm"),prefer}
+  String                   -> Expression {cons("Str")}
+
+  MetaExpression           -> Expression{prefer}
+%%  MetaExpression*          -> Expression{prefer}
+  MetaSymbol               -> Symbol{prefer}
+  MetaString               -> QuotAttrValueString{prefer}
+  MetaString               -> String{prefer}
+  MetaString               -> StringLiteral{cons("Chars"),prefer}
+  Symbol "#" Symbol        -> Symbol {cons("ConcatSymbol"),prefer,right}
+
+  Call "(" {Expr ","}* ")" -> Call {cons("Call"),prefer}
+
+  context-free start-symbols StrategoModule
