@@ -644,6 +644,9 @@ fn_count1 lst !total =
 fn_count lst =
 (cons (xml::mknumber (fn_count1 lst 0)) nil)
 
+fn_empty lst =
+(cons (xml::mkbool (if lst nil 1)) nil)
+
 fn_avg lst =
 (if lst
   (cons (xml::mknumber (/ (fn_sum1 (atomize lst)) (fn_count1 lst 0))) nil)
@@ -1086,10 +1089,9 @@ ordered sortby body =
 sortseq lst =
 (map tail lst)
 
-main args stdin query =
+main args stdin query INDENT =
 (letrec
   STRIPALL = 1
-  INDENT = 1
   input =
     (if (== (len args) 0)
       (if stdin

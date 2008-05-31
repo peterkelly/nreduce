@@ -96,20 +96,20 @@ ModuleImport                        -> Import                                   
 "default" "element" "namespace"     -> SchemaPrefix {cons("DefaultSchemaPrefix")}  %% [22]
 "import" "module" ("namespace" NCName "=")? URILiteral AtURILiterals? ";"
                                     -> ModuleImport {cons("ModuleImport")}         %% [23]
-"declare" "variable" "$" QName TypeDeclaration? (":=" Expr) ";"
+"declare" "variable" "$" VarName TypeDeclaration? (":=" Expr) ";"
                                     -> VarDecl {cons("VarDecl")}                   %% [24]
 "declare" "variable" "$" QName TypeDeclaration? "external" ";"
                                     -> VarDecl {cons("ExternalVarDecl")}           %% [24]
 "declare" "construction" ("strip" | "preserve") ";"
                                     -> ConstructionDecl {cons("Construction")}     %% [25]
 
-"declare" "function" QName "(" {Param ","}* ")" ("as" SequenceType)? EnclosedExpr ";"
+"declare" "function" FunctionName "(" {Param ","}* ")" ("as" SequenceType)? EnclosedExpr ";"
                                     -> FunctionDecl {cons("Function")}             %% [26]
 
-"declare" "function" QName "(" {Param ","}* ")" ("as" SequenceType)? "external" ";"
+"declare" "function" FunctionName "(" {Param ","}* ")" ("as" SequenceType)? "external" ";"
                                     -> FunctionDecl {cons("ExternalFunction")}     %% [26]
 
-"$" QName TypeDeclaration?          -> Param {cons("Param")}                       %% [28]
+"$" VarName TypeDeclaration?        -> Param {cons("Param")}                       %% [28]
 
 %% --------------------------- Expressions ------------------------------
 
@@ -164,7 +164,7 @@ DoubleLiteral                       -> Expr {cons("Double")}                    
 "(" Expr ")"                        -> Expr {bracket}                              %% [89]
 "."                                 -> Expr {cons("ContextItem")}                  %% [90]
 FunctionName "(" {Expr ","}* ")"    -> Call {cons("Call")}                         %% [93]
-QName                               -> FunctionName
+QName                               -> FunctionName {cons("FunctionName")}
 Call                                -> Expr
 "ordered" "{" Expr "}"              -> Expr {cons("Ordered")}                      %% [91]
 "unordered" "{" Expr "}"            -> Expr {cons("Unordered")}                    %% [92]

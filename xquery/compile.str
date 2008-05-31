@@ -79,14 +79,12 @@ E : |[ element { e1 } { e2 } ]|   -> |{ (letrec x1 = (xq::consimple e1)
 
 // FIXME: support type declaration and positional
 E : |[ for $n in e1 return e2 ]|   -> |{ (xq::foreach e1 (!n.e2)) }|
-E : |[ for $n1:n2 in e1 return e2 ]| -> |{ (xq::foreach e1 (!n1#_#n2.e2)) }|
 
 E : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
 E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
-E : |[ let $n1:n2 := e1 return e2 ]| -> |{ (letrec n1#_#n2 = e1 in e2) }|
 
 E : |[ $n ]|                      -> |{ n }|
-E : |[ $n1:n2 ]|                  -> |{ n1#_#n2 }|
+E : FunctionName(UQName(n))       -> |{ n }|
 
 
 
@@ -96,6 +94,15 @@ E : |[ declare default function namespace s; ]|
                                   -> |{ fun_ns = s }|
 E : |[ declare namespace n = s; ]|
                                   -> |{ ns_#n = s }|
+E : |[ declare variable $n := e; ]|
+                                  -> |{ n = e }|
+
+E : |[ declare variable $n external; ]|
+                                  -> |{ n = (cons
+                                              (xml::parsexml 1
+                                                (readb s))
+                                              nil) }|
+  where <concat-strings>["external/",n,".xml"] => s
 
 E : NameTest(UQName(n))           -> |{ (xq::name_test xml::TYPE_ELEMENT def_ns ~s:n) }|
 E : NameTest(PQName(n1,n2))       -> |{ (xq::name_test xml::TYPE_ELEMENT ns_#n1 ~s:n2) }|
@@ -162,9 +169,11 @@ E : |[ if (e1) then e2 else e3 ]| -> |{ (if (xq::ebv e1) e2 e3) }|
 E : |[ e1, e2 ]|                  -> |{ (++ e1 e2) }|
 E : |[ e1 to e2 ]|                -> |{ (xq::range (xq::getnumber e1) (xq::getnumber e2)) }|
 E : |[ -e ]|                      -> |{ (xq::uminus e) }|
+E : |[ e1 and e2 ]|               -> |{ (cons (xml::mkbool (&& (xq::ebv e1) (xq::ebv e2))) nil) }|
+E : |[ e1 or e2 ]|                -> |{ (cons (xml::mkbool (|| (xq::ebv e1) (xq::ebv e2))) nil) }|
 
-E : |{ position }|                -> |{ (cons (xml::mknumber cpos) nil) }|
-E : |{ last }|                    -> |{ (cons (xml::mknumber csize) nil) }|
+E : |{ xq::fn_position }|         -> |{ (cons (xml::mknumber cpos) nil) }|
+E : |{ xq::fn_last }|             -> |{ (cons (xml::mknumber csize) nil) }|
 
 // Abbreviated steps
 
@@ -185,8 +194,8 @@ simplify_xquery = S0 <+ S1
 // Built-in functions with no parameters
 S0 : |[ string() ]|                -> |[ string(.) ]|
 
-S1 : Call(x,p) -> Call(VarRef(x),p)
-  where not(!x;?VarRef(_))
+//S1 : Call(x,p) -> Call(VarRef(x),p)
+//  where not(!x;?VarRef(_))
 
 
 // Convert a complex FLWOR expression into a nested set of simple FLWOR expressions
@@ -230,7 +239,7 @@ E : LCurly() -> String(Chars("{"))
 E : RCurly() -> String(Chars("}"))
 
 E : Function(x,p,_,e) -> SComb(x,p,e)
-E : Param(n,t) -> n
+E : Param(VarName(UQName(n)),t) -> n
 
 E : Text(s) -> App(App(Sym("cons"),App(Sym("xml::mktext"),Str(<escape>s))),Nl())
 
@@ -254,10 +263,6 @@ O2 : |{ (++ s nil) }|             -> |{ s }|
 O2 : |{ (++ s1 s2) }|             -> |{ s3 }|
      where s3 := <conc-strings>(s1,s2)
 
-// Map XQuery functions to functions in xq ELC module
-FO : |{ (string e) }|             -> |{ (xq::fn_string e) }|
-FO : |{ (count e) }|              -> |{ (xq::fn_count e) }|
-
 fixapp1 : SComb(n,[],Str(x))      -> SCombConst(n,[],Str(x))
 fixapp1 : SComb(n,[],Sym(x))      -> SCombConst(n,[],Sym(x))
 fixapp1 : SComb(n,[],Number(x))   -> SCombConst(n,[],Number(x))
@@ -280,30 +285,47 @@ fixapp3 : ListApp(x)              -> Parenthetical(ListApp(x))
 
 addmain:
   Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[m|funcs])
-  where m := |{ main args stdin = (xq::main args stdin query) }|
+  where if <get-config>XQTS() then
+          !|{ main args stdin = (xq::main args stdin query nil) }|
+        else
+          !|{ main args stdin = (xq::main args stdin query 1) }|
+        end => m
 
 buildns: [NamespaceDecl(s1,Chars(s2))|e] -> |{ (cons (cons s1 s2) e) }|
 buildns: [] -> |{ nil }|
 
 
-/* ---------------------------- Variable namespace consolidation ---------------------- */
+/* --------------------- Variable and function namespace consolidation ---------------- */
 
 names_to_uris =
      NameToURI
   <+ (?|[ declare namespace n = s; ]| <+ ?|[ xmlns:n="s" ]|);
-     rules(NameToURI: VarName(PQName(n,local)) -> VarName(RQName(s,local)))
+     rules(NameToURI: VarName(PQName(n,local)) -> VarName(RQName(s,local)));
+     rules(NameToURI: FunctionName(PQName(n,local)) -> FunctionName(RQName(s,local)))
+  <+ ?|[ declare default function namespace s; ]|;
+     rules(NameToURI: FunctionName(UQName(local)) -> FunctionName(RQName(s,local)))
   <+ ?DirElemConstructor1(_,_); {| NameToURI: all(names_to_uris) |}
   <+ ?DirElemConstructor2(_,_,_,_); {| NameToURI: all(names_to_uris) |}
   <+ all(names_to_uris)
 
 uris_to_names =
-  (?|[ declare namespace n = s; ]| <+ ?|[ xmlns:n="s" ]|);
+  (?|[ declare namespace n = s; ]| <+
+   ?|[ declare default function namespace s; ]| <+
+   ?|[ xmlns:n="s" ]|);
   where(new => proxy);
   rules(URIToName: VarName(RQName(s,n2)) -> VarName(UQName(name))
+        where name := <concat-strings>[proxy,"_",n2]);
+  rules(URIToName: FunctionName(RQName(s,n2)) -> FunctionName(UQName(name))
         where name := <concat-strings>[proxy,"_",n2])
   <+ all(uris_to_names)
 
-fixvarnames = names_to_uris; uris_to_names; topdown(try(URIToName))
+StaticURIToName:
+  FunctionName(RQName("http://www.w3.org/2005/xpath-functions",n2)) ->
+  FunctionName(UQName(name))
+    where name := <concat-strings>["xq::fn_",n2]
+
+fixvarnames =
+  names_to_uris; uris_to_names; topdown(try(StaticURIToName)); topdown(try(URIToName))
 
 /* ---------------------------- Unique variables names -------------------------------- */
 
@@ -325,9 +347,8 @@ newvar : n1 -> n2
   where if <RenameVar>|[ $n1 ]| then new else !n1 end => n2;
         rules(RenameVar : |[ $n1 ]| -> |[ $n2 ]|)
 
-
 addnamespaces(|e):
-  Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[n|funcs])
+  Program(imports,funcs)   -> Program(imports,[n|funcs])
   where n := |{ namespaces = e }|
 
 def_elem: Prolog(decls,r)         -> Prolog([defe|decls],r)
@@ -338,12 +359,27 @@ def_fun: Prolog(decls,r)          -> Prolog([deff|decls],r)
   where not(<some(?DefaultFunNS(_))>decls);
         deff := |[ declare default function namespace "http://www.w3.org/2005/xpath-functions"; ]|
 
+addns(|prefix,uri):
+  Prolog(decls,r)         -> Prolog([def|decls],r)
+  where not(<some(?NamespaceDecl(prefix,_))>decls);
+        def := NamespaceDecl(prefix,Chars(uri))
+
+addpredeclared =
+  try(addns(|"xml","http://www.w3.org/XML/1998/namespace"));
+  try(addns(|"xs","http://www.w3.org/2001/XMLSchema"));
+  try(addns(|"xsi","http://www.w3.org/2001/XMLSchema-instance"));
+  try(addns(|"fn","http://www.w3.org/2005/xpath-functions"));
+  try(addns(|"local","http://www.w3.org/2005/xquery-local-functions"))
+
 /* ---------------------------- Top-level strategies ---------------------------------- */
 
 strategies
   main = io-wrap(Option("--simplify",
                         <set-config>(Simplify(),"on"),
-                        !"--simplify       Just run XQuery simplification"),
+                        !"--simplify       Just run XQuery simplification")+
+                 Option("--xqts",
+                        <set-config>(XQTS(),"on"),
+                        !"--xqts       Set query options for XQTS usage"),
                  top)
 
   toconslist = foldr(!Nl(),\(e1,e2) -> |{ (cons e1 e2) }|\)
@@ -365,6 +401,8 @@ strategies
 
   simplify =
     innermost(simplify_xquery)
+  ; innermost(def_elem <+ def_fun) // Define default function/element namespace
+  ; MainModule(id,addpredeclared,id)
   ; fixvarnames
   ; rename
 
@@ -372,9 +410,7 @@ strategies
     where(findnamespaces => ns)    // Search for namespace declarations
   //; where(!ns; debug(!"got namespaces: "))
   ; bottomup(try(bind_nsdecls))
-  ; innermost(def_elem <+ def_fun) // Define default function/element namespace
   ; innermost(E)                   // Main compilation routines
-  ; innermost(FO)                  // Map XQuery functions to functions in xq ELC module
   ; innermost(OX)                  // ELC code optimisation (XQuery-specific)
   ; innermost(O1) ; innermost(O2)  // ELC code optimisation (general)
   ; addmain                        // Add main function
@@ -382,7 +418,7 @@ strategies
   ; fixapp                         // Convert ELC constructs to pretty-print forms
 
   top =
-  if <get-config> Simplify() then
+  if <get-config>Simplify() then
     simplify
   else
     simplify
@@ -402,5 +438,6 @@ signature
     SCombConst   : Symbol * List(Symbol) * Expression -> SComb
 
     Simplify : Unknown
+    XQTS : Unknown
 
     RQName     : String * NCName -> QName

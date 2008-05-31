@@ -47,7 +47,7 @@ HEXDIGITS               {HEXDIGIT}+
 INTEGER                  -?{DIGITS}
 HEX                      0[xX]{HEXDIGIT}+
 DOUBLE                   -?{DIGITS}\.{DIGITS}
-IDCHAR                   [a-zA-Z_?:]
+IDCHAR                   [a-zA-Z_?:\-]
 IDENT                    {IDCHAR}({IDCHAR}|{DIGIT}|_)*
 CHAR                     \'.\'
 

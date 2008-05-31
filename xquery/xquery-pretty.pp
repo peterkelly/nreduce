@@ -103,6 +103,7 @@
    ContextItem                                -- KW["."],
    Call                                       -- H hs=0 [_1 KW["("] _2 KW[")"]],
    Call.2:iter-star-sep                       -- _1 KW[","],
+   FunctionName                               -- _1,
    Ordered                                    -- H hs=1 [KW["ordered"] KW["{"] _1 KW["}"]],
    Unordered                                  -- H hs=1 [KW["unordered"] KW["{"] _1 KW["}"]],
    Predicate                                  -- H hs=0 [KW["["] _1 KW["]"]],
