@@ -23,15 +23,18 @@ TYPE_COMMENT    = 7
 TYPE_ATTRIBUTE  = 8
 TYPE_NAMESPACE  = 9
 TYPE_DOCUMENT   = 10
+TYPE_PI         = 11
 
-TYPE_ERROR      = 11
+TYPE_ERROR      = 12
 
 TOKEN_STARTELEM = 0
-TOKEN_ENDELEM = 1
-TOKEN_TEXT = 2
-TOKEN_ATTRNAME = 3
+TOKEN_ENDELEM   = 1
+TOKEN_TEXT      = 2
+TOKEN_ATTRNAME  = 3
 TOKEN_ATTRVALUE = 4
-TOKEN_COMMENT = 5
+TOKEN_COMMENT   = 5
+TOKEN_PITARGET  = 6
+TOKEN_PICONTENT = 7
 
 TOKEN_NAMES = 
 (cons "STARTELEM"
@@ -128,6 +131,12 @@ mkcomment value =
 mkattr @root @parent @prev @next nsuri nsprefix localname value =
 (mkitem TYPE_ATTRIBUTE value root parent prev next nsuri nsprefix localname nil nil nil)
 
+mkpi @root @parent @prev @next localname value =
+(mkitem TYPE_PI value root parent prev next nil nil localname nil nil nil)
+
+mknppi localname value =
+(mkpi nil nil nil nil localname value)
+
 mknpattr nsuri nsprefix localname value =
 (mkattr nil nil nil nil nsuri nsprefix localname value)
 
@@ -212,21 +221,44 @@ tokenize_main !stream !start !count =
       (tokenize_main rest start (+ count 1))))
   nil)
 
-tokenize_pi !stream =
+
+tokenize_pitarget !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (== c ' ')
+      (cons (cons TOKEN_PITARGET (prefix count start))
+            (tokenize_picontent rest rest 0))
+    (if (== c '?')
+      (cons (cons TOKEN_PITARGET (prefix count start))
+            (tokenize_piend2 rest rest 0))
+      (tokenize_pitarget rest start (+ count 1)))))
+  (error "XML parse error: unexpected end of input in processing instruction"))
+
+tokenize_picontent !stream !start !count =
 (if stream
   (letrec !c = (head stream) !rest = (tail stream) in
     (if (== c '?')
-      (tokenize_piend rest)
-      (tokenize_pi rest)))
+      (tokenize_piend1 rest start (+ count 1))
+      (tokenize_picontent rest start (+ count 1))))
   (error "XML parse error: unexpected end of input in processing instruction"))
 
-tokenize_piend !stream =
+tokenize_piend1 !stream !start !count =
 (if stream
   (letrec !c = (head stream) !rest = (tail stream) in
     (if (== c '>')
-      (tokenize_skipspace rest)
-      (tokenize_pi rest)))
-  (error "XML parse error: unexpected end of input in processing instruction end"))
+      (cons (cons TOKEN_PICONTENT (prefix (- count 1) start))
+            (tokenize_skipspace rest))
+      (tokenize_picontent rest start (+ count 1))))
+  (error "XML parse error: unexpected end of input in processing instruction"))
+
+tokenize_piend2 !stream !start !count =
+(if stream
+  (letrec !c = (head stream) !rest = (tail stream) in
+    (if (== c '>')
+      (cons (cons TOKEN_PICONTENT "")
+            (tokenize_skipspace rest))
+     (error "XML parse error: unexpected character in processing instruction")))
+  (error "XML parse error: unexpected end of input in processing instruction"))
 
 tokenize_skipspace !stream =
 (if stream
@@ -242,7 +274,7 @@ tokenize_namestart !stream =
     (if (== c '/')
       (tokenize_endname rest rest 0)
       (if (== c '?')
-        (tokenize_pi rest)
+        (tokenize_pitarget rest rest 0)
         (if (== c '!')
           (tokenize_comment1 rest stream)
           (tokenize_name stream stream 0)))))
@@ -432,6 +464,9 @@ print_token val =
 add_whitespace nodes =
 (add_whitespace1 0 nodes nil 0 nil)
 
+// FIXME: parents are not correctly set here
+// (Not that it matters, since this is only used for output, but better to not
+// set them at all here)
 add_whitespace1 depth lst needindent haveindent @parent =
 (if lst
   (letrec
@@ -457,31 +492,36 @@ add_whitespace1 depth lst needindent haveindent @parent =
           (cons
             elem
             (add_whitespace1 depth rest 1 0 parent))))
-      (if (== type TYPE_TEXT)
-        (letrec
-          str = (item_value this)
-          newhave = (count_indent str haveindent)
-          nws = (isnonws str)
-         in
-          (cons
-            this
-            (if nws
-              (add_whitespace1 depth rest nil 0 parent)
-              (add_whitespace1 depth rest needindent newhave parent))))
-        (if (== type TYPE_COMMENT)
-          (maybe_indent depth needindent haveindent
-            (cons
-              this
-              (add_whitespace1 depth rest nil 0 parent)))
-          (if (== type TYPE_DOCUMENT)
-            (letrec
-              children = (item_children this)
-              doc = (mkdoc (add_whitespace1 depth children 1 0 doc))
-             in
-              (cons
-                doc
-                (add_whitespace1 depth rest nil 0 parent)))
-            nil)))))
+    (if (== type TYPE_TEXT)
+      (letrec
+        str = (item_value this)
+        newhave = (count_indent str haveindent)
+        nws = (isnonws str)
+       in
+        (cons
+          this
+          (if nws
+            (add_whitespace1 depth rest nil 0 parent)
+            (add_whitespace1 depth rest needindent newhave parent))))
+    (if (== type TYPE_COMMENT)
+      (maybe_indent depth needindent haveindent
+        (cons
+          this
+          (add_whitespace1 depth rest nil 0 parent)))
+    (if (== type TYPE_PI)
+      (maybe_indent depth needindent haveindent
+        (cons
+          this
+          (add_whitespace1 depth rest nil 0 parent)))
+    (if (== type TYPE_DOCUMENT)
+      (letrec
+        children = (item_children this)
+        doc = (mkdoc (add_whitespace1 depth children 1 0 doc))
+       in
+        (cons
+          doc
+          (add_whitespace1 depth rest nil 0 parent)))
+      nil))))))
   (if (> depth 0)
     (maybe_indent (- depth 1) needindent haveindent nil)
     nil))
@@ -614,7 +654,22 @@ in
       lst = (cons text next)
     in
       (cons newrest lst))
-  (error "Invalid tag")))))))
+  (if (== tag TOKEN_PITARGET)
+    (letrec
+      target = (tail cur)
+      content = (tail (head (tail tokens)))
+    in
+      (if (streq target "xml")
+        (parse1 (tail rest) namespaces root parent prev)
+        (letrec
+          text = (mkpi nil parent prev next target content)
+          pr = (parse1 (tail rest) namespaces root parent text)
+          newrest = (head pr)
+          next = (tail pr)
+          lst = (cons text next)
+        in
+          (cons newrest lst))))
+  (error "Invalid tag"))))))))
 
 skip_attrs tokens =
 (if (not tokens)
@@ -877,14 +932,19 @@ print_nodes lst next =
             (append qname
               (print_namespaces node namespaces
                 (print_attrs attributes
-                  (append "/>" (print_nodes rest next))))))))
-      (if (== (item_type node) TYPE_TEXT)
-        (append (item_value node) (print_nodes rest next))
-        (if (== (item_type node) TYPE_COMMENT)
-          (append "<!--" (append (item_value node) (append "-->" (print_nodes rest next))))
-          (if (== (item_type node) TYPE_DOCUMENT)
-            (print_nodes (item_children node) (print_nodes rest next))
-            (append "OTHER: " (append (numtostring (item_type node)) (print_nodes rest next))))))))
+                  (append " />" (print_nodes rest next))))))))
+    (if (== (item_type node) TYPE_TEXT)
+      (append (item_value node) (print_nodes rest next))
+    (if (== (item_type node) TYPE_COMMENT)
+      (append "<!--" (append (item_value node) (append "-->" (print_nodes rest next))))
+    (if (== (item_type node) TYPE_DOCUMENT)
+      (print_nodes (item_children node) (print_nodes rest next))
+    (if (== (item_type node) TYPE_PI)
+      (if (item_value node)
+        (append "<?" (append (item_localname node) (append " "
+        (append (item_value node) (append "?>" (print_nodes rest next))))))
+        (append "<?" (append (item_localname node) (append "?>" (print_nodes rest next)))))
+      (append "OTHER: " (append (numtostring (item_type node)) (print_nodes rest next)))))))))
   next)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -928,28 +988,36 @@ stripspaces lst @root @parent @prev =
         (stripspaces rest root parent elem)
        in
         (cons elem next))
-      (if (== type TYPE_TEXT)
-        (if (isnonws (item_value cur))
-          (letrec
-            content = (item_value cur)
-            text = (mktext2 content parent prev next)
-            next = (stripspaces rest root parent text)
-           in
-            (cons text next))
-          (stripspaces rest root parent prev))
-        (if (== type TYPE_COMMENT)
-          (letrec
-            content = (item_value cur)
-            comment = (mkcomment2 content parent prev next)
-            next = (stripspaces rest root parent comment)
-           in
-            (cons comment next))
-          (if (== type TYPE_DOCUMENT)
-            (letrec
-              doc = (mkdoc (stripspaces (item_children cur) root doc nil))
-             in
-              (cons doc nil))
-            (cons cur (stripspaces rest root parent cur)))))))
+    (if (== type TYPE_TEXT)
+      (if (isnonws (item_value cur))
+        (letrec
+          content = (item_value cur)
+          text = (mktext2 content parent prev next)
+          next = (stripspaces rest root parent text)
+         in
+          (cons text next))
+        (stripspaces rest root parent prev))
+    (if (== type TYPE_COMMENT)
+      (letrec
+        content = (item_value cur)
+        comment = (mkcomment2 content parent prev next)
+        next = (stripspaces rest root parent comment)
+       in
+        (cons comment next))
+    (if (== type TYPE_PI)
+      (letrec
+        target = (item_localname cur)
+        content = (item_value cur)
+        pi = (mkpi nil parent prev next target content)
+        next = (stripspaces rest root parent pi)
+       in
+        (cons pi next))
+    (if (== type TYPE_DOCUMENT)
+      (letrec
+        doc = (mkdoc (stripspaces (item_children cur) root doc nil))
+       in
+        (cons doc nil))
+      (cons cur (stripspaces rest root parent cur))))))))
   nil)
 
 parsexml strip stream =

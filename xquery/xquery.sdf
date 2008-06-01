@@ -323,10 +323,12 @@ CompPIConstructor                   -> ComputedConstructor                      
                                     -> CompElemConstructor {cons("CompElem1")}     %% [111]
 "element" "{" Expr "}" "{" ContentExpr? "}"
                                     -> CompElemConstructor {cons("CompElem2")}     %% [111]
-
 Expr                                -> ContentExpr            %% [112]
-"attribute" (QName | ("{" Expr "}")) "{" Expr? "}"
-                                    -> CompAttrConstructor {cons("CompAttr")}      %% [113]
+"attribute" QName "{" Expr? "}"
+                                    -> CompAttrConstructor {cons("CompAttr1")}     %% [113]
+"attribute" "{" Expr "}" "{" Expr? "}"
+                                    -> CompAttrConstructor {cons("CompAttr2")}     %% [113]
+
 "text" "{" Expr "}"                 -> CompTextConstructor {cons("CompText")}      %% [114]
 "comment" "{" Expr "}"              -> CompCommentConstructor {cons("CompComment")} %% [115]
 "processing-instruction" (NCName | ("{" Expr "}"))  "{" Expr? "}"
@@ -377,8 +379,8 @@ NameTest                            -> NodeTest                                 
 QName                               -> NameTest {cons("NameTest")}                 %% [79]
 Wildcard                            -> NameTest {cons("NameTest")}                 %% [79]
 "*"                                 -> Wildcard {cons("Wildcard1")}                %% [80]
-(NCName ":" "*")                    -> Wildcard {cons("Wildcard2")}                %% [80]
-("*" ":" NCName)                    -> Wildcard {cons("Wildcard3")}                %% [80]
+NCName ":" "*"                      -> Wildcard {cons("Wildcard2")}                %% [80]
+"*" ":" NCName                      -> Wildcard {cons("Wildcard3")}                %% [80]
 QName                               -> VarName {cons("VarName")}                   %% [88]
 
 AnyKindTest                         -> KindTest {prefer}                       %% [123]

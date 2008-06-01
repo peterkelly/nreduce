@@ -232,14 +232,16 @@ dm_string_value node =
  in
   (if (== type xml::TYPE_TEXT)
     (xml::item_value node) // content
-    (if (== type xml::TYPE_COMMENT)
-      (xml::item_value node) // content
-      (if (== type xml::TYPE_NAMESPACE)
-        (xml::item_nsuri node) // uri
-        (if (== type xml::TYPE_ATTRIBUTE)
-          (xml::item_value node) // value
-          // else: element or document
-          (textcontent (xml::item_children node)))))))
+  (if (== type xml::TYPE_COMMENT)
+    (xml::item_value node) // content
+  (if (== type xml::TYPE_PI)
+    (xml::item_value node) // content
+  (if (== type xml::TYPE_NAMESPACE)
+    (xml::item_nsuri node) // uri
+  (if (== type xml::TYPE_ATTRIBUTE)
+    (xml::item_value node) // value
+  // else: element or document
+  (textcontent (xml::item_children node))))))))
 
 //==================================================================================================
 // Atomization
@@ -250,19 +252,21 @@ atomize lst =
 atomize1 x =
 (if (isatomic x)
   x
-  (if (== (xml::item_type x) xml::TYPE_TEXT)
-    (xml::mkuntyped (xml::item_value x))
-    (if (== (xml::item_type x) xml::TYPE_COMMENT)
-      (xml::mkuntyped (xml::item_value x))
-      (if (== (xml::item_type x) xml::TYPE_ATTRIBUTE)
-        (xml::mkuntyped (xml::item_value x))
-        (if (== (xml::item_type x) xml::TYPE_ELEMENT)
-          (xml::mkuntyped (textcontent (xml::item_children x)))
-          (if (== (xml::item_type x) xml::TYPE_DOCUMENT)
-            (xml::mkuntyped (textcontent (xml::item_children x)))
-	    (if (== (xml::item_type x) xml::TYPE_NAMESPACE)
-		(xml::mkuntyped (xml::item_nsuri x))
-	      (error (append "FIXME(atomize):" (numtostring (xml::item_type x)))))))))))
+(if (== (xml::item_type x) xml::TYPE_TEXT)
+  (xml::mkuntyped (xml::item_value x))
+(if (== (xml::item_type x) xml::TYPE_COMMENT)
+  (xml::mkuntyped (xml::item_value x))
+(if (== (xml::item_type x) xml::TYPE_PI)
+  (xml::mkuntyped (xml::item_value x))
+(if (== (xml::item_type x) xml::TYPE_ATTRIBUTE)
+  (xml::mkuntyped (xml::item_value x))
+(if (== (xml::item_type x) xml::TYPE_ELEMENT)
+  (xml::mkuntyped (textcontent (xml::item_children x)))
+(if (== (xml::item_type x) xml::TYPE_DOCUMENT)
+  (xml::mkuntyped (textcontent (xml::item_children x)))
+(if (== (xml::item_type x) xml::TYPE_NAMESPACE)
+  (xml::mkuntyped (xml::item_nsuri x))
+(error (append "FIXME(atomize):" (numtostring (xml::item_type x))))))))))))
 
 textcontent lst =
 (if lst
@@ -292,29 +296,32 @@ isatomic x =
 (<= (xml::item_type x) xml::MAX_ATOMIC_TYPE)
 
 atom_to_string x =
+(xml::mkstring (atom_to_string_value x))
+
+atom_to_string_value x =
 (letrec
   type = (xml::item_type x)
  in
   (if (== type xml::TYPE_NUMBER)
-    (xml::mkstring (numtostring (xml::item_value x)))
-    (if (== type xml::TYPE_BOOLEAN)
-      (if (xml::item_value x)
-        (xml::mkstring "true")
-        (xml::mkstring "false"))
-      (if (== type xml::TYPE_QNAME)
-        (letrec
-          nsprefix = (xml::item_nsprefix x)
-          localname = (xml::item_localname x)
-         in
-          (if nsprefix
-            (xml::mkstring (append nsprefix (cons ':' localname)))
-            (xml::mkstring localname)))
-        (if (== type xml::UNTYPED_ATOMIC)
-          (xml::mkstring (xml::item_value x))
-          (if (== type xml::TYPE_STRING)
-            x
-            (error (append "atom_to_string: invalid type "
-                      (append (numtostring type) "\n")))))))))
+    (numtostring (xml::item_value x))
+  (if (== type xml::TYPE_BOOLEAN)
+    (if (xml::item_value x)
+      "true"
+      "false")
+  (if (== type xml::TYPE_QNAME)
+    (letrec
+      nsprefix = (xml::item_nsprefix x)
+      localname = (xml::item_localname x)
+     in
+      (if nsprefix
+        (append nsprefix (cons ':' localname))
+        localname))
+  (if (== type xml::UNTYPED_ATOMIC)
+    (xml::item_value x)
+  (if (== type xml::TYPE_STRING)
+    (xml::item_value x)
+  (error (append "atom_to_string: invalid type "
+            (append (numtostring type) "\n")))))))))
 
 normalize2 lst =
 (map (!x.if (isatomic x)
@@ -434,17 +441,29 @@ filter3a f lst !pos !total =
     nil)
 
 isnode x =
-(or (== (xml::item_type x) xml::TYPE_ELEMENT)
-(or (== (xml::item_type x) xml::TYPE_TEXT)
-(or (== (xml::item_type x) xml::TYPE_ATTRIBUTE)
-(or (== (xml::item_type x) xml::TYPE_COMMENT)
-    (== (xml::item_type x) xml::TYPE_DOCUMENT)))))
+(letrec
+  type = (xml::item_type x)
+in
+  (if (== type xml::TYPE_ELEMENT)
+    1
+  (if (== type xml::TYPE_TEXT)
+    1
+  (if (== type xml::TYPE_ATTRIBUTE)
+    1
+  (if (== type xml::TYPE_COMMENT)
+    1
+  (if (== type xml::TYPE_PI)
+    1
+    (== type xml::TYPE_DOCUMENT)))))))
 
 issingle seq = (if seq (not (tail seq)) nil)
 
 isboolean x = (== (xml::item_type x) xml::TYPE_BOOLEAN)
-isstring x = (== (xml::item_type x) xml::TYPE_STRING)
 isnumber x = (== (xml::item_type x) xml::TYPE_NUMBER)
+isstring x =
+(if (== (xml::item_type x) xml::TYPE_STRING)
+  1
+  (== (xml::item_type x) xml::UNTYPED_ATOMIC))
 
 // XPath 2.0 2.4.3 - Effective Boolean Value
 ebv seq =
@@ -452,15 +471,15 @@ ebv seq =
     nil
 (if (isnode (head seq))
     1
-(if (not (tail seq))
-    (if (isboolean (head seq))
-        (xml::item_value (head seq))
-    (if (isstring (head seq))
-        (xml::item_value (head seq))
-    (if (isnumber (head seq))
-        (!= (xml::item_value (head seq)) 0)
-        nil)))
-    nil)))
+(if (tail seq)
+  (error "FORG0006: can't compute effective boolean value for non-singleton sequence")
+(if (isboolean (head seq))
+  (xml::item_value (head seq))
+(if (isstring (head seq))
+  (xml::item_value (head seq))
+(if (isnumber (head seq))
+  (!= (xml::item_value (head seq)) 0) // FIXME: NaN is also false
+  nil))))))
 
 predicate_match cpos seq =
 (if seq
@@ -560,6 +579,10 @@ concomplex lst = (concomplex4 (concomplex3 (concomplex2 lst)))
 fn_true = (cons (xml::mkbool 1) nil)
 
 fn_false = (cons (xml::mkbool nil) nil)
+
+fn_boolean lst = (cons (xml::mkbool (ebv lst)) nil)
+
+fn_not lst = (cons (xml::mkbool (not (ebv lst))) nil)
 
 fn_data lst = (atomize lst)
 
@@ -866,26 +889,34 @@ copytree cfun lst root parent prev =
         (copytree cfun rest root parent elem)
        in
         (cons elem next))
-      (if (== type xml::TYPE_TEXT)
-        (letrec
-          content = (xml::item_value cur)
-          text = (xml::mktext2 content parent prev next)
-          next = (copytree cfun rest root parent text)
-         in
-          (cons text next))
-        (if (== type xml::TYPE_COMMENT)
-          (letrec
-            content = (xml::item_value cur)
-            comment = (xml::mkcomment2 content parent prev next)
-            next = (copytree cfun rest root parent comment)
-           in
-            (cons comment next))
-          (if (== type xml::TYPE_DOCUMENT)
-            (letrec
-              doc = (xml::mkdoc (copytree cfun (cfun (xml::item_children cur)) root doc nil))
-             in
-              (cons doc nil))
-            (cons cur (copytree cfun rest root parent cur)))))))
+    (if (== type xml::TYPE_TEXT)
+      (letrec
+        content = (xml::item_value cur)
+        text = (xml::mktext2 content parent prev next)
+        next = (copytree cfun rest root parent text)
+       in
+        (cons text next))
+    (if (== type xml::TYPE_COMMENT)
+      (letrec
+        content = (xml::item_value cur)
+        comment = (xml::mkcomment2 content parent prev next)
+        next = (copytree cfun rest root parent comment)
+       in
+        (cons comment next))
+    (if (== type xml::TYPE_PI)
+      (letrec
+        target = (xml::item_localname cur)
+        content = (xml::item_value cur)
+        pi = (xml::mkpi parent prev next target content)
+        next = (copytree cfun rest root parent pi)
+       in
+        (cons pi next))
+    (if (== type xml::TYPE_DOCUMENT)
+      (letrec
+        doc = (xml::mkdoc (copytree cfun (cfun (xml::item_children cur)) root doc nil))
+       in
+        (cons doc nil))
+    (cons cur (copytree cfun rest root parent cur))))))))
   nil)
 
 copydoc cfun doc =
@@ -1114,3 +1145,106 @@ resolve pre namespaces =
       nsuri
       (resolve pre (tail namespaces))))
   (error (++ "Namespace prefix not bound: " pre)))
+
+compelem name content namespaces =
+(letrec
+  qname = (xq::consimple name)
+  nsprefix = (xml::getnsprefix qname)
+  nsuri = (xq::resolve nsprefix namespaces)
+  localname = (xml::getlocalname qname)
+in
+  (xq::construct_elem2 nsuri nsprefix localname nil nil content))
+
+compattr name content namespaces =
+(letrec
+  qname = (xq::consimple name)
+  nsprefix = (xml::getnsprefix qname)
+  nsuri = (xq::resolve nsprefix namespaces)
+  localname = (xml::getlocalname qname)
+  value = (xq::consimple content)
+in
+  (cons (xml::mknpattr nsuri nsprefix localname value) nil))
+
+join_strings strings separator =
+(if strings
+  (if (tail strings)
+    (++ (head strings) (++ separator (join_strings (tail strings) separator)))
+    (++ (head strings) (join_strings (tail strings) separator)))
+  nil)
+
+comptext e =
+(letrec
+  atoms = (atomize e)
+in
+  (if (not atoms)
+    nil
+  (letrec
+    strings = (map atom_to_string_value atoms)
+    content = (join_strings strings " ")
+  in
+    (cons (xml::mktext content) nil))))
+
+//==================================================================================================
+// Casting
+
+xs_anyURI arg = (xs_string arg)
+
+xs_string arg =
+(if (not arg)
+  nil
+(if (tail arg)
+  (error "Can't pass more than one item to cast operation")
+(if (isatomic (head arg))
+  (cons (atom_to_string (head arg)) nil)
+  (cons (xml::mkstring (dm_string_value (head arg))) nil))))
+
+xs_untypedAtomic arg =
+(if (not arg)
+  nil
+(if (tail arg)
+  (error "Can't pass more than one item to cast operation")
+(if (isatomic (head arg))
+  (cons (xml::mkuntyped (xml::item_value (atom_to_string (head arg)))) nil)
+  (cons (xml::mkuntyped (dm_string_value (head arg))) nil))))
+
+xs_boolean arg =
+(if (not arg)
+  nil
+(if (tail arg)
+  (error "Can't pass more than one item to cast operation")
+(if (isboolean (head arg))
+  arg
+(if (isnumber (head arg))
+  (cons (xml::mkbool (!= (xml::item_value (head arg)) 0)) nil)
+(if (isstring (head arg))
+  (letrec val = (xml::item_value (head arg))
+  in (cons (xml::mkbool (or (streq val "true") (streq val "1"))) nil))
+(error "Invalid cast to boolean"))))))
+
+xs_decimal arg = (cast_number arg)
+xs_float arg = (cast_number arg)
+xs_double arg = (cast_number arg)
+xs_integer arg = (cast_number arg)
+xs_nonPositiveInteger arg = (cast_number arg)
+xs_negativeInteger arg = (cast_number arg)
+xs_long arg = (cast_number arg)
+xs_int arg = (cast_number arg)
+xs_short arg = (cast_number arg)
+xs_byte arg = (cast_number arg)
+xs_nonNegativeInteger arg = (cast_number arg)
+xs_unsignedLong arg = (cast_number arg)
+xs_unsignedInt arg = (cast_number arg)
+xs_unsignedShort arg = (cast_number arg)
+xs_unsignedByte arg = (cast_number arg)
+xs_positiveInteger arg = (cast_number arg)
+
+cast_number arg =
+(if (not arg)
+  nil
+(if (tail arg)
+  (error "Can't pass more than one item to cast operation")
+(if (isnumber (head arg))
+  arg
+(if (isstring (head arg))
+  (cons (xml::mknumber (stringtonum (xml::item_value (head arg)))) nil)
+  (error "Cannot cast to number")))))

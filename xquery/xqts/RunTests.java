@@ -111,16 +111,45 @@ public class RunTests
     return bout.toByteArray();
   }
 
+  public byte[] removeTrailingNewline(byte[] data)
+  {
+    int len = data.length;
+
+    if ((len > 0) && (data[len-1] == '\n'))
+      len--;
+    if ((len > 0) && (data[len-1] == '\r'))
+      len--;
+
+    if (len == data.length)
+      return data;
+
+    byte[] removed = new byte[len];
+    System.arraycopy(data,0,removed,0,len);
+    return removed;
+  }
+
   public boolean compare(String method, InputStream is1, InputStream is2)
     throws IOException
   {
-    byte[] b1 = streamToByteArray(is1);
-    byte[] b2 = streamToByteArray(is2);
+    byte[] b1 = removeTrailingNewline(streamToByteArray(is1));
+    byte[] b2 = removeTrailingNewline(streamToByteArray(is2));
     if (Arrays.equals(b1,b2)) {
       return true;
     }
     else {
       if (verbose) {
+//         int b1len = b1.length;
+//         if ((b1len > 0) && (b1[b1len-1] == '\n'))
+//           b1len--;
+//         if ((b1len > 0) && (b1[b1len-1] == '\r'))
+//           b1len--;
+
+//         int b2len = b2.length;
+//         if ((b2len > 0) && (b2[b2len-1] == '\n'))
+//           b2len--;
+//         if ((b2len > 0) && (b2[b2len-1] == '\r'))
+//           b2len--;
+
         System.out.println("================= actual =====================");
         System.out.write(b1,0,b1.length);
         System.out.println();
@@ -285,6 +314,8 @@ public class RunTests
         System.out.println("  file "+queryFile);
         System.out.println("  outputFile "+outputFile);
         System.out.println("  compare "+compare);
+        for (int i = 0; i < inputs.size(); i++)
+          System.out.println("  "+inputVariables.get(i)+" = "+inputs.get(i));
       }
 
       if (queryName == null)
