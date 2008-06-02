@@ -1,0 +1,109 @@
+module ws
+imports xquery xml-info libstratego-lib
+
+rules
+
+A : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/"),name),
+            attrs,ch) -> Elem("wsdl",name,attrs,ch)
+A : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/soap/"),name),
+            attrs,ch) -> Elem("soap",name,attrs,ch)
+
+// Simplify XML info structure to WSDL terms
+
+S : Document(x)                             -> x
+S : Elem("wsdl","types",_,ch)         -> Types(ch)
+S : Elem("wsdl","definitions",_,defs)       -> Definitions(defs)
+S : Elem("wsdl","portType",attrs,ops)       -> PortType(name,ops)
+    where attr(|attrs,"name") => name
+S : Elem("wsdl","message",attrs,parts)      -> Message(name,parts)
+    where attr(|attrs,"name") => name
+S : Elem("wsdl","part",attrs,_)             -> Part(name,type)
+  where attr(|attrs,"name") => name;
+        attr(|attrs,"type") => type
+
+S : Elem("wsdl","operation",attrs,ch)       -> Operation(name,ip,op)
+  where attr(|attrs,"name") => name;
+        ip := MessageRef(<local><cattr(|ch,"wsdl","input","message")>);
+        op := MessageRef(<local><cattr(|ch,"wsdl","output","message")>)
+
+S : Elem("wsdl","binding",attrs,ch)         -> Binding(name,pref,style)
+  where name := <attr(|attrs,"name")>;
+        pref := PortTypeRef(<local><attr(|attrs,"type")>);
+        style := <cattr(|ch,"soap","binding","style")>
+
+S : Elem("wsdl","port",attrs,ch)            -> Port(name,bref,location)
+  where name := <attr(|attrs,"name")>;
+        bref := BindingRef(<local><attr(|attrs,"binding")>);
+        location := <cattr(|ch,"soap","address","location")>
+
+S : Elem("wsdl","service",attrs,ports)      -> Service(name,ports)
+    where name := <attr(|attrs,"name")>
+
+attr(|attrs,name) =
+  <one(?Attribute(Name(None(),name),value))>attrs; !value
+
+cattr(|ch,ctype,cname,aname) =
+  <one(?Elem(ctype,cname,attrs,_))>ch;
+  attr(|attrs,aname)
+
+// Set reference resolution rules
+
+R : Message(name,parts) -> Message(name,parts)
+    where rules(C : MessageRef(name) -> Message(name,parts))
+
+R : PortType(name,operations) -> PortType(name,operations)
+   where rules(C : PortTypeRef(name) -> PortType(name,operations))
+
+R : Binding(name,portType,style) -> Binding(name,portType,style)
+   where rules(C : BindingRef(name) -> Binding(name,portType,style))
+
+// Generate XQuery code
+
+X : Operation(name,input,output) ->
+    Function(FunctionName(UQName(name)),input,
+             None(),Enclosed(EmptySeq()))
+
+X : Message(name,parts) -> parts
+
+X : Part(name,type) ->
+    Param(VarName(UQName(name)),
+          Some(TypeDeclaration(PQName(<prefix>type,<local>type))))
+
+strategies
+  main = io-wrap(genws)
+
+  genws =
+  topdown(try(A))
+; topdown(try(repeat(S)))
+/*
+; topdown(try(R))
+; innermost(C)
+; find(?Service(_,_))
+; topdown(try(repeat(X)))
+; find(?Function(_,_,_,_))
+; !MainModule(None(),Prolog([],<id>),EmptySeq())
+*/
+
+  prefix = string-tokenize(|[':']); ?[name,_]; !name
+  local = string-tokenize(|[':']); ?[_,name]; !name
+
+  find(s) = s; ![<id>] <+ {c,p: ?c#(p); <map(find(s))>p; concat }
+
+signature
+constructors
+
+  Definitions : Unknown -> Unknown
+  PortType : String * Unknown -> Unknown
+  Message : String * Unknown -> Unknown
+  Part : String * String -> Unknown
+  Operation : String * String * String -> Unknown
+  Binding : String * String * String -> Unknown
+  Port : String * String * String -> Unknown
+  Port2 : String * String * String * Unknown -> Unknown
+  Service : String * Unknown -> Unknown
+  Types : Unknown -> Unknown
+
+  MessageRef : String -> Unknown
+  PortTypeRef : String -> Unknown
+  BindingRef : String -> Unknown
+  Elem : String * String * Unknown * Unknown -> Unknown

@@ -1,6 +1,9 @@
 FLAGS=`strcflags stratego-lib`
 
-all: xquery.tbl elc.tbl xquery.pp elc.pp xquery-parenthesize elc-parenthesize compile nopriorities
+all: xquery.tbl elc.tbl xquery.pp elc.pp xquery-parenthesize elc-parenthesize compile nopriorities ws
+
+ws: ws.str concrete.tbl
+	strc -i ws.str $(FLAGS)
 
 compile: compile.str concrete.tbl
 	strc -i compile.str $(FLAGS)
@@ -56,3 +59,4 @@ clean:
 	rm -rf .libs
 	rm -f compile.c compile
 	rm -f nopriorities.c nopriorities
+	rm -f ws.c ws
