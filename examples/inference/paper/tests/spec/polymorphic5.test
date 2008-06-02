@@ -1,0 +1,35 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  f = (!x.!y.pair x y)
+  g = (!x.!y.f x y)
+in
+  (g true false)
+==================================== OUTPUT ====================================
+block                                                        bool x bool
+|-- rec                                                      
+|   |-- def f1                                               f1: bool -> bool -> bool x bool
+|   |   `-- lambda x                                         bool -> bool -> bool x bool
+|   |       `-- lambda y                                     bool -> bool x bool
+|   |           `-- @                                        bool x bool
+|   |               |-- @                                    bool -> bool x bool
+|   |               |   |-- pair                             bool -> bool -> bool x bool
+|   |               |   `-- x                                bool
+|   |               `-- y                                    bool
+|   `-- def g1                                               g1: bool -> bool -> bool x bool
+|       `-- lambda x                                         bool -> bool -> bool x bool
+|           `-- lambda y                                     bool -> bool x bool
+|               `-- @                                        bool x bool
+|                   |-- @                                    bool -> bool x bool
+|                   |   |-- f1                               bool -> bool -> bool x bool
+|                   |   `-- x                                bool
+|                   `-- y                                    bool
+`-- @                                                        bool x bool
+    |-- @                                                    bool -> bool x bool
+    |   |-- g1                                               bool -> bool -> bool x bool
+    |   `-- true                                             bool
+    `-- false                                                bool
+================================== RETURN CODE =================================
+0

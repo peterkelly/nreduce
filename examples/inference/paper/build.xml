@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<project name="typecheck" default="compile" basedir=".">
+
+  <property environment="env"/>
+  <property name="work" location="${user.dir}"/>
+  <property name="build" location="${user.dir}/build"/>
+  <property name="saxon" location="/usr/local/saxon"/>
+
+  <target name="initbuild">
+    <echo message="work is ${work}"/>
+    <echo message="build is ${build}"/>
+    <mkdir dir="${build}"/>
+    <mkdir dir="${build}/classes"/>
+    <mkdir dir="${build}/javacc"/>
+  </target>
+
+  <target name="javacc" depends="initbuild">
+    <javacc javacchome="/usr/local/javacc-4.0"
+            target="syntax.jj"
+            outputdirectory="${build}/javacc"/>
+  </target>
+
+  <target name="compile" depends="javacc">
+    <javac destdir="${build}/classes" debug="on">
+      <src path="."/>
+      <src path="${build}/javacc"/>
+    </javac>
+  </target>
+
+  <target name="clean">
+    <delete dir="${build}"/>
+  </target>
+
+</project>

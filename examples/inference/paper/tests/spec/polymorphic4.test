@@ -1,0 +1,40 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  f = (!x.x)
+in
+  (pair (f true) (pair (f 3) (pair (f false) (f 4))))
+==================================== OUTPUT ====================================
+block                                                        bool x int x bool x int
+|-- rec                                                      
+|   |-- def f1                                               f1: int -> int
+|   |   `-- lambda x                                         int -> int
+|   |       `-- x                                            int
+|   `-- def f2                                               f2: bool -> bool
+|       `-- lambda x                                         bool -> bool
+|           `-- x                                            bool
+`-- @                                                        bool x int x bool x int
+    |-- @                                                    (int x bool x int) -> bool x int x bool x int
+    |   |-- pair                                             bool -> (int x bool x int) -> bool x int x bool x int
+    |   `-- @                                                bool
+    |       |-- f2                                           bool -> bool
+    |       `-- true                                         bool
+    `-- @                                                    int x bool x int
+        |-- @                                                (bool x int) -> int x bool x int
+        |   |-- pair                                         int -> (bool x int) -> int x bool x int
+        |   `-- @                                            int
+        |       |-- f1                                       int -> int
+        |       `-- 3                                        int
+        `-- @                                                bool x int
+            |-- @                                            int -> bool x int
+            |   |-- pair                                     bool -> int -> bool x int
+            |   `-- @                                        bool
+            |       |-- f2                                   bool -> bool
+            |       `-- false                                bool
+            `-- @                                            int
+                |-- f1                                       int -> int
+                `-- 4                                        int
+================================== RETURN CODE =================================
+0

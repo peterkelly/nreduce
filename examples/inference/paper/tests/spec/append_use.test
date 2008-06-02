@@ -1,0 +1,47 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+in
+  (append (cons true nil) (cons false nil))
+==================================== OUTPUT ====================================
+block                                                        bool list
+|-- rec                                                      
+|   `-- def append1                                          append1: (bool list) -> (bool list) -> bool list
+|       `-- lambda x                                         (bool list) -> (bool list) -> bool list
+|           `-- lambda y                                     (bool list) -> bool list
+|               `-- if                                       bool list
+|                   |-- @                                    bool
+|                   |   |-- null                             (bool list) -> bool
+|                   |   `-- x                                bool list
+|                   |-- y                                    bool list
+|                   `-- @                                    bool list
+|                       |-- @                                (bool list) -> bool list
+|                       |   |-- cons                         bool -> (bool list) -> bool list
+|                       |   `-- @                            bool
+|                       |       |-- hd                       (bool list) -> bool
+|                       |       `-- x                        bool list
+|                       `-- @                                bool list
+|                           |-- @                            (bool list) -> bool list
+|                           |   |-- append1                  (bool list) -> (bool list) -> bool list
+|                           |   `-- @                        bool list
+|                           |       |-- tl                   (bool list) -> bool list
+|                           |       `-- x                    bool list
+|                           `-- y                            bool list
+`-- @                                                        bool list
+    |-- @                                                    (bool list) -> bool list
+    |   |-- append1                                          (bool list) -> (bool list) -> bool list
+    |   `-- @                                                bool list
+    |       |-- @                                            (bool list) -> bool list
+    |       |   |-- cons                                     bool -> (bool list) -> bool list
+    |       |   `-- true                                     bool
+    |       `-- nil                                          bool list
+    `-- @                                                    bool list
+        |-- @                                                (bool list) -> bool list
+        |   |-- cons                                         bool -> (bool list) -> bool list
+        |   `-- false                                        bool
+        `-- nil                                              bool list
+================================== RETURN CODE =================================
+0

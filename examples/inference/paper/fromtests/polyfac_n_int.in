@@ -1,0 +1,4 @@
+letrec
+  fac = (!n.if (p<= n 1) then n else (p* n (fac (p- n 1))))
+in
+  (fac 5)

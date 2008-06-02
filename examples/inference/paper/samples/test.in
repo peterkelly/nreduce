@@ -1,0 +1,6 @@
+letrec
+  add = (!x.!y.+ x y)
+in
+  (add 2 3)
+
+

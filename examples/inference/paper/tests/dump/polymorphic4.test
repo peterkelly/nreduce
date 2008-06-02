@@ -1,0 +1,37 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  f = (!x.x)
+in
+  (pair (f true) (pair (f 3) (pair (f false) (f 4))))
+==================================== OUTPUT ====================================
+block                                                        bool x int x bool x int
+|-- rec                                                      
+|   `-- def f                                                f: a -> a
+|       `-- lambda x                                         a -> a
+|           `-- x                                            a
+`-- @                                                        bool x int x bool x int
+    |-- @                                                    (int x bool x int) -> bool x int x bool x int
+    |   |-- pair                                             bool -> (int x bool x int) -> bool x int x bool x int
+    |   `-- @                                                bool
+    |       |-- f                                            bool -> bool
+    |       `-- true                                         bool
+    `-- @                                                    int x bool x int
+        |-- @                                                (bool x int) -> int x bool x int
+        |   |-- pair                                         int -> (bool x int) -> int x bool x int
+        |   `-- @                                            int
+        |       |-- f                                        int -> int
+        |       `-- 3                                        int
+        `-- @                                                bool x int
+            |-- @                                            int -> bool x int
+            |   |-- pair                                     bool -> int -> bool x int
+            |   `-- @                                        bool
+            |       |-- f                                    bool -> bool
+            |       `-- false                                bool
+            `-- @                                            int
+                |-- f                                        int -> int
+                `-- 4                                        int
+================================== RETURN CODE =================================
+0

@@ -1,0 +1,4 @@
+letrec
+  mklist = (!n.if (== n 0) then nil else (cons n (mklist (- n 1))))
+in
+  mklist

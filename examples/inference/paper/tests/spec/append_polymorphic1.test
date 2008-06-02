@@ -1,0 +1,90 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  appints = (append (cons 1 nil) (cons 3 nil))
+  appbools = (append (cons true nil) (cons false nil))
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+in
+  (pair appints appbools)
+==================================== OUTPUT ====================================
+block                                                        (int list) x bool list
+|-- rec                                                      
+|   |-- def append1                                          append1: (bool list) -> (bool list) -> bool list
+|   |   `-- lambda x                                         (bool list) -> (bool list) -> bool list
+|   |       `-- lambda y                                     (bool list) -> bool list
+|   |           `-- if                                       bool list
+|   |               |-- @                                    bool
+|   |               |   |-- null                             (bool list) -> bool
+|   |               |   `-- x                                bool list
+|   |               |-- y                                    bool list
+|   |               `-- @                                    bool list
+|   |                   |-- @                                (bool list) -> bool list
+|   |                   |   |-- cons                         bool -> (bool list) -> bool list
+|   |                   |   `-- @                            bool
+|   |                   |       |-- hd                       (bool list) -> bool
+|   |                   |       `-- x                        bool list
+|   |                   `-- @                                bool list
+|   |                       |-- @                            (bool list) -> bool list
+|   |                       |   |-- append1                  (bool list) -> (bool list) -> bool list
+|   |                       |   `-- @                        bool list
+|   |                       |       |-- tl                   (bool list) -> bool list
+|   |                       |       `-- x                    bool list
+|   |                       `-- y                            bool list
+|   |-- def append2                                          append2: (int list) -> (int list) -> int list
+|   |   `-- lambda x                                         (int list) -> (int list) -> int list
+|   |       `-- lambda y                                     (int list) -> int list
+|   |           `-- if                                       int list
+|   |               |-- @                                    bool
+|   |               |   |-- null                             (int list) -> bool
+|   |               |   `-- x                                int list
+|   |               |-- y                                    int list
+|   |               `-- @                                    int list
+|   |                   |-- @                                (int list) -> int list
+|   |                   |   |-- cons                         int -> (int list) -> int list
+|   |                   |   `-- @                            int
+|   |                   |       |-- hd                       (int list) -> int
+|   |                   |       `-- x                        int list
+|   |                   `-- @                                int list
+|   |                       |-- @                            (int list) -> int list
+|   |                       |   |-- append2                  (int list) -> (int list) -> int list
+|   |                       |   `-- @                        int list
+|   |                       |       |-- tl                   (int list) -> int list
+|   |                       |       `-- x                    int list
+|   |                       `-- y                            int list
+|   |-- def appints                                          appints: int list
+|   |   `-- @                                                int list
+|   |       |-- @                                            (int list) -> int list
+|   |       |   |-- append2                                  (int list) -> (int list) -> int list
+|   |       |   `-- @                                        int list
+|   |       |       |-- @                                    (int list) -> int list
+|   |       |       |   |-- cons                             int -> (int list) -> int list
+|   |       |       |   `-- 1                                int
+|   |       |       `-- nil                                  int list
+|   |       `-- @                                            int list
+|   |           |-- @                                        (int list) -> int list
+|   |           |   |-- cons                                 int -> (int list) -> int list
+|   |           |   `-- 3                                    int
+|   |           `-- nil                                      int list
+|   `-- def appbools                                         appbools: bool list
+|       `-- @                                                bool list
+|           |-- @                                            (bool list) -> bool list
+|           |   |-- append1                                  (bool list) -> (bool list) -> bool list
+|           |   `-- @                                        bool list
+|           |       |-- @                                    (bool list) -> bool list
+|           |       |   |-- cons                             bool -> (bool list) -> bool list
+|           |       |   `-- true                             bool
+|           |       `-- nil                                  bool list
+|           `-- @                                            bool list
+|               |-- @                                        (bool list) -> bool list
+|               |   |-- cons                                 bool -> (bool list) -> bool list
+|               |   `-- false                                bool
+|               `-- nil                                      bool list
+`-- @                                                        (int list) x bool list
+    |-- @                                                    (bool list) -> (int list) x bool list
+    |   |-- pair                                             (int list) -> (bool list) -> (int list) x bool list
+    |   `-- appints                                          int list
+    `-- appbools                                             bool list
+================================== RETURN CODE =================================
+0

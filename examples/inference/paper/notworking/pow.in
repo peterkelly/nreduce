@@ -1,0 +1,4 @@
+letrec
+  pow = (!n.!exp.if (== exp 1) then (p* n 1) else (p* n (pow n (- exp 1))))
+in
+  pow

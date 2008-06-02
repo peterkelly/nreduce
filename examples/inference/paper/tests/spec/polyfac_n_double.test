@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  fac = (!n.if (p<= n 1) then n else (p* n (fac (p- n 1))))
+in
+  (fac 5.0)
+==================================== OUTPUT ====================================
+block                                                        double
+|-- rec                                                      
+|   `-- def fac1                                             fac1: double -> double
+|       `-- lambda n                                         double -> double
+|           `-- if                                           double
+|               |-- @                                        bool
+|               |   |-- @                                    int -> bool
+|               |   |   |-- p<=                              double -> int -> bool
+|               |   |   `-- n                                double
+|               |   `-- 1                                    int
+|               |-- n                                        double
+|               `-- @                                        double
+|                   |-- @                                    double -> double
+|                   |   |-- p*                               double -> double -> double
+|                   |   `-- n                                double
+|                   `-- @                                    double
+|                       |-- fac1                             double -> double
+|                       `-- @                                double
+|                           |-- @                            int -> double
+|                           |   |-- p-                       double -> int -> double
+|                           |   `-- n                        double
+|                           `-- 1                            int
+`-- @                                                        double
+    |-- fac1                                                 double -> double
+    `-- 5.0                                                  double
+================================== RETURN CODE =================================
+0

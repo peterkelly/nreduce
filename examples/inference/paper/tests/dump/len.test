@@ -1,0 +1,30 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  len = (!lst.if (null lst) then 0 else (+ 1 (len (tl lst))))
+in
+  len
+==================================== OUTPUT ====================================
+block                                                        (a list) -> int
+|-- rec                                                      
+|   `-- def len                                              len: (b list) -> int
+|       `-- lambda lst                                       (b list) -> int
+|           `-- if                                           int
+|               |-- @                                        bool
+|               |   |-- null                                 (b list) -> bool
+|               |   `-- lst                                  b list
+|               |-- 0                                        int
+|               `-- @                                        int
+|                   |-- @                                    int -> int
+|                   |   |-- +                                int -> int -> int
+|                   |   `-- 1                                int
+|                   `-- @                                    int
+|                       |-- len                              (b list) -> int
+|                       `-- @                                b list
+|                           |-- tl                           (b list) -> b list
+|                           `-- lst                          b list
+`-- len                                                      (a list) -> int
+================================== RETURN CODE =================================
+0

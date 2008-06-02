@@ -1,0 +1,6 @@
+letrec
+  len = (!list.if (null list)
+               then 0
+               else (+ 1 (len (tl list))))
+in
+  len

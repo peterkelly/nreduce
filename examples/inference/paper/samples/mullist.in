@@ -1,0 +1,7 @@
+letrec
+  foldr = (!f.!base.!lst.
+(if (null lst)
+  then base
+  else (f (hd lst) (foldr f base (tl lst)))))
+in
+  (foldr + 0 (cons 1 (cons 2 nil)))

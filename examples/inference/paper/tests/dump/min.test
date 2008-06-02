@@ -1,0 +1,25 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  min = (!a.!b.(if (< a b) then a else b))
+in
+  min
+==================================== OUTPUT ====================================
+block                                                        int -> int -> int
+|-- rec                                                      
+|   `-- def min                                              min: int -> int -> int
+|       `-- lambda a                                         int -> int -> int
+|           `-- lambda b                                     int -> int
+|               `-- if                                       int
+|                   |-- @                                    bool
+|                   |   |-- @                                int -> bool
+|                   |   |   |-- <                            int -> int -> bool
+|                   |   |   `-- a                            int
+|                   |   `-- b                                int
+|                   |-- a                                    int
+|                   `-- b                                    int
+`-- min                                                      int -> int -> int
+================================== RETURN CODE =================================
+0

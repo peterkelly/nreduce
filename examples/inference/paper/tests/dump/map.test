@@ -1,0 +1,37 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  map = (!f.!lst.if (null lst) then nil else (cons (f (hd lst)) (map f (tl lst))))
+in
+  map
+==================================== OUTPUT ====================================
+block                                                        (a -> b) -> (a list) -> b list
+|-- rec                                                      
+|   `-- def map                                              map: (c -> d) -> (c list) -> d list
+|       `-- lambda f                                         (c -> d) -> (c list) -> d list
+|           `-- lambda lst                                   (c list) -> d list
+|               `-- if                                       d list
+|                   |-- @                                    bool
+|                   |   |-- null                             (c list) -> bool
+|                   |   `-- lst                              c list
+|                   |-- nil                                  d list
+|                   `-- @                                    d list
+|                       |-- @                                (d list) -> d list
+|                       |   |-- cons                         d -> (d list) -> d list
+|                       |   `-- @                            d
+|                       |       |-- f                        c -> d
+|                       |       `-- @                        c
+|                       |           |-- hd                   (c list) -> c
+|                       |           `-- lst                  c list
+|                       `-- @                                d list
+|                           |-- @                            (c list) -> d list
+|                           |   |-- map                      (c -> d) -> (c list) -> d list
+|                           |   `-- f                        c -> d
+|                           `-- @                            c list
+|                               |-- tl                       (c list) -> c list
+|                               `-- lst                      c list
+`-- map                                                      (a -> b) -> (a list) -> b list
+================================== RETURN CODE =================================
+0

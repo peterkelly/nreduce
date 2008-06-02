@@ -1,0 +1,4 @@
+letrec
+  dynret = (!a.if (> a 0) then 1 else true)
+in
+  (dynret 2)

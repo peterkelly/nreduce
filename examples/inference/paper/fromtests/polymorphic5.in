@@ -1,0 +1,5 @@
+letrec
+  f = (!x.!y.pair x y)
+  g = (!x.!y.f x y)
+in
+  (g true false)

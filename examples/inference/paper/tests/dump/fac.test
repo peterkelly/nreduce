@@ -1,0 +1,34 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  fac = (!n.if (<= n 1) then 1 else (* n (fac (- n 1))))
+in
+  fac
+==================================== OUTPUT ====================================
+block                                                        int -> int
+|-- rec                                                      
+|   `-- def fac                                              fac: int -> int
+|       `-- lambda n                                         int -> int
+|           `-- if                                           int
+|               |-- @                                        bool
+|               |   |-- @                                    int -> bool
+|               |   |   |-- <=                               int -> int -> bool
+|               |   |   `-- n                                int
+|               |   `-- 1                                    int
+|               |-- 1                                        int
+|               `-- @                                        int
+|                   |-- @                                    int -> int
+|                   |   |-- *                                int -> int -> int
+|                   |   `-- n                                int
+|                   `-- @                                    int
+|                       |-- fac                              int -> int
+|                       `-- @                                int
+|                           |-- @                            int -> int
+|                           |   |-- -                        int -> int -> int
+|                           |   `-- n                        int
+|                           `-- 1                            int
+`-- fac                                                      int -> int
+================================== RETURN CODE =================================
+0

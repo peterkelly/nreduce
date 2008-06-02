@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+inference -spec -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  fac = (!n.if (p<= n 1) then 1 else (p* n (fac (p- n 1))))
+in
+  (fac 5)
+==================================== OUTPUT ====================================
+block                                                        int
+|-- rec                                                      
+|   `-- def fac1                                             fac1: int -> int
+|       `-- lambda n                                         int -> int
+|           `-- if                                           int
+|               |-- @                                        bool
+|               |   |-- @                                    int -> bool
+|               |   |   |-- p<=                              int -> int -> bool
+|               |   |   `-- n                                int
+|               |   `-- 1                                    int
+|               |-- 1                                        int
+|               `-- @                                        int
+|                   |-- @                                    int -> int
+|                   |   |-- p*                               int -> int -> int
+|                   |   `-- n                                int
+|                   `-- @                                    int
+|                       |-- fac1                             int -> int
+|                       `-- @                                int
+|                           |-- @                            int -> int
+|                           |   |-- p-                       int -> int -> int
+|                           |   `-- n                        int
+|                           `-- 1                            int
+`-- @                                                        int
+    |-- fac1                                                 int -> int
+    `-- 5                                                    int
+================================== RETURN CODE =================================
+0

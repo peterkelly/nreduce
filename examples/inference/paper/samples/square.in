@@ -1,0 +1,4 @@
+letrec
+  square = (!x.p* x x)
+in
+  (pair (square 3) (square 2.7))

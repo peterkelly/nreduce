@@ -1,0 +1,4 @@
+letrec
+  f = (!x.x)
+in
+  (pair (f true) (pair (f 3) (pair (f false) (f 4))))

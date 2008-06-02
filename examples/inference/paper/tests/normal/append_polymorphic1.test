@@ -1,0 +1,14 @@
+=================================== PROGRAM ====================================
+inference runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  appints = (append (cons 1 nil) (cons 3 nil))
+  appbools = (append (cons true nil) (cons false nil))
+  append = (!x.!y.if (null x) then y else (cons (hd x) (append (tl x) y)))
+in
+  (pair appints appbools)
+==================================== OUTPUT ====================================
+(int list) x bool list
+================================== RETURN CODE =================================
+0

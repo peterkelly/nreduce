@@ -1,0 +1,36 @@
+=================================== PROGRAM ====================================
+inference -dump runtests.tmp/test.in
+===================================== FILE =====================================
+test.in
+letrec
+  fac = (!n.if (p<= n 1) then n else (p* n (fac (p- n 1))))
+in
+  (fac 5)
+==================================== OUTPUT ====================================
+block                                                        int
+|-- rec                                                      
+|   `-- def fac                                              fac: a -> a
+|       `-- lambda n                                         a -> a
+|           `-- if                                           a
+|               |-- @                                        bool
+|               |   |-- @                                    int -> bool
+|               |   |   |-- p<=                              a -> int -> bool
+|               |   |   `-- n                                a
+|               |   `-- 1                                    int
+|               |-- n                                        a
+|               `-- @                                        a
+|                   |-- @                                    arith(a,int) -> a
+|                   |   |-- p*                               a -> arith(a,int) -> a
+|                   |   `-- n                                a
+|                   `-- @                                    arith(a,int)
+|                       |-- fac                              arith(a,int) -> arith(a,int)
+|                       `-- @                                arith(a,int)
+|                           |-- @                            int -> arith(a,int)
+|                           |   |-- p-                       a -> int -> arith(a,int)
+|                           |   `-- n                        a
+|                           `-- 1                            int
+`-- @                                                        int
+    |-- fac                                                  int -> int
+    `-- 5                                                    int
+================================== RETURN CODE =================================
+0
