@@ -230,19 +230,33 @@ E : Text(s) -> App(App(Sym("cons"),App(Sym("xml::mktext"),Str(<escape>s))),Nl())
 
 // ELC code optimisation (XQuery-specific)
 
-OX : |{ xq::consimple (cons (xml::mkstring e) nil) }| -> |{ e }|
-OX : |{ xq::consimple nil }| -> |{ nil }|
+OX : |{ (xq::consimple (cons (xml::mkstring e) nil)) }| -> |{ e }|
+OX : |{ (xq::consimple nil) }| -> |{ nil }|
+OX : |{ (xq::ebv (cons (xml::mkbool e) nil)) }| -> |{ e }|
+
+/*
+OX : |{ (x
+          (cons (xml::mknumber e1) nil)
+          (cons (xml::mknumber e2) nil)) }| -> |{ (cons (xml::mknumber (+ e1 e2)) nil) }|
+
+OX : |{ (xq::general_eq
+          (cons (xml::mknumber e1) nil)
+          (cons (xml::mknumber e2) nil)) }| -> |{ (== e1 e2) }|
+*/
 
 // ELC code optimisation (general)
+
+O1 : |{ (if e1 (x e2 nil) (x e3 nil)) }| -> |{ (x (if e1 e2 e3) nil) }|
+O1 : |{ (if e1 (x e2) (x e3)) }| -> |{ (x (if e1 e2 e3)) }|
 
 O1 : |{ (filter (!x.1) e) }|      -> |{ e }|
 
 O1 : |{ (++ nil e) }|             -> |{ e }|
 O1 : |{ (++ (++ e1 e2) e3) }|     -> |{ ++ e1 (++ e2 e3) }|
+O1 : |{ (++ (cons e1 e2) e3) }|   -> |{ (cons e1 (++ e2 e3)) }|
 
-O2 : |{ (++ (cons e1 nil) e2) }|  -> |{ cons e1 e2 }|
-O2 : |{ (++ s nil) }|             -> |{ s }|
-O2 : |{ (++ s1 s2) }|             -> |{ s3 }|
+O1 : |{ (++ s nil) }|             -> |{ s }|
+O1 : |{ (++ s1 s2) }|             -> |{ s3 }|
      where s3 := <conc-strings>(s1,s2)
 
 fixapp1 : SComb(n,[],Str(x))      -> SCombConst(n,[],Str(x))
@@ -438,7 +452,7 @@ strategies
   ; bottomup(try(bind_nsdecls))
   ; innermost(E)                   // Main compilation routines
   ; innermost(OX)                  // ELC code optimisation (XQuery-specific)
-  ; innermost(O1) ; innermost(O2)  // ELC code optimisation (general)
+  ; innermost(O1)                  // ELC code optimisation (general)
   ; addmain                        // Add main function
   ; addnamespaces(|ns)             // Add in-scope namespaces variable
   ; fixapp                         // Convert ELC constructs to pretty-print forms
