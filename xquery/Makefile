@@ -1,12 +1,13 @@
-FLAGS=`strcflags stratego-lib`
+FLAGS=`strcflags stratego-lib stratego-xtc`
+XTCREPOS=`xtc query -R | sed -e 's/^.*=//'`
 
 all: xquery.tbl elc.tbl xquery.pp elc.pp xquery-parenthesize elc-parenthesize compile nopriorities ws
 
 ws: ws.str concrete.tbl
-	strc -i ws.str $(FLAGS)
+	strc -i ws.str -m wsmain $(FLAGS)
 
-compile: compile.str concrete.tbl
-	strc -i compile.str $(FLAGS)
+compile: compile.str concrete.tbl ws.str
+	strc --xtc-repo $(XTCREPOS) -i compile.str $(FLAGS)
 
 nopriorities: nopriorities.str
 	strc -i nopriorities.str $(FLAGS)

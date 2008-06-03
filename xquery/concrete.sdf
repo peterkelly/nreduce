@@ -57,6 +57,7 @@ exports
   "~" StrategoTerm         -> Expr {cons("FromTerm"),prefer}
   "~" StrategoTerm         -> Expression {cons("FromTerm"),prefer}
   "~" StrategoTerm         -> SequenceType {cons("FromTerm"),prefer}
+  "~" StrategoTerm         -> {Param ","}* {cons("FromTerm"),prefer}
   "~s:" StrategoTerm       -> String {cons("FromTerm"),prefer}
   String                   -> Expression {cons("Str")}
 

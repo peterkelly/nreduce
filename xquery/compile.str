@@ -1,5 +1,5 @@
 module compile
-imports xquery elc libstratego-lib
+imports xquery elc ws libstratego-lib libstratego-xtc xml-xtc-tools
 
 rules
 
@@ -414,6 +414,32 @@ nsattr2pair : DirAttribute(UQName("xmlns"),s) ->
 /* ---------------------------- Top-level strategies ---------------------------------- */
 
 strategies
+
+  get-wsdl =
+    ? address
+    ; where(pipe => p)
+    ; fork(<stdout-to-pipe> p; <execvp> ("curl",["-s",address]))
+    ; ?(pid, _)
+    ; <stdin-from-pipe>p
+    ; <xtc-parse-xml-info>stdin()
+    ; where(<waitpid> pid ; (exited + signaled + stopped))
+
+  wsdl-functions =
+    ?(prefix,address);
+    <get-wsdl>address;
+    read-from;
+    genws(|prefix)
+
+findops : |[ import service namespace n = s; ]| -> |[ declare namespace n = s; ]|
+          where rules(ServiceOps:+ [] -> <wsdl-functions>(n,s))
+
+replaceops: Prolog(a,b) -> Prolog(a,<conc>(newfuns,b))
+            where <concat><bagof-ServiceOps>[] => newfuns
+
+  wsdlprocessing =
+  topdown(try(findops))
+; topdown(try(replaceops))
+
   main = io-wrap(Option("--simplify",
                         <set-config>(Simplify(),"on"),
                         !"--simplify       Just run XQuery simplification")+
@@ -458,6 +484,7 @@ strategies
   ; fixapp                         // Convert ELC constructs to pretty-print forms
 
   top =
+  wsdlprocessing;
   if <get-config>Simplify() then
     simplify
   else

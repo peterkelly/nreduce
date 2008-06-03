@@ -3,40 +3,40 @@ imports xquery xml-info libstratego-lib
 
 rules
 
-A : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/"),name),
+WA : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/"),name),
             attrs,ch) -> Elem("wsdl",name,attrs,ch)
-A : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/soap/"),name),
+WA : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/soap/"),name),
             attrs,ch) -> Elem("soap",name,attrs,ch)
 
 // Simplify XML info structure to WSDL terms
 
-S : Document(x)                             -> x
-S : Elem("wsdl","types",_,ch)         -> Types(ch)
-S : Elem("wsdl","definitions",_,defs)       -> Definitions(defs)
-S : Elem("wsdl","portType",attrs,ops)       -> PortType(name,ops)
+WS : Document(x)                             -> x
+WS : Elem("wsdl","types",_,ch)         -> Types(ch)
+WS : Elem("wsdl","definitions",_,defs)       -> Definitions(defs)
+WS : Elem("wsdl","portType",attrs,ops)       -> PortType(name,ops)
     where attr(|attrs,"name") => name
-S : Elem("wsdl","message",attrs,parts)      -> Message(name,parts)
+WS : Elem("wsdl","message",attrs,parts)      -> Message(name,parts)
     where attr(|attrs,"name") => name
-S : Elem("wsdl","part",attrs,_)             -> Part(name,type)
+WS : Elem("wsdl","part",attrs,_)             -> Part(name,type)
   where attr(|attrs,"name") => name;
         attr(|attrs,"type") => type
 
-S : Elem("wsdl","operation",attrs,ch)       -> Operation(name,ip,op)
+WS : Elem("wsdl","operation",attrs,ch)       -> Operation(name,ip,op)
   where attr(|attrs,"name") => name;
         ip := MessageRef(<local><cattr(|ch,"wsdl","input","message")>);
         op := MessageRef(<local><cattr(|ch,"wsdl","output","message")>)
 
-S : Elem("wsdl","binding",attrs,ch)         -> Binding(name,pref,style)
+WS : Elem("wsdl","binding",attrs,ch)         -> Binding(name,pref,style)
   where name := <attr(|attrs,"name")>;
         pref := PortTypeRef(<local><attr(|attrs,"type")>);
         style := <cattr(|ch,"soap","binding","style")>
 
-S : Elem("wsdl","port",attrs,ch)            -> Port(name,bref,location)
+WS : Elem("wsdl","port",attrs,ch)            -> Port(name,bref,location)
   where name := <attr(|attrs,"name")>;
         bref := BindingRef(<local><attr(|attrs,"binding")>);
         location := <cattr(|ch,"soap","address","location")>
 
-S : Elem("wsdl","service",attrs,ports)      -> Service(name,ports)
+WS : Elem("wsdl","service",attrs,ports)      -> Service(name,ports)
     where name := <attr(|attrs,"name")>
 
 attr(|attrs,name) =
@@ -48,41 +48,62 @@ cattr(|ch,ctype,cname,aname) =
 
 // Set reference resolution rules
 
-R : Message(name,parts) -> Message(name,parts)
-    where rules(C : MessageRef(name) -> Message(name,parts))
+WR : Message(name,parts) -> Message(name,parts)
+    where rules(WC : MessageRef(name) -> Message(name,parts))
 
-R : PortType(name,operations) -> PortType(name,operations)
-   where rules(C : PortTypeRef(name) -> PortType(name,operations))
+WR : PortType(name,operations) -> PortType(name,operations)
+   where rules(WC : PortTypeRef(name) -> PortType(name,operations))
 
-R : Binding(name,portType,style) -> Binding(name,portType,style)
-   where rules(C : BindingRef(name) -> Binding(name,portType,style))
+WR : Binding(name,portType,style) -> Binding(name,portType,style)
+   where rules(WC : BindingRef(name) -> Binding(name,portType,style))
 
 // Generate XQuery code
 
-X : Operation(name,input,output) ->
-    Function(FunctionName(UQName(name)),input,
-             None(),Enclosed(EmptySeq()))
+WX(|n1) : OperationAddr(s,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
+     |[ declare function n1:n2(~input) as ~rt {
+         fn:post(s,
+                 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+                   <soap:Body>
+                     <n2>~e</n2>
+                   </soap:Body>
+                 </soap:Envelope>)/soap:Envelope/soap:Body }; ]|
+     where <map(genparam)>input => lst;
+           <foldr(!|[ () ]|,\(e1,e2) -> |[ e1,e2 ]|\)>lst => e
 
-X : Message(name,parts) -> parts
+genparam : Param(VarName(UQName(n)),_) -> |[ <n>{$n}</n> ]|
 
-X : Part(name,type) ->
+WX(|n1) : Message(name,parts) -> parts
+
+WX(|n1) : Part(name,type) ->
     Param(VarName(UQName(name)),
           Some(TypeDeclaration(PQName(<prefix>type,<local>type))))
 
-strategies
-  main = io-wrap(genws)
+giveaddress =
+  rec r(
+    SetAddress
+  <+ ?Port(_,Binding,addr);
+     {| SetAddress: rules(SetAddress: Operation(n,i,o) -> OperationAddr(addr,n,i,o)); all(r) |}
+  <+ all(r))
 
-  genws =
-  topdown(try(A))
-; topdown(try(repeat(S)))
-/*
-; topdown(try(R))
-; innermost(C)
+strategies
+  wsmain = io-wrap(genwsfull)
+
+setprefix(|p) : FunctionName(UQName(n)) -> FunctionName(PQName(p,n))
+
+  genws(|prefix) =
+  topdown(try(WA))
+; topdown(try(repeat(WS)))
+; topdown(try(WR))
+; innermost(WC)
+; giveaddress
 ; find(?Service(_,_))
-; topdown(try(repeat(X)))
+; innermost(WX(|prefix))
 ; find(?Function(_,_,_,_))
+//; topdown(try(setprefix(|prefix)))
+
+  genwsfull =
+  genws(|"x")
 ; !MainModule(None(),Prolog([],<id>),EmptySeq())
-*/
 
   prefix = string-tokenize(|[':']); ?[name,_]; !name
   local = string-tokenize(|[':']); ?[_,name]; !name
@@ -97,6 +118,7 @@ constructors
   Message : String * Unknown -> Unknown
   Part : String * String -> Unknown
   Operation : String * String * String -> Unknown
+  OperationAddr : String * String * String * String -> Unknown
   Binding : String * String * String -> Unknown
   Port : String * String * String -> Unknown
   Port2 : String * String * String * Unknown -> Unknown
