@@ -16,7 +16,7 @@ exports
   [p][0-9]* "*" -> Predicate* {prefer}
 
   [a][0-9]* -> DirAttribute {prefer}
-  [a][0-9]* "*" -> DirAttributes {prefer}
+  [a][0-9]* "*" -> DirAttribute* {prefer}
 
   [n][0-9]* -> NCName {prefer}
 

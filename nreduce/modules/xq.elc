@@ -968,97 +968,11 @@ docorder_sort2 pivot lst before after =
       (docorder_sort2 pivot rest before (cons item after))))
   (append (docorder_sort before) (cons pivot (docorder_sort after))))
 
-have_nsuri namespaces nsuri =
-(if namespaces
-  (letrec
-    ns = (head namespaces)
-    uri = (xml::item_nsuri ns)
-  in
-    (if (streq uri nsuri)
-      1
-      (have_nsuri (tail namespaces) nsuri)))
-  nil)
-
-/* FIXME: this should also check attributes */
-nsfixup nsuri nsprefix localpart attrs namespaces =
-(if (have_nsuri namespaces nsuri)
-  (cons nsprefix namespaces)
-(if (xml::have_nsprefix nsprefix namespaces)
-  (letrec
-    newprefix = (++ nsprefix "_0")
-  in
-    (cons newprefix (++ namespaces (cons (xml::mknamespace nsuri newprefix) nil))))
-  (cons nsprefix (cons (xml::mknamespace nsuri nsprefix) namespaces))))
-
-element nsuri nsprefix localpart ans content =
-(letrec
-  supplied_attrs = (filter (!x.== (xml::item_type x) xml::TYPE_ATTRIBUTE) ans)
-  supplied_namespaces = (filter (!x.== (xml::item_type x) xml::TYPE_NAMESPACE) ans)
-  attrs = (++ supplied_attrs (get_attributes content))
-  namespaces = supplied_namespaces
-  children = (concomplex (get_children content))
-  elem = (xml::mknpelem nsuri nsprefix localpart attrs namespaces children)
- in
-  (cons elem nil))
-
-compelement name content namespaces =
-(letrec
-  qname = (xq::consimple name)
-  nsprefix = (xml::getnsprefix qname)
-  nsuri = (xq::resolve nsprefix namespaces)
-  localname = (xml::getlocalname qname)
-in
-  (xq::element nsuri nsprefix localname nil content))
-
 construct_text str =
 (cons (xml::mktext str) nil)
 
 construct_value_of expr =
 (cons (xml::mktext (consimple expr)) nil)
-
-SOAPENV_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/"
-
-call_ws service_url inuri inlocalpart outuri outlocalpart args =
-(letrec
-  requestxml =
-    (cons (xml::mkelem nil nil nil nil SOAPENV_NAMESPACE "soapenv" "Envelope" nil
-      (cons (xml::mknamespace SOAPENV_NAMESPACE "soapenv") nil)
-      (cons (xml::mkelem nil nil nil nil SOAPENV_NAMESPACE "soapenv" "Body" nil nil
-        (cons (xml::mkelem nil nil nil nil inuri "operation" inlocalpart nil 
-           (cons (xml::mknamespace inuri "operation") nil)
-           args) nil)) nil)) nil)
-  request = (output nil requestxml)
-  response = (post service_url request)
-  responsedoc = (xml::parsexml 1 response)
-  topelems = (xml::item_children responsedoc)
-
-  bodies = (apmap3
-             (!citem.!cpos.!csize.
-               (filter
-                 (name_test xml::TYPE_ELEMENT SOAPENV_NAMESPACE "Body")
-                 (xml::item_children citem)))
-             topelems)
-
-  respelems = (apmap3
-                (!citem.!cpos.!csize.
-                  (filter
-                    (name_test xml::TYPE_ELEMENT outuri outlocalpart) 
-                    (xml::item_children citem)))
-                bodies)
-  returns = (apmap xml::item_children respelems)
-in
-  returns)
-
-ws_arg_list nsuri localpart expr =
-(map
-  (!x.(xml::mkelem nil nil nil nil nsuri nil localpart nil nil (xml::item_children x)))
-  (filter
-    (!x.== (xml::item_type x) xml::TYPE_ELEMENT)
-    (concomplex (get_children expr))))
-
-ws_arg nsuri localpart expr =
-(xml::mkelem nil nil nil nil nsuri nil localpart nil nil 
-  (concomplex (get_children expr)))
 
 check_aos node test =
 (if node

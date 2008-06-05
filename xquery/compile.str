@@ -5,38 +5,46 @@ rules
 
 /* ---------------------------- Node constructors ------------------------------------- */
 
-E : DirAttribute(UQName(n),vs) -> |{ (xml::mknpattr def_ns  "" ~s:n ~vs) }|
+E : DirAttribute(UQName(n),vs) -> |{ (xml::mknpattr ns_  "" ~s:n ~vs) }|
 // FIXME: default xmlns
 E : DirAttribute(PQName(n1,n2),vs) -> |{ (xml::mknpattr ns_#n1 ~s:n1 ~s:n2 ~vs) }|
     where not(<equal>(n1,"xmlns"))
 E : DirAttribute(PQName("xmlns",n),s) -> |{ (xml::mknamespace ~s ~s:n) }|
 
 E : AttrValues(x) -> <foldr(!Nl(),\(e1,e2) -> |{ (++ (xq::consimple e1) e2) }|\)>x
-E : DirAttributes(x) -> <toconslist>x
 E : DirElemContents(x) -> <toappendlist>x
 
 E : |[ comment { e } ]|           -> |{ (cons (xml::mkcomment (xq::consimple e)) nil) }|
 
-E : |[ attribute n { } ]|         -> |{ (cons (xml::mknpattr def_ns  ""    ~s:n  nil) nil) }|
-E : |[ attribute n { e } ]|       -> |{ (cons (xml::mknpattr def_ns  ""    ~s:n 
-                                                (xq::consimple e)) nil)   }|
-E : |[ attribute n1:n2 { } ]|     -> |{ (cons (xml::mknpattr ns_#n1  ~s:n1 ~s:n2 nil) nil) }|
 E : |[ attribute n1:n2 { e } ]|   -> |{ (cons (xml::mknpattr ns_#n1  ~s:n1 ~s:n2
                                                 (xq::consimple e)) nil)   }|
-E : |[ attribute { e1 } { } ]|    -> |{ (xq::compattr e1 nil namespaces) }|
 E : |[ attribute { e1 } { e2 } ]| -> |{ (xq::compattr e1 e2 namespaces) }|
-
 E : |[ text { e } ]|              -> |{ (xq::comptext e) }|
-E : |[ <n a*/> ]|                 -> |{ (xq::element def_ns ""   "n"  a*  nil) }|
-E : |[ <n a*>     ~e </n> ]|      -> |{ (xq::element def_ns ""   "n"  a*  e)   }|
-E : |[ <n1:n2 a*/> ]|             -> |{ (xq::element ns_#n1 "n1" "n2" a*  nil) }|
-E : |[ <n1:n2 a*> ~e </n1:n2> ]|  -> |{ (xq::element ns_#n1 "n1" "n2" a*  e)   }|
-E : |[ element n { } ]|           -> |{ (xq::element def_ns ""   "n"  nil nil) }|
-E : |[ element n { e } ]|         -> |{ (xq::element def_ns ""   "n"  nil e)   }|
-E : |[ element n1:n2 { } ]|       -> |{ (xq::element ns_#n1 "n1" "n2" nil nil) }|
-E : |[ element n1:n2 { e } ]|     -> |{ (xq::element ns_#n1 "n1" "n2" nil e)   }|
-E : |[ element { e1 } { } ]|      -> |{ (xq::compelement e1 nil namespaces) }|
-E : |[ element { e1 } { e2 } ]|   -> |{ (xq::compelement e1 e2 namespaces) }|
+
+// Direct elements and computed elements with a fixed name
+E : |[ <n1:n2 a*> ~e </n1:n2> ]|  ->
+    |{ (cons (letrec content = e
+                     attrs = (++ e1 (xq::get_attributes content))
+                     children = (xq::get_children content)
+              in (xml::mknpelem ns_#n1 "n1" "n2" attrs e2
+                   (xq::concomplex children))) nil) }|
+where e1 := <filter(not(isnsattr)); toconslist>a*;
+      e2 := <filter(isnsattr); toconslist>a*
+
+isnsattr = ?DirAttribute(PQName("xmlns",_),_) <+
+           ?DirAttribute(UQName("xmlns"),_)
+
+// Elements with a computed name
+E : |[ element { e1 } { e2 } ]|   ->
+    |{ (cons (letrec qname = (xq::consimple e1)
+                     nsuri = (xq::resolve nsprefix namespaces)
+                     nsprefix = (xml::getnsprefix qname)
+                     alocalname = (xml::getlocalname qname)
+                     content = e2
+                     attributes = (xq::get_attributes content)
+                     children = (xq::get_children content)
+              in (xml::mknpelem nsuri nsprefix alocalname
+                   attributes nil (xq::concomplex children))) nil) }|
 
 /* ---------------------------- Expressions ------------------------------------------- */
 
@@ -52,7 +60,7 @@ E : FunctionName(UQName(n))       -> |{ n }|
 
 
 E : |[ declare default element namespace s; ]|
-                                  -> |{ def_ns = s }|
+                                  -> |{ ns_ = s }|
 E : |[ declare default function namespace s; ]|
                                   -> |{ fun_ns = s }|
 E : |[ declare namespace n = s; ]|
@@ -82,7 +90,7 @@ E : |[ e1[e2] ]|                  -> |{ (xq::filter3
 E : NameTest(Wildcard1())         -> |{ (!pnk.xq::type_test pnk) }|
 E : NameTest(Wildcard2(n))        -> |{ (!pnk.xq::wildcard_localname_test pnk ns_#n) }|
 E : NameTest(Wildcard3(s))        -> |{ (!pnk.xq::wildcard_uri_test pnk s) }|
-E : NameTest(UQName(n))           -> |{ (!pnk.xq::name_test pnk def_ns ~s:n) }|
+E : NameTest(UQName(n))           -> |{ (!pnk.xq::name_test pnk ns_ ~s:n) }|
 E : NameTest(PQName(n1,n2))       -> |{ (!pnk.xq::name_test pnk ns_#n1 ~s:n2) }|
 
 E : |[ document-node() ]|         -> |{ (!pnk.(xq::type_test xml::TYPE_DOCUMENT)) }|
@@ -176,6 +184,21 @@ S1 : ForwardStepChild(SchemaAttributeTest(x))
 // Simplify XQuery expressions
 
 simplify_xquery = S0 <+ S1
+
+S0 : |[ <n a*/> ]|                -> |[ <n a*></n> ]|
+S0 : |[ <n1:n2 a*/> ]|            -> |[ <n1:n2 a*></n1:n2> ]|
+S0 : |[ element n { } ]|          -> |[ element n { () } ]|
+S0 : |[ element n1:n2 { } ]|      -> |[ element n1:n2 { () } ]|
+S0 : |[ element { e1 } { } ]|     -> |[ element { e1 } { () } ]|
+S0 : |[ element n { e } ]|        -> |[ <n>{e}</n> ]|
+S0 : |[ element n1:n2 { e } ]|    -> |[ <n1:n2>{e}</n1:n2> ]|
+S0 : |[ attribute n { } ]|        -> |[ attribute n { () } ]|
+S0 : |[ attribute n1:n2 { } ]|    -> |[ attribute n1:n2 { () } ]|
+S0 : |[ attribute { e1 } { } ]|   -> |[ attribute { e1 } { () } ]|
+S0 : |[ <n2 a*> ~e </n2> ]|       -> |[ <n1:n2 a*> ~e </n1:n2> ]|
+                                     where n1 := ""
+S0 : |[ attribute n2 { e } ]|     -> |[ attribute n1:n2 { e } ]|
+                                     where n1 := ""
 
 // Built-in functions with no parameters
 S0 : |[ string() ]|                -> |[ string(.) ]|
@@ -407,13 +430,13 @@ nsattr2binding : DirAttribute(PQName("xmlns",prefix),e) ->
                  Binding(<conc-strings>("ns_",prefix),e)
 
 nsattr2binding : DirAttribute(UQName("xmlns"),e) ->
-                 Binding("def_ns",e)
+                 Binding("ns_",e)
 
 nsattr2pair : DirAttribute(PQName("xmlns",n),s) ->
                  |{ (cons ~s:n ns_#n) }|
 
 nsattr2pair : DirAttribute(UQName("xmlns"),s) ->
-                 |{ (cons "" def_ns) }|
+                 |{ (cons "" ns_) }|
 
 
 /* ---------------------------- Top-level strategies ---------------------------------- */
@@ -463,7 +486,7 @@ replaceops: Prolog(a,b) -> Prolog(a,<conc>(newfuns,b))
 
   findnamespaces =
   oncetd(?Prolog(decls,r); <filter(?NamespaceDecl(_,_))>decls => ns);
-  <foldr(!|{ (cons (cons "" def_ns) nil) }|,mknscons)>ns
+  <foldr(!|{ (cons (cons "" ns_) nil) }|,mknscons)>ns
 
   fixapp =
   innermost(fixapp1)
@@ -481,7 +504,7 @@ replaceops: Prolog(a,b) -> Prolog(a,<conc>(newfuns,b))
     where(findnamespaces => ns)    // Search for namespace declarations
   //; where(!ns; debug(!"got namespaces: "))
   ; bottomup(try(bind_nsdecls))
-  ; innermost(E)                   // Main compilation routines
+  ; topdown(try(repeat(E)))        // Main compilation routines
   ; innermost(OX)                  // ELC code optimisation (XQuery-specific)
   ; innermost(O1)                  // ELC code optimisation (general)
   ; addmain                        // Add main function
