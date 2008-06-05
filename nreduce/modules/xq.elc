@@ -827,20 +827,11 @@ node_following node =
  in
   (gonext node))
 
-fn_post content =
+fn_post url content =
   (letrec
-   text = (post "http:://localhost:8080/axis/Test.jws" (output 1 content))
+   text = (post (consimple url) (output 1 content))
   in
   (cons (xml::parsexml 1 text) nil))
-
-
-
-
-
-
-
-
-
 
 post url content = (http::parse_url url (post2 url content))
 
@@ -999,28 +990,25 @@ nsfixup nsuri nsprefix localpart attrs namespaces =
     (cons newprefix (++ namespaces (cons (xml::mknamespace nsuri newprefix) nil))))
   (cons nsprefix (cons (xml::mknamespace nsuri nsprefix) namespaces))))
 
-construct_elem1 nsuri qname xa xn content =
+element nsuri nsprefix localpart ans content =
 (letrec
-  nsprefix1 = (xml::getnsprefix qname)
-  localpart = (xml::getlocalname qname)
-  attrs = (append xa (get_attributes content))
-  namespaces = (append xn (get_namespaces content))
-  np = (nsfixup nsuri nsprefix1 localpart attrs namespaces)
-  nsprefix = (head np)
-  rnamespaces = (tail np)
-  children = (concomplex (get_children content))
-  elem = (xml::mknpelem nsuri nsprefix localpart attrs rnamespaces children)
- in
-  (cons elem nil))
-
-construct_elem2 nsuri nsprefix localpart xa xn content =
-(letrec
-  attrs = (append xa (get_attributes content))
-  namespaces = (append xn (get_namespaces content))
+  supplied_attrs = (filter (!x.== (xml::item_type x) xml::TYPE_ATTRIBUTE) ans)
+  supplied_namespaces = (filter (!x.== (xml::item_type x) xml::TYPE_NAMESPACE) ans)
+  attrs = (++ supplied_attrs (get_attributes content))
+  namespaces = supplied_namespaces
   children = (concomplex (get_children content))
   elem = (xml::mknpelem nsuri nsprefix localpart attrs namespaces children)
  in
   (cons elem nil))
+
+compelement name content namespaces =
+(letrec
+  qname = (xq::consimple name)
+  nsprefix = (xml::getnsprefix qname)
+  nsuri = (xq::resolve nsprefix namespaces)
+  localname = (xml::getlocalname qname)
+in
+  (xq::element nsuri nsprefix localname nil content))
 
 construct_text str =
 (cons (xml::mktext str) nil)
@@ -1145,15 +1133,6 @@ resolve pre namespaces =
       nsuri
       (resolve pre (tail namespaces))))
   (error (++ "Namespace prefix not bound: " pre)))
-
-compelem name content namespaces =
-(letrec
-  qname = (xq::consimple name)
-  nsprefix = (xml::getnsprefix qname)
-  nsuri = (xq::resolve nsprefix namespaces)
-  localname = (xml::getlocalname qname)
-in
-  (xq::construct_elem2 nsuri nsprefix localname nil nil content))
 
 compattr name content namespaces =
 (letrec

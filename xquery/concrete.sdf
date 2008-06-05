@@ -64,6 +64,7 @@ exports
   MetaExpression           -> Expression{prefer}
 %%  MetaExpression*          -> Expression{prefer}
   MetaSymbol               -> Symbol{prefer}
+  "\"" MetaSymbol "\""     -> String{prefer,bracket}
   MetaString               -> QuotAttrValueString{prefer}
   MetaString               -> String{prefer}
   MetaString               -> StringLiteral{cons("Chars"),prefer}

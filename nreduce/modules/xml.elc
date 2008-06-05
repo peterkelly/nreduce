@@ -932,7 +932,7 @@ print_nodes lst next =
             (append qname
               (print_namespaces node namespaces
                 (print_attrs attributes
-                  (append " />" (print_nodes rest next))))))))
+                  (append "/>" (print_nodes rest next))))))))
     (if (== (item_type node) TYPE_TEXT)
       (append (item_value node) (print_nodes rest next))
     (if (== (item_type node) TYPE_COMMENT)

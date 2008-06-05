@@ -6,7 +6,11 @@ rules
 /* ---------------------------- Node constructors ------------------------------------- */
 
 E : DirAttribute(UQName(n),vs) -> |{ (xml::mknpattr def_ns  "" ~s:n ~vs) }|
+// FIXME: default xmlns
 E : DirAttribute(PQName(n1,n2),vs) -> |{ (xml::mknpattr ns_#n1 ~s:n1 ~s:n2 ~vs) }|
+    where not(<equal>(n1,"xmlns"))
+E : DirAttribute(PQName("xmlns",n),s) -> |{ (xml::mknamespace ~s ~s:n) }|
+
 E : AttrValues(x) -> <foldr(!Nl(),\(e1,e2) -> |{ (++ (xq::consimple e1) e2) }|\)>x
 E : DirAttributes(x) -> <toconslist>x
 E : DirElemContents(x) -> <toappendlist>x
@@ -23,16 +27,16 @@ E : |[ attribute { e1 } { } ]|    -> |{ (xq::compattr e1 nil namespaces) }|
 E : |[ attribute { e1 } { e2 } ]| -> |{ (xq::compattr e1 e2 namespaces) }|
 
 E : |[ text { e } ]|              -> |{ (xq::comptext e) }|
-E : |[ <n a*/> ]|                 -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  a*  nil nil) }|
-E : |[ <n a*>     ~e </n> ]|      -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  a*  nil e)   }|
-E : |[ <n1:n2 a*/> ]|             -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 a*  nil nil) }|
-E : |[ <n1:n2 a*> ~e </n1:n2> ]|  -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 a*  nil e)   }|
-E : |[ element n { } ]|           -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  nil nil nil) }|
-E : |[ element n { e } ]|         -> |{ (xq::construct_elem2 def_ns  ""    ~s:n  nil nil e)   }|
-E : |[ element n1:n2 { } ]|       -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 nil nil nil) }|
-E : |[ element n1:n2 { e } ]|     -> |{ (xq::construct_elem2 ns_#n1  ~s:n1 ~s:n2 nil nil e)   }|
-E : |[ element { e1 } { } ]|      -> |{ (xq::compelem e1 nil namespaces) }|
-E : |[ element { e1 } { e2 } ]|   -> |{ (xq::compelem e1 e2 namespaces) }|
+E : |[ <n a*/> ]|                 -> |{ (xq::element def_ns ""   "n"  a*  nil) }|
+E : |[ <n a*>     ~e </n> ]|      -> |{ (xq::element def_ns ""   "n"  a*  e)   }|
+E : |[ <n1:n2 a*/> ]|             -> |{ (xq::element ns_#n1 "n1" "n2" a*  nil) }|
+E : |[ <n1:n2 a*> ~e </n1:n2> ]|  -> |{ (xq::element ns_#n1 "n1" "n2" a*  e)   }|
+E : |[ element n { } ]|           -> |{ (xq::element def_ns ""   "n"  nil nil) }|
+E : |[ element n { e } ]|         -> |{ (xq::element def_ns ""   "n"  nil e)   }|
+E : |[ element n1:n2 { } ]|       -> |{ (xq::element ns_#n1 "n1" "n2" nil nil) }|
+E : |[ element n1:n2 { e } ]|     -> |{ (xq::element ns_#n1 "n1" "n2" nil e)   }|
+E : |[ element { e1 } { } ]|      -> |{ (xq::compelement e1 nil namespaces) }|
+E : |[ element { e1 } { e2 } ]|   -> |{ (xq::compelement e1 e2 namespaces) }|
 
 /* ---------------------------- Expressions ------------------------------------------- */
 
@@ -378,7 +382,8 @@ isnsattr = ?DirAttribute(PQName("xmlns",_),_) <+ ?DirAttribute(UQName("xmlns"),_
 
 process_nsattrs(|attrs) =
   <filter(isnsattr)>attrs => nsattrs;
-  <filter(not(isnsattr))>attrs => regattrs;
+//  <filter(not(isnsattr))>attrs => regattrs;
+  !attrs => regattrs;
   <map(nsattr2binding)>nsattrs => nsbindings;
   <map(nsattr2pair)>nsattrs => strings;
   <foldr(!|{ oldns }|,\(e1,e2) -> |{ (cons e1 e2) }|\)>strings => conslist;

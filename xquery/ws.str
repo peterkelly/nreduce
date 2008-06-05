@@ -11,11 +11,13 @@ WA : Element(Name(Some("http://schemas.xmlsoap.org/wsdl/soap/"),name),
 // Simplify XML info structure to WSDL terms
 
 WS : Document(x)                             -> x
-WS : Elem("wsdl","types",_,ch)         -> Types(ch)
-WS : Elem("wsdl","definitions",_,defs)       -> Definitions(defs)
+WS : Elem("wsdl","types",_,ch)               -> Types(ch)
+WS : Elem("wsdl","definitions",attrs,defs)   -> Definitions(tns,defs)
+    where attr(|attrs,"targetNamespace") => tns;
+          rules(TNS: [] -> tns)
 WS : Elem("wsdl","portType",attrs,ops)       -> PortType(name,ops)
     where attr(|attrs,"name") => name
-WS : Elem("wsdl","message",attrs,parts)      -> Message(name,parts)
+WS : Elem("wsdl","message",attrs,parts)      -> Message(<TNS>[],name,parts)
     where attr(|attrs,"name") => name
 WS : Elem("wsdl","part",attrs,_)             -> Part(name,type)
   where attr(|attrs,"name") => name;
@@ -48,8 +50,8 @@ cattr(|ch,ctype,cname,aname) =
 
 // Set reference resolution rules
 
-WR : Message(name,parts) -> Message(name,parts)
-    where rules(WC : MessageRef(name) -> Message(name,parts))
+WR : Message(tns,name,parts) -> Message(tns,name,parts)
+    where rules(WC : MessageRef(name) -> Message(tns,name,parts))
 
 WR : PortType(name,operations) -> PortType(name,operations)
    where rules(WC : PortTypeRef(name) -> PortType(name,operations))
@@ -59,20 +61,21 @@ WR : Binding(name,portType,style) -> Binding(name,portType,style)
 
 // Generate XQuery code
 
-WX(|n1) : OperationAddr(s,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
+WX(|n1) : OperationAddr(s1,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
      |[ declare function n1:n2(~input) as ~rt {
-         fn:post(s,
+         fn:post(s1,
                  <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
                    <soap:Body>
-                     <n2>~e</n2>
+                     <msg:n2 xmlns:msg="s2">~e</msg:n2>
                    </soap:Body>
-                 </soap:Envelope>)/soap:Envelope/soap:Body }; ]|
+                 </soap:Envelope>)/ *:Envelope/ *:Body/node()/node() }; ]|
      where <map(genparam)>input => lst;
-           <foldr(!|[ () ]|,\(e1,e2) -> |[ e1,e2 ]|\)>lst => e
+           <foldr(!|[ () ]|,\(e1,e2) -> |[ e1,e2 ]|\)>lst => e;
+           <TNS>[] => s2
 
 genparam : Param(VarName(UQName(n)),_) -> |[ <n>{$n}</n> ]|
 
-WX(|n1) : Message(name,parts) -> parts
+WX(|n1) : Message(tns,name,parts) -> parts
 
 WX(|n1) : Part(name,type) ->
     Param(VarName(UQName(name)),
@@ -91,13 +94,13 @@ strategies
 setprefix(|p) : FunctionName(UQName(n)) -> FunctionName(PQName(p,n))
 
   genws(|prefix) =
-  topdown(try(WA))
-; topdown(try(repeat(WS)))
-; topdown(try(WR))
-; innermost(WC)
-; giveaddress
+  topdown(try(WA))         // convert namespace URIs to short names
+; topdown(try(repeat(WS))) // simplify XML to WSDL ATerms
+; topdown(try(WR))         // set reference resolution rules
+; innermost(WC)            // apply reference resolution rules
+; giveaddress              // set the address field of operations
 ; find(?Service(_,_))
-; innermost(WX(|prefix))
+; innermost(WX(|prefix))   // generate XQuery code
 ; find(?Function(_,_,_,_))
 //; topdown(try(setprefix(|prefix)))
 
@@ -113,9 +116,9 @@ setprefix(|p) : FunctionName(UQName(n)) -> FunctionName(PQName(p,n))
 signature
 constructors
 
-  Definitions : Unknown -> Unknown
+  Definitions : Unknown * Unknown -> Unknown
   PortType : String * Unknown -> Unknown
-  Message : String * Unknown -> Unknown
+  Message : String * String * Unknown -> Unknown
   Part : String * String -> Unknown
   Operation : String * String * String -> Unknown
   OperationAddr : String * String * String * String -> Unknown
