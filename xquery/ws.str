@@ -61,14 +61,17 @@ WR : Binding(name,portType,style) -> Binding(name,portType,style)
 
 // Generate XQuery code
 
-WX(|n1) : OperationAddr(s1,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
-     |[ declare function n1:n2(~input) as ~rt {
+FunctionDef(|s1,s2,n1,n2,input,rt,e) =
+    !|[ declare function n1:n2(~input) as ~rt {
          fn:post(s1,
                  <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
                    <soap:Body>
                      <msg:n2 xmlns:msg="s2">~e</msg:n2>
                    </soap:Body>
                  </soap:Envelope>)/ *:Envelope/ *:Body/node()/node() }; ]|
+
+WX(|n1) : OperationAddr(s1,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
+     <FunctionDef(|s1,s2,n1,n2,input,rt,e)>
      where <map(genparam)>input => lst;
            <foldr(!|[ () ]|,\(e1,e2) -> |[ e1,e2 ]|\)>lst => e;
            <TNS>[] => s2

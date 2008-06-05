@@ -1,16 +1,17 @@
 FLAGS=`strcflags stratego-lib stratego-xtc`
 XTCREPOS=`xtc query -R | sed -e 's/^.*=//'`
+STRC_OPTIONS=-O 0 --fusion
 
-all: xquery.tbl elc.tbl xquery.pp elc.pp xquery-parenthesize elc-parenthesize compile nopriorities ws
+all: xquery.tbl elc.tbl xquery.pp elc.pp xquery-parenthesize elc-parenthesize compile nopriorities
 
 ws: ws.str concrete.tbl
-	strc -i ws.str -m wsmain $(FLAGS)
+	strc $(STRC_OPTIONS) -i ws.str -m wsmain $(FLAGS)
 
 compile: compile.str concrete.tbl ws.str
-	strc --xtc-repo $(XTCREPOS) -i compile.str $(FLAGS)
+	strc $(STRC_OPTIONS) --xtc-repo $(XTCREPOS) -i compile.str $(FLAGS)
 
 nopriorities: nopriorities.str
-	strc -i nopriorities.str $(FLAGS)
+	strc $(STRC_OPTIONS) -i nopriorities.str $(FLAGS)
 
 xquery.def: xquery.sdf
 	pack-sdf -i xquery.sdf -o xquery.def
@@ -26,7 +27,7 @@ xquery.str: xquery.rtg
 xquery-parenthesize.str: xquery.def xquery.str
 	sdf2parenthesize -i xquery.def -o xquery-parenthesize.str -m xquery --lang xquery
 xquery-parenthesize: xquery-parenthesize.str
-	strc -i xquery-parenthesize.str -m io-xquery-parenthesize -la stratego-lib
+	strc $(STRC_OPTIONS) -i xquery-parenthesize.str -m io-xquery-parenthesize -la stratego-lib
 
 elc.def: elc.sdf
 	pack-sdf -i elc.sdf -o elc.def
@@ -41,7 +42,7 @@ elc.str: elc.rtg
 elc-parenthesize.str: elc.def elc.str
 	sdf2parenthesize -i elc.def -o elc-parenthesize.str -m elc --lang elc
 elc-parenthesize: elc-parenthesize.str
-	strc -i elc-parenthesize.str -m io-elc-parenthesize -la stratego-lib
+	strc $(STRC_OPTIONS) -i elc-parenthesize.str -m io-elc-parenthesize -la stratego-lib
 
 concrete.def: concrete.sdf xquery.def elc.def
 	pack-sdf -i concrete.sdf -o concrete.def
