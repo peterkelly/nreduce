@@ -1,0 +1,24 @@
+This used to cause a crash due to names being incorrectly duplicated when
+inlining function bodies. The crash was occuring during the letrec reordering
+process, but the duplication of names that lead to this should not have been
+happening.
+=================================== PROGRAM ====================================
+nreduce runtests.tmp/test.l
+===================================== FILE =====================================
+test.l
+main args stdin = nil
+
+mkitem type localname attributes =
+(lcons type (lcons localname nil))
+
+mkelem localname attributes =
+(mkitem 1 localname attributes)
+
+mknpelem localname attributes =
+(mkelem localname attributes)
+
+g_0_sayHello arg0 =
+(mknpelem "Envelope" (cons (mknpelem nil nil) nil))
+==================================== OUTPUT ====================================
+================================== RETURN CODE =================================
+0

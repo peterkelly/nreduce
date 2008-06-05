@@ -170,12 +170,14 @@ void inlining(source *src);
 
 /* appendopt */
 
-snode *snode_copy(snode *s);
+snode *copy_scomb_body(source *src, scomb *sc, char **newargnames);
 void appendopt(source *src);
 
 /* renaming */
 
 char *next_var(source *src, const char *oldname);
+void rename_sc_body_variables(source *src, snode *body, int nargs,
+                              char **oldargnames, char **newargnames);
 void rename_variables(source *src, scomb *sc);
 
 /* debug */

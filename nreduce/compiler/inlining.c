@@ -99,7 +99,7 @@ static void inline_r(source *src, snode *s, int *changed)
 
       s->type = SNODE_LETREC;
       s->bindings = r;
-      s->body = snode_copy(asc->body);
+      s->body = copy_scomb_body(src,asc,newsyms);
 
       replace_symbols(src,s->body,asc->argnames,newsyms,asc->nargs);
 
@@ -121,7 +121,7 @@ static void inline_r(source *src, snode *s, int *changed)
   }
   case SNODE_SCREF:
     if ((0 == s->sc->nargs) && s->sc->caninline) {
-      snode *tmp = snode_copy(s->sc->body);
+      snode *tmp = copy_scomb_body(src,s->sc,NULL);
       memcpy(s,tmp,sizeof(snode));
       free(tmp);
     }

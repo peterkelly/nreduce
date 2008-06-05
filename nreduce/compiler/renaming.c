@@ -69,6 +69,8 @@ char *next_var(source *src, const char *oldname)
   sprintf(name,"%s%d",GENVAR_PREFIX,src->varno++);
 
   copy = strdup(oldname);
+  if (NULL == src->oldnames)
+    src->oldnames = array_new(sizeof(char*),0);
   array_append(src->oldnames,&copy,sizeof(char*));
 
   return name;
@@ -132,23 +134,34 @@ static void rename_variables_r(source *src, snode *c, stack *mappings)
   }
 }
 
-void rename_variables(source *src, scomb *sc)
+void rename_sc_body_variables(source *src, snode *body, int nargs,
+                              char **oldargnames, char **newargnames)
 {
   stack *mappings = stack_new();
   int i;
 
-  if (NULL == src->oldnames)
-    src->oldnames = array_new(sizeof(char*),0);
+  for (i = 0; i < nargs; i++)
+    stack_push(mappings,mapping_new(oldargnames[i],newargnames[i]));
 
-  for (i = 0; i < sc->nargs; i++) {
-    char *newname = next_var(src,sc->argnames[i]);
-    stack_push(mappings,mapping_new(sc->argnames[i],newname));
-    free(sc->argnames[i]);
-    sc->argnames[i] = newname;
-  }
-
-  rename_variables_r(src,sc->body,mappings);
+  rename_variables_r(src,body,mappings);
 
   mappings_set_count(mappings,0);
   stack_free(mappings);
+}
+
+void rename_variables(source *src, scomb *sc)
+{
+  char **newargnames = (char**)malloc(sc->nargs*sizeof(char*));
+  int i;
+
+  for (i = 0; i < sc->nargs; i++)
+    newargnames[i] = next_var(src,sc->argnames[i]);;
+
+  rename_sc_body_variables(src,sc->body,sc->nargs,sc->argnames,newargnames);
+
+  for (i = 0; i < sc->nargs; i++) {
+    free(sc->argnames[i]);
+    sc->argnames[i] = newargnames[i];
+  }
+  free(newargnames);
 }

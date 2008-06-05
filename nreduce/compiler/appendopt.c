@@ -38,7 +38,7 @@
 /* Optimize away usage of append where possible. See the paper titled "The concatenate vanishes"
    by Philip Wadler. */
 
-snode *snode_copy(snode *s)
+static snode *snode_copy(snode *s)
 {
   snode *repl = snode_new(s->sl.fileno,s->sl.lineno);
   repl->type = s->type;
@@ -83,6 +83,13 @@ snode *snode_copy(snode *s)
     break;
   }
   return repl;
+}
+
+snode *copy_scomb_body(source *src, scomb *sc, char **newargnames)
+{
+  snode *copy = snode_copy(sc->body);
+  rename_sc_body_variables(src,copy,sc->nargs,sc->argnames,newargnames);
+  return copy;
 }
 
 static void mark_used(snode *s, int *used)
@@ -143,7 +150,7 @@ static void make_append_version(source *src, scomb *sc)
 
   app1->type = SNODE_APPLICATION;
   app1->left = fun;
-  app1->right = snode_copy(sc->body);
+  app1->right = copy_scomb_body(src,sc,newsc->argnames);
 
   app2->type = SNODE_APPLICATION;
   app2->left = app1;
