@@ -5,7 +5,7 @@ output indent raw =
 (letrec
   nodes = (if indent (xml::add_whitespace raw) raw)
  in
-  (append xml::XML_DECL (xml::print_nodes nodes nil)))
+  (append xml::XML_DECL (xml::print_nodes nodes nil nil)))
 
 //==================================================================================================
 // Functions to abstract specific node types from sequences

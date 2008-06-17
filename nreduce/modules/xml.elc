@@ -877,27 +877,26 @@ node_default_namespace node =
     (node_default_namespace (item_parent node)))
   1)
 
-print_namespaces node lst next =
+print_namespaces lst nslists next =
 (if lst
   (letrec
     cur = (head lst)
     nsuri = (item_nsuri cur)
     nsprefix = (item_nsprefix cur)
-    parent = (item_parent node)
    in
-    (if (node_has_namespace parent nsprefix nsuri)
-      (print_namespaces node (tail lst) next)
+    (if (streq (ns_lookup nsprefix nslists) nsuri)
+      (print_namespaces (tail lst) nslists next)
     (if (and (and (streq nsprefix "") (streq nsuri ""))
-             (node_default_namespace parent))
-      (print_namespaces node (tail lst) next)
+             (ns_lookup "" nslists))
+      (print_namespaces (tail lst) nslists next)
       (append (if nsprefix " xmlns:" " xmlns")
         (append nsprefix
           (append "=\""
             (append nsuri
-              (append "\"" (print_namespaces node (tail lst) next)))))))))
+              (append "\"" (print_namespaces (tail lst) nslists next)))))))))
   next)
 
-print_nodes lst next =
+print_nodes lst nslists next =
 (if lst
   (letrec
     node = (head lst)
@@ -918,33 +917,33 @@ print_nodes lst next =
           (cons '<'
 //            (append (++ "{" (++ nsuri (++ "}" qname)))
             (append qname
-              (print_namespaces node namespaces
+              (print_namespaces namespaces nslists
                 (print_attrs attributes
                   (cons '>'
-                    (print_nodes children
+                    (print_nodes children (cons (item_namespaces node) nslists)
                       (cons '<'
                         (cons '/'
                           (append qname
                             (append ">"
-                              (print_nodes rest next)))))))))))
+                              (print_nodes rest nslists next)))))))))))
           (cons '<'
 //            (append (++ "{" (++ nsuri (++ "}" qname)))
             (append qname
-              (print_namespaces node namespaces
+              (print_namespaces namespaces nslists
                 (print_attrs attributes
-                  (append "/>" (print_nodes rest next))))))))
+                  (append "/>" (print_nodes rest nslists next))))))))
     (if (== (item_type node) TYPE_TEXT)
-      (append (item_value node) (print_nodes rest next))
+      (append (item_value node) (print_nodes rest nslists next))
     (if (== (item_type node) TYPE_COMMENT)
-      (append "<!--" (append (item_value node) (append "-->" (print_nodes rest next))))
+      (append "<!--" (append (item_value node) (append "-->" (print_nodes rest nslists next))))
     (if (== (item_type node) TYPE_DOCUMENT)
-      (print_nodes (item_children node) (print_nodes rest next))
+      (print_nodes (item_children node) nslists (print_nodes rest nslists next))
     (if (== (item_type node) TYPE_PI)
       (if (item_value node)
         (append "<?" (append (item_localname node) (append " "
-        (append (item_value node) (append "?>" (print_nodes rest next))))))
-        (append "<?" (append (item_localname node) (append "?>" (print_nodes rest next)))))
-      (append "OTHER: " (append (numtostring (item_type node)) (print_nodes rest next)))))))))
+        (append (item_value node) (append "?>" (print_nodes rest nslists next))))))
+        (append "<?" (append (item_localname node) (append "?>" (print_nodes rest nslists next)))))
+      (append "OTHER: " (append (numtostring (item_type node)) (print_nodes rest nslists next)))))))))
   next)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1034,5 +1033,5 @@ printxml indent root =
   nodes = (if indent (add_whitespace raw) raw)
  in
   (if nodes
-    (append XML_DECL (print_nodes nodes nil))
+    (append XML_DECL (print_nodes nodes nil nil))
     XML_DECL))

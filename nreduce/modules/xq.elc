@@ -5,10 +5,10 @@ output indent raw =
 (letrec
   nodes = (if indent (xml::add_whitespace raw) raw)
  in
-  (xml::print_nodes nodes nil))
+  (xml::print_nodes nodes nil nil))
 
 // omit xml declaration for now (required by XQuery test suite)
-//  (append xml::XML_DECL (xml::print_nodes nodes nil)))
+//  (append xml::XML_DECL (xml::print_nodes nodes nil nil)))
 
 //==================================================================================================
 // Functions to abstract specific node types from sequences
