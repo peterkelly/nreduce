@@ -641,28 +641,6 @@ static int iscons(snode *c)
           (B_CONS == c->left->left->bif));
 }
 
-static void Ccons(source *src, compilation *comp, snode *c, pmap *p, int n)
-{
-  stack *s = stack_new();
-  snode *app = c;
-  int count = 1;
-
-  while (iscons(app)) {
-    stack_push(s,app);
-    count++;
-    app = app->right;
-  }
-  C(src,comp,app,p,n++);
-
-  while (0 < s->count) {
-    app = s->data[--s->count];
-    C(src,comp,app->left->right,p,n++);
-  }
-  CONSN(c->sl,count);
-
-  stack_free(s);
-}
-
 static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
 {
   comp->cdepth++;
@@ -842,7 +820,7 @@ static void S2(source *src, compilation *comp, snode *source, stack *exprs,
   }
 }
 
-static void S(source *src, compilation *comp, snode *source, stack *exprs,
+static void S(source *src, compilation *comp, sourceloc sl, stack *exprs,
               stack *strict, pmap *p, int n)
 {
   int m = 0;
@@ -874,7 +852,37 @@ static void S(source *src, compilation *comp, snode *source, stack *exprs,
   }
 
   if (0 < remove)
-    SQUEEZE(source->sl,count,remove);
+    SQUEEZE(sl,count,remove);
+}
+
+static void Ccons(source *src, compilation *comp, snode *c, pmap *p, int n)
+{
+  stack *s = stack_new();
+  snode *app = c;
+  int count = 1;
+
+  while (iscons(app)) {
+    stack_push(s,app->left->right);
+    count++;
+    app = app->right;
+  }
+  stack_push(s,app);
+
+  stack *exprs = stack_new();
+  stack *strict = stack_new();
+  int m;
+  for (m = s->count-1; m >= 0; m--) {
+    stack_push(exprs,s->data[m]);
+    stack_push(strict,0);
+  }
+
+  S(src,comp,c->sl,exprs,strict,p,n);
+
+  CONSN(c->sl,count);
+
+  stack_free(s);
+  stack_free(exprs);
+  stack_free(strict);
 }
 
 static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
@@ -905,7 +913,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
     if (SNODE_SYMBOL == app->type) {
       stack_push(args,app);
       stack_push(argstrict,0);
-      S(src,comp,app,args,argstrict,p,n);
+      S(src,comp,app->sl,args,argstrict,p,n);
       SPARK(app->sl,0);
       EVAL(app->sl,0);
       DO(app->sl,0);
@@ -915,7 +923,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
       int fno = snode_fno(app);
       int k = function_nargs(src,fno);
       if (m > k) {
-        S(src,comp,app,args,argstrict,p,n);
+        S(src,comp,app->sl,args,argstrict,p,n);
         MKFRAME(app->sl,fno,k);
         SPARK(app->sl,0);
         EVAL(app->sl,0);
@@ -1022,7 +1030,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
           DO(app->sl,1);
         }
         else {
-          S(src,comp,app,args,argstrict,p,n);
+          S(src,comp,app->sl,args,argstrict,p,n);
           JFUN(app->sl,fno);
         }
       }
@@ -1711,6 +1719,7 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
     else if ((OP_PUSH == instr->opcode) ||
              (OP_EVAL == instr->opcode) ||
              (OP_SPARK == instr->opcode)) {
+#if 0
       int done = 0;
       if (src && (NUM_BUILTINS <= fno)) {
         scomb *sc = get_scomb_index(src,fno-NUM_BUILTINS);
@@ -1721,6 +1730,7 @@ void bc_print(const char *bcdata, FILE *f, source *src, int builtins, int *usage
         }
       }
       if (!done)
+#endif
         fprintf(f," %-18d %-6d",instr->arg0,instr->arg1);
     }
     else {
