@@ -231,6 +231,7 @@ typedef struct {
   int ioid;
   socketid sockid;
   int error;
+  int errn;
   char errmsg[ERRMSG_MAX+1];
 } __attribute__ ((__packed__)) connect_response_msg;
 

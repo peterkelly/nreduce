@@ -162,13 +162,15 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from n
   obj = resolve_pntr(obj);
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
-    char *tmp;
     assert(CELL_FRAME != pntrtype(obj));
 
+    #ifdef DEBUG_DISTRIBUTION
+    char *tmp;
     tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (resume_fetchers)",
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (resume_fetchers)",
              tsk->tid,ft->tid,ft->lid,ft->tid,tmp);
     free(tmp);
+    #endif
 
     msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
@@ -202,8 +204,7 @@ void frame_return(task *tsk, frame *curf, pntr val)
   if (curf->c) {
     assert(NULL == curf->retp);
     assert(CELL_FRAME == celltype(curf->c));
-    curf->c->type = CELL_IND;
-    curf->c->field1 = val;
+    cell_make_ind(tsk,curf->c,val);
     curf->c = NULL;
   }
   else {
@@ -312,6 +313,9 @@ static void send_mark_messages(task *tsk)
         gaddr addr = array_item(tsk->distmarks[pid],a,gaddr);
         write_gaddr(msg,tsk,addr);
         tsk->gcsent[addr.tid]++;
+        #ifdef DEBUG_DISTRIBUTION
+        node_log(tsk->n,LOG_DEBUG2,"send(%d->%d) MARKENTRY %d@%d",tsk->tid,pid,addr.lid,addr.tid);
+        #endif
       }
       msg_send(tsk,pid,MSG_MARKENTRY,msg->data,msg->nbytes);
       write_end(msg);
@@ -413,6 +417,7 @@ static void interpreter_connect_response(task *tsk, connect_response_msg *m)
   if (m->error) {
     so->closed = 1;
     so->error = 1;
+    so->errn = m->errn;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
   }
   else {
@@ -516,8 +521,8 @@ static void interpreter_get_stats(task *tsk, get_stats_msg *m)
   get_stats_response_msg gsrm;
   frameblock *fb;
   int i;
-  int connections;
-  int listeners;
+/*   int connections; */
+/*   int listeners; */
   memset(&gsrm,0,sizeof(gsrm));
   gsrm.epid = tsk->endpt->epid;
 
@@ -535,7 +540,9 @@ static void interpreter_get_stats(task *tsk, get_stats_msg *m)
   }
 
   /* memory statistics */
-  memusage(tsk,&gsrm.cells,&gsrm.bytes,&gsrm.alloc,&connections,&listeners);
+  /* FIXME */
+  assert(0);
+/*   memusage(tsk,&gsrm.cells,&gsrm.bytes,&gsrm.alloc,&connections,&listeners); */
 
   endpoint_send(tsk->endpt,m->sender,MSG_GET_STATS_RESPONSE,&gsrm,sizeof(gsrm));
 }
@@ -557,7 +564,6 @@ static void interpreter_fish(task *tsk, message *msg)
   int reqtsk, age, nframes;
   int scheduled = 0;
   array *newmsg;
-  array *names = array_new(1,0);
   int from = get_idmap_index(tsk,msg->source);
   int done = 0;
 
@@ -575,7 +581,10 @@ static void interpreter_fish(task *tsk, message *msg)
   if (reqtsk == tsk->tid)
     return;
 
+  #ifdef DEBUG_DISTRIBUTION
+  array *names = array_new(1,0);
   array_printf(names,"send(%d->%d) SCHEDULE",tsk->tid,reqtsk);
+  #endif
   newmsg = write_start();
 
   for (fb = tsk->frameblocks; fb && !done; fb = fb->next) {
@@ -586,8 +595,10 @@ static void interpreter_fish(task *tsk, message *msg)
           pntr p;
           assert(f->c);
           make_pntr(p,f->c);
+          #ifdef DEBUG_DISTRIBUTION
           array_printf(names," ");
           print_pntr(tsk,names,p,1);
+          #endif
 
           schedule_frame(tsk,f,reqtsk,newmsg);
           scheduled++;
@@ -600,11 +611,15 @@ static void interpreter_fish(task *tsk, message *msg)
   }
 
   if (0 < scheduled) {
+    #ifdef DEBUG_DISTRIBUTION
     node_log(tsk->n,LOG_DEBUG1,"%s",names->data);
+    #endif
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
   }
   write_end(newmsg);
+  #ifdef DEBUG_DISTRIBUTION
   array_free(names);
+  #endif
 
   if (!scheduled && (0 < (age)--)) {
     int dest;
@@ -625,7 +640,6 @@ static void interpreter_fetch(task *tsk, message *msg)
   gaddr targetaddr;
   reader rd;
   global *fetchglo;
-  char *tmp;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
@@ -650,17 +664,22 @@ static void interpreter_fetch(task *tsk, message *msg)
   assert(storeaddr.tid == from);
   fetchglo = addrhash_lookup(tsk,targetaddr);
 
-  if (NULL == fetchglo)
-    fatal("Request for deleted global %d@%d, from task %d",targetaddr.lid,targetaddr.tid,from);
+  if (NULL == fetchglo) {
+    node_log(tsk->n,LOG_ERROR,"recv(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (target deleted)",
+             from,tsk->tid,targetaddr.lid,targetaddr.tid,storeaddr.lid,storeaddr.tid);
+    abort();
+  }
 
   obj = fetchglo->p;
   assert(!is_nullpntr(obj));
   obj = resolve_pntr(obj);
 
-  tmp = pntr_to_string(tsk,obj);
-  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d obj=%s",
+  #ifdef DEBUG_DISTRIBUTION
+  char *tmp = pntr_to_string(tsk,obj);
+  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d obj=%s",
            from,tsk->tid,targetaddr.lid,targetaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
   free(tmp);
+  #endif
 
   if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
     add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
@@ -682,10 +701,12 @@ static void interpreter_fetch(task *tsk, message *msg)
     unspark_frame(tsk,f);
 
     /* Send the actual frame */
-    tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (interpreter_fetch 1)",
+    #ifdef DEBUG_DISTRIBUTION
+    char *tmp = pntr_to_string(tsk,obj);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (interpreter_fetch 1)",
              tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
     free(tmp);
+    #endif
 
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
 
@@ -693,8 +714,7 @@ static void interpreter_fetch(task *tsk, message *msg)
       /* We could already have a target for this storeaddr if a reference has bene
          passed back to us due to another function that is running in this task */
       assert(CELL_REMOTEREF == pntrtype(storeglo->p));
-      f->c->type = CELL_IND;
-      f->c->field1 = storeglo->p;
+      cell_make_ind(tsk,f->c,storeglo->p);
     }
     else {
       /* No target global for the store address yet... create one and make the frame's
@@ -708,10 +728,12 @@ static void interpreter_fetch(task *tsk, message *msg)
     frame_free(tsk,f);
   }
   else {
-    tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr=%d@%d obj=%s (interpreter_fetch 2)",
+    #ifdef DEBUG_DISTRIBUTION
+    char *tmp = pntr_to_string(tsk,obj);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (interpreter_fetch 2)",
              tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
     free(tmp);
+    #endif
 
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
   }
@@ -721,7 +743,6 @@ static void interpreter_respond(task *tsk, message *msg)
 {
   pntr obj;
   gaddr storeaddr;
-  char *tmp;
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
@@ -737,10 +758,34 @@ static void interpreter_respond(task *tsk, message *msg)
 
   /* Look up the local reference object, whose physical address is storeaddr */
   global *reference = addrhash_lookup(tsk,storeaddr);
+  if (NULL == reference) {
+    node_log(tsk->n,LOG_ERROR,"recv(%d->%d) RESPOND storeaddr %d@%d (does not exist)",
+             from,tsk->tid,storeaddr.lid,storeaddr.tid);
+  }
   assert(reference);
   assert(reference->addr.tid == storeaddr.tid);
   assert(reference->addr.lid == storeaddr.lid);
   assert(!is_nullpntr(reference->p));
+  if (CELL_REMOTEREF != pntrtype(reference->p)) {
+
+    /* If we get a RESPOND message and it turns out that we already have something
+       for the specified store address, it means we have been given the object as
+       part of another message (e.g. a frame being schedulued). This means that the
+       object sent back in this message should be a remote reference pointing to the
+       object at its new location on this node. So we just need to verify that this
+       is indeed the case. */
+
+    int type;
+    gaddr addr;
+    read_check_tag(&rd,PNTR_TAG);
+    read_int(&rd,&type);
+    assert(CELL_REMOTEREF == type);
+    read_gaddr(&rd,&addr);
+    assert(0 <= addr.lid);
+    assert(addr.tid == tsk->tid);
+    finish_address_reading(tsk,from,msg->tag);
+    return;
+  }
   assert(CELL_REMOTEREF == pntrtype(reference->p));
   assert(physhash_lookup(tsk,reference->p) == reference);
 
@@ -756,10 +801,12 @@ static void interpreter_respond(task *tsk, message *msg)
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
-  tmp = pntr_to_string(tsk,obj);
-  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) RESPOND storeaddr=%d@%d obj=%s",
+  #ifdef DEBUG_DISTRIBUTION
+  char *tmp = pntr_to_string(tsk,obj);
+  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) RESPOND storeaddr %d@%d obj=%s",
            from,tsk->tid,storeaddr.lid,storeaddr.tid,tmp);
   free(tmp);
+  #endif
 
   global *objglo = targethash_lookup(tsk,obj);
   if (objglo && (target != objglo)) {
@@ -773,8 +820,7 @@ static void interpreter_respond(task *tsk, message *msg)
          be anything waiting on the new object. */
     assert(CELL_REMOTEREF == pntrtype(target->p));
     cell *refcell = get_pntr(target->p);
-    refcell->type = CELL_IND;
-    refcell->field1 = obj;
+    cell_make_ind(tsk,refcell,obj);
   }
 
   frame *w;
@@ -795,7 +841,6 @@ static void interpreter_schedule(task *tsk, message *msg)
   gaddr tellsrc;
   array *urmsg;
   int count = 0;
-  array *names = array_new(1,0);
 
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
@@ -805,6 +850,7 @@ static void interpreter_schedule(task *tsk, message *msg)
 
   urmsg = write_start();
 
+  array *names = array_new(1,0);
   array_printf(names,"recv(%d->%d) SCHEDULE",from,tsk->tid);
 
   start_address_reading(tsk,from,msg->tag);
@@ -821,6 +867,8 @@ static void interpreter_schedule(task *tsk, message *msg)
 
     frameaddr = get_physical_address(tsk,framep);
     write_format(urmsg,tsk,"aa",tellsrc,frameaddr);
+    node_log(tsk->n,LOG_DEBUG2,"send(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d",
+             tsk->tid,from,tellsrc.lid,tellsrc.tid,frameaddr.lid,frameaddr.tid);
 
     run_frame_toend(tsk,pframe(framep));
 
@@ -860,6 +908,8 @@ static void interpreter_updateref(task *tsk, message *msg)
     /* Read the reference address and target address */
     read_gaddr(&rd,&refaddr);
     read_gaddr(&rd,&remoteaddr);
+    node_log(tsk->n,LOG_DEBUG2,"recv(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d",
+             from,tsk->tid,refaddr.lid,refaddr.tid,remoteaddr.lid,remoteaddr.tid);
     assert(refaddr.tid == tsk->tid);
     assert(refaddr.lid >= 0);
     assert(remoteaddr.tid == from);
@@ -878,10 +928,17 @@ static void interpreter_updateref(task *tsk, message *msg)
     /* Get the target of this reference, which should currently have its lid set to -1 */
     global *target = pglobal(reference->p);
     assert(target != reference);
+
+    if ((target->addr.tid != -1) || (target->addr.lid != -1)) {
+      node_log(tsk->n,LOG_ERROR,
+               "recv(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d -- target is %d@%d",
+               from,tsk->tid,refaddr.lid,refaddr.tid,remoteaddr.lid,remoteaddr.tid,
+               target->addr.lid,target->addr.tid);
+    }
+
     assert(target->addr.tid == -1);
     assert(target->addr.lid == -1);
     assert(NULL == addrhash_lookup(tsk,target->addr)); /* since lid == -1 */
-
     /* Now the have the correct address of the target, assign it */
     target->addr = remoteaddr;
     addrhash_add(tsk,target);
@@ -951,7 +1008,7 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
     endpoint_link(tsk->endpt,tsk->gc);
   }
   tsk->gciter = m->gciter;
-  clear_marks(tsk,FLAG_DMB);
+/*   clear_marks(tsk,FLAG_DMB); */
 
   endpoint_send(tsk->endpt,tsk->gc,MSG_STARTDISTGCACK,NULL,0);
 }
@@ -959,51 +1016,19 @@ static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
 static void interpreter_markroots(task *tsk)
 {
 /* An RMT (Root Marking Task) */
-  list *l;
-  int pid;
-  int i;
-  int h;
-  global *glo;
+  int tid;
 
   assert(tsk->indistgc);
   assert(!endpointid_isnull(&tsk->gc));
 
-/*   printf("markroots\n"); */
-
   assert(tsk->indistgc);
 
   /* sanity check: shouldn't have any pending mark messages at this point */
-  for (pid = 0; pid < tsk->groupsize; pid++)
-    assert(0 == array_count(tsk->distmarks[pid]));
+  for (tid = 0; tid < tsk->groupsize; tid++)
+    assert(0 == array_count(tsk->distmarks[tid]));
   tsk->inmark = 1;
 
-  mark_roots(tsk,FLAG_DMB);
-
-  /* mark any in-flight gaddrs that refer to remote objects */
-  for (l = tsk->inflight; l; l = l->next) {
-    gaddr *addr = (gaddr*)l->data;
-    if ((0 <= addr->lid) && (tsk->tid != addr->tid))
-      add_pending_mark(tsk,*addr);
-  }
-
-  for (pid = 0; pid < tsk->groupsize; pid++) {
-    int count = array_count(tsk->inflight_addrs[pid]);
-    for (i = 0; i < count; i++) {
-      gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
-      if ((0 <= addr.lid) && (tsk->tid != addr.tid))
-        add_pending_mark(tsk,addr);
-    }
-  }
-
-  /* make sure that for all marked globals, the pointer is also marked */
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    for (glo = tsk->targethash[h]; glo; glo = glo->targetnext)
-      if (glo->flags & FLAG_DMB)
-        mark_global(tsk,glo,FLAG_DMB);
-    for (glo = tsk->physhash[h]; glo; glo = glo->physnext)
-      if (glo->flags & FLAG_DMB)
-        mark_global(tsk,glo,FLAG_DMB);
-  }
+  distributed_collect_start(tsk);
 
   tsk->gcsent[tsk->tid]--;
   send_mark_messages(tsk);
@@ -1038,16 +1063,21 @@ static void interpreter_markentry(task *tsk, message *msg)
   tsk->inmark = 1;
 
   start_address_reading(tsk,from,tag);
+  mark_start(tsk,FLAG_DMB);
   while (rd.pos < rd.size) {
     read_gaddr(&rd,&addr);
     assert(addr.tid == tsk->tid);
+    node_log(tsk->n,LOG_DEBUG2,"recv(%d->%d) MARKENTRY %d@%d",from,tsk->tid,addr.lid,addr.tid);
     glo = addrhash_lookup(tsk,addr);
-    if (!glo)
-      fatal("Marking request for deleted global %d@%d",addr.lid,addr.tid);
+    if (!glo) {
+      node_log(tsk->n,LOG_ERROR,"Marking request for deleted global %d@%d",addr.lid,addr.tid);
+      abort();
+    }
     assert(glo);
-    mark_global(tsk,glo,FLAG_DMB);
+    mark_global(tsk,glo,FLAG_DMB,0);
     tsk->gcsent[tsk->tid]--;
   }
+  mark_end(tsk,FLAG_DMB);
   finish_address_reading(tsk,from,tag);
 
   send_mark_messages(tsk);
@@ -1064,16 +1094,80 @@ static void interpreter_sweep(task *tsk, message *msg)
   rd = read_start(tsk,msg->data,msg->size);
 
   /* do sweep */
-  endpoint_send(tsk->endpt,tsk->gc,MSG_SWEEPACK,NULL,0);
-
-  clear_marks(tsk,FLAG_MARKED);
-  mark_roots(tsk,FLAG_MARKED);
-
-  sweep(tsk,0);
-  clear_marks(tsk,FLAG_NEW);
+  distributed_collect_end(tsk);
 
   tsk->indistgc = 0;
   tsk->newcellflags &= ~FLAG_NEW;
+
+  endpoint_send(tsk->endpt,tsk->gc,MSG_SWEEPACK,NULL,0);
+}
+
+static void maybe_pauseack(task *tsk)
+{
+  if (tsk->paused && (tsk->groupsize-1 == tsk->gotpause))
+    endpoint_send(tsk->endpt,tsk->gc,MSG_PAUSEACK,NULL,0);
+}
+
+static void interpreter_pause(task *tsk, message *msg)
+{
+  assert(!tsk->paused);
+  if (endpointid_isnull(&tsk->gc)) {
+    tsk->gc = msg->source;
+    endpoint_link(tsk->endpt,tsk->gc);
+  }
+  tsk->paused = 1;
+  int i;
+  for (i = 0; i < tsk->groupsize; i++) {
+    if (i != tsk->tid)
+      endpoint_send(tsk->endpt,tsk->idmap[i],MSG_GOTPAUSE,NULL,0);
+  }
+  maybe_pauseack(tsk);
+}
+
+static void interpreter_gotpause(task *tsk)
+{
+  tsk->gotpause++;
+  assert(tsk->groupsize-1 >= tsk->gotpause);
+  maybe_pauseack(tsk);
+}
+
+static void interpreter_resume(task *tsk)
+{
+  tsk->paused = 0;
+  tsk->gotpause = 0;
+}
+
+static void interpreter_checkallrefs(task *tsk)
+{
+  send_checkrefs(tsk);
+}
+
+static void interpreter_checkrefs(task *tsk, message *msg)
+{
+  int from = get_idmap_index(tsk,msg->source);
+  uint32_t pos = 0;
+  int count = 0;
+  int bad = 0;
+  while (pos < msg->size) {
+    assert(pos+sizeof(gaddr) <= msg->size);
+    gaddr addr;
+    memcpy(&addr,&msg->data[pos],sizeof(gaddr));
+    pos += sizeof(gaddr);
+    if (NULL == addrhash_lookup(tsk,addr)) {
+      node_log(tsk->n,LOG_ERROR,"Task %d: Reference %d@%d from task %d is invalid",
+               tsk->tid,addr.lid,addr.tid,from);
+      bad++;
+    }
+    count++;
+  }
+  if (0 == bad) {
+    node_log(tsk->n,LOG_DEBUG1,"Task %d: All %d refs from task %d are ok",
+             tsk->tid,count,from);
+  }
+  else {
+    node_log(tsk->n,LOG_ERROR,"Task %d: Out of %d refs from task %d, %d are bad",
+             tsk->tid,count,from,bad);
+  }
 }
 
 static void handle_message(task *tsk, message *msg)
@@ -1145,6 +1239,21 @@ static void handle_message(task *tsk, message *msg)
   case MSG_GET_STATS:
     assert(sizeof(get_stats_msg) <= msg->size);
     interpreter_get_stats(tsk,(get_stats_msg*)msg->data);
+    break;
+  case MSG_PAUSE:
+    interpreter_pause(tsk,msg);
+    break;
+  case MSG_GOTPAUSE:
+    interpreter_gotpause(tsk);
+    break;
+  case MSG_RESUME:
+    interpreter_resume(tsk);
+    break;
+  case MSG_CHECKALLREFS:
+    interpreter_checkallrefs(tsk);
+    break;
+  case MSG_CHECKREFS:
+    interpreter_checkrefs(tsk,msg);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");
@@ -1238,19 +1347,28 @@ int handle_interrupt(task *tsk)
   if (tsk->done)
     return 1;
 
-  if (tsk->alloc_bytes >= COLLECT_THRESHOLD) {
+  if (tsk->need_minor) {
     local_collect(tsk);
 
-    if (getenv("GC_STATS")) {
-      int cells;
-      int bytes;
-      int alloc;
-      int connections;
-      int listeners;
-      memusage(tsk,&cells,&bytes,&alloc,&connections,&listeners);
-      printf("Collect: %d cells, %dk memory, %dk allocated, %d connections, %d listeners\n",
-             cells,bytes/1024,alloc/1024,connections,listeners);
+    list *l;
+    for (l = tsk->wakeup_after_collect; l; l = l->next) {
+      fprintf(stderr,"waking up blocked frame with ioid %d\n",*(int*)l->data);
+      retrieve_blocked_frame(tsk,*(int*)l->data);
     }
+    list_free(tsk->wakeup_after_collect,free);
+    tsk->wakeup_after_collect = NULL;
+
+    /* FIXME */
+/*     if (getenv("GC_STATS")) { */
+/*       int cells; */
+/*       int bytes; */
+/*       int alloc; */
+/*       int connections; */
+/*       int listeners; */
+/*       memusage(tsk,&cells,&bytes,&alloc,&connections,&listeners); */
+/*       printf("Collect: %d cells, %dk memory, %dk allocated, %d connections, %d listeners\n", */
+/*              cells,bytes/1024,alloc/1024,connections,listeners); */
+/*     } */
 
     gettimeofday(&now,NULL);
     tsk->nextgc = timeval_addms(now,GC_DELAY);
@@ -1259,6 +1377,11 @@ int handle_interrupt(task *tsk)
   if (NULL != (msg = endpoint_receive(tsk->endpt,0))) {
     handle_message(tsk,msg);
     endpoint_interrupt(tsk->endpt); /* may be another one */
+  }
+
+  while (tsk->paused) {
+    msg = endpoint_receive(tsk->endpt,-1);
+    handle_message(tsk,msg);
   }
 
   if (NULL == *tsk->runptr) {
@@ -1273,8 +1396,8 @@ int handle_interrupt(task *tsk)
       return 1;
     }
 
-    node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d",
-             tsk->tid,tsk->svcbusy,tsk->nfetching);
+/*     node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d", */
+/*              tsk->tid,tsk->svcbusy,tsk->nfetching); */
 
     assert(0 <= tsk->svcbusy);
 
@@ -1286,13 +1409,6 @@ int handle_interrupt(task *tsk)
       handle_message(tsk,msg);
       doreturn = 1;
     }
-
-#if 0
-    if (NULL != *tsk->runptr) {
-      node_log(tsk->n,LOG_DEBUG1,"%d: runnable frame is %s\n",tsk->tid,
-               bc_function_name(tsk->bcdata,frame_fno(tsk,*tsk->runptr)));
-    }
-#endif
 
     if (doreturn) {
       endpoint_interrupt(tsk->endpt);
@@ -1310,9 +1426,11 @@ int handle_interrupt(task *tsk)
           pntr fp;
           assert(f->c);
           make_pntr(fp,f->c);
+          #ifdef DEBUG_DISTRIBUTION
           char *tmp = pntr_to_string(tsk,fp);
           node_log(tsk->n,LOG_DEBUG1,"%d: RUNSPARK %s",tsk->tid,tmp);
           free(tmp);
+          #endif
 #endif
           run_frame(tsk,f);
           return 0;
@@ -1349,7 +1467,8 @@ int handle_interrupt(task *tsk)
        much memory allocation done during this time, there may be socket connections lying around
        that are no longer referenced and should therefore be cleaned up. */
     if (0 >= timeval_diffms(now,tsk->nextgc)) {
-      tsk->alloc_bytes = COLLECT_THRESHOLD;
+      tsk->need_minor = 1;
+      tsk->need_major = 1;
       endpoint_interrupt(tsk->endpt); /* may be another one */
     }
 
@@ -1435,12 +1554,12 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
        FRAME's stack */
     int i;
     pntr rep;
-    cap *newcp = cap_alloc(tsk,cp->arity,cp->address,cp->fno);
+    cap *newcp = cap_alloc(tsk,cp->arity,cp->address,cp->fno,
+                           instr->expcount-1+cp->count);
     #ifdef PROFILING
     tsk->stats.caps[cp->fno]++;
     #endif
     newcp->sl = cp->sl;
-    newcp->data = (pntr*)malloc((instr->expcount-1+cp->count)*sizeof(pntr));
     newcp->count = 0;
     for (i = 0; i < instr->expcount-1; i++)
       newcp->data[newcp->count++] = f2->data[i];
@@ -1449,6 +1568,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
 
     /* replace the current FRAME with the new CAP */
     if (f2->c) {
+      write_barrier(tsk,f2->c);
       f2->c->type = CELL_CAP;
       make_pntr(f2->c->field1,newcp);
       make_pntr(rep,f2->c);
@@ -1460,6 +1580,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
       make_pntr(capc->field1,newcp);
       make_pntr(*f2->retp,capc);
       f2->retp = NULL;
+      make_pntr(rep,capc);
     }
 
     /* return to caller */
@@ -1585,8 +1706,7 @@ inline void op_update(task *tsk, frame *runnable, const instruction *instr)
     fprintf(stderr,"Attempt to update cell with itself\n");
     exit(1);
   }
-  target->type = CELL_IND;
-  target->field1 = res;
+  cell_make_ind(tsk,target,res);
   runnable->data[instr->arg0] = res;
 }
 
@@ -1617,13 +1737,12 @@ inline void op_mkcap(task *tsk, frame *runnable, const instruction *instr)
   int n = instr->arg1;
   int i;
   cell *capv;
-  cap *c = cap_alloc(tsk,program_finfo[fno].arity,program_finfo[fno].address,fno);
+  cap *c = cap_alloc(tsk,program_finfo[fno].arity,program_finfo[fno].address,fno,n);
   #ifdef PROFILING
   tsk->stats.caps[fno]++;
   #endif
   c->sl.fileno = instr->fileno;
   c->sl.lineno = instr->lineno;
-  c->data = (pntr*)malloc(n*sizeof(pntr));
   c->count = 0;
   for (i = instr->expcount-n; i < instr->expcount; i++)
     c->data[c->count++] = runnable->data[i];
@@ -1722,7 +1841,7 @@ void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native
     assert(CELL_REMOTEREF == pntrtype(ref));
     gaddr storeaddr = get_physical_address(tsk,ref);
     assert(storeaddr.tid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d (EVAL)",
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (EVAL)",
              tsk->tid,target->addr.tid,
              target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
@@ -2170,9 +2289,20 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   int gcms = tsk->gcms;
   int runms = totalms-gcms;
   double gcpct = 100.0*((double)gcms)/((double)totalms);
+  double minorpct = 100.0*((double)tsk->minorms)/((double)totalms);
+  double majorpct = 100.0*((double)tsk->majorms)/((double)totalms);
 
-  node_log(tsk->n,LOG_INFO,"Task completed; total %d run %d gc %d gcpct %.3f%",
-           totalms,runms,gcms,gcpct);
+  node_log(tsk->n,LOG_INFO,"Task completed; total %d run %d gc %d gcpct %.2f%%"
+           " minor %.2f%% major %.2f%%",
+           totalms,runms,gcms,gcpct,minorpct,majorpct);
+  #ifdef OBJECT_LIFETIMES
+  int bucket;
+  node_log(tsk->n,LOG_INFO,"Task ages: (mb/count)");
+  for (bucket = 0; bucket < array_count(tsk->lifetimes); bucket++) {
+    node_log(tsk->n,LOG_INFO,"%u %u",
+             (bucket*LIFETIME_INCR)/1024/1024,((int*)tsk->lifetimes->data)[bucket]);
+  }
+  #endif
   #ifdef PROFILING
   if (ENGINE_INTERPRETER == engine_type)
     print_profile(tsk);

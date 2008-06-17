@@ -35,6 +35,55 @@
 #include <stdarg.h>
 #include <math.h>
 
+static pntrstack *pntrstack_new(void)
+{
+  pntrstack *s = (pntrstack*)calloc(1,sizeof(pntrstack));
+  s->alloc = 1;
+  s->count = 0;
+  s->data = (pntr*)malloc(sizeof(pntr));
+  s->limit = STACK_LIMIT;
+  return s;
+}
+
+static void pntrstack_grow(int *alloc, pntr **data, int size)
+{
+  if (*alloc < size) {
+    *alloc = size;
+    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
+  }
+}
+
+static void pntrstack_push(pntrstack *s, pntr p)
+{
+  if (s->count == s->alloc) {
+    if ((0 <= s->limit) && (s->count >= s->limit)) {
+      fprintf(stderr,"Out of stack space\n");
+      exit(1);
+    }
+    pntrstack_grow(&s->alloc,&s->data,s->alloc*2);
+  }
+  s->data[s->count++] = p;
+}
+
+static pntr pntrstack_at(pntrstack *s, int pos)
+{
+  assert(0 <= pos);
+  assert(pos < s->count);
+  return resolve_pntr(s->data[pos]);
+}
+
+static pntr pntrstack_pop(pntrstack *s)
+{
+  assert(0 < s->count);
+  return resolve_pntr(s->data[--s->count]);
+}
+
+static void pntrstack_free(pntrstack *s)
+{
+  free(s->data);
+  free(s);
+}
+
 static pntr makescref(task *tsk, scomb *sc)
 {
   cell *c = alloc_cell(tsk);
@@ -90,8 +139,7 @@ static pntr instantiate_scomb_r(task *tsk, scomb *sc, snode *source,
     for (rec = source->bindings; rec; rec = rec->next) {
       res = instantiate_scomb_r(tsk,sc,rec->value,names,values);
       assert(CELL_HOLE == get_pntr(values->data[oldcount+i])->type);
-      get_pntr(values->data[oldcount+i])->type = CELL_IND;
-      get_pntr(values->data[oldcount+i])->field1 = res;
+      cell_make_ind(tsk,get_pntr(values->data[oldcount+i]),res);
       i++;
     }
     res = instantiate_scomb_r(tsk,sc,source->body,names,values);
@@ -168,7 +216,7 @@ void reduce(task *tsk, pntrstack *s)
     int oldtop = s->count;
     pntr target;
 
-    if (tsk->alloc_bytes > COLLECT_THRESHOLD)
+    if (tsk->need_minor)
       local_collect(tsk);
 
     redex = s->data[s->count-1];
@@ -222,8 +270,7 @@ void reduce(task *tsk, pntrstack *s)
 
       trace_step(tsk,redex,1,"Instantiating supercombinator %s",sc->name);
       res = instantiate_scomb(tsk,s,sc);
-      get_pntr(dest)->type = CELL_IND;
-      get_pntr(dest)->field1 = res;
+      cell_make_ind(tsk,get_pntr(dest),res);
 
       s->count = oldtop;
       continue;
@@ -305,9 +352,7 @@ void reduce(task *tsk, pntrstack *s)
 
       s->data[s->count-1] = resolve_pntr(s->data[s->count-1]);
 
-      free_cell_fields(tsk,get_pntr(s->data[s->count-2]));
-      get_pntr(s->data[s->count-2])->type = CELL_IND;
-      get_pntr(s->data[s->count-2])->field1 = s->data[s->count-1];
+      cell_make_ind(tsk,get_pntr(s->data[s->count-2]),s->data[s->count-1]);
 
       s->count--;
       break;

@@ -1,0 +1,35 @@
+genlist i max =
+(if (>= i max)
+  nil
+  (cons (reverse (numtostring (* 7 i))) (genlist (+ i 1) max)))
+
+flatten lst =
+(if lst
+  (++ (head lst) (++ "\n" (flatten (tail lst))))
+  nil)
+
+quicksort2 pivot lst before after =
+(if lst
+  (letrec
+    item = (head lst)
+    rest = (tail lst)
+   in
+    (if (< (strcmp item pivot) 0)
+      (quicksort2 pivot rest (cons item before) after)
+      (quicksort2 pivot rest before (cons item after))))
+  (append (quicksort before) (cons pivot (quicksort after))))
+
+quicksort lst =
+(if lst
+  (quicksort2 (head lst) (tail lst) nil nil)
+  nil)
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        1000)
+  input = (genlist 0 n)
+  sorted = (quicksort input)
+in
+  (flatten sorted))

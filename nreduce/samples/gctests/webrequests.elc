@@ -1,0 +1,16 @@
+requests n =
+(if (< n 1)
+  0
+(letrec
+  response = (connect "localhost" 80 "GET / HTTP/1.0\r\n\r\n")
+in
+  (+ (len (prefix 4 response)) (requests (- n 1)))))
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        1000)
+in
+  (++ (numtostring (requests n)) "\n"))
+

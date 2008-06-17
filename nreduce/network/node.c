@@ -206,7 +206,7 @@ static node *node_new(int loglevel)
   }
   n->p->ioready_readfd = pipefds[0];
   n->p->ioready_writefd = pipefds[1];
-  n->p->logfile = stdout;
+  n->p->logfile = stderr;
   n->p->loglevel = loglevel;
 
   if (NULL != (logenv = getenv("LOG_LEVEL"))) {

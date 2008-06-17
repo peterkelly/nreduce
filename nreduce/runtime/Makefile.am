@@ -5,6 +5,7 @@ libruntime_la_SOURCES = worker.c \
 	task.c \
 	builtins.c \
 	memory.c \
+	checkmemory.c \
 	data.c \
 	interpreter.c \
 	reduction.c \

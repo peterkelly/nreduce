@@ -299,7 +299,31 @@ static void b_if(task *tsk, pntr *argstack)
   argstack[0] = source;
 }
 
- /* Can be called from native code */
+void array_resolve_tail(task *tsk, carray *arr)
+{
+  if (CELL_IND == pntrtype(arr->tail)) {
+    arr->tail = resolve_pntr(arr->tail);
+    write_barrier_ifnew(tsk,arr->wrapper,arr->tail);
+  }
+}
+
+void array_resolve_element(task *tsk, carray *arr, int pos)
+{
+  assert(sizeof(pntr) == arr->elemsize);
+  pntr *elements = (pntr*)arr->elements;
+  if (CELL_IND == pntrtype(elements[pos])) {
+    elements[pos] = resolve_pntr(elements[pos]);
+    write_barrier_ifnew(tsk,arr->wrapper,elements[pos]);
+  }
+}
+
+void array_set_tail(task *tsk, carray *arr, pntr newtail)
+{
+  arr->tail = newtail;
+  write_barrier_ifnew(tsk,arr->wrapper,newtail);
+}
+
+/* Can be called from native code */
 carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper)
 {
   carray *arr;
@@ -308,19 +332,28 @@ carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewra
     alloc = MAX_ARRAY_SIZE;
   else if (0 >= alloc)
     alloc = 8;
-
-  arr = (carray*)malloc(sizeof(carray)+alloc*dsize);
+  unsigned int sizereq = sizeof(carray)+alloc*dsize;
+  if (0 != sizereq%8)
+    sizereq += 8-(sizereq%8);
+  arr = (carray*)alloc_mem(tsk,sizereq);
+  arr->type = CELL_O_ARRAY;
+  arr->nbytes = sizereq;
   arr->alloc = alloc;
   arr->size = 0;
   arr->elemsize = dsize;
   arr->tail = tsk->globnilpntr;
   arr->nchars = 0;
+  if (usewrapper)
+    write_barrier(tsk,usewrapper);
   arr->wrapper = usewrapper ? usewrapper : alloc_cell(tsk);
   arr->wrapper->type = CELL_AREF;
   make_pntr(arr->wrapper->field1,arr);
 
-  if (oldarr)
-    make_aref_pntr(oldarr->tail,arr->wrapper,0);
+  if (oldarr) {
+    pntr p;
+    make_aref_pntr(p,arr->wrapper,0);
+    array_set_tail(tsk,oldarr,p);
+  }
 
   #ifdef PROFILING
   tsk->stats.array_allocs++;
@@ -356,13 +389,13 @@ static void convert_to_string(task *tsk, carray *arr)
 static void check_array_convert(task *tsk, carray *arr, const char *from)
 {
 #ifndef DISABLE_ARRAYS
-  arr->tail = resolve_pntr(arr->tail);
+  array_resolve_tail(tsk,arr);
   if ((sizeof(pntr) == arr->elemsize) &&
       ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(arr->tail)))) {
     pntr *pelements = (pntr*)arr->elements;
 
     while (arr->nchars < arr->size) {
-      pelements[arr->nchars] = resolve_pntr(pelements[arr->nchars]);
+      array_resolve_element(tsk,arr,arr->nchars);
       if (pntr_is_char(pelements[arr->nchars]))
         arr->nchars++;
       else
@@ -379,21 +412,25 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 {
   assert(dsize == (*arr)->elemsize); /* sanity check */
 
-  tsk->alloc_bytes += totalcount*dsize;
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
-    endpoint_interrupt(tsk->endpt);
-
   while (1) {
     int count = totalcount;
     if ((*arr)->size+count > MAX_ARRAY_SIZE)
       count = MAX_ARRAY_SIZE - (*arr)->size;
 
+    write_barrier(tsk,(*arr)->wrapper);
+
     if ((*arr)->alloc < (*arr)->size+count) {
       cell *wrapper = (*arr)->wrapper;
       assert(wrapper);
       while ((*arr)->alloc < (*arr)->size+count)
-        (*arr)->alloc *= 2;
-      (*arr) = (carray*)realloc((*arr),sizeof(carray)+(*arr)->alloc*(*arr)->elemsize);
+        (*arr)->alloc *= 4;
+      unsigned int sizereq = sizeof(carray)+(*arr)->alloc*(*arr)->elemsize;
+
+      if (0 != sizereq%8)
+        sizereq += 8-(sizereq%8);
+      (*arr) = (carray*)realloc_mem(tsk,*arr,sizereq);
+      (*arr)->nbytes = sizereq;
+
       make_pntr(wrapper->field1,*arr);
       #ifdef PROFILING
       tsk->stats.array_resizes++;
@@ -436,13 +473,13 @@ void maybe_expand_array(task *tsk, pntr p)
       arr = carray_new(tsk,sizeof(pntr),0,NULL,firstcell);
       carray_append(tsk,&arr,&firsthead,1,sizeof(pntr));
       carray_append(tsk,&arr,&secondhead,1,sizeof(pntr));
-      arr->tail = secondtail;
+      array_set_tail(tsk,arr,secondtail);
     }
   }
 
   if ((CELL_AREF == pntrtype(p)) && (sizeof(pntr) == aref_array(p)->elemsize)) {
     carray *arr = aref_array(p);
-    arr->tail = resolve_pntr(arr->tail);
+    array_resolve_tail(tsk,arr);
 
     /* FIXME: need to optimise this code by making sure it adjusts references to the
        old tails to point to this array, wherver possible. We can't just replace the
@@ -454,11 +491,12 @@ void maybe_expand_array(task *tsk, pntr p)
         cell *tailcell = get_pntr(arr->tail);
         pntr tailhead = resolve_pntr(tailcell->field1);
         carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
-        arr->tail = resolve_pntr(tailcell->field2);
+        array_set_tail(tsk,arr,resolve_pntr(tailcell->field2));
 
         /* FIXME: is there a way to do this safely? */
-/*         tailcell->type = CELL_IND; */
-/*         make_aref_pntr(tailcell->field1,arr->wrapper,arr->size-1); */
+/*         pntr newtail; */
+/*         make_aref_pntr(newtail,arr->wrapper,arr->size-1); */
+/*         cell_make_ind(tsk,tailcell,newtail); */
       }
       else if ((CELL_AREF == pntrtype(arr->tail)) &&
                (sizeof(pntr) == aref_array(arr->tail)->elemsize)) {
@@ -466,7 +504,7 @@ void maybe_expand_array(task *tsk, pntr p)
         int othindex = aref_index(arr->tail);
         carray_append(tsk,&arr,&((pntr*)otharr->elements)[othindex],
                       otharr->size-othindex,sizeof(pntr));
-        arr->tail = otharr->tail;
+        array_set_tail(tsk,arr,otharr->tail);
       }
       else {
         break;
@@ -504,7 +542,7 @@ pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
     pntr p;
     make_aref_pntr(p,arr->wrapper,0);
     carray_append(tsk,&arr,data,size,1);
-    arr->tail = tail;
+    array_set_tail(tsk,arr,tail);
     return p;
   }
   #endif
@@ -804,7 +842,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
       n = arr->size-index;
 
     prefix = carray_new(tsk,arr->elemsize,n,NULL,NULL);
-    prefix->tail = restpntr;
+    array_set_tail(tsk,prefix,restpntr);
     make_aref_pntr(argstack[0],prefix->wrapper,0);
     carray_append(tsk,&prefix,arr->elements+index*arr->elemsize,n,arr->elemsize);
   }
@@ -825,8 +863,8 @@ static void b_arraystrcmp(task *tsk, pntr *argstack)
     carray *barr = aref_array(b);
     int aindex = aref_index(a);
     int bindex = aref_index(b);
-    aarr->tail = resolve_pntr(aarr->tail);
-    barr->tail = resolve_pntr(barr->tail);
+    array_resolve_tail(tsk,aarr);
+    array_resolve_tail(tsk,barr);
     if ((1 == aarr->elemsize) && (1 == barr->elemsize) &&
         (CELL_NIL == pntrtype(aarr->tail)) && (CELL_NIL == pntrtype(barr->tail))) {
 
@@ -888,7 +926,7 @@ static void b_teststring(task *tsk, pntr *argstack)
   pntr tail = argstack[0];
   pntr p = string_to_array(tsk,"this part shouldn't be here! test");
   carray *arr = aref_array(p);
-  arr->tail = tail;
+  array_set_tail(tsk,arr,tail);
   make_aref_pntr(argstack[0],arr->wrapper,29);
 }
 
@@ -902,7 +940,7 @@ static void b_testarray(task *tsk, pntr *argstack)
   make_aref_pntr(p,arr->wrapper,2);
   for (i = 0; i < 5; i++)
     carray_append(tsk,&arr,&content,1,sizeof(pntr));
-  arr->tail = tail;
+  array_set_tail(tsk,arr,tail);
   argstack[0] = p;
 }
 
@@ -961,10 +999,8 @@ static void b_readchunk(task *tsk, pntr *argstack)
   }
 
   if (doclose) {
-    close(so->fd);
-    free(so);
-    c->type = CELL_IND;
-    c->field1 = tsk->globnilpntr;
+    free_sysobject(tsk,so);
+    cell_make_ind(tsk,c,tsk->globnilpntr);
     return;
   }
 
@@ -1232,11 +1268,30 @@ static void b_connect(task *tsk, pntr *argstack)
     curf->resume = 0;
 
     if (!so->connected) {
-      node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
-      set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
-      sysobject_done_reading(so);
-      sysobject_done_writing(so);
-      return;
+      if (((EISCONN == so->errn) || (EMFILE == so->errn) || (ENFILE == so->errn)) &&
+          (0 == so->retry)){
+        node_log(tsk->n,LOG_DEBUG1,
+                 "%d: CONNECT2 (%s:%d) failed (out of sockets); will retry after GC",
+                 tsk->tid,so->hostname,so->port);
+        /* Force a major garbage collection and retry */
+        so->retry++;
+        argstack[2] = string_to_array(tsk,so->hostname);
+        int ioid = suspend_current_frame(tsk,*tsk->runptr);
+        curf->resume = 0;
+        int *copy = (int*)malloc(sizeof(int));
+        memcpy(copy,&ioid,sizeof(int));
+        list_push(&tsk->wakeup_after_collect,copy);
+        fprintf(stderr,"suspended; ioid %d\n",ioid);
+        force_major_collection(tsk);
+        return;
+      }
+      else {
+        node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
+        set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
+        sysobject_done_reading(so);
+        sysobject_done_writing(so);
+        return;
+      }
     }
     else {
       pntr printer;
@@ -1255,7 +1310,7 @@ static void b_connect(task *tsk, pntr *argstack)
 
         gaddr storeaddr = get_physical_address(tsk,printer);
         assert(storeaddr.tid == tsk->tid);
-        node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr=%d@%d storeaddr=%d@%d (connect)",
+        node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (connect)",
                  tsk->tid,target->addr.tid,
                  target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
         msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
@@ -1343,7 +1398,7 @@ static void b_readcon(task *tsk, pntr *argstack)
       carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
       make_aref_pntr(argstack[0],arr->wrapper,0);
       carray_append(tsk,&arr,so->buf,so->len,1);
-      arr->tail = nextpntr;
+      array_set_tail(tsk,arr,nextpntr);
       free(so->buf);
       so->buf = NULL;
       so->len = 0;

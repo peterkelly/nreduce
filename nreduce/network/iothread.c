@@ -317,6 +317,7 @@ static void handle_write(node *n, connection *conn)
     if (0 > w) {
       node_log(n,LOG_WARNING,"write() to %s:%d failed: %s",
                conn->hostname,conn->port,strerror(errno));
+      conn->errn = errno;
       snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
       conn->errmsg[ERRMSG_MAX] = '\0';
       connection_fsm(conn,CE_ERROR);
@@ -477,6 +478,7 @@ static void handle_read(node *n, connection *conn)
   if (0 > r) {
     node_log(n,LOG_WARNING,"read() from %s:%d failed: %s",
              conn->hostname,conn->port,strerror(errno));
+    conn->errn = errno;
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(errno));
     conn->errmsg[ERRMSG_MAX] = '\0';
     connection_fsm(conn,CE_ERROR);
@@ -513,6 +515,7 @@ static int handle_connected(node *n, connection *conn)
   socklen_t optlen = sizeof(int);
 
   if (0 > getsockopt(conn->sock,SOL_SOCKET,SO_ERROR,&err,&optlen)) {
+    conn->errn = errno;
     snprintf(conn->errmsg,ERRMSG_MAX,"getsockopt SO_ERROR: %s",strerror(errno));
     conn->errmsg[ERRMSG_MAX] = '\0';
     connection_fsm(conn,CE_ASYNC_FAILED);
@@ -524,6 +527,7 @@ static int handle_connected(node *n, connection *conn)
     node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
     if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+      conn->errn = errno;
       snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt TCP_NODELAY: %s",strerror(errno));
       conn->errmsg[ERRMSG_MAX] = '\0';
       connection_fsm(conn,CE_ASYNC_FAILED);
@@ -535,6 +539,7 @@ static int handle_connected(node *n, connection *conn)
   else {
     node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
              conn->hostname,conn->port,strerror(err));
+    conn->errn = err;
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
     conn->errmsg[ERRMSG_MAX] = '\0';
     connection_fsm(conn,CE_ASYNC_FAILED);

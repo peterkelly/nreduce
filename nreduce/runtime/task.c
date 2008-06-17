@@ -45,6 +45,7 @@
 extern const module_info *modules;
 
 pthread_key_t task_key;
+// FIXME: make sure these are set correctly
 int engine_type = ENGINE_NATIVE;
 int strict_evaluation = 1;
 
@@ -154,6 +155,8 @@ gaddr get_physical_address(task *tsk, pntr p)
     llist_append(&tsk->globals,glo);
     glo->addr.tid = tsk->tid;
     glo->addr.lid = tsk->nextlid++;
+    node_log(tsk->n,LOG_DEBUG2,"Added new global with address %d@%d (get_physical_address)",
+             glo->addr.lid,glo->addr.tid);
     glo->p = p;
     glo->flags = tsk->indistgc ? FLAG_NEW : 0;
     physhash_add(tsk,glo);
@@ -177,6 +180,8 @@ global *add_target(task *tsk, gaddr addr, pntr p)
   glo = (global*)calloc(1,sizeof(global));
   llist_append(&tsk->globals,glo);
   glo->addr = addr;
+  node_log(tsk->n,LOG_DEBUG2,"Added new global with address %d@%d (add_target)",
+           glo->addr.lid,glo->addr.tid);
   glo->p = p;
   glo->flags = tsk->indistgc ? FLAG_NEW : 0;
   /* Can't store targets with lid < 0 in addrhash, since there may be more than one of them */
@@ -359,19 +364,19 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   tsk->n = n;
   tsk->runptr = &tsk->rtemp;
   tsk->freeptr = (cell*)1;
+  tsk->oldgenoffset = BLOCK_START;
+  tsk->newgenoffset = sizeof(block);
+  tsk->altspace = FLAG_ALTSPACE;
+  tsk->lifetimes = array_new(sizeof(unsigned int),0);
 
   if (0 > pipe(tsk->threadrunningfds))
     fatal("pipe: %s",strerror(errno));
 
   globnilvalue = alloc_cell(tsk);
   globnilvalue->type = CELL_NIL;
-  globnilvalue->flags |= FLAG_PINNED;
 
   make_pntr(tsk->globnilpntr,globnilvalue);
   set_pntrdouble(tsk->globtruepntr,1.0);
-
-  if (is_pntr(tsk->globtruepntr))
-    get_pntr(tsk->globtruepntr)->flags |= FLAG_PINNED;
 
   tsk->targethash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
   tsk->physhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
@@ -423,6 +428,7 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
 
   tsk->framesize = sizeof(frame)+maxstack*sizeof(pntr);
   tsk->framesperblock = FRAMEBLOCK_SIZE/tsk->framesize;
+  tsk->remembered = array_new(sizeof(cell*),1024);
 
   assert(NULL == tsk->strings);
   assert(0 == tsk->nstrings);
@@ -471,9 +477,12 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
 void task_free(task *tsk)
 {
   int i;
-  block *bl;
-  int h;
 
+  sweep_sysobjects(tsk,1);
+
+#if 0
+  int h;
+  /* FIXME */
   sweep(tsk,1);
 
   /* Make sure all globals are deleted; this should be handled by sweep */
@@ -484,13 +493,10 @@ void task_free(task *tsk)
   }
   assert(NULL == tsk->globals.first);
   assert(NULL == tsk->globals.last);
+#endif
 
-  bl = tsk->blocks;
-  while (bl) {
-    block *next = bl->next;
-    free(bl);
-    bl = next;
-  }
+  free_blocks(tsk->oldgen);
+  free_blocks(tsk->newgen);
 
   free(tsk->idmap);
   free(tsk->ioframes);
@@ -507,6 +513,11 @@ void task_free(task *tsk)
     tsk->frameblocks = next;
   }
 
+  if (tsk->remembered)
+    array_free(tsk->remembered);
+
+  list_free(tsk->wakeup_after_collect,free);
+  free(tsk->lifetimes);
   free(tsk->strings);
   free(tsk->stats.funcalls);
   free(tsk->stats.frames);
@@ -526,6 +537,8 @@ void task_free(task *tsk)
   free(tsk->bcaddr_to_fno);
   free(tsk->bcdata);
 
+  free(tsk->bpswapin[0]);
+  free(tsk->bpswapin[1]);
   free(tsk->bpaddrs[0]);
   free(tsk->bpaddrs[1]);
   free(tsk->cpu_to_bcaddr);
@@ -778,6 +791,7 @@ void print_profile(task *tsk)
   fprintf(f,"\n");
   fprintf(f,"Instructions           %d\n",totalusage);
   fprintf(f,"Cell allocations       %d\n",tsk->stats.cell_allocs);
+  fprintf(f,"Total bytes allocated  %d\n",tsk->stats.total_bytes);
   fprintf(f,"Array allocations      %d\n",tsk->stats.array_allocs);
   fprintf(f,"Array resizes          %d\n",tsk->stats.array_resizes);
   fprintf(f,"FRAME allocations      %d\n",tsk->stats.frame_allocs);

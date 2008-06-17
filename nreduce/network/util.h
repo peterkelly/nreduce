@@ -47,6 +47,7 @@ typedef struct array {
 typedef struct stack {
   int alloc;
   int count;
+  int limit;
   void **data;
 } stack;
 

@@ -1,0 +1,46 @@
+genlist i max =
+(if (>= i max)
+  nil
+  (cons (reverse (numtostring (* 7 i))) (genlist (+ i 1) max)))
+
+flatten lst =
+(if lst
+  (++ (head lst) (++ "\n" (flatten (tail lst))))
+  nil)
+
+mergesort m =
+(if (<= (len m) 1)
+  m
+  (letrec
+    middle = (floor (/ (len m) 2))
+    left = (prefix middle m)
+    right = (skip middle m)
+    left2 = (mergesort left)
+    right2 = (mergesort right)
+  in
+    (merge left2 right2 nil)))
+
+merge xlst ylst out =
+(if xlst
+  (if ylst
+    (letrec
+      x = (head xlst)
+      y = (head ylst)
+     in
+      (if (> (strcmp x y) 0)
+        (merge xlst (tail ylst) (cons y out))
+        (merge (tail xlst) ylst (cons x out))))
+    (merge (tail xlst) ylst (cons (head xlst) out)))
+  (if ylst
+    (merge xlst (tail ylst) (cons (head ylst) out))
+    (reverse out)))
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        1000)
+  input = (genlist 0 n)
+  sorted = (mergesort input)
+in
+  (flatten sorted))

@@ -135,6 +135,7 @@ static int initiate_connection(connection *conn)
   addr.sin_addr.s_addr = conn->ip;
 
   if (0 > (conn->sock = socket(AF_INET,SOCK_STREAM,0))) {
+    conn->errn = errno;
     snprintf(conn->errmsg,ERRMSG_MAX,"socket: %s",strerror(errno));
     perror("socket");
     return -1;
@@ -150,6 +151,7 @@ static int initiate_connection(connection *conn)
   r = connect(conn->sock,(struct sockaddr*)&addr,sizeof(struct sockaddr));
   assert(0 > r); /* we don't expect direct success */
   if (EINPROGRESS != errno) {
+    conn->errn = errno;
     snprintf(conn->errmsg,ERRMSG_MAX,"connect: %s",strerror(errno));
     return -1;
   }

@@ -80,6 +80,7 @@ void notify_connect(node *n, connection *conn, int error)
 
     crm.ioid = conn->frameids[CONNECT_FRAMEADDR];
     crm.error = error;
+    crm.errn = conn->errn;
     if (error)
       memset(&crm.sockid,0,sizeof(crm.sockid));
     else

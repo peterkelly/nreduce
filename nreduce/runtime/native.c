@@ -480,13 +480,8 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 /*
  * Received when we hit a breakpoint that was previously set by native_sigusr1(). When this is
  * called, the native code is at a "safe" point at which we can execute handle_interrupt().
- *
- * Rather than executing it directly here though, we modify the return instruction pointer so that
- * when the thread exits the signal handler it will jump to the assembler code generated for the
- * interrupt handler. We save the old value of the EIP register in tsk->interrupt_return_eip, so
- * that the thread can jump back to the original position after the interrupt has been dealt with.
  */
-void handle_trap(task *tsk, void *eip)
+void handle_trap(task *tsk, void *eip, void *eax)
 {
   bcheader *bch = (bcheader*)tsk->bcdata;
   const instruction *program_ops = bc_instructions(tsk->bcdata);
@@ -507,10 +502,25 @@ void handle_trap(task *tsk, void *eip)
   assert((bcaddr == bch->nops-1) ||
          (eip <= program_ops[bcaddr+1].code));
 
-  /* Clear the breakpoint(s), by restoring the previous values that were at the start of the
-     relevant machine instrucitons. These were temporarily set to 0xCC in native_sigusr1() */
-  assert(tsk->bpaddrs[0][bcaddr]);
+  /* Figure out which breakpoint address we came from, so we can tell if the code was executing
+     swap_in when the breakpoint was triggered. This affects how we instruct the code to continue
+     afterwards. */
 
+  int found = 0;
+  int from_swapin = 0;
+  for (bp = 0; bp <= 1; bp++) {
+    if (tsk->bpaddrs[bp][bcaddr] == eip) {
+      found++;
+      if (tsk->bpswapin[bp][bcaddr])
+        from_swapin = 1;
+    }
+  }
+  assert(1 == found); /* exactly one should match */
+
+  /* Clear the breakpoint(s), by restoring the previous values that were at the start of the
+     relevant machine instrucitons. These were temporarily set to a 5-byte CALL instruction
+     in native_sigusr1() */
+  assert(tsk->bpaddrs[0][bcaddr]);
   for (bp = 0; bp <= 1; bp++) {
     if (tsk->bpaddrs[bp][bcaddr]) {
       assert(0xe8 == *tsk->bpaddrs[bp][bcaddr]);
@@ -522,14 +532,44 @@ void handle_trap(task *tsk, void *eip)
   tsk->trap_bcaddr = 0;
   tsk->trap_pending = 0;
 
-  /* Swap out - set the current frame's instruction pointer to the correct value according to
-     the bytecode address that the native code is executing */
-  if (curf && (NULL == curf->instr))
-    curf->instr = &program_ops[bcaddr+1];
+  /* Make sure that if we have a current frame, it's instr pointer is set to NULL, because
+     the native code instruction pointer is the authorative source for this information. */
+  assert((NULL == curf) || (NULL == curf->instr));
 
+  if (curf) {
+    /* If we were called from swap_in, then the current frame's instruction is derived from the
+       address that the native code is about to jump to after we've finished handling this trap.
+       Otheriwse, it's simply the next instruction to be executed. */
+    if (from_swapin) {
+      int target_bcaddr = tsk->cpu_to_bcaddr[eax-tsk->code];
+      curf->instr =  &program_ops[target_bcaddr];
+    }
+    else {
+      curf->instr = &program_ops[bcaddr+1];
+    }
+  }
+
+  /* Call the handle_interrupt() function in interpreter.c to do message processing, garbage
+     collection etc. */
   handle_interrupt(tsk);
 
-  assert((NULL == curf) || (curf == *tsk->runptr));
+  curf = *tsk->runptr;
+  if (curf) {
+    assert(curf->instr);
+    if (from_swapin) {
+      /* If we were called during execution of swap_in, this means there is a possibility that
+         the current frame may have changed. We need to arrange for the jump instruction at
+         the end of swap_in to jump to this frame.
+
+         Note that we do not do this for other instructions, as this may cause incorrect behaviour
+         (e.g. if it is about to jump to a label). */
+      tsk->interrupt_return_eip = curf->instr->code;
+    }
+
+    /* Set the current frame's instruction to NULL, since the native code instruction pointer is
+       now the authorative source of information about where this frame is in the code. */
+    curf->instr = NULL;
+  }
 }
 
 void native_sigfpe(int sig, siginfo_t *ino, void *uc1)
@@ -660,7 +700,7 @@ void swap_in_error(task *tsk)
 }
 
 /* Update the native code EIP for the current runnable list head */
-void swap_in(task *tsk, x86_assembly *as, int lab)
+void swap_in(task *tsk, x86_assembly *as, int **bplabels, int curaddr)
 {
   int Lnotnull = as->labels++;
   int Ljump = as->labels++;
@@ -696,8 +736,8 @@ void swap_in(task *tsk, x86_assembly *as, int lab)
   I_MOV(reg(EAX),regmem(EAX,INSTR_CODE)); // get the code address for the current instruction
 
   /* Jump to the next instruction */
-  if (lab)
-    LABEL(lab);
+  tsk->bpswapin[0][curaddr] = 1;
+  LABEL(bplabels[0][curaddr]);
   LABEL(Ljump);
   I_JMP(reg(EAX));
 }
@@ -728,25 +768,6 @@ void asm_check_runnable(task *tsk, x86_assembly *as)
   END_CALL;
 
   LABEL(Lno);
-}
-
-void asm_check_collect_needed(task *tsk, x86_assembly *as)
-{
-  // if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt) {
-  //   endpoint_interrupt(tsk->endpt);
-  // }
-  int Laftermemcheck = as->labels++;
-  I_CMP(absmem((int)&tsk->alloc_bytes),imm(COLLECT_THRESHOLD));
-  I_JL(label(Laftermemcheck));
-
-  BEGIN_CALL(4);
-  I_PUSH(imm((int)tsk->endpt));
-  I_MOV(reg(EAX),imm((int)endpoint_interrupt));
-  I_CALL(reg(EAX));
-  I_ADD(reg(ESP),imm(4));
-  END_CALL;
-
-  LABEL(Laftermemcheck);
 }
 
 /*
@@ -807,12 +828,6 @@ void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
   int Lhavefree = as->labels++;
   int Lframeallocated = as->labels++;
 
-  if (addalloc) {
-    // tsk->alloc_bytes += tsk->framesize+sizeof(cell);
-    I_ADD(absmem((int)&tsk->alloc_bytes),imm(tsk->framesize+sizeof(cell)));
-    asm_check_collect_needed(tsk,as);
-  }
-
   // f = tsk->freeframe;
   I_MOV(reg(EDI),absmem((int)&tsk->freeframe));
 
@@ -848,6 +863,7 @@ void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
     // f->state = 0;
     // f->resume = 0;
     // f->freelnk = 0;
+    // f->marked = 0;
     I_MOV(regmem(EDI,FRAME_STATE),imm(state));
     I_MOV(regmem(EDI,FRAME_RESUME),imm(0));
     I_MOV(regmem(EDI,FRAME_FREELNK),imm(0));
@@ -899,7 +915,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   bplabels[1] = (int*)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[0] = (unsigned char**)calloc(bch->nops,sizeof(int));
   tsk->bpaddrs[1] = (unsigned char**)calloc(bch->nops,sizeof(int));
-
+  tsk->bpswapin[0] = (unsigned char*)calloc(bch->nops,sizeof(unsigned char));
+  tsk->bpswapin[1] = (unsigned char*)calloc(bch->nops,sizeof(unsigned char));
   instrlabels = (int*)malloc(bch->nops*sizeof(int));
   for (i = 0; i < bch->nops; i++)
     instrlabels[i] = as->labels++;
@@ -918,7 +935,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
 
   asm_check_runnable(tsk,as);
   assert(OP_BEGIN == program_ops[0].opcode);
-  swap_in(tsk,as,bplabels[1][0]); /* initialize EBP and jump to first instruction */
+  swap_in(tsk,as,bplabels,0); /* initialize EBP and jump to first instruction */
   I_NOP(); /* pad to 5 bytes between labels */
   I_NOP();
   I_NOP();
@@ -953,7 +970,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
     #ifdef NATIVE_BEGIN
     case OP_BEGIN:
       /* NOOP */
-      LABEL(bplabels[0][addr]);
       break;
     #endif
     #ifdef NATIVE_GLOBSTART
@@ -990,10 +1006,29 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
     case OP_RETURN: {
       int Lvalueset = as->labels++;
       int Lretp = as->labels++;
+      int Lafter_write_barrier = as->labels++;
 
       I_MOV(reg(ECX),regmem(EBP,FRAME_C));
       I_CMP(reg(ECX),imm(0));
       I_JZ(label(Lretp));
+
+      /* Write barrier */
+      I_MOV(reg(EAX),regmem(ECX,CELL_FLAGS));
+      I_AND(reg(EAX),imm(FLAG_MATURE));
+      I_CMP(reg(EAX),imm(0));
+      I_JZ(label(Lafter_write_barrier));
+
+      BEGIN_CALL(16);
+      I_PUSH(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4));
+      I_PUSH(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+      I_PUSH(reg(ECX));
+      I_PUSH(imm((int)tsk));
+      I_MOV(reg(EAX),imm((int)write_barrier_ifnew));
+      I_CALL(reg(EAX));
+      I_ADD(reg(ESP),imm(16));
+      END_CALL;
+
+      LABEL(Lafter_write_barrier);
 
       /* Have cell - change it to an IND reference to the actual result */
 
@@ -1113,7 +1148,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         I_MOV(absmem((int)&tsk->freeframe),reg(EDI));
       }
 
-      swap_in(tsk,as,bplabels[0][addr]);
+      swap_in(tsk,as,bplabels,addr);
       break;
     }
     #endif
@@ -1224,12 +1259,12 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       // if (NULL == tsk->ptr)
       int Lhavefreecell = as->labels++;
       int Lcellallocated = as->labels++;
-      I_CMP(absmem((int)&tsk->freeptr),imm(1));
-      I_JNE(label(Lhavefreecell));
-      /* Fall back to C version */
 
-      /* Note: an extra sizeof(cell) will get added to alloc_bytes here, but it doesn't affect
-         program correctness (the next collection will just happen very slightly sooner) */
+      I_MOV(reg(ESI),absmem((int)&tsk->newgenoffset));
+      I_CMP(reg(ESI),imm(sizeof(block)-sizeof(cell)));
+      I_JL(label(Lhavefreecell));
+
+      /* Fall back to C version */
 
       BEGIN_CALL(4);
       I_PUSH(imm((int)tsk));
@@ -1240,18 +1275,21 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       END_CALL;
       I_JMP(label(Lcellallocated));
 
+      /* Allocate cell directly here; ESI points to newgenoffset from above */
+
       LABEL(Lhavefreecell);
 
-      // v = tsk->freeptr;
-      I_MOV(reg(ESI),absmem((int)&tsk->freeptr));
+      // newgenoffset += sizeof(cell)
+      I_LEA(reg(EAX),regmem(ESI,sizeof(cell)));
+      I_MOV(absmem((int)&tsk->newgenoffset),reg(EAX));
 
-      // v->flags = tsk->newcellflags;
+      // get correct cell position
+      I_ADD(reg(ESI),absmem((int)&tsk->newgen));
+
+      // Set flags on new cell
       I_MOV(reg(EAX),absmem((int)&tsk->newcellflags));
       I_MOV(regmem(ESI,CELL_FLAGS),reg(EAX));
 
-      // tsk->freeptr = (cell*)get_pntr(v->field1);
-      I_MOV(reg(EAX),regmem(ESI,CELL_FIELD1));
-      I_MOV(absmem(((int)&tsk->freeptr)),reg(EAX));
       LABEL(Lcellallocated);
 
       // newfholder->type = CELL_FRAME;
@@ -1308,7 +1346,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         int Lend = as->labels++;
         double one = 1;
         int *trueval = (int*)&one;
-        int *falseval = (int*)&tsk->globnilpntr;
 
         I_FLD_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)));
         I_FLD_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
@@ -1324,8 +1361,10 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         case B_GE: I_JNB(label(Ltrue)); break;
         }
 
-        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)),imm(falseval[0]));
-        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)+4),imm(falseval[1]));
+        I_MOV(reg(EAX),absmem((int)&tsk->globnilpntr.data[0]));
+        I_MOV(reg(EBX),absmem((int)&tsk->globnilpntr.data[1]));
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)),reg(EAX));
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)+4),reg(EBX));
         I_JMP(label(Lend));
 
         LABEL(Ltrue);
@@ -1356,7 +1395,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         END_CALL;
 
         runnable_owner_native_code(tsk,as);
-        swap_in(tsk,as,bplabels[0][addr]);
+        swap_in(tsk,as,bplabels,addr);
         break;
       }
       break;
@@ -1365,9 +1404,10 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
     #ifdef NATIVE_PUSHNIL
     case OP_PUSHNIL: {
       // runnable->data[instr->expcount] = tsk->globnilpntr;
-      int *p = (int*)&tsk->globnilpntr;
-      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),imm(p[0]));
-      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),imm(p[1]));
+      I_MOV(reg(EAX),absmem((int)&tsk->globnilpntr.data[0]));
+      I_MOV(reg(EBX),absmem((int)&tsk->globnilpntr.data[1]));
+      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),reg(EAX));
+      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),reg(EBX));
       LABEL(bplabels[0][addr]);
       break;
     }
@@ -1384,9 +1424,10 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
     #ifdef NATIVE_PUSHSTRING
     case OP_PUSHSTRING: {
       // runnable->data[instr->expcount] = tsk->strings[instr->arg0];
-      int *p = (int*)&tsk->strings[instr->arg0];
-      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),imm(p[0]));
-      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),imm(p[1]));
+      I_MOV(reg(EAX),absmem((int)&tsk->strings[instr->arg0].data[0]));
+      I_MOV(reg(EBX),absmem((int)&tsk->strings[instr->arg0].data[1]));
+      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount),reg(EAX));
+      I_MOV(regmem(EBP,FRAME_DATA+8*instr->expcount+4),reg(EBX));
       LABEL(bplabels[0][addr]);
       break;
     }
@@ -1486,7 +1527,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       asm_check_runnable(tsk,as);
 
       LABEL(Lswapin);
-      swap_in(tsk,as,bplabels[0][addr]);
+      swap_in(tsk,as,bplabels,addr);
       I_NOP(); /* pad to 5 bytes between labels */
       I_NOP();
       I_NOP();
@@ -1697,7 +1738,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       END_CALL;
 
       runnable_owner_native_code(tsk,as);
-      swap_in(tsk,as,bplabels[0][addr]);
+      swap_in(tsk,as,bplabels,addr);
       break;
     }
     }
@@ -1717,14 +1758,19 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   /* Decrement the saved EIP by 5 bytes to put it back where the temporary CALL starts */
   I_MOV(reg(EAX),absmem((int)&tsk->normal_esp));
   I_SUB(regmem(EAX,-4),imm(5));
-  I_MOV(reg(EAX),regmem(EAX,-4));
 
-  BEGIN_CALL(16); /* note: 8 extra bytes because of EIP pushed by caller and the PUSHF above */
+  /* Get EIP */
+  I_MOV(reg(EAX),regmem(EAX,-4));
+  /* Get EAX (== jump target if we came from swap_in) */
+  I_MOV(reg(EBX),regmem(ESP,32-PUSHAD_OFFSET_EAX));
+
+  BEGIN_CALL(20); /* note: 8 extra bytes because of EIP pushed by caller and the PUSHF above */
+  I_PUSH(reg(EBX));
   I_PUSH(reg(EAX));
   I_PUSH(imm((int)tsk));
   I_MOV(reg(EAX),imm((int)handle_trap));
   I_CALL(reg(EAX));
-  I_ADD(reg(ESP),imm(8));
+  I_ADD(reg(ESP),imm(12));
   END_CALL;
 
   I_CMP(absmem((int)&tsk->done),imm(0));
@@ -1737,6 +1783,10 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   I_JMP(label(Lbcend));
 
   LABEL(Lstillactive);
+
+  /* Cause the JMP at the end of swap_in to jump to the interrupt return eip */
+  I_MOV(reg(EAX),absmem((int)&tsk->interrupt_return_eip));
+  I_MOV(regmem(ESP,32-PUSHAD_OFFSET_EAX),reg(EAX));
 
   I_POPAD();
   runnable_owner_native_code(tsk,as);

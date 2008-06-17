@@ -40,6 +40,12 @@
 #define MSG_SCHEDULE            11
 #define MSG_UPDATEREF           12
 #define MSG_STARTDISTGC         13
+#define MSG_PAUSE               14
+#define MSG_GOTPAUSE            15
+#define MSG_PAUSEACK            16
+#define MSG_RESUME              17
+#define MSG_CHECKALLREFS        18
+#define MSG_CHECKREFS           19
 
 /* Process startup */
 #define MSG_NEWTASK             100

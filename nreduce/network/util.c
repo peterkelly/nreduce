@@ -258,6 +258,7 @@ stack *stack_new(void)
   stack *s = (stack*)calloc(1,sizeof(stack));
   s->alloc = 1;
   s->count = 0;
+  s->limit = STACK_LIMIT;
   s->data = (void**)malloc(s->alloc*sizeof(void*));
   return s;
 }
@@ -271,7 +272,7 @@ void stack_free(stack *s)
 void stack_push(stack *s, void *c)
 {
   if (s->count == s->alloc) {
-    if (s->count >= STACK_LIMIT) {
+    if ((0 <= s->limit) && (s->count >= s->limit)) {
       fprintf(stderr,"Out of stack space\n");
       exit(1);
     }

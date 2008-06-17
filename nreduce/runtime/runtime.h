@@ -35,6 +35,16 @@
 #include <setjmp.h>
 #include <signal.h>
 
+//#define OBJECT_LIFETIMES
+#define LIFETIME_INCR (4*MB)
+//#define DEBUG_DISTRIBUTION
+
+#ifdef OBJECT_LIFETIMES
+#define DEBUG_FIELDS unsigned int pad; unsigned int birth;
+#else
+#define DEBUG_FIELDS
+#endif
+
 struct task;
 struct gaddr;
 
@@ -145,8 +155,9 @@ struct gaddr;
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
 #else
-#define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) \
-                          fatal("access to free'd cell %p",(_c)); \
+#define checkcell(_c) ({ if (CELL_EMPTY == (_c)->type) {    \
+                          assert(!"access to free'd cell"); \
+                          fatal("access to free'd cell %p",(_c)); } \
                         (_c); })
 #endif
 
@@ -173,14 +184,36 @@ typedef struct {
 #define CELL_NUMBER      0x0C  /*                                                  */
 #define CELL_SYMBOL      0x0D  /*                                                  */
 #define CELL_SYSOBJECT   0x0E  /* left: obj (sysobject*)                           */
-#define CELL_COUNT       0x0F
+
+#define CELL_OBJS        0x0F
+#define CELL_O_ARRAY     0x10  /* carray */
+#define CELL_O_CAP       0x11  /* cap */
+
+#define CELL_COUNT       0x12
+
+#define HEADER_FIELDS \
+  unsigned int type; \
+  unsigned int flags; \
+  DEBUG_FIELDS
+
+#define OBJHEADER_FIELDS \
+  HEADER_FIELDS \
+  unsigned int nbytes;
+  
+
+typedef struct header {
+  HEADER_FIELDS
+} __attribute__ ((__packed__)) header;
+
+typedef struct objheader {
+  OBJHEADER_FIELDS
+} __attribute__ ((__packed__)) objheader;
 
 typedef struct cell {
-  int type;
-  int flags;
+  HEADER_FIELDS
   pntr field1;
   pntr field2;
-} cell;
+} __attribute__ ((__packed__)) cell;
 
 #define PNTR_MASK  0xFFF80000
 #define INDEX_MASK 0x0003FFFF
@@ -263,6 +296,7 @@ typedef struct {
 
 typedef struct sysobject {
   int type;
+  int marked;
   int ownertid;
   int fd;
   char *hostname;
@@ -271,7 +305,9 @@ typedef struct sysobject {
   char *buf;
   int len;
   int closed;
+  int retry;
   int error;
+  int errn;
   char errmsg[ERRMSG_MAX+1];
   pntr listenerso;
   struct sysobject *newso;
@@ -285,16 +321,19 @@ typedef struct sysobject {
   int done_writing;
   int local;
   struct timeval start;
+  struct sysobject *prev;
+  struct sysobject *next;
 } sysobject;
 
 typedef struct carray {
+  OBJHEADER_FIELDS
+
   int alloc;
   int size;
   int elemsize;
   pntr tail;
   cell *wrapper;
   int nchars;
-  int pad;
   char elements[];
 } carray;
 
@@ -336,21 +375,24 @@ typedef struct pntrmap {
 } pntrmap;
 
 typedef struct cap {
+  OBJHEADER_FIELDS
+  int pad;
   int arity;
   int address;
-  int fno; /* temp */
+  int fno;
   sourceloc sl;
   int count;
 
-  pntr *data;
-} cap;
+  pntr data[0];
+} __attribute__ ((__packed__)) cap;
 
 /* frame states */
-#define STATE_NEW       0
-#define STATE_SPARKED   1
-#define STATE_RUNNING   2
-#define STATE_BLOCKED   3
-#define STATE_DONE      4
+#define STATE_UNALLOCATED  0
+#define STATE_NEW          1
+#define STATE_SPARKED      2
+#define STATE_RUNNING      3
+#define STATE_BLOCKED      4
+#define STATE_DONE         5
 
 typedef struct frame {
   const instruction *instr;
@@ -388,6 +430,7 @@ typedef struct procstats {
   int frame_allocs;
   int cap_allocs;
   int gcs;
+  int total_bytes;
 
   /* Functions */
   int *funcalls;
@@ -421,7 +464,7 @@ typedef struct global {
 
   int fetching;
   waitqueue wq;
-  int flags;
+  unsigned int flags;
   struct global *targetnext; /* for targethash entries */
   struct global *physnext; /* for physhash entries */
   struct global *addrnext; /* for addrhash entries */
@@ -433,9 +476,11 @@ typedef struct global {
 
 typedef struct block {
   struct block *next;
-  int pad;
-  cell values[BLOCK_SIZE];
+  int used; /* only set on full blocks */
+  char data[BLOCK_BYTES];
 } block;
+#define BLOCK_START ((unsigned int)&((block*)0)->data[0])
+#define BLOCK_END ((unsigned int)&((block*)0)->data[BLOCK_BYTES])
 
 typedef struct frameblock {
   struct frameblock *next;
@@ -467,6 +512,8 @@ typedef struct task {
   sysobject *out_so;
   endpoint *endpt;
   endpointid *idmap;
+  int gotpause;
+  int paused;
 
   /* distributed memory management */
   global **targethash;
@@ -505,7 +552,12 @@ typedef struct task {
   int svcbusy;
 
   /* memory */
-  block *blocks;
+/*   block *blocks; */
+  block *oldgen;
+  block *newgen;
+  unsigned int oldgenoffset;
+  unsigned int newgenoffset;
+  int oldgenbytes;
   frameblock *frameblocks;
   cell *freeptr;
   pntr globnilpntr;
@@ -513,14 +565,31 @@ typedef struct task {
   pntr *strings;
   int nstrings;
   pntrstack *streamstack;
-  pntrstack *markstack;
+  stack *markstack;
   int indistgc;
-  int newcellflags;
+  unsigned int newcellflags;
   int inmark;
+  int indcstart;
   int alloc_bytes;
   int framesize;
   int framesperblock;
   int gcms;
+  int minorms;
+  int majorms;
+  array *remembered;
+  int need_minor;
+  int need_major;
+  int altspace;
+  int skipmajors;
+  int skipremaining;
+  array *lifetimes;
+  unsigned int total_bytes_allocated;
+  list *wakeup_after_collect;
+  struct {
+    sysobject *first;
+    sysobject *last;
+  } sysobjects;
+  int nsysobjects;
 
   /* startup info (used by manager) */
   int haveidmap;
@@ -537,6 +606,7 @@ typedef struct task {
 
   /* native execution */
   unsigned char **bpaddrs[2];
+  unsigned char *bpswapin[2];
   void *code;
   int codesize;
   int *cpu_to_bcaddr;
@@ -549,6 +619,7 @@ typedef struct task {
   unsigned char bcbackup[2][5];
   int trap_pending;
   int trap_bcaddr;
+  void *interrupt_return_eip;
 
   /* tracing */
   pntr trace_root;
@@ -571,6 +642,7 @@ global *targethash_lookup(task *tsk, pntr p);
 global *physhash_lookup(task *tsk, pntr p);
 global *addrhash_lookup(task *tsk, gaddr addr);
 void targethash_add(task *tsk, global *glo);
+void physhash_add(task *tsk, global *glo);
 void addrhash_add(task *tsk, global *glo);
 void targethash_remove(task *tsk, global *glo);
 void physhash_remove(task *tsk, global *glo);
@@ -639,6 +711,7 @@ typedef struct reader {
 #define PNTR_TAG   0xE901FA12
 
 reader read_start(task *tsk, const char *data, int size);
+void read_check_tag(reader *rd, int tag);
 void read_char(reader *rd, char *c);
 void read_int(reader *rd, int *i);
 void read_uint(reader *rd, unsigned int *i);
@@ -696,40 +769,6 @@ int standalone(const char *bcdata, int bcsize, int argc, const char **argv);
 int string_to_mainchordid(node *n, const char *str, endpointid *out);
 int worker(int port, const char *initial_str);
 
-/* cell */
-
-cell *alloc_cell(task *tsk);
-void sysobject_done_reading(sysobject *so);
-void sysobject_done_writing(sysobject *so);
-sysobject *new_sysobject(task *tsk, int type);
-sysobject *find_sysobject(task *tsk, const socketid *sockid);
-void free_global(task *tsk, global *glo);
-void free_cell_fields(task *tsk, cell *v);
-
-void clear_marks(task *tsk, short bit);
-void mark_roots(task *tsk, short bit);
-void sweep(task *tsk, int all);
-void mark_global(task *tsk, global *glo, short bit);
-void local_collect(task *tsk);
-void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners);
-
-frame *frame_new(task *tsk, int addalloc);
-#define frame_free(tsk,_f) \
-{ \
-  assert(tsk->done || ((NULL == _f->retp) && (NULL == _f->c)));       \
-  assert(tsk->done || (STATE_DONE == _f->state) || (STATE_NEW == _f->state)); \
-  assert(tsk->done || (NULL == _f->wq.frames)); \
-  assert(tsk->done || (NULL == _f->wq.fetchers)); \
-  if (_f->wq.fetchers) \
-    list_free(_f->wq.fetchers,free); \
- \
-  _f->freelnk = tsk->freeframe; \
-  tsk->freeframe = _f; \
-}
-
-cap *cap_alloc(task *tsk, int arity, int address, int fno);
-void cap_dealloc(cap *c);
-
 /* interpreter */
 
 void add_waiter_frame(waitqueue *wq, frame *f);
@@ -748,14 +787,54 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg);
 
 /* memory */
 
-pntrstack *pntrstack_new(void);
-void pntrstack_push(pntrstack *s, pntr p);
-pntr pntrstack_at(pntrstack *s, int pos);
-pntr pntrstack_pop(pntrstack *s);
-pntr pntrstack_top(pntrstack *s);
-void pntrstack_free(pntrstack *s);
+#define REF_FLAGS 0xFFFFFFFF
+unsigned int object_size(void *ptr);
+void mark_global(task *tsk, global *glo, unsigned int bit, int depth);
+void mark_start(task *tsk, unsigned int bit);
+void mark_end(task *tsk, unsigned int bit);
+void *alloc_mem(task *tsk, unsigned int nbytes);
+void *realloc_mem(task *tsk, void *old, unsigned int nbytes);
+cell *alloc_cell(task *tsk);
+sysobject *new_sysobject(task *tsk, int type);
+void sysobject_done_reading(sysobject *so);
+void sysobject_done_writing(sysobject *so);
+sysobject *find_sysobject(task *tsk, const socketid *sockid);
+void free_sysobject(task *tsk, sysobject *so);
+void free_blocks(block *bl);
+void write_barrier(task *tsk, cell *c);
+void write_barrier_ifnew(task *tsk, cell *c, pntr dest);
+void cell_make_ind(task *tsk, cell *c, pntr dest);
+void sweep_sysobjects(task *tsk, int all);
+void force_major_collection(task *tsk);
+void local_collect(task *tsk);
+void distributed_collect_start(task *tsk);
+void distributed_collect_end(task *tsk);
+cap *cap_alloc(task *tsk, int arity, int address, int fno, unsigned int datasize);
+frame *frame_new(task *tsk, int addalloc);
+#define frame_free(tsk,_f) \
+{ \
+  assert(tsk->done || ((NULL == _f->retp) && (NULL == _f->c)));       \
+  assert(tsk->done || (STATE_DONE == _f->state) || (STATE_NEW == _f->state)); \
+  assert(tsk->done || (NULL == _f->wq.frames)); \
+  assert(tsk->done || (NULL == _f->wq.fetchers)); \
+  if (_f->wq.fetchers) \
+    list_free(_f->wq.fetchers,free); \
+ \
+  _f->state = STATE_UNALLOCATED; \
+  _f->freelnk = tsk->freeframe; \
+  tsk->freeframe = _f; \
+}
 
-void pntrstack_grow(int *alloc, pntr **data, int size);
+/* checkmemory */
+
+void check_all_refs_in_oldgen(task *tsk);
+void check_all_refs_in_eithergen(task *tsk);
+void check_remembered_set(task *tsk);
+int check_oldgen_valid(task *tsk);
+int count_inds(task *tsk);
+void update_lifetimes(task *tsk, block *gen);
+int calc_newgenbytes(task *tsk);
+void send_checkrefs(task *tsk);
 
 /* graph */
 

@@ -55,7 +55,7 @@ static void read_bytes(reader *rd, void *data, int count)
   rd->pos += count;
 }
 
-static void read_check_tag(reader *rd, int tag)
+void read_check_tag(reader *rd, int tag)
 {
   int got;
   read_bytes(rd,&got,sizeof(int));
@@ -144,6 +144,11 @@ void read_pntr(reader *rd, pntr *pout)
     read_gaddr(rd,&addr);
     if (NULL != (glo = addrhash_lookup(tsk,addr))) {
       *pout = glo->p;
+
+      node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Received remote reference to addr %d@%d (glo %s)",
+               tsk->tid,addr.lid,addr.tid,
+               cell_types[pntrtype(*pout)]);
+
     }
     else {
       cell *c;
@@ -152,6 +157,10 @@ void read_pntr(reader *rd, pntr *pout)
       c->type = CELL_REMOTEREF;
       make_pntr(*pout,c);
       make_pntr(c->field1,add_target(tsk,addr,*pout));
+
+      node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Received remote reference to addr %d@%d",
+               tsk->tid,addr.lid,addr.tid);
+
     }
   }
   else {
@@ -231,7 +240,21 @@ void read_pntr(reader *rd, pntr *pout)
       break;
     }
     case CELL_CAP: {
-      cap *cp = cap_alloc(tsk,1,0,0);
+      int arity;
+      int address;
+      int fno;
+      sourceloc sl;
+      int count;
+
+      read_int(rd,&arity);
+      read_int(rd,&address);
+      read_int(rd,&fno);
+      read_int(rd,&sl.fileno);
+      read_int(rd,&sl.lineno);
+      read_int(rd,&count);
+      assert(MAX_CAP_SIZE > count);
+
+      cap *cp = cap_alloc(tsk,1,0,0,count);
       cell *capcell;
       int i;
 
@@ -240,17 +263,13 @@ void read_pntr(reader *rd, pntr *pout)
       make_pntr(capcell->field1,cp);
       make_pntr(*pout,capcell);
 
-      read_int(rd,&cp->arity);
-      read_int(rd,&cp->address);
-      read_int(rd,&cp->fno);
-      read_int(rd,&cp->sl.fileno);
-      read_int(rd,&cp->sl.lineno);
-      read_int(rd,&cp->count);
+      cp->arity = arity;
+      cp->address = address;
+      cp->fno = fno;
+      cp->sl = sl;
+      cp->count = count;
 
-      assert(MAX_CAP_SIZE > cp->count);
-
-      cp->data = (pntr*)calloc(cp->count,sizeof(pntr));
-      for (i = 0; i < cp->count; i++)
+      for (i = 0; i < count; i++)
         read_pntr(rd,&cp->data[i]);
       break;
     }
@@ -275,11 +294,34 @@ void read_pntr(reader *rd, pntr *pout)
       assert(addr.lid >= 0);
       assert(NULL == targethash_lookup(tsk,*pout));
       add_target(tsk,addr,*pout);
+
+      node_log(rd->tsk->n,LOG_DEBUG2,
+               "task %d: Received object (no existing ref) with addr %d@%d (%s)",
+               tsk->tid,addr.lid,addr.tid,
+               cell_types[pntrtype(*pout)]);
+
     }
     else if (CELL_REMOTEREF == pntrtype(existing->p)) {
       cell *refcell = get_pntr(existing->p);
-      refcell->type = CELL_IND;
-      refcell->field1 = *pout;
+
+
+      global *refphys = NULL;
+      if (NULL != (refphys = physhash_lookup(tsk,existing->p))) {
+        node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Replacing REMOTEREF %d@%d with %d@%d (%s)",
+                 tsk->tid,refphys->addr.lid,refphys->addr.tid,
+                 addr.lid,addr.tid,
+                 cell_types[pntrtype(*pout)]);
+      }
+      else {
+        node_log(rd->tsk->n,LOG_DEBUG2,
+                 "task %d: Replacing REMOTEREF (no phys address) with %d@%d (%s)",
+                 tsk->tid,addr.lid,addr.tid,
+                 cell_types[pntrtype(*pout)]);
+      }
+
+
+
+      cell_make_ind(tsk,refcell,*pout);
       targethash_remove(tsk,existing);
       existing->p = *pout;
       targethash_add(tsk,existing);

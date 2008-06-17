@@ -316,8 +316,11 @@ int main(int argc, char **argv)
   assert(0 == sizeof(frame)%8);
   assert(0 == ((int)&((frameblock*)0)->mem)%8);
   assert(0 == sizeof(cell)%8);
-  assert(0 == ((int)&((block*)0)->values)%8);
+  assert(0 == BLOCK_START%8);
+  assert(0 == BLOCK_END%8);
   assert(0 == ((int)&((carray*)0)->elements)%8);
+  assert(sizeof(block) == BLOCK_END);
+  assert(MAX_ARRAY_SIZE*8 <= (BLOCK_END-BLOCK_START));
 
   gettimeofday(&time,NULL);
   srand(time.tv_usec);

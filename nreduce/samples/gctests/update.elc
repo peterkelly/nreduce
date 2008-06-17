@@ -1,0 +1,39 @@
+wrap n = (cons (cons n nil) nil)
+
+unwrap x = (head (head x))
+
+nfib wrapn =
+(letrec
+  n = (unwrap wrapn)
+  lst = (cons 1 lst)
+in
+(if lst
+  (if (<= n 1)
+      (wrap 1)
+      (wrap
+      (+ (unwrap (nfib (wrap (- n 2))))
+         (unwrap (nfib (wrap (- n 1)))))))
+  nil))
+
+bintree depth max =
+(if (== depth max)
+  (if (!= 0 (unwrap (nfib (wrap 4))))
+  nil nil)
+  (cons (bintree (+ depth 1) max)
+        (bintree (+ depth 1) max)))
+
+
+countnodes tree =
+(if tree
+    (+ 1 (+ (countnodes (head tree)) (countnodes (tail tree))))
+  0)
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        16)
+  tree = (bintree 0 n)
+  count = (countnodes tree)
+in
+  (++ (numtostring count) "\n"))

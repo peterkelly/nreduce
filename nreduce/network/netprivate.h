@@ -92,6 +92,7 @@ typedef struct connection {
   struct connection *prev;
   struct connection *next;
   char errmsg[ERRMSG_MAX+1];
+  int errn;
   int iswaiting;
   int isaccepted;
   int state;

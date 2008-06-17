@@ -49,7 +49,8 @@
 
 // Misc
 
-#define BLOCK_SIZE 102400
+#define MB 1048576
+#define BLOCK_BYTES (32*MB-1024)
 #define FRAMEBLOCK_SIZE 1048576
 #define COLLECT_THRESHOLD 8192000
 #define GLOBAL_HASH_SIZE 256
@@ -58,7 +59,9 @@
 #define FLAG_MARKED         0x1
 #define FLAG_NEW            0x2
 #define FLAG_DMB            0x4
-#define FLAG_PINNED         0x8
 #define FLAG_REDUCED       0x10
+#define FLAG_MATURE        0x20
+#define FLAG_INRSET        0x40
+#define FLAG_ALTSPACE      0x80
 
 #endif /* _NREDUCE_H */

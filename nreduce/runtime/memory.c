@@ -20,6 +20,9 @@
  *
  */
 
+//#define CHECK_HEAP_INTEGRITY
+//#define DONT_FREE_BLOCKS
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -41,6 +44,8 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+static void *add_to_oldgen(task *tsk, void *mem);
+
 unsigned char NULL_PNTR_BITS[8] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF };
 
 const char *cell_types[CELL_COUNT] = {
@@ -59,6 +64,9 @@ const char *cell_types[CELL_COUNT] = {
   "NUMBER",
   "SYMBOL",
   "SYSOBJECT",
+  "[OBJS]",
+  "[ARRAY]",
+  "[CAP]",
 };
 
 const char *sysobject_types[SYSOBJECT_COUNT] = {
@@ -68,7 +76,8 @@ const char *sysobject_types[SYSOBJECT_COUNT] = {
   "JAVA",
 };
 
-const char *frame_states[5] = {
+const char *frame_states[6] = {
+  "UNALLOCATED",
   "NEW",
   "SPARKED",
   "RUNNING",
@@ -85,194 +94,294 @@ pntr resolve_pntr(pntr p)
 }
 #endif
 
-static void mark(task *tsk, pntr p, short bit);
-static void mark_frame(task *tsk, frame *f, short bit);
+unsigned int object_size(void *ptr)
+{
+  assert(CELL_COUNT > ((header*)ptr)->type);
+  assert(REF_FLAGS != ((header*)ptr)->flags);
+  if (((header*)ptr)->type < CELL_OBJS)
+    return sizeof(cell);
+  else
+    return ((objheader*)ptr)->nbytes;
+}
 
-void mark_global(task *tsk, global *glo, short bit)
+static void mark(task *tsk, pntr p, unsigned int bit, int depth);
+
+static inline pntr resolve_copy_pntr(pntr p2)
+{
+  pntr p = p2;
+  while (1) {
+    cell *c;
+    if (!is_pntr(p))
+      break;
+    c = get_pntr(p);
+    if (CELL_IND == c->type)
+      p = c->field1;
+    else if (REF_FLAGS == c->flags)
+      p.data[0] = (unsigned int)c->type;
+    else
+      break;
+  }
+  return p;
+}
+
+void mark_global(task *tsk, global *glo, unsigned int bit, int depth)
 {
   assert(glo);
-  if (glo->flags & bit) {
-    assert(!is_pntr(glo->p) || (get_pntr(glo->p)->flags & bit));
-    return;
-  }
+/*   if (glo->flags & bit) */ // FIXME?
+/*     return; */
 
   glo->flags |= bit;
-  mark(tsk,glo->p,bit);
+  mark(tsk,glo->p,bit,depth);
 
   if ((FLAG_DMB == bit) && (0 <= glo->addr.lid) && (tsk->tid != glo->addr.tid))
     add_pending_mark(tsk,glo->addr);
 }
 
-static void mark_frame(task *tsk, frame *f, short bit)
+static void mark_frame(task *tsk, frame *f, unsigned int bit, int depth)
 {
   int i;
   int count = f->instr->expcount;
   if (f->c) {
     pntr p;
     make_pntr(p,f->c);
-    mark(tsk,p,bit);
+    assert(CELL_IND != f->c->type);
+    mark(tsk,p,bit,depth);
   }
   for (i = 0; i < count; i++) {
-    if (!is_nullpntr(f->data[i])) {
-      f->data[i] = resolve_pntr(f->data[i]);
-      mark(tsk,f->data[i],bit);
-    }
+    assert(!is_nullpntr(f->data[i]));
+    f->data[i] = resolve_copy_pntr(f->data[i]);
+    mark(tsk,f->data[i],bit,depth);
   }
-  /* FIXME: do we need to mark the objects on the wait queue here? The frames should be
-     ok, since they should already be in the runnable set. But the fetchers might need
-     to be marked */
 }
 
-static void mark_cap(task *tsk, cap *c, short bit)
+static void mark_cap(task *tsk, cap *c, unsigned int bit, int depth)
 {
   int i;
-  for (i = 0; i < c->count; i++)
-    if (!is_nullpntr(c->data[i]))
-      mark(tsk,c->data[i],bit);
+  pntr p;
+  make_pntr(p,c);
+  mark(tsk,p,bit,depth);
+
+  for (i = 0; i < c->count; i++) {
+    if (!is_nullpntr(c->data[i])) {
+      c->data[i] = resolve_copy_pntr(c->data[i]);
+      mark(tsk,c->data[i],bit,depth);
+    }
+  }
 }
 
-static void mark(task *tsk, pntr p, short bit)
+static inline int has_been_copied(task *tsk, void *mem)
 {
-  cell *c;
-  assert(CELL_EMPTY != pntrtype(p));
-  #ifdef DISABLE_ARRAYS
-  assert(CELL_AREF != pntrtype(p));
-  #endif
+  return ((((header*)mem)->flags & FLAG_ALTSPACE) == tsk->altspace);
+}
 
-  if (tsk->markstack) {
-    if (is_pntr(p) && !(get_pntr(p)->flags & bit))
-      pntrstack_push(tsk->markstack,p);
+static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
+{
+  #ifdef DISABLE_ARRAYS
+  assert(CELL_AREF != v->type);
+  #endif
+  cell *c = (cell*)v;
+  switch (v->type) {
+  case CELL_AREF: {
+    mark(tsk,c->field1,bit,depth+1);
+    c->field1 = resolve_copy_pntr(c->field1);
+
+    carray *arr = (carray*)get_pntr(c->field1);
+    int i;
+    assert(CELL_O_ARRAY == arr->type);
+    assert(MAX_ARRAY_SIZE >= arr->size);
+    if (sizeof(pntr) == arr->elemsize) {
+      for (i = 0; i < arr->size; i++) {
+        ((pntr*)arr->elements)[i] = resolve_copy_pntr(((pntr*)arr->elements)[i]);
+        mark(tsk,((pntr*)arr->elements)[i],bit,depth+1);
+      }
+    }
+    arr->tail = resolve_copy_pntr(arr->tail);
+    if (is_pntr(arr->tail))
+      return (header*)get_pntr(arr->tail);
+    break;
+  }
+  case CELL_CONS: {
+    c->field1 = resolve_copy_pntr(c->field1);
+    c->field2 = resolve_copy_pntr(c->field2);
+    mark(tsk,c->field1,bit,depth+1);
+    if (is_pntr(c->field2))
+      return (header*)get_pntr(c->field2);
+    break;
+  }
+  case CELL_IND:
+    mark(tsk,c->field1,bit,depth+1);
+    break;
+  case CELL_APPLICATION:
+    c->field1 = resolve_copy_pntr(c->field1);
+    c->field2 = resolve_copy_pntr(c->field2);
+    mark(tsk,c->field1,bit,depth+1);
+    mark(tsk,c->field2,bit,depth+1);
+    break;
+  case CELL_FRAME:
+    mark_frame(tsk,(frame*)get_pntr(c->field1),bit,depth+1);
+    break;
+  case CELL_CAP:
+    assert(CELL_O_CAP == pntrtype(c->field1));
+    mark_cap(tsk,(cap*)get_pntr(c->field1),bit,depth+1);
+    break;
+  case CELL_REMOTEREF: {
+    global *glo = (global*)get_pntr(c->field1);
+    mark_global(tsk,glo,bit,depth+1);
+    break;
+  }
+  case CELL_SYSOBJECT: {
+    sysobject *so = (sysobject*)get_pntr(c->field1);
+    so->marked = 1;
+    if (!is_nullpntr(so->listenerso)) {
+      so->listenerso = resolve_copy_pntr(so->listenerso);
+      mark(tsk,so->listenerso,bit,depth+1);
+    }
+    if (so->newso) {
+      so->newso->p = resolve_copy_pntr(so->newso->p);
+      mark(tsk,so->newso->p,bit,depth+1);
+    }
+    break;
+  }
+  case CELL_BUILTIN:
+  case CELL_SCREF:
+  case CELL_NIL:
+  case CELL_NUMBER:
+  case CELL_HOLE:
+  case CELL_SYMBOL:
+    break;
+  case CELL_O_ARRAY:
+    /* taken care of by the AREF cell */
+  case CELL_O_CAP:
+    /* taken care of by the CAP cell */
+    break;
+  default:
+    fatal("Invalid pntr type %d",c->type);
+    break;
+  }
+  return NULL;
+}
+
+static void mark_or_copy(task *tsk, header *v, unsigned int bit, int depth)
+{
+  assert((FLAG_MARKED == bit) || (FLAG_DMB == bit));
+
+  while (v && (REF_FLAGS != v->flags) && !(v->flags & bit)) {
+    assert(CELL_COUNT > v->type);
+
+    if (FLAG_MARKED == bit) {
+      v->flags |= bit;
+      v = add_to_oldgen(tsk,v);
+    }
+    else {
+      v->flags |= bit;
+      global *target;
+      pntr p;
+      make_pntr(p,v);
+      if (NULL != (target = targethash_lookup(tsk,p)))
+        mark_global(tsk,target,bit,depth);
+    }
+
+    v = mark_refs(tsk,v,bit,depth);
+  }
+}
+
+static void mark(task *tsk, pntr p, unsigned int bit, int depth)
+{
+  assert(CELL_EMPTY != pntrtype(p));
+  assert(tsk->markstack);
+  if (!is_pntr(p))
+    return;
+  if (depth > 100) {
+    stack_push(tsk->markstack,get_pntr(p));
     return;
   }
 
-  tsk->markstack = pntrstack_new();
+  mark_or_copy(tsk,(header*)get_pntr(p),bit,depth);
+}
+
+void mark_start(task *tsk, unsigned int bit)
+{
+  assert(NULL == tsk->markstack);
+  tsk->markstack = stack_new();
   tsk->markstack->limit = -1;
-  pntrstack_push(tsk->markstack,p);
+}
 
+void mark_end(task *tsk, unsigned int bit)
+{
+  assert(tsk->markstack);
   while (0 < tsk->markstack->count) {
-    int cont = 0;
-    global *target;
-
-    p = tsk->markstack->data[--tsk->markstack->count];
-
-    /* handle CONS and AREF specially - process the "spine" iteratively */
-    while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p))) {
-      c = get_pntr(p);
-      if (c->flags & bit) {
-        cont = 1;
-        break;
-      }
-      c->flags |= bit;
-      if ((FLAG_DMB == bit) && (NULL != (target = targethash_lookup(tsk,p))))
-        mark_global(tsk,target,bit);
-
-      if (CELL_AREF == pntrtype(p)) {
-        carray *arr = (carray*)get_pntr(c->field1);
-        int i;
-        assert(MAX_ARRAY_SIZE >= arr->size);
-        if (sizeof(pntr) == arr->elemsize) {
-          for (i = 0; i < arr->size; i++) {
-            ((pntr*)arr->elements)[i] = resolve_pntr(((pntr*)arr->elements)[i]);
-            mark(tsk,((pntr*)arr->elements)[i],bit);
-          }
-        }
-        arr->tail = resolve_pntr(arr->tail);
-        p = arr->tail;
-      }
-      else {
-        c->field1 = resolve_pntr(c->field1);
-        c->field2 = resolve_pntr(c->field2);
-        mark(tsk,c->field1,bit);
-        p = c->field2;
-      }
-    }
-
-    if (cont)
-      continue;
-
-    /* handle other types */
-    if (!is_pntr(p))
-      continue;
-
-    c = get_pntr(p);
-    if (c->flags & bit)
-      continue;
-
-    c->flags |= bit;
-    if ((FLAG_DMB == bit) && (NULL != (target = targethash_lookup(tsk,p))))
-      mark_global(tsk,target,bit);
-    switch (pntrtype(p)) {
-    case CELL_IND:
-      mark(tsk,c->field1,bit);
-      break;
-    case CELL_APPLICATION:
-      c->field1 = resolve_pntr(c->field1);
-      c->field2 = resolve_pntr(c->field2);
-      mark(tsk,c->field1,bit);
-      mark(tsk,c->field2,bit);
-      break;
-    case CELL_FRAME:
-      mark_frame(tsk,(frame*)get_pntr(c->field1),bit);
-      break;
-    case CELL_CAP:
-      mark_cap(tsk,(cap*)get_pntr(c->field1),bit);
-      break;
-    case CELL_REMOTEREF: {
-      global *glo = (global*)get_pntr(c->field1);
-      mark_global(tsk,glo,bit);
-      break;
-    }
-    case CELL_SYSOBJECT: {
-      sysobject *so = (sysobject*)get_pntr(c->field1);
-      if (!is_nullpntr(so->listenerso))
-        mark(tsk,so->listenerso,bit);
-      if (so->newso)
-        mark(tsk,so->newso->p,bit);
-      break;
-    }
-    case CELL_BUILTIN:
-    case CELL_SCREF:
-    case CELL_NIL:
-    case CELL_NUMBER:
-    case CELL_HOLE:
-    case CELL_SYMBOL:
-      break;
-    default:
-      fatal("Invalid pntr type %d",pntrtype(p));
-      break;
-    }
+    void *c = tsk->markstack->data[--tsk->markstack->count];
+    mark_or_copy(tsk,c,bit,0);
   }
 
-  assert(tsk->markstack);
-  pntrstack_free(tsk->markstack);
+  stack_free(tsk->markstack);
   tsk->markstack = NULL;
+}
+
+/* FIXME: setting FLAG_DMB on newly created objects is not sufficient to ensure they
+   survive beyond the end of the current distributed garbage collection cycle. This is
+   because object retention is no longer based on marks, but on them being referenced
+   somewhere. We need to ensure that during a local collection, all objects that have
+   were new in the current distributed collection cycle are copied. */
+void *alloc_mem(task *tsk, unsigned int nbytes)
+{
+  header *h;
+  assert(tsk);
+  assert(0 == nbytes%8); /* enforce alignment for performance reasons */
+  assert(nbytes <= (BLOCK_END-BLOCK_START));
+
+  /* New allocation method - pointer increment */
+  assert(((int)tsk->newgenoffset >= sizeof(block)) || (NULL != tsk->newgen));
+
+  if (tsk->newgenoffset >= sizeof(block)-nbytes) {
+    if (tsk->newgen) {
+      /* Filled up the first block... request a minor collection */
+      tsk->need_minor = 1;
+      if (tsk->endpt) {
+/*         fprintf(stderr,"first block full; requesting minor collection\n"); */
+        endpoint_interrupt(tsk->endpt);
+      }
+    }
+
+    block *bl = (block*)calloc(1,sizeof(block));
+    bl->next = tsk->newgen;
+    bl->used = tsk->newgenoffset;
+    tsk->newgen = bl;
+    tsk->newgenoffset = BLOCK_START;
+  }
+  else {
+/*     fprintf(stderr,"allocated cell\n"); */
+  }
+  h = (header*)(tsk->newgenoffset+(unsigned int)tsk->newgen);
+  tsk->newgenoffset += nbytes;
+
+  h->flags = tsk->newcellflags;
+
+  #ifdef OBJECT_LIFETIMES
+  h->birth = tsk->total_bytes_allocated;
+  tsk->total_bytes_allocated += nbytes;
+  #endif
+  #ifdef PROFILING
+  tsk->stats.cell_allocs++;
+  tsk->stats.total_bytes += nbytes;
+  #endif
+  return (char*)h;
+}
+
+void *realloc_mem(task *tsk, void *old, unsigned int nbytes)
+{
+  assert(nbytes > object_size(old));
+  char *new = alloc_mem(tsk,nbytes);
+  unsigned int flags = ((header*)new)->flags;
+  memcpy(new,old,object_size(old));
+  ((header*)new)->flags = flags;
+  /* FIXME: may need to preserve DMB flag here */
+  return new;
 }
 
 cell *alloc_cell(task *tsk)
 {
-  cell *v;
-  assert(tsk);
-  if ((cell*)1 == tsk->freeptr) { /* 64 bit pntrs use 1 in second byte for null */
-    block *bl = (block*)calloc(1,sizeof(block));
-    int i;
-    bl->next = tsk->blocks;
-    tsk->blocks = bl;
-    for (i = 0; i < BLOCK_SIZE-1; i++)
-      make_pntr(bl->values[i].field1,&bl->values[i+1]);
-    bl->values[i].field1 = NULL_PNTR;
-
-    tsk->freeptr = &bl->values[0];
-  }
-  v = tsk->freeptr;
-  v->flags = tsk->newcellflags;
-  tsk->freeptr = (cell*)get_pntr(tsk->freeptr->field1);
-  tsk->alloc_bytes += sizeof(cell);
-  #ifdef PROFILING
-  tsk->stats.cell_allocs++;
-  #endif
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
-    endpoint_interrupt(tsk->endpt);
-  return v;
+  return (cell*)alloc_mem(tsk,sizeof(cell));
 }
 
 sysobject *new_sysobject(task *tsk, int type)
@@ -285,6 +394,8 @@ sysobject *new_sysobject(task *tsk, int type)
   make_pntr(so->p,so->c);
   so->c->type = CELL_SYSOBJECT;
   make_pntr(so->c->field1,so);
+  llist_append(&tsk->sysobjects,so);
+  tsk->nsysobjects++;
   return so;
 }
 
@@ -319,24 +430,45 @@ void sysobject_done_writing(sysobject *so)
 sysobject *find_sysobject(task *tsk, const socketid *sockid)
 {
   block *bl;
-  int i;
-  for (bl = tsk->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      if (CELL_SYSOBJECT == bl->values[i].type) {
-        cell *c = &bl->values[i];
-        sysobject *so = (sysobject*)get_pntr(c->field1);
-        if (socketid_equals(&so->sockid,sockid))
-          return so;
-      }
+  cell *c = NULL;
+  /* FIXME: a hash table might be better here ;) */
+  for (bl = tsk->oldgen; bl && !c; bl = bl->next) {
+    unsigned int off;
+    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
+      header *h = (header*)(off+(char*)bl);
+      if (CELL_SYSOBJECT == h->type)
+        c = (cell*)h;
     }
+  }
+  for (bl = tsk->newgen; bl && !c; bl = bl->next) {
+    unsigned int off;
+    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
+      header *h = (header*)(off+(char*)bl);
+      if (CELL_SYSOBJECT == h->type)
+        c = (cell*)h;
+    }
+  }
+  if (c) {
+    sysobject *so = (sysobject*)get_pntr(c->field1);
+    if (socketid_equals(&so->sockid,sockid))
+      return so;
   }
   return NULL;
 }
 
-void free_global(task *tsk, global *glo)
+static void remove_global(task *tsk, global *glo)
 {
+  /* Remove from hash tables */
+  addrhash_remove(tsk,glo);
+  targethash_remove(tsk,glo);
+  physhash_remove(tsk,glo);
+  /* Remove from linked list of all globals */
+  llist_remove(&tsk->globals,glo);
+  /* Free fetchers */
   list_free(glo->wq.fetchers,free);
 
+#if 1
+  /* FIXME: not sure if these make sense */
   if (CELL_REMOTEREF == pntrtype(glo->p)) {
     cell *refcell = get_pntr(glo->p);
     global *target = (global*)get_pntr(refcell->field1);
@@ -345,12 +477,16 @@ void free_global(task *tsk, global *glo)
       assert(tsk->done || !(refcell->flags & FLAG_DMB));
     }
   }
+#endif
 
+  /* Free memory */
   free(glo);
 }
 
-static void free_sysobject(task *tsk, sysobject *so)
+void free_sysobject(task *tsk, sysobject *so)
 {
+  tsk->nsysobjects--;
+  llist_remove(&tsk->sysobjects,so);
   if (so->ownertid == tsk->tid) {
     switch (so->type) {
     case SYSOBJECT_FILE:
@@ -395,129 +531,154 @@ static void free_sysobject(task *tsk, sysobject *so)
   free(so);
 }
 
-void free_cell_fields(task *tsk, cell *v)
+static void mark_inflight_local_addresses(task *tsk, unsigned int bit, int justglobal)
 {
-  assert(CELL_EMPTY != v->type);
-  switch (celltype(v)) {
-  case CELL_AREF: {
-    free(get_pntr(v->field1));
-    break;
-  }
-  case CELL_FRAME: {
-    frame *f = (frame*)get_pntr(v->field1);
-    f->c = NULL;
-    assert(tsk->done || (STATE_DONE == f->state) || (STATE_NEW == f->state));
-    assert(tsk->done || (NULL == f->retp));
-    frame_free(tsk,f);
-    break;
-  }
-  case CELL_CAP: {
-    cap *cp = (cap*)get_pntr(v->field1);
-    cap_dealloc(cp);
-    break;
-  }
-  case CELL_REMOTEREF:
-    break;
-  case CELL_SYSOBJECT: {
-    sysobject *so = (sysobject*)get_pntr(v->field1);
-    free_sysobject(tsk,so);
-    break;
-  }
-  case CELL_SYMBOL:
-    free((char*)get_pntr(v->field1));
-    break;
-  }
-}
-
-void clear_marks(task *tsk, short bit)
-{
-  block *bl;
-  int i;
-  global *glo;
-
-  for (bl = tsk->blocks; bl; bl = bl->next)
-    for (i = 0; i < BLOCK_SIZE; i++)
-      bl->values[i].flags &= ~bit;
-
-  for (glo = tsk->globals.first; glo; glo = glo->next)
-    glo->flags &= ~bit;
-}
-
-void mark_roots(task *tsk, short bit)
-{
-  int pid;
-  int i;
-/*   frame *f; */
   list *l;
-  int h;
-  global *glo;
-  frameblock *fb;
-
-  for (i = 0; i < tsk->nstrings; i++)
-    mark(tsk,tsk->strings[i],bit);
-
-  mark(tsk,tsk->argsp,bit);
-
-  if (tsk->streamstack) {
-    for (i = 0; i < tsk->streamstack->count; i++)
-      mark(tsk,tsk->streamstack->data[i],bit);
-  }
-
-  if (tsk->tracing)
-    mark(tsk,tsk->trace_root,bit);
-
-  if (tsk->out_so)
-    mark(tsk,tsk->out_so->p,bit);
-
-  for (fb = tsk->frameblocks; fb; fb = fb->next) {
-    for (i = 0; i < tsk->framesperblock; i++) {
-      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if ((STATE_SPARKED == f->state) || (STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state))
-        mark_frame(tsk,f,bit);
-    }
-  }
-
+  int tid;
+  int i;
   /* mark any in-flight gaddrs that refer to objects in this task */
   for (l = tsk->inflight; l; l = l->next) {
     gaddr *addr = (gaddr*)l->data;
     if ((0 <= addr->lid) && (addr->tid == tsk->tid)) {
-      glo = addrhash_lookup(tsk,*addr);
+      global *glo = addrhash_lookup(tsk,*addr);
+      if (NULL == glo) {
+        node_log(tsk->n,LOG_ERROR,"Marking inflight local address (case 1) %d@%d: no such global",
+                 addr->lid,addr->tid);
+      }
       assert(glo);
-      mark_global(tsk,glo,bit);
+      if (justglobal)
+        glo->flags |= bit;
+      else
+        mark_global(tsk,glo,bit,0);
     }
   }
 
-  for (pid = 0; pid < tsk->groupsize; pid++) {
-    int count = array_count(tsk->inflight_addrs[pid]);
+  for (tid = 0; tid < tsk->groupsize; tid++) {
+    int count = array_count(tsk->inflight_addrs[tid]);
     for (i = 0; i < count; i++) {
-      gaddr addr = array_item(tsk->inflight_addrs[pid],i,gaddr);
+      gaddr addr = array_item(tsk->inflight_addrs[tid],i,gaddr);
       if ((0 <= addr.lid) && (addr.tid == tsk->tid)) {
-        glo = addrhash_lookup(tsk,addr);
+        global *glo = addrhash_lookup(tsk,addr);
+        if (NULL == glo) {
+          node_log(tsk->n,LOG_ERROR,"Marking inflight local address (case 2) %d@%d: no such global",
+                   addr.lid,addr.tid);
+        }
         assert(glo);
-        mark_global(tsk,glo,bit);
+        if (justglobal)
+          glo->flags |= bit;
+        else
+          mark_global(tsk,glo,bit,0);
       }
     }
   }
-
-  /* mark any remote references that are currently being fetched (and any frames waiting
-     on them */
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++)
-    for (glo = tsk->targethash[h]; glo; glo = glo->targetnext)
-      if (glo->fetching)
-        mark_global(tsk,glo,bit);
 }
 
-static int global_needed(global *glo)
+static void mark_inflight_remote_addresses(task *tsk)
 {
-  if ((glo->flags & FLAG_MARKED) || (glo->flags & FLAG_DMB)) {
-    return 1;
+  list *l;
+  int tid;
+  int i;
+  /* mark any in-flight gaddrs that refer to remote objects */
+  for (l = tsk->inflight; l; l = l->next) {
+    gaddr *addr = (gaddr*)l->data;
+    if ((0 <= addr->lid) && (tsk->tid != addr->tid))
+      add_pending_mark(tsk,*addr);
   }
-  else if (is_pntr(glo->p)) {
-    cell *c = checkcell(get_pntr(glo->p));
-    if ((c->flags & FLAG_MARKED) || (c->flags & FLAG_DMB))
-      return 1;
+
+  for (tid = 0; tid < tsk->groupsize; tid++) {
+    int count = array_count(tsk->inflight_addrs[tid]);
+    for (i = 0; i < count; i++) {
+      gaddr addr = array_item(tsk->inflight_addrs[tid],i,gaddr);
+      if ((0 <= addr.lid) && (tsk->tid != addr.tid))
+        add_pending_mark(tsk,addr);
+    }
   }
-  return 0;
+}
+
+static void mark_active_frames(task *tsk, unsigned int bit)
+{
+  int i;
+  frameblock *fb;
+  /* Note: we don't need to mark sparked frames explicitly, since a frame will only be
+     sparked if it is definitely needed by a program, which means there will be a
+     reference to it from somewhere else. */
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if ((STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state))
+        mark_frame(tsk,f,bit,0);
+    }
+  }
+}
+
+static void mark_misc_roots(task *tsk, unsigned int bit)
+{
+  int i;
+  for (i = 0; i < tsk->nstrings; i++)
+    mark(tsk,tsk->strings[i],bit,0);
+
+  mark(tsk,tsk->argsp,bit,0);
+
+  if (tsk->streamstack) {
+    for (i = 0; i < tsk->streamstack->count; i++) {
+      tsk->streamstack->data[i] = resolve_copy_pntr(tsk->streamstack->data[i]);
+      mark(tsk,tsk->streamstack->data[i],bit,0);
+    }
+  }
+
+  if (tsk->tracing) {
+    tsk->trace_root = resolve_copy_pntr(tsk->trace_root);
+    mark(tsk,tsk->trace_root,bit,0);
+  }
+
+  if (tsk->out_so) {
+    tsk->out_so->p = resolve_copy_pntr(tsk->out_so->p);
+    mark(tsk,tsk->out_so->p,bit,0);
+  }
+}
+
+static void mark_roots(task *tsk, unsigned int bit)
+{
+  mark(tsk,tsk->globnilpntr,bit,0);
+  mark(tsk,tsk->globtruepntr,bit,0);
+  mark_misc_roots(tsk,bit);
+  mark_active_frames(tsk,bit);
+  mark_inflight_local_addresses(tsk,bit,0);
+}
+
+static void mark_mature_remoteref_globals(task *tsk, unsigned int bit)
+{
+  int h;
+  global *glo;
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = tsk->addrhash[h]; glo; glo = glo->addrnext) {
+      if (is_pntr(glo->p)) {
+        header *v = (header*)get_pntr(glo->p);
+        if (REF_FLAGS == v->flags)
+          v = (header*)v->type;
+        if (has_been_copied(tsk,v))
+          mark_global(tsk,glo,bit,0);
+      }
+    }
+  }
+}
+
+static void mark_incoming_global_refs(task *tsk, unsigned int bit)
+{
+  global *glo;
+  /* treat any objects referenced from other tasks as roots */
+  for (glo = tsk->globals.first; glo; glo = glo->next) {
+    if (glo->addr.tid == tsk->tid) {
+      mark_global(tsk,glo,bit,0);
+    }
+  }
+}
+
+static void clear_global_marks(task *tsk, unsigned int bit)
+{
+  global *glo;
+  for (glo = tsk->globals.first; glo; glo = glo->next)
+    glo->flags &= ~bit;
 }
 
 static void sweep_globals(task *tsk, int all)
@@ -527,144 +688,789 @@ static void sweep_globals(task *tsk, int all)
 
   for (glo = tsk->globals.first; glo; glo = next) {
     next = glo->next;
-    if (all || !global_needed(glo)) {
-      /* Remove from hash tables */
-      addrhash_remove(tsk,glo);
-      targethash_remove(tsk,glo);
-      physhash_remove(tsk,glo);
-      /* Remove from linked list of all globals */
-      llist_remove(&tsk->globals,glo);
-      /* Free memory */
-      free_global(tsk,glo);
+    if (all || !(glo->flags & FLAG_MARKED)) {
+      #ifdef DEBUG_DISTRIBUTION
+      node_log(tsk->n,LOG_DEBUG1,"task %d: sweep_globals: deleting %d@%d",
+               tsk->tid,glo->addr.lid,glo->addr.tid);
+      #endif
+      remove_global(tsk,glo);
     }
   }
 }
 
-static void sweep_cells(task *tsk, int all)
+static void clear_marks(task *tsk, unsigned int bit)
 {
   block *bl;
-  int i;
-  if (all) {
-    for (bl = tsk->blocks; bl; bl = bl->next)
-      for (i = 0; i < BLOCK_SIZE; i++)
-        if (CELL_EMPTY != bl->values[i].type)
-          free_cell_fields(tsk,&bl->values[i]);
+  global *glo;
+
+  for (bl = tsk->oldgen; bl; bl = bl->next) {
+    unsigned int off;
+    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
+      header *h = (header*)(off+(char*)bl);
+      assert(REF_FLAGS != h->flags);
+      assert(CELL_COUNT > h->type);
+      h->flags &= ~bit;
+    }
+  }
+  /* This should only be called after a major collection, so the new generation
+     should be empty */
+  assert(NULL == tsk->newgen);
+
+  for (glo = tsk->globals.first; glo; glo = glo->next)
+    glo->flags &= ~bit;
+}
+
+#define REPLACE_PNTR(p) { if (check) { \
+                            if (is_pntr(p)) { \
+                              assert(REF_FLAGS != ((cell*)(p).data[0])->flags); \
+                              assert(0 != ((cell*)(p).data[0])->type); \
+                              assert(CELL_COUNT > ((cell*)(p).data[0])->type); \
+                            } \
+                         } else if (is_pntr(p)) { \
+                             if (REF_FLAGS == (unsigned int)((cell*)(p).data[0])->flags) {     \
+                               (p).data[0] = (unsigned int)((cell*)(p).data[0])->type; } \
+                         } }
+
+#define REPLACE_CELL(c) { if (check) { \
+                            assert(REF_FLAGS != (c)->flags); \
+                            assert(0 != (c)->type); \
+                            assert(CELL_COUNT > (c)->type); \
+                          } else if (REF_FLAGS == (c)->flags) {                    \
+                            (c) = (cell*)(c)->type; }     \
+                        }
+
+static void *add_to_oldgen(task *tsk, void *mem)
+{
+  assert(REF_FLAGS != ((header*)mem)->flags);
+  assert(CELL_COUNT > ((header*)mem)->type);
+  assert((0 == tsk->altspace) || (FLAG_ALTSPACE == tsk->altspace));
+
+  if (has_been_copied(tsk,mem))
+    return mem;
+
+  unsigned int size = object_size(mem);
+
+  if (tsk->oldgenoffset >= sizeof(block)-size) {
+    block *bl = (block*)calloc(1,sizeof(block));
+    bl->next = tsk->oldgen;
+    bl->used = tsk->oldgenoffset;
+    tsk->oldgen = bl;
+    tsk->oldgenoffset = BLOCK_START;
+    tsk->need_major = 1;
+  }
+  assert(tsk->oldgenoffset+object_size(mem) <= sizeof(block));
+
+  char *newmem = (char*)(((char*)tsk->oldgen)+tsk->oldgenoffset);
+  if (((header*)mem)->type < CELL_OBJS)
+    *((cell*)newmem) = *((cell*)mem);
+  else
+    memcpy(newmem,mem,size);
+  tsk->oldgenbytes += size;
+  tsk->oldgenoffset += size;
+
+  ((header*)mem)->type = (unsigned int)newmem;
+  ((header*)mem)->flags = REF_FLAGS;
+
+  if (tsk->altspace)
+    ((header*)newmem)->flags |= FLAG_ALTSPACE;
+  else
+    ((header*)newmem)->flags &= ~FLAG_ALTSPACE;
+  ((header*)newmem)->flags |= FLAG_MATURE;
+
+  return (char*)newmem;
+}
+
+static void replace_refs_cell(task *tsk, cell *c, int check)
+{
+  switch (c->type) {
+  case CELL_APPLICATION:
+    REPLACE_PNTR(c->field1);
+    REPLACE_PNTR(c->field2);
+    break;
+  case CELL_CONS:
+    REPLACE_PNTR(c->field1);
+    REPLACE_PNTR(c->field2);
+    break;
+  case CELL_IND:
+    REPLACE_PNTR(c->field1);
+    break;
+  case CELL_AREF: {
+    REPLACE_PNTR(c->field1);
+    carray *carr = (carray*)get_pntr(c->field1);
+    if (sizeof(pntr) == carr->elemsize) {
+      int i;
+      for (i = 0; i < carr->size; i++)
+        REPLACE_PNTR(((pntr*)carr->elements)[i]);
+    }
+    REPLACE_PNTR(carr->tail);
+    REPLACE_CELL(carr->wrapper);
+    assert(c == carr->wrapper);
+    break;
+  }
+  case CELL_FRAME: {
+    frame *f = (frame*)get_pntr(c->field1);
+    int i;
+    for (i = 0; i < f->instr->expcount; i++)
+      REPLACE_PNTR(f->data[i]);
+    REPLACE_CELL(f->c);
+    assert(c == f->c);
+    break;
+  }
+  case CELL_CAP: {
+    REPLACE_PNTR(c->field1);
+    cap *cp = (cap*)get_pntr(c->field1);
+    int i;
+    for (i = 0; i < cp->count; i++)
+      REPLACE_PNTR(cp->data[i]);
+    break;
+  }
+  case CELL_SYSOBJECT: {
+    sysobject *so = (sysobject*)get_pntr(c->field1);
+    REPLACE_CELL(so->c);
+    assert(c == so->c);
+    if (is_pntr(so->listenerso) && !is_nullpntr(so->listenerso))
+      REPLACE_PNTR(so->listenerso);
+    if (is_pntr(so->p) && !is_nullpntr(so->p))
+      REPLACE_PNTR(so->p);
+  }
+  case CELL_REMOTEREF: {
+    global *glo = (global*)get_pntr(c->field1);
+    REPLACE_PNTR(glo->p);
+    break;
+  }
+  }
+}
+
+static void replace_refs_globals(task *tsk, int check)
+{
+  int h;
+  global *glo;
+  if (check) {
+    /* Just verification - REPLACE_PNTR only does a check here */
+    for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+      for (glo = tsk->physhash[h]; glo; glo = glo->physnext)
+        REPLACE_PNTR(glo->p);
+      for (glo = tsk->targethash[h]; glo; glo = glo->targetnext)
+        REPLACE_PNTR(glo->p);
+    }
   }
   else {
-    for (bl = tsk->blocks; bl; bl = bl->next) {
-      for (i = 0; i < BLOCK_SIZE; i++) {
-        if (!(bl->values[i].flags & FLAG_MARKED) &&
-            !(bl->values[i].flags & FLAG_DMB) &&
-            !(bl->values[i].flags & FLAG_PINNED) &&
-            (CELL_EMPTY != bl->values[i].type)) {
-          free_cell_fields(tsk,&bl->values[i]);
-          bl->values[i].type = CELL_EMPTY;
+    /* Note that we need to rebuild the target and physical hash tables here,
+       sine the pointers have changed */
+    global *next;
+    global **oldphyshash = tsk->physhash;
+    global **oldtargethash = tsk->targethash;
+    tsk->physhash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
+    tsk->targethash = (global**)calloc(GLOBAL_HASH_SIZE,sizeof(global*));
 
-          /* comment out these two lines to avoid reallocating cells, to check invalid accesses */
-          make_pntr(bl->values[i].field1,tsk->freeptr);
-          tsk->freeptr = &bl->values[i];
+    for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+      for (glo = oldphyshash[h]; glo; glo = next) {
+        next = glo->physnext;
+        glo->physnext = NULL;
+        REPLACE_PNTR(glo->p);
+        physhash_add(tsk,glo);
+      }
+    }
+
+    for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+      for (glo = oldtargethash[h]; glo; glo = next) {
+        next = glo->targetnext;
+        glo->targetnext = NULL;
+        REPLACE_PNTR(glo->p);
+        targethash_add(tsk,glo);
+      }
+    }
+
+    free(oldphyshash);
+    free(oldtargethash);
+  }
+}
+
+static void replace_refs_other(task *tsk, int check)
+{
+  frameblock *fb;
+  int di;
+  int blocks = 0;
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    blocks++;
+    int fi;
+    for (fi = 0; fi < tsk->framesperblock; fi++) {
+      frame *f = ((frame*)&fb->mem[fi*tsk->framesize]);
+      if ((STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state)) {
+        int i;
+        for (i = 0; i < f->instr->expcount; i++)
+          REPLACE_PNTR(f->data[i]);
+        if (f->c)
+          REPLACE_CELL(f->c);
+      }
+    }
+  }
+
+  REPLACE_PNTR(tsk->globnilpntr);
+  REPLACE_PNTR(tsk->globtruepntr);
+  REPLACE_PNTR(tsk->argsp);
+  for (di = 0; di < tsk->nstrings; di++)
+    REPLACE_PNTR(tsk->strings[di]);
+  REPLACE_PNTR(tsk->trace_root);
+
+  int rsetsize = array_count(tsk->remembered);
+  cell **rsetdata = (cell**)tsk->remembered->data;
+  int i;
+  for (i = 0; i < rsetsize; i++)
+    REPLACE_CELL(rsetdata[i]);
+
+  if (tsk->streamstack) {
+    for (di = 0; di < tsk->streamstack->count; di++)
+      REPLACE_PNTR(tsk->streamstack->data[di]);
+  }
+
+  replace_refs_globals(tsk,check);
+}
+
+static void replace_refs(task *tsk, int check)
+{
+  block *bl;
+  for (bl = tsk->oldgen; bl; bl = bl->next) {
+    unsigned int off;
+    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
+      header *h = (header*)(off+(char*)bl);
+      if (h->type < CELL_OBJS)
+        replace_refs_cell(tsk,(cell*)h,check);
+    }
+  }
+
+  replace_refs_other(tsk,check);
+}
+
+static void init_oldgen(task *tsk)
+{
+  if (NULL == tsk->oldgen) {
+    tsk->oldgen = (block*)calloc(1,sizeof(block));
+    tsk->oldgenoffset = BLOCK_START;
+  }
+}
+
+void free_blocks(block *bl)
+{
+  while (bl) {
+    block *next = bl->next;
+#ifdef DONT_FREE_BLOCKS
+    memset(bl,0,sizeof(block));
+#else
+    free(bl);
+#endif
+    bl = next;
+  }
+}
+
+void write_barrier(task *tsk, cell *c)
+{
+  if (!(c->flags & FLAG_INRSET) && (c->flags & FLAG_MATURE)) {
+/*       fprintf(stderr,"Adding %p to remembered set\n",c); */
+      array_append(tsk->remembered,&c,sizeof(cell*));
+      c->flags |= FLAG_INRSET;
+    }
+}
+
+/* Can be called from native code */
+void write_barrier_ifnew(task *tsk, cell *c, pntr dest)
+{
+  if (is_pntr(dest) && !(get_pntr(dest)->flags & FLAG_MATURE))
+    write_barrier(tsk,c);
+}
+
+void cell_make_ind(task *tsk, cell *c, pntr dest)
+{
+  write_barrier_ifnew(tsk,c,dest);
+  c->type = CELL_IND;
+  c->field1 = dest;
+}
+
+static void sweep_frames(task *tsk)
+{
+  frameblock *fb;
+  int i;
+  int keep = 0;
+  int remove = 0;
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if ((STATE_SPARKED == f->state) ||
+          (STATE_RUNNING == f->state) ||
+          (STATE_BLOCKED == f->state)) {
+        keep++;
+      }
+      else if (STATE_NEW == f->state) {
+        assert(NULL != f->c);
+        assert(NULL == f->retp);
+        assert(CELL_EMPTY != f->c->type);
+        assert(CELL_FRAME == f->c->type);
+        if (f->c->flags & FLAG_MARKED) {
+          keep++;
+        }
+        else {
+          remove++;
+          f->c = NULL;
+          f->retp = NULL;
+          frame_free(tsk,f);
         }
       }
     }
   }
 }
 
-void sweep(task *tsk, int all)
+static block *copy_heap_start(task *tsk)
 {
-  global *glo;
-  block *bl;
+  block *prevgen = tsk->oldgen;
+  tsk->oldgen = NULL;
+  tsk->oldgenbytes = 0;
+  init_oldgen(tsk);
+  if (tsk->altspace) {
+    tsk->altspace = 0;
+    tsk->newcellflags |= FLAG_ALTSPACE;
+  }
+  else {
+    tsk->altspace = FLAG_ALTSPACE;
+    tsk->newcellflags &= ~FLAG_ALTSPACE;
+  }
+  return prevgen;
+}
+
+static void copy_heap_finish(task *tsk, block *prevgen)
+{
+  replace_refs(tsk,0);
+  sweep_frames(tsk);
+  update_lifetimes(tsk,prevgen);
+  free_blocks(prevgen);
+}
+
+static void mark_remembered_set(task *tsk)
+{
+  int rsetsize = array_count(tsk->remembered);
+  cell **rsetdata = (cell**)tsk->remembered->data;
   int i;
+  for (i = 0; i < rsetsize; i++) {
+    pntr p;
+    make_pntr(p,rsetdata[i]);
+    assert(REF_FLAGS != rsetdata[i]->flags);
+    assert(CELL_COUNT > rsetdata[i]->type);
+    rsetdata[i]->flags &= ~FLAG_MARKED;
+    mark(tsk,p,FLAG_MARKED,0);
+  }
+}
 
-  /* Treat all new globals and cells that were created during this garbage collection cycle
-     as rools that also need to be marked */
-  if (tsk->indistgc) {
-    for (glo = tsk->globals.first; glo; glo = glo->next)
-      if (glo->flags & FLAG_NEW)
-        mark_global(tsk,glo,FLAG_MARKED);
+static void clear_remembered_set(task *tsk)
+{
+  int rsetsize = array_count(tsk->remembered);
+  cell **rsetdata = (cell**)tsk->remembered->data;
+  int i;
+  for (i = 0; i < rsetsize; i++) {
+    assert(REF_FLAGS != rsetdata[i]->flags);
+    assert(rsetdata[i]->flags & FLAG_INRSET);
+    rsetdata[i]->flags &= ~FLAG_INRSET;
+  }
+  tsk->remembered->nbytes = 0;
+}
 
-    for (bl = tsk->blocks; bl; bl = bl->next) {
-      for (i = 0; i < BLOCK_SIZE; i++) {
-        if ((CELL_EMPTY != bl->values[i].type) && (bl->values[i].flags & FLAG_NEW)) {
-          pntr p;
-          make_pntr(p,&bl->values[i]);
-          mark(tsk,p,FLAG_MARKED);
-        }
+static void begin_promotion(task *tsk, block **prevstart, unsigned int *prevoffset)
+{
+  init_oldgen(tsk);
+  *prevstart = tsk->oldgen;
+  *prevoffset = tsk->oldgenoffset;
+  #ifdef CHECK_HEAP_INTEGRITY
+  check_remembered_set(tsk);
+  #endif
+}
+
+static void replace_refs_for_newgen(task *tsk, block *prevstart, unsigned int prevoffset)
+{
+  block *bl;
+  assert(prevstart);
+
+  bl = tsk->oldgen;
+  unsigned int endoffset = tsk->oldgenoffset;
+
+  unsigned int offset;
+
+  while (bl != prevstart) {
+    offset = BLOCK_START;
+    while (offset < endoffset) {
+      cell *c = (cell*)(((char*)bl)+offset);
+      replace_refs_cell(tsk,c,0);
+      offset += object_size(c);
+    }
+    bl = bl->next;
+    endoffset = sizeof(block);
+  }
+
+  offset = prevoffset;
+  while (offset < endoffset) {
+    cell *c = (cell*)(((char*)bl)+offset);
+    replace_refs_cell(tsk,c,0);
+    offset += object_size(c);
+  }
+
+  int rsetsize = array_count(tsk->remembered);
+  cell **rsetdata = (cell**)tsk->remembered->data;
+  int i;
+  for (i = 0; i < rsetsize; i++) {
+    replace_refs_cell(tsk,rsetdata[i],0);
+  }
+
+  replace_refs_other(tsk,0);
+}
+
+static void reset_newgen(task *tsk)
+{
+  free_blocks(tsk->newgen);
+  tsk->newgen = NULL;
+  tsk->newgenoffset = sizeof(block);
+}
+
+static void finish_promotion(task *tsk, block *prevstart, unsigned int prevoffset)
+{
+  replace_refs_for_newgen(tsk,prevstart,prevoffset);
+  sweep_frames(tsk);
+
+  clear_remembered_set(tsk);
+  update_lifetimes(tsk,tsk->newgen);
+  reset_newgen(tsk);
+  #ifdef CHECK_HEAP_INTEGRITY
+  replace_refs(tsk,1); /* just check */
+  #endif
+}
+
+void sweep_sysobjects(task *tsk, int all)
+{
+  sysobject *so;
+  int deleted = 0;
+  int kept = 0;
+  so = tsk->sysobjects.first;
+  while (so) {
+    sysobject *next = so->next;
+    if (!all && so->marked) {
+      so->marked = 0;
+      kept++;
+    }
+    else {
+      free_sysobject(tsk,so);
+      deleted++;
+    }
+    so = next;
+  }
+}
+
+void force_major_collection(task *tsk)
+{
+  tsk->need_minor = 1;
+  tsk->need_major = 1;
+  tsk->skipremaining = 0;
+  endpoint_interrupt(tsk->endpt);
+}
+
+/* When a local collection is performed during a distributed collection cycle, all objects
+   that have the FLAG_NEW bit set must be copied. */
+static void mark_new_objects(task *tsk, block *from)
+{
+  if (!tsk->indistgc)
+    return;
+  block *bl;
+  for (bl = from; bl; bl = bl->next) {
+    unsigned int off = BLOCK_START;
+    while (off < BLOCK_END) {
+      header *h = (header*)(off+(char*)bl);
+      if ((REF_FLAGS != h->flags) && (h->flags & FLAG_NEW)) {
+        pntr p;
+        make_pntr(p,h);
+        mark(tsk,p,FLAG_MARKED,0);
       }
+      if (REF_FLAGS == h->flags)
+        h = (header*)h->type;
+      off += object_size(h);
     }
   }
 
-  sweep_globals(tsk,all);
-  sweep_cells(tsk,all);
+  /* Treat all new globals and cells that were created during this distributed garbage
+     collection cycle as roots that also need to be marked */
+  global *glo;
+  for (glo = tsk->globals.first; glo; glo = glo->next)
+    if (glo->flags & FLAG_NEW)
+      mark_global(tsk,glo,FLAG_MARKED,0);
 }
 
 void local_collect(task *tsk)
 {
-  int h;
-  global *glo;
+/*   fprintf(stderr,"local_collect\n"); */
+  int prev_oldgenbytes = tsk->oldgenbytes;
+
+  /* Minor collection cycle */
+  int rsetsize = array_count(tsk->remembered);
+  int prev_newgenbytes = calc_newgenbytes(tsk);
   struct timeval start;
   struct timeval end;
-  int ms;
+  block *prevstart;
+  unsigned int prevoffset;
+
+  #ifdef CHECK_HEAP_INTEGRITY
+  check_all_refs_in_eithergen(tsk);
+  #endif
 
   gettimeofday(&start,NULL);
 
-  #ifdef PROFILING
-  tsk->stats.gcs++;
+  begin_promotion(tsk,&prevstart,&prevoffset);
+
+  /* Mark phase */
+  clear_global_marks(tsk,FLAG_MARKED);
+  mark_start(tsk,FLAG_MARKED);
+  mark_roots(tsk,FLAG_MARKED);
+  mark_incoming_global_refs(tsk,FLAG_MARKED);
+  mark_mature_remoteref_globals(tsk,FLAG_MARKED);
+  mark_remembered_set(tsk);
+  mark_new_objects(tsk,tsk->newgen);
+  mark_end(tsk,FLAG_MARKED);
+
+  #ifdef CHECK_HEAP_INTEGRITY
+  assert(check_oldgen_valid(tsk));
   #endif
 
-  tsk->alloc_bytes = 0;
+  /* Copy phase */
+  sweep_globals(tsk,0);
+  finish_promotion(tsk,prevstart,prevoffset);
+  #ifdef CHECK_HEAP_INTEGRITY
+  check_all_refs_in_oldgen(tsk);
+  #endif
 
-  /* clear */
-  clear_marks(tsk,FLAG_MARKED);
+  tsk->need_minor = 0;
+  gettimeofday(&end,NULL);
 
-  /* mark */
-  mark_roots(tsk,FLAG_MARKED);
+  int copiedbytes = tsk->oldgenbytes-prev_oldgenbytes;
+  int survived = 0;
+  if (prev_newgenbytes > 0)
+    survived = (int)((100.0*(double)copiedbytes)/((double)prev_newgenbytes));
 
-  /* treat any objects referenced from other tasks as roots */
-  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
-    for (glo = tsk->physhash[h]; glo; glo = glo->physnext) {
-      assert(glo->addr.tid == tsk->tid);
-      assert(glo->addr.lid >= 0);
-      mark_global(tsk,glo,FLAG_MARKED);
+  node_log(tsk->n,LOG_INFO,"minor: %dms; %dkb of %dkb survived (%d%%); rset %d, oldgen now %dkb",
+           timeval_diffms(start,end),
+           copiedbytes/1024,
+           prev_newgenbytes/1024,
+           survived,
+           rsetsize,
+           tsk->oldgenbytes/1024);
+  tsk->minorms += timeval_diffms(start,end);
+  tsk->gcms += timeval_diffms(start,end);
+
+  /* Major collection cycle */
+  if (tsk->need_major) {
+    if (tsk->skipremaining > 0) {
+      tsk->skipremaining--;
+      node_log(tsk->n,LOG_INFO,"Skipping major collection (%d skips remaining)",
+               tsk->skipremaining);
     }
+    else {
+
+      assert(NULL == tsk->newgen);
+      prev_oldgenbytes = tsk->oldgenbytes;
+      gettimeofday(&start,NULL);
+      /* Mark phase */
+      clear_marks(tsk,FLAG_MARKED);
+
+      block *prevgen = copy_heap_start(tsk);
+
+      mark_start(tsk,FLAG_MARKED);
+      mark_roots(tsk,FLAG_MARKED);
+      mark_incoming_global_refs(tsk,FLAG_MARKED);
+      mark_new_objects(tsk,prevgen);
+      mark_end(tsk,FLAG_MARKED);
+
+      /* Copy phase */
+      sweep_globals(tsk,0);
+      copy_heap_finish(tsk,prevgen);
+      #ifdef CHECK_HEAP_INTEGRITY
+      check_all_refs_in_oldgen(tsk);
+#if 0
+      int new_inds = count_inds(tsk);
+      fprintf(stderr,"new_inds = %d\n",new_inds);
+      assert(0 == new_inds);
+#endif
+      #endif
+      sweep_sysobjects(tsk,0);
+
+      double survived = ((double)tsk->oldgenbytes)/((double)prev_oldgenbytes);
+
+      /* Each time we have a major collection and at least 90% of the objects
+         survive, increment the number of major collections that are skipped
+         (up to a maximum of 8).
+         If less than 90% survived, we reset this number to 0. */
+      if (survived >= 0.9) {
+        if (tsk->skipmajors < 4) {
+          tsk->skipmajors++;
+          node_log(tsk->n,LOG_INFO,"More than 90%% survived in a major collection; setting "
+                   "skipmajors to %d",tsk->skipmajors);
+        }
+      }
+      else {
+        tsk->skipmajors = 0;
+      }
+
+      /* Skip the next n major collections */
+      tsk->skipremaining = tsk->skipmajors;
+
+      gettimeofday(&end,NULL);
+      node_log(tsk->n,LOG_INFO,"MAJOR: %dms; %dkb of %dkb survived (%d%%)",
+               timeval_diffms(start,end),
+               tsk->oldgenbytes/1024,
+               prev_oldgenbytes/1024,
+               (int)(100.0*survived));
+      tsk->majorms += timeval_diffms(start,end);
+      tsk->gcms += timeval_diffms(start,end);
+    }
+    tsk->need_major = 0;
   }
 
-  /* sweep */
-  sweep(tsk,0);
-
-  gettimeofday(&end,NULL);
-  ms = timeval_diffms(start,end);
-  node_log(tsk->n,LOG_INFO,"Garbage collection took %dms",ms);
-  tsk->gcms += ms;
+  /* End */
+  tsk->stats.gcs++;
 }
 
-void memusage(task *tsk, int *cells, int *bytes, int *alloc, int *connections, int *listeners)
+void distributed_collect_start(task *tsk)
 {
-  block *bl;
-  int i;
+  /* Note: All marks that are done with FLAG_DMB do not cause a copy to occur, but instead
+     the flag to be set, and any remote references encountered to have a MARKENTRY message
+     sent to them. */
 
-  *cells = 0;
-  *bytes = 0;
-  *connections = 0;
-  *listeners = 0;
-  *alloc = 0;
 
-  node_stats(tsk->n,connections,listeners);
+  force_major_collection(tsk); // FIXME: temp
 
-  for (bl = tsk->blocks; bl; bl = bl->next) {
-    for (i = 0; i < BLOCK_SIZE; i++) {
-      cell *c = &bl->values[i];
-      if (CELL_AREF == c->type) {
-        carray *arr = (carray*)get_pntr(c->field1);
-        (*bytes) += arr->size*arr->elemsize;
-        (*alloc) += arr->alloc*arr->elemsize;
-      }
-      if (CELL_EMPTY != c->type) {
-        (*bytes) += sizeof(cell);
-        (*cells)++;
+  /* First do a local collection to make sure the remembered set and new generation are
+     empty. Might not be strictly necessary but can simplify things if we can rely on
+     this assumption. */
+  local_collect(tsk);
+
+  tsk->indcstart = 1;
+  mark_start(tsk,FLAG_DMB);
+
+  /* Clear the FLAG_DMB bit on all globals. When distributed collection ends, we will delete
+     any globals that have neither FLAG_DMB or FLAG_MARKED set on them. */
+/*BAD:    clear_global_marks(tsk,FLAG_DMB); */
+
+  /* Mark roots (active frames etc.) */
+  mark_roots(tsk,FLAG_DMB);
+
+  /* Mark any remote addresses that are contained within messages that have yet to be
+     acknowledged by their destination. */
+  mark_inflight_remote_addresses(tsk);
+
+
+  mark_end(tsk,FLAG_DMB);
+  tsk->indcstart = 0;
+}
+
+static void sweep_incoming_references(task *tsk)
+{
+  global *glo;
+  global *next;
+
+  for (glo = tsk->globals.first; glo; glo = next) {
+    next = glo->next;
+
+    if (glo->addr.tid == tsk->tid) {
+      assert(0 <= glo->addr.lid);
+
+      if (!(glo->flags & FLAG_DMB) && !(glo->flags & FLAG_NEW)) {
+
+        assert(!is_pntr(glo->p) || (get_pntr(glo->p)->flags & FLAG_MATURE));
+        if (CELL_REMOTEREF == pntrtype(glo->p)) {
+          global *other = pglobal(glo->p);
+          assert(pntrequal(other->p,glo->p));
+          assert(other->addr.tid != tsk->tid);
+        }
+
+        if ((CELL_REMOTEREF == pntrtype(glo->p)) && pglobal(glo->p)->fetching) {
+          /* keep */
+          #ifdef DEBUG_DISTRIBUTION
+          node_log(tsk->n,LOG_DEBUG1,"sweep_incoming_references: keeping %d@%d (fetching)",
+                   glo->addr.lid,glo->addr.tid);
+          #endif
+        }
+        else {
+          #ifdef DEBUG_DISTRIBUTION
+          node_log(tsk->n,LOG_DEBUG1,"sweep_incoming_references: deleting %d@%d",
+                   glo->addr.lid,glo->addr.tid);
+          #endif
+          remove_global(tsk,glo);
+        }
       }
     }
-    (*alloc) += sizeof(block);
   }
+}
+
+static void reset_dmb(task *tsk)
+{
+  assert(NULL == tsk->newgen);
+  block *bl;
+  for (bl = tsk->oldgen; bl; bl = bl->next) {
+    unsigned int off;
+    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
+      header *h = (header*)(off+(char*)bl);
+      h->flags &= ~FLAG_DMB;
+      h->flags &= ~FLAG_NEW;
+    }
+  }
+
+  global *glo;
+  for (glo = tsk->globals.first; glo; glo = glo->next) {
+    glo->flags &= ~FLAG_DMB;
+    glo->flags &= ~FLAG_NEW;
+  }
+}
+
+void distributed_collect_end(task *tsk)
+{
+#ifdef DEBUG_DISTRIBUTION
+  node_log(tsk->n,LOG_INFO,"distributed_collect_end");
+  /* Force a major collection, so we can determine how much memory we're about to save */
+  force_major_collection(tsk);
+  local_collect(tsk);
+  int oldmem = tsk->oldgenbytes;
+#endif
+
+  /* Get rid of any incoming global references that don't have the distributed mark bit set */
+  mark_inflight_local_addresses(tsk,FLAG_DMB,1);
+  sweep_incoming_references(tsk);
+
+  /* Reset the DMB on all objects in the heap */
+  reset_dmb(tsk);
+
+  /* Force a major collection */
+  force_major_collection(tsk);
+  local_collect(tsk);
+
+  clear_marks(tsk,FLAG_NEW);
+
+#ifdef DEBUG_DISTRIBUTION
+  int newmem = tsk->oldgenbytes;
+  node_log(tsk->n,LOG_INFO,
+           "Distributed garbage collection end: old %dkb new %dkb saved %dkb (%d bytes)",
+           oldmem/1024,newmem/1024,(oldmem-newmem)/1024,oldmem-newmem);
+#endif
+}
+
+cap *cap_alloc(task *tsk, int arity, int address, int fno, unsigned int datasize)
+{
+  unsigned int sizereq = sizeof(cap)+datasize*sizeof(pntr);
+  if (0 != sizereq%8)
+    sizereq += 8-(sizereq%8);
+  cap *c = (cap*)alloc_mem(tsk,sizereq);
+  c->type = CELL_O_CAP;
+  c->nbytes = sizereq;
+  c->arity = arity;
+  c->address = address;
+  c->fno = fno;
+  assert(0 < c->arity); /* MKCAP should not be called for CAFs */
+
+  #ifdef PROFILING
+  tsk->stats.cap_allocs++;
+  #endif
+
+  return c;
 }
 
 frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
@@ -683,19 +1489,13 @@ frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
     tsk->freeframe = (frame*)fb->mem;
   }
 
-  if (addalloc)
-    tsk->alloc_bytes += tsk->framesize;
-
-  if ((tsk->alloc_bytes >= COLLECT_THRESHOLD) && tsk->endpt)
-    endpoint_interrupt(tsk->endpt);
-
   f = tsk->freeframe;
   tsk->freeframe = f->freelnk;
 
   f->c = 0; /* should be set by caller */
   f->instr = 0; /* should be set by caller */
 
-  f->state = 0;
+  f->state = STATE_NEW;
   f->resume = 0;
   f->freelnk = 0;
   f->retp = NULL;
@@ -711,81 +1511,4 @@ frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
   #endif
 
   return f;
-}
-
-cap *cap_alloc(task *tsk, int arity, int address, int fno)
-{
-  cap *c = (cap*)calloc(1,sizeof(cap));
-  c->arity = arity;
-  c->address = address;
-  c->fno = fno;
-  assert(0 < c->arity); /* MKCAP should not be called for CAFs */
-
-  #ifdef PROFILING
-  tsk->stats.cap_allocs++;
-  #endif
-
-  return c;
-}
-
-void cap_dealloc(cap *c)
-{
-  if (c->data)
-    free(c->data);
-  free(c);
-}
-
-pntrstack *pntrstack_new(void)
-{
-  pntrstack *s = (pntrstack*)calloc(1,sizeof(pntrstack));
-  s->alloc = 1;
-  s->count = 0;
-  s->data = (pntr*)malloc(sizeof(pntr));
-  s->limit = STACK_LIMIT;
-  return s;
-}
-
-void pntrstack_push(pntrstack *s, pntr p)
-{
-  if (s->count == s->alloc) {
-    if ((0 <= s->limit) && (s->count >= s->limit)) {
-      fprintf(stderr,"Out of stack space\n");
-      exit(1);
-    }
-    pntrstack_grow(&s->alloc,&s->data,s->alloc*2);
-  }
-  s->data[s->count++] = p;
-}
-
-pntr pntrstack_at(pntrstack *s, int pos)
-{
-  assert(0 <= pos);
-  assert(pos < s->count);
-  return resolve_pntr(s->data[pos]);
-}
-
-pntr pntrstack_pop(pntrstack *s)
-{
-  assert(0 < s->count);
-  return resolve_pntr(s->data[--s->count]);
-}
-
-pntr pntrstack_top(pntrstack *s)
-{
-  assert(0 < s->count);
-  return resolve_pntr(s->data[s->count]);
-}
-
-void pntrstack_free(pntrstack *s)
-{
-  free(s->data);
-  free(s);
-}
-
-void pntrstack_grow(int *alloc, pntr **data, int size)
-{
-  if (*alloc < size) {
-    *alloc = size;
-    *data = (pntr*)realloc(*data,(*alloc)*sizeof(pntr));
-  }
 }

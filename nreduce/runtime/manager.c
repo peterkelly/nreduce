@@ -43,13 +43,45 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define DISTGC_DELAY 3000
-//#define DEBUG_DISTGC
+#define DISTGC_DELAY 20000
+#define DEBUG_DISTGC
+
+#define PAUSE_DURING_GC
 
 typedef struct gcarg {
   int ntasks;
   endpointid idmap[0];
 } gcarg;
+
+void pause_all(node *n, endpoint *endpt, gcarg *ga)
+{
+  int i;
+  for (i = 0; i < ga->ntasks; i++)
+    endpoint_send(endpt,ga->idmap[i],MSG_PAUSE,NULL,0);
+  int waiting = ga->ntasks;
+  while (0 < waiting) {
+    message *msg = endpoint_receive(endpt,-1);
+    assert(MSG_PAUSEACK == msg->tag);
+    waiting--;
+  }
+  node_log(n,LOG_DEBUG1,"gc_thread: all tasks paused");
+}
+
+void resume_all(node *n, endpoint *endpt, gcarg *ga)
+{
+  int i;
+  for (i = 0; i < ga->ntasks; i++)
+    endpoint_send(endpt,ga->idmap[i],MSG_RESUME,NULL,0);
+  node_log(n,LOG_DEBUG1,"gc_thread: sent resume message to all tasks");
+}
+
+void check_all_refs(node *n, endpoint *endpt, gcarg *ga)
+{
+  int i;
+  for (i = 0; i < ga->ntasks; i++)
+    endpoint_send(endpt,ga->idmap[i],MSG_CHECKALLREFS,NULL,0);
+  node_log(n,LOG_DEBUG1,"gc_thread: sent checkallrefs message to all tasks");
+}
 
 static void gc_thread(node *n, endpoint *endpt, void *arg)
 {
@@ -64,9 +96,9 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
   int gciter = 0;
 
   #ifdef DEBUG_DISTGC
-  printf("gc_thread\n");
+  node_log(n,LOG_DEBUG1,"gc_thread");
   for (i = 0; i < ga->ntasks; i++)
-    printf("gc_thread: idmap[%d] = "EPID_FORMAT"\n",i,EPID_ARGS(ga->idmap[i]));
+    node_log(n,LOG_DEBUG1,"gc_thread: idmap[%d] = "EPID_FORMAT,i,EPID_ARGS(ga->idmap[i]));
   #endif
 
   for (i = 0; i < ga->ntasks; i++)
@@ -79,10 +111,14 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       sm.gc = endpt->epid;
       sm.gciter = ++gciter;
       #ifdef DEBUG_DISTGC
-      printf("Starting distributed garbage collection\n");
+      node_log(n,LOG_DEBUG1,"gc_thread: Starting distributed garbage collection");
       #endif
       assert(!ingc);
       ingc = 1;
+
+      #ifdef PAUSE_DURING_GC
+      pause_all(n,endpt,ga);
+      #endif
 
       for (i = 0; i < ga->ntasks; i++)
         endpoint_send(endpt,ga->idmap[i],MSG_STARTDISTGC,&sm,sizeof(sm));
@@ -98,7 +134,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       rem_startacks--;
       if (0 == rem_startacks) {
         #ifdef DEBUG_DISTGC
-        printf("All tasks have received STARTDISTGC\n");
+        node_log(n,LOG_DEBUG1,"gc_thread: All tasks have received STARTDISTGC");
         #endif
         memset(count,0,ga->ntasks*sizeof(int));
 
@@ -120,10 +156,12 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
         count[i] += m->counts[i];
 
       #ifdef DEBUG_DISTGC
-      printf("after update (gciter %d) from "EPID_FORMAT":",m->gciter,EPID_ARGS(msg->source));
+      array *tmp = array_new(1,0);
       for (i = 0; i < ga->ntasks; i++)
-        printf(" %d",count[i]);
-      printf("\n");
+        array_printf(tmp," %d",count[i]);
+      node_log(n,LOG_DEBUG1,"gc_thread: after update (gciter %d) from "EPID_FORMAT":%s",
+               m->gciter,EPID_ARGS(msg->source),tmp->data);
+      array_free(tmp);
       #endif
 
       mark_done = 1;
@@ -133,7 +171,7 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
 
       if (mark_done) {
         #ifdef DEBUG_DISTGC
-        printf("Mark done\n");
+        node_log(n,LOG_DEBUG1,"gc_thread: Mark done");
         #endif
         for (i = 0; i < ga->ntasks; i++)
           endpoint_send(endpt,ga->idmap[i],MSG_SWEEP,NULL,0);
@@ -148,13 +186,18 @@ static void gc_thread(node *n, endpoint *endpt, void *arg)
       rem_sweepacks--;
       if (0 == rem_sweepacks) {
         #ifdef DEBUG_DISTGC
-        printf("Distributed garbage collection completed\n");
+        node_log(n,LOG_DEBUG1,"gc_thread: Distributed garbage collection completed");
         #endif
         ingc = 0;
         mark_done = 0;
         for (i = 0; i < ga->ntasks; i++) {
           assert(0 == count[i]);
         }
+
+        #ifdef PAUSE_DURING_GC
+        check_all_refs(n,endpt,ga);
+        resume_all(n,endpt,ga);
+        #endif
       }
       break;
     }
