@@ -25,6 +25,7 @@ FILE *logfile = NULL;
 int startsec = 0;
 int rows = 0;
 int cols = 0;
+char *shell = "rsh";
 
 typedef struct host {
   char *hostname;
@@ -178,7 +179,7 @@ void login_hosts(host *hosts, int nhosts, const char *cmd)
   for (h = 0; h < nhosts; h++) {
     char *rshcmd;
     asprintf(&rshcmd,"cd %s && %s SLAVE",dir,cmd);
-    hosts[h].fd = run_process(&hosts[h].pid,"rsh",hosts[h].hostname,rshcmd,NULL);
+    hosts[h].fd = run_process(&hosts[h].pid,shell,hosts[h].hostname,rshcmd,NULL);
   }
 }
 
@@ -357,6 +358,9 @@ int main(int argc, char **argv)
     slave();
     return 0;
   }
+
+  if (NULL != getenv("SHOWLOAD_SHELL"))
+    shell = getenv("SHOWLOAD_SHELL");
 
   data = read_hosts(argv[1]);
 
