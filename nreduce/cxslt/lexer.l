@@ -5,7 +5,7 @@
 %{
 /*
  * This file is part of the nreduce project
- * Copyright (C) 2005-2007 Peter Kelly (pmk@cs.adelaide.edu.au)
+ * Copyright (C) 2005-2008 Peter Kelly (pmk@cs.adelaide.edu.au)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
