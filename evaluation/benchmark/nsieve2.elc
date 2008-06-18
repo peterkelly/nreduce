@@ -1,0 +1,62 @@
+merge gn x ys =
+(letrec
+  y = (head ys)
+in
+  (if (< x y)
+    (cons x (merge gn (+ x gn) ys))
+  (if (== x y)
+    (cons x (merge gn (+ x gn) (tail ys)))
+    (cons y (merge gn x (tail ys))))))
+
+foldr1 lst =
+(letrec
+  p = (head lst)
+  gn = (* 2 p)
+  gp = (* p p)
+in
+  (cons
+    gp
+    (merge
+      gn (+ gp gn)
+      (foldr1 (tail lst)))))
+
+diff n ys =
+(letrec
+  y = (head ys)
+in
+  (if (< n y)
+    (cons n (diff (+ n 2) ys))
+  (if (== n y)
+    (diff (+ n 2) (tail ys))
+    (diff n (tail ys)))))
+
+primes = (cons 2 (cons 3 (cons 5 (diff 7 nonprimes))))
+
+nonprimes = (foldr1 (tail primes))
+
+listmult n p = (cons p (listmult n (+ p n)))
+
+
+printnums lst =
+(if lst
+  (++ (numtostring (head lst))
+  (++ "\n" (printnums (tail lst))))
+  nil)
+
+nupto n primes !count =
+(if (> (head primes) n)
+  count
+  (nupto n (tail primes) (+ count 1)))
+
+
+showprimes n count =
+(++ "Primes up to " (++ (numtostring n) (++ ": " (++ (numtostring count) "\n"))))
+
+main args =
+(letrec
+  n = (if args
+        (stringtonum (head args))
+        10000)
+  count = (nupto n primes 0)
+in
+  (showprimes n count))
