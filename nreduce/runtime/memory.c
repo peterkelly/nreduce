@@ -429,29 +429,11 @@ void sysobject_done_writing(sysobject *so)
 
 sysobject *find_sysobject(task *tsk, const socketid *sockid)
 {
-  block *bl;
-  cell *c = NULL;
-  /* FIXME: a hash table might be better here ;) */
-  for (bl = tsk->oldgen; bl && !c; bl = bl->next) {
-    unsigned int off;
-    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
-      header *h = (header*)(off+(char*)bl);
-      if (CELL_SYSOBJECT == h->type)
-        c = (cell*)h;
-    }
-  }
-  for (bl = tsk->newgen; bl && !c; bl = bl->next) {
-    unsigned int off;
-    for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
-      header *h = (header*)(off+(char*)bl);
-      if (CELL_SYSOBJECT == h->type)
-        c = (cell*)h;
-    }
-  }
-  if (c) {
-    sysobject *so = (sysobject*)get_pntr(c->field1);
-    if (socketid_equals(&so->sockid,sockid))
+  sysobject *so;
+  for (so = tsk->sysobjects.first; so; so = so->next) {
+    if (socketid_equals(&so->sockid,sockid)) {
       return so;
+    }
   }
   return NULL;
 }
