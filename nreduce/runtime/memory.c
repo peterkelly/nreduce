@@ -162,10 +162,9 @@ static void mark_cap(task *tsk, cap *c, unsigned int bit, int depth)
   mark(tsk,p,bit,depth);
 
   for (i = 0; i < c->count; i++) {
-    if (!is_nullpntr(c->data[i])) {
-      c->data[i] = resolve_copy_pntr(c->data[i]);
-      mark(tsk,c->data[i],bit,depth);
-    }
+    assert(!is_nullpntr(c->data[i]));
+    c->data[i] = resolve_copy_pntr(c->data[i]);
+    mark(tsk,c->data[i],bit,depth);
   }
 }
 
@@ -221,6 +220,8 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
     mark_frame(tsk,(frame*)get_pntr(c->field1),bit,depth+1);
     break;
   case CELL_CAP:
+    mark(tsk,c->field1,bit,depth+1);
+    c->field1 = resolve_copy_pntr(c->field1);
     assert(CELL_O_CAP == pntrtype(c->field1));
     mark_cap(tsk,(cap*)get_pntr(c->field1),bit,depth+1);
     break;
