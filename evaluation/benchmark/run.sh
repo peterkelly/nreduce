@@ -48,7 +48,11 @@ TEMPDIR=`mktemp -d /tmp/run.XXXXXX`
 
 TIMEFORMAT="%R %U %S"
 
-runcmd "nreduce ${PROGRAM}.elc" "elc"
+if [ ${PROGRAM} = "nsieve" ]; then
+  runcmd "nreduce -v lazy ${PROGRAM}.elc" "elc"
+else
+  runcmd "nreduce ${PROGRAM}.elc" "elc"
+fi
 
 runcmd "./${PROGRAM}" "c"
 if [ -e "${PROGRAM}2" ]; then
