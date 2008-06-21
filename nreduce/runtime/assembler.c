@@ -311,6 +311,26 @@ void x86_assemble(x86_assembly *as, array *cpucode)
         fatal("POP: invalid destination");
       }
       break;
+    case X86_SHL:
+      if ((TYPE_REG == dtype) && (TYPE_IMM == stype)) {
+        byte(0xC1);
+        byte(modrm(MREG,4,dval));
+        byte(sval);
+      }
+      else {
+        fatal("SAL: invalid source/destination");
+      }
+      break;
+    case X86_SHR:
+      if ((TYPE_REG == dtype) && (TYPE_IMM == stype)) {
+        byte(0xC1);
+        byte(modrm(MREG,5,dval));
+        byte(sval);
+      }
+      else {
+        fatal("SAR: invalid source/destination");
+      }
+      break;
     case X86_MOV:
       if ((TYPE_REG == dtype) && (TYPE_REG == stype)) {
         byte(0x89);

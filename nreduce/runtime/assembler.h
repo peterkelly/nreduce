@@ -93,8 +93,10 @@
 #define X86_PUSHF   42
 #define X86_POPF    43
 #define X86_FILD    44
-#define X86_NONE    45
-#define NUM_X86     46
+#define X86_SHL     45
+#define X86_SHR     46
+#define X86_NONE    47
+#define NUM_X86     48
 
 #define I0(op)            x86_addinstr(as,(op),none(),none())
 #define I1(op,dst)        x86_addinstr(as,(op),(dst),none())
@@ -146,6 +148,8 @@
 #define I_PUSHF()         I0(X86_PUSHF)
 #define I_POPF()          I0(X86_POPF)
 #define I_FILD(src)       I1(X86_FILD,src)
+#define I_SHL(dst,src)    I2(X86_SHL,dst,src)
+#define I_SHR(dst,src)    I2(X86_SHR,dst,src)
 
 typedef struct x86_arg {
   int type;

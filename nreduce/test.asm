@@ -1688,3 +1688,21 @@ _start:
   int3
   pushf
   popf
+
+  shl eax,7
+  shl ecx,7
+  shl edx,7
+  shl ebx,7
+  shl esp,7
+  shl ebp,7
+  shl esi,7
+  shl edi,7
+
+  shr eax,7
+  shr ecx,7
+  shr edx,7
+  shr ebx,7
+  shr esp,7
+  shr ebp,7
+  shr esi,7
+  shr edi,7

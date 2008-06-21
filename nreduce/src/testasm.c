@@ -1705,6 +1705,24 @@ void testasm(array *cpucode)
   I_PUSHF();
   I_POPF();
 
+  I_SHL(reg(EAX),imm(7));
+  I_SHL(reg(ECX),imm(7));
+  I_SHL(reg(EDX),imm(7));
+  I_SHL(reg(EBX),imm(7));
+  I_SHL(reg(ESP),imm(7));
+  I_SHL(reg(EBP),imm(7));
+  I_SHL(reg(ESI),imm(7));
+  I_SHL(reg(EDI),imm(7));
+
+  I_SHR(reg(EAX),imm(7));
+  I_SHR(reg(ECX),imm(7));
+  I_SHR(reg(EDX),imm(7));
+  I_SHR(reg(EBX),imm(7));
+  I_SHR(reg(ESP),imm(7));
+  I_SHR(reg(EBP),imm(7));
+  I_SHR(reg(ESI),imm(7));
+  I_SHR(reg(EDI),imm(7));
+
   x86_assemble(as,cpucode);
   x86_assembly_free(as);
 }
