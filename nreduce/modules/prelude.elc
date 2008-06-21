@@ -95,7 +95,13 @@ skip n lst =
       (arrayskip n lst)
       (skip (- n partlen) (arrayskip partlen lst)))))
 
-item n lst = (head (skip n lst))
+item n lst =
+(if (<= n 0)
+  (head lst)
+  (letrec partlen = (arraysize lst) in
+    (if (< n partlen)
+      (arrayitem n lst)
+      (item (- n partlen) (arrayskip partlen lst)))))
 
 prefix n lst =
 (if (<= n 0)

@@ -807,6 +807,42 @@ static void b_arrayskip(task *tsk, pntr *argstack)
   }
 }
 
+static void b_arrayitem(task *tsk, pntr *argstack)
+{
+  pntr npntr = argstack[1];
+  pntr refpntr = argstack[0];
+  int n;
+
+  CHECK_ARG(1,CELL_NUMBER);
+
+  maybe_expand_array(tsk,refpntr);
+
+  n = (int)pntrdouble(npntr);
+  assert(0 <= n);
+
+
+  if (CELL_CONS == pntrtype(refpntr)) {
+    assert(0 == n);
+    argstack[0] = get_pntr(refpntr)->field1;
+  }
+  else if (CELL_AREF == pntrtype(refpntr)) {
+    carray *arr = aref_array(refpntr);
+    int index = aref_index(refpntr);
+    assert(index < arr->size);
+    assert(index+n < arr->size);
+
+    if (sizeof(pntr) == arr->elemsize) {
+      argstack[0] = ((pntr*)arr->elements)[index+n];
+    }
+    else {
+      set_pntrdouble(argstack[0],(double)(((unsigned char*)arr->elements)[index+n]));
+    }
+  }
+  else {
+    set_error(tsk,"arrayitem: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
+  }
+}
+
 static void b_arrayprefix(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[2];
@@ -1996,6 +2032,7 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "tail",           1, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_tail           },
 { "arraysize",      1, 1, MAYBE_UNEVAL, ALWAYS_TRUE,   PURE, b_arraysize      },
 { "arrayskip",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayskip      },
+{ "arrayitem",      2, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayitem      },
 { "arrayprefix",    3, 2, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_arrayprefix    },
 { "arraystrcmp",    2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_arraystrcmp    },
 { "teststring",     1, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_teststring     },

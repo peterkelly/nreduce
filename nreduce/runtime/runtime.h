@@ -97,60 +97,61 @@ struct gaddr;
 #define B_TAIL           28
 #define B_ARRAYSIZE      29
 #define B_ARRAYSKIP      30
-#define B_ARRAYPREFIX    31
-#define B_STRCMP1        32    
-#define B_TESTSTRING     33
-#define B_TESTARRAY      34
+#define B_ARRAYITEM      31
+#define B_ARRAYPREFIX    32
+#define B_STRCMP1        33    
+#define B_TESTSTRING     34
+#define B_TESTARRAY      35
 
 /* Sequential/parallel directives */
-#define B_SEQ            35
-#define B_PAR            36
-#define B_PARHEAD        37
+#define B_SEQ            36
+#define B_PAR            37
+#define B_PARHEAD        38
 
 /* Filesystem access */
-#define B_OPENFD         38
-#define B_READCHUNK      39
-#define B_READDIR1       40
-#define B_FEXISTS        41
-#define B_FISDIR         42
+#define B_OPENFD         39
+#define B_READCHUNK      40
+#define B_READDIR1       41
+#define B_FEXISTS        42
+#define B_FISDIR         43
 
 /* Networking */
-#define B_OPENCON        43
-#define B_READCON        44
-#define B_STARTLISTEN    45
-#define B_ACCEPT         46
+#define B_OPENCON        44
+#define B_READCON        45
+#define B_STARTLISTEN    46
+#define B_ACCEPT         47
 
 /* Terminal and network output */
-#define B_NCHARS         47
-#define B_PRINT          48
-#define B_PRINTARRAY     49
-#define B_PRINTEND       50
+#define B_NCHARS         48
+#define B_PRINT          49
+#define B_PRINTARRAY     50
+#define B_PRINTEND       51
 
 /* Other */
-#define B_ERROR          51
-#define B_GETOUTPUT      52
-#define B_GENID          53
-#define B_EXIT           54
+#define B_ERROR          52
+#define B_GETOUTPUT      53
+#define B_GENID          54
+#define B_EXIT           55
 
-#define B_ABS            55
-#define B_JNEW           56
-#define B_JCALL          57
-#define B_ISCONS         58
+#define B_ABS            56
+#define B_JNEW           57
+#define B_JCALL          58
+#define B_ISCONS         59
 
-#define B_CXSLT1         59
-#define B_CACHE          60
+#define B_CXSLT1         60
+#define B_CACHE          61
 
-#define B_CONNPAIR       61
-#define B_MKCONN         62
-#define B_SPAWN          63
-#define B_COMPILE        64
+#define B_CONNPAIR       62
+#define B_MKCONN         63
+#define B_SPAWN          64
+#define B_COMPILE        65
 
-#define B_ISSPACE        65
-#define B_LOOKUP         66
+#define B_ISSPACE        66
+#define B_LOOKUP         67
 
-#define B_LCONS          67
+#define B_LCONS          68
 
-#define NUM_BUILTINS     68
+#define NUM_BUILTINS     69
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
