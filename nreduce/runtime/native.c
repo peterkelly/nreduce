@@ -288,6 +288,9 @@ void dump_asm(task *tsk, const char *filename, array *cpucode)
     else if (i == tsk->trap_addr-tsk->code) {
       fprintf(f,"trap:\n");
     }
+    else if (i == tsk->headerror_addr-tsk->code) {
+      fprintf(f,"headerror:\n");
+    }
     else if (i == tsk->caperror_addr-tsk->code) {
       fprintf(f,"caperror:\n");
     }
@@ -651,6 +654,13 @@ void native_arg_error(task *tsk)
   handle_error(tsk);
 }
 
+void native_head_error(task *tsk, pntr cappntr)
+{
+  tsk->native_finished = 1;
+  head_error(tsk);
+  handle_error(tsk);
+}
+
 void native_cap_error(task *tsk, pntr cappntr)
 {
   tsk->native_finished = 1;
@@ -816,6 +826,45 @@ void asm_resolve_stack_pntr(task *tsk, x86_assembly *as, int pos)
   LABEL(Ldone);
 }
 
+void asm_alloc_cell_to_esi(task *tsk, x86_assembly *as)
+{
+  // if (NULL == tsk->ptr)
+  int Lhavefreecell = as->labels++;
+  int Lcellallocated = as->labels++;
+
+  I_MOV(reg(ESI),absmem((int)&tsk->newgenoffset));
+  I_CMP(reg(ESI),imm(sizeof(block)-sizeof(cell)));
+  I_JL(label(Lhavefreecell));
+
+  /* Fall back to C version */
+
+  BEGIN_CALL(4);
+  I_PUSH(imm((int)tsk));
+  I_MOV(reg(EAX),imm((int)alloc_cell));
+  I_CALL(reg(EAX));
+  I_ADD(reg(ESP),imm(4));
+  I_MOV(regmem(ESP,32-PUSHAD_OFFSET_ESI),reg(EAX));
+  END_CALL;
+  I_JMP(label(Lcellallocated));
+
+  /* Allocate cell directly here; ESI points to newgenoffset from above */
+
+  LABEL(Lhavefreecell);
+
+  // newgenoffset += sizeof(cell)
+  I_LEA(reg(EAX),regmem(ESI,sizeof(cell)));
+  I_MOV(absmem((int)&tsk->newgenoffset),reg(EAX));
+
+  // get correct cell position
+  I_ADD(reg(ESI),absmem((int)&tsk->newgen));
+
+  // Set flags on new cell
+  I_MOV(reg(EAX),absmem((int)&tsk->newcellflags));
+  I_MOV(regmem(ESI,CELL_FLAGS),reg(EAX));
+
+  LABEL(Lcellallocated);
+}
+
 /*
  * Native code implementation of frame_new(). This uses the first item from the linked list of
  * free frames if possible, but falls back to the C version there are no free frames and another
@@ -905,6 +954,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   int Ltrap = as->labels++;
   int Lstillactive = as->labels++;
   int Lcaperror = as->labels++;
+  int Lheaderror = as->labels++;
   int Largerror = as->labels++;
   int Lbcend = as->labels++;
   int *instrlabels;
@@ -1256,41 +1306,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
 
       // newfholder = alloc_cell(tsk);
 
-      // if (NULL == tsk->ptr)
-      int Lhavefreecell = as->labels++;
-      int Lcellallocated = as->labels++;
-
-      I_MOV(reg(ESI),absmem((int)&tsk->newgenoffset));
-      I_CMP(reg(ESI),imm(sizeof(block)-sizeof(cell)));
-      I_JL(label(Lhavefreecell));
-
-      /* Fall back to C version */
-
-      BEGIN_CALL(4);
-      I_PUSH(imm((int)tsk));
-      I_MOV(reg(EAX),imm((int)alloc_cell));
-      I_CALL(reg(EAX));
-      I_ADD(reg(ESP),imm(4));
-      I_MOV(regmem(ESP,32-PUSHAD_OFFSET_ESI),reg(EAX));
-      END_CALL;
-      I_JMP(label(Lcellallocated));
-
-      /* Allocate cell directly here; ESI points to newgenoffset from above */
-
-      LABEL(Lhavefreecell);
-
-      // newgenoffset += sizeof(cell)
-      I_LEA(reg(EAX),regmem(ESI,sizeof(cell)));
-      I_MOV(absmem((int)&tsk->newgenoffset),reg(EAX));
-
-      // get correct cell position
-      I_ADD(reg(ESI),absmem((int)&tsk->newgen));
-
-      // Set flags on new cell
-      I_MOV(reg(EAX),absmem((int)&tsk->newcellflags));
-      I_MOV(regmem(ESI,CELL_FLAGS),reg(EAX));
-
-      LABEL(Lcellallocated);
+      asm_alloc_cell_to_esi(tsk,as);
 
       // newfholder->type = CELL_FRAME;
       I_MOV(regmem(ESI,CELL_TYPE),imm(CELL_FRAME));
@@ -1381,6 +1397,90 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         I_FSTP_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
         LABEL(bplabels[0][addr]);
         break;
+      case B_CONS:
+        asm_alloc_cell_to_esi(tsk,as);
+        I_MOV(regmem(ESI,CELL_TYPE),imm(CELL_CONS));
+
+        I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+        I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4));
+        I_MOV(regmem(ESI,CELL_FIELD1),reg(EAX));
+        I_MOV(regmem(ESI,CELL_FIELD1+4),reg(EBX));
+
+        I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-2)));
+        I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-2)+4));
+        I_MOV(regmem(ESI,CELL_FIELD2),reg(EAX));
+        I_MOV(regmem(ESI,CELL_FIELD2+4),reg(EBX));
+
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)),reg(ESI));
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-2)+4),imm(PNTR_VALUE));
+
+        LABEL(bplabels[0][addr]);
+        break;
+      case B_HEAD: {
+        int Linvalid = as->labels++;
+        int Lend = as->labels++;
+        int Lnotcons = as->labels++;
+        asm_jump_if_number(tsk,as,instr->expcount-1,Linvalid);
+        I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1))); // EAX now points to the cell
+        I_MOV(reg(EBX),regmem(EAX,CELL_TYPE)); // EBX = cell type
+
+        I_CMP(reg(EBX),imm(CELL_CONS));
+        I_JNE(label(Lnotcons));
+
+        /* cons cell */
+        I_MOV(reg(ECX),regmem(EAX,CELL_FIELD1));
+        I_MOV(reg(EDX),regmem(EAX,CELL_FIELD1+4));
+
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)),reg(ECX));
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4),reg(EDX));
+        I_JMP(label(Lend));
+
+        LABEL(Lnotcons);
+        I_CMP(reg(EBX),imm(CELL_AREF));
+        I_JNE(label(Linvalid));
+
+        /* array reference */
+
+        // EBX = array
+        I_MOV(reg(ECX),regmem(EAX,CELL_FIELD1));
+        // EDX = index
+        I_MOV(reg(EDX),regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4));
+        I_AND(reg(EDX),imm(INDEX_MASK));
+
+        I_CMP(regmem(ECX,CARRAY_ELEMSIZE),imm(sizeof(pntr)));
+        int Lcharelem = as->labels++;
+        I_JNE(label(Lcharelem));
+        /* pntr elements */
+
+        I_MOV(reg(EAX),regmemscaled(ECX,CARRAY_ELEMENTS,SCALE_8,EDX));
+        I_MOV(reg(EBX),regmemscaled(ECX,CARRAY_ELEMENTS+4,SCALE_8,EDX));
+
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)),reg(EAX));
+        I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)+4),reg(EBX));
+
+        I_JMP(label(Lend));
+
+        /* char elements */
+        LABEL(Lcharelem);
+
+        // -3 is to avoid going beyond end of allocated memory
+        I_MOV(reg(EAX),regmemscaled(ECX,CARRAY_ELEMENTS-3,SCALE_1,EDX));
+        I_SHR(reg(EAX),imm(24));
+        I_MOV(absmem((int)&tsk->itransfer),reg(EAX));
+        I_FILD(absmem((int)&tsk->itransfer));
+
+        I_FSTP_64(regmem(EBP,FRAME_DATA+8*(instr->expcount-1)));
+
+        I_JMP(label(Lend));
+
+        LABEL(Linvalid);
+        I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
+        I_JMP(label(Lheaderror));
+
+        LABEL(Lend);
+        LABEL(bplabels[0][addr]);
+        break;
+      }
       default:
         I_MOV(regmem(EBP,FRAME_INSTR),imm((int)(instr+1)));
         I_LEA(reg(ECX),regmem(EBP,FRAME_DATA+8*(instr->expcount-nargs)));
@@ -1793,6 +1893,17 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   I_POPF();
   I_RET();
 
+  /************** head_error ************/
+  LABEL(Lheaderror);
+  runnable_owner_task(tsk,as);
+  BEGIN_CALL(4);
+  I_PUSH(imm((int)tsk));
+  I_MOV(reg(EAX),imm((int)native_head_error));
+  I_CALL(reg(EAX));
+  I_ADD(reg(ESP),imm(4));
+  END_CALL;
+  I_JMP(label(Lfinished));
+
   /************** cap_error ************/
   LABEL(Lcaperror);
   // Caller has set EAX = pntr* referring to offending value
@@ -1861,6 +1972,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
 
   tsk->bcend_addr = tsk->code+as->labeladdrs[Lbcend];
   tsk->trap_addr = tsk->code+as->labeladdrs[Ltrap];
+  tsk->headerror_addr = tsk->code+as->labeladdrs[Lheaderror];
   tsk->caperror_addr = tsk->code+as->labeladdrs[Lcaperror];
   tsk->argerror_addr = tsk->code+as->labeladdrs[Largerror];
 

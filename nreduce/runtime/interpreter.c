@@ -102,6 +102,11 @@ void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl)
     fprintf(f,"%s:%d: ",bc_string(tsk->bcdata,sl.fileno),sl.lineno);
 }
 
+void head_error(task *tsk)
+{
+  set_error(tsk,"Invalid argument passed to head");
+}
+
 void cap_error(task *tsk, pntr cappntr)
 {
   assert(CELL_CAP == pntrtype(cappntr));

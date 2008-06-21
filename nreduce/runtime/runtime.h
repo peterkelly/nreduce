@@ -613,6 +613,7 @@ typedef struct task {
   int *cpu_to_bcaddr;
   void *bcend_addr;
   void *trap_addr;
+  void *headerror_addr;
   void *caperror_addr;
   void *argerror_addr;
   void *normal_esp;
@@ -621,6 +622,7 @@ typedef struct task {
   int trap_pending;
   int trap_bcaddr;
   void *interrupt_return_eip;
+  int itransfer;
 
   /* tracing */
   pntr trace_root;
@@ -780,6 +782,7 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj);
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
 void add_pending_mark(task *tsk, gaddr addr);
 void spark(task *tsk, frame *f);
+void head_error(task *tsk);
 void cap_error(task *tsk, pntr cappntr);
 void handle_error(task *tsk);
 void make_item_frame(task *tsk, frame *runnable, int expcount, int pos);
