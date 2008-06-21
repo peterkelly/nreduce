@@ -74,7 +74,7 @@ public class GenScripts
     }
 
     PrintWriter out = new PrintWriter(scriptsDir+"/all.sh");
-    for (int run = 0; run < 5; run++) {
+    for (int run = 1; run <= 5; run++) {
       for (int i = 0; i < maxvalues; i++) {
         for (ProgTest test : tests) {
           if (i < test.values.length) {
