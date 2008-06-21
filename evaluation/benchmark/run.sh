@@ -59,9 +59,9 @@ if [ -e "${PROGRAM}2" ]; then
   runcmd "./${PROGRAM}2" "c2"
 fi
 
-runcmd "java ${PROGRAM}" "java"
+runcmd "java -Xmx256m ${PROGRAM}" "java"
 if [ -e "${PROGRAM}2.class" ]; then
-  runcmd "java ${PROGRAM}2" "java2"
+  runcmd "java -Xmx256m ${PROGRAM}2" "java2"
 fi
 
 runcmd "./${PROGRAM}.pl" "perl"
