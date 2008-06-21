@@ -63,7 +63,7 @@ public class GenScripts
     tests.add(new ProgTest("matmult",new int[]{100,200,300,400}));
     tests.add(new ProgTest("mergesort",new int[]{100000,200000,300000,400000}));
     tests.add(new ProgTest("quicksort",new int[]{100000,200000,300000,400000}));
-    tests.add(new ProgTest("nsieve",new int[]{2500000,5000000,7500000,10000000}));
+    tests.add(new ProgTest("nsieve",new int[]{2000000,4000000,6000000,8000000}));
     tests.add(new ProgTest("nfib",new int[]{30,32,34,36}));
 
     int maxvalues = 0;
@@ -74,10 +74,12 @@ public class GenScripts
     }
 
     PrintWriter out = new PrintWriter(scriptsDir+"/all.sh");
-    for (int i = 0; i < maxvalues; i++) {
-      for (ProgTest test : tests) {
-        if (i < test.values.length) {
-          out.println("./run.sh "+test.name+" "+test.values[i]+" results/run1");
+    for (int run = 0; run < 5; run++) {
+      for (int i = 0; i < maxvalues; i++) {
+        for (ProgTest test : tests) {
+          if (i < test.values.length) {
+            out.println("./run.sh "+test.name+" "+test.values[i]+" results/run"+run);
+          }
         }
       }
     }
