@@ -1,0 +1,2 @@
+#!/bin/bash
+sglri -p lang.tbl -i $1

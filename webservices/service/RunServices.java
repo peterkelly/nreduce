@@ -8,6 +8,7 @@ import service.calcdw.CalcDW;
 import service.peoplerpc.PeopleRPC;
 import service.peopledw.PeopleDW;
 import service.mandelbrot.Mandelbrot;
+import service.store.Store;
 
 public class RunServices
 {
@@ -26,5 +27,6 @@ public class RunServices
         Endpoint.publish(base+"/peoplerpc",new PeopleRPC());
         Endpoint.publish(base+"/peopledw",new PeopleDW());
         Endpoint.publish(base+"/mandelbrot",new Mandelbrot());
+        Endpoint.publish(base+"/store",new Store());
     }
 }

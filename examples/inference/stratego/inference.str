@@ -1,0 +1,56 @@
+module inference
+imports lang libstratego-lib
+
+rules
+
+//E0 : Ide("+") -> Type(Ide("+"),Fun(Integer(),Fun(Integer(),Integer())))
+
+S : Type(Ide("+"),Var(t)) -> Type(Ide("+"),Var(t))
+    where rules(R : Var(t) -> Fun(Integer(),Fun(Integer(),Integer())))
+
+
+/*
+S : Type(App(Type(e1,Fun(t1,t2)),Type(e2,Var(t3))),t4) ->
+    Type(App(Type(e1,Fun(t1,t2)),Type(e2,Var(t3))),t4)
+    where rules(R: Var(t3) -> t1)
+
+S : Type(App(Type(e1,Fun(t1,t2)),Type(e2,t3)),Var(t4)) ->
+    Type(App(Type(e1,Fun(t1,t2)),Type(e2,t3)),Var(t4))
+    where rules(R: Var(t4) -> t2)
+*/
+
+S : Type(App(Type(e1,Var(t1)),Type(e2,t3)),t4) ->
+    Type(App(Type(e1,Var(t1)),Type(e2,t3)),t4)
+    where rules(R: Var(t1) -> Fun(t3,t4))
+
+/*
+S : Type(App(Type(e1,t1),Type(e2,t2)),t3) -> Type(App(Type(e1,t1),Type(e2,t2)),t3)
+    where ?Var(t1);
+          rules(R : t1 -> Fun(t2,t3))
+*/
+
+E : App(e1,e2) -> Type(App(e1,e2),Var(<new>))
+E : Int(x) -> Type(Int(x),Integer())
+E : Dbl(x) -> Type(Dbl(x),Double())
+E : Ide(x) -> Type(Ide(x),Var(<new>))
+E : Letrec(b,e) -> Type(Letrec(b,e),Var(<new>))
+
+strategies
+
+  main = io-wrap(inference)
+
+
+  inference =
+  bottomup(try(E))
+; innermost(S <+ R)
+//; bottomup(try(S))
+//; innermost(R)
+
+signature
+  constructors
+    Type : Unknown * Unknown -> Unknown
+    Fun : Unknown * Unknown -> Unknown
+    Integer : Unknown
+    Double : Unknown
+    Any : Unknown
+    Var : Unknown -> Unknown

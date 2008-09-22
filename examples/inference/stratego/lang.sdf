@@ -1,0 +1,66 @@
+module lang
+
+exports
+  lexical syntax
+    [\ \t\n\r]    -> LAYOUT
+  context-free restrictions
+    LAYOUT? -/- [\ \t\n\r]
+
+  sorts Id Int Dbl String StrChar
+  lexical syntax
+    [A-Za-z][A-Za-z0-9]*            -> Id
+    [0-9]+                          -> Int
+    [0-9]+"."[0-9]+                 -> Dbl
+    "\"" StrChar* "\""              -> String
+    ~[\"\\\n]                       -> StrChar
+    [\\][\"\\n]                     -> StrChar
+
+    "+"                             -> Id
+    "-"                             -> Id
+    "*"                             -> Id
+    "/"                             -> Id
+    "%"
+
+    "="                             -> Id
+    "=="                            -> Id
+    "!="                            -> Id
+    "<"                             -> Id
+    "<="                            -> Id
+    ">"                             -> Id
+    ">="                            -> Id
+
+    "<<"                            -> Id
+    ">>"                            -> Id
+    "&"                             -> Id
+    "|"                             -> Id
+    "^"                             -> Id
+    "~"                             -> Id
+
+    "&&"                            -> Id
+    "||"                            -> Id
+    "++"                            -> Id
+
+  lexical restrictions
+    Id  -/- [A-Za-z0-9]
+    Int -/- [0-9\.]
+    Dbl -/- [0-9]
+
+  sorts Expr Binding
+
+  context-free syntax
+
+  "if"                              -> Expr {reject}
+  Int                               -> Expr {cons("Int")}
+  Dbl                               -> Expr {cons("Dbl")}
+  Id                                -> Expr {cons("Ide")}
+  "(" Expr ")"                      -> Expr {bracket}
+  "if" "(" Expr ")"
+  "then" Expr "else" Expr           -> Expr {cons("if")}
+  Id "=" Expr                       -> Binding {cons("Binding")}
+
+  context-free priorities
+   Expr Expr                        -> Expr {cons("App"),left}
+  > "!" Id "." Expr                   -> Expr {cons("Sym")}
+  > "letrec" Binding+ "in" Expr -> Expr {cons("Letrec")}
+
+  context-free start-symbols Expr

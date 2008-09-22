@@ -1,0 +1,23 @@
+dorequests n host port path =
+(if (> n 0)
+  (cons
+    (connect host port (++ "GET " (++ path " HTTP/1.0\r\n\r\n")))
+    (dorequests (- n 1) host port path))
+  nil)
+
+sum lst =
+(if lst
+  (+ (head lst) (sum (tail lst)))
+  0)
+
+main args =
+(if (< (len args) 3)
+  "Usage: requests <n> <host> <port> [path]\n"
+(letrec
+  n = (stringtonum (item 0 args))
+  host = (item 1 args)
+  port = (stringtonum (item 2 args))
+  path = (if (>= (len args) 4) (item 3 args) "/")
+  total = (sum (map len (dorequests n host port path)))
+in
+  (++ (numtostring total) "\n")))

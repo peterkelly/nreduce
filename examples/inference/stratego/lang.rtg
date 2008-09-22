@@ -1,0 +1,25 @@
+regular tree grammar
+  start Expr
+  productions
+    ListStarOfBinding0 -> ListPlusOfBinding0
+    ListStarOfBinding0 -> <nil>()
+    ListStarOfBinding0 -> <conc>(ListStarOfBinding0,ListStarOfBinding0)
+    ListPlusOfBinding0 -> <conc>(ListStarOfBinding0,ListPlusOfBinding0)
+    ListPlusOfBinding0 -> <conc>(ListPlusOfBinding0,ListStarOfBinding0)
+    ListPlusOfBinding0 -> <conc>(ListPlusOfBinding0,ListPlusOfBinding0)
+    ListPlusOfBinding0 -> <cons>(Binding,ListStarOfBinding0)
+    ListStarOfStrChar0 -> <string>
+    ListPlusOfStrChar0 -> <string>
+    Expr               -> Letrec(ListPlusOfBinding0,Expr)
+    Expr               -> Sym(Id,Expr)
+    Expr               -> App(Expr,Expr)
+    Binding            -> Binding(Id,Expr)
+    Expr               -> if(Expr,Expr,Expr)
+    Expr               -> Ide(Id)
+    Expr               -> Dbl(Dbl)
+    Expr               -> Int(Int)
+    StrChar            -> <string>
+    String             -> <string>
+    Dbl                -> <string>
+    Int                -> <string>
+    Id                 -> <string>
