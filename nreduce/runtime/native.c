@@ -1143,25 +1143,26 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         int Lwhile = as->labels++;
         int Ldone = as->labels++;
         int Lresumedfetchers = as->labels++;
+        I_MOV(reg(ESI),regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES));
         LABEL(Lwhile);
         {
-          I_MOV(reg(EBX),regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES));
-          I_CMP(reg(EBX),imm(0));
+          I_CMP(reg(ESI),imm(0));
           I_JZ(label(Ldone));
 
-          I_MOV(reg(EAX),regmem(EBX,FRAME_WAITLNK));
-          I_MOV(regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES),reg(EAX));
-          I_MOV(regmem(EBX,FRAME_WAITGLO),imm(0));
-          I_MOV(regmem(EBX,FRAME_WAITLNK),imm(0));
+          I_MOV(reg(EAX),regmem(ESI,FRAME_WAITLNK));
+          I_MOV(regmem(ESI,FRAME_WAITGLO),imm(0));
+          I_MOV(regmem(ESI,FRAME_WAITLNK),imm(0));
 
           // f->rnext = *tsk->runptr;
-          I_MOV(regmem(EBX,FRAME_RNEXT),reg(EBP));
+          I_MOV(regmem(ESI,FRAME_RNEXT),reg(EBP));
           // *tsk->runptr = f;
-          I_MOV(reg(EBP),reg(EBX));
+          I_MOV(reg(EBP),reg(ESI));
+          I_MOV(reg(ESI),reg(EAX));
           I_JMP(label(Lwhile));
         }
-
         LABEL(Ldone);
+
+        I_MOV(regmem(EDI,FRAME_WQ+WAITQUEUE_FRAMES),imm(0));
 
         /* resume fetchers */
         I_CMP(regmem(EDI,FRAME_WQ+WAITQUEUE_FETCHERS),imm(0));
