@@ -1158,9 +1158,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
           I_MOV(regmem(EBX,FRAME_RNEXT),reg(EBP));
           // *tsk->runptr = f;
           I_MOV(reg(EBP),reg(EBX));
-          // f->state = STATE_RUNNING;
-          I_MOV(regmem(EBX,FRAME_STATE),imm(STATE_RUNNING));
-
           I_JMP(label(Lwhile));
         }
 
@@ -1579,7 +1576,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       // block_frame(tsk,curf);
       I_MOV(reg(EAX),regmem(EBP,FRAME_RNEXT));
       I_MOV(regmem(EBP,FRAME_RNEXT),imm(0));
-      I_MOV(regmem(EBP,FRAME_STATE),imm(STATE_BLOCKED));
       I_MOV(reg(EBP),reg(EAX));
 
       // run_frame(tsk,newf);
@@ -1595,7 +1591,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       LABEL(Ldorun);
 
       I_MOV(regmem(EDI,FRAME_RNEXT),reg(EBP));
-      I_MOV(regmem(EDI,FRAME_STATE),imm(STATE_RUNNING));
+      I_MOV(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
       I_MOV(reg(EBP),reg(EDI));
 
       LABEL(Lafterrun);
@@ -1644,7 +1640,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       int n = instr->arg1;
 
       // newf = frame_new(tsk,0);
-      asm_frame_new(tsk,as,0,STATE_RUNNING);
+      asm_frame_new(tsk,as,0,STATE_ACTIVE);
       // EDI == frame pointer
 
       // newf->c = 0;
@@ -1675,7 +1671,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
          already initialised to STATE_NEW when we created the frame above. */
       I_MOV(reg(EAX),regmem(EBP,FRAME_RNEXT));
       I_MOV(regmem(EBP,FRAME_RNEXT),imm(0));
-      I_MOV(regmem(EBP,FRAME_STATE),imm(STATE_BLOCKED));
       I_MOV(regmem(EDI,FRAME_RNEXT),reg(EAX));
 
       /* Jump directly to the new frame, instead of calling swap_in() */

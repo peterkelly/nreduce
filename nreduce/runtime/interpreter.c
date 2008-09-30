@@ -537,8 +537,7 @@ static void interpreter_get_stats(task *tsk, get_stats_msg *m)
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
       switch (f->state) {
       case STATE_SPARKED: gsrm.sparked++; break;
-      case STATE_RUNNING: gsrm.running++; break;
-      case STATE_BLOCKED: gsrm.blocked++; break;
+      case STATE_ACTIVE: gsrm.running++; break;
       default: break;
       }
     }
@@ -690,7 +689,7 @@ static void interpreter_fetch(task *tsk, message *msg)
     add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
   }
   else if ((CELL_FRAME == pntrtype(obj)) &&
-           ((STATE_RUNNING == pframe(obj)->state) || (STATE_BLOCKED == pframe(obj)->state))) {
+           (STATE_ACTIVE == pframe(obj)->state)) {
     add_gaddr(&pframe(obj)->wq.fetchers,storeaddr);
   }
   else if ((CELL_FRAME == pntrtype(obj)) &&
@@ -1323,7 +1322,7 @@ static void find_recursion(task *tsk)
   for (fb = tsk->frameblocks; fb; fb = fb->next) {
     for (i = 0; i < tsk->framesperblock; i++) {
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if (STATE_BLOCKED == f->state) {
+      if (STATE_ACTIVE == f->state) { /* FIXME: check after running/blocked change */
         assert(0 == s->count);
         if (find_frame(tsk,s,f,f)) {
           printf("%p (%s): blocked on self\n",

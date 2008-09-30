@@ -391,9 +391,8 @@ typedef struct cap {
 #define STATE_UNALLOCATED  0
 #define STATE_NEW          1
 #define STATE_SPARKED      2
-#define STATE_RUNNING      3
-#define STATE_BLOCKED      4
-#define STATE_DONE         5
+#define STATE_ACTIVE       3
+#define STATE_DONE         4
 
 typedef struct frame {
   const instruction *instr;
@@ -672,7 +671,7 @@ void unblock_frame(task *tsk, frame *f);
 void unblock_frame_toend(task *tsk, frame *f);
 #define done_frame(tsk,_f) \
 { \
-  assert(STATE_RUNNING == (_f)->state); \
+  assert(STATE_ACTIVE == (_f)->state); \
   assert((_f) == *tsk->runptr); \
  \
   *tsk->runptr = (_f)->rnext; \

@@ -76,12 +76,11 @@ const char *sysobject_types[SYSOBJECT_COUNT] = {
   "JAVA",
 };
 
-const char *frame_states[6] = {
+const char *frame_states[5] = {
   "UNALLOCATED",
   "NEW",
   "SPARKED",
-  "RUNNING",
-  "BLOCKED",
+  "ACTIVE",
   "DONE",
 };
 
@@ -588,7 +587,7 @@ static void mark_active_frames(task *tsk, unsigned int bit)
   for (fb = tsk->frameblocks; fb; fb = fb->next) {
     for (i = 0; i < tsk->framesperblock; i++) {
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if ((STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state))
+      if (STATE_ACTIVE == f->state)
         mark_frame(tsk,f,bit,0);
     }
   }
@@ -879,7 +878,7 @@ static void replace_refs_other(task *tsk, int check)
     int fi;
     for (fi = 0; fi < tsk->framesperblock; fi++) {
       frame *f = ((frame*)&fb->mem[fi*tsk->framesize]);
-      if ((STATE_RUNNING == f->state) || (STATE_BLOCKED == f->state)) {
+      if (STATE_ACTIVE == f->state) {
         int i;
         for (i = 0; i < f->instr->expcount; i++)
           REPLACE_PNTR(f->data[i]);
@@ -979,8 +978,7 @@ static void sweep_frames(task *tsk)
     for (i = 0; i < tsk->framesperblock; i++) {
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
       if ((STATE_SPARKED == f->state) ||
-          (STATE_RUNNING == f->state) ||
-          (STATE_BLOCKED == f->state)) {
+          (STATE_ACTIVE == f->state)) {
         keep++;
       }
       else if (STATE_NEW == f->state) {

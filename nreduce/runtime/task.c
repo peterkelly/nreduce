@@ -239,7 +239,7 @@ void run_frame(task *tsk, frame *f)
 {
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
     f->rnext = *tsk->runptr;
-    f->state = STATE_RUNNING;
+    f->state = STATE_ACTIVE;
     *tsk->runptr = f;
 
     #ifdef PROFILING
@@ -258,7 +258,7 @@ void run_frame_toend(task *tsk, frame *f)
     *fp = f;
 
     f->rnext = NULL;
-    f->state = STATE_RUNNING;
+    f->state = STATE_ACTIVE;
 
     #ifdef PROFILING
     if (0 <= frame_fno(tsk,f))
@@ -277,34 +277,31 @@ void check_runnable(task *tsk)
 void block_frame(task *tsk, frame *f)
 {
   frame *next;
-  assert(STATE_RUNNING == f->state);
+  assert(STATE_ACTIVE == f->state);
   assert(f == *tsk->runptr);
 
   next = f->rnext;
   f->rnext = NULL;
-  f->state = STATE_BLOCKED;
   *tsk->runptr = next;
 }
 
 void unblock_frame(task *tsk, frame *f)
 {
-  assert(STATE_BLOCKED == f->state);
+  assert(STATE_ACTIVE == f->state);
   assert(NULL == f->rnext);
   f->rnext = *tsk->runptr;
   *tsk->runptr = f;
-  f->state = STATE_RUNNING;
 }
 
 void unblock_frame_toend(task *tsk, frame *f)
 {
   frame **fp;
-  assert(STATE_BLOCKED == f->state);
+  assert(STATE_ACTIVE == f->state);
   assert(NULL == f->rnext);
   fp = tsk->runptr;
   while (*fp)
     fp = &((*fp)->rnext);
   *fp = f;
-  f->state = STATE_RUNNING;
 }
 
 int frame_fno(task *tsk, frame *f)

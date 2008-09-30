@@ -94,9 +94,8 @@ static void check_all_refs(task *tsk, int cnewgen)
         frame *f = (frame*)get_pntr(c->field1);
         int i;
         if ((STATE_NEW == f->state) ||
-            (STATE_RUNNING == f->state) ||
-            (STATE_SPARKED == f->state) ||
-            (STATE_BLOCKED == f->state)) {
+            (STATE_ACTIVE == f->state) ||
+            (STATE_SPARKED == f->state)) {
           for (i = 0; i < f->instr->expcount; i++)
             assert(oldgen_pntr_valid(tsk,cnewgen,f->data[i]));
           assert(oldgen_cell_valid(tsk,cnewgen,f->c));
