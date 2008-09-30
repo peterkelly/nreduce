@@ -1553,6 +1553,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       // RUNNABLE->data[INSTR->arg0] = resolve_pntr(RUNNABLE->data[INSTR->arg0]);
       asm_resolve_stack_pntr(tsk,as,pos); // uses EAX, EBX, ECX, ECX
       // now EBX == type, EAX == cell pointer (if not number)
+      I_CMP(reg(EBX),imm(CELL_NUMBER));
+      I_JZ(label(Ldone));
       I_CMP(reg(EBX),imm(CELL_FRAME));
       I_JNE(label(Lcheckref));
 
@@ -1581,15 +1583,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
 
       // run_frame(tsk,newf);
       int Lafterrun = as->labels++;
-      int Ldorun = as->labels++;
-
-      I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_SPARKED));
-      I_JZ(label(Ldorun));
-      I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_NEW));
-      I_JZ(label(Ldorun));
-      I_JMP(label(Lafterrun));
-
-      LABEL(Ldorun);
+      I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
+      I_JZ(label(Lafterrun));
 
       I_MOV(regmem(EDI,FRAME_RNEXT),reg(EBP));
       I_MOV(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
