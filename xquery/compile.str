@@ -48,8 +48,9 @@ E : |[ element { e1 } { e2 } ]|   ->
 
 /* ---------------------------- Expressions ------------------------------------------- */
 
-// FIXME: support type declaration and positional
-E : |[ for $n in e1 return e2 ]|   -> |{ (xq::foreach e1 (!n.e2)) }|
+// FIXME: support type declaration
+E : |[ for $n in e1 return e2 ]|  -> |{ (xq::foreach e1 (!n.e2)) }|
+E : |[ for $n1 at $n2 in e1 return e2 ]| -> |{ (xq::foreachpos e1 1 (!n1.!n2.e2)) }|
 
 E : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
 E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
@@ -361,12 +362,18 @@ rename = rec rn(
   RenameVar
   <+ |[ for $<id> in <rn> return <id> ]|;
      {| RenameVar: RenameFor; |[ for $<id> in <id> return <rn> ]| |}
+  <+ |[ for $<id> at $<id> in <rn> return <id> ]|;
+     {| RenameVar: RenameFor; |[ for $<id> at $<id> in <id> return <rn> ]| |}
   <+ |[ let $<id> := <rn> return <id> ]|;
      {| RenameVar: RenameLet; |[ let $<id> := <id> return <rn> ]| |}
   <+ all(rn))
 
 RenameFor : |[ for $n1 in e1 return e2 ]| -> |[ for $n2 in e1 return e2 ]|
   where <newvar>n1 => n2
+
+RenameFor : |[ for $n1 at $n3 in e1 return e2 ]| -> |[ for $n2 at $n4 in e1 return e2 ]|
+  where <newvar>n1 => n2;
+        <newvar>n3 => n4
 
 RenameLet : |[ let $n1 := e1 return e2 ]| -> |[ let $n2 := e1 return e2 ]|
   where <newvar>n1 => n2
