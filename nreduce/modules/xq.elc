@@ -421,6 +421,12 @@ foreach lst f =
       (foreach (tail lst) f))
   nil)
 
+foreachpos lst !pos f =
+(if lst
+  (++ (f (cons (head lst) nil) (cons (xml::mknumber pos) nil))
+      (foreachpos (tail lst) (+ pos 1) f))
+  nil)
+
 foreach3 lst f = (apmap3 f lst)
 
 apmap3 f lst = (apmap3a f lst 1 0)
@@ -658,6 +664,41 @@ fn_sum1 lst =
 fn_sum lst =
 (cons (xml::mknumber (fn_sum1 (atomize lst))) nil)
 
+fn_max1 lst max =
+(if lst
+  (letrec
+    num = (tonumber (head lst))
+  in
+    (if (> num max)
+      (fn_max1 (tail lst) num)
+      (fn_max1 (tail lst) max)))
+  max)
+
+fn_max lst =
+(if lst
+  (letrec
+    atlst = (atomize lst)
+  in
+    (cons (xml::mknumber (fn_max1 atlst (tonumber (head atlst)))) nil))
+  nil)
+
+fn_min1 lst min =
+(if lst
+  (letrec
+    num = (tonumber (head lst))
+  in
+    (if (< num min)
+      (fn_min1 (tail lst) num)
+      (fn_min1 (tail lst) min)))
+  min)
+
+fn_min lst =
+(if lst
+  (letrec
+    atlst = (atomize lst)
+  in
+    (cons (xml::mknumber (fn_min1 atlst (tonumber (head atlst)))) nil))
+  nil)
 
 fn_count1 lst !total =
 (if lst
@@ -829,7 +870,7 @@ node_following node =
 
 fn_post url content =
   (letrec
-   text = (post (consimple url) (output 1 content))
+   text = (post (consimple url) (output nil content))
   in
   (cons (xml::parsexml 1 text) nil))
 
@@ -1117,19 +1158,19 @@ xs_boolean arg =
 xs_decimal arg = (cast_number arg)
 xs_float arg = (cast_number arg)
 xs_double arg = (cast_number arg)
-xs_integer arg = (cast_number arg)
-xs_nonPositiveInteger arg = (cast_number arg)
-xs_negativeInteger arg = (cast_number arg)
-xs_long arg = (cast_number arg)
-xs_int arg = (cast_number arg)
-xs_short arg = (cast_number arg)
-xs_byte arg = (cast_number arg)
-xs_nonNegativeInteger arg = (cast_number arg)
-xs_unsignedLong arg = (cast_number arg)
-xs_unsignedInt arg = (cast_number arg)
-xs_unsignedShort arg = (cast_number arg)
-xs_unsignedByte arg = (cast_number arg)
-xs_positiveInteger arg = (cast_number arg)
+xs_integer arg = (cast_integer arg)
+xs_nonPositiveInteger arg = (cast_integer arg)
+xs_negativeInteger arg = (cast_integer arg)
+xs_long arg = (cast_integer arg)
+xs_int arg = (cast_integer arg)
+xs_short arg = (cast_integer arg)
+xs_byte arg = (cast_integer arg)
+xs_nonNegativeInteger arg = (cast_integer arg)
+xs_unsignedLong arg = (cast_integer arg)
+xs_unsignedInt arg = (cast_integer arg)
+xs_unsignedShort arg = (cast_integer arg)
+xs_unsignedByte arg = (cast_integer arg)
+xs_positiveInteger arg = (cast_integer arg)
 
 cast_number arg =
 (if (not arg)
@@ -1140,4 +1181,15 @@ cast_number arg =
   arg
 (if (isstring (head arg))
   (cons (xml::mknumber (stringtonum (xml::item_value (head arg)))) nil)
+  (error "Cannot cast to number")))))
+
+cast_integer arg =
+(if (not arg)
+  nil
+(if (tail arg)
+  (error "Can't pass more than one item to cast operation")
+(if (isnumber (head arg))
+  (cons (xml::mknumber (floor (xml::item_value (head arg)))) nil)
+(if (isstring (head arg))
+  (cons (xml::mknumber (floor (stringtonum (xml::item_value (head arg))))) nil)
   (error "Cannot cast to number")))))
