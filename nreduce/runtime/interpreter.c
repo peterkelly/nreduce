@@ -262,7 +262,11 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
      the frame's cell into a remote reference that points to this target */
   gaddr blankaddr = { tid: -1, lid: -1 };
   f->c->type = CELL_REMOTEREF;
-  make_pntr(f->c->field1,add_target(tsk,blankaddr,p));
+
+  global *glo = targethash_lookup(tsk,p);
+  if (NULL == glo)
+    glo = add_target(tsk,blankaddr,p);
+  make_pntr(f->c->field1,glo);
 
   /* Delete the local copy of the frame */
   f->c = NULL;

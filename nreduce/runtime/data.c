@@ -275,14 +275,38 @@ void read_pntr(reader *rd, pntr *pout)
     }
     case CELL_SYSOBJECT: {
       int type;
+      int ownertid;
+      unsigned int sid;
+      unsigned int ip;
+      unsigned int port;
+      unsigned int localid;
       read_int(rd,&type);
-      sysobject *so = new_sysobject(tsk,type);
-      read_int(rd,&so->ownertid);
+      read_int(rd,&ownertid);
+      read_uint(rd,&ip);
+      read_uint(rd,&port);
+      read_uint(rd,&localid);
+      read_uint(rd,&sid);
 
-      assert(so->ownertid != tsk->tid);
-      assert(so->c);
-      make_pntr(*pout,so->c);
-
+      if (ownertid != tsk->tid) {
+        /* Returned object is a sysobject that exists somewhere else */
+        sysobject *so = new_sysobject(tsk,type);
+        so->ownertid = ownertid;
+        assert(so->c);
+        make_pntr(*pout,so->c);
+      }
+      else {
+        /* Returned object is a sysobject that exists locally... figure out which one it is */
+        socketid sockid;
+        sockid.coordid.ip = ip;
+        sockid.coordid.port = port;
+        sockid.coordid.localid = localid;
+        sockid.sid = sid;
+        sysobject *exso = find_sysobject(tsk,&sockid);
+        assert(NULL != exso);
+        node_log(rd->tsk->n,LOG_DEBUG2,"found");
+        assert(exso->c);
+        make_pntr(*pout,exso->c);
+      }
       break;
     }
     default:
@@ -577,6 +601,10 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
       sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
       write_int(arr,so->type);
       write_int(arr,so->ownertid);
+      write_uint(arr,so->sockid.coordid.ip);
+      write_uint(arr,so->sockid.coordid.port);
+      write_uint(arr,so->sockid.coordid.localid);
+      write_uint(arr,so->sockid.sid);
       break;
     }
     default:
