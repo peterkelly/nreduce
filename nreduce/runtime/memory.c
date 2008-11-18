@@ -84,6 +84,25 @@ const char *frame_states[5] = {
   "DONE",
 };
 
+#define REPLACE_PNTR(p) { if (check) { \
+                            if (is_pntr(p)) { \
+                              assert(REF_FLAGS != ((cell*)(p).data[0])->flags); \
+                              assert(0 != ((cell*)(p).data[0])->type); \
+                              assert(CELL_COUNT > ((cell*)(p).data[0])->type); \
+                            } \
+                         } else if (is_pntr(p)) { \
+                             if (REF_FLAGS == (unsigned int)((cell*)(p).data[0])->flags) {     \
+                               (p).data[0] = (unsigned int)((cell*)(p).data[0])->type; } \
+                         } }
+
+#define REPLACE_CELL(c) { if (check) { \
+                            assert(REF_FLAGS != (c)->flags); \
+                            assert(0 != (c)->type); \
+                            assert(CELL_COUNT > (c)->type); \
+                          } else if (REF_FLAGS == (c)->flags) {                    \
+                            (c) = (cell*)(c)->type; }     \
+                        }
+
 #ifndef INLINE_RESOLVE_PNTR
 pntr resolve_pntr(pntr p)
 {
@@ -521,7 +540,8 @@ static void mark_inflight_local_addresses(task *tsk, unsigned int bit, int justg
   /* mark any in-flight gaddrs that refer to objects in this task */
   for (l = tsk->inflight; l; l = l->next) {
     gaddr *addr = (gaddr*)l->data;
-    if ((0 <= addr->lid) && (addr->tid == tsk->tid)) {
+    assert(0 <= addr->lid);
+    if (addr->tid == tsk->tid) {
       global *glo = addrhash_lookup(tsk,*addr);
       if (NULL == glo) {
         node_log(tsk->n,LOG_ERROR,"Marking inflight local address (case 1) %d@%d: no such global",
@@ -539,7 +559,8 @@ static void mark_inflight_local_addresses(task *tsk, unsigned int bit, int justg
     int count = array_count(tsk->inflight_addrs[tid]);
     for (i = 0; i < count; i++) {
       gaddr addr = array_item(tsk->inflight_addrs[tid],i,gaddr);
-      if ((0 <= addr.lid) && (addr.tid == tsk->tid)) {
+      assert(0 <= addr.lid);
+      if (addr.tid == tsk->tid) {
         global *glo = addrhash_lookup(tsk,addr);
         if (NULL == glo) {
           node_log(tsk->n,LOG_ERROR,"Marking inflight local address (case 2) %d@%d: no such global",
@@ -626,6 +647,17 @@ static void mark_roots(task *tsk, unsigned int bit)
   mark_misc_roots(tsk,bit);
   mark_active_frames(tsk,bit);
   mark_inflight_local_addresses(tsk,bit,0);
+
+  /* Mark all globals that are being fetched but would not otherwise be marked
+     (e.g. scheduled frames) */
+  int h;
+  global *glo;
+  for (h = 0; h < GLOBAL_HASH_SIZE; h++) {
+    for (glo = tsk->targethash[h]; glo; glo = glo->targetnext) {
+      if (glo->fetching)
+        mark_global(tsk,glo,bit,0);
+    }
+  }
 }
 
 static void mark_mature_remoteref_globals(task *tsk, unsigned int bit)
@@ -663,16 +695,44 @@ static void clear_global_marks(task *tsk, unsigned int bit)
     glo->flags &= ~bit;
 }
 
-static void sweep_globals(task *tsk, int all)
+static void preserve_targets(task *tsk)
+{
+  /* Mark all targets whose local replicas are marked. This prevents us from losing the
+     association between the local replica of an object and it's canonical address.
+     This is particularly important for sysobjects, since other parts of the program
+     depend on a sysobject who's owner tid is elsewhere always have a correct target. */
+
+  global *glo;
+  global *next;
+
+  for (glo = tsk->globals.first; glo; glo = next) {
+    next = glo->next;
+    if (!(glo->flags & FLAG_MARKED)) {
+      int check = 0;
+      REPLACE_PNTR(glo->p);
+      assert(CELL_COUNT > ((cell*)(glo->p).data[0])->type);
+      if (((cell*)(glo->p).data[0])->flags & FLAG_MARKED) {
+        glo->flags |= FLAG_MARKED;
+        #ifdef DEBUG_DISTRIBUTION
+        node_log(tsk->n,LOG_DEBUG1,"%d: preserve_targets: preserving %d@%d (%s)",
+                 tsk->tid,glo->addr.lid,glo->addr.tid,
+                 cell_types[pntrtype(glo->p)]);
+        #endif
+      }
+    }
+  }
+}
+
+static void sweep_globals(task *tsk)
 {
   global *glo;
   global *next;
 
   for (glo = tsk->globals.first; glo; glo = next) {
     next = glo->next;
-    if (all || !(glo->flags & FLAG_MARKED)) {
+    if (!(glo->flags & FLAG_MARKED)) {
       #ifdef DEBUG_DISTRIBUTION
-      node_log(tsk->n,LOG_DEBUG1,"task %d: sweep_globals: deleting %d@%d",
+      node_log(tsk->n,LOG_DEBUG1,"%d: sweep_globals: deleting %d@%d",
                tsk->tid,glo->addr.lid,glo->addr.tid);
       #endif
       remove_global(tsk,glo);
@@ -701,25 +761,6 @@ static void clear_marks(task *tsk, unsigned int bit)
   for (glo = tsk->globals.first; glo; glo = glo->next)
     glo->flags &= ~bit;
 }
-
-#define REPLACE_PNTR(p) { if (check) { \
-                            if (is_pntr(p)) { \
-                              assert(REF_FLAGS != ((cell*)(p).data[0])->flags); \
-                              assert(0 != ((cell*)(p).data[0])->type); \
-                              assert(CELL_COUNT > ((cell*)(p).data[0])->type); \
-                            } \
-                         } else if (is_pntr(p)) { \
-                             if (REF_FLAGS == (unsigned int)((cell*)(p).data[0])->flags) {     \
-                               (p).data[0] = (unsigned int)((cell*)(p).data[0])->type; } \
-                         } }
-
-#define REPLACE_CELL(c) { if (check) { \
-                            assert(REF_FLAGS != (c)->flags); \
-                            assert(0 != (c)->type); \
-                            assert(CELL_COUNT > (c)->type); \
-                          } else if (REF_FLAGS == (c)->flags) {                    \
-                            (c) = (cell*)(c)->type; }     \
-                        }
 
 static void *add_to_oldgen(task *tsk, void *mem)
 {
@@ -1215,7 +1256,8 @@ void local_collect(task *tsk)
   #endif
 
   /* Copy phase */
-  sweep_globals(tsk,0);
+  preserve_targets(tsk);
+  sweep_globals(tsk);
   finish_promotion(tsk,prevstart,prevoffset);
   #ifdef CHECK_HEAP_INTEGRITY
   check_all_refs_in_oldgen(tsk);
@@ -1263,7 +1305,8 @@ void local_collect(task *tsk)
       mark_end(tsk,FLAG_MARKED);
 
       /* Copy phase */
-      sweep_globals(tsk,0);
+      preserve_targets(tsk);
+      sweep_globals(tsk);
       copy_heap_finish(tsk,prevgen);
       #ifdef CHECK_HEAP_INTEGRITY
       check_all_refs_in_oldgen(tsk);

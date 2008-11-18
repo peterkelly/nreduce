@@ -311,6 +311,11 @@ int frame_fno(task *tsk, frame *f)
   return tsk->bcaddr_to_fno[bcaddr];
 }
 
+const char *frame_fname(task *tsk, frame *f)
+{
+  return bc_function_name(tsk->bcdata,frame_fno(tsk,f));
+}
+
 int set_error(task *tsk, const char *format, ...)
 {
   va_list ap;

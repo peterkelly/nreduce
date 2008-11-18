@@ -679,6 +679,7 @@ void unblock_frame_toend(task *tsk, frame *f);
   (_f)->state = STATE_DONE; \
 }
 int frame_fno(task *tsk, frame *f);
+const char *frame_fname(task *tsk, frame *f);
 
 int set_error(task *tsk, const char *format, ...);
 
@@ -706,6 +707,8 @@ typedef struct reader {
 #define CHAR_TAG   0x44912234
 #define INT_TAG    0xA492BC09
 #define UINT_TAG   0x9415C132
+#define SHORT_TAG  0x48145AA1
+#define USHORT_TAG 0x99CDA131
 #define DOUBLE_TAG 0x44ABC92F
 #define STRING_TAG 0x93EB1123
 #define BINARY_TAG 0x559204A3
@@ -717,9 +720,12 @@ void read_check_tag(reader *rd, int tag);
 void read_char(reader *rd, char *c);
 void read_int(reader *rd, int *i);
 void read_uint(reader *rd, unsigned int *i);
+void read_short(reader *rd, short *i);
+void read_ushort(reader *rd, unsigned short *i);
 void read_double(reader *rd, double *d);
 void read_string(reader *rd, char **s);
 void read_binary(reader *rd, char *b, int len);
+void read_socketid(reader *rd, socketid *sockid);
 void read_gaddr(reader *rd, gaddr *a);
 void read_pntr(reader *rd, pntr *pout);
 void read_end(reader *rd);
@@ -729,6 +735,8 @@ void write_tag(array *wr, int tag);
 void write_char(array *wr, char c);
 void write_int(array *wr, int i);
 void write_uint(array *wr, unsigned int i);
+void write_short(array *wr, short i);
+void write_ushort(array *wr, unsigned short i);
 void write_double(array *wr, double d);
 void write_string(array *wr, char *s);
 void write_binary(array *wr, const void *b, int len);

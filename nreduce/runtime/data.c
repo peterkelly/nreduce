@@ -83,6 +83,16 @@ void read_uint(reader *rd, unsigned int *i)
   read_tagged_bytes(rd,UINT_TAG,i,sizeof(unsigned int));
 }
 
+void read_short(reader *rd, short *i)
+{
+  read_tagged_bytes(rd,SHORT_TAG,i,sizeof(short));
+}
+
+void read_ushort(reader *rd, unsigned short *i)
+{
+  read_tagged_bytes(rd,USHORT_TAG,i,sizeof(unsigned short));
+}
+
 void read_double(reader *rd, double *d)
 {
   read_tagged_bytes(rd,DOUBLE_TAG,d,sizeof(double));
@@ -109,6 +119,14 @@ void read_binary(reader *rd, char *b, int len)
   assert(rd->pos+len <= rd->size);
   memcpy(b,&rd->data[rd->pos],len);
   rd->pos += len;
+}
+
+void read_socketid(reader *rd, socketid *sockid)
+{
+  read_uint(rd,&sockid->coordid.ip);
+  read_ushort(rd,&sockid->coordid.port);
+  read_uint(rd,&sockid->coordid.localid);
+  read_uint(rd,&sockid->sid);
 }
 
 void read_gaddr(reader *rd, gaddr *a)
@@ -276,37 +294,27 @@ void read_pntr(reader *rd, pntr *pout)
     case CELL_SYSOBJECT: {
       int type;
       int ownertid;
-      unsigned int sid;
-      unsigned int ip;
-      unsigned int port;
-      unsigned int localid;
+      socketid sockid;
       read_int(rd,&type);
       read_int(rd,&ownertid);
-      read_uint(rd,&ip);
-      read_uint(rd,&port);
-      read_uint(rd,&localid);
-      read_uint(rd,&sid);
+      read_socketid(rd,&sockid);
 
-      if (ownertid != tsk->tid) {
-        /* Returned object is a sysobject that exists somewhere else */
-        sysobject *so = new_sysobject(tsk,type);
-        so->ownertid = ownertid;
-        assert(so->c);
-        make_pntr(*pout,so->c);
-      }
-      else {
-        /* Returned object is a sysobject that exists locally... figure out which one it is */
-        socketid sockid;
-        sockid.coordid.ip = ip;
-        sockid.coordid.port = port;
-        sockid.coordid.localid = localid;
-        sockid.sid = sid;
-        sysobject *exso = find_sysobject(tsk,&sockid);
-        assert(NULL != exso);
-        node_log(rd->tsk->n,LOG_DEBUG2,"found");
-        assert(exso->c);
-        make_pntr(*pout,exso->c);
-      }
+      /* We should never receive a sysobject that we already own. The other task should have
+         a target associated with its replica, and just send us a reference, which will be
+         resolved to our copy of the sysobject - a canonical one. */
+
+      /* In the case of sysobjects, the "replicas" simply contain the owntertid and sockid.
+         They cannot be used directly; any function which wants to invoke an operation on a
+         sysobject must migrate to the task which owns it. */
+
+      assert(ownertid != tsk->tid);
+      assert(ownertid == addr.tid);
+
+      sysobject *so = new_sysobject(tsk,type);
+      so->ownertid = ownertid;
+      so->sockid = sockid;
+      assert(so->c);
+      make_pntr(*pout,so->c);
       break;
     }
     default:
@@ -326,9 +334,6 @@ void read_pntr(reader *rd, pntr *pout)
 
     }
     else if (CELL_REMOTEREF == pntrtype(existing->p)) {
-      cell *refcell = get_pntr(existing->p);
-
-
       global *refphys = NULL;
       if (NULL != (refphys = physhash_lookup(tsk,existing->p))) {
         node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Replacing REMOTEREF %d@%d with %d@%d (%s)",
@@ -343,12 +348,14 @@ void read_pntr(reader *rd, pntr *pout)
                  cell_types[pntrtype(*pout)]);
       }
 
+      assert(existing == targethash_lookup(tsk,existing->p));
 
-
+      cell *refcell = get_pntr(existing->p);
       cell_make_ind(tsk,refcell,*pout);
       targethash_remove(tsk,existing);
       existing->p = *pout;
-      targethash_add(tsk,existing);
+      if (NULL == targethash_lookup(tsk,existing->p))
+        targethash_add(tsk,existing);
     }
     else {
       *pout = existing->p;
@@ -414,6 +421,18 @@ void write_uint(array *wr, unsigned int i)
   array_append(wr,&i,sizeof(unsigned int));
 }
 
+void write_short(array *wr, short i)
+{
+  write_tag(wr,SHORT_TAG);
+  array_append(wr,&i,sizeof(short));
+}
+
+void write_ushort(array *wr, unsigned short i)
+{
+  write_tag(wr,USHORT_TAG);
+  array_append(wr,&i,sizeof(unsigned short));
+}
+
 void write_double(array *wr, double d)
 {
   write_tag(wr,DOUBLE_TAG);
@@ -433,6 +452,14 @@ void write_binary(array *wr, const void *b, int len)
   write_tag(wr,BINARY_TAG);
   array_append(wr,&len,sizeof(int));
   array_append(wr,b,len);
+}
+
+void write_socketid(array *wr, socketid sockid)
+{
+  write_uint(wr,sockid.coordid.ip);
+  write_ushort(wr,sockid.coordid.port);
+  write_uint(wr,sockid.coordid.localid);
+  write_uint(wr,sockid.sid);
 }
 
 void write_gaddr(array *wr, task *tsk, gaddr a)
@@ -482,6 +509,7 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     global *glo = targethash_lookup(tsk,p);
     if (NULL != glo) {
       /* The object is a replica, since the original is in another heap */
+      assert((CELL_SYSOBJECT != pntrtype(p)) || (psysobject(p)->ownertid == glo->addr.tid));
       assert(glo->addr.tid != tsk->tid);
       assert(glo->addr.lid >= 0);
       write_int(arr,CELL_REMOTEREF);
@@ -490,6 +518,7 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     else {
       /* The object is an original */
       gaddr addr = get_physical_address(tsk,p);
+      assert((CELL_SYSOBJECT != pntrtype(p)) || (psysobject(p)->ownertid == tsk->tid));
       write_int(arr,CELL_REMOTEREF);
       write_gaddr(arr,tsk,addr);
     }
@@ -601,10 +630,7 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
       sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
       write_int(arr,so->type);
       write_int(arr,so->ownertid);
-      write_uint(arr,so->sockid.coordid.ip);
-      write_uint(arr,so->sockid.coordid.port);
-      write_uint(arr,so->sockid.coordid.localid);
-      write_uint(arr,so->sockid.sid);
+      write_socketid(arr,so->sockid);
       break;
     }
     default:

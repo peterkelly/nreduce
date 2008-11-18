@@ -228,6 +228,10 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
 {
   pntr p;
 
+  /* If the frame does not have a cell associated with it (e.g. because it was created by a CALL
+     instruction), then create a cell, and make the return pointer refer to this cell. We need a
+     cell when scheduling a frame so that it can be converted into a remote reference on the
+     local side. */
   if (NULL == f->c) {
     f->c = alloc_cell(tsk);
     f->c->type = CELL_FRAME;
@@ -246,27 +250,49 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
   if (STATE_SPARKED == f->state)
     unspark_frame(tsk,f);
 
-  /* Get the physical address of the frame's cell, which is about to become a remote reference */
-  gaddr refaddr = get_physical_address(tsk,p);
-
-  /* We can't convert waiting frames to fetchers, since the target address is currently unknown.
-     Wake them up instead, so they'll handle it as a normal remote reference. */
+  /* We can't convert waiting frames to fetchers, since the target address may not be known at
+     this point. Wake them up instead, so they'll handle it as a normal remote reference. */
   resume_local_waiters(tsk,&f->wq);
-  assert(NULL == f->wq.frames);
+  assert(NULL == f->wq.frames); /* Is this valid? What if it was already running, and migrated? */
 
-  /* Transfer the frame to the destination, and tell it to notfy us of the global address it
-     assigns to the frame (which we'll store in the new target) */
-  write_format(msg,tsk,"pa",p,refaddr);
+  /* There are two cases we need to deal with here:
+     1. The frame was originally created by this task. It's "canonical" address is therefore
+     the phyiscal address of the cell.
+     2. The frame was originally created by another task, and was scheduled or migrated here. In
+     this case, it will have an entry in the target hash table, and its canonical address is the
+     target address associated with the cell. We refer to the local copy of the frame as the
+     "replica" (even though it was moved, not copied). In order for other tasks (including the
+     creator) to recognise it as the same frame, we must send this target address. */
 
-  /* Create a target that will hold the address of the frame once it arrives, and convert
-     the frame's cell into a remote reference that points to this target */
-  gaddr blankaddr = { tid: -1, lid: -1 };
-  f->c->type = CELL_REMOTEREF;
+  global *targetglo = targethash_lookup(tsk,p);
+  if (NULL == targetglo) {
+    /* Case 1: Frame was created by this task */
+    gaddr refaddr = get_physical_address(tsk,p);
+    write_format(msg,tsk,"ap",refaddr,p);
 
-  global *glo = targethash_lookup(tsk,p);
-  if (NULL == glo)
-    glo = add_target(tsk,blankaddr,p);
-  make_pntr(f->c->field1,glo);
+    /* Create a target that will hold the address of the frame once it arrives, and convert
+       the frame's cell into a remote reference that points to this target */
+    gaddr blankaddr = { tid: -1, lid: -1 };
+    global *glo = add_target(tsk,blankaddr,p);
+    f->c->type = CELL_REMOTEREF;
+    make_pntr(f->c->field1,glo);
+    glo->fetching = 1;
+
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) SCHEDULE %s; phys %d@%d",tsk->tid,desttsk,
+             frame_fname(tsk,f),glo->addr.lid,glo->addr.tid);
+  }
+  else {
+    /* Case 2: Frame was created by another task */
+    write_format(msg,tsk,"ap",targetglo->addr,p);
+
+    /* Convert the cell back to a remote reference, whose destination is the original address
+       of the frame (which may be different to the destination where its being sent). */
+    f->c->type = CELL_REMOTEREF;
+    make_pntr(f->c->field1,targetglo);
+
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) SCHEDULE %s; replica of %d@%d",tsk->tid,desttsk,
+             frame_fname(tsk,f),targetglo->addr.lid,targetglo->addr.tid);
+  }
 
   /* Delete the local copy of the frame */
   f->c = NULL;
@@ -776,6 +802,13 @@ static void interpreter_respond(task *tsk, message *msg)
   assert(!is_nullpntr(reference->p));
   if (CELL_REMOTEREF != pntrtype(reference->p)) {
 
+    /* FIXME: We should make sure this can't happen - if we receive a frame that we previously
+       had a reference to, we should remove ourselves from the fetcher list. */
+
+    node_log(tsk->n,LOG_ERROR,"recv(%d->%d) RESPOND storeaddr %d@%d - store not remoteref (%s)",
+             from,tsk->tid,storeaddr.lid,storeaddr.tid,pntrtype(reference->p));
+    assert(0);
+
     /* If we get a RESPOND message and it turns out that we already have something
        for the specified store address, it means we have been given the object as
        part of another message (e.g. a frame being schedulued). This means that the
@@ -844,122 +877,65 @@ static void interpreter_respond(task *tsk, message *msg)
     run_frame_toend(tsk,pframe(obj));
 }
 
-static void interpreter_schedule(task *tsk, message *msg)
+static void add_fetcher_unique(waitqueue *wq, gaddr srcaddr)
 {
-  gaddr tellsrc;
-  array *urmsg;
-  int count = 0;
-
-  reader rd;
-  int from = get_idmap_index(tsk,msg->source);
-  assert(0 <= from);
-
-  rd = read_start(tsk,msg->data,msg->size);
-
-  urmsg = write_start();
-
-  array *names = array_new(1,0);
-  array_printf(names,"recv(%d->%d) SCHEDULE",from,tsk->tid);
-
-  start_address_reading(tsk,from,msg->tag);
-  while (rd.pos < rd.size) {
-    pntr framep;
-    gaddr frameaddr;
-    read_pntr(&rd,&framep);
-    read_gaddr(&rd,&tellsrc);
-
-    array_printf(names," ");
-    print_pntr(tsk,names,framep,1);
-
-    assert(CELL_FRAME == pntrtype(framep));
-
-    frameaddr = get_physical_address(tsk,framep);
-    write_format(urmsg,tsk,"aa",tellsrc,frameaddr);
-    node_log(tsk->n,LOG_DEBUG2,"send(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d",
-             tsk->tid,from,tellsrc.lid,tellsrc.tid,frameaddr.lid,frameaddr.tid);
-
-    run_frame_toend(tsk,pframe(framep));
-
-    count++;
+  int origfetcher = 0;
+  list *l;
+  for (l = wq->fetchers; l; l = l->next) {
+    gaddr *ft = (gaddr*)l->data;
+    if ((ft->tid == srcaddr.tid) && (ft->lid == srcaddr.lid))
+      origfetcher = 1;
   }
-  read_end(&rd);
-  finish_address_reading(tsk,from,msg->tag);
-  node_log(tsk->n,LOG_DEBUG1,"%s",names->data);
-  array_free(names);
-
-  msg_send(tsk,from,MSG_UPDATEREF,urmsg->data,urmsg->nbytes);
-  write_end(urmsg);
-
-  tsk->newfish = 1;
+  if (!origfetcher)
+    add_gaddr(&wq->fetchers,srcaddr);
 }
 
-static void interpreter_updateref(task *tsk, message *msg)
+static void interpreter_schedule(task *tsk, message *msg)
 {
-  gaddr refaddr;
-  gaddr remoteaddr;
-
-  reader rd;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
 
-  /* FIXME: possible race condition:
-     1. A SCHEDULEs frame to B
-     2. B sends back UPDATEREF with the address, but message does not yet reach A
-     3. frame migrates to C
-     4. C sends back RESPOND with return value of frame, and it is processed b A
-     5. UPDATEREF finally arrives from B; it's not longer a reference
-        and we'll have an assertion failure */
-
   start_address_reading(tsk,from,msg->tag);
-  rd = read_start(tsk,msg->data,msg->size);
+
+  reader rd = read_start(tsk,msg->data,msg->size);
   while (rd.pos < rd.size) {
-    /* Read the reference address and target address */
-    read_gaddr(&rd,&refaddr);
-    read_gaddr(&rd,&remoteaddr);
-    node_log(tsk->n,LOG_DEBUG2,"recv(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d",
-             from,tsk->tid,refaddr.lid,refaddr.tid,remoteaddr.lid,remoteaddr.tid);
-    assert(refaddr.tid == tsk->tid);
-    assert(refaddr.lid >= 0);
-    assert(remoteaddr.tid == from);
-    assert(remoteaddr.tid != tsk->tid);
-    assert(remoteaddr.lid >= 0);
+    /* Read the frame and originating address */
+    gaddr srcaddr;
+    pntr framep;
+    read_gaddr(&rd,&srcaddr);
 
-    /* Obtain the reference object to be upated */
-    global *reference = addrhash_lookup(tsk,refaddr);
-    assert(reference);
-    assert(reference->addr.tid == refaddr.tid);
-    assert(reference->addr.lid == refaddr.lid);
-    assert(!is_nullpntr(reference->p));
-    assert(CELL_REMOTEREF == pntrtype(reference->p));
-    assert(physhash_lookup(tsk,reference->p) == reference);
-
-    /* Get the target of this reference, which should currently have its lid set to -1 */
-    global *target = pglobal(reference->p);
-    assert(target != reference);
-
-    if ((target->addr.tid != -1) || (target->addr.lid != -1)) {
-      node_log(tsk->n,LOG_ERROR,
-               "recv(%d->%d) UPDATEREF refaddr %d@%d remoteaddr %d@%d -- target is %d@%d",
-               from,tsk->tid,refaddr.lid,refaddr.tid,remoteaddr.lid,remoteaddr.tid,
-               target->addr.lid,target->addr.tid);
+    global *existing = addrhash_lookup(tsk,srcaddr);
+    int have_existing = 0;
+    int existing_type = 0;
+    if (NULL != existing) {
+      have_existing = 1;
+      existing_type = pntrtype(existing->p);
     }
 
-    assert(target->addr.tid == -1);
-    assert(target->addr.lid == -1);
-    assert(NULL == addrhash_lookup(tsk,target->addr)); /* since lid == -1 */
-    /* Now the have the correct address of the target, assign it */
-    target->addr = remoteaddr;
-    addrhash_add(tsk,target);
+    read_pntr(&rd,&framep);
+    assert(CELL_FRAME == pntrtype(framep));
+    frame *newf = pframe(framep);
 
-    frame *w;
-    for (w = target->wq.frames; w; w = w->waitlnk)
-      tsk->nfetching--;
-    assert(0 <= tsk->nfetching);
+    if (have_existing) {
+      node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) SCHEDULE %s %d@%d (existing %s)",
+               from,tsk->tid,
+               frame_fname(tsk,newf),srcaddr.lid,srcaddr.tid,cell_types[existing_type]);
+    }
+    else {
+      node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) SCHEDULE %s %d@%d (new)",from,tsk->tid,
+               frame_fname(tsk,newf),srcaddr.lid,srcaddr.tid);
+    }
 
-    resume_waiters(tsk,&target->wq,reference->p);
+    /* Add the old address as a fetcher, so it will be given the result when the frame
+       eventually returns. But *only* if it is not already listed as a fetcher. */
+    add_fetcher_unique(&newf->wq,srcaddr);
+
+    run_frame_toend(tsk,newf);
   }
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
+
+  tsk->newfish = 1;
 }
 
 static void interpreter_ack(task *tsk, message *msg)
@@ -1192,9 +1168,6 @@ static void handle_message(task *tsk, message *msg)
     break;
   case MSG_SCHEDULE:
     interpreter_schedule(tsk,msg);
-    break;
-  case MSG_UPDATEREF:
-    interpreter_updateref(tsk,msg);
     break;
   case MSG_ACK:
     interpreter_ack(tsk,msg);
