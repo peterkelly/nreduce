@@ -1224,6 +1224,30 @@ static void migrate_to(task *tsk, int desttsk)
   write_end(newmsg);
 }
 
+static void start_frame_running(task *tsk, pntr framep)
+{
+  framep = resolve_pntr(framep);
+  if (CELL_FRAME == pntrtype(framep)) {
+    run_frame(tsk,pframe(framep));
+  }
+  else if (CELL_REMOTEREF == pntrtype(framep)) {
+    /* Send a FETCH request for the frame, so it will migrate here and start running,
+       but don't need to block the current frame since they're supposed to run concurrently */
+    global *target = (global*)get_pntr(get_pntr(framep)->field1);
+    assert(target->addr.tid != tsk->tid);
+
+    gaddr storeaddr = get_physical_address(tsk,framep);
+    assert(storeaddr.tid == tsk->tid);
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (connect)",
+             tsk->tid,target->addr.tid,
+             target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
+    msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
+    assert(0 <= tsk->nfetching);
+    tsk->nfetching++;
+    target->fetching = 1;
+  }
+}
+
 static void b_connect(task *tsk, pntr *argstack)
 {
   frame *curf = *tsk->runptr;
@@ -1330,30 +1354,10 @@ static void b_connect(task *tsk, pntr *argstack)
       }
     }
     else {
-      pntr printer;
       node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) connected",tsk->tid,so->hostname,so->port);
 
       /* Start printing output to the connection */
-      printer = resolve_pntr(argstack[0]);
-      if (CELL_FRAME == pntrtype(printer)) {
-        run_frame(tsk,pframe(printer));
-      }
-      else if (CELL_REMOTEREF == pntrtype(printer)) {
-        /* Send a FETCH request for the printer, so it will migrate here and start running,
-           but don't need to block the current frame since they're supposed to run concurrently */
-        global *target = (global*)get_pntr(get_pntr(printer)->field1);
-        assert(target->addr.tid != tsk->tid);
-
-        gaddr storeaddr = get_physical_address(tsk,printer);
-        assert(storeaddr.tid == tsk->tid);
-        node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (connect)",
-                 tsk->tid,target->addr.tid,
-                 target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
-        msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
-        assert(0 <= tsk->nfetching);
-        tsk->nfetching++;
-        target->fetching = 1;
-      }
+      start_frame_running(tsk,argstack[0]);
 
       /* Return the sysobject */
       argstack[0] = argstack[2];
@@ -1441,8 +1445,7 @@ static void b_readcon(task *tsk, pntr *argstack)
 
       if (strict_evaluation) {
         /* Force the next part of the stream to be read immediately */
-        assert(CELL_FRAME == pntrtype(nextpntr));
-        run_frame(tsk,pframe(nextpntr));
+        start_frame_running(tsk,nextpntr);
       }
     }
   }

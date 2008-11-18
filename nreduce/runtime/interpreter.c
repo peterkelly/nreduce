@@ -1357,12 +1357,16 @@ int handle_interrupt(task *tsk)
 
   if (NULL != (msg = endpoint_receive(tsk->endpt,0))) {
     handle_message(tsk,msg);
+    if (tsk->done)
+      return 1;
     endpoint_interrupt(tsk->endpt); /* may be another one */
   }
 
   while (tsk->paused) {
     msg = endpoint_receive(tsk->endpt,-1);
     handle_message(tsk,msg);
+    if (tsk->done)
+      return 1;
   }
 
   if (NULL == *tsk->runptr) {
@@ -1388,6 +1392,8 @@ int handle_interrupt(task *tsk)
       /* We've got stuff in progress; don't request any more work */
       msg = endpoint_receive(tsk->endpt,-1);
       handle_message(tsk,msg);
+      if (tsk->done)
+        return 1;
       doreturn = 1;
     }
 
