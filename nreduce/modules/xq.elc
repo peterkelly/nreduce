@@ -632,6 +632,21 @@ fn_string_length arg0 =
     (fn_string_length0 (head arg0)))
   (cons (xml::mknumber 0) nil))
 
+fn_string-join lst sep =
+(cons (xml::mkstring (fn_string-join1 lst (fn_string sep))) nil)
+
+fn_string-join1 lst sep =
+(if lst
+  (++ (node_to_string (head lst))
+      (fn_string-join1 (tail lst) sep))
+  nil)
+
+fn_string-join2 lst sep =
+(if lst
+  (++ sep (++ (node_to_string (head lst))
+      (fn_string-join2 (tail lst) sep)))
+  nil)
+
 fn_node_name0 node =
 (letrec
   type = (xml::item_type node)
