@@ -560,5 +560,5 @@ void start_chord(node *n, int localid, endpointid initial, endpointid caller, in
   crd->initial = initial;
   crd->caller = caller;
   crd->stabilize_delay = stabilize_delay;
-  node_add_thread2(n,"chord",chord_thread,crd,NULL,localid,32768);
+  node_add_thread2(n,"chord",chord_thread,crd,NULL,localid,262144);
 }
