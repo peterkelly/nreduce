@@ -301,6 +301,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       done = 1;
       break;
     case MSG_SHUTDOWN:
+      node_log(n,LOG_INFO,"Manager received SHUTDOWN");
       node_shutdown(n);
       done = 1;
       break;

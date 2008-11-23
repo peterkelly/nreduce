@@ -47,6 +47,8 @@
 #include <unistd.h>
 #include <signal.h>
 
+static int ignore_node_failure = 0;
+
 typedef struct launcher {
   node *n;
   char *bcdata;
@@ -413,14 +415,16 @@ static void connection_thread(node *n, endpoint *endpt, void *arg)
     message *msg = endpoint_receive(endpt,-1);
     switch (msg->tag) {
     case MSG_ENDPOINT_EXIT: {
-      endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
-      unsigned char *c;
-      int port;
-      assert(sizeof(endpoint_exit_msg) == msg->size);
-      c = (unsigned char*)&m->epid.ip;
-      port = m->epid.port;
-      fprintf(stderr,"Connection to %u.%u.%u.%u:%u failed\n",c[0],c[1],c[2],c[3],port);
-      exit(1);
+      if (!ignore_node_failure) {
+        endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
+        unsigned char *c;
+        int port;
+        assert(sizeof(endpoint_exit_msg) == msg->size);
+        c = (unsigned char*)&m->epid.ip;
+        port = m->epid.port;
+        fprintf(stderr,"Connection to %u.%u.%u.%u:%u failed\n",c[0],c[1],c[2],c[3],port);
+        exit(1);
+      }
       break;
     }
     case MSG_KILL:
@@ -685,6 +689,7 @@ static void shutdown_thread(node *n, endpoint *endpt, void *arg)
 {
   list *nodes = (list*)arg;
   list *l;
+  ignore_node_failure = 1;
   for (l = nodes; l; l = l->next) {
     endpointid epid = *(endpointid*)l->data;
     epid.localid = MANAGER_ID;
