@@ -300,6 +300,10 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
       node_log(n,LOG_INFO,"Manager received KILL");
       done = 1;
       break;
+    case MSG_SHUTDOWN:
+      node_shutdown(n);
+      done = 1;
+      break;
     default:
       fatal("manager: unexpected message %d",msg->tag);
       break;

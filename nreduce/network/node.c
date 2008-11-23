@@ -242,6 +242,7 @@ static void node_free(node *n)
   destroy_mutex(&n->p->lock);
   close(n->p->ioready_readfd);
   close(n->p->ioready_writefd);
+  node_log(n,LOG_INFO,"Shutdown complete");
   free(n->p);
   free(n);
 }

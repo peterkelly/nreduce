@@ -681,6 +681,18 @@ static void monitor(node *n, list *epids)
     fatal("pthread_join: %s",strerror(errno));
 }
 
+static void shutdown_thread(node *n, endpoint *endpt, void *arg)
+{
+  list *nodes = (list*)arg;
+  list *l;
+  for (l = nodes; l; l = l->next) {
+    endpointid epid = *(endpointid*)l->data;
+    epid.localid = MANAGER_ID;
+    printf("Shutting down "IP_FORMAT":%u\n",IP_ARGS(epid.ip),epid.port);
+    endpoint_send(endpt,epid,MSG_SHUTDOWN,NULL,0);
+  }
+}
+
 int do_client(char *initial_str, int argc, const char **argv)
 {
   int r = 0;
@@ -722,6 +734,14 @@ int do_client(char *initial_str, int argc, const char **argv)
     monitor(n,tasks);
     list_free(nodes,free);
     list_free(tasks,free);
+  }
+  else if (!strcmp(cmd,"shutdown")) {
+    list *nodes = find_nodes(n,initial,0,0);
+    pthread_t thread;
+    node_add_thread(n,"shutdown",shutdown_thread,nodes,&thread);
+    if (0 != pthread_join(thread,NULL))
+      fatal("pthread_join: %s",strerror(errno));
+    list_free(nodes,free);
   }
   else if (!strcmp(cmd,"run")) {
     if (3 > argc) {

@@ -62,6 +62,7 @@
 #define MSG_GET_TASKS           300
 #define MSG_GET_TASKS_RESPONSE  301
 #define MSG_REPORT_ERROR        302
+#define MSG_SHUTDOWN            303
 
 /* Java */
 #define MSG_JCMD                400
