@@ -24,7 +24,8 @@ public class Numbers {
     }
     finally {
       c.close();
-      System.out.println(id+": connection closed");
+      System.out.format("%10d %10d: connection closed\n",
+                        System.currentTimeMillis(),id);
     }
   }
 
@@ -37,7 +38,8 @@ public class Numbers {
     for (int nextid = 0; true; nextid++) {
       final Socket c = s.accept();
       final int id = nextid;
-      System.out.println(id+": accepted connection");
+      System.out.format("%10d %10d: accepted connection\n",
+                        System.currentTimeMillis(),id);
       new Thread() { public void run() {
         try { handle(c,id); } catch (Exception e) { }
       } }.start();

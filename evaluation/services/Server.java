@@ -23,6 +23,8 @@ public abstract class Server
 
   public void handle(Socket c, int id)
   {
+    System.out.format("%10d %10d: accepted connection\n",
+                      System.currentTimeMillis(),id);
     try {
       InputStream cin = c.getInputStream();
       OutputStream cout = c.getOutputStream();
@@ -50,6 +52,8 @@ public abstract class Server
         e.printStackTrace();
       }
     }
+    System.out.format("%10d %10d: connection closed\n",
+                      System.currentTimeMillis(),id);
   }
 
   private int getNthreads()
@@ -64,7 +68,7 @@ public abstract class Server
   {
     byte[] b = new byte[]{0,0,0,0};
     InetAddress addr = InetAddress.getByAddress(b);
-    ServerSocket s = new ServerSocket(port,50,addr);
+    ServerSocket s = new ServerSocket(port,100,addr);
     System.out.println("Started server socket on port "+port);
     for (int nextid = 0; true; nextid++) {
 
