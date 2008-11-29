@@ -363,7 +363,7 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_ALLOC: {
     int i;
     for (i = 0; i < arg0; i++)
-      pushstatus(comp->si,0);
+      pushstatus(comp->si,STATUS_UNKNOWN);
     break;
   }
   case OP_SQUEEZE:
@@ -376,12 +376,12 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
   case OP_MKCAP:
     assert(0 <= comp->si->count-arg1);
     popstatus(comp->si,arg1);
-    pushstatus(comp->si,0);
+    pushstatus(comp->si,STATUS_EVALUATED);
     break;
   case OP_MKFRAME:
     assert(0 <= comp->si->count-arg1);
     popstatus(comp->si,arg1);
-    pushstatus(comp->si,0);
+    pushstatus(comp->si,STATUS_UNKNOWN);
     break;
   case OP_BIF:
     popstatus(comp->si,builtin_info[arg0].nargs-1);
@@ -391,13 +391,13 @@ static void add_instruction(compilation *comp, sourceloc sl, int opcode, int arg
       setstatusat(comp->si,comp->si->count-1,STATUS_UNKNOWN);
     break;
   case OP_PUSHNIL:
-    pushstatus(comp->si,1);
+    pushstatus(comp->si,STATUS_EVALUATED);
     break;
   case OP_PUSHNUMBER:
-    pushstatus(comp->si,1);
+    pushstatus(comp->si,STATUS_EVALUATED);
     break;
   case OP_PUSHSTRING:
-    pushstatus(comp->si,1);
+    pushstatus(comp->si,STATUS_EVALUATED);
     break;
   case OP_ERROR:
     comp->si->invalid = 1;
@@ -704,7 +704,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
         popstatus(comp->si,1); /* for the POP instructions */
 
         LABEL(end);
-        pushstatus(comp->si,1);
+        pushstatus(comp->si,STATUS_SPARKED);
 
       }
       else {
@@ -722,7 +722,7 @@ static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
         stackinfo_freeswap(&comp->si,&oldsi);
 
         LABEL(end);
-        pushstatus(comp->si,1);
+        pushstatus(comp->si,STATUS_SPARKED);
       }
     }
     else if ((SNODE_BUILTIN == app->type) &&
@@ -1363,7 +1363,7 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
        these here, since the sparking will be done at the call site (unless the function call
        is a partial application, which only happens rarely). */
     for (i = 0; i < sc->nargs; i++)
-      pushstatus(comp->si,0);
+      pushstatus(comp->si,STATUS_UNKNOWN);
 
     GLOBSTART(sc->sl,fno,sc->nargs);
     comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
@@ -1493,7 +1493,7 @@ static void compile_prologue(compilation *comp, source *src)
 
   comp->bch.erroraddr = array_count(comp->instructions);
   comp->si = stackinfo_new(NULL);
-  pushstatus(comp->si,0);
+  pushstatus(comp->si,STATUS_UNKNOWN);
   ERROR(nosl);
   stackinfo_free(comp->si);
   comp->si = NULL;
@@ -1519,7 +1519,7 @@ static void compile_evaldo(compilation *comp, source *src)
     int j;
     comp->si = stackinfo_new(NULL);
     for (j = 0; j < i; j++)
-      pushstatus(comp->si,0);
+      pushstatus(comp->si,STATUS_UNKNOWN);
     EVAL(nosl,0);
     DO(nosl,0);
     stackinfo_free(comp->si);
@@ -1551,7 +1551,7 @@ static void compile_builtins(compilation *comp)
     comp->si = stackinfo_new(NULL);
 
     for (argno = 0; argno < bi->nargs; argno++)
-      pushstatus(comp->si,0);
+      pushstatus(comp->si,STATUS_UNKNOWN);
 
     comp->finfo[i].address = array_count(comp->instructions);
     comp->finfo[i].addressne = array_count(comp->instructions);
