@@ -38,6 +38,90 @@
 #include <math.h>
 #include <errno.h>
 
+/* Write & read functions for basic types */
+
+array *write_start(void)
+{
+  return array_new(sizeof(char),0);
+}
+
+void write_tag(array *wr, int tag)
+{
+  array_append(wr,&tag,sizeof(int));
+}
+
+void write_char(array *wr, char c)
+{
+  write_tag(wr,CHAR_TAG);
+  array_append(wr,&c,sizeof(char));
+}
+
+void write_int(array *wr, int i)
+{
+  write_tag(wr,INT_TAG);
+  array_append(wr,&i,sizeof(int));
+}
+
+void write_uint(array *wr, unsigned int i)
+{
+  write_tag(wr,UINT_TAG);
+  array_append(wr,&i,sizeof(unsigned int));
+}
+
+void write_short(array *wr, short i)
+{
+  write_tag(wr,SHORT_TAG);
+  array_append(wr,&i,sizeof(short));
+}
+
+void write_ushort(array *wr, unsigned short i)
+{
+  write_tag(wr,USHORT_TAG);
+  array_append(wr,&i,sizeof(unsigned short));
+}
+
+void write_double(array *wr, double d)
+{
+  write_tag(wr,DOUBLE_TAG);
+  array_append(wr,&d,sizeof(d));
+}
+
+void write_string(array *wr, char *s)
+{
+  int len = strlen(s);
+  write_tag(wr,STRING_TAG);
+  array_append(wr,&len,sizeof(int));
+  array_append(wr,s,len);
+}
+
+void write_binary(array *wr, const void *b, int len)
+{
+  write_tag(wr,BINARY_TAG);
+  array_append(wr,&len,sizeof(int));
+  array_append(wr,b,len);
+}
+
+void write_socketid(array *wr, socketid sockid)
+{
+  write_uint(wr,sockid.coordid.ip);
+  write_ushort(wr,sockid.coordid.port);
+  write_uint(wr,sockid.coordid.localid);
+  write_uint(wr,sockid.sid);
+}
+
+void write_gaddr(array *wr, task *tsk, gaddr a)
+{
+  write_tag(wr,GADDR_TAG);
+  array_append(wr,&a.tid,sizeof(int));
+  array_append(wr,&a.lid,sizeof(int));
+  add_gaddr(&tsk->inflight,a);
+}
+
+void write_end(array *wr)
+{
+  array_free(wr);
+}
+
 reader read_start(task *tsk, const char *data, int size)
 {
   reader rd;
@@ -138,6 +222,255 @@ void read_gaddr(reader *rd, gaddr *a)
     rd->tsk->naddrsread++;
 }
 
+void read_end(reader *rd)
+{
+  assert(rd->size == rd->pos);
+}
+
+/* Write & read functions for heap objects */
+
+static void write_aref(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_AREF == pntrtype(p));
+  carray *carr = aref_array(p);
+  int index = aref_index(p);
+  int i;
+
+  assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
+  assert(MAX_ARRAY_SIZE >= carr->size);
+  assert(index < carr->size);
+
+  write_int(arr,index);
+  write_int(arr,carr->elemsize);
+  write_int(arr,carr->size);
+
+  if (1 == carr->elemsize)
+    write_binary(arr,carr->elements,carr->size);
+  else
+    for (i = 0; i < carr->size; i++)
+      write_ref(arr,tsk,((pntr*)carr->elements)[i]);
+  write_ref(arr,tsk,carr->tail);
+}
+
+static void read_aref(reader *rd, pntr *pout)
+{
+  task *tsk = rd->tsk;
+  int index;
+  int elemsize;
+  int size;
+  carray *carr;
+  int i;
+
+  read_int(rd,&index);
+  read_int(rd,&elemsize);
+  read_int(rd,&size);
+
+  assert((1 == elemsize) || (sizeof(pntr) == elemsize));
+  assert(MAX_ARRAY_SIZE >= size);
+  assert(index < size);
+
+  carr = carray_new(tsk,elemsize,size,NULL,NULL);
+  carr->size = size;
+  assert(carr->alloc == size);
+  if (1 == elemsize)
+    read_binary(rd,carr->elements,size);
+  else
+    for (i = 0; i < size; i++)
+      read_pntr(rd,&((pntr*)carr->elements)[i]);
+  read_pntr(rd,&carr->tail);
+  make_aref_pntr(*pout,carr->wrapper,index);
+}
+
+static void write_cons(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_CONS == pntrtype(p));
+  write_ref(arr,tsk,get_pntr(p)->field1);
+  write_ref(arr,tsk,get_pntr(p)->field2);
+}
+
+static void read_cons(reader *rd, pntr *pout)
+{
+  task *tsk = rd->tsk;
+  cell *c;
+  pntr head;
+  pntr tail;
+
+  read_pntr(rd,&head);
+  read_pntr(rd,&tail);
+
+  c = alloc_cell(tsk);
+  c->type = CELL_CONS;
+  c->field1 = head;
+  c->field2 = tail;
+  make_pntr(*pout,c);
+}
+
+static void write_frame(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_FRAME == pntrtype(p));
+  frame *f = (frame*)get_pntr(get_pntr(p)->field1);
+  int i;
+  int count = f->instr->expcount;
+  int address = f->instr-bc_instructions(tsk->bcdata);
+  int nfetchers = list_count(f->wq.fetchers);
+  list *l;
+
+  assert((STATE_NEW == f->state) || (STATE_DONE == f->state));
+  assert(NULL == f->retp);
+  assert(NULL == f->wq.frames);
+
+  if (STATE_DONE == f->state) {
+    int fno = frame_fno(tsk,f);
+    int startaddr = bc_funinfo(tsk->bcdata)[fno].address;
+    /* We can only migrate a running frame if it's a BIF wrapper... this is because the
+       destination will restart evaluation from the beginning of the function to ensure
+       all necessary stack positions are evaluated */
+    assert(NUM_BUILTINS > fno);
+    address = startaddr+1; /* skip GLOBSTART */
+  }
+
+  write_int(arr,address);
+
+  assert(f->c);
+
+  /* Idea: when the recipient gets the frame, have it send RESPOND messages to
+     all the fetchers, telling them that the result object is a remoteref that
+     points to the new addres. I think this might lead to a race condition though,
+     beacuse these RESPOND messages could arrive in arbitrary order. Perhaps it's
+     safest to just send back one RESPOND message when the actual value is known. */
+
+  /* Transfer fetchers */
+  write_int(arr,nfetchers);
+  for (l = f->wq.fetchers; l; l = l->next) {
+    gaddr *addr = (gaddr*)l->data;
+    write_gaddr(arr,tsk,*addr);
+  }
+  list_free(f->wq.fetchers,free);
+  f->wq.fetchers = NULL;
+
+  /* Transfer data */
+  for (i = 0; i < count; i++)
+    write_ref(arr,tsk,f->data[i]);
+}
+
+static void read_frame(reader *rd, pntr *pout)
+{
+  task *tsk = rd->tsk;
+  frame *fr = frame_new(tsk);
+  int i;
+  int count;
+  int address;
+  int nfetchers;
+
+  fr->c = alloc_cell(tsk);
+  fr->c->type = CELL_FRAME;
+  make_pntr(fr->c->field1,fr);
+  make_pntr(*pout,fr->c);
+
+  read_int(rd,&address);
+  fr->instr = bc_instructions(tsk->bcdata)+address;
+
+  /* Read fetchers */
+  read_int(rd,&nfetchers);
+  for (i = 0; i < nfetchers; i++) {
+    gaddr *addr = (gaddr*)malloc(sizeof(gaddr));
+    read_gaddr(rd,addr);
+    list_push(&fr->wq.fetchers,addr);
+  }
+
+  count = fr->instr->expcount;
+  for (i = 0; i < count; i++)
+    read_pntr(rd,&fr->data[i]);
+}
+
+static void write_cap(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_CAP == pntrtype(p));
+  cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
+  int i;
+  write_int(arr,cp->arity);
+  write_int(arr,cp->address);
+  write_int(arr,cp->fno);
+  write_int(arr,cp->sl.fileno);
+  write_int(arr,cp->sl.lineno);
+  write_int(arr,cp->count);
+  for (i = 0; i < cp->count; i++)
+    write_ref(arr,tsk,cp->data[i]);
+}
+
+static void read_cap(reader *rd, pntr *pout)
+{
+  task *tsk = rd->tsk;
+  int arity;
+  int address;
+  int fno;
+  sourceloc sl;
+  int count;
+
+  read_int(rd,&arity);
+  read_int(rd,&address);
+  read_int(rd,&fno);
+  read_int(rd,&sl.fileno);
+  read_int(rd,&sl.lineno);
+  read_int(rd,&count);
+  assert(MAX_CAP_SIZE > count);
+
+  cap *cp = cap_alloc(tsk,1,0,0,count);
+  cell *capcell;
+  int i;
+
+  capcell = alloc_cell(tsk);
+  capcell->type = CELL_CAP;
+  make_pntr(capcell->field1,cp);
+  make_pntr(*pout,capcell);
+
+  cp->arity = arity;
+  cp->address = address;
+  cp->fno = fno;
+  cp->sl = sl;
+  cp->count = count;
+
+  for (i = 0; i < count; i++)
+    read_pntr(rd,&cp->data[i]);
+}
+
+static void write_sysobject(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_SYSOBJECT == pntrtype(p));
+  sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
+  write_int(arr,so->type);
+  write_int(arr,so->ownertid);
+  write_socketid(arr,so->sockid);
+}
+
+static void read_sysobject(reader *rd, pntr *pout, gaddr addr)
+{
+  task *tsk = rd->tsk;
+  int type;
+  int ownertid;
+  socketid sockid;
+  read_int(rd,&type);
+  read_int(rd,&ownertid);
+  read_socketid(rd,&sockid);
+
+  /* We should never receive a sysobject that we already own. The other task should have
+     a target associated with its replica, and just send us a reference, which will be
+     resolved to our copy of the sysobject - a canonical one. */
+
+  /* In the case of sysobjects, the "replicas" simply contain the owntertid and sockid.
+     They cannot be used directly; any function which wants to invoke an operation on a
+     sysobject must migrate to the task which owns it. */
+
+  assert(ownertid != tsk->tid);
+  assert(ownertid == addr.tid);
+
+  sysobject *so = new_sysobject(tsk,type);
+  so->ownertid = ownertid;
+  so->sockid = sockid;
+  assert(so->c);
+  make_pntr(*pout,so->c);
+}
+
 void read_pntr(reader *rd, pntr *pout)
 {
   /* TODO: determine if this refers to an object we already have a copy of, and return
@@ -187,138 +520,12 @@ void read_pntr(reader *rd, pntr *pout)
     read_gaddr(rd,&addr);
 
     switch (type) {
-    case CELL_AREF: {
-      int index;
-      int elemsize;
-      int size;
-      carray *carr;
-      int i;
-
-      read_int(rd,&index);
-      read_int(rd,&elemsize);
-      read_int(rd,&size);
-
-      assert((1 == elemsize) || (sizeof(pntr) == elemsize));
-      assert(MAX_ARRAY_SIZE >= size);
-      assert(index < size);
-
-      carr = carray_new(tsk,elemsize,size,NULL,NULL);
-      carr->size = size;
-      assert(carr->alloc == size);
-      if (1 == elemsize)
-        read_binary(rd,carr->elements,size);
-      else
-        for (i = 0; i < size; i++)
-          read_pntr(rd,&((pntr*)carr->elements)[i]);
-      read_pntr(rd,&carr->tail);
-      make_aref_pntr(*pout,carr->wrapper,index);
-      break;
-    }
-    case CELL_CONS: {
-      cell *c;
-      pntr head;
-      pntr tail;
-
-      read_pntr(rd,&head);
-      read_pntr(rd,&tail);
-
-      c = alloc_cell(tsk);
-      c->type = CELL_CONS;
-      c->field1 = head;
-      c->field2 = tail;
-      make_pntr(*pout,c);
-      break;
-    }
-    case CELL_FRAME: {
-      frame *fr = frame_new(tsk);
-      int i;
-      int count;
-      int address;
-      int nfetchers;
-
-      fr->c = alloc_cell(tsk);
-      fr->c->type = CELL_FRAME;
-      make_pntr(fr->c->field1,fr);
-      make_pntr(*pout,fr->c);
-
-      read_int(rd,&address);
-      fr->instr = bc_instructions(tsk->bcdata)+address;
-
-      /* Read fetchers */
-      read_int(rd,&nfetchers);
-      for (i = 0; i < nfetchers; i++) {
-        gaddr *addr = (gaddr*)malloc(sizeof(gaddr));
-        read_gaddr(rd,addr);
-        list_push(&fr->wq.fetchers,addr);
-      }
-
-      count = fr->instr->expcount;
-      for (i = 0; i < count; i++)
-        read_pntr(rd,&fr->data[i]);
-      break;
-    }
-    case CELL_CAP: {
-      int arity;
-      int address;
-      int fno;
-      sourceloc sl;
-      int count;
-
-      read_int(rd,&arity);
-      read_int(rd,&address);
-      read_int(rd,&fno);
-      read_int(rd,&sl.fileno);
-      read_int(rd,&sl.lineno);
-      read_int(rd,&count);
-      assert(MAX_CAP_SIZE > count);
-
-      cap *cp = cap_alloc(tsk,1,0,0,count);
-      cell *capcell;
-      int i;
-
-      capcell = alloc_cell(tsk);
-      capcell->type = CELL_CAP;
-      make_pntr(capcell->field1,cp);
-      make_pntr(*pout,capcell);
-
-      cp->arity = arity;
-      cp->address = address;
-      cp->fno = fno;
-      cp->sl = sl;
-      cp->count = count;
-
-      for (i = 0; i < count; i++)
-        read_pntr(rd,&cp->data[i]);
-      break;
-    }
-    case CELL_SYSOBJECT: {
-      int type;
-      int ownertid;
-      socketid sockid;
-      read_int(rd,&type);
-      read_int(rd,&ownertid);
-      read_socketid(rd,&sockid);
-
-      /* We should never receive a sysobject that we already own. The other task should have
-         a target associated with its replica, and just send us a reference, which will be
-         resolved to our copy of the sysobject - a canonical one. */
-
-      /* In the case of sysobjects, the "replicas" simply contain the owntertid and sockid.
-         They cannot be used directly; any function which wants to invoke an operation on a
-         sysobject must migrate to the task which owns it. */
-
-      assert(ownertid != tsk->tid);
-      assert(ownertid == addr.tid);
-
-      sysobject *so = new_sysobject(tsk,type);
-      so->ownertid = ownertid;
-      so->sockid = sockid;
-      assert(so->c);
-      make_pntr(*pout,so->c);
-      break;
-    }
-    default:
-      fatal("read_pntr: got unexpected cell type %d",type);
+    case CELL_AREF:      read_aref(rd,pout); break;
+    case CELL_CONS:      read_cons(rd,pout); break;
+    case CELL_FRAME:     read_frame(rd,pout); break;
+    case CELL_CAP:       read_cap(rd,pout); break;
+    case CELL_SYSOBJECT: read_sysobject(rd,pout,addr); break;
+    default: fatal("read_pntr: got unexpected cell type %d",type);
     }
 
     if (NULL == (existing = addrhash_lookup(tsk,addr))) {
@@ -362,112 +569,7 @@ void read_pntr(reader *rd, pntr *pout)
       /* FIXME: work out if it's possible for us to receive a copy of an object we already have
          that differs from our existing copy, and if this can cause problems */
     }
-
-    /*
-    if (CELL_AREF == type) {
-      carray *carr = aref_array(*pout);
-      int index = aref_index(*pout);
-      if (1 == carr->elemsize) {
-        printf("(index %d, %d chars)",index,carr->size);
-      }
-      else {
-        pntr *elements = (pntr*)carr->elements;
-        int values = 0;
-        int i;
-        for (i = 0; i < carr->size; i++) {
-          pntr val = resolve_pntr(elements[i]);
-          if (CELL_REMOTEREF != pntrtype(val))
-            values++;
-        }
-        printf("(index %d %d/%d values)",index,values,carr->size);
-      }
-    }
-
-    printf("\n");
-    */
   }
-}
-
-void read_end(reader *rd)
-{
-  assert(rd->size == rd->pos);
-}
-
-array *write_start(void)
-{
-  return array_new(sizeof(char),0);
-}
-
-void write_tag(array *wr, int tag)
-{
-  array_append(wr,&tag,sizeof(int));
-}
-
-void write_char(array *wr, char c)
-{
-  write_tag(wr,CHAR_TAG);
-  array_append(wr,&c,sizeof(char));
-}
-
-void write_int(array *wr, int i)
-{
-  write_tag(wr,INT_TAG);
-  array_append(wr,&i,sizeof(int));
-}
-
-void write_uint(array *wr, unsigned int i)
-{
-  write_tag(wr,UINT_TAG);
-  array_append(wr,&i,sizeof(unsigned int));
-}
-
-void write_short(array *wr, short i)
-{
-  write_tag(wr,SHORT_TAG);
-  array_append(wr,&i,sizeof(short));
-}
-
-void write_ushort(array *wr, unsigned short i)
-{
-  write_tag(wr,USHORT_TAG);
-  array_append(wr,&i,sizeof(unsigned short));
-}
-
-void write_double(array *wr, double d)
-{
-  write_tag(wr,DOUBLE_TAG);
-  array_append(wr,&d,sizeof(d));
-}
-
-void write_string(array *wr, char *s)
-{
-  int len = strlen(s);
-  write_tag(wr,STRING_TAG);
-  array_append(wr,&len,sizeof(int));
-  array_append(wr,s,len);
-}
-
-void write_binary(array *wr, const void *b, int len)
-{
-  write_tag(wr,BINARY_TAG);
-  array_append(wr,&len,sizeof(int));
-  array_append(wr,b,len);
-}
-
-void write_socketid(array *wr, socketid sockid)
-{
-  write_uint(wr,sockid.coordid.ip);
-  write_ushort(wr,sockid.coordid.port);
-  write_uint(wr,sockid.coordid.localid);
-  write_uint(wr,sockid.sid);
-}
-
-void write_gaddr(array *wr, task *tsk, gaddr a)
-{
-  write_tag(wr,GADDR_TAG);
-  array_append(wr,&a.tid,sizeof(int));
-  array_append(wr,&a.lid,sizeof(int));
-  add_gaddr(&tsk->inflight,a);
 }
 
 void write_ref(array *arr, task *tsk, pntr p)
@@ -541,101 +643,12 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     }
 
     switch (pntrtype(p)) {
-    case CELL_AREF: {
-      carray *carr = aref_array(p);
-      int index = aref_index(p);
-      int i;
-
-      assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
-      assert(MAX_ARRAY_SIZE >= carr->size);
-      assert(index < carr->size);
-
-      write_int(arr,index);
-      write_int(arr,carr->elemsize);
-      write_int(arr,carr->size);
-
-      if (1 == carr->elemsize)
-        write_binary(arr,carr->elements,carr->size);
-      else
-        for (i = 0; i < carr->size; i++)
-          write_ref(arr,tsk,((pntr*)carr->elements)[i]);
-      write_ref(arr,tsk,carr->tail);
-      break;
-    }
-    case CELL_CONS: {
-      write_ref(arr,tsk,get_pntr(p)->field1);
-      write_ref(arr,tsk,get_pntr(p)->field2);
-      break;
-    }
-    case CELL_FRAME: {
-      frame *f = (frame*)get_pntr(get_pntr(p)->field1);
-      int i;
-      int count = f->instr->expcount;
-      int address = f->instr-bc_instructions(tsk->bcdata);
-      int nfetchers = list_count(f->wq.fetchers);
-      list *l;
-
-      assert((STATE_NEW == f->state) || (STATE_DONE == f->state));
-      assert(NULL == f->retp);
-      assert(NULL == f->wq.frames);
-
-      if (STATE_DONE == f->state) {
-        int fno = frame_fno(tsk,f);
-        int startaddr = bc_funinfo(tsk->bcdata)[fno].address;
-        /* We can only migrate a running frame if it's a BIF wrapper... this is because the
-           destination will restart evaluation from the beginning of the function to ensure
-           all necessary stack positions are evaluated */
-        assert(NUM_BUILTINS > fno);
-        address = startaddr+1; /* skip GLOBSTART */
-      }
-
-      write_int(arr,address);
-
-      assert(f->c);
-
-      /* Idea: when the recipient gets the frame, have it send RESPOND messages to
-         all the fetchers, telling them that the result object is a remoteref that
-         points to the new addres. I think this might lead to a race condition though,
-         beacuse these RESPOND messages could arrive in arbitrary order. Perhaps it's
-         safest to just send back one RESPOND message when the actual value is known. */
-
-      /* Transfer fetchers */
-      write_int(arr,nfetchers);
-      for (l = f->wq.fetchers; l; l = l->next) {
-        gaddr *addr = (gaddr*)l->data;
-        write_gaddr(arr,tsk,*addr);
-      }
-      list_free(f->wq.fetchers,free);
-      f->wq.fetchers = NULL;
-
-      /* Transfer data */
-      for (i = 0; i < count; i++)
-        write_ref(arr,tsk,f->data[i]);
-      break;
-    }
-    case CELL_CAP: {
-      cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
-      int i;
-      write_int(arr,cp->arity);
-      write_int(arr,cp->address);
-      write_int(arr,cp->fno);
-      write_int(arr,cp->sl.fileno);
-      write_int(arr,cp->sl.lineno);
-      write_int(arr,cp->count);
-      for (i = 0; i < cp->count; i++)
-        write_ref(arr,tsk,cp->data[i]);
-      break;
-    }
-    case CELL_SYSOBJECT: {
-      sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
-      write_int(arr,so->type);
-      write_int(arr,so->ownertid);
-      write_socketid(arr,so->sockid);
-      break;
-    }
-    default:
-      fatal("write: invalid pntr type %d",pntrtype(p));
-      break;
+    case CELL_AREF:      write_aref(arr,tsk,p); break;
+    case CELL_CONS:      write_cons(arr,tsk,p); break;
+    case CELL_FRAME:     write_frame(arr,tsk,p); break;
+    case CELL_CAP:       write_cap(arr,tsk,p); break;
+    case CELL_SYSOBJECT: write_sysobject(arr,tsk,p); break;
+    default: fatal("write: invalid pntr type %d",pntrtype(p));
     }
   }
 }
@@ -683,11 +696,6 @@ void write_format(array *wr, task *tsk, const char *fmt, ...)
   va_start(ap,fmt);
   write_vformat(wr,tsk,fmt,ap);
   va_end(ap);
-}
-
-void write_end(array *wr)
-{
-  array_free(wr);
 }
 
 void msg_send(task *tsk, int dest, int tag, char *data, int size)
