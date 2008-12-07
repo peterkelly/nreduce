@@ -872,7 +872,7 @@ void asm_alloc_cell_to_esi(task *tsk, x86_assembly *as)
  *
  * After this code runs, EDI contains the address of the new frame
  */
-void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
+void asm_frame_new(task *tsk, x86_assembly *as, int state)
 {
   int Lhavefree = as->labels++;
   int Lframeallocated = as->labels++;
@@ -885,12 +885,11 @@ void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
   I_JNE(label(Lhavefree));
   {
     /* Fall back to C version */
-    BEGIN_CALL(8);
-    I_PUSH(imm(addalloc));
+    BEGIN_CALL(4);
     I_PUSH(imm((int)tsk));
     I_MOV(reg(EAX),imm((int)frame_new));
     I_CALL(reg(EAX));
-    I_ADD(reg(ESP),imm(8));
+    I_ADD(reg(ESP),imm(4));
     I_MOV(regmem(ESP,32-PUSHAD_OFFSET_EDI),reg(EAX));
     END_CALL;
     I_MOV(regmem(EDI,FRAME_STATE),imm(state));
@@ -912,7 +911,6 @@ void asm_frame_new(task *tsk, x86_assembly *as, int addalloc, int state)
     // f->state = 0;
     // f->resume = 0;
     // f->freelnk = 0;
-    // f->marked = 0;
     I_MOV(regmem(EDI,FRAME_STATE),imm(state));
     I_MOV(regmem(EDI,FRAME_RESUME),imm(0));
     I_MOV(regmem(EDI,FRAME_FREELNK),imm(0));
@@ -1297,7 +1295,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       int fno = instr->arg0;
       int n = instr->arg1;
 
-      asm_frame_new(tsk,as,1,STATE_NEW);
+      asm_frame_new(tsk,as,STATE_NEW);
 
       // newf->retp = NULL;
       I_MOV(regmem(EDI,FRAME_RETP),imm(0));
@@ -1635,8 +1633,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       int fno = instr->arg0;
       int n = instr->arg1;
 
-      // newf = frame_new(tsk,0);
-      asm_frame_new(tsk,as,0,STATE_ACTIVE);
+      // newf = frame_new(tsk);
+      asm_frame_new(tsk,as,STATE_ACTIVE);
       // EDI == frame pointer
 
       // newf->c = 0;

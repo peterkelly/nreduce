@@ -230,7 +230,7 @@ void read_pntr(reader *rd, pntr *pout)
       break;
     }
     case CELL_FRAME: {
-      frame *fr = frame_new(tsk,1);
+      frame *fr = frame_new(tsk);
       int i;
       int count;
       int address;

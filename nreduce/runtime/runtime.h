@@ -821,7 +821,7 @@ void local_collect(task *tsk);
 void distributed_collect_start(task *tsk);
 void distributed_collect_end(task *tsk);
 cap *cap_alloc(task *tsk, int arity, int address, int fno, unsigned int datasize);
-frame *frame_new(task *tsk, int addalloc);
+frame *frame_new(task *tsk);
 #define frame_free(tsk,_f) \
 { \
   assert(tsk->done || ((NULL == _f->retp) && (NULL == _f->c)));       \

@@ -1497,7 +1497,7 @@ cap *cap_alloc(task *tsk, int arity, int address, int fno, unsigned int datasize
   return c;
 }
 
-frame *frame_new(task *tsk, int addalloc) /* Can be called from native code */
+frame *frame_new(task *tsk) /* Can be called from native code */
 {
   frame *f;
   if (NULL == tsk->freeframe) {

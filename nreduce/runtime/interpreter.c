@@ -1595,7 +1595,7 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
   }
   else { /* s+have > arity */
     int newcount = instr->expcount-1;
-    frame *newf = frame_new(tsk,1);
+    frame *newf = frame_new(tsk);
     int i;
     int extra = arity-have;
     int nfc = 0;
@@ -1748,7 +1748,7 @@ inline void op_mkframe(task *tsk, frame *runnable, const instruction *instr)
   int n = instr->arg1;
   cell *newfholder;
   int i;
-  frame *newf = frame_new(tsk,1);
+  frame *newf = frame_new(tsk);
   int nfc = 0;
 
   assert(OP_GLOBSTART == program_ops[program_finfo[fno].address].opcode);
@@ -1879,7 +1879,7 @@ inline void op_call(task *tsk, frame *runnable, const instruction *instr)
 
   assert(OP_GLOBSTART == program_ops[program_finfo[fno].address].opcode);
 
-  newf = frame_new(tsk,0);
+  newf = frame_new(tsk);
   newf->instr = &program_ops[program_finfo[fno].address+1];
   newf->retp = &f2->data[instr->expcount-n];
 
@@ -1964,7 +1964,7 @@ void make_item_frame(task *tsk, frame *runnable, int expcount, int pos)
   const funinfo *program_finfo = bc_funinfo(tsk->bcdata);
   const bcheader *bch = (const bcheader*)tsk->bcdata;
   cell *newfholder;
-  frame *newf = frame_new(tsk,1);
+  frame *newf = frame_new(tsk);
   double index = pos;
 
   assert(OP_GLOBSTART == program_ops[program_finfo[bch->itemfno].address].opcode);
@@ -2126,7 +2126,7 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   gettimeofday(&start,NULL);
 
   if (0 == tsk->tid) {
-    frame *initial = frame_new(tsk,1);
+    frame *initial = frame_new(tsk);
     initial->instr = bc_instructions(tsk->bcdata);
     assert(1 == initial->instr->expcount);
     initial->data[0] = tsk->argsp;
