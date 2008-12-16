@@ -203,7 +203,7 @@ void update(host *hosts, int nhosts, int h, int load)
   if (0 < hosts[h].count++) {
 
     if (0 > load) {
-      mvaddstr(h+2,HOSTWIDTH,"error");
+      mvaddstr(h+2,HOSTWIDTH,"?????????????????????????????????????????");
       fprintf(logfile,"%s %d.%03d error\n",
               hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000);
     }
@@ -256,14 +256,8 @@ void loop(host *hosts, int nhosts)
         int r;
         while ((0 > (r = read(hosts[h].fd,&c,1))) &&
                (EINTR == errno));
-        if (0 > r) {
-          fprintf(stderr,"read() from %s: %s\n",hosts[h].hostname,strerror(errno));
-          exit(-1);
-        }
-        if (0 == r) {
-          fprintf(stderr,"read() from %s returned 0 bytes\n",hosts[h].hostname);
-          exit(-1);
-        }
+        if (0 >= r)
+          c = -1;
         update(hosts,nhosts,h,c);
       }
     }

@@ -135,9 +135,10 @@ void run_shell(char *host, int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-  char *host;
+  char host[1025];
   FILE *hf;
   int i;
+  int exitstatus = 0;
 
   memset(&arguments,0,sizeof(struct arguments));
 
@@ -158,8 +159,8 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  while ((1 == fscanf(hf,"%as",&host)) && (MAXHOSTS > nhosts)) {
-    hostnames[nhosts] = host;
+  while ((1 == fscanf(hf,"%1024s",host)) && (MAXHOSTS > nhosts)) {
+    hostnames[nhosts] = strdup(host);
     run_shell(host,arguments.nargs,arguments.args);
     fcntl(outfds[nhosts],F_SETFL,fcntl(outfds[nhosts],F_GETFL)|O_NONBLOCK);
     nhosts++;
@@ -236,6 +237,21 @@ int main(int argc, char **argv)
               printf("%s",hostbufs[i].data);
           }
 
+          int status = 0;
+          if (0 > waitpid(pids[i],&status,0)) {
+            perror("waitpid");
+          }
+          else if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status) != 0) {
+              printf("Process on %s exited with status %d\n",hostnames[i],
+                     WEXITSTATUS(status));
+              exitstatus = 1;
+            }
+          }
+          else {
+            printf("Process on %s had abnormal exit\n",hostnames[i]);
+            exitstatus = 1;
+          }
         }
       }
     }
@@ -243,5 +259,5 @@ int main(int argc, char **argv)
 
   fclose(hf);
 
-  return 0;
+  return exitstatus;
 }
