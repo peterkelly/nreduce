@@ -8,6 +8,6 @@ main =
  in
   (append (numtostring (* inf 0)) "\n"))
 ==================================== OUTPUT ====================================
-runtests.tmp/test.l:5: *: floating point exception
+runtests.tmp/test.l:3: *: floating point exception
 ================================== RETURN CODE =================================
 1
