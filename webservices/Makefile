@@ -19,6 +19,7 @@ all:
 	javac client/*.java
 
 test:
+	javac service/test/*.java
 	wsgen -cp . -wsdl service.test.Test
 	wsimport -p proxy.test TestService.wsdl
 	javac client/*.java

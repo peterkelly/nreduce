@@ -1,4 +1,4 @@
-import service namespace test = "http://localhost:8080/test?WSDL";
+import service namespace test = "http://localhost:8081/test?WSDL";
 
 let $figures :=
       <sales-figures>

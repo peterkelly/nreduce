@@ -99,6 +99,16 @@ public class Test
   }
 
   @WebMethod
+  public String addChar(String str)
+  {
+    char[] chars = str.toCharArray();
+    for (int i = 0; i < chars.length; i++)
+      chars[i]++;
+    String result = new String(chars);
+    return result;
+  }
+
+  @WebMethod
   public String other(String x)
   {
     return x;
@@ -131,6 +141,33 @@ public class Test
     for (int i = 0; i < sales.length; i++) {
       if (sales[i].location.equals(location))
         res[pos++] = sales[i];
+    }
+    return res;
+  }
+
+  @WebMethod
+  public int[][] getMatrix(int rows, int cols, int start)
+  {
+    int[][] matrix = new int[rows][cols];
+    int value = start;
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        matrix[r][c] = value++;
+      }
+    }
+    return matrix;
+  }
+
+  @WebMethod
+  public int[][] addMatrices(int[][] a, int[][] b)
+  {
+    int rows = Math.min(a.length,b.length);
+    int cols = Math.min(a[0].length,b[0].length);
+    int[][] res = new int[rows][cols];
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        res[r][c] = a[r][c] + b[r][c];
+      }
     }
     return res;
   }

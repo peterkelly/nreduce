@@ -1,2 +1,2 @@
 #!/bin/bash
-java service.RunServices 8080
+java -Xmx256M service.RunServices 8080
