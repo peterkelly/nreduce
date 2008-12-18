@@ -688,14 +688,56 @@ static void monitor(node *n, list *epids)
 static void shutdown_thread(node *n, endpoint *endpt, void *arg)
 {
   list *nodes = (list*)arg;
+  int count = list_count(nodes);
+  endpointid *managerids = (endpointid*)malloc(count*sizeof(endpointid));
+  int *exited = (int*)calloc(count,sizeof(endpointid));
+  int nexited = 0;
+  int i = 0;
   list *l;
-  ignore_node_failure = 1;
   for (l = nodes; l; l = l->next) {
-    endpointid epid = *(endpointid*)l->data;
-    epid.localid = MANAGER_ID;
-    printf("Shutting down "IP_FORMAT":%u\n",IP_ARGS(epid.ip),epid.port);
-    endpoint_send(endpt,epid,MSG_SHUTDOWN,NULL,0);
+    managerids[i] = *(endpointid*)l->data;
+    managerids[i].localid = MANAGER_ID;
+    i++;
   }
+
+  ignore_node_failure = 1;
+
+  /* Send a shutdown message to each node */
+
+  for (i = 0; i < count; i++) {
+    endpoint_link(endpt,managerids[i]);
+    printf("Shutting down "IP_FORMAT":%u\n",IP_ARGS(managerids[i].ip),managerids[i].port);
+    endpoint_send(endpt,managerids[i],MSG_SHUTDOWN,NULL,0);
+  }
+
+  /* Wait until we have received an ENDPOINT_EXIT message for each node */
+  while (nexited < count) {
+    message *msg = endpoint_receive(endpt,-1);
+    if (MSG_ENDPOINT_EXIT != msg->tag) {
+      printf("Unexpected message %d from "EPID_FORMAT"\n",msg->tag,EPID_ARGS(msg->source));
+      exit(1);
+    }
+
+    endpoint_exit_msg *m = (endpoint_exit_msg*)msg->data;
+    assert(sizeof(endpoint_exit_msg) == msg->size);
+
+    int pos;
+    int found = 0;
+    for (pos = 0; pos < count; pos++) {
+      if (!exited[pos] && endpointid_equals(&m->epid,&managerids[pos])) {
+        exited[pos] = 1;
+        found = 1;
+      }
+    }
+    if (found) {
+      nexited++;
+      printf("Got endpoint exit %d/%d for "EPID_FORMAT"\n",nexited,count,
+             EPID_ARGS(m->epid));
+    }
+  }
+
+  free(managerids);
+  free(exited);
 }
 
 int do_client(char *initial_str, int argc, const char **argv)
