@@ -17,7 +17,6 @@
 #include <signal.h>
 
 #define CHUNKSIZE 4
-#define LOGFILENAME "showload.log"
 #define DELAYMS 1000
 #define HOSTWIDTH 12
 
@@ -26,6 +25,7 @@ int startsec = 0;
 int rows = 0;
 int cols = 0;
 char *shell = "rsh";
+int quiet = 0;
 
 typedef struct host {
   char *hostname;
@@ -185,13 +185,18 @@ void login_hosts(host *hosts, int nhosts, const char *cmd)
 
 void finish(int sig)
 {
-  endwin();
-  fclose(logfile);
+  if (!quiet)
+    endwin();
+  if (NULL != logfile)
+    fclose(logfile);
   exit(0);
 }
 
-void update(host *hosts, int nhosts, int h, int load)
+void update_screen(host *hosts, int nhosts, int h, int load)
 {
+  if (quiet)
+    return;
+
   int i;
   double ratio = ((double)(cols-HOSTWIDTH))/100.0;
   int nchars = (int)(((double)load)*ratio);
@@ -200,12 +205,10 @@ void update(host *hosts, int nhosts, int h, int load)
   gettimeofday(&now,NULL);
 
   mvaddstr(h+2,0,hosts[h].hostname);
-  if (0 < hosts[h].count++) {
+  if (0 < hosts[h].count) {
 
     if (0 > load) {
       mvaddstr(h+2,HOSTWIDTH,"?????????????????????????????????????????");
-      fprintf(logfile,"%s %d.%03d error\n",
-              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000);
     }
     else {
       for (i = 0; i < cols-HOSTWIDTH; i++) {
@@ -218,13 +221,30 @@ void update(host *hosts, int nhosts, int h, int load)
         mvaddstr(h+2,HOSTWIDTH+i," ");
       }
       attroff(A_REVERSE);
-      fprintf(logfile,"%s %d.%03d %d\n",
-              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000,load);
     }
   }
   move(0,0);
 
   refresh();
+}
+
+void update_log(host *hosts, int nhosts, int h, int load)
+{
+  if (NULL == logfile)
+    return;
+
+  struct timeval now;
+  gettimeofday(&now,NULL);
+  if (0 < hosts[h].count) {
+    if (0 > load) {
+      fprintf(logfile,"%s %d.%03d error\n",
+              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000);
+    }
+    else {
+      fprintf(logfile,"%s %d.%03d %d\n",
+              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000,load);
+    }
+  }
 }
 
 void loop(host *hosts, int nhosts)
@@ -258,7 +278,9 @@ void loop(host *hosts, int nhosts)
                (EINTR == errno));
         if (0 >= r)
           c = -1;
-        update(hosts,nhosts,h,c);
+        hosts[h].count++;
+        update_screen(hosts,nhosts,h,c);
+        update_log(hosts,nhosts,h,c);
       }
     }
   }
@@ -334,55 +356,85 @@ void slave()
   }
 }
 
+void usage()
+{
+  fprintf(stderr,"Usage: showload [OPTION] <hosts>\n");
+  fprintf(stderr,"  -l FILENAME       Log load data to FILENAME\n");
+  fprintf(stderr,"  -q                Quiet mode; don't show display\n");
+  exit(1);
+}
+
 int main(int argc, char **argv)
 {
   char *data;
   int nhosts;
   host *hosts;
   struct timeval now;
+  char *logfilename = NULL;
+  char *hostsfilename = NULL;
 
   setbuf(stdout,NULL);
 
-  if (2 > argc) {
-    fprintf(stderr,"Usage: showload <hosts>\n");
-    return -1;
-  }
+  if (2 > argc)
+    usage();
 
   if (!strcmp("SLAVE",argv[1])) {
     slave();
     return 0;
   }
 
+  int argpos;
+  for (argpos = 1; argpos < argc; argpos++) {
+    if (!strcmp(argv[argpos],"-l")) {
+      if (argpos+1 >= argc)
+        usage();
+      logfilename = argv[++argpos];
+    }
+    else if (!strcmp(argv[argpos],"-q")) {
+      quiet = 1;
+    }
+    else {
+      hostsfilename = argv[argpos];
+    }
+  }
+
+  if (NULL == hostsfilename)
+    usage();
+
   if (NULL != getenv("SHOWLOAD_SHELL"))
     shell = getenv("SHOWLOAD_SHELL");
 
-  data = read_hosts(argv[1]);
+  data = read_hosts(hostsfilename);
 
-  if (NULL == (logfile = fopen(LOGFILENAME,"w"))) {
-    perror(LOGFILENAME);
+  if ((NULL != logfilename) &&
+      (NULL == (logfile = fopen(logfilename,"w")))) {
+    perror(logfilename);
     return -1;
   }
-  setbuf(logfile,NULL);
+  if (NULL != logfile)
+    setbuf(logfile,NULL);
 
   gettimeofday(&now,NULL);
   startsec = now.tv_sec;
 
   signal(SIGINT,finish);
 
-  initscr();
-  keypad(stdscr,1);
-  nonl();
-  cbreak();
-  noecho();
-  curs_set(0);
-  getmaxyx(stdscr,rows,cols);
+  if (!quiet) {
+    initscr();
+    keypad(stdscr,1);
+    nonl();
+    cbreak();
+    noecho();
+    curs_set(0);
+    getmaxyx(stdscr,rows,cols);
 
-  mvaddstr(0,0,"Host");
-  mvaddstr(0,HOSTWIDTH,"0");
-  mvaddstr(0,HOSTWIDTH+(cols-HOSTWIDTH)/2-1,"50");
-  mvaddstr(0,cols-4,"100");
+    mvaddstr(0,0,"Host");
+    mvaddstr(0,HOSTWIDTH,"0");
+    mvaddstr(0,HOSTWIDTH+(cols-HOSTWIDTH)/2-1,"50");
+    mvaddstr(0,cols-4,"100");
 
-  refresh();
+    refresh();
+  }
 
   nhosts = parse_hosts(data,&hosts);
   login_hosts(hosts,nhosts,argv[0]);

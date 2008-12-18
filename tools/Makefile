@@ -1,4 +1,4 @@
-all: parsh showload loadbal nobuftail runtests measure saxonclient
+all: parsh showload loadbal waitconn nobuftail runtests measure saxonclient
 
 parsh: parsh.c
 	gcc -g -Wall -o parsh parsh.c
@@ -8,6 +8,9 @@ showload: showload.c
 
 loadbal: loadbal.c
 	gcc -g -Wall -o loadbal loadbal.c
+
+waitconn: waitconn.c
+	gcc -g -Wall -o waitconn waitconn.c
 
 nobuftail: nobuftail.c
 	gcc -g -Wall -o nobuftail nobuftail.c
@@ -26,5 +29,5 @@ saxonwebapp: SaxonServlet.java
 	cp SaxonServlet.class saxon/WEB-INF/classes
 
 clean:
-	rm -f parsh showload loadbal nobuftail runtests measure saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
+	rm -f parsh showload loadbal waitconn nobuftail runtests measure saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
 	rm -rf *.DSYM
