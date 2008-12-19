@@ -2,6 +2,18 @@
 
 . ~/dev/evaluation/scripts/common.sh
 
+check_if_crashed()
+{
+  local CRASHED=`~/dev/evaluation/scripts/crashednodes.sh`
+
+  if [ ! -z "$CRASHED" ]; then
+    echo "Nodes $CRASHED crashed"
+    exit 1
+  fi
+
+  echo "All nodes shut down successfully"
+}
+
 if [ -z $JOB_DIR ]; then
   echo JOB_DIR is not set!
   exit 1
@@ -34,7 +46,7 @@ echo "-------------------------------- sync"
 parsh -h $JOB_DIR/jobnodes sync
 
 echo "-------------------------------- Checking for crash"
-check_for_crash
+check_if_crashed
 
 echo "-------------------------------- Showing network stats"
 java -cp ~/dev/evaluation util.CollateNetStats ~/logs

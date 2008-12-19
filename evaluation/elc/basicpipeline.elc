@@ -1,0 +1,27 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+main args =
+(if (< (len args) 2)
+    "Please specify host and port\n"
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+
+        callservice a b = (stringtonum (connect host
+                                                port
+                                                (++ (numtostring (+ a b))
+                                                    " 1")))
+
+        result = (foldr callservice 0 (range 1 5))
+
+
+ in     (++ (numtostring result) "\n")))
+

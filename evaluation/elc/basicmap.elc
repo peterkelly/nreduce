@@ -1,0 +1,33 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+addnewline str =
+(++ str "\n")
+
+printstrings strings =
+(foldr ++ "" (map addnewline strings))
+
+main args =
+(if (< (len args) 4)
+    "Usage: basicmap.elc host port size comp\n"
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        size = (stringtonum (item 2 args))
+        comp = (stringtonum (item 3 args))
+
+        callservice n = (connect host
+                                 port
+                                 (++ (numtostring n)
+                                     (++ " " (numtostring comp))))
+
+        results = (map callservice (range 1 size))
+
+ in     (++ (printstrings results) "END\n")))

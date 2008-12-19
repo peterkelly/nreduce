@@ -5,9 +5,9 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.Scanner;
 
-public class Compute extends Server
+public class CompSimple extends Server
 {
-  public Compute(int maxThreads, int port)
+  public CompSimple(int maxThreads, int port)
   {
     super(maxThreads,port);
   }
@@ -29,8 +29,6 @@ public class Compute extends Server
   public void process(InputStream cin, OutputStream cout) throws Exception
   {
     PrintWriter writer = new PrintWriter(cout);
-    writer.println("Welcome");
-    writer.flush();
 
     Scanner scanner = new Scanner(cin);
     String line = scanner.nextLine();
@@ -42,7 +40,7 @@ public class Compute extends Server
     compute(delay);
     long end = System.nanoTime();
     int ms = (int)((end-start)/1000000);
-    writer.println("done: "+ms+" ("+value+")");
+    writer.print(value+1);
     writer.flush();
   }
 
@@ -54,7 +52,7 @@ public class Compute extends Server
     }
 
     int port = Integer.parseInt(args[0]);
-    Compute comp = new Compute(3,port);
+    CompSimple comp = new CompSimple(3,port);
     comp.serve();
   }
 }

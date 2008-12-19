@@ -1,0 +1,16 @@
+printdict lst =
+(if lst
+    (letrec cur = (head lst)
+            name = (head cur)
+            value = (tail cur)
+     in (++ name (++ " = " (++ value (++ "\n" (printdict (tail lst)))))))
+    nil)
+
+mkdict name value prev =
+(cons (cons name value) prev)
+
+main =
+(printdict (mkdict "name" "Peter"
+           (mkdict "age" "28"
+           (mkdict "occupation" "Lecturer"
+           nil))))

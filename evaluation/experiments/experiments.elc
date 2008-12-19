@@ -1,0 +1,115 @@
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+foldl f base lst =
+(if lst
+    (foldl f (f base (head lst)) (tail lst))
+    base)
+
+zip a b =
+(if (and a b)
+    (cons (cons (head a)
+                (head b))
+          (zip (tail a)
+               (tail b)))
+    nil)
+
+
+
+callservice input =
+(connect "localhost" 1234 input)
+
+callservice2 x y =
+(connect "localhost" 1234 (++ x y))
+
+/* ================================================================================ */
+
+/* Test: Basic map. Takes a list of items, invokes a service for each, and returns a list
+   containing the results of each service call. Should get perfect speedup.
+
+   basicmap :: [a] -> [b]
+   where callservice: a -> b */
+
+basicmap lst =
+(map callservice lst)
+
+/* ================================================================================ */
+
+/* Test: Static pipeline. Invokes three service calls in a row. Each call takes the result
+   of the previous as input. The first service gets the supplied parameter. Result of the
+   workflow is the result of the last service call.
+   This workflow will execute sequentially. */
+
+pipeline_static x =
+(callservice (callservice (callservice x)))
+
+/* ================================================================================ */
+
+/* Test: Dynamic pipeline: Takes a list of items and a starting parameter. The service
+   (which takes two parameters) is invoked once for each item in the list, with the first
+   parameter coming from the list item, and the second parameter coming from the result
+   of the previous call. The first call uses the last item in the list, plus the supplied
+   base value.
+   This workflow will execute sequentially.
+
+   pipeline :: a -> [a] -> a
+   where base :: a
+   and  callservice2 :: a -> a -> a  */
+
+pipeline base lst =
+(foldr callservice2 base lst)
+
+
+/* ================================================================================ */
+
+/* Test: Combined map & pipeline. Each element in lists is a list of items. The pipeline
+is invoked once for each combination of element from bases and lists. */
+
+map_pipeline bases lists =
+(map (!pair.pipeline (head pair)
+                     (tail pair))
+     (zip bases lists))
+
+/* ================================================================================ */
+
+
+/* Divide-and-conquer parallelism */
+
+reduce f lst =
+(if (== (len lst) 0)
+    (error "Empty list")
+(if (== (len lst) 1)
+    (head lst)
+(if (== (len lst) 2)
+    (f (item 0 lst)
+       (item 1 lst))
+(letrec mid = (floor (/ (len lst) 2))
+        right = (- (len lst) let)
+in      (f (reduce f (sub 0 mid lst))
+           (reduce f (sub mid right lst)))))))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+main =
+(letrec services = (cons "titan01" (cons "titan02" (cons "titan03" nil)))
+ in     (foldr call "input" services))
+
+// (call titan01 (call titan02 (call titan03 input)))
