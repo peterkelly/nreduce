@@ -22,6 +22,9 @@
 #define BACKLOG 250
 #define MAXPERSERVER 3
 
+FILE *logfile = NULL;
+int nextproxyid = 0;
+
 #define llist_append(_ll,_obj) {                          \
     assert(!(_obj)->prev && !(_obj)->next);               \
     if ((_ll)->last) {                                    \
@@ -60,7 +63,12 @@ typedef struct relay {
   int sourcefd;
   int destfd;
   int eof;
+  int type;
+  struct proxy *p;
 } relay;
+
+#define RELAY_CLIENT_TO_SERVER 0
+#define RELAY_SERVER_TO_CLIENT 1
 
 typedef struct server {
   char *hostname;
@@ -77,6 +85,7 @@ typedef struct serverlist {
 } serverlist;
 
 typedef struct proxy {
+  int id;
   int connected;
 
   int clientfd;
@@ -115,13 +124,14 @@ void fatal(const char *format, ...)
 
 void debug(const char *format, ...)
 {
-#if 0
+  if (NULL == logfile)
+    return;
+
   va_list ap;
   va_start(ap,format);
-  vfprintf(stderr,format,ap);
+  vfprintf(logfile,format,ap);
   va_end(ap);
-  fprintf(stdout,"\n");
-#endif
+  fprintf(logfile,"\n");
 }
 
 void express_interest(relay *r, fd_set *readfds, fd_set *writefds)
@@ -147,7 +157,7 @@ int check_action(relay *r, fd_set *readfds, fd_set *writefds, const char *type)
       r->size = n;
     }
     else { /* error; tell caller to close both connections */
-      debug("%s ERROR read: %s",type,strerror(errno));
+      debug("ERROR read (proxy %d, type %s): %s",r->p->id,type,strerror(errno));
       return 1;
     }
   }
@@ -159,31 +169,37 @@ int check_action(relay *r, fd_set *readfds, fd_set *writefds, const char *type)
       r->size -= n;
     }
     else { /* error; tell caller to close both connections */
-      debug("%s ERROR write: %s",type,strerror(errno));
+      debug("ERROR write (proxy %d, type %s): %s",r->p->id,type,strerror(errno));
       return 1;
     }
   }
   return 0; /* success */
 }
 
-void add_proxy(int clientfd, int serverfd, server *s)
+proxy *add_proxy(int clientfd, int serverfd, server *s)
 {
   proxy *p = (proxy*)calloc(1,sizeof(proxy));
+  p->id = nextproxyid++;
   p->connected = 0;
   p->clientfd = clientfd;
   p->serverfd = serverfd;
   p->client_to_server.sourcefd = clientfd;
   p->client_to_server.destfd = serverfd;
+  p->client_to_server.type = RELAY_CLIENT_TO_SERVER;
+  p->client_to_server.p = p;
   p->server_to_client.sourcefd = serverfd;
   p->server_to_client.destfd = clientfd;
+  p->server_to_client.type = RELAY_SERVER_TO_CLIENT;
+  p->server_to_client.p = p;
   p->s = s;
   llist_append(&proxies,p);
   nproxies++;
+  return p;
 }
 
 void remove_proxy(proxy *p)
 {
-  debug("remove_proxy");
+  debug("remove_proxy %d",p->id);
   p->s->connections--;
   llist_remove(&proxies,p);
 
@@ -305,7 +321,7 @@ void main_loop()
           fatal("connect: %s",strerror(err));
         else
           p->connected = 1;
-        debug("Connected to server");
+        debug("Connected to server (proxy %d)",p->id);
       }
     }
 
@@ -332,8 +348,9 @@ void main_loop()
       if (EINPROGRESS != errno)
         fatal("connect: %s",strerror(errno));
 
-      debug("Initiated connection; clientfd = %d, serverfd = %d",clientfd,serverfd);
-      add_proxy(clientfd,serverfd,s);
+      proxy *p = add_proxy(clientfd,serverfd,s);
+      debug("Initiated connection to %s; clientfd = %d, serverfd = %d (proxy %d)",
+            s->hostname,clientfd,serverfd,p->id);
       s->connections++;
     }
   }
@@ -401,6 +418,13 @@ void init_servers(const char *filename)
   fclose(f);
 }
 
+void usage()
+{
+  fprintf(stderr,"Usage: loadbal [OPTION] <port> <servers>\n");
+  fprintf(stderr,"  -l FILENAME      Log status info to FILENAME\n");
+  exit(-1);
+}
+
 int main(int argc, char **argv)
 {
   struct timeval now;
@@ -410,15 +434,47 @@ int main(int argc, char **argv)
 
   signal(SIGPIPE,SIG_IGN);
 
-  if (3 > argc) {
-    fprintf(stderr,"Usage: loadbal <port> <servers>\n");
-    exit(-1);
+  char *portstr = NULL;
+  char *servers = NULL;
+  char *logfilename = NULL;
+
+  int argpos;
+  for (argpos = 1; argpos < argc; argpos++) {
+    if (!strcmp(argv[argpos],"-l")) {
+      if (argpos+1 >= argc)
+        usage();
+      logfilename = argv[++argpos];
+    }
+    else {
+      if (NULL == portstr)
+        portstr = argv[argpos];
+      else if (NULL == servers)
+        servers = argv[argpos];
+    }
   }
 
-  init_servers(argv[2]);
+  if ((NULL == portstr) || (NULL == servers))
+    usage();
 
-  listenfd = start_listening(atoi(argv[1]));
+  if (NULL != logfilename) {
+    if (!strcmp(logfilename,"-"))
+      logfile = stdout;
+    else
+      logfile = fopen(logfilename,"w");
+    setbuf(logfile,NULL);
+    if (NULL == logfile) {
+      perror(logfilename);
+      exit(1);
+    }
+  }
+
+  init_servers(servers);
+
+  listenfd = start_listening(atoi(portstr));
   main_loop();
+
+  if (NULL != logfile)
+    fclose(logfile);
 
   return 0;
 }
