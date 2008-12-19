@@ -550,7 +550,8 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
       array_append(conn->sendbuf,data,size);
 
       connection_fsm(conn,CE_REQUESTED);
-      connection_fsm(conn,CE_SLOT_AVAILABLE);
+      if (CS_WAITING == conn->state) /* ignore opening limit */
+        connection_fsm(conn,CE_SLOT_AVAILABLE);
     }
     else {
       array_append(conn->sendbuf,&hdr,sizeof(msgheader));

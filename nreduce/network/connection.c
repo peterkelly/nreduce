@@ -167,6 +167,9 @@ static int initiate_connection(connection *conn)
   return 0;
 }
 
+#define WAITING_STATE(state) \
+  (CS_WAITING == (state))
+
 #define OPENING_STATE(state) \
   ((CS_READY == (state)) || \
    (CS_CONNECTING == (state)) || \
@@ -178,26 +181,47 @@ static int initiate_connection(connection *conn)
    (CS_ACCEPTED_DONE_READING == (state)) || \
    (CS_ACCEPTED_DONE_WRITING == (state)))
 
-static void enter_pending(connection *conn)
+static void enter_waiting(connection *conn)
 {
-  assert(0 <= conn->n->p->nopening);
-  conn->n->p->nopening++;
+  assert(0 <= conn->n->p->nwaiting);
+  conn->n->p->nwaiting++;
+  node_log(conn->n,LOG_DEBUG1,"nwaiting = %d",conn->n->p->nwaiting);
   assert(!conn->iswaiting);
   conn->iswaiting = 1;
 }
 
-static void exit_pending(connection *conn)
+static void exit_waiting(connection *conn)
 {
-  conn->n->p->nopening--;
-  assert(0 <= conn->n->p->nopening);
+  conn->n->p->nwaiting--;
+  node_log(conn->n,LOG_DEBUG1,"nwaiting = %d",conn->n->p->nwaiting);
+  assert(0 <= conn->n->p->nwaiting);
   assert(conn->iswaiting);
   conn->iswaiting = 0;
+}
+
+static void enter_opening(connection *conn)
+{
+  assert(0 <= conn->n->p->nopening);
+  conn->n->p->nopening++;
+  node_log(conn->n,LOG_DEBUG1,"nopening = %d",conn->n->p->nopening);
+  assert(!conn->isopening);
+  conn->isopening = 1;
+}
+
+static void exit_opening(connection *conn)
+{
+  conn->n->p->nopening--;
+  node_log(conn->n,LOG_DEBUG1,"nopening = %d",conn->n->p->nopening);
+  assert(0 <= conn->n->p->nopening);
+  assert(conn->isopening);
+  conn->isopening = 0;
 }
 
 static void enter_active(connection *conn)
 {
   assert(0 <= conn->n->p->naccepted);
   conn->n->p->naccepted++;
+  node_log(conn->n,LOG_DEBUG1,"naccepted = %d",conn->n->p->naccepted);
   assert(!conn->isaccepted);
   conn->isaccepted = 1;
 }
@@ -205,6 +229,7 @@ static void enter_active(connection *conn)
 static void exit_active(connection *conn)
 {
   conn->n->p->naccepted--;
+  node_log(conn->n,LOG_DEBUG1,"naccepted = %d",conn->n->p->naccepted);
   assert(0 <= conn->n->p->naccepted);
   assert(conn->isaccepted);
   conn->isaccepted = 0;
@@ -212,10 +237,17 @@ static void exit_active(connection *conn)
 
 static void connection_state(connection *conn, int newstate)
 {
+  node *n = conn->n;
+
+  if (WAITING_STATE(newstate) && !WAITING_STATE(conn->state))
+    enter_waiting(conn);
+  else if (!WAITING_STATE(newstate) && WAITING_STATE(conn->state))
+    exit_waiting(conn);
+
   if (OPENING_STATE(newstate) && !OPENING_STATE(conn->state))
-    enter_pending(conn);
+    enter_opening(conn);
   else if (!OPENING_STATE(newstate) && OPENING_STATE(conn->state))
-    exit_pending(conn);
+    exit_opening(conn);
 
   if (ACCEPTED_STATE(newstate) && !ACCEPTED_STATE(conn->state))
     enter_active(conn);
@@ -224,6 +256,7 @@ static void connection_state(connection *conn, int newstate)
 
   conn->state = newstate;
   connection_fsm(conn,CE_AUTO);
+  connect_pending(n);
 }
 
 void connection_fsm(connection *conn, int event)

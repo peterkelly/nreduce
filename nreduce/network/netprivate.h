@@ -94,6 +94,7 @@ typedef struct connection {
   char errmsg[ERRMSG_MAX+1];
   int errn;
   int iswaiting;
+  int isopening;
   int isaccepted;
   int state;
   int haderror;
@@ -146,6 +147,7 @@ typedef struct node_private {
   pthread_cond_t closecond;
   list *toclose;
   list *stats;
+  int nwaiting;
   int nopening;
   int naccepted;
 } node_private;
