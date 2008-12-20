@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 SCRIPT_DIR=`dirname $0`
@@ -7,6 +8,7 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 startup services.Compute 1234
 
-time nreduce $ELC_DIR/basicmap.elc $HOSTNAME 1235 60 50
+time nreduce $ELC_DIR/basicmap.elc $HOSTNAME 1235 100 100
+echo Program exited with status $?
 
 shutdown

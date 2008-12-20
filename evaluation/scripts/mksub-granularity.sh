@@ -7,9 +7,13 @@ fi
 
 SUB_DIR=$1
 
-for ((nodes = 2; nodes <= 30; nodes += 2)); do
-  jobname=basicmap2-$nodes
-  cat > $SUB_DIR/basicmap2-$nodes.sub <<EOF
+expname=granularity
+nodes=17
+
+for ((run = 0; run < 5; run++)); do
+  for ((gran = 1; gran <= 100; gran++)); do
+    jobname=$expname.r$run.n$gran
+    cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
 #PBS -V
@@ -30,7 +34,7 @@ for ((nodes = 2; nodes <= 30; nodes += 2)); do
 #PBS -q titan
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=00:10:00
+#PBS -l nodes=$((nodes+1)):ppn=2,walltime=00:30:00
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR
@@ -39,8 +43,9 @@ echo Running on host \`hostname\`
 echo Time is \`date\`
 
 # Run the executable
-export JOB_DIR=~/jobs/basicmap2/$jobname
+export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/basicmap2.sh >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $gran >\$JOB_DIR/output 2>&1
 EOF
+  done
 done

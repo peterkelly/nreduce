@@ -94,7 +94,7 @@ startvm()
 startloadbal()
 {
   echo -n "Starting load balancer... "
-  (~/dev/tools/loadbal -l $JOB_DIR/loadbal.log 1235 $JOB_DIR/otherservers >/dev/null 2>&1 &)
+  (~/dev/tools/loadbal -l - 1235 $JOB_DIR/otherservers >loadbal.log 2>&1 &)
   echo "ok"
 }
 
@@ -168,9 +168,9 @@ startup()
   echo "ok"
 
   startloadbal
-  startshowload
   startservice $service $port
   startvm
+  startshowload
 
   echo "Startup completed"
   return 0
@@ -180,12 +180,12 @@ shutdown()
 {
   check_env
 
-  echo -n "Stopping load balancer... "
-  killall -9 loadbal >/dev/null 2>&1
-  echo "ok"
-
   echo -n "Stopping showload... "
   killall -9 showload >/dev/null 2>&1
+  echo "ok"
+
+  echo -n "Stopping load balancer... "
+  killall -9 loadbal >/dev/null 2>&1
   echo "ok"
 
   echo -n "Stopping services... "
