@@ -1359,13 +1359,15 @@ static void F(source *src, compilation *comp, int fno, scomb *sc)
     comp->finfo[NUM_BUILTINS+sc->index].addressed = array_count(comp->instructions);
   }
   else {
-    /* Otherwise, evaluate all parameters that we know will be needed. It's not worth sparking
-       these here, since the sparking will be done at the call site (unless the function call
-       is a partial application, which only happens rarely). */
+    /* Otherwise, spark all of the strict expressions; we know we're going to need the values
+       eventually so might as well start evaluation of them now, hopefully in parallel. */
     for (i = 0; i < sc->nargs; i++)
       pushstatus(comp->si,STATUS_UNKNOWN);
 
     GLOBSTART(sc->sl,fno,sc->nargs);
+    for (i = 0; i < sc->nargs; i++)
+      if (sc->strictin && sc->strictin[i])
+        SPARK(sc->sl,i);
     comp->finfo[NUM_BUILTINS+sc->index].addressne = array_count(comp->instructions);
     for (i = 0; i < sc->nargs; i++)
       if (sc->strictin && sc->strictin[i])
