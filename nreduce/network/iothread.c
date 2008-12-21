@@ -112,9 +112,8 @@ static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointi
 
   endpoint_link_locked(endpt,m->owner);
   sprintf(hostname,IP_FORMAT,IP_ARGS(m->ip));
-  conn = add_connection(n,hostname,NULL);
+  conn = add_connection(n,hostname,m->ip,NULL);
   conn->isreg = 1;
-  conn->ip = m->ip;
   conn->port = m->port;
   assert(0 == conn->frameids[CONNECT_FRAMEADDR]);
   conn->frameids[CONNECT_FRAMEADDR] = m->ioid;
@@ -142,8 +141,8 @@ static void iothread_connpair(node *n, endpoint *endpt, connpair_msg *m, endpoin
     crm.errmsg[ERRMSG_MAX] = '\0';
   }
   else {
-    connection *ca = add_connection(n,"(internal)",NULL);
-    connection *cb = add_connection(n,"(internal)",NULL);
+    connection *ca = add_connection(n,"(internal)",0,NULL);
+    connection *cb = add_connection(n,"(internal)",0,NULL);
     ca->sock = fds[0];
     cb->sock = fds[1];
     crm.a = ca->sockid;
@@ -575,7 +574,7 @@ static void handle_new_connection(node *n, listener *l)
 
   hostname = lookup_hostname(remote_addr.sin_addr.s_addr);
   node_log(n,LOG_INFO,"Got connection from %s",hostname);
-  conn = add_connection(n,hostname,l);
+  conn = add_connection(n,hostname,remote_addr.sin_addr.s_addr,l);
   conn->sock = clientfd;
   free(hostname);
 

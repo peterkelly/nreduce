@@ -183,54 +183,54 @@ static int initiate_connection(connection *conn)
 
 static void enter_waiting(connection *conn)
 {
-  assert(0 <= conn->n->p->nwaiting);
-  conn->n->p->nwaiting++;
-  node_log(conn->n,LOG_DEBUG1,"nwaiting = %d",conn->n->p->nwaiting);
+  assert(0 <= conn->si->nwaiting);
+  conn->si->nwaiting++;
+  node_log(conn->n,LOG_DEBUG1,"nwaiting("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->nwaiting);
   assert(!conn->iswaiting);
   conn->iswaiting = 1;
 }
 
 static void exit_waiting(connection *conn)
 {
-  conn->n->p->nwaiting--;
-  node_log(conn->n,LOG_DEBUG1,"nwaiting = %d",conn->n->p->nwaiting);
-  assert(0 <= conn->n->p->nwaiting);
+  conn->si->nwaiting--;
+  node_log(conn->n,LOG_DEBUG1,"nwaiting("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->nwaiting);
+  assert(0 <= conn->si->nwaiting);
   assert(conn->iswaiting);
   conn->iswaiting = 0;
 }
 
 static void enter_opening(connection *conn)
 {
-  assert(0 <= conn->n->p->nopening);
-  conn->n->p->nopening++;
-  node_log(conn->n,LOG_DEBUG1,"nopening = %d",conn->n->p->nopening);
+  assert(0 <= conn->si->nopening);
+  conn->si->nopening++;
+  node_log(conn->n,LOG_DEBUG1,"nopening("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->nopening);
   assert(!conn->isopening);
   conn->isopening = 1;
 }
 
 static void exit_opening(connection *conn)
 {
-  conn->n->p->nopening--;
-  node_log(conn->n,LOG_DEBUG1,"nopening = %d",conn->n->p->nopening);
-  assert(0 <= conn->n->p->nopening);
+  conn->si->nopening--;
+  node_log(conn->n,LOG_DEBUG1,"nopening("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->nopening);
+  assert(0 <= conn->si->nopening);
   assert(conn->isopening);
   conn->isopening = 0;
 }
 
 static void enter_active(connection *conn)
 {
-  assert(0 <= conn->n->p->naccepted);
-  conn->n->p->naccepted++;
-  node_log(conn->n,LOG_DEBUG1,"naccepted = %d",conn->n->p->naccepted);
+  assert(0 <= conn->si->naccepted);
+  conn->si->naccepted++;
+  node_log(conn->n,LOG_DEBUG1,"naccepted("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->naccepted);
   assert(!conn->isaccepted);
   conn->isaccepted = 1;
 }
 
 static void exit_active(connection *conn)
 {
-  conn->n->p->naccepted--;
-  node_log(conn->n,LOG_DEBUG1,"naccepted = %d",conn->n->p->naccepted);
-  assert(0 <= conn->n->p->naccepted);
+  conn->si->naccepted--;
+  node_log(conn->n,LOG_DEBUG1,"naccepted("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->naccepted);
+  assert(0 <= conn->si->naccepted);
   assert(conn->isaccepted);
   conn->isaccepted = 0;
 }

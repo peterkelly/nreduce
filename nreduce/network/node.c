@@ -121,11 +121,9 @@ void connect_pending(node *n)
 {
   connection *conn = NULL;
   assert(NODE_ALREADY_LOCKED(n));
-  if (MAX_OPENING <= n->p->nopening)
-    return;
 
   for (conn = n->p->connections.first; conn; conn = conn->next) {
-    if (CS_WAITING == conn->state) {
+    if ((CS_WAITING == conn->state) && (MAX_OPENING > conn->si->nopening)) {
       connection_fsm(conn,CE_SLOT_AVAILABLE);
       return;
     }
@@ -162,7 +160,7 @@ static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nod
   }
 }
 
-connection *add_connection(node *n, const char *hostname, listener *l)
+connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
   assert(NODE_ALREADY_LOCKED(n));
@@ -170,7 +168,7 @@ connection *add_connection(node *n, const char *hostname, listener *l)
   conn->sockid.coordid = n->iothid;
   conn->sockid.sid = n->p->nextsid++;
   conn->hostname = strdup(hostname);
-  conn->ip = 0;
+  conn->ip = ip;
   conn->sock = -1;
   conn->l = l;
   conn->n = n;
@@ -178,6 +176,7 @@ connection *add_connection(node *n, const char *hostname, listener *l)
   conn->recvbuf = array_new(1,n->iosize*2);
   conn->sendbuf = array_new(1,n->iosize*2);
   conn->state = CS_START;
+  conn->si = get_serverinfo(n,ip);
   if (l == n->p->mainl)
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->p->connections,conn);
@@ -242,6 +241,7 @@ static void node_free(node *n)
   destroy_mutex(&n->p->lock);
   close(n->p->ioready_readfd);
   close(n->p->ioready_writefd);
+  list_free(n->p->servers,free);
   node_log(n,LOG_INFO,"Shutdown complete");
   free(n->p);
   free(n);
@@ -538,9 +538,8 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
 
 
       hostname = lookup_hostname(destendpointid.ip);
-      conn = add_connection(n,hostname,n->p->mainl);
+      conn = add_connection(n,hostname,destendpointid.ip,n->p->mainl);
       free(hostname);
-      conn->ip = destendpointid.ip;
       conn->port = destendpointid.port;
 
       assert(n->listenport == n->p->mainl->port);
@@ -933,4 +932,19 @@ int socketid_equals(const socketid *a, const socketid *b)
 int socketid_isnull(const socketid *a)
 {
   return (0 == a->sid);
+}
+
+serverinfo *get_serverinfo(node *n, in_addr_t ip)
+{
+  list *l;
+  for (l = n->p->servers; l; l = l->next) {
+    serverinfo *si = (serverinfo*)l->data;
+    if (si->ip == ip)
+      return si;
+  }
+
+  serverinfo *si = (serverinfo*)calloc(1,sizeof(serverinfo));
+  si->ip = ip;
+  list_push(&n->p->servers,si);
+  return si;
 }

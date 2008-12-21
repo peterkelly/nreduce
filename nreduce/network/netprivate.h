@@ -98,6 +98,7 @@ typedef struct connection {
   int isaccepted;
   int state;
   int haderror;
+  struct serverinfo *si;
 } connection;
 
 typedef struct listener {
@@ -129,6 +130,13 @@ typedef struct listenerlist {
   listener *last;
 } listenerlist;
 
+typedef struct serverinfo {
+  int nwaiting;
+  int nopening;
+  int naccepted;
+  in_addr_t ip;
+} serverinfo;
+
 typedef struct node_private {
   struct listener *mainl;
   endpointlist endpoints;
@@ -147,9 +155,7 @@ typedef struct node_private {
   pthread_cond_t closecond;
   list *toclose;
   list *stats;
-  int nwaiting;
-  int nopening;
-  int naccepted;
+  list *servers;
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);
@@ -174,12 +180,14 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
                       uint32_t tag, const void *data, uint32_t size);
 void got_message(node *n, const msgheader *hdr, endpointid source,
                  uint32_t tag, uint32_t size, const void *data);
-connection *add_connection(node *n, const char *hostname, listener *l);
+connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener *l);
 void endpoint_link_locked(endpoint *endpt, endpointid to);
 void endpoint_unlink_locked(endpoint *endpt, endpointid to);
 void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void *data, int size);
 
 void console_thread(node *n, endpoint *endpt, void *arg);
+
+serverinfo *get_serverinfo(node *n, in_addr_t ip);
 
 /* iothread.c */
 
