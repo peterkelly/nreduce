@@ -1,0 +1,36 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+divconq f lst =
+(if (== (len lst) 0)
+    (error "Empty list")
+(if (== (len lst) 1)
+    (head lst)
+(if (== (len lst) 2)
+    (f (item 0 lst)
+       (item 1 lst))
+(letrec mid = (floor (/ (len lst) 2))
+        right = (- (len lst) mid)
+in      (f (divconq f (sub 0 mid lst))
+           (divconq f (sub mid right lst)))))))
+
+main args =
+(if (< (len args) 4)
+    "Usage: divconq.elc host port size comp\n"
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        size = (stringtonum (item 2 args))
+        comp = (stringtonum (item 3 args))
+
+        callservice x y = (stringtonum
+                          (tail 
+                          (connect host
+                                   port
+                                   (++ (numtostring (+ x y))
+                                       (++ " " (numtostring comp))))))
+
+        result = (divconq callservice (range 1 size))
+
+ in     (++ (numtostring result) "\nEND\n")))

@@ -7,7 +7,6 @@ fi
 
 SHOWLOAD_LOG=$1
 OUTPUT_FILE=$2
-MACHINES=`awk '{print $1}' $SHOWLOAD_LOG | sort | uniq`
 
 cat >$OUTPUT_FILE.plot <<HERE
 #!/usr/bin/gnuplot
@@ -21,14 +20,6 @@ HERE
 
 echo -n "plot " >> $OUTPUT_FILE.plot
 
-count=0
-
-for i in $MACHINES; do
-  if ((count>0)); then
-    echo -n , >> $OUTPUT_FILE.plot
-  fi
-  echo -n \"\< grep $i $SHOWLOAD_LOG\" using 2:3 title \'$i\' with lines " " >> $OUTPUT_FILE.plot
-  ((count++))
-done
+echo -n \"\< grep total $SHOWLOAD_LOG\" using 2:3 title \'$i\' with lines " " linewidth 2 >> $OUTPUT_FILE.plot
 echo "" >> $OUTPUT_FILE.plot
 gnuplot $OUTPUT_FILE.plot

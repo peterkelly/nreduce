@@ -2,5 +2,4 @@ Time per iteration for compute()
 
 titan: 165ms
 macbook: 42ms
-
-
+hydra: 46ms

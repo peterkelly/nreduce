@@ -1,6 +1,7 @@
 EXECUTABLES="$HOME/dev/nreduce/src/nreduce $HOME/dev/tools/loadbal"
 
 export TIMEFORMAT="Total execution time: %R"
+export VM_RUNNING=0
 
 fail()
 {
@@ -39,6 +40,7 @@ init()
   echo "SCRIPT_DIR is $SCRIPT_DIR"
   echo "JOB_DIR is $JOB_DIR"
   echo "PBS_NODEFILE is $PBS_NODEFILE"
+  echo "HOSTNAME is $HOSTNAME"
 
   if [ -e $JOB_DIR/started ]; then
     fail "Job dir has already been used"
@@ -54,6 +56,15 @@ init()
   `cat $JOB_DIR/jobservers | grep -v $HOSTNAME > $JOB_DIR/otherservers`
 
   echo "Nodes:" `cat $JOB_DIR/jobnodes`
+
+  echo -n "Killing existing processes... "
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce loadbal showload' >/dev/null 2>&1
+  echo "ok"
+
+  echo -n "Clearing log dir... "
+  mkdir -p $JOB_DIR/logs/ 2>/dev/null
+  rm -f $JOB_DIR/logs/* 2>/dev/null
+  echo "ok"
 }
 
 startservice()
@@ -89,12 +100,15 @@ startvm()
   echo "Other nodes started: `cat $JOB_DIR/othernodes`"
   wait_vm_startup
   echo "ok"
+
+  VM_RUNNING=1
 }
 
 startloadbal()
 {
   echo -n "Starting load balancer... "
-  (~/dev/tools/loadbal -l - 1235 $JOB_DIR/otherservers >loadbal.log 2>&1 &)
+  (~/dev/tools/loadbal -l - 1235 $JOB_DIR/otherservers >$JOB_DIR/loadbal.log 2>&1 &)
+  ~/dev/tools/waitconn $HOSTNAME 1235 30
   echo "ok"
 }
 
@@ -102,6 +116,13 @@ startshowload()
 {
   echo -n "Starting showload... "
   (~/dev/tools/showload -q -l $JOB_DIR/showload.log $JOB_DIR/jobnodes >/dev/null 2>&1 &)
+  echo "ok"
+}
+
+startshowload_servicenodes()
+{
+  echo -n "Starting showload (service nodes only)... "
+  (~/dev/tools/showload -q -l $JOB_DIR/showload.log $JOB_DIR/othernodes >/dev/null 2>&1 &)
   echo "ok"
 }
 
@@ -148,7 +169,6 @@ check_for_crash()
 
 startup()
 {
-  init
   if (($# < 2)); then
     echo "startup_exp: service or port missing"
     return 1
@@ -157,18 +177,8 @@ startup()
   local service=$1
   local port=$2
 
-  echo -n "Killing existing processes... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce' >/dev/null 2>&1
-  sleep 3
-  echo "ok"
-
-  echo -n "Clearing log dir... "
-  mkdir -p $JOB_DIR/logs/ 2>/dev/null
-  rm -f $JOB_DIR/logs/* 2>/dev/null
-  echo "ok"
-
-  startloadbal
   startservice $service $port
+  startloadbal
   startvm
   startshowload
 
@@ -189,29 +199,40 @@ shutdown()
   echo "ok"
 
   echo -n "Stopping services... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java'
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java' >/dev/null 2>&1
   echo "ok"
 
-  echo -n "Requesting shutdown of virtual machine... "
-  nreduce --client $HOSTNAME shutdown >/dev/null 2>&1
-  sleep 3
-  echo "ok"
+  if [ $VM_RUNNING -ne 0 ]; then
+    echo -n "Requesting shutdown of virtual machine... "
+    nreduce --client $HOSTNAME shutdown >/dev/null 2>&1
+    sleep 3
+    echo "ok"
+  fi
 
   echo -n "Performing filesystem sync... "
   parsh -h $JOB_DIR/jobnodes sync >/dev/null
   echo "ok"
 
-  echo -n "Checking if all nodes shut down successfully... "
-  check_for_crash
-  echo "ok"
+  if [ $VM_RUNNING -ne 0 ]; then
+    echo -n "Checking if all nodes shut down successfully... "
+    check_for_crash
+    echo "ok"
 
-  echo -n "Collating netstats to $JOB_DIR/logs/netstats... "
-  java -cp ~/dev/evaluation util.CollateNetStats $JOB_DIR/logs > $JOB_DIR/logs/netstats
-  echo "ok"
+    echo -n "Killing any lingering VM noes... "
+    parsh -h $JOB_DIR/jobnodes 'killall -9 nreduce' >/dev/null 2>&1
+    echo "ok"
+
+    echo -n "Collating netstats to $JOB_DIR/logs/netstats... "
+    java -cp ~/dev/evaluation util.CollateNetStats $JOB_DIR/logs > $JOB_DIR/logs/netstats
+    echo "ok"
+  fi
 
   echo -n "Generating plot of machine usage... "
-  $SCRIPT_DIR/plotload.sh $JOB_DIR/showload.log $JOB_DIR/usage.ps
+  $SCRIPT_DIR/plotload.sh $JOB_DIR/showload.log $JOB_DIR/usage.eps
+  $SCRIPT_DIR/plotload_total.sh $JOB_DIR/showload.log $JOB_DIR/usage_total.eps
   echo "ok"
 
   touch $JOB_DIR/done
 }
+
+init

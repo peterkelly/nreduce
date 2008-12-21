@@ -6,6 +6,7 @@ if (($# < 1)); then
 fi
 
 SUB_DIR=$1
+QNAME=`hostname -s`
 
 expname=granularity
 nodes=17
@@ -31,7 +32,7 @@ for ((run = 0; run < 5; run++)); do
 #PBS -M pmk@cs.adelaide.edu.au
 
 ### Queue name that job is submitted to
-#PBS -q titan
+#PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
 #PBS -l nodes=$((nodes+1)):ppn=2,walltime=00:30:00
