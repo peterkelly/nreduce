@@ -21,7 +21,7 @@
 #define HOSTWIDTH 12
 
 FILE *logfile = NULL;
-int startsec = 0;
+struct timeval start_time;
 int rows = 0;
 int cols = 0;
 char *shell = "rsh";
@@ -32,7 +32,37 @@ typedef struct host {
   int pid;
   int fd;
   int count;
+  int load;
 } host;
+
+struct timeval timeval_diff(struct timeval from, struct timeval to)
+{
+  struct timeval diff;
+  diff.tv_sec = to.tv_sec - from.tv_sec;
+  diff.tv_usec = to.tv_usec - from.tv_usec;
+  if (0 > diff.tv_usec) {
+    diff.tv_sec -= 1;
+    diff.tv_usec += 1000000;
+  }
+  return diff;
+}
+
+int timeval_diffms(struct timeval from, struct timeval to)
+{
+  struct timeval diff = timeval_diff(from,to);
+  return diff.tv_sec*1000 + diff.tv_usec/1000;
+}
+
+struct timeval timeval_addms(struct timeval t, int ms)
+{
+  t.tv_sec += ms/1000;
+  t.tv_usec += (ms%1000)*1000;
+  if (t.tv_usec >= 1000000) {
+    t.tv_usec -= 1000000;
+    t.tv_sec++;
+  }
+  return t;
+}
 
 char *readfile(FILE *f)
 {
@@ -235,25 +265,56 @@ void update_log(host *hosts, int nhosts, int h, int load)
 
   struct timeval now;
   gettimeofday(&now,NULL);
+  int total_ms = timeval_diffms(start_time,now);
+  int time_sec = total_ms/1000;
+  int time_ms = total_ms%1000;
   if (0 < hosts[h].count) {
     if (0 > load) {
       fprintf(logfile,"%s %d.%03d error\n",
-              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000);
+              hosts[h].hostname,time_sec,time_ms);
     }
     else {
       fprintf(logfile,"%s %d.%03d %d\n",
-              hosts[h].hostname,(int)now.tv_sec-startsec,(int)now.tv_usec/1000,load);
+              hosts[h].hostname,time_sec,time_ms,load);
     }
   }
 }
 
+void update_log_total(host *hosts, int nhosts)
+{
+  if (NULL == logfile)
+    return;
+
+  int total = 0;
+
+  struct timeval now;
+  gettimeofday(&now,NULL);
+  int total_ms = timeval_diffms(start_time,now);
+  int time_sec = total_ms/1000;
+  int time_ms = total_ms%1000;
+
+  int h;
+  for (h = 0; h < nhosts; h++) {
+    if ((0 < hosts[h].count) && (0 <= hosts[h].load))
+      total += hosts[h].load;
+  }
+
+  fprintf(logfile,"total %d.%03d %.3f\n",
+          time_sec,time_ms,total/(double)nhosts);
+}
+
 void loop(host *hosts, int nhosts)
 {
+  int next_updatems = 0;
+
   while (1) {
     fd_set rfds;
     int h;
     int highest = -1;
     int s;
+    int ms;
+    struct timeval wait_time = { 0, 0 };
+    struct timeval now;
 
     FD_ZERO(&rfds);
     for (h = 0; h < nhosts; h++) {
@@ -262,12 +323,24 @@ void loop(host *hosts, int nhosts)
         highest = hosts[h].fd;
     }
 
-    while ((0 > (s = select(highest+1,&rfds,NULL,NULL,NULL))) &&
+    gettimeofday(&now,NULL);
+    ms = timeval_diffms(start_time,now);
+    if (ms < next_updatems)
+      wait_time = timeval_addms(wait_time,next_updatems-ms);
+
+    while ((0 > (s = select(highest+1,&rfds,NULL,NULL,&wait_time))) &&
            (EINTR == errno));
 
     if (0 > s) {
       perror("select");
       exit(-1);
+    }
+
+    gettimeofday(&now,NULL);
+    ms = timeval_diffms(start_time,now);
+    if (ms >= next_updatems) {
+      update_log_total(hosts,nhosts);
+      next_updatems += 500;
     }
 
     for (h = 0; h < nhosts; h++) {
@@ -279,6 +352,8 @@ void loop(host *hosts, int nhosts)
         if (0 >= r)
           c = -1;
         hosts[h].count++;
+        if (0 <= c)
+          hosts[h].load = c;
         update_screen(hosts,nhosts,h,c);
         update_log(hosts,nhosts,h,c);
       }
@@ -369,7 +444,6 @@ int main(int argc, char **argv)
   char *data;
   int nhosts;
   host *hosts;
-  struct timeval now;
   char *logfilename = NULL;
   char *hostsfilename = NULL;
 
@@ -414,8 +488,7 @@ int main(int argc, char **argv)
   if (NULL != logfile)
     setbuf(logfile,NULL);
 
-  gettimeofday(&now,NULL);
-  startsec = now.tv_sec;
+  gettimeofday(&start_time,NULL);
 
   signal(SIGINT,finish);
 
