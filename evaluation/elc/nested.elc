@@ -1,0 +1,51 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+addnewline str =
+(++ str "\n")
+
+addspace str =
+(++ str " ")
+
+printstrings strings =
+(foldr ++ "" (map addnewline strings))
+
+printcols strings =
+(foldr ++ "" (map addspace strings))
+
+main args =
+(if (< (len args) 4)
+    "Usage: dataparallel.elc host port size compms\n"
+
+
+
+
+
+
+
+
+
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        size = (stringtonum (item 2 args))
+        compms = (stringtonum (item 3 args))
+
+        callservice n = (stringtonum (tail (connect host
+                                                    port
+                                                    (++ (numtostring n)
+                                                        (++ " " (numtostring compms))))))
+
+        data = (map (!x.(range x (+ x (- size 1)))) (range 0 (- size 1)))
+        results = (map (!row.map callservice row) data)
+ 
+ in     (++ (printstrings (map (!row.printcols (map numtostring row))
+                               results))
+            "END\n")))

@@ -9,10 +9,10 @@ SUB_DIR=$1
 QNAME=`hostname -s`
 
 expname=granularity
-nodes=17
+nodes=16
 
-for ((run = 0; run < 5; run++)); do
-  for ((gran = 1; gran <= 100; gran++)); do
+for ((run = 0; run < 3; run++)); do
+  for ((gran = 10; gran <= 10240; gran *= 2)); do
     jobname=$expname.r$run.n$gran
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh

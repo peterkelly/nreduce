@@ -8,7 +8,7 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=divconq-size
+expname=divconq-usage
 nodes=32
 
 for size in 32 64 128 256 512 1024; do

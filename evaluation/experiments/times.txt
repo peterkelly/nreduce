@@ -1,5 +1,31 @@
-Time per iteration for compute()
+Java Compute service:
 
-titan: 165ms
-macbook: 42ms
-hydra: 46ms
+macbook: Computations per ms = 216334
+titan: Computations per ms = 98425
+hydra: Computations per ms = 392105
+
+C Compute service:
+
+macbook: COMP_PER_MS=138465
+titan: COMP_PER_MS=32985 (range 32800.0-33170)
+hyra: COMP_PER_MS=138216
+
+(range 131000-148000)
+
+
+
+132117 - 148456
+
+
+
+=============== hydra084 ===============
+1000 iterations took 7569ms
+comp per ms = 132117
+
+
+=============== hydra073 ===============
+1000 iterations took 6736ms
+comp per ms = 148456
+
+
+151825 - 166839

@@ -16,17 +16,17 @@ printstrings strings =
 
 main args =
 (if (< (len args) 4)
-    "Usage: basicmap.elc host port size comp\n"
+    "Usage: dataparallel.elc host port size compms\n"
 
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))
         size = (stringtonum (item 2 args))
-        comp = (stringtonum (item 3 args))
+        compms = (stringtonum (item 3 args))
 
         callservice n = (connect host
                                  port
                                  (++ (numtostring n)
-                                     (++ " " (numtostring comp))))
+                                     (++ " " (numtostring compms))))
 
         results = (map callservice (range 1 size))
 

@@ -12,13 +12,13 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
-startservice services.Compute2 1234
+startcservice dev/tools/svc_compute 1234
 startloadbal
-startshowload
+startshowload_servicenodes
 
   echo "Startup completed"
 
-time nreduce $ELC_DIR/divconq.elc $HOSTNAME 1235 $SIZE 100
+time nreduce $ELC_DIR/divconq.elc $HOSTNAME 1235 $SIZE 10000
 echo Program exited with status $?
 
 shutdown
