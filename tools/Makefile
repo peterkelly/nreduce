@@ -1,4 +1,6 @@
-all: parsh showload loadbal waitconn nobuftail runtests measure saxonclient
+almostall: parsh showload loadbal waitconn nobuftail runtests measure svc_compute
+
+all: almostall saxonclient
 
 parsh: parsh.c
 	gcc -g -Wall -o parsh parsh.c
@@ -20,6 +22,9 @@ runtests: runtests.c
 
 measure: measure.c
 	gcc -g -Wall -o measure measure.c -lpthread
+
+svc_compute: svc_compute.c
+	gcc -g -Wall -o svc_compute svc_compute.c -lpthread
 
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
