@@ -1371,8 +1371,6 @@ int handle_interrupt(task *tsk)
 
   if (NULL == *tsk->runptr) {
     int diffms;
-    frameblock *fb;
-    int i;
 
     /* Standalone: no runnable or blocked frames means we can exit */
     if ((1 == tsk->groupsize) && (0 == tsk->netpending)) {
@@ -1405,25 +1403,29 @@ int handle_interrupt(task *tsk)
     /* We really have nothing to do; run a sparked frame if we have one, otherwise send
        out a work request */
 
-    for (fb = tsk->frameblocks; fb; fb = fb->next) {
-      for (i = 0; i < tsk->framesperblock; i++) {
-        frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-        if (STATE_SPARKED == f->state) {
-#if 0
-          pntr fp;
-          assert(f->c);
-          make_pntr(fp,f->c);
-          #ifdef DEBUG_DISTRIBUTION
-          char *tmp = pntr_to_string(tsk,fp);
-          node_log(tsk->n,LOG_DEBUG1,"%d: RUNSPARK %s",tsk->tid,tmp);
-          free(tmp);
-          #endif
-#endif
-          run_frame(tsk,f);
-          return 0;
-        }
-      }
+    if (NULL == tsk->searchfb) {
+      tsk->searchfb = tsk->frameblocks;
+      tsk->searchpos = 0;
     }
+
+    frameblock *fb = tsk->searchfb;
+    int i = tsk->searchpos;
+
+    do {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if (STATE_SPARKED == f->state) {
+        run_frame(tsk,f);
+        tsk->searchfb = fb;
+        tsk->searchpos = i;
+        return 0;
+      }
+
+      i++;
+      if (i >= tsk->framesperblock) {
+        i = 0;
+        fb = fb->next ? fb->next : tsk->frameblocks;
+      }
+    } while ((fb != tsk->searchfb) || (i != tsk->searchpos));
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);

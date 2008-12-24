@@ -119,13 +119,13 @@ void got_message(node *n, const msgheader *hdr, endpointid source,
 
 void connect_pending(node *n)
 {
-  connection *conn = NULL;
   assert(NODE_ALREADY_LOCKED(n));
-
-  for (conn = n->p->connections.first; conn; conn = conn->next) {
-    if ((CS_WAITING == conn->state) && (MAX_OPENING > conn->si->nopening)) {
-      connection_fsm(conn,CE_SLOT_AVAILABLE);
-      return;
+  list *l;
+  for (l = n->p->servers; l; l = l->next) {
+    serverinfo *si = (serverinfo*)l->data;
+    while ((MAX_OPENING > si->nopening) && (NULL != si->waiting_connections.first)) {
+      assert(si->waiting_connections.first->iswaiting);
+      connection_fsm(si->waiting_connections.first,CE_SLOT_AVAILABLE);
     }
   }
 }
@@ -144,6 +144,8 @@ void start_console(node *n, connection *conn)
 
 static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nodeport)
 {
+  /* Note: we don't need to check waiting connections here, because this method is
+     only used for node-node connections, and they always bypass the waiting state */
   if (getenv("OUTGOING")) {
     connection *conn;
     for (conn = n->p->connections.first; conn; conn = conn->next)
@@ -173,13 +175,12 @@ connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener
   conn->l = l;
   conn->n = n;
   conn->port = -1;
-  conn->recvbuf = array_new(1,n->iosize*2);
-  conn->sendbuf = array_new(1,n->iosize*2);
   conn->state = CS_START;
   conn->si = get_serverinfo(n,ip);
   if (l == n->p->mainl)
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
   llist_append(&n->p->connections,conn);
+  connhash_add(n,conn);
   return conn;
 }
 
@@ -391,6 +392,8 @@ void node_remove_listener(node *n, listener *l)
 {
   connection *conn;
   assert(NODE_ALREADY_LOCKED(n));
+  /* No need to check waiting connections here, since these are outgoing only, and thus
+     don't have a listener associated with them */
   conn = n->p->connections.first;
   while (conn) {
     connection *next = conn->next;
@@ -451,6 +454,12 @@ void node_close_connections(node *n)
   lock_node(n);
   while (n->p->connections.first)
     connection_fsm(n->p->connections.first,CE_DELETE);
+  list *l;
+  for (l = n->p->servers; l; l = l->next) {
+    serverinfo *si = (serverinfo*)l->data;
+    while (si->waiting_connections.first)
+      connection_fsm(si->waiting_connections.first,CE_DELETE);
+  }
   unlock_node(n);
 }
 
@@ -947,4 +956,41 @@ serverinfo *get_serverinfo(node *n, in_addr_t ip)
   si->ip = ip;
   list_push(&n->p->servers,si);
   return si;
+}
+
+connection *connhash_lookup(node *n, socketid sockid)
+{
+  assert(NODE_ALREADY_LOCKED(n));
+  int h = sockid.sid % CONNECTION_HASH_SIZE;
+  connection *conn;
+  for (conn = n->p->connhash[h]; conn; conn = conn->hashnext) {
+    if (socketid_equals(&conn->sockid,&sockid))
+      return conn;
+  }
+  return NULL;
+}
+
+void connhash_add(node *n, connection *conn)
+{
+  assert(NODE_ALREADY_LOCKED(n));
+  assert(NULL == connhash_lookup(n,conn->sockid));
+  assert(NULL == conn->hashnext);
+  int h = conn->sockid.sid % CONNECTION_HASH_SIZE;
+  conn->hashnext = n->p->connhash[h];
+  n->p->connhash[h] = conn;
+}
+
+void connhash_remove(node *n, connection *conn)
+{
+  assert(NODE_ALREADY_LOCKED(n));
+  int h = conn->sockid.sid % CONNECTION_HASH_SIZE;
+  connection **cp;
+  for (cp = &n->p->connhash[h]; *cp; cp = &((*cp)->hashnext)) {
+    if (*cp == conn) {
+      *cp = conn->hashnext;
+      conn->hashnext = NULL;
+      return;
+    }
+  }
+  assert(!"connhash_remove: connection not found");
 }

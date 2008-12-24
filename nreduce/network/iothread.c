@@ -50,16 +50,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-static connection *get_connection(node *n, socketid id)
-{
-  connection *conn;
-  assert(NODE_ALREADY_LOCKED(n));
-  for (conn = n->p->connections.first; conn; conn = conn->next)
-    if (socketid_equals(&conn->sockid,&id))
-      return conn;
-  return NULL;
-}
-
 static listener *get_listener(node *n, socketid id)
 {
   listener *l;
@@ -170,7 +160,7 @@ static void iothread_read(node *n, endpoint *endpt, read_msg *m, endpointid sour
 
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
      receive a CONNECTION_CLOSED MESSAGE */
-  if (NULL != (conn = get_connection(n,m->sockid))) {
+  if (NULL != (conn = connhash_lookup(n,m->sockid))) {
     if (CS_ACCEPTED_DONE_READING == conn->state)
       fatal("READ request for socket that has finished reading");
     assert(!conn->collected);
@@ -203,7 +193,7 @@ static void iothread_write(node *n, endpoint *endpt, write_msg *m, endpointid so
 
   /* If the connection doesn't exist any more, ignore the request - the caller is about to
      receive a CONNECTION_CLOSED MESSAGE */
-  if (NULL != (conn = get_connection(n,m->sockid))) {
+  if (NULL != (conn = connhash_lookup(n,m->sockid))) {
     assert(!conn->collected);
 
     if (!endpointid_equals(&conn->owner,&source)) {
@@ -241,7 +231,7 @@ static void iothread_delete_connection(node *n, endpoint *endpt,
 {
   connection *conn;
 
-  if (NULL != (conn = get_connection(n,m->sockid))) {
+  if (NULL != (conn = connhash_lookup(n,m->sockid))) {
     conn->collected = 1;
     if (!conn->finwrite) {
       conn->finwrite = 1;
@@ -612,6 +602,7 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
       highest = n->p->ioready_readfd;
 
     for (conn = n->p->connections.first; conn; conn = conn->next) {
+      assert(!conn->iswaiting);
       if (0 > conn->sock)
         continue;
       if (highest < conn->sock)

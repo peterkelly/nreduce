@@ -114,7 +114,13 @@ static void remove_connection(node *n, connection *conn)
   add_connection_stats(n,conn);
   if (0 <= conn->sock)
     list_push(&n->p->toclose,(void*)conn->sock);
-  llist_remove(&n->p->connections,conn);
+  connhash_remove(n,conn);
+  if (CS_WAITING == conn->state) {
+    llist_remove(&conn->si->waiting_connections,conn);
+  }
+  else {
+    llist_remove(&n->p->connections,conn);
+  }
   free(conn->hostname);
   array_free(conn->recvbuf);
   array_free(conn->sendbuf);
@@ -188,6 +194,8 @@ static void enter_waiting(connection *conn)
   node_log(conn->n,LOG_DEBUG1,"nwaiting("IP_FORMAT") = %d",IP_ARGS(conn->ip),conn->si->nwaiting);
   assert(!conn->iswaiting);
   conn->iswaiting = 1;
+  llist_remove(&conn->n->p->connections,conn);
+  llist_append(&conn->si->waiting_connections,conn);
 }
 
 static void exit_waiting(connection *conn)
@@ -197,6 +205,8 @@ static void exit_waiting(connection *conn)
   assert(0 <= conn->si->nwaiting);
   assert(conn->iswaiting);
   conn->iswaiting = 0;
+  llist_remove(&conn->si->waiting_connections,conn);
+  llist_append(&conn->n->p->connections,conn);
 }
 
 static void enter_opening(connection *conn)
@@ -253,6 +263,13 @@ static void connection_state(connection *conn, int newstate)
     enter_active(conn);
   else if (!ACCEPTED_STATE(newstate) && ACCEPTED_STATE(conn->state))
     exit_active(conn);
+
+  if (CS_CONNECTED == newstate) {
+    assert(NULL == conn->recvbuf);
+    assert(NULL == conn->sendbuf);
+    conn->recvbuf = array_new(1,n->iosize*2);
+    conn->sendbuf = array_new(1,n->iosize*2);
+  }
 
   conn->state = newstate;
   connection_fsm(conn,CE_AUTO);

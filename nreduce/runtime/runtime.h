@@ -559,6 +559,8 @@ typedef struct task {
   unsigned int newgenoffset;
   int oldgenbytes;
   frameblock *frameblocks;
+  frameblock *searchfb;
+  int searchpos;
   cell *freeptr;
   pntr globnilpntr;
   pntr globtruepntr;

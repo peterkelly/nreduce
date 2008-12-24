@@ -29,6 +29,8 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#define CONNECTION_HASH_SIZE 7919
+
 //#define DEBUG_SHORT_KEEPALIVE
 
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
@@ -99,6 +101,7 @@ typedef struct connection {
   int state;
   int haderror;
   struct serverinfo *si;
+  struct connection *hashnext;
 } connection;
 
 typedef struct listener {
@@ -135,6 +138,7 @@ typedef struct serverinfo {
   int nopening;
   int naccepted;
   in_addr_t ip;
+  connectionlist waiting_connections;
 } serverinfo;
 
 typedef struct node_private {
@@ -156,6 +160,7 @@ typedef struct node_private {
   list *toclose;
   list *stats;
   list *servers;
+  connection *connhash[CONNECTION_HASH_SIZE];
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);
@@ -188,6 +193,9 @@ void endpoint_send_locked(endpoint *endpt, endpointid dest, int tag, const void 
 void console_thread(node *n, endpoint *endpt, void *arg);
 
 serverinfo *get_serverinfo(node *n, in_addr_t ip);
+connection *connhash_lookup(node *n, socketid sockid);
+void connhash_add(node *n, connection *conn);
+void connhash_remove(node *n, connection *conn);
 
 /* iothread.c */
 
