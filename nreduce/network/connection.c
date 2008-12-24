@@ -122,8 +122,10 @@ static void remove_connection(node *n, connection *conn)
     llist_remove(&n->p->connections,conn);
   }
   free(conn->hostname);
-  array_free(conn->recvbuf);
-  array_free(conn->sendbuf);
+  if (NULL != conn->recvbuf)
+    array_free(conn->recvbuf);
+  if (NULL != conn->sendbuf)
+    array_free(conn->sendbuf);
   free(conn);
   connect_pending(n);
 }
@@ -264,12 +266,8 @@ static void connection_state(connection *conn, int newstate)
   else if (!ACCEPTED_STATE(newstate) && ACCEPTED_STATE(conn->state))
     exit_active(conn);
 
-  if (CS_CONNECTED == newstate) {
-    assert(NULL == conn->recvbuf);
-    assert(NULL == conn->sendbuf);
-    conn->recvbuf = array_new(1,n->iosize*2);
-    conn->sendbuf = array_new(1,n->iosize*2);
-  }
+  if (CS_CONNECTED == newstate)
+    create_connection_buffers(conn);
 
   conn->state = newstate;
   connection_fsm(conn,CE_AUTO);
@@ -340,8 +338,8 @@ void connection_fsm(connection *conn, int event)
   case CS_CONNECTING:
     switch (event) {
     case CE_ASYNC_OK:
-      notify_connect(conn->n,conn,0);
       connection_state(conn,CS_CONNECTED);
+      notify_connect(conn->n,conn,0);
       return;
     case CE_ASYNC_FAILED:
       connection_state(conn,CS_FAILED);

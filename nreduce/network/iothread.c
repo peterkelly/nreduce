@@ -195,6 +195,7 @@ static void iothread_write(node *n, endpoint *endpt, write_msg *m, endpointid so
      receive a CONNECTION_CLOSED MESSAGE */
   if (NULL != (conn = connhash_lookup(n,m->sockid))) {
     assert(!conn->collected);
+    assert(NULL != conn->sendbuf);
 
     if (!endpointid_equals(&conn->owner,&source)) {
       conn->owner = source;

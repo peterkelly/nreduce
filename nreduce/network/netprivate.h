@@ -185,6 +185,7 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
                       uint32_t tag, const void *data, uint32_t size);
 void got_message(node *n, const msgheader *hdr, endpointid source,
                  uint32_t tag, uint32_t size, const void *data);
+void create_connection_buffers(connection *conn);
 connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener *l);
 void endpoint_link_locked(endpoint *endpt, endpointid to);
 void endpoint_unlink_locked(endpoint *endpt, endpointid to);

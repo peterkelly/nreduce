@@ -162,6 +162,16 @@ static connection *find_connection(node *n, in_addr_t nodeip, unsigned short nod
   }
 }
 
+void create_connection_buffers(connection *conn)
+{
+  /* We only do this when necessary, to avoid using lots of memory to store buffers
+     for waiting connections that don't need them yet */
+  if (NULL == conn->recvbuf)
+    conn->recvbuf = array_new(1,conn->n->iosize*2);
+  if (NULL == conn->sendbuf)
+    conn->sendbuf = array_new(1,conn->n->iosize*2);
+}
+
 connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener *l)
 {
   connection *conn = (connection*)calloc(1,sizeof(connection));
@@ -177,8 +187,10 @@ connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener
   conn->port = -1;
   conn->state = CS_START;
   conn->si = get_serverinfo(n,ip);
-  if (l == n->p->mainl)
+  if (l == n->p->mainl) {
+    create_connection_buffers(conn);
     array_append(conn->sendbuf,WELCOME_MESSAGE,strlen(WELCOME_MESSAGE));
+  }
   llist_append(&n->p->connections,conn);
   connhash_add(n,conn);
   return conn;
