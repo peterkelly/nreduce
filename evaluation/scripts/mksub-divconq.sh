@@ -8,12 +8,12 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=granularity
-nodes=16
+expname=divconq
 
 for ((run = 0; run < 3; run++)); do
-  for ((gran = 16; gran <= 65536; gran *= 2)); do
-    jobname=$expname.r$run.n$gran
+  for ((nodes = 1; nodes <= 32; nodes++)); do
+#  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
+    jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -46,7 +46,7 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh $gran >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
 EOF
   done
 done

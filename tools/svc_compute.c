@@ -173,11 +173,19 @@ long long get_comp_per_ms()
   return cpm;
 }
 
-void compute_service(int port)
+void compute_service(int port, int direct)
 {
   int listensock;
   int sock;
   int maxthreads = 3;
+  int nconnections = 0;
+
+  if (direct) {
+    printf("Using single thread for all responses\n");
+  }
+  else {
+    printf("Using separate threads for each response\n");
+  }
 
   comp_per_ms = get_comp_per_ms();
 
@@ -195,14 +203,16 @@ void compute_service(int port)
   /* Repeatedly accept connections from clients */
   printf("Waiting for connection...\n");
   while (1) {
-    /* Wait until there is a thread available */
-    pthread_mutex_lock(&lock);
-    while (nthreads+1 > maxthreads) {
-      printf("nthreads = %d, waiting\n",nthreads);
-      pthread_cond_wait(&cond,&lock);
+    if (!direct) {
+      /* Wait until there is a thread available */
+      pthread_mutex_lock(&lock);
+      while (nthreads+1 > maxthreads) {
+        printf("nthreads = %d, waiting\n",nthreads);
+        pthread_cond_wait(&cond,&lock);
+      }
+      nthreads++;
+      pthread_mutex_unlock(&lock);
     }
-    nthreads++;
-    pthread_mutex_unlock(&lock);
 
     /* Accept the connection */
     if (0 > (sock = accept(listensock,NULL,0))) {
@@ -210,17 +220,25 @@ void compute_service(int port)
       exit(-1);
     }
 
-    printf("Got connection\n");
+    printf("Got connection %d\n",nconnections);
+    nconnections++;
 
-    /* Start a new thread to handle the connection */
-    pthread_t thread;
-    if (0 != pthread_create(&thread,NULL,connection_handler,(void*)sock)) {
-      perror("pthread_create");
-      exit(-1);
+    if (direct) {
+      handle(sock);
+      close(sock);
     }
-    if (0 != pthread_detach(thread)) {
-      perror("pthread_detach");
-      exit(-1);
+    else {
+
+      /* Start a new thread to handle the connection */
+      pthread_t thread;
+      if (0 != pthread_create(&thread,NULL,connection_handler,(void*)sock)) {
+        perror("pthread_create");
+        exit(-1);
+      }
+      if (0 != pthread_detach(thread)) {
+        perror("pthread_detach");
+        exit(-1);
+      }
     }
   }
 
@@ -251,7 +269,8 @@ int main(int argc, char **argv)
       fprintf(stderr,"Invalid port number\n");
       exit(1);
     }
-    compute_service(port);
+    int direct = (getenv("DIRECT") != NULL);
+    compute_service(port,direct);
   }
 
   return 0;

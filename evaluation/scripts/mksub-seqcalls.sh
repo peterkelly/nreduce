@@ -8,12 +8,13 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=granularity
-nodes=16
+expname=seqcalls
+nodes=2
+
 
 for ((run = 0; run < 3; run++)); do
-  for ((gran = 16; gran <= 65536; gran *= 2)); do
-    jobname=$expname.r$run.n$gran
+  for ((size = 1000; size <= 64000; size *= 2)); do
+    jobname=$expname.r$run.n$size
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -46,7 +47,7 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh $gran >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $size >\$JOB_DIR/output 2>&1
 EOF
   done
 done

@@ -7,10 +7,11 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 startcservice dev/tools/svc_compute 1234
 startloadbal
-startshowload
+startshowload_servicenodes
+
 echo "Startup completed"
 
-time nreduce $ELC_DIR/dataparallel.elc $HOSTNAME 1235 1024 1000
+time nreduce $ELC_DIR/divconq.elc $HOSTNAME 1235 512 10000
 echo Program exited with status $?
 
 shutdown

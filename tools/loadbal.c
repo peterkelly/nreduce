@@ -318,7 +318,7 @@ void main_loop()
         if (0 > getsockopt(p->serverfd,SOL_SOCKET,SO_ERROR,&err,&optlen))
           fatal("getsockopt SO_ERROR: %s",strerror(errno));
         else if (0 != err)
-          fatal("connect: %s",strerror(err));
+          fatal("connect %s: %s",p->s->hostname,strerror(err));
         else
           p->connected = 1;
         debug("Connected to server (proxy %d)",p->id);
@@ -346,7 +346,7 @@ void main_loop()
       r = connect(serverfd,(struct sockaddr*)&addr,sizeof(struct sockaddr));
       assert(0 > r);
       if (EINPROGRESS != errno)
-        fatal("connect: %s",strerror(errno));
+        fatal("connect %s: %s",p->s->hostname,strerror(errno));
 
       proxy *p = add_proxy(clientfd,serverfd,s);
       debug("Initiated connection to %s; clientfd = %d, serverfd = %d (proxy %d)",

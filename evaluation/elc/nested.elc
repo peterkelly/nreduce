@@ -22,16 +22,7 @@ printcols strings =
 
 main args =
 (if (< (len args) 4)
-    "Usage: dataparallel.elc host port size compms\n"
-
-
-
-
-
-
-
-
-
+    "Usage: nested.elc host port size compms\n"
 
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))

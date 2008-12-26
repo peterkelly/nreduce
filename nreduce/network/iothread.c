@@ -100,6 +100,12 @@ static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointi
   connection *conn;
   char hostname[HOSTNAME_MAX+1];
 
+/*   int nactive = 0; */
+/*   for (conn = n->p->connections.first; conn; conn = conn->next) */
+/*     nactive++; */
+/*   int ntoclose = list_count(n->p->toclose); */
+/*   printf("xiothread_connect: # active connections = %d, to close = %d\n",nactive,ntoclose); */
+
   endpoint_link_locked(endpt,m->owner);
   sprintf(hostname,IP_FORMAT,IP_ARGS(m->ip));
   conn = add_connection(n,hostname,m->ip,NULL);
@@ -529,6 +535,8 @@ static int handle_connected(node *n, connection *conn)
   else {
     node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
              conn->hostname,conn->port,strerror(err));
+    printf("connect error case 2\n");
+    system("netstat -tnp");
     conn->errn = err;
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
     conn->errmsg[ERRMSG_MAX] = '\0';

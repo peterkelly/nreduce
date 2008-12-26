@@ -1,0 +1,26 @@
+/*
+loop host port ncalls =
+(if (== ncalls 0)
+    nil
+    (loop host
+       port (stringtonum (tail (connect host
+                                        port
+                                        (++ (numtostring (- ncalls 1)) " 0"))))))
+*/
+
+loop host port ncalls =
+(if (== ncalls 0)
+    nil
+(seq (connect host port "0 0")
+     (loop host port (- ncalls 1))))
+
+
+main args =
+(if (< (len args) 3)
+    "Usage: dataparallel.elc host port size compms\n"
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        ncalls = (stringtonum (item 2 args))
+in      (loop host port ncalls)))
+

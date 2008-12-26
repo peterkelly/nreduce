@@ -7,7 +7,7 @@ fi
 
 GRANULARITY=$1
 
-((requests=25600.0/$GRANULARITY))
+((requests=2097152/$GRANULARITY))
 
 echo GRANULARITY $GRANULARITY requests $requests mult $((requests*GRANULARITY))
 
