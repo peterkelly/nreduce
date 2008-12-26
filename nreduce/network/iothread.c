@@ -535,8 +535,6 @@ static int handle_connected(node *n, connection *conn)
   else {
     node_log(n,LOG_WARNING,"Connection to %s:%d failed: %s",
              conn->hostname,conn->port,strerror(err));
-    printf("connect error case 2\n");
-    system("netstat -tnp");
     conn->errn = err;
     snprintf(conn->errmsg,ERRMSG_MAX,"%s",strerror(err));
     conn->errmsg[ERRMSG_MAX] = '\0';

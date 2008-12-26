@@ -161,8 +161,6 @@ static int initiate_connection(connection *conn)
   if (EINPROGRESS != errno) {
     conn->errn = errno;
     snprintf(conn->errmsg,ERRMSG_MAX,"connect: %s",strerror(errno));
-    printf("connect error case 1\n");
-    system("netstat -tnp");
     return -1;
   }
 

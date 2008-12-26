@@ -45,7 +45,7 @@
 #define JAVA_ID         4
 #define FIRST_ID        5
 
-#define WORKER_PORT     2000
+#define WORKER_PORT     6879
 
 struct node;
 struct endpoint;
