@@ -51,7 +51,7 @@ init()
   touch $JOB_DIR/started
 
   `sort $PBS_NODEFILE | uniq > $JOB_DIR/jobnodes`
-  `sort $PBS_NODEFILE | uniq | sed -e 's/$/:1234/' > $JOB_DIR/jobservers`
+  `sort $PBS_NODEFILE | uniq | sed -e 's/$/:5000/' > $JOB_DIR/jobservers`
   `cat $JOB_DIR/jobnodes | grep -v $HOSTNAME > $JOB_DIR/othernodes`
   `cat $JOB_DIR/jobservers | grep -v $HOSTNAME > $JOB_DIR/otherservers`
 
@@ -108,7 +108,7 @@ startvm()
   # Start the initial node
   ~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$HOSTNAME.log 2>&1 &
   echo "Initial node started: $HOSTNAME"
-  ~/dev/tools/waitconn $HOSTNAME 2000 30
+  ~/dev/tools/waitconn $HOSTNAME 6879 30
 
   # Start the other nodes
   parsh -h $JOB_DIR/othernodes \
@@ -124,8 +124,8 @@ startvm()
 startloadbal()
 {
   echo -n "Starting load balancer... "
-  (~/dev/tools/loadbal -l - 1235 $JOB_DIR/otherservers >$JOB_DIR/loadbal.log 2>&1 &)
-  ~/dev/tools/waitconn $HOSTNAME 1235 30
+  (~/dev/tools/loadbal -l - 5001 $JOB_DIR/otherservers >$JOB_DIR/loadbal.log 2>&1 &)
+  ~/dev/tools/waitconn $HOSTNAME 5001 30
   echo "ok"
 }
 

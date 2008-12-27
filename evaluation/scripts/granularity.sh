@@ -16,12 +16,12 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
-startcservice dev/tools/svc_compute 1234
+startcservice dev/tools/svc_compute 5000
 startloadbal
 startshowload
 echo "Startup completed"
 
-time nreduce $ELC_DIR/dataparallel.elc $HOSTNAME 1235 $requests $GRANULARITY
+time nreduce $ELC_DIR/dataparallel.elc $HOSTNAME 5001 $requests $GRANULARITY
 echo Program exited with status $?
 
 shutdown

@@ -35,7 +35,7 @@ export LOG_LEVEL=debug2
 echo "-------------------------------- Starting Servers and VM"
 parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce'
 runvm
-runservice services.AddChar 1234
+runservice services.AddChar 5000
 sleep 5
 echo "-------------------------------- Running program"
 nreduce --client $LAST run 0 ~/dev/evaluation/elc/pipeline.elc $SERVERS

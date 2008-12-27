@@ -5,12 +5,12 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
-startcservice dev/tools/svc_compute 1234
+startcservice dev/tools/svc_compute 5000
 startloadbal
 startshowload
 echo "Startup completed"
 
-time nreduce $ELC_DIR/nested.elc $HOSTNAME 1235 32 1000
+time nreduce $ELC_DIR/nested.elc $HOSTNAME 5001 32 1000
 echo Program exited with status $?
 
 shutdown

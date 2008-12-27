@@ -11,7 +11,7 @@ if [ -z $PBS_NODEFILE ]; then
 fi
 
 uniq $PBS_NODEFILE > $JOB_DIR/jobnodes
-uniq $PBS_NODEFILE | sed -e 's/$/:1234/' > $JOB_DIR/jobservers
+uniq $PBS_NODEFILE | sed -e 's/$/:5000/' > $JOB_DIR/jobservers
 
 echo Job nodes
 cat $JOB_DIR/jobnodes

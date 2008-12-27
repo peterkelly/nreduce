@@ -18,14 +18,15 @@ printstrings strings =
 
 main args =
 (if (< (len args) 3)
-  "Usage: pipeline.elc <nitems> <comp> services...\n"
+  "Usage: pipeline.elc <nitems> <comp> <port> services...\n"
 (letrec nitems = (stringtonum (item 0 args))
         comp = (stringtonum (item 1 args))
-        services = (skip 2 args)
+        port = (stringtonum (item 2 args))
+        services = (skip 3 args)
 
         callservice host x =
           (stringtonum (tail (connect host
-                                      1234
+                                      port
                                       (++ (numtostring (+ x 1))
                                           (++ " " (numtostring comp))))))
 

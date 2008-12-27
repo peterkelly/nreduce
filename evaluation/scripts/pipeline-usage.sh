@@ -12,13 +12,12 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
-startcservice dev/tools/svc_compute 1234
+startcservice dev/tools/svc_compute 5000
 startloadbal
 startshowload_servicenodes
 echo "Startup completed"
 
-echo nreduce $ELC_DIR/pipeline.elc $NITEMS 10000 `grep -v $HOSTNAME $JOB_DIR/jobnodes`
-time nreduce $ELC_DIR/pipeline.elc $NITEMS 10000 `grep -v $HOSTNAME $JOB_DIR/jobnodes`
+time nreduce $ELC_DIR/pipeline.elc $NITEMS 10000 5000 `grep -v $HOSTNAME $JOB_DIR/jobnodes`
 echo Program exited with status $?
 
 shutdown
