@@ -6,7 +6,7 @@ import java.util.regex.*;
 
 public class Plot2D extends Plot
 {
-  public void genPlot(String name, String title, int col, String ylabel)
+  public void genPlot(String name, String title, int col, String ylabel, boolean ideal)
     throws IOException
   {
     StringWriter sw = new StringWriter();
@@ -20,6 +20,10 @@ public class Plot2D extends Plot
     plotOut.println("set yrange [0:]");
 
     plotOut.println("plot \\");
+
+    if (ideal) {
+      plotOut.print("x title \"Ideal speedup\" with lines ls 0, \\\n");
+    }
 
     for (int i = 0; i < testdirs.length; i++) {
       plotOut.print("\""+outdir+"/"+testnames[i]+".dat\" using 1:"+col+
@@ -54,20 +58,23 @@ public class Plot2D extends Plot
     // Create data files
 
     for (int i = 0; i < ntests; i++) {
-      double t1 = getUserTime(testdirs[i],maxr,1,0,false).avg;
+      double t1 = 0.0; // if no n=1, can't compute speedup/efficiency
+      try {
+        t1 = getUserTime(testdirs[i],maxr,1,0,false).avg;
+      } catch (Exception e) {}
       PrintWriter dataOut = openData(outdir+"/"+testnames[i]+".dat");
       for (int n : nvalues) {
         Result rn = getUserTime(testdirs[i],maxr,n,0,false);
-        printData(dataOut,n,0,rn,t1);
+        printData(dataOut,n,0,rn,-1);
       }
       closeData(dataOut);
     }
 
     // Generate plots
 
-    genPlot("time","Time",AVG,"Time (s)");
-    genPlot("speedup","Speedup",SPEEDUP,"Speedup");
-    genPlot("efficiency","Efficiency",EFFICIENCY,"Efficiency");
+    genPlot("time","Time",AVG,"Time (s)",false);
+    genPlot("speedup","Speedup",SPEEDUP,"Speedup",true);
+    genPlot("efficiency","Efficiency",EFFICIENCY,"Efficiency",false);
   }
 
   public static void main(String[] args)
