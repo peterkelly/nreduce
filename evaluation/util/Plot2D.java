@@ -61,11 +61,11 @@ public class Plot2D extends Plot
       double t1 = 0.0; // if no n=1, can't compute speedup/efficiency
       try {
         t1 = getUserTime(testdirs[i],maxr,1,0,false).avg;
-      } catch (Exception e) {}
+      } catch (FileNotFoundException e) {}
       PrintWriter dataOut = openData(outdir+"/"+testnames[i]+".dat");
       for (int n : nvalues) {
         Result rn = getUserTime(testdirs[i],maxr,n,0,false);
-        printData(dataOut,n,0,rn,-1);
+        printData(dataOut,n,0,rn,t1);
       }
       closeData(dataOut);
     }
