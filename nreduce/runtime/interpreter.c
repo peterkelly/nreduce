@@ -1403,29 +1403,31 @@ int handle_interrupt(task *tsk)
     /* We really have nothing to do; run a sparked frame if we have one, otherwise send
        out a work request */
 
-    if (NULL == tsk->searchfb) {
-      tsk->searchfb = tsk->frameblocks;
-      tsk->searchpos = 0;
+    if (NULL != tsk->frameblocks) {
+      if (NULL == tsk->searchfb) {
+        tsk->searchfb = tsk->frameblocks;
+        tsk->searchpos = 0;
+      }
+
+      frameblock *fb = tsk->searchfb;
+      int i = tsk->searchpos;
+
+      do {
+        frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+        if (STATE_SPARKED == f->state) {
+          run_frame(tsk,f);
+          tsk->searchfb = fb;
+          tsk->searchpos = i;
+          return 0;
+        }
+
+        i++;
+        if (i >= tsk->framesperblock) {
+          i = 0;
+          fb = fb->next ? fb->next : tsk->frameblocks;
+        }
+      } while ((fb != tsk->searchfb) || (i != tsk->searchpos));
     }
-
-    frameblock *fb = tsk->searchfb;
-    int i = tsk->searchpos;
-
-    do {
-      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if (STATE_SPARKED == f->state) {
-        run_frame(tsk,f);
-        tsk->searchfb = fb;
-        tsk->searchpos = i;
-        return 0;
-      }
-
-      i++;
-      if (i >= tsk->framesperblock) {
-        i = 0;
-        fb = fb->next ? fb->next : tsk->frameblocks;
-      }
-    } while ((fb != tsk->searchfb) || (i != tsk->searchpos));
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);
