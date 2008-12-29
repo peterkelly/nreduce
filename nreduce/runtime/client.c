@@ -801,6 +801,31 @@ int do_client(char *initial_str, int argc, const char **argv)
       list *nodes = find_nodes(n,initial,want,0);
       pthread_t thread;
       socketid out_sockid;
+
+      /* Make sure the initial node is the first one in the list - this will cause
+         task 0 to be started on the specified node, which is the task that initially
+         has the executing frames. */
+      list **lptr = &nodes;
+      int found = 0;
+      while (*lptr) {
+        endpointid *epid = (endpointid*)(*lptr)->data;
+        if ((epid->ip == initial.ip) && (epid->port == initial.port)) {
+
+          list *first = *lptr;
+          *lptr = (*lptr)->next;
+
+          first->next = nodes;
+          nodes = first;
+
+          found = 1;
+          break;
+        }
+        else {
+          lptr = &(*lptr)->next;
+        }
+      }
+      assert(found);
+
       output_arg oa;
       memset(&oa,0,sizeof(oa));
       out_sockid.coordid = node_add_thread(n,"output",output_thread,&oa,&thread);
