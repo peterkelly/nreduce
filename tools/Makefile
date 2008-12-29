@@ -1,4 +1,4 @@
-almostall: parsh showload loadbal waitconn nobuftail runtests measure svc_compute
+almostall: parsh showload loadbal waitconn nobuftail runtests measure svc_compute average
 
 all: almostall saxonclient
 
@@ -25,6 +25,9 @@ measure: measure.c
 
 svc_compute: svc_compute.c
 	gcc -g -Wall -o svc_compute svc_compute.c -lpthread
+
+average: average.c
+	gcc -g -Wall -o average average.c
 
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
