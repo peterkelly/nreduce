@@ -8,11 +8,11 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=dataparallel
+expname=pseudo-pipeline-o
 
 for ((run = 0; run < 3; run++)); do
-#  for ((nodes = 1; nodes <= 32; nodes++)); do
-  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
+  for ((nodes = 1; nodes <= 32; nodes++)); do
+#  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
     jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh

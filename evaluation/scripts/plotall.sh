@@ -4,19 +4,12 @@
 # TODO: granularity
 # TODO: seqcalls
 
-~/dev/evaluation/scripts/plotjob.sh dataparallel
-~/dev/evaluation/scripts/plotjob.sh nested
-~/dev/evaluation/scripts/plotjob.sh divconq
-~/dev/evaluation/scripts/plotjob.sh divconq-n
+~/dev/evaluation/scripts/plotjob.sh jobs plots dataparallel dataparallel dataparallel-c
+~/dev/evaluation/scripts/plotjob.sh jobs plots nested nested
+~/dev/evaluation/scripts/plotjob.sh jobs plots divconq divconq
+~/dev/evaluation/scripts/plotjob.sh jobs plots divconq-n divconq-n
+~/dev/evaluation/scripts/plotjob.sh jobs plots pseudo-pipeline pseudo-pipeline-o pseudo-pipeline-c
+
 gnuplot ~/dev/evaluation/scripts/divconq-usage.plot
 gnuplot ~/dev/evaluation/scripts/pipeline-usage.plot
-
-mkdir plots
-
-for j in dataparallel nested divconq divconq-n; do
-  for g in time speedup efficiency; do
-    mv $j/plot/$g.eps plots/$j-$g.eps
-  done
-done
-mv divconq-usage.eps plots
-mv pipeline-usage.eps plots
+gnuplot ~/dev/evaluation/scripts/pseudo-pipeline-usage.plot

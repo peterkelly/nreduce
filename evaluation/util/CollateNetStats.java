@@ -72,7 +72,7 @@ public class CollateNetStats
       throw new Exception("No such match");
   }
 
-  void printStats(boolean betweenonly)
+  void printStats(String type, boolean betweenonly)
   {
     int totalData = 0;
     for (NetStats ns : stats.values()) {
@@ -85,7 +85,7 @@ public class CollateNetStats
         }
       }
     }
-    System.out.println("Total data: "+sizeStr(totalData));
+    System.out.println("Total data "+type+": "+sizeStr(totalData));
   }
 
   public void printDot(String filename)
@@ -153,6 +153,8 @@ public class CollateNetStats
   {
     BufferedReader br = new BufferedReader(new FileReader(f));
     String first = br.readLine();
+    if (null == first)
+      throw new Exception("No first line in "+f.getName());
     Matcher m = firstPattern.matcher(first);
     if (!m.matches())
       throw new Exception("Invalid first line in "+f.getName());
@@ -193,10 +195,10 @@ public class CollateNetStats
     }
 
     System.out.println("Between processes");
-    printStats(false);
+    printStats("between processes",false);
     System.out.println();
     System.out.println("Between machines");
-    printStats(true);
+    printStats("between machines",true);
     System.out.println();
 //     printDot("transfer.dot");
   }

@@ -8,13 +8,14 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=dataparallel
+expname=pseudo-pipeline-usage
 
-for ((run = 0; run < 3; run++)); do
-#  for ((nodes = 1; nodes <= 32; nodes++)); do
-  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
-    jobname=$expname.r$run.n$nodes
-    cat > $SUB_DIR/$jobname.sub <<EOF
+run=0
+nodes=8
+
+for ((nitems=10; nitems <= 50; nitems += 10)); do
+  jobname=$expname.r$run.n$nitems
+  cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
 #PBS -V
@@ -46,7 +47,6 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $nitems $nodes >\$JOB_DIR/output 2>&1
 EOF
-  done
 done

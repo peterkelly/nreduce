@@ -36,10 +36,10 @@ for job in $(cd $EXP_DIR; echo *); do
     echo Job $EXP_DIR/$job did not complete successfully
     exit 1
   fi
-  if ! grep -q END $EXP_DIR/$job/output; then
-    echo Job output for $EXP_DIR/$job does not contain END token
-    exit 1
-  fi
+#  if ! grep -q END $EXP_DIR/$job/output; then
+#    echo Job output for $EXP_DIR/$job does not contain END token
+#    exit 1
+#  fi
   if ! grep -qF 'Total execution time' $EXP_DIR/$job/output; then
     echo Job output for $EXP_DIR/$job does not execution time
     exit 1
@@ -49,6 +49,6 @@ for job in $(cd $EXP_DIR; echo *); do
   run=`echo $job | sed -E -e 's/^.*\.r([0-9]+)\.n([0-9]+)/\1/'`
   nodes=`echo $job | sed -E -e 's/^.*\.r([0-9]+)\.n([0-9]+)/\2/'`
   seconds=`grep 'Total execution time' $EXP_DIR/$job/output | sed -e 's/^.*: //'`
-  echo run=$run nodes=$nodes seconds=$seconds
+#  echo run=$run nodes=$nodes seconds=$seconds
   echo "$seconds 0.0 0.0" > $OUT_DIR/time.r$run.n$nodes
 done

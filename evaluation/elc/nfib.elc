@@ -1,0 +1,17 @@
+nfib n =
+(if (<= n 1)
+    1
+    (+ (nfib (- n 2)) (nfib (- n 1))))
+
+
+main args =
+(if (< (len args) 1)
+  "Usage: nfib.elc <n>\n"
+  (letrec
+     n = (stringtonum (head args))
+   in
+     (++ "nfib("
+     (++ (numtostring n)
+     (++ ") = "
+     (++ (numtostring (nfib n))
+         "\n"))))))

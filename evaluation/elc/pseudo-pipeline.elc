@@ -1,0 +1,40 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+addnewline str =
+(++ str "\n")
+
+printstrings strings =
+(foldr ++ "" (map addnewline strings))
+
+// Usage: nitems comp services...
+
+main args =
+(if (< (len args) 3)
+  "Usage: pipeline.elc <nitems> <nstages> <comp> <host> <port>\n"
+(letrec nitems = (stringtonum (item 0 args))
+        nstages = (stringtonum (item 1 args))
+        comp = (stringtonum (item 2 args))
+        host = (item 3 args)
+        port = (stringtonum (item 4 args))
+
+        callservice x =
+          (stringtonum (tail (connect host
+                                      port
+                                      (++ (numtostring (+ x 1))
+                                          (++ " " (numtostring comp))))))
+
+        f n x = (if (> n 0)
+                    (callservice (f (- n 1) x))
+                    x)
+
+        res = (map numtostring (map (f nstages) (range 1 nitems)))
+
+ in     (printstrings res)))
