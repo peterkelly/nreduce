@@ -608,7 +608,7 @@ static void mark_active_frames(task *tsk, unsigned int bit)
   for (fb = tsk->frameblocks; fb; fb = fb->next) {
     for (i = 0; i < tsk->framesperblock; i++) {
       frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if (STATE_ACTIVE == f->state)
+      if ((STATE_ACTIVE == f->state) || (STATE_SPARKED == f->state))
         mark_frame(tsk,f,bit,0);
     }
   }
@@ -637,6 +637,11 @@ static void mark_misc_roots(task *tsk, unsigned int bit)
   if (tsk->out_so) {
     tsk->out_so->p = resolve_copy_pntr(tsk->out_so->p);
     mark(tsk,tsk->out_so->p,bit,0);
+  }
+
+  sysobject *so;
+  for (so = tsk->sysobjects.first; so; so = so->next) {
+    mark(tsk,so->p,bit,0);
   }
 }
 
@@ -919,7 +924,7 @@ static void replace_refs_other(task *tsk, int check)
     int fi;
     for (fi = 0; fi < tsk->framesperblock; fi++) {
       frame *f = ((frame*)&fb->mem[fi*tsk->framesize]);
-      if (STATE_ACTIVE == f->state) {
+      if ((STATE_ACTIVE == f->state) || (STATE_SPARKED == f->state)) {
         int i;
         for (i = 0; i < f->instr->expcount; i++)
           REPLACE_PNTR(f->data[i]);
@@ -1361,7 +1366,7 @@ void distributed_collect_start(task *tsk)
      sent to them. */
 
 
-  force_major_collection(tsk); // FIXME: temp
+  force_major_collection(tsk);
 
   /* First do a local collection to make sure the remembered set and new generation are
      empty. Might not be strictly necessary but can simplify things if we can rely on
@@ -1460,12 +1465,12 @@ void distributed_collect_end(task *tsk)
   mark_inflight_local_addresses(tsk,FLAG_DMB,1);
   sweep_incoming_references(tsk);
 
-  /* Reset the DMB on all objects in the heap */
-  reset_dmb(tsk);
-
   /* Force a major collection */
   force_major_collection(tsk);
   local_collect(tsk);
+
+  /* Reset the DMB on all objects in the heap */
+  reset_dmb(tsk);
 
   clear_marks(tsk,FLAG_NEW);
 
@@ -1523,6 +1528,7 @@ frame *frame_new(task *tsk) /* Can be called from native code */
   f->resume = 0;
   f->freelnk = 0;
   f->retp = NULL;
+  f->nolocal = 0;
 
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);

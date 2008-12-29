@@ -48,6 +48,7 @@
 #define FISH_DELAY_MS 250
 #define GC_DELAY 2500
 #define NSPARKS_REQUESTED 4
+//#define STANDALONE_NOFRAMES_ERROR
 
 inline void op_begin(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
@@ -224,7 +225,7 @@ void frame_return(task *tsk, frame *curf, pntr val)
   frame_free(tsk,curf);
 }
 
-void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
+static pntr ensure_frame_has_cell(task *tsk, frame *f)
 {
   pntr p;
 
@@ -245,6 +246,12 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
   else {
     make_pntr(p,f->c);
   }
+  return p;
+}
+
+void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
+{
+  pntr p = ensure_frame_has_cell(tsk,f);
 
   /* Remove the frame from the sparked queue */
   if (STATE_SPARKED == f->state)
@@ -270,10 +277,17 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
     gaddr refaddr = get_physical_address(tsk,p);
     write_format(msg,tsk,"ap",refaddr,p);
 
-    /* Create a target that will hold the address of the frame once it arrives, and convert
-       the frame's cell into a remote reference that points to this target */
-    gaddr blankaddr = { tid: -1, lid: -1 };
-    global *glo = add_target(tsk,blankaddr,p);
+    /* Convert the cell into a remote reference. The global this points to is actually the
+       global associated with the physical address of the cell. In this case the reference
+       isn't actually remote, since the address is local. However, the fetching flag is set,
+       so any attempt to access this object will cause the requesting frame to block. */
+    global *glo = physhash_lookup(tsk,p);
+    assert(NULL != glo);
+    assert(glo->addr.lid == refaddr.lid);
+    assert(glo->addr.tid == refaddr.tid);
+    assert(glo->addr.tid == tsk->tid);
+    assert(pntrequal(glo->p,p));
+
     f->c->type = CELL_REMOTEREF;
     make_pntr(f->c->field1,glo);
     glo->fetching = 1;
@@ -773,6 +787,66 @@ static void interpreter_fetch(task *tsk, message *msg)
   }
 }
 
+static void transfer_waiters_and_fetchers(waitqueue *from, waitqueue *to)
+{
+  /* Transfer waiters */
+  frame **waitptr = &to->frames;
+  while (*waitptr)
+    waitptr = &(*waitptr)->waitlnk;
+  *waitptr = from->frames;
+  from->frames = NULL;
+
+  /* Transfer fetchers */
+  list **lptr = &to->fetchers;
+  while (*lptr)
+    lptr = &(*lptr)->next;
+  *lptr = from->fetchers;
+  from->fetchers = NULL;
+}
+
+static void resolve_local_fetchers(task *tsk, frame *f)
+{
+  /* This function is called when we have just received a frame from another task.
+     If there are any fetch requests pending on that frame which came from this
+     task, then translate them into waiting frames. */
+
+  /* First go through the list finding all fetchers from this node, and move them to
+     a separate list (to avoid potential problems with concurrent modification) */
+  list *to_transfer = NULL;
+  list **lptr = &f->wq.fetchers;
+  while (*lptr) {
+    list *l = *lptr;
+    gaddr *current = (gaddr*)l->data;
+    if (current->tid == tsk->tid) {
+      /* Add to pending list */
+      list_push(&to_transfer,current);
+
+      /* Remove fetcher from list */
+      *lptr = (*lptr)->next;
+      free(l);
+    }
+    else {
+      lptr = &(*lptr)->next;
+    }
+  }
+
+  /* Now transfer the local fetchers/waiters to the new frame */
+  list *l;
+  for (l = to_transfer; l; l = l->next) {
+    gaddr *current = (gaddr*)l->data;
+    global *glo = addrhash_lookup(tsk,*current);
+    assert(NULL != glo);
+    assert(glo->addr.lid == current->lid);
+    assert(glo->addr.tid == current->tid);
+    assert(glo->fetching);
+
+    transfer_waiters_and_fetchers(&glo->wq,&f->wq);
+    glo->fetching = 0;
+  }
+  list_free(to_transfer,free);
+  
+}
+
 static void interpreter_respond(task *tsk, message *msg)
 {
   pntr obj;
@@ -781,6 +855,7 @@ static void interpreter_respond(task *tsk, message *msg)
   reader rd;
   int from = get_idmap_index(tsk,msg->source);
   assert(0 <= from);
+  assert(from != tsk->tid);
 
   rd = read_start(tsk,msg->data,msg->size);
   start_address_reading(tsk,from,msg->tag);
@@ -806,7 +881,7 @@ static void interpreter_respond(task *tsk, message *msg)
        had a reference to, we should remove ourselves from the fetcher list. */
 
     node_log(tsk->n,LOG_ERROR,"recv(%d->%d) RESPOND storeaddr %d@%d - store not remoteref (%s)",
-             from,tsk->tid,storeaddr.lid,storeaddr.tid,pntrtype(reference->p));
+             from,tsk->tid,storeaddr.lid,storeaddr.tid,cell_types[pntrtype(reference->p)]);
     assert(0);
 
     /* If we get a RESPOND message and it turns out that we already have something
@@ -832,8 +907,6 @@ static void interpreter_respond(task *tsk, message *msg)
 
   /* Look up the target global that the reference points to */
   global *target = pglobal(reference->p);
-  assert(target != reference);
-  assert(target->addr.tid != tsk->tid);
   assert(target->fetching);
   target->fetching = 0;
 
@@ -873,8 +946,10 @@ static void interpreter_respond(task *tsk, message *msg)
   resume_waiters(tsk,&target->wq,obj);
 
   /* If the received object is a frame, start it running */
-  if (CELL_FRAME == pntrtype(obj))
+  if (CELL_FRAME == pntrtype(obj)) {
+    resolve_local_fetchers(tsk,pframe(obj));
     run_frame_toend(tsk,pframe(obj));
+  }
 }
 
 static void add_fetcher_unique(waitqueue *wq, gaddr srcaddr)
@@ -929,6 +1004,7 @@ static void interpreter_schedule(task *tsk, message *msg)
     /* Add the old address as a fetcher, so it will be given the result when the frame
        eventually returns. But *only* if it is not already listed as a fetcher. */
     add_fetcher_unique(&newf->wq,srcaddr);
+    resolve_local_fetchers(tsk,newf);
 
     run_frame_toend(tsk,newf);
   }
@@ -1254,6 +1330,7 @@ static void handle_message(task *tsk, message *msg)
   message_free(msg);
 }
 
+#ifdef STANDALONE_NOFRAMES_ERROR
 static int find_frame(task *tsk, stack *s, frame *f, frame *lookingfor)
 {
   frame *w;
@@ -1312,6 +1389,7 @@ static void find_recursion(task *tsk)
   }
   stack_free(s);
 }
+#endif
 
 /* Note: handle_interrupt() should never change the frame at the head of the runnable queue
    unless the queue is empty. This is because when handle_trap() returns, it will go back to
@@ -1372,33 +1450,20 @@ int handle_interrupt(task *tsk)
   if (NULL == *tsk->runptr) {
     int diffms;
 
-    /* Standalone: no runnable or blocked frames means we can exit */
+#ifdef STANDALONE_NOFRAMES_ERROR
+    /* Standalone: no runnable or blocked frames means we can exit. This situation should
+       only ever arise in programs that are incorrect, due to a cell pointing to itself. */
     if ((1 == tsk->groupsize) && (0 == tsk->netpending)) {
       printf("Out of runnable frames!\n");
       find_recursion(tsk);
       return 1;
     }
+#endif
 
 /*     node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d", */
 /*              tsk->tid,tsk->svcbusy,tsk->nfetching); */
 
     assert(0 <= tsk->svcbusy);
-
-    int doreturn = 0;
-
-    while ((NULL == *tsk->runptr) && ((1 < tsk->svcbusy) || (1 < tsk->nfetching))) {
-      /* We've got stuff in progress; don't request any more work */
-      msg = endpoint_receive(tsk->endpt,-1);
-      handle_message(tsk,msg);
-      if (tsk->done)
-        return 1;
-      doreturn = 1;
-    }
-
-    if (doreturn) {
-      endpoint_interrupt(tsk->endpt);
-      return 0;
-    }
 
     /* We really have nothing to do; run a sparked frame if we have one, otherwise send
        out a work request */
@@ -1414,7 +1479,12 @@ int handle_interrupt(task *tsk)
 
       do {
         frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-        if (STATE_SPARKED == f->state) {
+        /* If a frame is marked nolocal, this means that it was placed back in the
+           SPARKED state by b_connect, because the local service was already processing
+           the max no. of requests at the time. If we've got enough service requests
+           in progress, don't run it locally - only allow it to be exported to another
+           machine. */
+        if ((STATE_SPARKED == f->state) && ((MAX_SVCBUSY > tsk->svcbusy) || !f->nolocal)) {
           run_frame(tsk,f);
           tsk->searchfb = fb;
           tsk->searchpos = i;
@@ -1432,7 +1502,11 @@ int handle_interrupt(task *tsk)
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);
 
-    if ((tsk->newfish || (0 >= diffms)) && (1 < tsk->groupsize)) {
+    /* Only send a FISH request if there's been enough time passed since the last one,
+       and if the local machine is not already busy with enough service requests. */
+    if ((MAX_SVCBUSY > tsk->svcbusy) &&
+        (tsk->newfish || (0 >= diffms)) &&
+        (1 < tsk->groupsize)) {
       int dest;
 
       /* avoid sending another until after the sleep period */
@@ -1826,9 +1900,9 @@ inline void op_error(task *tsk, frame *runnable, const instruction *instr)
 void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native code */
 {
   global *target = (global*)get_pntr(get_pntr(ref)->field1);
-  assert(target->addr.tid != tsk->tid);
 
   if (!target->fetching && (0 <= target->addr.lid)) {
+    assert(target->addr.tid != tsk->tid);
     assert(CELL_REMOTEREF == pntrtype(ref));
     gaddr storeaddr = get_physical_address(tsk,ref);
     assert(storeaddr.tid == tsk->tid);

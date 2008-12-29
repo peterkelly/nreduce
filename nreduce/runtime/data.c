@@ -453,15 +453,10 @@ static void read_sysobject(reader *rd, pntr *pout, gaddr addr)
   read_int(rd,&ownertid);
   read_socketid(rd,&sockid);
 
-  /* We should never receive a sysobject that we already own. The other task should have
-     a target associated with its replica, and just send us a reference, which will be
-     resolved to our copy of the sysobject - a canonical one. */
-
   /* In the case of sysobjects, the "replicas" simply contain the owntertid and sockid.
      They cannot be used directly; any function which wants to invoke an operation on a
      sysobject must migrate to the task which owns it. */
 
-  assert(ownertid != tsk->tid);
   assert(ownertid == addr.tid);
 
   sysobject *so = new_sysobject(tsk,type);
@@ -528,7 +523,17 @@ void read_pntr(reader *rd, pntr *pout)
     default: fatal("read_pntr: got unexpected cell type %d",type);
     }
 
-    if (NULL == (existing = addrhash_lookup(tsk,addr))) {
+    existing = addrhash_lookup(tsk,addr);
+
+    if ((CELL_SYSOBJECT == type) && (psysobject(*pout)->ownertid == tsk->tid)) {
+      /* If we've received a sysobject whose owner is this task, then this means
+         we should have the authorative copy of it. The data received isn't of
+         use to us, since other nodes just have a "proxy" for the main sysobject. */
+      assert(existing);
+      assert(CELL_SYSOBJECT == pntrtype(existing->p));
+    }
+
+    if (NULL == existing) {
       assert(addr.tid != tsk->tid);
       assert(addr.lid >= 0);
       assert(NULL == targethash_lookup(tsk,*pout));
@@ -555,14 +560,31 @@ void read_pntr(reader *rd, pntr *pout)
                  cell_types[pntrtype(*pout)]);
       }
 
-      assert(existing == targethash_lookup(tsk,existing->p));
+      global *lookup = targethash_lookup(tsk,existing->p);
+      int inphys = 0;
+      if (NULL == lookup) {
+        /* If there is no target address associated with the existing object, it may be
+           because the existing object is the authoritative copy. In this case, there
+           will be an entry in the physical hash table instead of the target hash table. */
+        lookup = physhash_lookup(tsk,existing->p);
+        assert(lookup->addr.lid == addr.lid);
+        assert(lookup->addr.tid == addr.tid);
+        assert(lookup->addr.tid == tsk->tid);
+        inphys = 1;
+      }
+      assert(lookup);
+      assert(existing == lookup);
 
       cell *refcell = get_pntr(existing->p);
       cell_make_ind(tsk,refcell,*pout);
+      if (inphys)
+        physhash_remove(tsk,existing);
       targethash_remove(tsk,existing);
       existing->p = *pout;
-      if (NULL == targethash_lookup(tsk,existing->p))
+      if ((NULL == targethash_lookup(tsk,existing->p)) && (addr.tid != tsk->tid))
         targethash_add(tsk,existing);
+      if (inphys)
+        physhash_add(tsk,existing);
     }
     else {
       *pout = existing->p;

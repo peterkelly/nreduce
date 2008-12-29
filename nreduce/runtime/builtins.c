@@ -1268,6 +1268,7 @@ static void b_connect(task *tsk, pntr *argstack)
       set_error(tsk,"connect: hostname is not a string");
       return;
     }
+    int local = !strcmp(hostname,"127.0.0.1");
     if (1 != inet_aton(hostname,&ipt)) {
       set_error(tsk,"connect: invalid IP %s",hostname);
       free(hostname);
@@ -1291,6 +1292,24 @@ static void b_connect(task *tsk, pntr *argstack)
       return;
     }
 
+    if (local && (MAX_SVCBUSY <= tsk->svcbusy)) {
+      /* This machine is already processing the max. no of allowed service requests. Put
+         the frame back in the SPARKED state, and mark it as nolocal. This will prevent
+         the frame from being run again locally until the number of active local service
+         requests drops below the maximum. The frame can however be exported to other machines
+         in response to a FISH request. */
+      int fno = frame_fno(tsk,curf);
+      curf->instr = bc_instructions(tsk->bcdata)+bc_funinfo(tsk->bcdata)[fno].address+1;
+
+      done_frame(tsk,curf);
+      curf->nolocal = 1;
+      curf->state = STATE_SPARKED;
+      check_runnable(tsk);
+
+      free(hostname);
+      return;
+    }
+
     /* Create sysobject cell */
     so = new_sysobject(tsk,SYSOBJECT_CONNECTION);
     so->hostname = strdup(hostname);
@@ -1298,7 +1317,7 @@ static void b_connect(task *tsk, pntr *argstack)
     so->len = 0;
 
     gettimeofday(&so->start,NULL);
-    so->local = !strcmp(hostname,"127.0.0.1");
+    so->local = local;
     if (so->local) {
       assert(0 <= so->tsk->svcbusy);
       tsk->svcbusy++;

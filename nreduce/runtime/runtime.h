@@ -409,7 +409,7 @@ typedef struct frame {
   struct frame *waitlnk;
   struct frame *rnext;
 
-  int pad;
+  int nolocal;
   struct global *waitglo;
   pntr data[0];
 } frame;
