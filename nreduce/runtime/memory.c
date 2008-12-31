@@ -468,18 +468,6 @@ static void remove_global(task *tsk, global *glo)
   /* Free fetchers */
   list_free(glo->wq.fetchers,free);
 
-#if 1
-  /* FIXME: not sure if these make sense */
-  if (CELL_REMOTEREF == pntrtype(glo->p)) {
-    cell *refcell = get_pntr(glo->p);
-    global *target = (global*)get_pntr(refcell->field1);
-    if (target == glo) {
-      assert(tsk->done || !(refcell->flags & FLAG_MARKED));
-      assert(tsk->done || !(refcell->flags & FLAG_DMB));
-    }
-  }
-#endif
-
   /* Free memory */
   free(glo);
 }
