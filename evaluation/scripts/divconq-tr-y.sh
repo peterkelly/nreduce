@@ -5,13 +5,13 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
+startservice services.CombineChar 5000
 startvm
 startshowload
 echo "Startup completed"
 
-time nreduce --client $INITIAL run 0 $ELC_DIR/nfib.elc 40
+time nreduce --client $INITIAL run 0 $ELC_DIR/divconq-tr.elc \
+    localhost 5000 256 256 > $JOB_DIR/program.out
 echo Program exited with status $?
 
 shutdown
-
-java -cp $SCRIPT_DIR/.. util.CollateNetStats $JOB_DIR/logs

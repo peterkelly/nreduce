@@ -1,24 +1,17 @@
 #!/bin/bash
 
-if (($# < 1)); then
-  echo "Usage: $0 <size>"
-  exit 1
-fi
-
-SIZE=$1
-
 SCRIPT_DIR=`dirname $0`
 ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
 startcservice dev/tools/svc_compute 5000
-startloadbal
+startvm
 startshowload
-
 echo "Startup completed"
 
-time nreduce $ELC_DIR/seqcalls.elc $HOSTNAME 5001 $SIZE
+time nreduce --client $INITIAL run 0 $ELC_DIR/pp-comp.elc \
+    50 5 10000 localhost 5000
 echo Program exited with status $?
 
 shutdown

@@ -6,7 +6,7 @@ nfib n =
 
 main args =
 (if (< (len args) 1)
-  "Usage: nfib.elc <n>\n"
+  "Usage: nfib.elc n\n"
   (letrec
      n = (stringtonum (head args))
    in

@@ -6,6 +6,7 @@ import java.net.InetAddress;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 
 public abstract class Server
 {
@@ -20,6 +21,18 @@ public abstract class Server
   }
 
   public abstract void process(InputStream cin, OutputStream cout) throws Exception;
+
+  public byte[] readAll(InputStream in) throws IOException
+  {
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    byte[] buf = new byte[1024];
+    int r;
+    while (0 < (r = in.read(buf))) {
+      bout.write(buf,0,r);
+      // repeat
+    }
+    return bout.toByteArray();
+  }
 
   public void handle(Socket c, int id)
   {
@@ -36,10 +49,7 @@ public abstract class Server
          on our end will result in a RST being sent to the client, aborting the connection and
          potentially causing the client to miss some of the data we've sent back.
       See http://java.sun.com/javase/6/docs/technotes/guides/net/articles/connection_release.html */
-      byte[] buf = new byte[1024];
-      while (0 < cin.read(buf)) {
-        // repeat
-      }
+      readAll(cin);
     }
     catch (Exception e) {
       e.printStackTrace();

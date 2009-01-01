@@ -3,9 +3,9 @@ package services;
 import java.net.*;
 import java.io.*;
 
-public class AddChar extends Server
+public class CombineChar extends Server
 {
-  public AddChar(int maxThreads, int port)
+  public CombineChar(int maxThreads, int port)
   {
     super(maxThreads,port);
   }
@@ -15,11 +15,16 @@ public class AddChar extends Server
     PrintWriter writer = new PrintWriter(cout);
     String input = new String(readAll(cin));
     char[] chars = input.toCharArray();
-    for (int i = 0; i < chars.length; i++) {
-      int letter = Math.max(Math.min(chars[i] - 'A',25),0);
-      chars[i] = (char)('A' + (letter+1)%26);
+    int len = chars.length/2;
+    char[] reschars = new char[len];
+
+    for (int i = 0; i < len; i++) {
+      int letter1 = Math.max(Math.min(chars[i] - 'A',25),0);
+      int letter2 = Math.max(Math.min(chars[i*2] - 'A',25),0);
+      reschars[i] = (char)('A' + (letter1 + letter2)%26);
     }
-    String result = new String(chars);
+
+    String result = new String(reschars);
     writer.print(result);
     writer.flush();
   }
@@ -32,7 +37,7 @@ public class AddChar extends Server
     }
 
     int port = Integer.parseInt(args[0]);
-    AddChar service = new AddChar(3,port);
+    CombineChar service = new CombineChar(3,port);
     service.serve();
   }
 }

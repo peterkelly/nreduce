@@ -8,10 +8,10 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=nfib
+expname=divconq-comp-o
 
 for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
+  for ((nodes = 1; nodes <= 32; nodes++)); do
     jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
@@ -34,7 +34,7 @@ for ((run = 0; run < 3; run++)); do
 #PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=00:30:00
+#PBS -l nodes=$((nodes+1)):ppn=2,walltime=02:00:00
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR

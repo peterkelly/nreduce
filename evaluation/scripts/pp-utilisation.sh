@@ -1,11 +1,12 @@
 #!/bin/bash
 
-if (($# < 1)); then
-  echo "Usage: $0 <size>"
+if (($# < 2)); then
+  echo "Usage: $0 <size> <nstages>"
   exit 1
 fi
 
-SIZE=$1
+NITEMS=$1
+NSTAGES=$2
 
 SCRIPT_DIR=`dirname $0`
 ELC_DIR=$SCRIPT_DIR/../elc
@@ -15,10 +16,9 @@ ELC_DIR=$SCRIPT_DIR/../elc
 startcservice dev/tools/svc_compute 5000
 startloadbal
 startshowload
-
 echo "Startup completed"
 
-time nreduce $ELC_DIR/seqcalls.elc $HOSTNAME 5001 $SIZE
+time nreduce $ELC_DIR/pp-comp.elc $NITEMS $NSTAGES 10000 $HOSTNAME 5001
 echo Program exited with status $?
 
 shutdown

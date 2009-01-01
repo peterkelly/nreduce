@@ -17,23 +17,24 @@ printstrings strings =
 // Usage: nitems comp services...
 
 main args =
-(if (< (len args) 4)
-  "Usage: pipeline.elc nitems comp port services...\n"
+(if (< (len args) 5)
+  "Usage: pp-comp.elc nitems nstages comp host port\n"
 (letrec nitems = (stringtonum (item 0 args))
-        comp = (stringtonum (item 1 args))
-        port = (stringtonum (item 2 args))
-        services = (skip 3 args)
+        nstages = (stringtonum (item 1 args))
+        comp = (stringtonum (item 2 args))
+        host = (item 3 args)
+        port = (stringtonum (item 4 args))
 
-        callservice host x =
+        callservice x =
           (stringtonum (tail (connect host
                                       port
                                       (++ (numtostring (+ x 1))
                                           (++ " " (numtostring comp))))))
 
-        f lst x = (if lst
-                      (callservice (head lst) (f (tail lst) x))
-                      x)
+        f n x = (if (> n 0)
+                    (callservice (f (- n 1) x))
+                    x)
 
-        res = (map numtostring (map (f services) (range 1 nitems)))
+        res = (map numtostring (map (f nstages) (range 1 nitems)))
 
  in     (++ (printstrings res) "END\n")))

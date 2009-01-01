@@ -18,7 +18,7 @@ startshowload
 
 echo "Startup completed"
 
-time nreduce $ELC_DIR/seqcalls.elc $HOSTNAME 5001 $SIZE
+time nreduce $ELC_DIR/divconq-comp.elc $HOSTNAME 5001 $SIZE 10000
 echo Program exited with status $?
 
 shutdown

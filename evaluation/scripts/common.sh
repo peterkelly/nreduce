@@ -50,10 +50,13 @@ init()
   mkdir -p $JOB_DIR/logs >/dev/null 2>&1
   touch $JOB_DIR/started
 
-  `sort $PBS_NODEFILE | uniq > $JOB_DIR/jobnodes`
-  `sort $PBS_NODEFILE | uniq | sed -e 's/$/:5000/' > $JOB_DIR/jobservers`
-  `cat $JOB_DIR/jobnodes | grep -v $HOSTNAME > $JOB_DIR/othernodes`
-  `cat $JOB_DIR/jobservers | grep -v $HOSTNAME > $JOB_DIR/otherservers`
+  sort $PBS_NODEFILE | uniq > $JOB_DIR/jobnodes
+  cat $JOB_DIR/jobnodes | grep -v $HOSTNAME > $JOB_DIR/computenodes
+  sort $JOB_DIR/computenodes | sed -e 's/$/:5000/' > $JOB_DIR/computeservers
+
+  INITIAL=`head -1 $JOB_DIR/computenodes`
+  echo "INITIAL is $INITIAL"
+  grep -v $INITIAL $JOB_DIR/computenodes > $JOB_DIR/vm2nodes
 
   echo "Nodes:" `cat $JOB_DIR/jobnodes`
 
@@ -74,11 +77,11 @@ startservice()
 
   echo -n "Starting Java service $service on port $port... "
   rm -f $JOB_DIR/logs/service.*
-  parsh -h $JOB_DIR/jobnodes \
+  parsh -h $JOB_DIR/computenodes \
         "cd ~/dev/evaluation && java $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
         >$JOB_DIR/logs/parsh_service.out &
   local node
-  for node in `cat $JOB_DIR/jobnodes`; do
+  for node in `cat $JOB_DIR/computenodes`; do
     ~/dev/tools/waitconn $node $port 30
   done
   echo "ok"
@@ -91,11 +94,11 @@ startcservice()
 
   echo -n "Starting C service $service on port $port... "
   rm -f $JOB_DIR/logs/service.*
-  parsh -h $JOB_DIR/jobnodes \
+  parsh -h $JOB_DIR/computenodes \
         "cd ~ && $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
         >$JOB_DIR/logs/parsh_service.out &
   local node
-  for node in `cat $JOB_DIR/jobnodes`; do
+  for node in `cat $JOB_DIR/computenodes`; do
     ~/dev/tools/waitconn $node $port 30
   done
   echo "ok"
@@ -103,18 +106,18 @@ startcservice()
 
 startvm()
 {
-  echo -n "Starting virtual machine... "
+  echo -n "Starting virtual machine (excluding client node)... "
 
   # Start the initial node
-  ~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$HOSTNAME.log 2>&1 &
-  echo "Initial node started: $HOSTNAME"
-  ~/dev/tools/waitconn $HOSTNAME 6879 30
+  ssh $INITIAL "~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1" &
+  echo "Initial node started: $INITIAL"
+  ~/dev/tools/waitconn $INITIAL 6879 30
 
   # Start the other nodes
-  parsh -h $JOB_DIR/othernodes \
-        "$SCRIPT_DIR/slave.sh $JOB_DIR $HOSTNAME $LOG_LEVEL" \
+  parsh -h $JOB_DIR/vm2nodes \
+        "$SCRIPT_DIR/slave.sh $JOB_DIR $INITIAL $LOG_LEVEL" \
         >$JOB_DIR/logs/parsh.out &
-  echo "Other nodes started: `cat $JOB_DIR/othernodes`"
+  echo "Other nodes started: `cat $JOB_DIR/vm2nodes`"
   wait_vm_startup
   echo "ok"
 
@@ -124,22 +127,15 @@ startvm()
 startloadbal()
 {
   echo -n "Starting load balancer... "
-  (~/dev/tools/loadbal -l - 5001 $JOB_DIR/otherservers >$JOB_DIR/loadbal.log 2>&1 &)
+  (~/dev/tools/loadbal -l - 5001 $JOB_DIR/computeservers >$JOB_DIR/loadbal.log 2>&1 &)
   ~/dev/tools/waitconn $HOSTNAME 5001 30
   echo "ok"
 }
 
 startshowload()
 {
-  echo -n "Starting showload... "
-  (~/dev/tools/showload -q -l $JOB_DIR/showload.log $JOB_DIR/jobnodes >/dev/null 2>&1 &)
-  echo "ok"
-}
-
-startshowload_servicenodes()
-{
-  echo -n "Starting showload (service nodes only)... "
-  (~/dev/tools/showload -q -l $JOB_DIR/showload.log $JOB_DIR/othernodes >/dev/null 2>&1 &)
+  echo -n "Starting showload (compute nodes only)... "
+  (~/dev/tools/showload -q -l $JOB_DIR/showload.log $JOB_DIR/computenodes >/dev/null 2>&1 &)
   echo "ok"
 }
 
@@ -147,14 +143,14 @@ wait_vm_startup()
 {
   # Wait until all nodes have joined
   local nodecount=0
-  local expected=`cat $JOB_DIR/jobnodes | wc -l`
+  local expected=`cat $JOB_DIR/computenodes | wc -l`
   local count=0
   while true; do
     if ((count >= 15)); then
       echo "chord stabilization failed after $count seconds"
       exit 1
     fi
-    ~/dev/nreduce/src/nreduce --client $HOSTNAME findall > $JOB_DIR/found_nodes
+    ~/dev/nreduce/src/nreduce --client $INITIAL findall > $JOB_DIR/found_nodes
     nodecount=`cat $JOB_DIR/found_nodes | wc -l`
     if ((nodecount == expected)); then
       break
@@ -168,7 +164,7 @@ check_for_crash()
 {
   local crashed=""
   local host
-  for host in `cat $JOB_DIR/jobnodes`; do
+  for host in `cat $JOB_DIR/computenodes`; do
     if ! grep -q 'Shutdown complete' $JOB_DIR/logs/$host.log; then
       if [ -z "$crashed" ]; then
         crashed="$host"
@@ -182,25 +178,6 @@ check_for_crash()
     echo "Crashed nodes: $crashed"
     exit 1
   fi
-}
-
-startup()
-{
-  if (($# < 2)); then
-    echo "startup_exp: service or port missing"
-    return 1
-  fi
-
-  local service=$1
-  local port=$2
-
-  startservice $service $port
-  startloadbal
-  startvm
-  startshowload
-
-  echo "Startup completed"
-  return 0
 }
 
 shutdown()
@@ -221,7 +198,7 @@ shutdown()
 
   if [ $VM_RUNNING -ne 0 ]; then
     echo -n "Requesting shutdown of virtual machine... "
-    nreduce --client $HOSTNAME shutdown >/dev/null 2>&1
+    nreduce --client $INITIAL shutdown >/dev/null 2>&1
     sleep 3
     echo "ok"
   fi

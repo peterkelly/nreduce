@@ -8,12 +8,12 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=nfib
+expname=divconq-utilisation
+nodes=32
 
-for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
-    jobname=$expname.r$run.n$nodes
-    cat > $SUB_DIR/$jobname.sub <<EOF
+for size in 32 64 128 256 512 1024; do
+  jobname=$expname.r0.n$size
+  cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
 #PBS -V
@@ -45,7 +45,6 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $size >\$JOB_DIR/output 2>&1
 EOF
-  done
 done

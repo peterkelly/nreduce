@@ -8,10 +8,10 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=nfib
+expname=divconq-tr-o
 
-for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes *= 2)); do
+for ((run = 0; run < 5; run++)); do
+  for ((nodes = 1; nodes <= 32; nodes++)); do
     jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh

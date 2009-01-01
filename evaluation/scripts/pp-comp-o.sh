@@ -1,12 +1,5 @@
 #!/bin/bash
 
-if (($# < 1)); then
-  echo "Usage: $0 <size>"
-  exit 1
-fi
-
-SIZE=$1
-
 SCRIPT_DIR=`dirname $0`
 ELC_DIR=$SCRIPT_DIR/../elc
 
@@ -15,10 +8,14 @@ ELC_DIR=$SCRIPT_DIR/../elc
 startcservice dev/tools/svc_compute 5000
 startloadbal
 startshowload
-
 echo "Startup completed"
 
-time nreduce $ELC_DIR/seqcalls.elc $HOSTNAME 5001 $SIZE
+export LOG_LEVEL=info
+mkdir $JOB_DIR/local_logs
+time nreduce $ELC_DIR/pp-comp.elc \
+    50 5 10000 $HOSTNAME 5001 2>$JOB_DIR/local_logs/$HOSTNAME.log
 echo Program exited with status $?
 
 shutdown
+
+java -cp $SCRIPT_DIR/.. util.CollateNetStats $JOB_DIR/local_logs

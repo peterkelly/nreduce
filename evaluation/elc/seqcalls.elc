@@ -16,9 +16,8 @@ loop host port ncalls =
 
 
 main args =
-(if (< (len args) 3)
-    "Usage: dataparallel.elc host port size compms\n"
-
+(if (< (len args) 4)
+    "Usage: seqcalls.elc host port size compms\n"
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))
         ncalls = (stringtonum (item 2 args))

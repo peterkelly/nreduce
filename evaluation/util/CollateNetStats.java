@@ -16,6 +16,7 @@ public class CollateNetStats
 
   Set<Integer> ports = new HashSet<Integer>();
   Map<String,NetStats> stats = new TreeMap<String,NetStats>();
+  InetAddress localhost;
 
   class NetStats
   {
@@ -77,7 +78,15 @@ public class CollateNetStats
     int totalData = 0;
     for (NetStats ns : stats.values()) {
       if (ports.isEmpty() || (ports.contains(ns.fromport) && ports.contains(ns.toport))) {
-        if (!betweenonly || (!ns.fromip.equals(ns.toip))) {
+
+        boolean count = true;
+        if (betweenonly) {
+          count = !ns.fromip.equals(ns.toip) &&
+            !ns.fromip.equals(localhost) &&
+            !ns.toip.equals(localhost);
+        }
+
+        if (count) {
           System.out.format("%21s %21s %9d %9d\n",
                             ns.from,ns.to,ns.sent,ns.received);
           totalData += ns.sent;
@@ -183,6 +192,8 @@ public class CollateNetStats
       System.err.println("Please specify log dir");
       System.exit(-1);
     }
+
+    localhost = InetAddress.getByName("127.0.0.1");
 
     String logdir = args[0];
     for (int i = 0; i < args.length-1; i++)
