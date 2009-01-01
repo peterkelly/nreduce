@@ -924,7 +924,7 @@ static void interpreter_respond(task *tsk, message *msg)
 
   global *objglo = targethash_lookup(tsk,obj);
   if (objglo && (target != objglo)) {
-    assert(NULL == objglo->wq.frames);
+    assert(NULL == objglo->wq.frames); /* FIXME: assertion failure here */
     assert(NULL == objglo->wq.fetchers);
   }
 
