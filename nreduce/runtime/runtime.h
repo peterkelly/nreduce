@@ -811,6 +811,7 @@ cell *alloc_cell(task *tsk);
 sysobject *new_sysobject(task *tsk, int type);
 void sysobject_done_reading(sysobject *so);
 void sysobject_done_writing(sysobject *so);
+void sysobject_closed(sysobject *so);
 sysobject *find_sysobject(task *tsk, const socketid *sockid);
 void free_sysobject(task *tsk, sysobject *so);
 void free_blocks(block *bl);

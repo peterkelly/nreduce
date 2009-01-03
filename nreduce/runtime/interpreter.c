@@ -464,7 +464,7 @@ static void interpreter_connect_response(task *tsk, connect_response_msg *m)
   so->frameids[CONNECT_FRAMEADDR] = 0;
 
   if (m->error) {
-    so->closed = 1;
+    sysobject_closed(so);
     so->error = 1;
     so->errn = m->errn;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
@@ -525,7 +525,7 @@ static void interpreter_connection_closed(task *tsk, connection_closed_msg *m)
 {
   sysobject *so = find_sysobject(tsk,&m->sockid);
   if (NULL != so) {
-    so->closed = 1;
+    sysobject_closed(so);
     so->error = m->error;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
 

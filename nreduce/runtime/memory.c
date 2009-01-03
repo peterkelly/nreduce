@@ -434,16 +434,25 @@ static void sysobject_check_finished(sysobject *so)
 
 void sysobject_done_reading(sysobject *so)
 {
-  assert(!so->done_reading);
+  if (so->done_reading)
+    return;
   so->done_reading = 1;
   sysobject_check_finished(so);
 }
 
 void sysobject_done_writing(sysobject *so)
 {
-  assert(!so->done_writing);
+  if (so->done_writing)
+    return;
   so->done_writing = 1;
   sysobject_check_finished(so);
+}
+
+void sysobject_closed(sysobject *so)
+{
+  sysobject_done_reading(so);
+  sysobject_done_writing(so);
+  so->closed = 1;
 }
 
 sysobject *find_sysobject(task *tsk, const socketid *sockid)
@@ -482,10 +491,7 @@ void free_sysobject(task *tsk, sysobject *so)
       close(so->fd);
       break;
     case SYSOBJECT_CONNECTION: {
-      if (!so->done_reading)
-        sysobject_done_reading(so);
-      if (!so->done_writing)
-        sysobject_done_writing(so);
+      sysobject_closed(so);
       if (!socketid_isnull(&so->sockid))
         send_delete_connection(tsk->endpt,so->sockid);
       if (!tsk->done) {

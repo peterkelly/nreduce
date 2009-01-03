@@ -1367,8 +1367,6 @@ static void b_connect(task *tsk, pntr *argstack)
       else {
         node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
         set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
-        sysobject_done_reading(so);
-        sysobject_done_writing(so);
         return;
       }
     }
@@ -1435,7 +1433,6 @@ static void b_readcon(task *tsk, pntr *argstack)
       set_error(tsk,"readcon %s:%d: %s",so->hostname,so->port,so->errmsg);
     else
       argstack[0] = tsk->globnilpntr;
-    sysobject_done_reading(so);
     curf->resume = 0;
     return;
   }
