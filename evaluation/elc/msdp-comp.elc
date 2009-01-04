@@ -1,0 +1,40 @@
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+sum lst =
+(if lst
+    (+ (head lst) (sum (tail lst)))
+    0)
+
+main args =
+(if (< (len args) 4)
+    "Usage: msdp-comp.elc host port size stages compms\n"
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        size = (stringtonum (item 2 args))
+        stages = (stringtonum (item 3 args))
+        compms = (stringtonum (item 4 args))
+
+        callservice n =
+          (stringtonum
+            (tail
+              (connect host
+                       port
+                       (++ (numtostring n)
+                           (++ " " (numtostring compms))))))
+
+        loop total stages =
+          (if (> stages 0)
+              (letrec
+                 res = (map (!x.callservice (+ total x)) (range 1 size))
+                 total2 = (callservice (sum res))
+               in
+                 (loop total2 (- stages 1)))
+              total)
+
+        result = (loop 0 stages)
+
+ in     (++ (numtostring result) "\nEND\n")))

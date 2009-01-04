@@ -45,11 +45,7 @@ public class CollateNetStats
 
   String sizeStr(int bytes)
   {
-    if (bytes >= 1024*1024)
-      return String.format("%.3f MB",((double)bytes)/(1024.0*1024.0));
-    if (bytes >= 1024)
-      return String.format("%.3f KB",((double)bytes)/1024.0);
-    return bytes+" bytes";
+    return String.format("%.3f KB",((double)bytes)/1024.0);
   }
 
   int getPort(String str)

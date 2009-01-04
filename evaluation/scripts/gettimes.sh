@@ -22,6 +22,8 @@ OUT_DIR=$2
 
 echo $EXP_DIR | sed -e 's/\///' > $OUT_DIR/title
 
+echo -n Getting times for $EXP_DIR
+
 # Go through each job directory
 for job in $(cd $EXP_DIR; echo *); do
 
@@ -50,5 +52,7 @@ for job in $(cd $EXP_DIR; echo *); do
   nodes=`echo $job | sed -E -e 's/^.*\.r([0-9]+)\.n([0-9]+)/\2/'`
   seconds=`grep 'Total execution time' $EXP_DIR/$job/output | sed -e 's/^.*: //'`
 #  echo run=$run nodes=$nodes seconds=$seconds
+  echo -n .
   echo "$seconds 0.0 0.0" > $OUT_DIR/time.r$run.n$nodes
 done
+echo

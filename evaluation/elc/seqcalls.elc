@@ -8,18 +8,20 @@ loop host port ncalls =
                                         (++ (numtostring (- ncalls 1)) " 0"))))))
 */
 
-loop host port ncalls =
-(if (== ncalls 0)
+loop host port ncalls max =
+(if (>= ncalls max)
     nil
-(seq (connect host port "0 0")
-     (loop host port (- ncalls 1))))
+(seq (echo (++ "Before call " (++ (numtostring ncalls) "\n")))
+(seq (len (connect host port "0 0"))
+(seq (echo (++ "After call " (++ (numtostring ncalls) "\n")))
+     (loop host port (+ ncalls 1) max)))))
 
 
 main args =
-(if (< (len args) 4)
-    "Usage: seqcalls.elc host port size compms\n"
+(if (< (len args) 3)
+    "Usage: seqcalls.elc host port ncalls\n"
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))
         ncalls = (stringtonum (item 2 args))
-in      (loop host port ncalls)))
+in      (loop host port 0 ncalls)))
 
