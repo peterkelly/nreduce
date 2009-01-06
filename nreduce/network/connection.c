@@ -159,15 +159,18 @@ static int initiate_connection(connection *conn)
     return -1;
   }
 
-  int yes = 1;
-  if (0 > setsockopt(conn->sock,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
-    snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt SO_REUSEADDR: %s",strerror(errno));
-    return -1;
-  }
+  if (0 < conn->n->p->outports.max) {
+    /* Choose our own outgoing port for the connection */
+    int yes = 1;
+    if (0 > setsockopt(conn->sock,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
+      snprintf(conn->errmsg,ERRMSG_MAX,"setsockopt SO_REUSEADDR: %s",strerror(errno));
+      return -1;
+    }
 
-  if (0 > (conn->outport = bind_client_port(conn->n,conn->sock))) {
-    snprintf(conn->errmsg,ERRMSG_MAX,"failed to bind client port");
-    return -1;
+    if (0 > (conn->outport = bind_client_port(conn->n,conn->sock))) {
+      snprintf(conn->errmsg,ERRMSG_MAX,"failed to bind client port");
+      return -1;
+    }
   }
 
   /* We expect the connect() call to not succeed immediately, because the socket is in

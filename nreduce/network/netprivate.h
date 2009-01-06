@@ -36,8 +36,7 @@
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
-#define OUTGOING_PORT_MIN 32768
-#define OUTGOING_PORT_MAX 65535
+
 #define MAX_OPENING 3
 
 typedef struct messagelist {

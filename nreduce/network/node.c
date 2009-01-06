@@ -236,7 +236,21 @@ static node *node_new(int loglevel)
     }
   }
 
-  portset_init(&n->p->outports,OUTGOING_PORT_MIN,OUTGOING_PORT_MAX);
+  char *portrange = getenv("LOCAL_PORT_RANGE");
+  int from;
+  int to;
+  if (NULL == portrange) {
+    portset_init(&n->p->outports,0,0);
+    node_log(n,LOG_INFO,"Using OS-assigned outgoing ports");
+  }
+  else if (2 == sscanf(portrange,"%d-%d",&from,&to)) {
+    portset_init(&n->p->outports,from,to);
+    node_log(n,LOG_INFO,"Using outgoing port range %d-%d",from,to);
+  }
+  else {
+    fprintf(stderr,"Invalid port range: %s\n",portrange);
+    exit(1);
+  }
 
   return n;
 }
