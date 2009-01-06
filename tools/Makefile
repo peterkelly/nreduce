@@ -10,8 +10,8 @@ parsh: parsh.c
 showload: showload.c
 	gcc -g -Wall -o showload showload.c -lncurses
 
-loadbal: loadbal.c
-	gcc -g -Wall -o loadbal loadbal.c
+loadbal: loadbal.c portset.h portset.c
+	gcc -g -Wall -o loadbal loadbal.c portset.c
 
 waitconn: waitconn.c
 	gcc -g -Wall -o waitconn waitconn.c
@@ -28,8 +28,8 @@ measure: measure.c
 svc_compute: svc_compute.c
 	gcc -g -Wall -o svc_compute svc_compute.c -lpthread
 
-connections: connections.c
-	gcc -g -Wall -o connections connections.c -lpthread
+connections: connections.c portset.h portset.c
+	gcc -g -Wall -o connections connections.c portset.c -lpthread
 
 average: average.c
 	gcc -g -Wall -o average average.c

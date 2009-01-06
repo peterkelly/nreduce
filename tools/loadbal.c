@@ -1,5 +1,6 @@
 #define _GNU_SOURCE /* for asprintf */
 
+#include "portset.h"
 #include <assert.h>
 #include <assert.h>
 #include <errno.h>
@@ -91,6 +92,7 @@ typedef struct proxy {
   int clientfd;
   int serverfd;
   int haderror;
+  int outport;
 
   relay client_to_server;
   relay server_to_client;
@@ -111,6 +113,8 @@ int nproxies = 0;
 serverlist servers = { first: NULL, last: NULL };
 int nservers = 0;
 int listenfd = 0;
+int customports = 0;
+portset outports;
 
 void fatal(const char *format, ...)
 {
@@ -181,6 +185,7 @@ proxy *add_proxy(int clientfd, int serverfd, server *s)
   proxy *p = (proxy*)calloc(1,sizeof(proxy));
   p->id = nextproxyid++;
   p->connected = 0;
+  p->outport = -1;
   p->clientfd = clientfd;
   p->serverfd = serverfd;
   p->client_to_server.sourcefd = clientfd;
@@ -216,6 +221,8 @@ void remove_proxy(proxy *p)
 
   close(p->clientfd);
   close(p->serverfd);
+  if (0 <= p->outport)
+    portset_releaseport(&outports,p->outport);
   free(p);
   nproxies--;
 }
@@ -342,13 +349,25 @@ void main_loop()
       set_non_blocking(clientfd);
       set_non_blocking(serverfd);
 
+      int outport = -1;
+      if (customports) {
+        int yes = 1;
+        if (0 > setsockopt(serverfd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int))) {
+          fatal("setsockopt SO_REUSEADDR");
+          exit(-1);
+        }
+        bind_client_port(serverfd,&outports,&outport);
+      }
+
       /* Initiate asynchronous connection */
       r = connect(serverfd,(struct sockaddr*)&addr,sizeof(struct sockaddr));
       assert(0 > r);
       if (EINPROGRESS != errno)
-        fatal("connect %s: %s",p->s->hostname,strerror(errno));
+        fatal("connect %s: %s",s->hostname,strerror(errno));
 
       proxy *p = add_proxy(clientfd,serverfd,s);
+      if (customports)
+        p->outport = outport;
       debug("Initiated connection to %s; clientfd = %d, serverfd = %d (proxy %d)",
             s->hostname,clientfd,serverfd,p->id);
       s->connections++;
@@ -422,6 +441,7 @@ void usage()
 {
   fprintf(stderr,"Usage: loadbal [OPTION] <port> <servers>\n");
   fprintf(stderr,"  -l FILENAME      Log status info to FILENAME\n");
+  fprintf(stderr,"  -p FROM-TO       Use outgoing ports in range FROM-TO\n");
   exit(-1);
 }
 
@@ -431,6 +451,7 @@ int main(int argc, char **argv)
   gettimeofday(&now,NULL);
   srandom(now.tv_usec);
   setbuf(stdout,NULL);
+  memset(&outports,0,sizeof(portset));
 
   signal(SIGPIPE,SIG_IGN);
 
@@ -440,7 +461,22 @@ int main(int argc, char **argv)
 
   int argpos;
   for (argpos = 1; argpos < argc; argpos++) {
-    if (!strcmp(argv[argpos],"-l")) {
+    if (!strcmp(argv[argpos],"-p")) {
+      if (argpos+2 >= argc)
+        usage();
+      argpos++;
+      int from;
+      int to;
+      if (2 == sscanf(argv[argpos],"%d-%d",&from,&to)) {
+        customports = 1;
+        portset_init(&outports,from,to);
+      }
+      else {
+        fprintf(stderr,"Invalid port range: %s\n",argv[argpos]);
+        exit(-1);
+      }
+    }
+    else if (!strcmp(argv[argpos],"-l")) {
       if (argpos+1 >= argc)
         usage();
       logfilename = argv[++argpos];
