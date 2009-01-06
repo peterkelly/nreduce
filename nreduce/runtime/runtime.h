@@ -147,11 +147,10 @@ struct gaddr;
 #define B_COMPILE        65
 
 #define B_ISSPACE        66
-#define B_LOOKUP         67
 
-#define B_LCONS          68
+#define B_LCONS          67
 
-#define NUM_BUILTINS     69
+#define NUM_BUILTINS     68
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)

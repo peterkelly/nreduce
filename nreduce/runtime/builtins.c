@@ -1259,7 +1259,6 @@ static void b_connect(task *tsk, pntr *argstack)
     sysobject *so;
     int ioid;
     in_addr_t ip;
-    struct in_addr ipt;
 
     CHECK_ARG(1,CELL_NUMBER);
     port = (int)pntrdouble(portpntr);
@@ -1268,17 +1267,15 @@ static void b_connect(task *tsk, pntr *argstack)
       set_error(tsk,"connect: hostname is not a string");
       return;
     }
-    int local = !strcmp(hostname,"127.0.0.1");
-    if (1 != inet_aton(hostname,&ipt)) {
-      set_error(tsk,"connect: invalid IP %s",hostname);
+
+    int error;
+    if (0 > lookup_address(hostname,&ip,&error)) {
+      set_error(tsk,"%s, %s",hostname,hstrerror(error));
       free(hostname);
       return;
     }
-    ip = ipt.s_addr;
 
-    char ipstr[100];
-    snprintf(ipstr,100,IP_FORMAT,IP_ARGS(tsk->endpt->epid.ip));
-
+    int local = (ntohl(ip) == 0x7f000001); /* 127.0.0.1 */
     int i;
     int found = -1;
     for (i = 0; i < tsk->groupsize; i++) {
@@ -1975,30 +1972,6 @@ static void b_isspace(task *tsk, pntr *argstack)
   setbool(tsk,&argstack[0],isspace((int)pntrdouble(argstack[0])));
 }
 
-static void b_lookup(task *tsk, pntr *argstack)
-{
-  pntr hostnamepntr = argstack[0];
-  char *hostname;
-  in_addr_t ip;
-  int error;
-  char ipstr[100];
-
-  if (0 > array_to_string(hostnamepntr,&hostname)) {
-    set_error(tsk,"lookup: hostname is not a string");
-    return;
-  }
-
-  if (0 > lookup_address(hostname,&ip,&error)) {
-    set_error(tsk,"lookup: %s",hstrerror(error));
-    free(hostname);
-    return;
-  }
-
-  snprintf(ipstr,100,IP_FORMAT,IP_ARGS(ip));
-  argstack[0] = string_to_array(tsk,ipstr);
-  free(hostname);
-}
-
 int get_builtin(const char *name)
 {
   int i;
@@ -2101,7 +2074,6 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "_compile",       2, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_compile        },
 
 { "isspace",        1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_isspace        },
-{ "_lookup",        1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_lookup         },
 
 { "lcons",          2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
 
