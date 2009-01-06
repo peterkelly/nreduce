@@ -100,12 +100,6 @@ static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointi
   connection *conn;
   char hostname[HOSTNAME_MAX+1];
 
-/*   int nactive = 0; */
-/*   for (conn = n->p->connections.first; conn; conn = conn->next) */
-/*     nactive++; */
-/*   int ntoclose = list_count(n->p->toclose); */
-/*   printf("xiothread_connect: # active connections = %d, to close = %d\n",nactive,ntoclose); */
-
   endpoint_link_locked(endpt,m->owner);
   sprintf(hostname,IP_FORMAT,IP_ARGS(m->ip));
   conn = add_connection(n,hostname,m->ip,NULL);

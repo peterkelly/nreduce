@@ -185,6 +185,7 @@ connection *add_connection(node *n, const char *hostname, in_addr_t ip, listener
   conn->l = l;
   conn->n = n;
   conn->port = -1;
+  conn->outport = -1;
   conn->state = CS_START;
   conn->si = get_serverinfo(n,ip);
   if (l == n->p->mainl) {
@@ -235,6 +236,8 @@ static node *node_new(int loglevel)
     }
   }
 
+  portset_init(&n->p->outports,OUTGOING_PORT_MIN,OUTGOING_PORT_MAX);
+
   return n;
 }
 
@@ -255,6 +258,7 @@ static void node_free(node *n)
   close(n->p->ioready_readfd);
   close(n->p->ioready_writefd);
   list_free(n->p->servers,free);
+  portset_destroy(&n->p->outports);
   node_log(n,LOG_INFO,"Shutdown complete");
   free(n->p);
   free(n);

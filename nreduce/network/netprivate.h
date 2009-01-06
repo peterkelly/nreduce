@@ -36,7 +36,8 @@
 #define WELCOME_MESSAGE "Welcome to the nreduce 0.1 debug console. Enter commands below:\n\n> "
 #define MSG_HEADER_SIZE sizeof(msgheader)
 #define LISTEN_BACKLOG 10
-
+#define OUTGOING_PORT_MIN 32768
+#define OUTGOING_PORT_MAX 65535
 #define MAX_OPENING 3
 
 typedef struct messagelist {
@@ -70,6 +71,7 @@ typedef struct connection {
   in_addr_t ip;
   int port;
   int sock;
+  int outport;
   struct listener *l;
   struct node *n;
 
@@ -141,6 +143,20 @@ typedef struct serverinfo {
   connectionlist waiting_connections;
 } serverinfo;
 
+/* Keeps track of ports we have previously used, to aid in selection of client-side ports
+   when establishing outgoing connections. */
+typedef struct portset {
+  int min;
+  int max;
+  int upto;
+
+  int size;
+  int count;
+  int *ports;
+  int start;
+  int end;
+} portset;
+
 typedef struct node_private {
   struct listener *mainl;
   endpointlist endpoints;
@@ -161,6 +177,7 @@ typedef struct node_private {
   list *stats;
   list *servers;
   connection *connhash[CONNECTION_HASH_SIZE];
+  portset outports;
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);
@@ -253,5 +270,11 @@ void notify_write(node *n, connection *conn);
    (CS_ACCEPTED_DONE_READING == (conn)->state))
 
 void connection_fsm(connection *conn, int event);
+
+void portset_init(portset *pb, int min, int max);
+void portset_destroy(portset *pb);
+int portset_allocport(portset *pb);
+void portset_releaseport(portset *pb, int port);
+int bind_client_port(node *n, int sock);
 
 #endif
