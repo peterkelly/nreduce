@@ -328,6 +328,13 @@ void main_loop()
           fatal("connect %s: %s",p->s->hostname,strerror(err));
         else
           p->connected = 1;
+
+        int yes = 1;
+        if (0 > setsockopt(p->serverfd,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int)))
+          fatal("setsockopt TCP_NODELAY");
+        if (0 > setsockopt(p->clientfd,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int)))
+          fatal("setsockopt TCP_NODELAY");
+
         debug("Connected to server (proxy %d)",p->id);
       }
     }
