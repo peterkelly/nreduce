@@ -1,20 +1,8 @@
-/*
-loop host port ncalls =
-(if (== ncalls 0)
-    nil
-    (loop host
-       port (stringtonum (tail (connect host
-                                        port
-                                        (++ (numtostring (- ncalls 1)) " 0"))))))
-*/
-
 loop host port ncalls max =
 (if (>= ncalls max)
     nil
-(seq (echo (++ "Before call " (++ (numtostring ncalls) "\n")))
 (seq (len (connect host port "0 0"))
-(seq (echo (++ "After call " (++ (numtostring ncalls) "\n")))
-     (loop host port (+ ncalls 1) max)))))
+     (loop host port (+ ncalls 1) max)))
 
 
 main args =
@@ -24,4 +12,3 @@ main args =
         port = (stringtonum (item 1 args))
         ncalls = (stringtonum (item 2 args))
 in      (loop host port 0 ncalls)))
-

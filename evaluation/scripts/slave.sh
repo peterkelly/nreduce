@@ -18,4 +18,5 @@ if [ ! -d $JOB_DIR ]; then
   exit 1
 fi
 
+export LOCAL_PORT_RANGE=49152-65535
 ~/dev/nreduce/src/nreduce -w -i $INITIAL 1>$JOB_DIR/logs/$HOSTNAME.log 2>&1

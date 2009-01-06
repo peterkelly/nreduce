@@ -109,7 +109,7 @@ startvm()
   echo -n "Starting virtual machine (excluding client node)... "
 
   # Start the initial node
-  ssh $INITIAL "~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1" &
+  ssh $INITIAL "LOCAL_PORT_RANGE=49152-65535 ~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1" &
   echo "Initial node started: $INITIAL"
   ~/dev/tools/waitconn $INITIAL 6879 30
 
@@ -127,7 +127,7 @@ startvm()
 startloadbal()
 {
   echo -n "Starting load balancer... "
-  (~/dev/tools/loadbal -l - 5001 $JOB_DIR/computeservers >$JOB_DIR/loadbal.log 2>&1 &)
+  (~/dev/tools/loadbal -p 32768-49151 -l - 5001 $JOB_DIR/computeservers >$JOB_DIR/loadbal.log 2>&1 &)
   ~/dev/tools/waitconn $HOSTNAME 5001 30
   echo "ok"
 }

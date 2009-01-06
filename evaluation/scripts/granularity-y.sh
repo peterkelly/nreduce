@@ -7,7 +7,7 @@ fi
 
 GRANULARITY=$1
 
-((requests=2097152/$GRANULARITY))
+((requests=65536/$GRANULARITY))
 
 echo GRANULARITY $GRANULARITY requests $requests mult $((requests*GRANULARITY))
 
@@ -17,11 +17,11 @@ ELC_DIR=$SCRIPT_DIR/../elc
 . $SCRIPT_DIR/common.sh
 
 startcservice dev/tools/svc_compute 5000
-startloadbal
+startvm
 startshowload
 echo "Startup completed"
 
-time nreduce $ELC_DIR/dataparallel.elc $HOSTNAME 5001 $requests $GRANULARITY
+time nreduce --client $INITIAL run 0 $ELC_DIR/dataparallel.elc localhost 5000 $requests $GRANULARITY
 echo Program exited with status $?
 
 shutdown

@@ -1,20 +1,27 @@
 #!/bin/bash
 
+SCRIPT_DIR=`dirname $0`
 
-# TODO: granularity
 # TODO: seqcalls
 
-~/dev/evaluation/scripts/plotjob.sh jobs plots dataparallel dataparallel-o dataparallel-y
-~/dev/evaluation/scripts/plotjob.sh jobs plots nested nested-o nested-y
-~/dev/evaluation/scripts/plotjob.sh jobs plots divconq-comp divconq-comp-o divconq-comp-y
-~/dev/evaluation/scripts/plotjob.sh jobs plots pp-comp pp-comp-o pp-comp-y
-~/dev/evaluation/scripts/plotjob.sh jobs plots msdp-comp msdp-comp-o msdp-comp-y
+if [ ! -d jobs ]; then
+  echo jobs directory not found. Check you are running this script from the correct location.
+  exit 1
+fi
 
-gnuplot ~/dev/evaluation/scripts/divconq-utilisation.plot
-gnuplot ~/dev/evaluation/scripts/pipeline-utilisation.plot
-gnuplot ~/dev/evaluation/scripts/pp-utilisation.plot
+$SCRIPT_DIR/plotgranularity.sh jobs plots granularity "Granularity"
 
-~/dev/evaluation/scripts/plotdata.sh jobs plots divconq-tr divconq-tr-o divconq-tr-y
-~/dev/evaluation/scripts/plotdata.sh jobs plots pipeline-tr pipeline-tr-o pipeline-tr-y
-~/dev/evaluation/scripts/plotdata.sh jobs plots pp-tr pp-tr-o pp-tr-y
-~/dev/evaluation/scripts/plotdata.sh jobs plots msdp-tr msdp-tr-o msdp-tr-y
+$SCRIPT_DIR/plotjob.sh jobs plots dataparallel "Data parallelism"
+$SCRIPT_DIR/plotjob.sh jobs plots nested "Nested data parallelism"
+$SCRIPT_DIR/plotjob.sh jobs plots divconq-comp "Divide & conquer"
+$SCRIPT_DIR/plotjob.sh jobs plots pp-comp "Pseudo-pipeline"
+$SCRIPT_DIR/plotjob.sh jobs plots msdp-comp "Multi-stage data parallelism"
+
+gnuplot $SCRIPT_DIR/divconq-utilisation.plot
+gnuplot $SCRIPT_DIR/pipeline-utilisation.plot
+gnuplot $SCRIPT_DIR/pp-utilisation.plot
+
+$SCRIPT_DIR/plotdata.sh jobs plots divconq-tr "Divide & conquer"
+$SCRIPT_DIR/plotdata.sh jobs plots pipeline-tr "Pipeline"
+$SCRIPT_DIR/plotdata.sh jobs plots pp-tr "Pseudo-pipeline"
+$SCRIPT_DIR/plotdata.sh jobs plots msdp-tr "Multi-stage data parallelism"
