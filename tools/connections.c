@@ -12,67 +12,6 @@
 #include <netinet/tcp.h>
 #include <assert.h>
 
-#define llist_prepend(_ll,_obj) {                         \
-    assert(!(_obj)->prev && !(_obj)->next);               \
-    if ((_ll)->first) {                                   \
-      (_obj)->next = (_ll)->first;                        \
-      (_ll)->first->prev = (_obj);                        \
-      (_ll)->first = (_obj);                              \
-    }                                                     \
-    else {                                                \
-      (_ll)->first = (_ll)->last = (_obj);                \
-    }                                                     \
-  }
-
-#define llist_append(_ll,_obj) {                          \
-    assert(!(_obj)->prev && !(_obj)->next);               \
-    if ((_ll)->last) {                                    \
-      (_obj)->prev = (_ll)->last;                         \
-      (_ll)->last->next = (_obj);                         \
-      (_ll)->last = (_obj);                               \
-    }                                                     \
-    else {                                                \
-      (_ll)->first = (_ll)->last = (_obj);                \
-    }                                                     \
-  }
-
-#define llist_remove(_ll,_obj) {                          \
-    assert((_obj)->prev || ((_ll)->first == (_obj)));     \
-    assert((_obj)->next || ((_ll)->last == (_obj)));      \
-    if ((_ll)->first == (_obj))                           \
-      (_ll)->first = (_obj)->next;                        \
-    if ((_ll)->last == (_obj))                            \
-      (_ll)->last = (_obj)->prev;                         \
-    if ((_obj)->next)                                     \
-      (_obj)->next->prev = (_obj)->prev;                  \
-    if ((_obj)->prev)                                     \
-      (_obj)->prev->next = (_obj)->next;                  \
-    (_obj)->next = NULL;                                  \
-    (_obj)->prev = NULL;                                  \
-  }
-
-typedef struct portinfo {
-  int port;
-  int used;
-  struct portinfo *prev;
-  struct portinfo *next;
-} portinfo;
-
-typedef struct portlist {
-  portinfo *first;
-  portinfo *last;
-} portlist;
-
-typedef struct portset {
-  int min;
-  int max;
-  int upto;
-  portlist used;
-  portlist available;
-} portset;
-
-portset main_ps;
-
 struct timeval timeval_diff(struct timeval from, struct timeval to)
 {
   struct timeval diff;
@@ -91,64 +30,110 @@ int timeval_diffms(struct timeval from, struct timeval to)
   return diff.tv_sec*1000 + diff.tv_usec/1000;
 }
 
-void portset_init(portset *ps, int min, int max)
-{
-  memset(ps,0,sizeof(portset));
-  ps->min = min;
-  ps->max = max;
-  ps->upto = min;
-}
-
-portinfo *portset_getport(portset *ps)
-{
-  if (ps->upto <= ps->max) {
-    /* There is still at least one more port available in the specified port range.
-       Use this in preference to a previously-used one, so we can maximise the duration
-       for which previously-used ports can remain associated with connections in the
-       TIME_WAIT state. */
-    portinfo *pi = (portinfo*)calloc(1,sizeof(portinfo));
-    pi->port = ps->upto++;
-    pi->used = 1;
-    llist_append(&ps->used,pi);
-    return pi;
-  }
-  else if (ps->available.last) {
-    /* We have previously used this port, but it is now released. Take the least
-       recently used port and return it */
-    portinfo *pi = ps->available.last;
-    llist_remove(&ps->available,pi);
-    llist_append(&ps->used,pi);
-    assert(!pi->used);
-    pi->used = 1;
-    return pi;
-  }
-  else {
-    return NULL;
-  }
-}
-
-void portset_releaseport(portset *ps, portinfo *pi)
-{
-  assert(pi->used);
-  pi->used = 0;
-  llist_remove(&ps->used,pi);
-  llist_prepend(&ps->available,pi);
-}
-
-/* Port has been found to be in use by another application. Remove it from the used
-   list, but don't add it back to the avaiable list, because we don't want to try and
-   use it again. */
-void portset_portbusy(portset *ps, portinfo *pi)
-{
-  assert(pi->used);
-  pi->used = 0;
-  llist_remove(&ps->used,pi);
-  free(pi);
-}
-
 int customports = 0;
 
-int open_connection(const char *hostname, int port, portinfo **pi)
+/* Keeps track of ports we have previously used, to aid in selection of client-side ports
+   when establishing outgoing connections. */
+typedef struct portset {
+  int min;
+  int max;
+  int upto;
+
+  int size;
+  int count;
+  int *ports;
+  int start;
+  int end;
+} portset;
+
+portset usedports;
+
+void portset_init(portset *pb, int min, int max)
+{
+  pb->min = min;
+  pb->max = max;
+  pb->upto = min;
+
+  pb->size = max+1-min;
+  pb->ports = (int*)calloc(pb->size,sizeof(int));
+  pb->count = 0;
+  pb->start = 0;
+  pb->end = 0;
+}
+
+void portset_destroy(portset *pb)
+{
+  free(pb->ports);
+}
+
+/* Choose a port to use for an outgoing connection. If we have not yet used up all ports in the
+   range, the next port is picked. Otherwise, we choose the least recently used port. */
+int portset_allocport(portset *pb)
+{
+  assert(0 <= pb->count);
+  if (pb->upto <= pb->max) {
+    /* Pick a port that has not yet been used, in preference to an existing one (which may still
+       be be in TIME_WAIT) */
+    return pb->upto++;
+  }
+  else if (0 < pb->count) {
+    /* Pick a previously used port. It may still be in TIME_WAIT, but by picking the least
+       recently used, we maximise the amount of time connections can stay in TIME_WAIT. */
+    int r = pb->ports[pb->start];
+    pb->start = (pb->start+1) % pb->size;
+    pb->count--;
+    return r;
+  }
+  else {
+    return -1;
+  }
+}
+
+/* Indicate that we have finished using a port, and it can be re-used again for a subsequent
+   connection. */
+void portset_releaseport(portset *pb, int port)
+{
+  pb->ports[pb->end] = port;
+  pb->end = (pb->end+1) % pb->size;
+  pb->count++;
+  assert(pb->count <= pb->size);
+}
+
+void bind_client_port(int sock, int *clientport)
+{
+  while (1) {
+
+    *clientport = portset_allocport(&usedports);
+    if (0 > *clientport) {
+      fprintf(stderr,"No more ports available!\n");
+      exit(-1);
+    }
+
+    struct sockaddr_in local_addr;
+    local_addr.sin_family = AF_INET;
+    local_addr.sin_port = htons(*clientport);
+    local_addr.sin_addr.s_addr = INADDR_ANY;
+    memset(&local_addr.sin_zero,0,8);
+
+    if (0 == bind(sock,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
+      /* Port successfully bound */
+      break;
+    }
+
+    if (EADDRINUSE == errno) {
+      /* Port in use by another application. We don't put this back in the port set, since we
+         don't want it to be used again. */
+      printf("bind: port %d already in use, trying with another\n",*clientport);
+      *clientport = -1;
+    }
+    else {
+      perror("bind");
+      exit(-1);
+    }
+  }
+}
+
+int open_connection(const char *hostname, int port, int *clientport)
 {
   int sock;
   struct hostent *he;
@@ -170,49 +155,18 @@ int open_connection(const char *hostname, int port, portinfo **pi)
     exit(-1);
   }
 
-  while (1) {
+  if (customports)
+    bind_client_port(sock,clientport);
 
-    if (customports) {
-      *pi = portset_getport(&main_ps);
-      if (NULL == *pi) {
-        fprintf(stderr,"No more ports available!\n");
-        exit(-1);
-      }
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  addr.sin_addr = *((struct in_addr*)he->h_addr);
+  memset(&addr.sin_zero,0,8);
 
-      struct sockaddr_in local_addr;
-      local_addr.sin_family = AF_INET;
-      local_addr.sin_port = htons((*pi)->port);
-      local_addr.sin_addr.s_addr = INADDR_ANY;
-      memset(&local_addr.sin_zero,0,8);
-
-      if (0 > bind(sock,(struct sockaddr*)&local_addr,sizeof(struct sockaddr))) {
-
-        if (EADDRINUSE == errno) {
-          printf("bind: port %d already in use, trying with another\n",(*pi)->port);
-          portset_releaseport(&main_ps,*pi);
-          *pi = NULL;
-          continue;
-        }
-        else {
-          perror("bind");
-          exit(-1);
-        }
-      }
-    }
-
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr = *((struct in_addr*)he->h_addr);
-    memset(&addr.sin_zero,0,8);
-
-    if (0 > (connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr)))) {
-      perror("connect");
-      close(sock);
-      exit(-1);
-    }
-    else {
-      break;
-    }
+  if (0 > (connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr)))) {
+    perror("connect");
+    close(sock);
+    exit(-1);
   }
 
   return sock;
@@ -257,7 +211,7 @@ int main(int argc, char **argv)
   int nconnections = 0;
 
   setbuf(stdout,NULL);
-  memset(&main_ps,0,sizeof(portset));
+  memset(&usedports,0,sizeof(portset));
 
   struct timeval start;
   gettimeofday(&start,NULL);
@@ -272,7 +226,7 @@ int main(int argc, char **argv)
       int to;
       if (2 == sscanf(argv[argpos],"%d-%d",&from,&to)) {
         customports = 1;
-        portset_init(&main_ps,from,to);
+        portset_init(&usedports,from,to);
       }
       else {
         fprintf(stderr,"Invalid port range: %s\n",argv[argpos]);
@@ -293,9 +247,9 @@ int main(int argc, char **argv)
   port = atoi(portstr);
 
   while (1) {
-    portinfo *pi = NULL;
+    int clientport = -1;
 
-    sock = open_connection(hostname,port,&pi);
+    sock = open_connection(hostname,port,&clientport);
     nconnections++;
 
     read_write(sock);
@@ -317,9 +271,8 @@ int main(int argc, char **argv)
 
     close(sock);
 
-    if (NULL != pi) {
-      portset_releaseport(&main_ps,pi);
-    }
+    if (0 <= clientport)
+      portset_releaseport(&usedports,clientport);
   }
 
   return 0;
