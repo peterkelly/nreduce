@@ -105,6 +105,10 @@ long calibrate()
 
 void handle(int sock)
 {
+  /* Let client know connection has been accepted */
+  char dot = '.';
+  write(sock,&dot,1);
+
   /* Read all data from client */
   int alloc = 1024;
   int size = 0;
