@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <math.h>
+#include <netinet/tcp.h>
 
 #define BACKLOG 100
 
@@ -104,41 +105,32 @@ long calibrate()
 
 void handle(int sock)
 {
-  char data[BUFSIZE];
+  /* Read all data from client */
+  int alloc = 1024;
   int size = 0;
+  char *data = (char*)malloc(alloc);
   int r;
-
-  char dot = '.';
-  write(sock,&dot,1); /* let client know connection has been accepted */
-
-  while ((size < BUFSIZE-1) &&
-         (0 < (r = read(sock,&data[size],BUFSIZE-size-1)))) {
+  while (0 < (r = read(sock,&data[size],1024))) {
+    alloc += r;
     size += r;
-    data[size] = '\0';
+    data = (char*)realloc(data,alloc);
+  }
+  data[size] = '\0';
 
-    int value;
-    int ms;
-    if (2 == sscanf(data,"%d %d",&value,&ms)) {
-      printf("value = %d, ms = %d\n",value,ms);
-      long long start = get_micro_time();
-      run(comp_per_ms,ms);
-      long long end = get_micro_time();
-      double ratio = (end-start)/(ms*1000.0);
-      printf("%d iterations took %lldms (%.3f%%)\n",ms,(end-start)/1000,100.0*ratio);
-      snprintf(data,1024,"%d",value);
-      write(sock,data,strlen(data));
-      return;
-    }
+  /* Get value & computation time */
+  int value;
+  int ms;
+  if (2 == sscanf(data,"%d %d",&value,&ms)) {
+
+    /* Compute for requested time */
+    run(comp_per_ms,ms);
+
+    /* Send back value */
+    snprintf(data,1024,"%d",value);
+    write(sock,data,strlen(data));
   }
 
-  /* Make sure we read all remaining data from the client before closing the connection.
-     Otherwise if there is outstanding data or a FIN sent by the client, closing the socket
-     on our end will result in a RST being sent to the client, aborting the connection and
-     potentially causing the client to miss some of the data we've sent back.
-     See http://java.sun.com/javase/6/docs/technotes/guides/net/articles/connection_release.html */
-  while (0 < read(sock,data,BUFSIZE)) {
-    /* repeat */
-  }
+  free(data);
 }
 
 void *connection_handler(void *arg)
@@ -146,7 +138,6 @@ void *connection_handler(void *arg)
   int sock = (int)arg;
   handle(sock);
   close(sock);
-  printf("Closed connection\n");
 
   pthread_mutex_lock(&lock);
   nthreads--;
@@ -207,7 +198,6 @@ void compute_service(int port, int direct)
       /* Wait until there is a thread available */
       pthread_mutex_lock(&lock);
       while (nthreads+1 > maxthreads) {
-        printf("nthreads = %d, waiting\n",nthreads);
         pthread_cond_wait(&cond,&lock);
       }
       nthreads++;
@@ -220,8 +210,14 @@ void compute_service(int port, int direct)
       exit(-1);
     }
 
-    printf("Got connection %d\n",nconnections);
+    int yes = 1;
+    if (0 > setsockopt(sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
+      perror("setsockopt TCP_NODELAY");
+      exit(-1);
+    }
+
     nconnections++;
+    printf("# connections = %d\n",nconnections);
 
     if (direct) {
       handle(sock);

@@ -1,4 +1,6 @@
-almostall: parsh showload loadbal waitconn nobuftail runtests measure svc_compute average min max
+PROGRAMS = parsh showload loadbal waitconn nobuftail runtests measure svc_compute connections average min max
+
+almostall: $(PROGRAMS)
 
 all: almostall saxonclient
 
@@ -26,6 +28,9 @@ measure: measure.c
 svc_compute: svc_compute.c
 	gcc -g -Wall -o svc_compute svc_compute.c -lpthread
 
+connections: connections.c
+	gcc -g -Wall -o connections connections.c -lpthread
+
 average: average.c
 	gcc -g -Wall -o average average.c
 
@@ -43,5 +48,5 @@ saxonwebapp: SaxonServlet.java
 	cp SaxonServlet.class saxon/WEB-INF/classes
 
 clean:
-	rm -f parsh showload loadbal waitconn nobuftail runtests measure saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
+	rm -f $(PROGRAMS) saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
 	rm -rf *.DSYM
