@@ -42,9 +42,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-#define CHECK_SPARKS
-#define TIME_CHECK_SPARKS
-
 extern const module_info *modules;
 
 pthread_key_t task_key;
@@ -222,12 +219,10 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
   fatal("gaddr %d@%d not found",addr.lid,addr.tid);
 }
 
-void add_spark(task *tsk, frame *f)
+void append_spark(task *tsk, frame *f)
 {
-  assert(!f->in_sparklist);
   assert(NULL == f->sprev);
   assert(NULL == f->snext);
-  f->in_sparklist = 1;
 
   frame *last = tsk->sparklist->sprev;
   f->snext = tsk->sparklist;
@@ -236,14 +231,24 @@ void add_spark(task *tsk, frame *f)
   tsk->sparklist->sprev = f;
 }
 
+void prepend_spark(task *tsk, frame *f)
+{
+  assert(NULL == f->sprev);
+  assert(NULL == f->snext);
+
+  frame *first = tsk->sparklist->snext;
+  f->sprev = tsk->sparklist;
+  f->snext = first;
+  first->sprev = f;
+  tsk->sparklist->snext = f;
+}
+
 void remove_spark(task *tsk, frame *f)
 {
-  assert(f->in_sparklist);
   assert(NULL != f->sprev);
   assert(NULL != f->snext);
   assert(f->sprev->snext == f);
   assert(f->snext->sprev == f);
-  f->in_sparklist = 0;
 
   frame *prev = f->sprev;
   frame *next = f->snext;
@@ -256,13 +261,6 @@ void remove_spark(task *tsk, frame *f)
 
 void check_sparks(task *tsk)
 {
-#ifdef CHECK_SPARKS
-#ifdef TIME_CHECK_SPARKS
-  static int total = 0;
-  struct timeval start;
-  gettimeofday(&start,NULL);
-#endif
-
   frameblock *fb;
   int i;
   for (fb = tsk->frameblocks; fb; fb = fb->next) {
@@ -271,14 +269,12 @@ void check_sparks(task *tsk)
       if (f == tsk->sparklist)
         continue;
       if (STATE_SPARKED == f->state) {
-        assert(f->in_sparklist);
         assert(NULL != f->sprev);
         assert(NULL != f->snext);
         assert(f->sprev->snext == f);
         assert(f->snext->sprev == f);
       }
       else {
-        assert(!f->in_sparklist);
         assert(NULL == f->sprev);
         assert(NULL == f->snext);
       }
@@ -288,33 +284,35 @@ void check_sparks(task *tsk)
   frame *f;
   for (f = tsk->sparklist->snext; f != tsk->sparklist; f = f->snext) {
     assert(STATE_SPARKED == f->state);
-    assert(f->in_sparklist);
     assert(NULL != f->sprev);
     assert(NULL != f->snext);
     assert(f->sprev->snext == f);
     assert(f->snext->sprev == f);
   }
 
-#ifdef TIME_CHECK_SPARKS
-  struct timeval end;
-  gettimeofday(&end,NULL);
-  int ms = timeval_diffms(start,end);
-  total += ms;
-  printf("check_sparks took %dms, total so far %dms\n",ms,total);
-#endif
-#endif
+
+  /* Check that all "nolocal" sparked frames are at the end of the list */
+  int in_nolocal = 0;
+  for (f = tsk->sparklist->snext; f != tsk->sparklist; f = f->snext) {
+    if (f->nolocal)
+      in_nolocal = 1;
+    if (in_nolocal)
+      assert(f->nolocal);
+  }
 }
 
 void spark_frame(task *tsk, frame *f)
 {
+  assert(f != tsk->sparklist);
   if (STATE_NEW == f->state) {
     f->state = STATE_SPARKED;
-    add_spark(tsk,f);
+    prepend_spark(tsk,f);
   }
 }
 
 void unspark_frame(task *tsk, frame *f)
 {
+  assert(f != tsk->sparklist);
   assert((STATE_SPARKED == f->state) || (STATE_NEW == f->state));
   if (STATE_SPARKED == f->state)
     remove_spark(tsk,f);
@@ -325,11 +323,12 @@ void unspark_frame(task *tsk, frame *f)
 
 void run_frame(task *tsk, frame *f)
 {
-  if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
-
-    if (STATE_SPARKED == f->state)
-      remove_spark(tsk,f);
-
+  assert(f != tsk->sparklist);
+  switch (f->state) {
+  case STATE_SPARKED:
+    remove_spark(tsk,f);
+    /* fall through */
+  case STATE_NEW:
     f->rnext = *tsk->runptr;
     f->state = STATE_ACTIVE;
     *tsk->runptr = f;
@@ -338,28 +337,40 @@ void run_frame(task *tsk, frame *f)
     if (0 <= frame_fno(tsk,f))
       tsk->stats.funcalls[frame_fno(tsk,f)]++;
     #endif
+    break;
+  default:
+    break;
   }
 }
 
-void run_frame_toend(task *tsk, frame *f)
+/* Used when called from a function that may be invoked within handle_interrupt, since
+   we can't change the current frame if one already exists */
+void run_frame_after_first(task *tsk, frame *f)
 {
-  if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
-
-    if (STATE_SPARKED == f->state)
-      remove_spark(tsk,f);
-
-    frame **fp = tsk->runptr;
-    while (*fp)
-      fp = &((*fp)->rnext);
-    *fp = f;
-
-    f->rnext = NULL;
+  assert(f != tsk->sparklist);
+  switch (f->state) {
+  case STATE_SPARKED:
+    remove_spark(tsk,f);
+    /* fall through */
+  case STATE_NEW: {
+    if (*tsk->runptr) {
+      f->rnext = (*tsk->runptr)->rnext;
+      (*tsk->runptr)->rnext = f;
+    }
+    else {
+      f->rnext = *tsk->runptr;
+      *tsk->runptr = f;
+    }
     f->state = STATE_ACTIVE;
 
     #ifdef PROFILING
     if (0 <= frame_fno(tsk,f))
       tsk->stats.funcalls[frame_fno(tsk,f)]++;
     #endif
+    break;
+  }
+  default:
+    break;
   }
 }
 
@@ -389,15 +400,21 @@ void unblock_frame(task *tsk, frame *f)
   *tsk->runptr = f;
 }
 
-void unblock_frame_toend(task *tsk, frame *f)
+/* Used when called from a function that may be invoked within handle_interrupt, since
+   we can't change the current frame if one already exists */
+void unblock_frame_after_first(task *tsk, frame *f)
 {
-  frame **fp;
   assert(STATE_ACTIVE == f->state);
   assert(NULL == f->rnext);
-  fp = tsk->runptr;
-  while (*fp)
-    fp = &((*fp)->rnext);
-  *fp = f;
+
+  if (*tsk->runptr) {
+    f->rnext = (*tsk->runptr)->rnext;
+    (*tsk->runptr)->rnext = f;
+  }
+  else {
+    f->rnext = *tsk->runptr;
+    *tsk->runptr = f;
+  }
 }
 
 int frame_fno(task *tsk, frame *f)

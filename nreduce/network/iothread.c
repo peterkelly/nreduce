@@ -110,8 +110,6 @@ static void iothread_connect(node *n, endpoint *endpt, connect_msg *m, endpointi
   conn->dontread = 1;
   conn->owner = m->owner;
   connection_fsm(conn,CE_REQUESTED);
-
-  connect_pending(n);
 }
 
 static void iothread_connpair(node *n, endpoint *endpt, connpair_msg *m, endpointid source)
@@ -686,6 +684,9 @@ static void ioloop(node *n, endpoint *endpt, void *arg)
     /* Handle pending close requests - this is done here to avoid closing an fd while select()
       is looking at it */
     node_close_pending(n);
+
+    /* If there are available slots, initiate any new connections that are in the waiting state */
+    connect_pending(n);
   }
   unlock_mutex(&n->p->lock);
 }

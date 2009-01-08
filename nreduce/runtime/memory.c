@@ -1524,7 +1524,6 @@ frame *frame_new(task *tsk) /* Can be called from native code */
   f->freelnk = 0;
   f->retp = NULL;
   f->nolocal = 0;
-  f->in_sparklist = 0;
   f->sprev = NULL;
   f->snext = NULL;
 

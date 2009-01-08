@@ -191,7 +191,7 @@ void resume_local_waiters(task *tsk, waitqueue *wq)
     assert((OP_EVAL == f->instr->opcode) || (OP_CALL == f->instr->opcode));
     wq->frames = f->waitlnk;
     f->waitlnk = NULL;
-    unblock_frame_toend(tsk,f);
+    unblock_frame_after_first(tsk,f);
   }
 }
 
@@ -385,7 +385,7 @@ static frame *retrieve_blocked_frame(task *tsk, int ioid)
   tsk->ioframes[ioid].freelnk = tsk->iofree;
   tsk->iofree = ioid;
   tsk->netpending--;
-  unblock_frame_toend(tsk,f);
+  unblock_frame_after_first(tsk,f);
   check_runnable(tsk);
   return f;
 }
@@ -947,7 +947,7 @@ static void interpreter_respond(task *tsk, message *msg)
   /* If the received object is a frame, start it running */
   if (CELL_FRAME == pntrtype(obj)) {
     resolve_local_fetchers(tsk,pframe(obj));
-    run_frame_toend(tsk,pframe(obj));
+    run_frame_after_first(tsk,pframe(obj));
   }
 }
 
@@ -1005,7 +1005,7 @@ static void interpreter_schedule(task *tsk, message *msg)
     add_fetcher_unique(&newf->wq,srcaddr);
     resolve_local_fetchers(tsk,newf);
 
-    run_frame_toend(tsk,newf);
+    run_frame_after_first(tsk,newf);
   }
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
@@ -1390,6 +1390,31 @@ static void find_recursion(task *tsk)
 }
 #endif
 
+int find_spark(task *tsk)
+{
+  if (NULL != tsk->frameblocks) {
+    /* Some frames in the spark list may have the nolocal field set, indicating that they
+       correspond to service requests to the local machine which should not be sparked locally
+       if there are already the maximum number of service requests in the progress. The spark
+       list is organised such that these are always placed *after* normal sparks that can
+       be run locally. So we only need to check the head of the spark list. If it is marked
+       nolocal, this means that all frames in the spark list are marked nonlocal, and so we
+       should only run the spark if the maximum no. of local requests are not already in
+       progress.
+
+       Normally, sparks are added to the front of the list. b_connect is the only place
+       where a nonlocal spark can be added to the list, in which case it is placed at the end */
+
+    frame *spark = tsk->sparklist->snext;
+    if ((spark != tsk->sparklist) &&
+        (!spark->nolocal || (MAX_SVCBUSY > tsk->svcbusy))) {
+      run_frame(tsk,spark);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 /* Note: handle_interrupt() should never change the frame at the head of the runnable queue
    unless the queue is empty. This is because when handle_trap() returns, it will go back to
    an EIP which is within the code for the current frame. If the current frame changes, EBP
@@ -1467,57 +1492,8 @@ int handle_interrupt(task *tsk)
     /* We really have nothing to do; run a sparked frame if we have one, otherwise send
        out a work request */
 
-    if (NULL != tsk->frameblocks) {
-      if (NULL == tsk->searchfb) {
-        tsk->searchfb = tsk->frameblocks;
-        tsk->searchpos = 0;
-      }
-
-      frameblock *fb = tsk->searchfb;
-      int i = tsk->searchpos;
-      int foundspark = 0;
-
-      struct timeval search_start;
-      gettimeofday(&search_start,NULL);
-
-      do {
-        frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-        /* If a frame is marked nolocal, this means that it was placed back in the
-           SPARKED state by b_connect, because the local service was already processing
-           the max no. of requests at the time. If we've got enough service requests
-           in progress, don't run it locally - only allow it to be exported to another
-           machine. */
-        if ((STATE_SPARKED == f->state) && ((MAX_SVCBUSY > tsk->svcbusy) || !f->nolocal)) {
-          run_frame(tsk,f);
-          tsk->searchfb = fb;
-          tsk->searchpos = i;
-          foundspark = 1;
-          break;
-        }
-
-        i++;
-        if (i >= tsk->framesperblock) {
-          i = 0;
-          fb = fb->next ? fb->next : tsk->frameblocks;
-        }
-      } while ((fb != tsk->searchfb) || (i != tsk->searchpos));
-
-      struct timeval search_end;
-      gettimeofday(&search_end,NULL);
-      int ms = timeval_diffms(search_start,search_end);
-      tsk->searchms += ms;
-      tsk->nsearches++;
-      if (foundspark)
-        tsk->nfound++;
-
-      node_log(tsk->n,LOG_INFO,"Search: %dms, found = %d, nsearches = %d, nfound = %d, total = %dms",
-               ms,foundspark,tsk->nsearches,tsk->nfound,tsk->searchms);
-
-      if (foundspark)
-        return 0;
-
-    }
-
+    if (find_spark(tsk))
+      return 0;
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);
@@ -2266,12 +2242,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       }
 
       assert(runnable);
-
-
-/*       int addr = runnable->instr - bc_instructions(tsk->bcdata); */
-/*       printf("%4d %-20s\n",addr,opcodes[runnable->instr->opcode]); */
-
-      check_sparks(tsk);
 
       instr = runnable->instr;
       runnable->instr++;

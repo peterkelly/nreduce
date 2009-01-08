@@ -409,7 +409,7 @@ typedef struct frame {
   struct frame *rnext;
 
   int nolocal;
-  int in_sparklist;
+  int pad;
   struct frame *sprev;
   struct frame *snext;
   pntr data[0];
@@ -496,12 +496,6 @@ typedef struct ioframe {
 
 typedef struct task {
 
-  int nsearches;
-  int nfound;
-  int searchms;
-
-  frame *sparklist; /* sentinel node */
-
   /* general */
   procstats stats;
   pntr argsp;
@@ -549,6 +543,7 @@ typedef struct task {
   int done;
   frame **runptr;
   frame *rtemp;
+  frame *sparklist;
   int nextlid;
   int *gcsent;
   list *inflight;
@@ -665,22 +660,19 @@ gaddr get_physical_address(task *tsk, pntr p);
 void add_gaddr(list **l, gaddr addr);
 void remove_gaddr(task *tsk, list **l, gaddr addr);
 
-#define add_frame_queue llist_prepend
-#define add_frame_queue_end llist_append
-#define remove_frame_queue llist_remove
-
-void add_spark(task *tsk, frame *f);
+void append_spark(task *tsk, frame *f);
+void prepend_spark(task *tsk, frame *f);
 void remove_spark(task *tsk, frame *f);
 void check_sparks(task *tsk);
 void spark_frame(task *tsk, frame *f);
 void unspark_frame(task *tsk, frame *f);
 void run_frame(task *tsk, frame *f);
-void run_frame_toend(task *tsk, frame *f);
+void run_frame_after_first(task *tsk, frame *f);
 
 void check_runnable(task *tsk);
 void block_frame(task *tsk, frame *f);
 void unblock_frame(task *tsk, frame *f);
-void unblock_frame_toend(task *tsk, frame *f);
+void unblock_frame_after_first(task *tsk, frame *f);
 #define done_frame(tsk,_f) \
 { \
   assert(STATE_ACTIVE == (_f)->state); \

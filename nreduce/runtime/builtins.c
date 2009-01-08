@@ -1301,7 +1301,7 @@ static void b_connect(task *tsk, pntr *argstack)
       done_frame(tsk,curf);
       curf->nolocal = 1;
       curf->state = STATE_SPARKED;
-      add_spark(tsk,curf);
+      append_spark(tsk,curf);
       check_runnable(tsk);
 
       free(hostname);

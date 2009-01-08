@@ -132,7 +132,6 @@ static void remove_connection(node *n, connection *conn)
     portset_releaseport(&n->p->outports,conn->outport);
 
   free(conn);
-  connect_pending(n);
 }
 
 static int initiate_connection(connection *conn)
@@ -268,8 +267,6 @@ static void exit_active(connection *conn)
 
 static void connection_state(connection *conn, int newstate)
 {
-  node *n = conn->n;
-
   if (WAITING_STATE(newstate) && !WAITING_STATE(conn->state))
     enter_waiting(conn);
   else if (!WAITING_STATE(newstate) && WAITING_STATE(conn->state))
@@ -290,7 +287,6 @@ static void connection_state(connection *conn, int newstate)
 
   conn->state = newstate;
   connection_fsm(conn,CE_AUTO);
-  connect_pending(n);
 }
 
 void connection_fsm(connection *conn, int event)
