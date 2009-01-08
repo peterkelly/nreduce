@@ -646,6 +646,7 @@ static void mark_roots(task *tsk, unsigned int bit)
   mark_misc_roots(tsk,bit);
   mark_active_frames(tsk,bit);
   mark_inflight_local_addresses(tsk,bit,0);
+  mark_frame(tsk,tsk->sparklist,bit,0);
 
   /* Mark all globals that are being fetched but would not otherwise be marked
      (e.g. scheduled frames) */
@@ -1523,12 +1524,14 @@ frame *frame_new(task *tsk) /* Can be called from native code */
   f->freelnk = 0;
   f->retp = NULL;
   f->nolocal = 0;
+  f->in_sparklist = 0;
+  f->sprev = NULL;
+  f->snext = NULL;
 
   assert(NULL == f->wq.frames);
   assert(NULL == f->wq.fetchers);
   assert(NULL == f->waitlnk);
   assert(NULL == f->rnext);
-  assert(NULL == f->waitglo);
 
   #ifdef PROFILING
   tsk->stats.frame_allocs++;

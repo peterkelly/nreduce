@@ -409,7 +409,9 @@ typedef struct frame {
   struct frame *rnext;
 
   int nolocal;
-  struct global *waitglo;
+  int in_sparklist;
+  struct frame *sprev;
+  struct frame *snext;
   pntr data[0];
 } frame;
 
@@ -493,6 +495,12 @@ typedef struct ioframe {
 } ioframe;
 
 typedef struct task {
+
+  int nsearches;
+  int nfound;
+  int searchms;
+
+  frame *sparklist; /* sentinel node */
 
   /* general */
   procstats stats;
@@ -661,6 +669,9 @@ void remove_gaddr(task *tsk, list **l, gaddr addr);
 #define add_frame_queue_end llist_append
 #define remove_frame_queue llist_remove
 
+void add_spark(task *tsk, frame *f);
+void remove_spark(task *tsk, frame *f);
+void check_sparks(task *tsk);
 void spark_frame(task *tsk, frame *f);
 void unspark_frame(task *tsk, frame *f);
 void run_frame(task *tsk, frame *f);
@@ -789,7 +800,6 @@ void resume_local_waiters(task *tsk, waitqueue *wq);
 void resume_fetchers(task *tsk, waitqueue *wq, pntr obj);
 void print_task_sourceloc(task *tsk, FILE *f, sourceloc sl);
 void add_pending_mark(task *tsk, gaddr addr);
-void spark(task *tsk, frame *f);
 void head_error(task *tsk);
 void cap_error(task *tsk, pntr cappntr);
 void handle_error(task *tsk);

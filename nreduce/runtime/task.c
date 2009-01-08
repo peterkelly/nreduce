@@ -42,6 +42,9 @@
 #include <errno.h>
 #include <unistd.h>
 
+#define CHECK_SPARKS
+#define TIME_CHECK_SPARKS
+
 extern const module_info *modules;
 
 pthread_key_t task_key;
@@ -219,15 +222,102 @@ void remove_gaddr(task *tsk, list **l, gaddr addr)
   fatal("gaddr %d@%d not found",addr.lid,addr.tid);
 }
 
+void add_spark(task *tsk, frame *f)
+{
+  assert(!f->in_sparklist);
+  assert(NULL == f->sprev);
+  assert(NULL == f->snext);
+  f->in_sparklist = 1;
+
+  frame *last = tsk->sparklist->sprev;
+  f->snext = tsk->sparklist;
+  f->sprev = last;
+  last->snext = f;
+  tsk->sparklist->sprev = f;
+}
+
+void remove_spark(task *tsk, frame *f)
+{
+  assert(f->in_sparklist);
+  assert(NULL != f->sprev);
+  assert(NULL != f->snext);
+  assert(f->sprev->snext == f);
+  assert(f->snext->sprev == f);
+  f->in_sparklist = 0;
+
+  frame *prev = f->sprev;
+  frame *next = f->snext;
+  prev->snext = next;
+  next->sprev = prev;
+
+  f->sprev = NULL;
+  f->snext = NULL;
+}
+
+void check_sparks(task *tsk)
+{
+#ifdef CHECK_SPARKS
+#ifdef TIME_CHECK_SPARKS
+  static int total = 0;
+  struct timeval start;
+  gettimeofday(&start,NULL);
+#endif
+
+  frameblock *fb;
+  int i;
+  for (fb = tsk->frameblocks; fb; fb = fb->next) {
+    for (i = 0; i < tsk->framesperblock; i++) {
+      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
+      if (f == tsk->sparklist)
+        continue;
+      if (STATE_SPARKED == f->state) {
+        assert(f->in_sparklist);
+        assert(NULL != f->sprev);
+        assert(NULL != f->snext);
+        assert(f->sprev->snext == f);
+        assert(f->snext->sprev == f);
+      }
+      else {
+        assert(!f->in_sparklist);
+        assert(NULL == f->sprev);
+        assert(NULL == f->snext);
+      }
+    }
+  }
+
+  frame *f;
+  for (f = tsk->sparklist->snext; f != tsk->sparklist; f = f->snext) {
+    assert(STATE_SPARKED == f->state);
+    assert(f->in_sparklist);
+    assert(NULL != f->sprev);
+    assert(NULL != f->snext);
+    assert(f->sprev->snext == f);
+    assert(f->snext->sprev == f);
+  }
+
+#ifdef TIME_CHECK_SPARKS
+  struct timeval end;
+  gettimeofday(&end,NULL);
+  int ms = timeval_diffms(start,end);
+  total += ms;
+  printf("check_sparks took %dms, total so far %dms\n",ms,total);
+#endif
+#endif
+}
+
 void spark_frame(task *tsk, frame *f)
 {
-  if (STATE_NEW == f->state)
+  if (STATE_NEW == f->state) {
     f->state = STATE_SPARKED;
+    add_spark(tsk,f);
+  }
 }
 
 void unspark_frame(task *tsk, frame *f)
 {
   assert((STATE_SPARKED == f->state) || (STATE_NEW == f->state));
+  if (STATE_SPARKED == f->state)
+    remove_spark(tsk,f);
   f->state = STATE_NEW;
   assert((NULL == f->c) || (CELL_FRAME == celltype(f->c)));
   assert((NULL == f->c) || (f == (frame*)get_pntr(f->c->field1)));
@@ -236,6 +326,10 @@ void unspark_frame(task *tsk, frame *f)
 void run_frame(task *tsk, frame *f)
 {
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
+
+    if (STATE_SPARKED == f->state)
+      remove_spark(tsk,f);
+
     f->rnext = *tsk->runptr;
     f->state = STATE_ACTIVE;
     *tsk->runptr = f;
@@ -250,6 +344,10 @@ void run_frame(task *tsk, frame *f)
 void run_frame_toend(task *tsk, frame *f)
 {
   if ((STATE_SPARKED == f->state) || (STATE_NEW == f->state)) {
+
+    if (STATE_SPARKED == f->state)
+      remove_spark(tsk,f);
+
     frame **fp = tsk->runptr;
     while (*fp)
       fp = &((*fp)->rnext);
@@ -470,6 +568,15 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
     tsk->threadrunningfds[0] = -1;
     tsk->threadrunningfds[1] = -1;
   }
+
+  /* Create sentinel node for spark list */
+  tsk->sparklist = frame_new(tsk);
+  tsk->sparklist->snext = tsk->sparklist;
+  tsk->sparklist->sprev = tsk->sparklist;
+  tsk->sparklist->instr = bc_instructions(tsk->bcdata);
+  tsk->sparklist->c = alloc_cell(tsk);
+  tsk->sparklist->c->type = CELL_FRAME;
+  make_pntr(tsk->sparklist->c->field1,tsk->sparklist);
 
   return tsk;
 }

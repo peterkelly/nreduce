@@ -212,6 +212,14 @@ op_fun *op_handlers[OP_COUNT] = {
       I_ADD(reg(ESP),imm(4)); \
       I_POPAD();
 
+#define ASM_CHECK_SPARKS() \
+      BEGIN_CALL(4);			     \
+      I_PUSH(imm((int)tsk));                 \
+      I_MOV(reg(EAX),imm((int)check_sparks)); \
+      I_CALL(reg(EAX)); \
+      I_ADD(reg(ESP),imm(4)); \
+      END_CALL;
+
 #define CELL_FLAGS ((int)&((cell*)0)->flags)
 #define CELL_TYPE ((int)&((cell*)0)->type)
 #define CELL_FIELD1 ((int)&((cell*)0)->field1)
@@ -221,7 +229,6 @@ op_fun *op_handlers[OP_COUNT] = {
 #define obj_field(reg,struct,member) regmem(reg,field(struct,member))
 #define set_field_value(reg,struct,member,value) I_MOV(obj_field(reg,struct,member),value)
 
-#define FRAME_WAITGLO ((int)&((frame*)0)->waitglo)
 #define FRAME_WAITLNK ((int)&((frame*)0)->waitlnk)
 #define FRAME_WQ ((int)&((frame*)0)->wq)
 #define FRAME_FREELNK ((int)&((frame*)0)->freelnk)
@@ -234,6 +241,9 @@ op_fun *op_handlers[OP_COUNT] = {
 #define FRAME_RNEXT ((int)&((frame*)0)->rnext)
 #define FRAME_STATE ((int)&((frame*)0)->state)
 #define FRAME_RESUME ((int)&((frame*)0)->resume)
+#define FRAME_IN_SPARKLIST ((int)&((frame*)0)->in_sparklist)
+#define FRAME_SPREV ((int)&((frame*)0)->sprev)
+#define FRAME_SNEXT ((int)&((frame*)0)->snext)
 #define ARRAY_DATA ((int)&((array*)0)->data)
 #define TASK_GLOBNILPNTR ((int)&((task*)0)->globnilpntr)
 #define TASK_STRINGS ((int)&((task*)0)->strings)
@@ -912,10 +922,17 @@ void asm_frame_new(task *tsk, x86_assembly *as, int state)
     // f->state = 0;
     // f->resume = 0;
     // f->freelnk = 0;
+    // f->nolocal = 0;
+    // f->in_sparklist = 0;
+    // f->sprev = NULL;
+    // f->snext = NULL;
     I_MOV(regmem(EDI,FRAME_STATE),imm(state));
     I_MOV(regmem(EDI,FRAME_RESUME),imm(0));
     I_MOV(regmem(EDI,FRAME_FREELNK),imm(0));
     I_MOV(regmem(EDI,FRAME_NOLOCAL),imm(0));
+    I_MOV(regmem(EDI,FRAME_IN_SPARKLIST),imm(0));
+    I_MOV(regmem(EDI,FRAME_SPREV),imm(0));
+    I_MOV(regmem(EDI,FRAME_SNEXT),imm(0));
   }
   LABEL(Lframeallocated);
 }
@@ -1011,6 +1028,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       END_CALL;
     }
 
+    ASM_CHECK_SPARKS();
+
     switch (instr->opcode) {
     case OP_END:
       I_MOV(absmem((int)&tsk->native_finished),imm(1));
@@ -1043,10 +1062,35 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       I_MOV(reg(EAX),regmem(EAX,CELL_FIELD1));
 
       /* Check the frame state and change it to SPARKED if necessary */
-      I_MOV(reg(EBX),regmem(EAX,FRAME_STATE));
-      I_CMP(reg(EBX),imm(STATE_NEW));
+      I_CMP(regmem(EAX,FRAME_STATE),imm(STATE_NEW));
       I_JNE(label(Ldone));
+/*       PRINT_MESSAGE("adding spark\n"); */
       I_MOV(regmem(EAX,FRAME_STATE),imm(STATE_SPARKED));
+
+
+      /* add_spark */
+
+      /* Note: since tsk->sparklist never changes, we can use absolute memory
+         addresses here to access its fields */
+
+      // EAX = frame being sparked
+      // EBX = last == tsk->sparklist->sprev;
+
+
+      // f->in_sparklist = 1;
+      I_MOV(regmem(EAX,FRAME_IN_SPARKLIST),imm(1));
+
+      // frame *last = tsk->sparklist->sprev;
+      I_MOV(reg(EBX),absmem(((int)tsk->sparklist)+FRAME_SPREV));
+      // f->snext = tsk->sparklist;
+      I_MOV(regmem(EAX,FRAME_SNEXT),imm((int)tsk->sparklist));
+      // f->sprev = last;
+      I_MOV(regmem(EAX,FRAME_SPREV),reg(EBX));
+      // last->snext = f;
+      I_MOV(regmem(EBX,FRAME_SNEXT),reg(EAX));
+      // tsk->sparklist->sprev = f;
+      I_MOV(absmem(((int)tsk->sparklist)+FRAME_SPREV),reg(EAX));
+
       LABEL(Ldone);
       LABEL(bplabels[0][addr]);
       break;
@@ -1135,7 +1179,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
         // while (wq->frames) {
         //   frame *f = wq->frames;
         //   wq->frames = f->waitlnk;
-        //   f->waitglo = NULL;
         //   f->waitlnk = NULL;
         //   unblock_frame(tsk,f);
         // }
@@ -1150,7 +1193,6 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
           I_JZ(label(Ldone));
 
           I_MOV(reg(EAX),regmem(ESI,FRAME_WAITLNK));
-          I_MOV(regmem(ESI,FRAME_WAITGLO),imm(0));
           I_MOV(regmem(ESI,FRAME_WAITLNK),imm(0));
 
           // f->rnext = *tsk->runptr;
@@ -1585,6 +1627,42 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       int Lafterrun = as->labels++;
       I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
       I_JZ(label(Lafterrun));
+
+
+
+      int Lnotsparked = as->labels++;
+      I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_SPARKED));
+      I_JNE(label(Lnotsparked));
+
+      /* remove_spark */
+
+/*       PRINT_MESSAGE("removing spark\n"); */
+
+      // EDI = frame being unsparked
+      // EAX = previous frame
+      // EBX = next frame
+
+      // f->in_sparklist = 0;
+      I_MOV(regmem(EDI,FRAME_IN_SPARKLIST),imm(0));
+
+      // frame *prev = f->sprev;
+      I_MOV(reg(EAX),regmem(EDI,FRAME_SPREV));
+      // frame *next = f->snext;
+      I_MOV(reg(EBX),regmem(EDI,FRAME_SNEXT));
+      // prev->snext = next;
+      I_MOV(regmem(EAX,FRAME_SNEXT),reg(EBX));
+      // next->sprev = prev;
+      I_MOV(regmem(EBX,FRAME_SPREV),reg(EAX));
+
+      // f->sprev = NULL;
+      I_MOV(regmem(EDI,FRAME_SPREV),imm(0));
+      // f->snext = NULL;
+      I_MOV(regmem(EDI,FRAME_SNEXT),imm(0));
+
+
+
+
+      LABEL(Lnotsparked);
 
       I_MOV(regmem(EDI,FRAME_RNEXT),reg(EBP));
       I_MOV(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));

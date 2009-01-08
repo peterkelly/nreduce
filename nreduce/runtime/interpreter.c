@@ -190,7 +190,6 @@ void resume_local_waiters(task *tsk, waitqueue *wq)
     frame *f = wq->frames;
     assert((OP_EVAL == f->instr->opcode) || (OP_CALL == f->instr->opcode));
     wq->frames = f->waitlnk;
-    f->waitglo = NULL;
     f->waitlnk = NULL;
     unblock_frame_toend(tsk,f);
   }
@@ -1476,6 +1475,10 @@ int handle_interrupt(task *tsk)
 
       frameblock *fb = tsk->searchfb;
       int i = tsk->searchpos;
+      int foundspark = 0;
+
+      struct timeval search_start;
+      gettimeofday(&search_start,NULL);
 
       do {
         frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
@@ -1488,7 +1491,8 @@ int handle_interrupt(task *tsk)
           run_frame(tsk,f);
           tsk->searchfb = fb;
           tsk->searchpos = i;
-          return 0;
+          foundspark = 1;
+          break;
         }
 
         i++;
@@ -1497,7 +1501,23 @@ int handle_interrupt(task *tsk)
           fb = fb->next ? fb->next : tsk->frameblocks;
         }
       } while ((fb != tsk->searchfb) || (i != tsk->searchpos));
+
+      struct timeval search_end;
+      gettimeofday(&search_end,NULL);
+      int ms = timeval_diffms(search_start,search_end);
+      tsk->searchms += ms;
+      tsk->nsearches++;
+      if (foundspark)
+        tsk->nfound++;
+
+      node_log(tsk->n,LOG_INFO,"Search: %dms, found = %d, nsearches = %d, nfound = %d, total = %dms",
+               ms,foundspark,tsk->nsearches,tsk->nfound,tsk->searchms);
+
+      if (foundspark)
+        return 0;
+
     }
+
 
     gettimeofday(&now,NULL);
     diffms = timeval_diffms(now,tsk->nextfish);
@@ -1914,7 +1934,6 @@ void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native
   }
   assert(0 <= tsk->nfetching);
   tsk->nfetching++;
-  f2->waitglo = target;
   add_waiter_frame(&target->wq,f2);
   f2->instr--;
   block_frame(tsk,f2);
@@ -2247,6 +2266,12 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
       }
 
       assert(runnable);
+
+
+/*       int addr = runnable->instr - bc_instructions(tsk->bcdata); */
+/*       printf("%4d %-20s\n",addr,opcodes[runnable->instr->opcode]); */
+
+      check_sparks(tsk);
 
       instr = runnable->instr;
       runnable->instr++;
