@@ -507,7 +507,7 @@ void free_sysobject(task *tsk, sysobject *so)
       sysobject_done_connect(so);
       sysobject_done_reading(so);
       sysobject_done_writing(so);
-      if (!socketid_isnull(&so->sockid))
+      if (!socketid_isnull(&so->sockid) && !so->from_network)
         send_delete_connection(tsk->endpt,so->sockid);
       if (!tsk->done) {
         assert(0 == so->frameids[CONNECT_FRAMEADDR]);
@@ -519,7 +519,7 @@ void free_sysobject(task *tsk, sysobject *so)
       break;
     }
     case SYSOBJECT_LISTENER: {
-      if (!socketid_isnull(&so->sockid))
+      if (!socketid_isnull(&so->sockid) && !so->from_network)
         send_delete_listener(tsk->endpt,so->sockid);
       break;
     }

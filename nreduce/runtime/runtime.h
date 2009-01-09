@@ -324,6 +324,7 @@ typedef struct sysobject {
   struct timeval start;
   struct sysobject *prev;
   struct sysobject *next;
+  int from_network;
 } sysobject;
 
 typedef struct carray {

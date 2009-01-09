@@ -457,6 +457,7 @@ static void handle_read(node *n, connection *conn)
   array *buf = conn->recvbuf;
 
   assert(CANREAD(conn));
+  assert(!conn->isreg || (0 <= conn->frameids[READ_FRAMEADDR]));
 
   array_mkroom(conn->recvbuf,n->iosize);
   r = TEMP_FAILURE_RETRY(read(conn->sock,

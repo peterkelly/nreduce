@@ -462,6 +462,7 @@ static void read_sysobject(reader *rd, pntr *pout, gaddr addr)
   sysobject *so = new_sysobject(tsk,type);
   so->ownertid = ownertid;
   so->sockid = sockid;
+  so->from_network = 1;
   assert(so->c);
   make_pntr(*pout,so->c);
 }
@@ -531,6 +532,8 @@ void read_pntr(reader *rd, pntr *pout)
          use to us, since other nodes just have a "proxy" for the main sysobject. */
       assert(existing);
       assert(CELL_SYSOBJECT == pntrtype(existing->p));
+      free_sysobject(tsk,psysobject(*pout));
+      *pout = existing->p;
     }
 
     if (NULL == existing) {

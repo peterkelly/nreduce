@@ -523,6 +523,7 @@ static void interpreter_connection_closed(task *tsk, connection_closed_msg *m)
 {
   sysobject *so = find_sysobject(tsk,&m->sockid);
   if (NULL != so) {
+    assert(socketid_equals(&so->sockid,&m->sockid));
 
     /* We should only receive MSG_CONNECTION_CLOSED if the connection previously
        succeeded. */
@@ -532,10 +533,14 @@ static void interpreter_connection_closed(task *tsk, connection_closed_msg *m)
     so->error = m->error;
     memcpy(so->errmsg,m->errmsg,sizeof(so->errmsg));
 
-    if (0 != so->frameids[READ_FRAMEADDR])
+    if (0 != so->frameids[READ_FRAMEADDR]) {
       retrieve_blocked_frame(tsk,so->frameids[READ_FRAMEADDR]);
-    if (0 != so->frameids[WRITE_FRAMEADDR])
+      so->frameids[READ_FRAMEADDR] = 0;
+    }
+    if (0 != so->frameids[WRITE_FRAMEADDR]) {
       retrieve_blocked_frame(tsk,so->frameids[WRITE_FRAMEADDR]);
+      so->frameids[WRITE_FRAMEADDR] = 0;
+    }
 
     so->closed = 1;
   }
