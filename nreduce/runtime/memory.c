@@ -420,7 +420,8 @@ sysobject *new_sysobject(task *tsk, int type)
 
 static void sysobject_check_finished(sysobject *so)
 {
-  if (so->done_connect && so->done_reading && so->done_writing) {
+  if (so->outgoing_connection &&
+      so->done_connect && so->done_reading && so->done_writing) {
     if (so->local) {
       so->tsk->local_conns--;
       assert(0 <= so->tsk->local_conns);

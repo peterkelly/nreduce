@@ -1314,6 +1314,7 @@ static void b_connect(task *tsk, pntr *argstack)
     so->hostname = strdup(hostname);
     so->port = port;
     so->len = 0;
+    so->outgoing_connection = 1;
 
     gettimeofday(&so->start,NULL);
     so->local = local;

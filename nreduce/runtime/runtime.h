@@ -325,6 +325,7 @@ typedef struct sysobject {
   struct sysobject *prev;
   struct sysobject *next;
   int from_network;
+  int outgoing_connection;
 } sysobject;
 
 typedef struct carray {
