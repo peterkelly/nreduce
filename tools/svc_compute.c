@@ -14,6 +14,24 @@
 
 long long comp_per_ms = 0;
 
+struct timeval timeval_diff(struct timeval from, struct timeval to)
+{
+  struct timeval diff;
+  diff.tv_sec = to.tv_sec - from.tv_sec;
+  diff.tv_usec = to.tv_usec - from.tv_usec;
+  if (0 > diff.tv_usec) {
+    diff.tv_sec -= 1;
+    diff.tv_usec += 1000000;
+  }
+  return diff;
+}
+
+int timeval_diffms(struct timeval from, struct timeval to)
+{
+  struct timeval diff = timeval_diff(from,to);
+  return diff.tv_sec*1000 + diff.tv_usec/1000;
+}
+
 int start_listening(int port)
 {
   int yes = 1;
@@ -174,6 +192,7 @@ void compute_service(int port, int direct)
   int sock;
   int maxthreads = 3;
   int nconnections = 0;
+  struct timeval start;
 
   if (direct) {
     printf("Using single thread for all responses\n");
@@ -201,7 +220,7 @@ void compute_service(int port, int direct)
     if (!direct) {
       /* Wait until there is a thread available */
       pthread_mutex_lock(&lock);
-      while (nthreads+1 > maxthreads) {
+      while (nthreads >= maxthreads) {
         pthread_cond_wait(&cond,&lock);
       }
       nthreads++;
@@ -221,7 +240,17 @@ void compute_service(int port, int direct)
     }
 
     nconnections++;
-    printf("# connections = %d\n",nconnections);
+    if (1 == nconnections) {
+      gettimeofday(&start,NULL);
+      printf("# connections = %d\n",nconnections);
+    }
+    else {
+      struct timeval now;
+      gettimeofday(&now,NULL);
+      int ms = timeval_diffms(start,now);
+      double rate = 1000.0*((double)nconnections)/ms;
+      printf("# connections = %d, rate = %.3f c/s\n",nconnections,rate);
+    }
 
     if (direct) {
       handle(sock);
