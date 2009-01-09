@@ -55,7 +55,8 @@
 #define COLLECT_THRESHOLD 8192000
 #define GLOBAL_HASH_SIZE 256
 #define PROFILE_FILENAME "profile.out"
-#define MAX_SVCBUSY 3
+#define MAX_LOCAL_CONNECTIONS 3
+#define MAX_TOTAL_CONNECTIONS 128
 
 #define FLAG_MARKED         0x1
 #define FLAG_NEW            0x2

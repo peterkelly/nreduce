@@ -553,7 +553,8 @@ typedef struct task {
   sourceloc errorsl;
   frame *freeframe;
   unsigned int nextid;
-  int svcbusy;
+  int local_conns;
+  int total_conns;
 
   /* memory */
 /*   block *blocks; */

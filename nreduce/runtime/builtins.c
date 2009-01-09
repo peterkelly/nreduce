@@ -1289,7 +1289,8 @@ static void b_connect(task *tsk, pntr *argstack)
       return;
     }
 
-    if (local && (MAX_SVCBUSY <= tsk->svcbusy)) {
+    if ((local && (MAX_LOCAL_CONNECTIONS <= tsk->local_conns)) ||
+        (MAX_TOTAL_CONNECTIONS <= tsk->total_conns)) {
       /* This machine is already processing the max. no of allowed service requests. Put
          the frame back in the SPARKED state, and mark it as nolocal. This will prevent
          the frame from being run again locally until the number of active local service
@@ -1317,14 +1318,16 @@ static void b_connect(task *tsk, pntr *argstack)
     gettimeofday(&so->start,NULL);
     so->local = local;
     if (so->local) {
-      assert(0 <= so->tsk->svcbusy);
-      tsk->svcbusy++;
+      assert(0 <= so->tsk->local_conns);
+      tsk->local_conns++;
     }
+    assert(0 <= so->tsk->total_conns);
+    tsk->total_conns++;
 
     make_pntr(argstack[2],so->c);
 
-    node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT1 (%s:%d) svcbusy = %d",
-             tsk->tid,hostname,port,tsk->svcbusy);
+    node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT1 (%s:%d) local_conns = %d",
+             tsk->tid,hostname,port,tsk->local_conns);
 
     ioid = suspend_current_frame(tsk,*tsk->runptr);
     send_connect(tsk->endpt,tsk->n->iothid,ip,port,tsk->endpt->epid,ioid);

@@ -420,15 +420,13 @@ sysobject *new_sysobject(task *tsk, int type)
 
 static void sysobject_check_finished(sysobject *so)
 {
-  if (so->local && so->done_connect && so->done_reading && so->done_writing) {
-    int duration;
-    so->tsk->svcbusy--;
-    assert(0 <= so->tsk->svcbusy);
-    struct timeval now;
-    gettimeofday(&now,NULL);
-    duration = timeval_diffms(so->start,now);
-    node_log(so->tsk->n,LOG_DEBUG1,"%d: CONNECT3 (%s:%d) lasted %d, now svcbusy = %d",
-             so->tsk->tid,so->hostname,so->port,duration,so->tsk->svcbusy);
+  if (so->done_connect && so->done_reading && so->done_writing) {
+    if (so->local) {
+      so->tsk->local_conns--;
+      assert(0 <= so->tsk->local_conns);
+    }
+    so->tsk->total_conns--;
+    assert(0 <= so->tsk->total_conns);
   }
 }
 

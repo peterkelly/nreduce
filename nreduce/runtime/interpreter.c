@@ -1418,7 +1418,8 @@ int find_spark(task *tsk)
 
     frame *spark = tsk->sparklist->snext;
     if ((spark != tsk->sparklist) &&
-        (!spark->nolocal || (MAX_SVCBUSY > tsk->svcbusy))) {
+        (!spark->nolocal || ((MAX_LOCAL_CONNECTIONS > tsk->local_conns) &&
+                             (MAX_TOTAL_CONNECTIONS > tsk->total_conns)))) {
       run_frame(tsk,spark);
       return 1;
     }
@@ -1495,10 +1496,10 @@ int handle_interrupt(task *tsk)
     }
 #endif
 
-/*     node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; svcbusy = %d, nfetching = %d", */
-/*              tsk->tid,tsk->svcbusy,tsk->nfetching); */
+/*     node_log(tsk->n,LOG_DEBUG1,"%d: no runnable frames; local_conns = %d, nfetching = %d", */
+/*              tsk->tid,tsk->local_conns,tsk->nfetching); */
 
-    assert(0 <= tsk->svcbusy);
+    assert(0 <= tsk->local_conns);
 
     /* We really have nothing to do; run a sparked frame if we have one, otherwise send
        out a work request */
@@ -1511,7 +1512,7 @@ int handle_interrupt(task *tsk)
 
     /* Only send a FISH request if there's been enough time passed since the last one,
        and if the local machine is not already busy with enough service requests. */
-    if ((MAX_SVCBUSY > tsk->svcbusy) &&
+    if ((MAX_LOCAL_CONNECTIONS > tsk->local_conns) &&
         (tsk->newfish || (0 >= diffms)) &&
         (1 < tsk->groupsize)) {
       int dest;
