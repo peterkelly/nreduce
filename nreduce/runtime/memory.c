@@ -106,7 +106,7 @@ const char *frame_states[5] = {
 #ifndef INLINE_RESOLVE_PNTR
 pntr resolve_pntr(pntr p)
 {
-  while (TYPE_IND == pntrtype(p))
+  while (CELL_IND == pntrtype(p))
     p = get_pntr(p)->field1;
   return p;
 }
@@ -420,7 +420,7 @@ sysobject *new_sysobject(task *tsk, int type)
 
 static void sysobject_check_finished(sysobject *so)
 {
-  if (so->local && so->done_reading && so->done_writing) {
+  if (so->local && so->done_connect && so->done_reading && so->done_writing) {
     int duration;
     so->tsk->svcbusy--;
     assert(0 <= so->tsk->svcbusy);
@@ -430,6 +430,14 @@ static void sysobject_check_finished(sysobject *so)
     node_log(so->tsk->n,LOG_DEBUG1,"%d: CONNECT3 (%s:%d) lasted %d, now svcbusy = %d",
              so->tsk->tid,so->hostname,so->port,duration,so->tsk->svcbusy);
   }
+}
+
+void sysobject_done_connect(sysobject *so)
+{
+  if (so->done_connect)
+    return;
+  so->done_connect = 1;
+  sysobject_check_finished(so);
 }
 
 void sysobject_done_reading(sysobject *so)
@@ -448,11 +456,10 @@ void sysobject_done_writing(sysobject *so)
   sysobject_check_finished(so);
 }
 
-void sysobject_closed(sysobject *so)
+void sysobject_delete_if_finished(sysobject *so)
 {
-  sysobject_done_reading(so);
-  sysobject_done_writing(so);
-  so->closed = 1;
+  if (so->done_connect && so->done_reading && so->done_writing)
+    free_sysobject(so->tsk,so);
 }
 
 sysobject *find_sysobject(task *tsk, const socketid *sockid)
@@ -485,13 +492,21 @@ void free_sysobject(task *tsk, sysobject *so)
 {
   tsk->nsysobjects--;
   llist_remove(&tsk->sysobjects,so);
+
+  assert(NULL != so->c);
+  assert(CELL_SYSOBJECT == so->c->type);
+  so->c->type = CELL_IND;
+  so->c->field1 = tsk->globnilpntr;
+
   if (so->ownertid == tsk->tid) {
     switch (so->type) {
     case SYSOBJECT_FILE:
       close(so->fd);
       break;
     case SYSOBJECT_CONNECTION: {
-      sysobject_closed(so);
+      sysobject_done_connect(so);
+      sysobject_done_reading(so);
+      sysobject_done_writing(so);
       if (!socketid_isnull(&so->sockid))
         send_delete_connection(tsk->endpt,so->sockid);
       if (!tsk->done) {

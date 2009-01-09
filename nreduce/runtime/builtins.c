@@ -1365,10 +1365,15 @@ static void b_connect(task *tsk, pntr *argstack)
       else {
         node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) failed",tsk->tid,so->hostname,so->port);
         set_error(tsk,"%s:%d: %s",so->hostname,so->port,so->errmsg);
+        sysobject_done_connect(so);
+        sysobject_done_reading(so);
+        sysobject_done_writing(so);
+        sysobject_delete_if_finished(so);
         return;
       }
     }
     else {
+      sysobject_done_connect(so);
       node_log(tsk->n,LOG_DEBUG1,"%d: CONNECT2 (%s:%d) connected",tsk->tid,so->hostname,so->port);
 
       /* Start printing output to the connection */
@@ -1432,6 +1437,8 @@ static void b_readcon(task *tsk, pntr *argstack)
     else
       argstack[0] = tsk->globnilpntr;
     curf->resume = 0;
+    sysobject_done_reading(so);
+    sysobject_delete_if_finished(so);
     return;
   }
 
@@ -1447,6 +1454,7 @@ static void b_readcon(task *tsk, pntr *argstack)
     if (0 == so->len) {
       argstack[0] = tsk->globnilpntr;
       sysobject_done_reading(so);
+      sysobject_delete_if_finished(so);
     }
     else {
       carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
@@ -1586,6 +1594,8 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
         set_error(tsk,"writecon %s:%d: Connection is closed",so->hostname,so->port);
     }
     curf->resume = 0;
+    sysobject_done_writing(so);
+    sysobject_delete_if_finished(so);
     return;
   }
 
@@ -1600,8 +1610,10 @@ static void write_data(task *tsk, pntr *argstack, const char *data, int len, pnt
   if (curf->resume) {
     argstack[0] = tsk->globnilpntr; /* normal return */
     curf->resume = 0;
-    if (0 == len)
+    if (0 == len) {
       sysobject_done_writing(so);
+      sysobject_delete_if_finished(so);
+    }
   }
   else {
     int ioid = suspend_current_frame(tsk,curf);
