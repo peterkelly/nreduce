@@ -77,9 +77,10 @@ const char *connection_events[13] = {
 
 static void do_shutdown(node *n, connection *conn, int how, const char *howstr)
 {
-  if (0 > shutdown(conn->sock,how))
+  if ((0 > shutdown(conn->sock,how)) && (ENOTCONN != errno)) {
     node_log(n,LOG_WARNING,"shutdown(%s) on %s:%d failed: %s",
              howstr,conn->hostname,conn->port,strerror(errno));
+  }
 }
 
 static void add_connection_stats(node *n, connection *conn)
@@ -110,7 +111,8 @@ static void add_connection_stats(node *n, connection *conn)
 static void remove_connection(node *n, connection *conn)
 {
   assert(NODE_ALREADY_LOCKED(n));
-  node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
+  if (!conn->isreg)
+    node_log(n,LOG_INFO,"Removing connection %s",conn->hostname);
   add_connection_stats(n,conn);
   if (0 <= conn->sock)
     list_push(&n->p->toclose,(void*)conn->sock);

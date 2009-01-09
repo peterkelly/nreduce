@@ -475,9 +475,7 @@ static void handle_read(node *n, connection *conn)
   }
 
   if (0 == r) {
-    if (conn->isreg)
-      node_log(n,LOG_INFO,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
-    else
+    if (!conn->isreg)
       node_log(n,LOG_WARNING,"read: Connection %s:%d closed by peer",conn->hostname,conn->port);
     notify_read(n,conn);
     handle_disconnection(n,conn);
@@ -513,7 +511,9 @@ static int handle_connected(node *n, connection *conn)
 
   if (0 == err) {
     int yes = 1;
-    node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
+
+    if (!conn->isreg)
+      node_log(n,LOG_INFO,"Connected to %s:%d",conn->hostname,conn->port);
 
     if (0 > setsockopt(conn->sock,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(int))) {
       conn->errn = errno;
