@@ -16,7 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: manager.c 610 2007-08-22 06:07:12Z pmkelly $
+ * $Id$
  *
  */
 
