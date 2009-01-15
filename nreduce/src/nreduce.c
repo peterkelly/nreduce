@@ -328,6 +328,10 @@ int main(int argc, char **argv)
   if (getenv("ENGINE"))
     set_engine(getenv("ENGINE"));
 
+#ifdef DISABLE_SPARKS
+  printf("Sparks disabled\n");
+#endif
+
   memset(&args,0,sizeof(args));
   args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);

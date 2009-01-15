@@ -53,11 +53,16 @@
                                   add_instruction(comp,_s,OP_JFUN,(_a),0); }
 #define UPDATE(_s,_a)         add_instruction(comp,_s,OP_UPDATE,comp->si->count-1-(_a),0)
 #define DO(_s,_a)             add_instruction(comp,_s,OP_DO,_a,0);
+
+#ifdef DISABLE_SPARKS
+#define SPARK(_s,_a) EVAL(_s,_a)
+#else
 #define SPARK(_s,_a)          { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
                                 if (!comp->si || (STATUS_SPARKED > statusat(comp->si,pos))) { \
                                    add_instruction(comp,_s,OP_SPARK,pos,0); \
                               }}
+#endif
 #define EVAL(_s,_a)           { int arg0 = (_a);                \
                                 int pos = comp->si->count-1-arg0; \
                                 if (!comp->si || (STATUS_EVALUATED > statusat(comp->si,pos))) \
@@ -1180,6 +1185,13 @@ static void peephole(compilation *comp, int start)
       map[addr1] = addr1;
 
     while (source < count) {
+#ifdef DISABLE_SPARKS
+      if (OP_SPARK == instrs[source].opcode) {
+        map[source] = dest;
+        source++;
+      }
+      else
+#endif
       if ((source+1 < count) &&
           (OP_SPARK == instrs[source].opcode) &&
           (OP_EVAL == instrs[source+1].opcode) &&

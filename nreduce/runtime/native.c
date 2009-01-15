@@ -1610,6 +1610,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
       I_JZ(label(Lafterrun));
 
+#ifndef DISABLE_SPARKS
       int Lnotsparked = as->labels++;
       I_CMP(regmem(EDI,FRAME_STATE),imm(STATE_SPARKED));
       I_JNE(label(Lnotsparked));
@@ -1635,6 +1636,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       I_MOV(regmem(EDI,FRAME_SNEXT),imm(0));
 
       LABEL(Lnotsparked);
+#endif
 
       I_MOV(regmem(EDI,FRAME_RNEXT),reg(EBP));
       I_MOV(regmem(EDI,FRAME_STATE),imm(STATE_ACTIVE));
