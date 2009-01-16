@@ -653,6 +653,9 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
   else {
     global *target;
 
+    if ((CELL_CONS == pntrtype(p)) || (CELL_AREF == pntrtype(p)))
+      maybe_expand_array(tsk,p);
+
     write_int(arr,pntrtype(p));
 
     if (NULL != (target = targethash_lookup(tsk,p))) {

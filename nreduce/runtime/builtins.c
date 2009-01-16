@@ -49,6 +49,8 @@
 #include <dirent.h>
 #include <arpa/inet.h>
 
+extern int opt_postpone;
+
 static const char *numnames[4] = {"first", "second", "third", "fourth"};
 
 static unsigned char NAN_BITS[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF };
@@ -428,8 +430,11 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
 
       if (0 != sizereq%8)
         sizereq += 8-(sizereq%8);
-      (*arr) = (carray*)realloc_mem(tsk,*arr,sizereq);
-      (*arr)->nbytes = sizereq;
+
+      if (sizereq > (*arr)->nbytes) {
+        (*arr) = (carray*)realloc_mem(tsk,*arr,sizereq);
+        (*arr)->nbytes = sizereq;
+      }
 
       make_pntr(wrapper->field1,*arr);
       #ifdef PROFILING
@@ -477,7 +482,7 @@ void maybe_expand_array(task *tsk, pntr p)
     }
   }
 
-  if ((CELL_AREF == pntrtype(p)) && (sizeof(pntr) == aref_array(p)->elemsize)) {
+  if (CELL_AREF == pntrtype(p)) {
     carray *arr = aref_array(p);
     array_resolve_tail(tsk,arr);
 
@@ -486,28 +491,56 @@ void maybe_expand_array(task *tsk, pntr p)
        old tails with INDs, because the execution engine assumes that once a cell is
        non-IND, it remains non-IND for the rest of its lifetime. */
 
-    while (MAX_ARRAY_SIZE > arr->size) {
-      if (CELL_CONS == pntrtype(arr->tail)) {
-        cell *tailcell = get_pntr(arr->tail);
-        pntr tailhead = resolve_pntr(tailcell->field1);
-        carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
-        array_set_tail(tsk,arr,resolve_pntr(tailcell->field2));
+    if (sizeof(pntr) == aref_array(p)->elemsize) {
+      while (MAX_ARRAY_SIZE > arr->size) {
+        if (CELL_CONS == pntrtype(arr->tail)) {
+          cell *tailcell = get_pntr(arr->tail);
+          pntr tailhead = resolve_pntr(tailcell->field1);
+          carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
+          array_set_tail(tsk,arr,resolve_pntr(tailcell->field2));
 
-        /* FIXME: is there a way to do this safely? */
-/*         pntr newtail; */
-/*         make_aref_pntr(newtail,arr->wrapper,arr->size-1); */
-/*         cell_make_ind(tsk,tailcell,newtail); */
+          /* FIXME: is there a way to do this safely? */
+/*           pntr newtail; */
+/*           make_aref_pntr(newtail,arr->wrapper,arr->size-1); */
+/*           cell_make_ind(tsk,tailcell,newtail); */
+        }
+        else if ((CELL_AREF == pntrtype(arr->tail)) &&
+                 (sizeof(pntr) == aref_array(arr->tail)->elemsize)) {
+          carray *otharr = aref_array(arr->tail);
+          int othindex = aref_index(arr->tail);
+          carray_append(tsk,&arr,&((pntr*)otharr->elements)[othindex],
+                        otharr->size-othindex,sizeof(pntr));
+          array_set_tail(tsk,arr,otharr->tail);
+        }
+        else {
+          break;
+        }
       }
-      else if ((CELL_AREF == pntrtype(arr->tail)) &&
-               (sizeof(pntr) == aref_array(arr->tail)->elemsize)) {
-        carray *otharr = aref_array(arr->tail);
-        int othindex = aref_index(arr->tail);
-        carray_append(tsk,&arr,&((pntr*)otharr->elements)[othindex],
-                      otharr->size-othindex,sizeof(pntr));
-        array_set_tail(tsk,arr,otharr->tail);
+    }
+    else {
+      /* string */
+      int oldsize = arr->size;
+      while (1) {
+        if (CELL_AREF != pntrtype(arr->tail))
+          break;
+        carray *tail_arr = aref_array(arr->tail);
+        int tail_index = aref_index(arr->tail);
+        int tail_size = tail_arr->size-tail_index;
+        if (tail_arr->elemsize != arr->elemsize)
+          break;
+        if (arr->size+tail_size > MAX_ARRAY_SIZE)
+          break;
+        carray_append(tsk,&arr,&tail_arr->elements[tail_index],tail_size,arr->elemsize);
+        arr->tail = tail_arr->tail;
+        write_barrier_ifnew(tsk,arr->wrapper,arr->tail);
       }
-      else {
-        break;
+      if (arr->size > oldsize) {
+        char *str = (char*)malloc(arr->size+1);
+        memcpy(str,arr->elements,arr->size);
+        str[arr->size] = '\0';
+        node_log(tsk->n,LOG_DEBUG2,"Expanded string from %d to %d: \"%s\"",
+                 oldsize,arr->size,str);
+        free(str);
       }
     }
 
@@ -1238,7 +1271,7 @@ static void start_frame_running(task *tsk, pntr framep)
 
     gaddr storeaddr = get_physical_address(tsk,framep);
     assert(storeaddr.tid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (connect)",
+    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (sfr)",
              tsk->tid,target->addr.tid,
              target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
@@ -1289,10 +1322,11 @@ static void b_connect(task *tsk, pntr *argstack)
       return;
     }
 
-    if ((local && (MAX_LOCAL_CONNECTIONS <= tsk->local_conns)) ||
-        (MAX_TOTAL_CONNECTIONS <= tsk->total_conns)) {
+    if (opt_postpone &&
+        ((MAX_TOTAL_CONNECTIONS <= tsk->total_conns) ||
+         ((MAX_LOCAL_CONNECTIONS <= tsk->local_conns) && local))) {
       /* This machine is already processing the max. no of allowed service requests. Put
-         the frame back in the SPARKED state, and mark it as nolocal. This will prevent
+         the frame back in the SPARKED state, and mark it as postponed. This will prevent
          the frame from being run again locally until the number of active local service
          requests drops below the maximum. The frame can however be exported to other machines
          in response to a FISH request. */
@@ -1300,7 +1334,7 @@ static void b_connect(task *tsk, pntr *argstack)
       curf->instr = bc_instructions(tsk->bcdata)+bc_funinfo(tsk->bcdata)[fno].address+1;
 
       done_frame(tsk,curf);
-      curf->nolocal = 1;
+      curf->postponed = 1;
       curf->state = STATE_SPARKED;
       append_spark(tsk,curf);
       check_runnable(tsk);

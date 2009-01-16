@@ -49,6 +49,9 @@
 
 #define NREDUCE_C
 
+extern int opt_postpone;
+extern int opt_fishframes;
+
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
 int max_array_size = (1 << 18);
@@ -289,8 +292,21 @@ static void init_evaluation()
     }
   }
 
-  if (strict_evaluation)
+  if (strict_evaluation) {
     builtin_info[B_CONS].nstrict = builtin_info[B_CONS].nargs;
+    builtin_info[B_ARRAYPREFIX].nstrict = builtin_info[B_ARRAYPREFIX].nargs;
+  }
+}
+
+void parse_optimisations()
+{
+  char *postpone = getenv("OPT_POSTPONE");
+  if (NULL != postpone)
+    opt_postpone = atoi(postpone);
+
+  char *fishframes = getenv("OPT_FISHFRAMES");
+  if (NULL != fishframes)
+    opt_fishframes = atoi(fishframes);
 }
 
 int main(int argc, char **argv)
@@ -335,6 +351,7 @@ int main(int argc, char **argv)
   memset(&args,0,sizeof(args));
   args.extra = array_new(sizeof(char*),0);
   parse_args(argc,argv);
+  parse_optimisations();
 
   init_evaluation();
 

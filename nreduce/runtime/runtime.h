@@ -411,7 +411,7 @@ typedef struct frame {
   struct frame *waitlnk;
   struct frame *rnext;
 
-  int nolocal;
+  int postponed;
   int pad;
   struct frame *sprev;
   struct frame *snext;
@@ -777,6 +777,7 @@ pntr socketid_string(task *tsk, socketid sockid);
 pntr mkcons(task *tsk, pntr head, pntr tail);
 
 int get_builtin(const char *name);
+void maybe_expand_array(task *tsk, pntr p);
 pntr string_to_array(task *tsk, const char *str);
 int array_to_string(pntr refpntr, char **str);
 int flatten_list(pntr refpntr, pntr **data);

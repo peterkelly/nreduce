@@ -48,6 +48,8 @@ pthread_key_t task_key;
 // FIXME: make sure these are set correctly
 int engine_type = ENGINE_NATIVE;
 int strict_evaluation = 1;
+int opt_postpone = 1;
+int opt_fishframes = 4;
 
 global *targethash_lookup(task *tsk, pntr p)
 {
@@ -290,14 +292,13 @@ void check_sparks(task *tsk)
     assert(f->snext->sprev == f);
   }
 
-
-  /* Check that all "nolocal" sparked frames are at the end of the list */
-  int in_nolocal = 0;
+  /* Check that all postponed sparked frames are at the end of the list */
+  int in_postponed = 0;
   for (f = tsk->sparklist->snext; f != tsk->sparklist; f = f->snext) {
-    if (f->nolocal)
-      in_nolocal = 1;
-    if (in_nolocal)
-      assert(f->nolocal);
+    if (f->postponed)
+      in_postponed = 1;
+    if (in_postponed)
+      assert(f->postponed);
   }
 }
 

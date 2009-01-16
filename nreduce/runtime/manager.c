@@ -43,7 +43,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define DISTGC_DELAY 20000
+#define DISTGC_DELAY 30000
 #define DEBUG_DISTGC
 
 #define PAUSE_DURING_GC

@@ -47,8 +47,10 @@
 
 #define FISH_DELAY_MS 250
 #define GC_DELAY 2500
-#define NSPARKS_REQUESTED 4
 //#define STANDALONE_NOFRAMES_ERROR
+
+extern int opt_postpone;
+extern int opt_fishframes;
 
 inline void op_begin(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
@@ -617,13 +619,11 @@ static int get_idmap_index(task *tsk, endpointid epid)
 static void interpreter_fish(task *tsk, message *msg)
 {
   reader rd;
-  frameblock *fb;
-  int i;
-  int reqtsk, age, nframes;
+  int reqtsk;
+  int age;
   int scheduled = 0;
   array *newmsg;
   int from = get_idmap_index(tsk,msg->source);
-  int done = 0;
 
   assert(0 <= from);
 
@@ -632,7 +632,6 @@ static void interpreter_fish(task *tsk, message *msg)
   start_address_reading(tsk,from,msg->tag);
   read_int(&rd,&reqtsk);
   read_int(&rd,&age);
-  read_int(&rd,&nframes);
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
@@ -645,27 +644,24 @@ static void interpreter_fish(task *tsk, message *msg)
   #endif
   newmsg = write_start();
 
-  for (fb = tsk->frameblocks; fb && !done; fb = fb->next) {
-    for (i = 0; (i < tsk->framesperblock) && !done; i++) {
-      frame *f = ((frame*)&fb->mem[i*tsk->framesize]);
-      if (STATE_SPARKED == f->state) {
-        if (1 <= nframes--) {
-          pntr p;
-          assert(f->c);
-          make_pntr(p,f->c);
-          #ifdef DEBUG_DISTRIBUTION
-          array_printf(names," ");
-          print_pntr(tsk,names,p,1);
-          #endif
+  int nframes = opt_fishframes;
+  while (0 < nframes) {
+    frame *spark = tsk->sparklist->sprev;
 
-          schedule_frame(tsk,f,reqtsk,newmsg);
-          scheduled++;
-        }
-        else {
-          done = 1;
-        }
-      }
-    }
+    if (spark == tsk->sparklist)
+      break; /* Spark list is empty */
+
+    pntr p;
+    assert(spark->c);
+    make_pntr(p,spark->c);
+    #ifdef DEBUG_DISTRIBUTION
+    array_printf(names," ");
+    print_pntr(tsk,names,p,1);
+    #endif
+
+    schedule_frame(tsk,spark,reqtsk,newmsg);
+    scheduled++;
+    nframes--;
   }
 
   if (0 < scheduled) {
@@ -674,21 +670,20 @@ static void interpreter_fish(task *tsk, message *msg)
     #endif
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
   }
-  write_end(newmsg);
-  #ifdef DEBUG_DISTRIBUTION
-  array_free(names);
-  #endif
-
-  if (!scheduled && (0 < (age)--)) {
+  else if (0 < age--) {
     int dest;
-
     /*       dest = (tsk->tid+1) % tsk->groupsize; */
     do {
       dest = rand() % tsk->groupsize;
     } while (dest == tsk->tid);
 
-    msg_fsend(tsk,dest,MSG_FISH,"iii",reqtsk,age,nframes);
+    msg_fsend(tsk,dest,MSG_FISH,"ii",reqtsk,age);
   }
+
+  write_end(newmsg);
+  #ifdef DEBUG_DISTRIBUTION
+  array_free(names);
+  #endif
 }
 
 static void interpreter_fetch(task *tsk, message *msg)
@@ -1404,12 +1399,12 @@ static void find_recursion(task *tsk)
 int find_spark(task *tsk)
 {
   if (NULL != tsk->frameblocks) {
-    /* Some frames in the spark list may have the nolocal field set, indicating that they
+    /* Some frames in the spark list may have the postponed field set, indicating that they
        correspond to service requests to the local machine which should not be sparked locally
        if there are already the maximum number of service requests in the progress. The spark
        list is organised such that these are always placed *after* normal sparks that can
        be run locally. So we only need to check the head of the spark list. If it is marked
-       nolocal, this means that all frames in the spark list are marked nonlocal, and so we
+       postponed, this means that all frames in the spark list are marked nonlocal, and so we
        should only run the spark if the maximum no. of local requests are not already in
        progress.
 
@@ -1418,8 +1413,8 @@ int find_spark(task *tsk)
 
     frame *spark = tsk->sparklist->snext;
     if ((spark != tsk->sparklist) &&
-        (!spark->nolocal || ((MAX_LOCAL_CONNECTIONS > tsk->local_conns) &&
-                             (MAX_TOTAL_CONNECTIONS > tsk->total_conns)))) {
+        (!spark->postponed || ((MAX_LOCAL_CONNECTIONS > tsk->local_conns) &&
+                               (MAX_TOTAL_CONNECTIONS > tsk->total_conns)))) {
       run_frame(tsk,spark);
       return 1;
     }
@@ -1527,11 +1522,9 @@ int handle_interrupt(task *tsk)
         dest = rand() % tsk->groupsize;
       } while (dest == tsk->tid);
 
-      node_log(tsk->n,LOG_DEBUG1,"%d: IDLE sending out FISH (requested: %d)",
-               tsk->tid,NSPARKS_REQUESTED);
+      node_log(tsk->n,LOG_DEBUG1,"%d: IDLE sending out FISH",tsk->tid);
 
-      msg_fsend(tsk,dest,MSG_FISH,
-                "iii",tsk->tid,tsk->groupsize,NSPARKS_REQUESTED);
+      msg_fsend(tsk,dest,MSG_FISH,"ii",tsk->tid,tsk->groupsize);
       tsk->newfish = 0;
     }
 
@@ -2193,6 +2186,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   tsk->endpt->interrupt = 1;
   pthread_setspecific(task_key,tsk);
   endpoint_link(endpt,tsk->out_sockid.coordid);
+
+  node_log(tsk->n,LOG_INFO,"opt_postpone = %d",opt_postpone);
+  node_log(tsk->n,LOG_INFO,"opt_fishframes = %d",opt_fishframes);
 
   write(tsk->threadrunningfds[1],&semdata,1);
 

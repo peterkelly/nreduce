@@ -224,7 +224,7 @@ op_fun *op_handlers[OP_COUNT] = {
 #define FRAME_WAITLNK ((int)&((frame*)0)->waitlnk)
 #define FRAME_WQ ((int)&((frame*)0)->wq)
 #define FRAME_FREELNK ((int)&((frame*)0)->freelnk)
-#define FRAME_NOLOCAL ((int)&((frame*)0)->nolocal)
+#define FRAME_POSTPONED ((int)&((frame*)0)->postponed)
 
 #define FRAME_DATA ((int)&((frame*)0)->data[0])
 #define FRAME_C ((int)&((frame*)0)->c)
@@ -913,13 +913,13 @@ void asm_frame_new(task *tsk, x86_assembly *as, int state)
     // f->state = 0;
     // f->resume = 0;
     // f->freelnk = 0;
-    // f->nolocal = 0;
+    // f->postponed = 0;
     // f->sprev = NULL;
     // f->snext = NULL;
     I_MOV(regmem(EDI,FRAME_STATE),imm(state));
     I_MOV(regmem(EDI,FRAME_RESUME),imm(0));
     I_MOV(regmem(EDI,FRAME_FREELNK),imm(0));
-    I_MOV(regmem(EDI,FRAME_NOLOCAL),imm(0));
+    I_MOV(regmem(EDI,FRAME_POSTPONED),imm(0));
     I_MOV(regmem(EDI,FRAME_SPREV),imm(0));
     I_MOV(regmem(EDI,FRAME_SNEXT),imm(0));
   }

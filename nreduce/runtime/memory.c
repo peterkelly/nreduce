@@ -389,6 +389,8 @@ void *alloc_mem(task *tsk, unsigned int nbytes)
 
 void *realloc_mem(task *tsk, void *old, unsigned int nbytes)
 {
+  assert(0 <= object_size(old));
+  assert(0 <= nbytes);
   assert(nbytes > object_size(old));
   char *new = alloc_mem(tsk,nbytes);
   unsigned int flags = ((header*)new)->flags;
@@ -1537,7 +1539,7 @@ frame *frame_new(task *tsk) /* Can be called from native code */
   f->resume = 0;
   f->freelnk = 0;
   f->retp = NULL;
-  f->nolocal = 0;
+  f->postponed = 0;
   f->sprev = NULL;
   f->snext = NULL;
 
