@@ -1,0 +1,64 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netdb.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <math.h>
+
+void run(long long work, long long iterations)
+{
+  long long total = work*iterations;
+  long long i;
+  for (i = 0; i < total; i++) {
+  }
+}
+
+long long get_micro_time()
+{
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  return (long long)tv.tv_sec*1000000 + (long long)tv.tv_usec;
+}
+
+long long get_comp_per_ms()
+{
+  char *cpmstr = getenv("COMP_PER_MS");
+  if (NULL == cpmstr) {
+    fprintf(stderr,"Environment variable COMP_PER_MS not set; run with -calibrate to determine\n");
+    exit(-1);
+  }
+  char *end = NULL;
+  long long cpm = strtol(cpmstr,&end,10);
+  if (('\0' == cpmstr[0]) || ('\0' != *end)) {
+    fprintf(stderr,"Environment variable COMP_PER_MS invalid (\"%s\"); must be a number\n",
+            cpmstr);
+    exit(1);
+  }
+  return cpm;
+}
+
+int main(int argc, char **argv)
+{
+  setbuf(stdout,NULL);
+
+  if (2 > argc) {
+    fprintf(stderr,"Usage: compute <ms>\n");
+    return -1;
+  }
+
+  int ms = atoi(argv[1]);
+  long long comp_per_ms = get_comp_per_ms();
+
+  long long start = get_micro_time();
+  run(comp_per_ms,ms);
+  long long end = get_micro_time();
+  double ratio = (end-start)/(ms*1000.0);
+  printf("Goal=%dms Actual=%lldms (%.3f%%)\n",
+         ms,(end-start)/1000,100.0*ratio);
+
+  return 0;
+}

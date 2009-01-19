@@ -1,0 +1,199 @@
+import xq
+import xml
+
+namespaces =
+(cons
+   (cons "local" ns_local)
+   (cons
+      (cons "fn" ns_fn)
+      (cons
+         (cons "xsi" ns_xsi)
+         (cons
+            (cons "xs" ns_xs)
+            (cons
+               (cons "xml" ns_xml)
+               (cons
+                  (cons "comp" ns_comp)
+                  (cons (cons "" ns_) nil)))))))
+
+main args stdin =
+(xq::main args stdin query 1)
+
+ns_local = "http://www.w3.org/2005/xquery-local-functions"
+
+ns_fn = "http://www.w3.org/2005/xpath-functions"
+
+ns_xsi = "http://www.w3.org/2001/XMLSchema-instance"
+
+ns_xs = "http://www.w3.org/2001/XMLSchema"
+
+ns_xml = "http://www.w3.org/XML/1998/namespace"
+
+fun_ns = "http://www.w3.org/2005/xpath-functions"
+
+ns_ = ""
+
+ns_comp = "http://localhost:5001/compute?WSDL"
+
+g_0_compute arg0 arg1 =
+(xq::foreach3
+   (xq::fn_post
+      (cons (xml::mkstring "http://127.0.0.1:5001/compute") nil)
+      (letrec
+         oldns = namespaces
+       in
+         ((letrec
+             namespaces = (cons
+                             (cons "soap" ns_soap)
+                             oldns)
+             ns_soap = "http://schemas.xmlsoap.org/soap/envelope/"
+           in
+             ((cons (letrec
+                       content = (++
+                                    (letrec
+                                       oldns = namespaces
+                                     in
+                                       ((letrec
+                                           namespaces = oldns
+                                         in
+                                           ((cons (letrec
+                                                     content = (++
+                                                                  (letrec
+                                                                     oldns = namespaces
+                                                                   in
+                                                                     ((letrec
+                                                                         namespaces = (cons
+                                                                                         (cons "msg" ns_msg)
+                                                                                         oldns)
+                                                                         ns_msg = "urn:compute"
+                                                                       in
+                                                                         ((cons (letrec
+                                                                                   content = (++
+                                                                                                (letrec
+                                                                                                   oldns = namespaces
+                                                                                                 in
+                                                                                                   ((letrec
+                                                                                                       namespaces = oldns
+                                                                                                     in
+                                                                                                       ((cons (letrec
+                                                                                                                 content = (++ arg0 nil)
+                                                                                                                 attrs = (xq::get_attributes content)
+                                                                                                                 children = (xq::get_children content)
+                                                                                                               in
+                                                                                                                 ((xml::mknpelem
+                                                                                                                     ns_
+                                                                                                                     ""
+                                                                                                                     "arg0"
+                                                                                                                     attrs
+                                                                                                                     nil
+                                                                                                                     (xq::concomplex children)))) nil)))))
+                                                                                                (++
+                                                                                                   (letrec
+                                                                                                      oldns = namespaces
+                                                                                                    in
+                                                                                                      ((letrec
+                                                                                                          namespaces = oldns
+                                                                                                        in
+                                                                                                          ((cons (letrec
+                                                                                                                    content = (++ arg1 nil)
+                                                                                                                    attrs = (xq::get_attributes content)
+                                                                                                                    children = (xq::get_children content)
+                                                                                                                  in
+                                                                                                                    ((xml::mknpelem
+                                                                                                                        ns_
+                                                                                                                        ""
+                                                                                                                        "arg1"
+                                                                                                                        attrs
+                                                                                                                        nil
+                                                                                                                        (xq::concomplex children)))) nil)))))
+                                                                                                   nil))
+                                                                                   attrs = (xq::get_attributes content)
+                                                                                   children = (xq::get_children content)
+                                                                                 in
+                                                                                   ((xml::mknpelem
+                                                                                       ns_msg
+                                                                                       "msg"
+                                                                                       "compute"
+                                                                                       attrs
+                                                                                       (cons (xml::mknamespace "urn:compute" "msg") nil)
+                                                                                       (xq::concomplex children)))) nil)))))
+                                                                  nil)
+                                                     attrs = (xq::get_attributes content)
+                                                     children = (xq::get_children content)
+                                                   in
+                                                     ((xml::mknpelem
+                                                         ns_soap
+                                                         "soap"
+                                                         "Body"
+                                                         attrs
+                                                         nil
+                                                         (xq::concomplex children)))) nil)))))
+                                    nil)
+                       attrs = (xq::get_attributes content)
+                       children = (xq::get_children content)
+                     in
+                       ((xml::mknpelem
+                           ns_soap
+                           "soap"
+                           "Envelope"
+                           attrs
+                           (cons (xml::mknamespace "http://schemas.xmlsoap.org/soap/envelope/" "soap") nil)
+                           (xq::concomplex children)))) nil))))))
+   (!citem.!cpos.!csize.
+     (xq::foreach3
+        (filter
+           ((!pnk.
+              (xq::wildcard_uri_test pnk "Envelope"))
+              xml::TYPE_ELEMENT)
+           (xml::item_children citem))
+        (!citem.!cpos.!csize.
+          (xq::foreach3
+             (filter
+                ((!pnk.
+                   (xq::wildcard_uri_test pnk "Body"))
+                   xml::TYPE_ELEMENT)
+                (xml::item_children citem))
+             (!citem.!cpos.!csize.
+               (xq::foreach3
+                  (filter
+                     ((!pnk.!node.
+                        1)
+                        xml::TYPE_ELEMENT)
+                     (xml::item_children citem))
+                  (!citem.!cpos.!csize.
+                    (filter
+                       ((!pnk.!node.
+                          1)
+                          xml::TYPE_ELEMENT)
+                       (xml::item_children citem))))))))))
+
+query citem cpos csize =
+(((letrec
+     oldns = namespaces
+   in
+     ((letrec
+         namespaces = oldns
+       in
+         ((cons (letrec
+                   content = (++
+                                (xq::foreach
+                                   (xq::range
+                                      (xq::getnumber
+                                         (cons (xml::mknumber 1) nil))
+                                      (xq::getnumber
+                                         (cons (xml::mknumber 1024) nil)))
+                                   (!i.
+                                     (g_0_compute
+                                        i
+                                        (cons (xml::mknumber 1000) nil))))
+                                nil)
+                   attrs = (xq::get_attributes content)
+                   children = (xq::get_children content)
+                 in
+                   ((xml::mknpelem
+                       ns_
+                       ""
+                       "result"
+                       attrs
+                       nil
+                       (xq::concomplex children)))) nil)))))))

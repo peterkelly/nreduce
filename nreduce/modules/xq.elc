@@ -893,18 +893,31 @@ post url content = (http::parse_url url (post2 url content))
 
 post2 url content scheme host port path =
 (letrec
-  request = (append "POST " (append path (append " HTTP/1.1\r\nHost: " (append host (append "\r\nContent-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\nContent-Length: " (append (numtostring (len content)) (append "\r\nConnection: close\r\n\r\n" content)))))))
+  request = (++ "HEAD / HTTP/1.1\r\nHost: "
+            (++ host
+            (++ "\r\n\r\n"
+            (++ "POST "
+            (++ path
+            (++ " HTTP/1.1\r\nHost: "
+            (++ host
+            (++ "\r\nContent-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\nContent-Length: "
+            (++ (numtostring (len content))
+            (++ "\r\nConnection: close\r\n\r\n" content))))))))))
   stream = (connect host (stringtonum port) request)
  in
   (http::parse_response stream (post3 url content)))
 
+// have response to HEAD request; now get response from service
 post3 url content version status reason headers body =
+(http::parse_response body (post4 url content))
+
+post4 url content version status reason headers body =
 (if (== status 302)
   (post (http::get_header "location" headers) content)
   (if (!= status 200)
     (error
-     (append "HTTP error "
-	     (append (numtostring status) (append ": " (append url (append "\n" body))))))
+     (++ "HTTP error "
+	     (++ (numtostring status) (++ ": " (++ url (++ "\n" body))))))
     body))
 
 

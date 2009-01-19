@@ -1,2 +1,6 @@
 #!/bin/bash
-sglri -p xquery.tbl -i $1 | ./compile | ./elc-parenthesize | ast2text -p elc-pretty.pp
+DIR=`dirname $0`
+sglri -p $DIR/xquery.tbl -i $1 \
+  | $DIR/compile \
+  | $DIR/elc-parenthesize \
+  | ast2text -p $DIR/elc-pretty.pp

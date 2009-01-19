@@ -1,6 +1,6 @@
 EXECUTABLES="$HOME/dev/nreduce/src/nreduce $HOME/dev/tools/loadbal"
 
-export TIMEFORMAT="Total execution time: %R"
+export TIMEFORMAT=$'\nTotal execution time: %R'
 export VM_RUNNING=0
 
 fail()
@@ -61,7 +61,7 @@ init()
   echo "Nodes:" `cat $JOB_DIR/jobnodes`
 
   echo -n "Killing existing processes... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce loadbal showload svc_compute' >/dev/null 2>&1
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce loadbal showload svc_compute compute' >/dev/null 2>&1
   echo "ok"
 
   echo -n "Clearing log dir... "
@@ -77,11 +77,11 @@ startservice()
 
   echo -n "Starting Java service $service on port $port... "
   rm -f $JOB_DIR/logs/service.*
-  parsh -h $JOB_DIR/computenodes \
+  parsh -h $JOB_DIR/jobnodes \
         "cd ~/dev/evaluation && java $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
         >$JOB_DIR/logs/parsh_service.out &
   local node
-  for node in `cat $JOB_DIR/computenodes`; do
+  for node in `cat $JOB_DIR/jobnodes`; do
     ~/dev/tools/waitconn $node $port 30
   done
   echo "ok"
@@ -94,11 +94,11 @@ startcservice()
 
   echo -n "Starting C service $service on port $port... "
   rm -f $JOB_DIR/logs/service.*
-  parsh -h $JOB_DIR/computenodes \
+  parsh -h $JOB_DIR/jobnodes \
         "cd ~ && $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
         >$JOB_DIR/logs/parsh_service.out &
   local node
-  for node in `cat $JOB_DIR/computenodes`; do
+  for node in `cat $JOB_DIR/jobnodes`; do
     ~/dev/tools/waitconn $node $port 30
   done
   echo "ok"
@@ -197,7 +197,7 @@ shutdown()
   echo "ok"
 
   echo -n "Stopping services... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java svc_compute' >/dev/null 2>&1
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java svc_compute compute' >/dev/null 2>&1
   echo "ok"
 
   if [ $VM_RUNNING -ne 0 ]; then

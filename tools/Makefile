@@ -1,4 +1,4 @@
-PROGRAMS = parsh showload loadbal waitconn nobuftail runtests measure svc_compute connections average min max
+PROGRAMS = parsh showload loadbal waitconn nobuftail runtests measure svc_compute compute connections average min max pow2
 
 almostall: $(PROGRAMS)
 
@@ -28,6 +28,9 @@ measure: measure.c
 svc_compute: svc_compute.c
 	gcc -g -Wall -o svc_compute svc_compute.c -lpthread
 
+compute: compute.c
+	gcc -g -Wall -o compute compute.c -lpthread
+
 connections: connections.c portset.h portset.c
 	gcc -g -Wall -o connections connections.c portset.c -lpthread
 
@@ -39,6 +42,9 @@ min: min.c
 
 max: max.c
 	gcc -g -Wall -o max max.c
+
+pow2: pow2.c
+	gcc -g -Wall -o pow2 pow2.c
 
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl

@@ -519,7 +519,6 @@ void maybe_expand_array(task *tsk, pntr p)
     }
     else {
       /* string */
-      int oldsize = arr->size;
       while (1) {
         if (CELL_AREF != pntrtype(arr->tail))
           break;
@@ -533,14 +532,6 @@ void maybe_expand_array(task *tsk, pntr p)
         carray_append(tsk,&arr,&tail_arr->elements[tail_index],tail_size,arr->elemsize);
         arr->tail = tail_arr->tail;
         write_barrier_ifnew(tsk,arr->wrapper,arr->tail);
-      }
-      if (arr->size > oldsize) {
-        char *str = (char*)malloc(arr->size+1);
-        memcpy(str,arr->elements,arr->size);
-        str[arr->size] = '\0';
-        node_log(tsk->n,LOG_DEBUG2,"Expanded string from %d to %d: \"%s\"",
-                 oldsize,arr->size,str);
-        free(str);
       }
     }
 
