@@ -50,14 +50,17 @@ check_job()
   fi
 }
 
-rvalues=`cd $EXP_DIR && for i in *; do echo $i; done | sed -e 's/^.*r\(.*\).n.*$/\1/' | sort | uniq`
-nvalues=`cd $EXP_DIR && for i in *; do echo $i; done | sed -e 's/^.*n//' | sort -n | uniq`
+rvalues=`cd $EXP_DIR && for i in $EXP_NAME.*; do echo $i; \
+         done | sed -e 's/^.*r\(.*\).n.*$/\1/' | sort | uniq`
+nvalues=`cd $EXP_DIR && for i in $EXP_NAME.*; do echo $i; \
+         done | sed -e 's/^.*n//' | sort -n | uniq`
 
 #echo rvalues $rvalues
 #echo nvalues $nvalues
 
 echo -n "Getting times for $EXP_NAME"
 echo "# n avg min max" > $DATA_FILENAME
+allmin=""
 for n in $nvalues; do
   values=""
   for r in $rvalues; do
@@ -69,7 +72,10 @@ for n in $nvalues; do
   avg=`average $values`
   min=`min $values`
   max=`max $values`
+  allmin="$allmin $avg"
   echo -n .
   echo "$n $avg $min $max" >> $DATA_FILENAME
 done
+globalmin=`min $allmin`
+echo $globalmin > $DATA_FILENAME.globalmin
 echo

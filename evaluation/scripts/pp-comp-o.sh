@@ -13,7 +13,7 @@ echo "Startup completed"
 export LOG_LEVEL=info
 mkdir $JOB_DIR/local_logs
 time nreduce $ELC_DIR/pp-comp.elc \
-    50 5 10000 $HOSTNAME 5001 2>$JOB_DIR/local_logs/$HOSTNAME.log
+    64 5 5000 $HOSTNAME 5001 2>$JOB_DIR/local_logs/$HOSTNAME.log
 echo Program exited with status $?
 
 shutdown

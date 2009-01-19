@@ -34,8 +34,8 @@ set style fill solid 0.2
 set size 0.75, 0.75
 
 plot x title "Ideal speedup" with lines ls 0, \
-     "$PLOT_NAME-o.dat" using 1:($t1o/\$2) smooth unique title "Orchestration" with lines ls 1, \\
-     "$PLOT_NAME-y.dat" using 1:($t1y/\$2) smooth unique title "Choreography" with lines ls 2
+     "$PLOT_NAME-o.dat" using 1:($t1o/\$2) title "Orchestration" with lines ls 1, \\
+     "$PLOT_NAME-y.dat" using 1:($t1y/\$2) title "Choreography" with lines ls 2
 HERE
 
 gnuplot $PLOT_NAME-speedup.plot

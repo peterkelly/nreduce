@@ -11,7 +11,7 @@ startshowload
 echo "Startup completed"
 
 time nreduce --client $INITIAL run 0 $ELC_DIR/pp-comp.elc \
-    50 5 10000 localhost 5000
+    64 5 5000 localhost 5000
 echo Program exited with status $?
 
 shutdown

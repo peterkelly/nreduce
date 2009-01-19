@@ -109,7 +109,7 @@ startvm()
   echo -n "Starting virtual machine (excluding client node)... "
 
   # Start the initial node
-  ssh $INITIAL "LOCAL_PORT_RANGE=49152-65535 ~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1" &
+  ssh $INITIAL "$SCRIPT_DIR/initial.sh $JOB_DIR $INITIAL $LOG_LEVEL" &
   echo "Initial node started: $INITIAL"
   ~/dev/tools/waitconn $INITIAL 6879 30
 
@@ -151,6 +151,10 @@ wait_vm_startup()
       exit 1
     fi
     ~/dev/nreduce/src/nreduce --client $INITIAL findall > $JOB_DIR/found_nodes
+
+    echo Found nodes:
+    cat $JOB_DIR/found_nodes
+
     nodecount=`cat $JOB_DIR/found_nodes | wc -l`
     if ((nodecount == expected)); then
       break

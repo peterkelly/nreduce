@@ -28,8 +28,8 @@ set style fill solid 0.2
 
 set size 0.75, 0.75
 
-plot "$PLOT_NAME-o.dat" using 1:2 smooth unique title "Orchestration" with lines ls 1, \\
-     "$PLOT_NAME-y.dat" using 1:2 smooth unique title "Choreography" with lines ls 2
+plot "$PLOT_NAME-o.dat" using 1:2 title "Orchestration" with lines ls 1, \\
+     "$PLOT_NAME-y.dat" using 1:2 title "Choreography" with lines ls 2
 HERE
 
 
