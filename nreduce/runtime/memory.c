@@ -84,11 +84,16 @@ const char *frame_states[5] = {
   "DONE",
 };
 
+#define check_valid_object(_c) {                 \
+                        if (CELL_COUNT <= (_c)->type) \
+                          printf("Not valid object: %p\n",(_c)); \
+                        assert(CELL_COUNT > (_c)->type); }
+
 #define REPLACE_PNTR(p) { if (check) { \
                             if (is_pntr(p)) { \
                               assert(REF_FLAGS != ((cell*)(p).data[0])->flags); \
                               assert(0 != ((cell*)(p).data[0])->type); \
-                              assert(CELL_COUNT > ((cell*)(p).data[0])->type); \
+                              check_valid_object(((cell*)(p).data[0])); \
                             } \
                          } else if (is_pntr(p)) { \
                              if (REF_FLAGS == (unsigned int)((cell*)(p).data[0])->flags) {     \
@@ -98,7 +103,7 @@ const char *frame_states[5] = {
 #define REPLACE_CELL(c) { if (check) { \
                             assert(REF_FLAGS != (c)->flags); \
                             assert(0 != (c)->type); \
-                            assert(CELL_COUNT > (c)->type); \
+                            check_valid_object((c));              \
                           } else if (REF_FLAGS == (c)->flags) {                    \
                             (c) = (cell*)(c)->type; }     \
                         }
@@ -114,7 +119,7 @@ pntr resolve_pntr(pntr p)
 
 unsigned int object_size(void *ptr)
 {
-  assert(CELL_COUNT > ((header*)ptr)->type);
+  check_valid_object(((header*)ptr));
   assert(REF_FLAGS != ((header*)ptr)->flags);
   if (((header*)ptr)->type < CELL_OBJS)
     return sizeof(cell);
@@ -124,9 +129,10 @@ unsigned int object_size(void *ptr)
 
 static void mark(task *tsk, pntr p, unsigned int bit, int depth);
 
-static inline pntr resolve_copy_pntr(pntr p2)
+static inline pntr resolve_copy_pntr(task *tsk, cell *refcell, int bit, pntr p2)
 {
   pntr p = p2;
+  int changed = 0;
   while (1) {
     cell *c;
     if (!is_pntr(p))
@@ -138,7 +144,12 @@ static inline pntr resolve_copy_pntr(pntr p2)
       p.data[0] = (unsigned int)c->type;
     else
       break;
+    changed = 1;
   }
+
+  if (changed && (NULL != refcell) && (FLAG_DMB == bit))
+    write_barrier_ifnew(tsk,refcell,p);
+
   return p;
 }
 
@@ -167,22 +178,26 @@ static void mark_frame(task *tsk, frame *f, unsigned int bit, int depth)
   }
   for (i = 0; i < count; i++) {
     assert(!is_nullpntr(f->data[i]));
-    f->data[i] = resolve_copy_pntr(f->data[i]);
+    f->data[i] = resolve_copy_pntr(tsk,f->c,bit,f->data[i]);
     mark(tsk,f->data[i],bit,depth);
   }
 }
 
-static void mark_cap(task *tsk, cap *c, unsigned int bit, int depth)
+static void mark_cap(task *tsk, cap *cp, unsigned int bit, int depth)
 {
   int i;
   pntr p;
-  make_pntr(p,c);
+  make_pntr(p,cp);
   mark(tsk,p,bit,depth);
 
-  for (i = 0; i < c->count; i++) {
-    assert(!is_nullpntr(c->data[i]));
-    c->data[i] = resolve_copy_pntr(c->data[i]);
-    mark(tsk,c->data[i],bit,depth);
+  pntr pc;
+  make_pntr(pc,cp->c);
+  mark(tsk,pc,bit,depth);
+
+  for (i = 0; i < cp->count; i++) {
+    assert(!is_nullpntr(cp->data[i]));
+    cp->data[i] = resolve_copy_pntr(tsk,cp->c,bit,cp->data[i]);
+    mark(tsk,cp->data[i],bit,depth);
   }
 }
 
@@ -200,26 +215,26 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
   switch (v->type) {
   case CELL_AREF: {
     mark(tsk,c->field1,bit,depth+1);
-    c->field1 = resolve_copy_pntr(c->field1);
-
+    c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
     carray *arr = (carray*)get_pntr(c->field1);
+
     int i;
     assert(CELL_O_ARRAY == arr->type);
     assert(MAX_ARRAY_SIZE >= arr->size);
     if (sizeof(pntr) == arr->elemsize) {
       for (i = 0; i < arr->size; i++) {
-        ((pntr*)arr->elements)[i] = resolve_copy_pntr(((pntr*)arr->elements)[i]);
+        ((pntr*)arr->elements)[i] = resolve_copy_pntr(tsk,c,bit,((pntr*)arr->elements)[i]);
         mark(tsk,((pntr*)arr->elements)[i],bit,depth+1);
       }
     }
-    arr->tail = resolve_copy_pntr(arr->tail);
+    arr->tail = resolve_copy_pntr(tsk,c,bit,arr->tail);
     if (is_pntr(arr->tail))
       return (header*)get_pntr(arr->tail);
     break;
   }
   case CELL_CONS: {
-    c->field1 = resolve_copy_pntr(c->field1);
-    c->field2 = resolve_copy_pntr(c->field2);
+    c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
+    c->field2 = resolve_copy_pntr(tsk,c,bit,c->field2);
     mark(tsk,c->field1,bit,depth+1);
     if (is_pntr(c->field2))
       return (header*)get_pntr(c->field2);
@@ -229,8 +244,8 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
     mark(tsk,c->field1,bit,depth+1);
     break;
   case CELL_APPLICATION:
-    c->field1 = resolve_copy_pntr(c->field1);
-    c->field2 = resolve_copy_pntr(c->field2);
+    c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
+    c->field2 = resolve_copy_pntr(tsk,c,bit,c->field2);
     mark(tsk,c->field1,bit,depth+1);
     mark(tsk,c->field2,bit,depth+1);
     break;
@@ -239,7 +254,7 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
     break;
   case CELL_CAP:
     mark(tsk,c->field1,bit,depth+1);
-    c->field1 = resolve_copy_pntr(c->field1);
+    c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
     assert(CELL_O_CAP == pntrtype(c->field1));
     mark_cap(tsk,(cap*)get_pntr(c->field1),bit,depth+1);
     break;
@@ -252,11 +267,11 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
     sysobject *so = (sysobject*)get_pntr(c->field1);
     so->marked = 1;
     if (!is_nullpntr(so->listenerso)) {
-      so->listenerso = resolve_copy_pntr(so->listenerso);
+      so->listenerso = resolve_copy_pntr(tsk,c,bit,so->listenerso);
       mark(tsk,so->listenerso,bit,depth+1);
     }
     if (so->newso) {
-      so->newso->p = resolve_copy_pntr(so->newso->p);
+      so->newso->p = resolve_copy_pntr(tsk,so->newso->c,bit,so->newso->p);
       mark(tsk,so->newso->p,bit,depth+1);
     }
     break;
@@ -285,7 +300,7 @@ static void mark_or_copy(task *tsk, header *v, unsigned int bit, int depth)
   assert((FLAG_MARKED == bit) || (FLAG_DMB == bit));
 
   while (v && (REF_FLAGS != v->flags) && !(v->flags & bit)) {
-    assert(CELL_COUNT > v->type);
+    check_valid_object(v);
 
     if (FLAG_MARKED == bit) {
       v->flags |= bit;
@@ -634,18 +649,18 @@ static void mark_misc_roots(task *tsk, unsigned int bit)
 
   if (tsk->streamstack) {
     for (i = 0; i < tsk->streamstack->count; i++) {
-      tsk->streamstack->data[i] = resolve_copy_pntr(tsk->streamstack->data[i]);
+      tsk->streamstack->data[i] = resolve_copy_pntr(tsk,NULL,bit,tsk->streamstack->data[i]);
       mark(tsk,tsk->streamstack->data[i],bit,0);
     }
   }
 
   if (tsk->tracing) {
-    tsk->trace_root = resolve_copy_pntr(tsk->trace_root);
+    tsk->trace_root = resolve_copy_pntr(tsk,NULL,bit,tsk->trace_root);
     mark(tsk,tsk->trace_root,bit,0);
   }
 
   if (tsk->out_so) {
-    tsk->out_so->p = resolve_copy_pntr(tsk->out_so->p);
+    tsk->out_so->p = resolve_copy_pntr(tsk,NULL,bit,tsk->out_so->p);
     mark(tsk,tsk->out_so->p,bit,0);
   }
 
@@ -726,7 +741,7 @@ static void preserve_targets(task *tsk)
     if (!(glo->flags & FLAG_MARKED)) {
       int check = 0;
       REPLACE_PNTR(glo->p);
-      assert(CELL_COUNT > ((cell*)(glo->p).data[0])->type);
+      check_valid_object(((cell*)(glo->p).data[0]));
       if (((cell*)(glo->p).data[0])->flags & FLAG_MARKED) {
         glo->flags |= FLAG_MARKED;
         #ifdef DEBUG_DISTRIBUTION
@@ -766,7 +781,7 @@ static void clear_marks(task *tsk, unsigned int bit)
     for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
       header *h = (header*)(off+(char*)bl);
       assert(REF_FLAGS != h->flags);
-      assert(CELL_COUNT > h->type);
+      check_valid_object(h);
       h->flags &= ~bit;
     }
   }
@@ -781,7 +796,7 @@ static void clear_marks(task *tsk, unsigned int bit)
 static void *add_to_oldgen(task *tsk, void *mem)
 {
   assert(REF_FLAGS != ((header*)mem)->flags);
-  assert(CELL_COUNT > ((header*)mem)->type);
+  check_valid_object(((header*)mem));
   assert((0 == tsk->altspace) || (FLAG_ALTSPACE == tsk->altspace));
 
   if (has_been_copied(tsk,mem))
@@ -861,6 +876,8 @@ static void replace_refs_cell(task *tsk, cell *c, int check)
     int i;
     for (i = 0; i < cp->count; i++)
       REPLACE_PNTR(cp->data[i]);
+    REPLACE_CELL(cp->c);
+    assert(c == cp->c);
     break;
   }
   case CELL_SYSOBJECT: {
@@ -1091,7 +1108,7 @@ static void mark_remembered_set(task *tsk)
     pntr p;
     make_pntr(p,rsetdata[i]);
     assert(REF_FLAGS != rsetdata[i]->flags);
-    assert(CELL_COUNT > rsetdata[i]->type);
+    check_valid_object(rsetdata[i]);
     rsetdata[i]->flags &= ~FLAG_MARKED;
     mark(tsk,p,FLAG_MARKED,0);
   }
@@ -1420,7 +1437,11 @@ static void sweep_incoming_references(task *tsk)
         if (CELL_REMOTEREF == pntrtype(glo->p)) {
           global *other = pglobal(glo->p);
           assert(pntrequal(other->p,glo->p));
-          assert(other->addr.tid != tsk->tid);
+          if (other->addr.tid == tsk->tid) {
+            /* We have a "remote reference" that points to a target on the local node, e.g. a
+               frame that has been migrated (in which case the remoteref will be fetching). */
+            continue;
+          }
         }
 
         if ((CELL_REMOTEREF == pntrtype(glo->p)) && pglobal(glo->p)->fetching) {

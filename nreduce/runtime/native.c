@@ -73,6 +73,8 @@
 #define NATIVE_CALL
 #define NATIVE_JCMP
 #define NATIVE_JEQ
+#define NATIVE_CONSN
+#define NATIVE_ITEMN
 
 typedef void (op_fun)(task *tsk, frame *runnable, const instruction *instr);
 
@@ -1761,6 +1763,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       break;
     }
     #endif
+    #ifdef NATIVE_CONSN
     case OP_CONSN: {
       int n = instr->arg0;
       int i;
@@ -1804,6 +1807,8 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       LABEL(bplabels[0][addr]);
       break;
     }
+    #endif
+    #ifdef NATIVE_ITEMN
     case OP_ITEMN: {
       int Lfallback = as->labels++;
       int Ldone = as->labels++;
@@ -1860,6 +1865,7 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       LABEL(bplabels[0][addr]);
       break;
     }
+    #endif
     case OP_INVALID:
       PRINT_MESSAGE("INVALID INSTRUCTION\n");
       I_MOV(absmem((int)&tsk->native_finished),imm(1));

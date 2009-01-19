@@ -2101,9 +2101,9 @@ builtin builtin_info[NUM_BUILTINS] = {
 
 /* Terminal and network output */
 { "nchars",         1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_nchars         },
-{ "print",          2, 2, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_print          },
-{ "printarray",     3, 3, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printarray     },
-{ "printend",       1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_printend       },
+{ "print",          2, 2, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_print          },
+{ "printarray",     3, 3, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_printarray     },
+{ "printend",       1, 1, MAYBE_UNEVAL, MAYBE_FALSE, IMPURE, b_printend       },
 
 /* Other */
 { "_error",         1, 1, ALWAYS_VALUE, MAYBE_FALSE, IMPURE, b_error          },

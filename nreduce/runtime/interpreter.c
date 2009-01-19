@@ -1638,10 +1638,12 @@ inline void op_do(task *tsk, frame *runnable, const instruction *instr)
       f2->c->type = CELL_CAP;
       make_pntr(f2->c->field1,newcp);
       make_pntr(rep,f2->c);
+      newcp->c = f2->c;
       f2->c = NULL;
     }
     else {
       cell *capc = alloc_cell(tsk);
+      newcp->c = capc;
       capc->type = CELL_CAP;
       make_pntr(capc->field1,newcp);
       make_pntr(*f2->retp,capc);
@@ -1814,6 +1816,7 @@ inline void op_mkcap(task *tsk, frame *runnable, const instruction *instr)
     c->data[c->count++] = runnable->data[i];
 
   capv = alloc_cell(tsk);
+  c->c = capv;
   capv->type = CELL_CAP;
   make_pntr(capv->field1,c);
   make_pntr(runnable->data[instr->expcount-n],capv);
@@ -2033,7 +2036,6 @@ inline void op_consn(task *tsk, frame *runnable, const instruction *instr)
   arr->size = n-1;
   arr->tail = runnable->data[instr->expcount-n];
   make_aref_pntr(runnable->data[instr->expcount-n],arr->wrapper,0);
-
 }
 
 void make_item_frame(task *tsk, frame *runnable, int expcount, int pos)

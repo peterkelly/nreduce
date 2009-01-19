@@ -259,23 +259,26 @@ void check_remembered_set(task *tsk)
           node_log(tsk->n,LOG_ERROR,"%s",tmp->data);
           array_free(tmp);
 
-          carray *carr = (carray*)get_pntr(c->field1);
-          if (sizeof(pntr) == carr->elemsize) {
-            int i;
-            for (i = 0; i < carr->size; i++) {
-              if (is_new_ref(((pntr*)carr->elements)[i])) {
-                node_log(tsk->n,LOG_ERROR,"new ref: array item %d %s",
-                         i,cell_types[pntrtype(((pntr*)carr->elements)[i])]);
+          if (CELL_AREF == c->type) {
+            carray *carr = (carray*)get_pntr(c->field1);
+            if (sizeof(pntr) == carr->elemsize) {
+              int i;
+              for (i = 0; i < carr->size; i++) {
+                if (is_new_ref(((pntr*)carr->elements)[i])) {
+                  node_log(tsk->n,LOG_ERROR,"new ref: array item %d %s",
+                           i,cell_types[pntrtype(((pntr*)carr->elements)[i])]);
+                }
               }
             }
-          }
-          if (is_new_ref(carr->tail)) {
-            node_log(tsk->n,LOG_ERROR,"new ref: array tail %s",
-                     cell_types[pntrtype(carr->tail)]);
-          }
-          if (is_new_cell(carr->wrapper)) {
-            node_log(tsk->n,LOG_ERROR,"new ref: array wrapper %s",
-                     cell_types[carr->wrapper->type]);
+            if (is_new_ref(carr->tail)) {
+              node_log(tsk->n,LOG_ERROR,"new ref: array tail %s %p",
+                       cell_types[pntrtype(carr->tail)],
+                       is_pntr(carr->tail) ? get_pntr(carr->tail) : 0);
+            }
+            if (is_new_cell(carr->wrapper)) {
+              node_log(tsk->n,LOG_ERROR,"new ref: array wrapper %s",
+                       cell_types[carr->wrapper->type]);
+            }
           }
         }
         assert(inset);

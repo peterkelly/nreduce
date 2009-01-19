@@ -423,6 +423,7 @@ static void read_cap(reader *rd, pntr *pout)
   capcell->type = CELL_CAP;
   make_pntr(capcell->field1,cp);
   make_pntr(*pout,capcell);
+  cp->c = capcell;
 
   cp->arity = arity;
   cp->address = address;

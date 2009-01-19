@@ -385,6 +385,7 @@ typedef struct cap {
   int fno;
   sourceloc sl;
   int count;
+  cell *c;
 
   pntr data[0];
 } __attribute__ ((__packed__)) cap;

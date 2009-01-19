@@ -673,6 +673,10 @@ void task_free(task *tsk)
 
 void print_pntr(task *tsk, array *arr, pntr p, int depth)
 {
+  if (depth < 0) {
+    array_printf(arr,"...");
+    return;
+  }
   p = resolve_pntr(p);
   switch (pntrtype(p)) {
   case CELL_AREF: {
