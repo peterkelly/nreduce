@@ -29,7 +29,7 @@ import java.net.*;
 
 public class CollateNetStats
 {
-  Pattern firstPattern =
+  Pattern ipPattern =
     Pattern.compile(".*listening addr = (\\d+\\.\\d+\\.\\d+\\.\\d+\\:\\d+)$");
 
   Pattern linePattern =
@@ -179,13 +179,17 @@ public class CollateNetStats
     throws Exception
   {
     BufferedReader br = new BufferedReader(new FileReader(f));
-    String first = br.readLine();
-    if (null == first)
-      throw new Exception("No first line in "+f.getName());
-    Matcher m = firstPattern.matcher(first);
-    if (!m.matches())
-      throw new Exception("Invalid first line in "+f.getName());
-    String thisip = m.group(1);
+
+    String thisip = null;
+    Matcher m;
+    do {
+      String line = br.readLine();
+      if (line == null)
+        throw new Exception("Cannot find line specifying IP address in "+f.getName());
+      m = ipPattern.matcher(line);
+    } while (!m.matches());
+
+    thisip = m.group(1);
 
     String line;
     while (null != (line = br.readLine())) {

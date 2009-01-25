@@ -95,7 +95,7 @@ startcservice()
   echo -n "Starting C service $service on port $port... "
   rm -f $JOB_DIR/logs/service.*
   parsh -h $JOB_DIR/jobnodes \
-        "cd ~ && $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
+        "cd ~ && $SCRIPT_DIR/service.sh $JOB_DIR $service $port > $JOB_DIR/logs/service.\$HOSTNAME 2>&1"\
         >$JOB_DIR/logs/parsh_service.out &
   local node
   for node in `cat $JOB_DIR/jobnodes`; do

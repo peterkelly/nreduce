@@ -1,13 +1,13 @@
 #!/bin/bash
 
 if (($# < 2)); then
-  echo "Usage: $0 <jobdir> <initial> <loglevel>"
+  echo "Usage: $0 <jobdir> args..."
   exit 1
 fi
 
 JOB_DIR=$1
-INITIAL=$2
-LOG_LEVEL=$3
+shift 1
+ARGS=$@
 
 if [ -e $JOB_DIR/env ]; then
   . $JOB_DIR/env
@@ -22,6 +22,4 @@ if [ ! -d $JOB_DIR ]; then
   exit 1
 fi
 
-export LOCAL_PORT_RANGE=49152-65535
-#export EVENTS_DIR=$JOB_DIR/logs
-~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1
+$ARGS

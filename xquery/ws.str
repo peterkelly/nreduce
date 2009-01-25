@@ -68,7 +68,7 @@ FunctionDef(|s1,s2,n1,n2,input,rt,e) =
                    <soap:Body>
                      <msg:n2 xmlns:msg="s2">~e</msg:n2>
                    </soap:Body>
-                 </soap:Envelope>)/ *:Envelope/ *:Body/node()/node() }; ]|
+                 </soap:Envelope>)/ *:Envelope/ *:Body/node()/node()/node() }; ]|
 
 WX(|n1) : OperationAddr(s1,n2,input,[Param(_,Some(TypeDeclaration(rt)))]) ->
      <FunctionDef(|s1,s2,n1,n2,input,rt,e)>
