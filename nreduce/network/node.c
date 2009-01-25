@@ -76,8 +76,10 @@ void got_message(node *n, const msgheader *hdr, endpointid source,
   endpoint *endpt;
   message *newmsg;
 
+  lock_mutex(&n->clock_lock);
   if (n->clock < hdr->timestamp+1)
     n->clock = hdr->timestamp+1;
+  unlock_mutex(&n->clock_lock);
 
   if (NULL == (endpt = find_endpoint(n,hdr->destlocalid))) {
 
@@ -205,6 +207,7 @@ static node *node_new(int loglevel)
 
   n->p = (node_private*)calloc(1,sizeof(node_private));
   init_mutex(&n->p->lock);
+  init_mutex(&n->clock_lock);
   pthread_cond_init(&n->p->closecond,NULL);
   n->p->nextlocalid = FIRST_ID;
   n->p->nextsid = 2;
@@ -268,6 +271,7 @@ static void node_free(node *n)
   assert(NULL == n->p->listeners.first);
 
   pthread_cond_destroy(&n->p->closecond);
+  destroy_mutex(&n->clock_lock);
   destroy_mutex(&n->p->lock);
   close(n->p->ioready_readfd);
   close(n->p->ioready_writefd);
@@ -334,8 +338,12 @@ void node_log(node *n, int level, const char *format, ...)
 
   /* Use only a single vfprintf call to avoid interleaving of messages from different threads */
   newfmt = (char*)malloc(100+strlen(format));
+
+  lock_mutex(&n->clock_lock);
   sprintf(newfmt,"%08u %8s %s\n",n->clock,log_levels[level],format);
   n->clock++;
+  unlock_mutex(&n->clock_lock);
+
   va_start(ap,format);
   vfprintf(n->p->logfile,newfmt,ap);
   va_end(ap);
@@ -561,7 +569,9 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
   hdr.destlocalid = destendpointid.localid;
   hdr.size1 = size;
   hdr.tag1 = tag;
+  lock_mutex(&n->clock_lock);
   hdr.timestamp = n->clock++;
+  unlock_mutex(&n->clock_lock);
 
   if ((destendpointid.ip == n->listenip) &&
       (destendpointid.port == n->listenport)) {

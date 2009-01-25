@@ -275,7 +275,7 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
                ntmsg->tid,ntmsg->groupsize,ntmsg->bcsize);
 
       task_new(ntmsg->tid,ntmsg->groupsize,ntmsg->bcdata,ntmsg->bcsize,args,n,
-               ntmsg->out_sockid,&epid);
+               ntmsg->out_sockid,&epid,ntmsg->eventskey);
 
       endpoint_send(endpt,msg->source,MSG_NEWTASKRESP,
                     &epid.localid,sizeof(int));

@@ -31,6 +31,7 @@
 #include "compiler/source.h"
 #include "runtime.h"
 #include "messages.h"
+#include "events.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -170,16 +171,8 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from n
   obj = resolve_pntr(obj);
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
-    assert(CELL_FRAME != pntrtype(obj));
-
-    #ifdef DEBUG_DISTRIBUTION
-    char *tmp;
-    tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (resume_fetchers)",
-             tsk->tid,ft->tid,ft->lid,ft->tid,tmp);
-    free(tmp);
-    #endif
-
+    assert(CELL_FRAME != pntrtype(obj)); /* FIXME: crash */
+    event_send_respond(tsk,ft->tid,*ft,pntrtype(obj),FUN_RESUME_FETCHERS);
     msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
   list_free(wq->fetchers,free);
@@ -293,8 +286,7 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
     make_pntr(f->c->field1,glo);
     glo->fetching = 1;
 
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) SCHEDULE %s; phys %d@%d",tsk->tid,desttsk,
-             frame_fname(tsk,f),glo->addr.lid,glo->addr.tid);
+    event_send_schedule(tsk,desttsk,glo->addr,frame_fno(tsk,f),1);
   }
   else {
     /* Case 2: Frame was created by another task */
@@ -305,8 +297,7 @@ void schedule_frame(task *tsk, frame *f, int desttsk, array *msg)
     f->c->type = CELL_REMOTEREF;
     make_pntr(f->c->field1,targetglo);
 
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) SCHEDULE %s; replica of %d@%d",tsk->tid,desttsk,
-             frame_fname(tsk,f),targetglo->addr.lid,targetglo->addr.tid);
+    event_send_schedule(tsk,desttsk,targetglo->addr,frame_fno(tsk,f),0);
   }
 
   /* Delete the local copy of the frame */
@@ -363,9 +354,7 @@ static void send_mark_messages(task *tsk)
         gaddr addr = array_item(tsk->distmarks[pid],a,gaddr);
         write_gaddr(msg,tsk,addr);
         tsk->gcsent[addr.tid]++;
-        #ifdef DEBUG_DISTRIBUTION
-        node_log(tsk->n,LOG_DEBUG2,"send(%d->%d) MARKENTRY %d@%d",tsk->tid,pid,addr.lid,addr.tid);
-        #endif
+        event_send_markentry(tsk,pid,addr);
       }
       msg_send(tsk,pid,MSG_MARKENTRY,msg->data,msg->nbytes);
       write_end(msg);
@@ -633,15 +622,12 @@ static void interpreter_fish(task *tsk, message *msg)
   read_int(&rd,&reqtsk);
   read_int(&rd,&age);
   read_end(&rd);
+  event_recv_fish(tsk,from,reqtsk,age);
   finish_address_reading(tsk,from,msg->tag);
 
   if (reqtsk == tsk->tid)
     return;
 
-  #ifdef DEBUG_DISTRIBUTION
-  array *names = array_new(1,0);
-  array_printf(names,"send(%d->%d) SCHEDULE",tsk->tid,reqtsk);
-  #endif
   newmsg = write_start();
 
   int nframes = opt_fishframes;
@@ -654,10 +640,6 @@ static void interpreter_fish(task *tsk, message *msg)
     pntr p;
     assert(spark->c);
     make_pntr(p,spark->c);
-    #ifdef DEBUG_DISTRIBUTION
-    array_printf(names," ");
-    print_pntr(tsk,names,p,1);
-    #endif
 
     schedule_frame(tsk,spark,reqtsk,newmsg);
     scheduled++;
@@ -665,9 +647,6 @@ static void interpreter_fish(task *tsk, message *msg)
   }
 
   if (0 < scheduled) {
-    #ifdef DEBUG_DISTRIBUTION
-    node_log(tsk->n,LOG_DEBUG1,"%s",names->data);
-    #endif
     msg_send(tsk,reqtsk,MSG_SCHEDULE,newmsg->data,newmsg->nbytes);
   }
   else if (0 < age--) {
@@ -677,13 +656,11 @@ static void interpreter_fish(task *tsk, message *msg)
       dest = rand() % tsk->groupsize;
     } while (dest == tsk->tid);
 
+    event_send_fish(tsk,dest,reqtsk,age,FUN_INTERPRETER_FISH);
     msg_fsend(tsk,dest,MSG_FISH,"ii",reqtsk,age);
   }
 
   write_end(newmsg);
-  #ifdef DEBUG_DISTRIBUTION
-  array_free(names);
-  #endif
 }
 
 static void interpreter_fetch(task *tsk, message *msg)
@@ -711,6 +688,7 @@ static void interpreter_fetch(task *tsk, message *msg)
   read_gaddr(&rd,&targetaddr);
   read_gaddr(&rd,&storeaddr);
   read_end(&rd);
+  event_recv_fetch(tsk,from,targetaddr,storeaddr);
   finish_address_reading(tsk,from,msg->tag);
 
   assert(targetaddr.tid == tsk->tid);
@@ -726,13 +704,6 @@ static void interpreter_fetch(task *tsk, message *msg)
   obj = fetchglo->p;
   assert(!is_nullpntr(obj));
   obj = resolve_pntr(obj);
-
-  #ifdef DEBUG_DISTRIBUTION
-  char *tmp = pntr_to_string(tsk,obj);
-  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d obj=%s",
-           from,tsk->tid,targetaddr.lid,targetaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
-  free(tmp);
-  #endif
 
   if ((CELL_REMOTEREF == pntrtype(obj)) && (0 > pglobal(obj)->addr.lid)) {
     add_gaddr(&pglobal(obj)->wq.fetchers,storeaddr);
@@ -754,13 +725,7 @@ static void interpreter_fetch(task *tsk, message *msg)
     unspark_frame(tsk,f);
 
     /* Send the actual frame */
-    #ifdef DEBUG_DISTRIBUTION
-    char *tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (interpreter_fetch 1)",
-             tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
-    free(tmp);
-    #endif
-
+    event_send_respond(tsk,from,storeaddr,pntrtype(obj),FUN_INTERPRETER_FETCH);
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
 
     if (NULL != (storeglo = addrhash_lookup(tsk,storeaddr))) {
@@ -781,13 +746,7 @@ static void interpreter_fetch(task *tsk, message *msg)
     frame_free(tsk,f);
   }
   else {
-    #ifdef DEBUG_DISTRIBUTION
-    char *tmp = pntr_to_string(tsk,obj);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) RESPOND storeaddr %d@%d obj=%s (interpreter_fetch 2)",
-             tsk->tid,storeaddr.tid,storeaddr.lid,storeaddr.tid,tmp);
-    free(tmp);
-    #endif
-
+    event_send_respond(tsk,from,storeaddr,pntrtype(obj),FUN_INTERPRETER_FETCH);
     msg_fsend(tsk,from,MSG_RESPOND,"ap",storeaddr,obj);
   }
 }
@@ -887,7 +846,7 @@ static void interpreter_respond(task *tsk, message *msg)
 
     node_log(tsk->n,LOG_ERROR,"recv(%d->%d) RESPOND storeaddr %d@%d - store not remoteref (%s)",
              from,tsk->tid,storeaddr.lid,storeaddr.tid,cell_types[pntrtype(reference->p)]);
-    assert(0);
+    assert(0); /* FIXME: crash */
 
     /* If we get a RESPOND message and it turns out that we already have something
        for the specified store address, it means we have been given the object as
@@ -920,12 +879,7 @@ static void interpreter_respond(task *tsk, message *msg)
   read_end(&rd);
   finish_address_reading(tsk,from,msg->tag);
 
-  #ifdef DEBUG_DISTRIBUTION
-  char *tmp = pntr_to_string(tsk,obj);
-  node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) RESPOND storeaddr %d@%d obj=%s",
-           from,tsk->tid,storeaddr.lid,storeaddr.tid,tmp);
-  free(tmp);
-  #endif
+  event_recv_respond(tsk,from,storeaddr,pntrtype(obj));
 
   global *objglo = targethash_lookup(tsk,obj);
   if (objglo && (target != objglo)) {
@@ -996,15 +950,7 @@ static void interpreter_schedule(task *tsk, message *msg)
     assert(CELL_FRAME == pntrtype(framep));
     frame *newf = pframe(framep);
 
-    if (have_existing) {
-      node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) SCHEDULE %s %d@%d (existing %s)",
-               from,tsk->tid,
-               frame_fname(tsk,newf),srcaddr.lid,srcaddr.tid,cell_types[existing_type]);
-    }
-    else {
-      node_log(tsk->n,LOG_DEBUG1,"recv(%d->%d) SCHEDULE %s %d@%d (new)",from,tsk->tid,
-               frame_fname(tsk,newf),srcaddr.lid,srcaddr.tid);
-    }
+    event_recv_schedule(tsk,from,srcaddr,frame_fno(tsk,newf),have_existing);
 
     /* Add the old address as a fetcher, so it will be given the result when the frame
        eventually returns. But *only* if it is not already listed as a fetcher. */
@@ -1063,6 +1009,7 @@ static void interpreter_ack(task *tsk, message *msg)
 
 static void interpreter_startdistgc(task *tsk, startdistgc_msg *m)
 {
+  event_recv_startdistgc(tsk,m->gciter);
 /*   printf("tsk->indistgc = %d\n",tsk->indistgc); */
   assert(!tsk->indistgc);
   tsk->indistgc = 1;
@@ -1083,6 +1030,7 @@ static void interpreter_markroots(task *tsk)
 /* An RMT (Root Marking Task) */
   int tid;
 
+  event_recv_markroots(tsk);
   assert(tsk->indistgc);
   assert(!endpointid_isnull(&tsk->gc));
 
@@ -1132,9 +1080,9 @@ static void interpreter_markentry(task *tsk, message *msg)
   while (rd.pos < rd.size) {
     read_gaddr(&rd,&addr);
     assert(addr.tid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG2,"recv(%d->%d) MARKENTRY %d@%d",from,tsk->tid,addr.lid,addr.tid);
+    event_recv_markentry(tsk,from,addr);
     glo = addrhash_lookup(tsk,addr);
-    if (!glo) {
+    if (!glo) { /* FIXME: crash */
       node_log(tsk->n,LOG_ERROR,"Marking request for deleted global %d@%d",addr.lid,addr.tid);
       abort();
     }
@@ -1152,6 +1100,8 @@ static void interpreter_markentry(task *tsk, message *msg)
 
 static void interpreter_sweep(task *tsk, message *msg)
 {
+  event_recv_sweep(tsk);
+
   reader rd;
   assert(tsk->indistgc);
   assert(!endpointid_isnull(&tsk->gc));
@@ -1164,17 +1114,21 @@ static void interpreter_sweep(task *tsk, message *msg)
   tsk->indistgc = 0;
   tsk->newcellflags &= ~FLAG_NEW;
 
+  event_send_sweepack(tsk);
   endpoint_send(tsk->endpt,tsk->gc,MSG_SWEEPACK,NULL,0);
 }
 
 static void maybe_pauseack(task *tsk)
 {
-  if (tsk->paused && (tsk->groupsize-1 == tsk->gotpause))
+  if (tsk->paused && (tsk->groupsize-1 == tsk->gotpause)) {
+    event_send_pauseack(tsk);
     endpoint_send(tsk->endpt,tsk->gc,MSG_PAUSEACK,NULL,0);
+  }
 }
 
 static void interpreter_pause(task *tsk, message *msg)
 {
+  event_recv_pause(tsk);
   assert(!tsk->paused);
   if (endpointid_isnull(&tsk->gc)) {
     tsk->gc = msg->source;
@@ -1183,14 +1137,18 @@ static void interpreter_pause(task *tsk, message *msg)
   tsk->paused = 1;
   int i;
   for (i = 0; i < tsk->groupsize; i++) {
-    if (i != tsk->tid)
+    if (i != tsk->tid) {
+      event_send_gotpause(tsk,i);
       endpoint_send(tsk->endpt,tsk->idmap[i],MSG_GOTPAUSE,NULL,0);
+    }
   }
   maybe_pauseack(tsk);
 }
 
-static void interpreter_gotpause(task *tsk)
+static void interpreter_gotpause(task *tsk, message *msg)
 {
+  int from = get_idmap_index(tsk,msg->source);
+  event_recv_gotpause(tsk,from);
   tsk->gotpause++;
   assert(tsk->groupsize-1 >= tsk->gotpause);
   maybe_pauseack(tsk);
@@ -1198,6 +1156,7 @@ static void interpreter_gotpause(task *tsk)
 
 static void interpreter_resume(task *tsk)
 {
+  event_recv_resume(tsk);
   tsk->paused = 0;
   tsk->gotpause = 0;
 }
@@ -1306,7 +1265,7 @@ static void handle_message(task *tsk, message *msg)
     interpreter_pause(tsk,msg);
     break;
   case MSG_GOTPAUSE:
-    interpreter_gotpause(tsk);
+    interpreter_gotpause(tsk,msg);
     break;
   case MSG_RESUME:
     interpreter_resume(tsk);
@@ -1522,8 +1481,7 @@ int handle_interrupt(task *tsk)
         dest = rand() % tsk->groupsize;
       } while (dest == tsk->tid);
 
-      node_log(tsk->n,LOG_DEBUG1,"%d: IDLE sending out FISH",tsk->tid);
-
+      event_send_fish(tsk,dest,tsk->tid,tsk->groupsize,FUN_HANDLE_INTERRUPT);
       msg_fsend(tsk,dest,MSG_FISH,"ii",tsk->tid,tsk->groupsize);
       tsk->newfish = 0;
     }
@@ -1910,9 +1868,7 @@ void eval_remoteref(task *tsk, frame *f2, pntr ref) /* Can be called from native
     assert(CELL_REMOTEREF == pntrtype(ref));
     gaddr storeaddr = get_physical_address(tsk,ref);
     assert(storeaddr.tid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (EVAL)",
-             tsk->tid,target->addr.tid,
-             target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
+    event_send_fetch(tsk,target->addr.tid,target->addr,storeaddr,FUN_EVAL_REMOTEREF);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
     target->fetching = 1;
   }
@@ -2208,6 +2164,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
 
   gettimeofday(&start,NULL);
 
+  event_task_start(tsk);
+
   if (0 == tsk->tid) {
     frame *initial = frame_new(tsk);
     initial->instr = bc_instructions(tsk->bcdata);
@@ -2378,5 +2336,6 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     print_profile(tsk);
   #endif
   tsk->done = 1;
+  event_task_end(tsk);
   task_free(tsk);
 }

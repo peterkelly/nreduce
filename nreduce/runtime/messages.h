@@ -97,6 +97,7 @@ typedef struct newtask_msg {
   int groupsize;
   int bcsize;
   socketid out_sockid;
+  int eventskey;
   int argc;
   char bcdata[0];
 } __attribute__ ((__packed__)) newtask_msg;

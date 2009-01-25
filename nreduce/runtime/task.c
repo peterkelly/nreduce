@@ -32,6 +32,7 @@
 #include "runtime/runtime.h"
 #include "modules/modules.h"
 #include "messages.h"
+#include "events.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -41,6 +42,7 @@
 #include <math.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 extern const module_info *modules;
 
@@ -157,12 +159,11 @@ gaddr get_physical_address(task *tsk, pntr p)
     llist_append(&tsk->globals,glo);
     glo->addr.tid = tsk->tid;
     glo->addr.lid = tsk->nextlid++;
-    node_log(tsk->n,LOG_DEBUG2,"Added new global with address %d@%d (get_physical_address)",
-             glo->addr.lid,glo->addr.tid);
     glo->p = p;
     glo->flags = tsk->indistgc ? FLAG_NEW : 0;
     physhash_add(tsk,glo);
     addrhash_add(tsk,glo);
+    event_add_global(tsk,glo->addr,pntrtype(glo->p),FUN_GET_PHYSICAL_ADDRESS);
   }
   else {
     assert(glo->addr.tid == tsk->tid);
@@ -182,14 +183,13 @@ global *add_target(task *tsk, gaddr addr, pntr p)
   glo = (global*)calloc(1,sizeof(global));
   llist_append(&tsk->globals,glo);
   glo->addr = addr;
-  node_log(tsk->n,LOG_DEBUG2,"Added new global with address %d@%d (add_target)",
-           glo->addr.lid,glo->addr.tid);
   glo->p = p;
   glo->flags = tsk->indistgc ? FLAG_NEW : 0;
   /* Can't store targets with lid < 0 in addrhash, since there may be more than one of them */
   if (0 <= addr.lid)
     addrhash_add(tsk,glo);
   targethash_add(tsk,glo);
+  event_add_global(tsk,glo->addr,pntrtype(glo->p),FUN_ADD_TARGET);
   return glo;
 }
 
@@ -462,7 +462,7 @@ int set_error(task *tsk, const char *format, ...)
 }
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
-               socketid out_sockid, endpointid *epid)
+               socketid out_sockid, endpointid *epid, int eventskey)
 {
   task *tsk = (task*)calloc(1,sizeof(task));
   cell *globnilvalue;
@@ -596,6 +596,25 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
   tsk->sparklist->c->type = CELL_FRAME;
   make_pntr(tsk->sparklist->c->field1,tsk->sparklist);
 
+  tsk->eventskey = eventskey;
+
+  char *events_dir = getenv("EVENTS_DIR");
+  if (NULL != events_dir) {
+    int len = strlen(events_dir)+100;
+    char *filename = (char*)malloc(len);
+    snprintf(filename,len,"%s/events.%d",events_dir,tsk->tid);
+    if (0 > (tsk->eventsfd = open(filename,O_WRONLY|O_CREAT|O_TRUNC,0666)))
+      fatal("Can't create events file %s",filename);
+    free(filename);
+
+    events_header eh;
+    eh.version = EVENTS_VERSION;
+    eh.key = eventskey;
+    eh.tid = tsk->tid;
+    eh.groupsize = tsk->groupsize;
+    write(tsk->eventsfd,&eh,sizeof(eh));
+  }
+
   return tsk;
 }
 
@@ -667,6 +686,9 @@ void task_free(task *tsk)
   free(tsk->bpaddrs[0]);
   free(tsk->bpaddrs[1]);
   free(tsk->cpu_to_bcaddr);
+
+  if (0 <= tsk->eventsfd)
+    close(tsk->eventsfd);
 
   free(tsk);
 }

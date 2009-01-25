@@ -163,6 +163,7 @@ static void send_newtask(launcher *lr)
   assert(pos == ((char*)ntmsg)+ntsize);
 
   ntmsg->out_sockid = lr->out_sockid;
+  ntmsg->eventskey = rand();
   for (i = 0; i < lr->count; i++) {
     ntmsg->tid = i;
     endpoint_send(lr->endpt,lr->managerids[i],MSG_NEWTASK,(char*)ntmsg,ntsize);

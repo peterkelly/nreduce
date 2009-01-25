@@ -34,6 +34,7 @@
 #include "compiler/source.h"
 #include "runtime/runtime.h"
 #include "messages.h"
+#include "events.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -491,6 +492,8 @@ sysobject *find_sysobject(task *tsk, const socketid *sockid)
 
 static void remove_global(task *tsk, global *glo)
 {
+  event_remove_global(tsk,glo->addr);
+
   /* Remove from hash tables */
   addrhash_remove(tsk,glo);
   targethash_remove(tsk,glo);
@@ -744,11 +747,7 @@ static void preserve_targets(task *tsk)
       check_valid_object(((cell*)(glo->p).data[0]));
       if (((cell*)(glo->p).data[0])->flags & FLAG_MARKED) {
         glo->flags |= FLAG_MARKED;
-        #ifdef DEBUG_DISTRIBUTION
-        node_log(tsk->n,LOG_DEBUG1,"%d: preserve_targets: preserving %d@%d (%s)",
-                 tsk->tid,glo->addr.lid,glo->addr.tid,
-                 cell_types[pntrtype(glo->p)]);
-        #endif
+        event_preserve_target(tsk,glo->addr);
       }
     }
   }
@@ -761,13 +760,8 @@ static void sweep_globals(task *tsk)
 
   for (glo = tsk->globals.first; glo; glo = next) {
     next = glo->next;
-    if (!(glo->flags & FLAG_MARKED)) {
-      #ifdef DEBUG_DISTRIBUTION
-      node_log(tsk->n,LOG_DEBUG1,"%d: sweep_globals: deleting %d@%d",
-               tsk->tid,glo->addr.lid,glo->addr.tid);
-      #endif
+    if (!(glo->flags & FLAG_MARKED))
       remove_global(tsk,glo);
-    }
   }
 }
 
@@ -1444,20 +1438,10 @@ static void sweep_incoming_references(task *tsk)
           }
         }
 
-        if ((CELL_REMOTEREF == pntrtype(glo->p)) && pglobal(glo->p)->fetching) {
-          /* keep */
-          #ifdef DEBUG_DISTRIBUTION
-          node_log(tsk->n,LOG_DEBUG1,"sweep_incoming_references: keeping %d@%d (fetching)",
-                   glo->addr.lid,glo->addr.tid);
-          #endif
-        }
-        else {
-          #ifdef DEBUG_DISTRIBUTION
-          node_log(tsk->n,LOG_DEBUG1,"sweep_incoming_references: deleting %d@%d",
-                   glo->addr.lid,glo->addr.tid);
-          #endif
+        if ((CELL_REMOTEREF == pntrtype(glo->p)) && pglobal(glo->p)->fetching)
+          event_keep_global(tsk,glo->addr);
+        else
           remove_global(tsk,glo);
-        }
       }
     }
   }

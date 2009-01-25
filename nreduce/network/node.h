@@ -115,6 +115,7 @@ typedef struct node {
   endpointid iothid;
   int iosize;
   unsigned int clock;
+  pthread_mutex_t clock_lock;
   struct node_private *p;
 } node;
 

@@ -1,6 +1,6 @@
 noinst_LTLIBRARIES = libruntime.la
 noinst_PROGRAMS = 
-noinst_HEADERS = runtime.h chord.h assembler.h messages.h
+noinst_HEADERS = runtime.h chord.h assembler.h messages.h events.h
 libruntime_la_SOURCES = worker.c \
 	task.c \
 	builtins.c \
@@ -18,7 +18,8 @@ libruntime_la_SOURCES = worker.c \
 	testchord.c \
 	assembler.c \
 	native.c \
-	java.c
+	java.c \
+	events.c
 
 INCLUDES = -I@top_srcdir@
 CLEANFILES = *.da *.bb *.bbg *.gcov

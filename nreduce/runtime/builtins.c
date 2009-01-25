@@ -33,6 +33,7 @@
 #include "runtime.h"
 #include "network/node.h"
 #include "messages.h"
+#include "events.h"
 #include "cxslt/xslt.h"
 #include <stdio.h>
 #include <string.h>
@@ -1262,9 +1263,7 @@ static void start_frame_running(task *tsk, pntr framep)
 
     gaddr storeaddr = get_physical_address(tsk,framep);
     assert(storeaddr.tid == tsk->tid);
-    node_log(tsk->n,LOG_DEBUG1,"send(%d->%d) FETCH targetaddr %d@%d storeaddr %d@%d (sfr)",
-             tsk->tid,target->addr.tid,
-             target->addr.lid,target->addr.tid,storeaddr.lid,storeaddr.tid);
+    event_send_fetch(tsk,target->addr.tid,target->addr,storeaddr,FUN_START_FRAME_RUNNING);
     msg_fsend(tsk,target->addr.tid,MSG_FETCH,"aa",target->addr,storeaddr);
     assert(0 <= tsk->nfetching);
     tsk->nfetching++;

@@ -435,7 +435,7 @@ void run_reduction(source *src, char *trace_dir, int trace_type, array *args)
   task *tsk;
 
   memset(&out_sockid,0,sizeof(out_sockid));
-  tsk = task_new(0,0,NULL,0,args,NULL,out_sockid,NULL);
+  tsk = task_new(0,0,NULL,0,args,NULL,out_sockid,NULL,0);
 
   debug_stage("Reduction engine");
   mainsc = get_scomb(src,"main");

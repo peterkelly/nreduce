@@ -37,7 +37,7 @@
 
 //#define OBJECT_LIFETIMES
 #define LIFETIME_INCR (4*MB)
-//#define DEBUG_DISTRIBUTION
+#define DEBUG_DISTRIBUTION
 
 #ifdef OBJECT_LIFETIMES
 #define DEBUG_FIELDS unsigned int pad; unsigned int birth;
@@ -503,6 +503,8 @@ typedef struct task {
   /* general */
   procstats stats;
   pntr argsp;
+  int eventskey;
+  int eventsfd;
 
   /* bytecode */
   char *bcdata;
@@ -643,7 +645,7 @@ typedef struct task {
 } task;
 
 task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *args, node *n,
-               socketid out_sockid, endpointid *epid);
+               socketid out_sockid, endpointid *epid, int eventskey);
 void task_free(task *tsk);
 void print_pntr(task *tsk, array *arr, pntr p, int depth);
 char *pntr_to_string(task *tsk, pntr p);

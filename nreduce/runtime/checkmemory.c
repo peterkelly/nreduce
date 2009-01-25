@@ -214,6 +214,7 @@ static int cell_has_new_ref(task *tsk, cell *c)
     return (is_new_cell(so->c) || is_new_ref(so->listenerso) || is_new_ref(so->p));
   }
   case CELL_REMOTEREF:
+  case CELL_HOLE:
   case CELL_NIL:
     return 0;
   }

@@ -29,6 +29,7 @@
 #include "compiler/source.h"
 #include "runtime.h"
 #include "messages.h"
+#include "events.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -492,11 +493,7 @@ void read_pntr(reader *rd, pntr *pout)
     read_gaddr(rd,&addr);
     if (NULL != (glo = addrhash_lookup(tsk,addr))) {
       *pout = glo->p;
-
-      node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Received remote reference to addr %d@%d (glo %s)",
-               tsk->tid,addr.lid,addr.tid,
-               cell_types[pntrtype(*pout)]);
-
+      event_got_remoteref(tsk,addr,pntrtype(*pout));
     }
     else {
       cell *c;
@@ -505,10 +502,7 @@ void read_pntr(reader *rd, pntr *pout)
       c->type = CELL_REMOTEREF;
       make_pntr(*pout,c);
       make_pntr(c->field1,add_target(tsk,addr,*pout));
-
-      node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Received remote reference to addr %d@%d",
-               tsk->tid,addr.lid,addr.tid);
-
+      event_got_remoteref(tsk,addr,CELL_EMPTY);
     }
   }
   else {
@@ -537,33 +531,14 @@ void read_pntr(reader *rd, pntr *pout)
       *pout = existing->p;
     }
 
+    int existing_type = existing ? pntrtype(existing->p) : CELL_EMPTY;
     if (NULL == existing) {
       assert(addr.tid != tsk->tid);
       assert(addr.lid >= 0);
       assert(NULL == targethash_lookup(tsk,*pout));
       add_target(tsk,addr,*pout);
-
-      node_log(rd->tsk->n,LOG_DEBUG2,
-               "task %d: Received object (no existing ref) with addr %d@%d (%s)",
-               tsk->tid,addr.lid,addr.tid,
-               cell_types[pntrtype(*pout)]);
-
     }
     else if (CELL_REMOTEREF == pntrtype(existing->p)) {
-      global *refphys = NULL;
-      if (NULL != (refphys = physhash_lookup(tsk,existing->p))) {
-        node_log(rd->tsk->n,LOG_DEBUG2,"task %d: Replacing REMOTEREF %d@%d with %d@%d (%s)",
-                 tsk->tid,refphys->addr.lid,refphys->addr.tid,
-                 addr.lid,addr.tid,
-                 cell_types[pntrtype(*pout)]);
-      }
-      else {
-        node_log(rd->tsk->n,LOG_DEBUG2,
-                 "task %d: Replacing REMOTEREF (no phys address) with %d@%d (%s)",
-                 tsk->tid,addr.lid,addr.tid,
-                 cell_types[pntrtype(*pout)]);
-      }
-
       global *lookup = targethash_lookup(tsk,existing->p);
       int inphys = 0;
       if (NULL == lookup) {
@@ -595,6 +570,7 @@ void read_pntr(reader *rd, pntr *pout)
       /* FIXME: work out if it's possible for us to receive a copy of an object we already have
          that differs from our existing copy, and if this can cause problems */
     }
+    event_got_object(tsk,addr,pntrtype(*pout),existing_type);
   }
 }
 
