@@ -40,15 +40,71 @@
 
 int max_event_size;
 
+typedef struct rglobal {
+  gaddr addr;
+  struct rglobal *prev;
+  struct rglobal *next;
+  struct rglobal *addrnext;
+} rglobal;
+
+typedef struct rglobal_list {
+  rglobal *first;
+  rglobal *last;
+} rglobal_list;
+
+typedef struct rtask {
+  rglobal_list globals;
+  rglobal *addrhash[GLOBAL_HASH_SIZE];
+} rtask;
+
 typedef struct {
+  rtask *tasks;
+
   int groupsize;
   int fds[MAX_TASKS];
-/*   int local_ts[MAX_TASKS]; */
-  int next_ts[MAX_TASKS];
   event *current_event[MAX_TASKS];
   event *next_event[MAX_TASKS];
   int global_ts;
+  int nsweeping;
 } replay;
+
+rglobal *lookup_rglobal(rtask *tsk, gaddr addr)
+{
+  int h = hash(&addr,sizeof(gaddr));
+  rglobal *g = tsk->addrhash[h];
+  while (g && ((g->addr.tid != addr.tid) || (g->addr.lid != addr.lid)))
+    g = g->addrnext;
+  return g;
+}
+
+void add_rglobal(rtask *tsk, gaddr addr)
+{
+  assert(NULL == lookup_rglobal(tsk,addr));
+  rglobal *rg = (rglobal*)calloc(1,sizeof(rglobal));
+  rg->addr = addr;
+  llist_append(&tsk->globals,rg);
+  int h = hash(&addr,sizeof(gaddr));
+  rg->addrnext = tsk->addrhash[h];
+  tsk->addrhash[h] = rg;
+}
+
+void remove_rglobal(rtask *tsk, rglobal *glo)
+{
+  assert(lookup_rglobal(tsk,glo->addr) == glo);
+
+  int h = hash(&glo->addr,sizeof(gaddr));
+  rglobal **ptr = &tsk->addrhash[h];
+
+  assert(glo);
+  while (*ptr && (*ptr != glo))
+    ptr = &(*ptr)->addrnext;
+  if (*ptr == glo) {
+    *ptr = glo->addrnext;
+    glo->addrnext = NULL;
+  }
+
+  llist_remove(&tsk->globals,glo);
+}
 
 void replay_open_logs(replay *rpl, const char *events_dir)
 {
@@ -132,6 +188,7 @@ void replay_process_headers(replay *rpl)
       have_key = 1;
     }
   }
+  rpl->tasks = (rtask*)calloc(rpl->groupsize,sizeof(rtask));
   printf("All headers ok, version=%d, groupsize=%d, key=%d\n",
          EVENTS_VERSION,rpl->groupsize,key);
 }
@@ -149,7 +206,6 @@ void read_next_event(replay *rpl, int tid)
     rpl->next_event[tid]->timestamp = TIMESTAMP_MAX;
     rpl->next_event[tid]->type = EV_NONE;
     rpl->next_event[tid]->tid = tid;
-/*     printf("read_next_event %d: no more events\n",tid); */
     return;
   }
   else if (sizeof(event) != r) {
@@ -178,8 +234,6 @@ void read_next_event(replay *rpl, int tid)
   else {
     /* event read ok */
   }
-
-/*   printf("read_next_event %d: type %d\n",tid,rpl->next_event[tid]->type); */
 }
 
 void read_initial_events(replay *rpl)
@@ -206,8 +260,6 @@ event *replay_next_event(replay *rpl)
     }
   }
 
-/*   printf("replay_next_event: earliest_tid = %d\n",earliest_tid); */
-
   if (0 <= earliest_tid) {
     memcpy(rpl->current_event[earliest_tid],rpl->next_event[earliest_tid],max_event_size);
     read_next_event(rpl,earliest_tid);
@@ -218,12 +270,161 @@ event *replay_next_event(replay *rpl)
   }
 }
 
+int owner_has_global(replay *rpl, gaddr addr)
+{
+  return (NULL != lookup_rglobal(&rpl->tasks[addr.tid],addr));
+}
+
+int others_have_global(replay *rpl, gaddr addr)
+{
+  int tid;
+  for (tid = 0; tid < rpl->groupsize; tid++) {
+    if ((tid != addr.tid) &&
+        (NULL != lookup_rglobal(&rpl->tasks[tid],addr)))
+      return 1;
+  }
+  return 0;
+}
+
+int check_all_globals(replay *rpl)
+{
+  int tid;
+  for (tid = 0; tid < rpl->groupsize; tid++) {
+    rglobal *glo;
+    for (glo = rpl->tasks[tid].globals.first; glo; glo = glo->next) {
+      if ((glo->addr.tid != tid) &&
+          !owner_has_global(rpl,glo->addr)) {
+        printf("Global %d@%d referenced by task %d is not present in owner\n",
+               glo->addr.lid,glo->addr.tid,tid);
+        return 0;
+      }
+    }
+  }
+  printf("check_all_globals: ok\n");
+  return 1;
+}
+
+int process_event(replay *rpl, event *evt)
+{
+  switch (evt->type) {
+  case EV_TASK_START:
+    /* FIXME */
+    break;
+  case EV_TASK_END:
+    /* FIXME */
+    break;
+  case EV_SEND_FISH:
+    /* FIXME */
+    break;
+  case EV_RECV_FISH:
+    /* FIXME */
+    break;
+  case EV_SEND_FETCH:
+    /* FIXME */
+    break;
+  case EV_RECV_FETCH:
+    /* FIXME */
+    break;
+  case EV_RECV_MARKROOTS:
+    /* FIXME */
+    break;
+  case EV_SEND_MARKENTRY:
+    /* FIXME */
+    break;
+  case EV_RECV_MARKENTRY:
+    /* FIXME */
+    break;
+  case EV_RECV_SWEEP:
+    rpl->nsweeping++;
+    break;
+  case EV_SEND_SWEEPACK:
+    rpl->nsweeping--;
+    if ((0 == rpl->nsweeping) && !check_all_globals(rpl))
+      return 0;
+    break;
+  case EV_SEND_RESPOND:
+    /* FIXME */
+    break;
+  case EV_RECV_RESPOND:
+    /* FIXME */
+    break;
+  case EV_SEND_SCHEDULE:
+    /* FIXME */
+    break;
+  case EV_RECV_SCHEDULE:
+    /* FIXME */
+    break;
+  case EV_RECV_STARTDISTGC:
+    /* FIXME */
+    break;
+  case EV_RECV_PAUSE:
+    /* FIXME */
+    break;
+  case EV_SEND_GOTPAUSE:
+    /* FIXME */
+    break;
+  case EV_RECV_GOTPAUSE:
+    /* FIXME */
+    break;
+  case EV_SEND_PAUSEACK:
+    /* FIXME */
+    break;
+  case EV_RECV_RESUME:
+    /* FIXME */
+    break;
+  case EV_ADD_GLOBAL: {
+    ev_add_global *ev = (ev_add_global*)evt;
+
+    if (ev->addr.tid != evt->tid) {
+      /* Address of object in remote task */
+      if (NULL == lookup_rglobal(&rpl->tasks[ev->addr.tid],ev->addr)) {
+        printf("Target %d@%d does not have corresponding entry in owner task\n",
+               ev->addr.lid,ev->addr.tid);
+        return 0;
+      }
+    }
+    else {
+      /* Address of object in local task */
+    }
+
+    add_rglobal(&rpl->tasks[evt->tid],ev->addr);
+    return 1;
+  }
+  case EV_REMOVE_GLOBAL: {
+    ev_remove_global *ev = (ev_remove_global*)evt;
+    rglobal *glo = lookup_rglobal(&rpl->tasks[evt->tid],ev->addr);
+    if (NULL == glo) { /* global not found */
+      printf("Global does not exist\n");
+      return 0;
+    }
+    remove_rglobal(&rpl->tasks[evt->tid],glo);
+    return 1;
+  }
+  case EV_KEEP_GLOBAL:
+    /* FIXME */
+    break;
+  case EV_PRESERVE_TARGET:
+    /* FIXME */
+    break;
+  case EV_GOT_REMOTEREF:
+    /* FIXME */
+    break;
+  case EV_GOT_OBJECT:
+    /* FIXME */
+    break;
+  }
+  return 1;
+}
 
 void main_loop(replay *rpl)
 {
   event *evt;
   while (NULL != (evt = replay_next_event(rpl))) {
     print_event(stdout,evt);
+    if (!process_event(rpl,evt)) {
+      printf("Failed\n");
+      break;
+    }
   }
 }
 
@@ -258,22 +459,6 @@ int main(int argc, char **argv)
   replay_process_headers(&rpl);
   read_initial_events(&rpl);
   main_loop(&rpl);
-
-/*   char *prefix = "events."; */
-/*   int prefixlen = strlen(prefix); */
-/*   struct dirent *entry; */
-/*   int maxtid = -1; */
-/*   while (NULL != (entry = readdir(dir))) { */
-/*     if (!strncmp(entry->d_name,prefix,prefixlen)) { */
-/*       char *tidstr = &entry->d_name[prefixlen]; */
-/*       char *endp = NULL; */
-/*       int tid = strtol(tidstr,&end,10); */
-/*       if (('\0' == *tidstr) || ('\0' != *endptr)) { */
-/*         fprintf(stderr,"Bad events filename: %s\n",entry->d_name); */
-/*         exit(1); */
-/*       } */
-/*     } */
-/*   } */
 
   return 0;
 }

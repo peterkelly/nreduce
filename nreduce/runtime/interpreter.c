@@ -171,8 +171,8 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from n
   obj = resolve_pntr(obj);
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
-    assert(CELL_FRAME != pntrtype(obj)); /* FIXME: crash */
     event_send_respond(tsk,ft->tid,*ft,pntrtype(obj),FUN_RESUME_FETCHERS);
+    assert(CELL_FRAME != pntrtype(obj)); /* FIXME: crash */
     msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
   list_free(wq->fetchers,free);
@@ -1002,6 +1002,9 @@ static void interpreter_ack(task *tsk, message *msg)
 
 
   assert(remove <= array_count(tsk->inflight_addrs[from]));
+
+  for (i = 0; i < remove; i++)
+    event_remove_inflight(tsk,array_item(tsk->inflight_addrs[from],i,gaddr));
 
   array_remove_items(tsk->unack_msg_acount[from],count);
   array_remove_items(tsk->inflight_addrs[from],remove);

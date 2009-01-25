@@ -25,7 +25,7 @@
 
 #include "runtime.h"
 
-#define EVENTS_VERSION              5
+#define EVENTS_VERSION              7
 
 #define EV_TASK_START               0  /* done */
 #define EV_TASK_END                 1  /* done */
@@ -67,8 +67,12 @@
 #define EV_GOT_REMOTEREF            36
 #define EV_GOT_OBJECT               37
 
-#define EV_NONE                     38 /* done */
-#define EV_COUNT                    39
+#define EV_ADD_INFLIGHT             38
+#define EV_REMOVE_INFLIGHT          39
+#define EV_RESCUE_GLOBAL            40
+
+#define EV_NONE                     41 /* done */
+#define EV_COUNT                    42
 
 #define FUN_INTERPRETER_FISH        0
 #define FUN_HANDLE_INTERRUPT        1
@@ -237,6 +241,7 @@ typedef struct {
 typedef struct {
   event e;
   gaddr addr;
+  unsigned char objtype;
 } __attribute__ ((__packed__)) ev_preserve_target;
 
 typedef struct {
@@ -251,6 +256,21 @@ typedef struct {
   unsigned char objtype;
   unsigned char extype;
 } __attribute__ ((__packed__)) ev_got_object;
+
+typedef struct {
+  event e;
+  gaddr addr;
+} __attribute__ ((__packed__)) ev_add_inflight;
+
+typedef struct {
+  event e;
+  gaddr addr;
+} __attribute__ ((__packed__)) ev_remove_inflight;
+
+typedef struct {
+  event e;
+  gaddr addr;
+} __attribute__ ((__packed__)) ev_rescue_global;
 
 void event_task_start(task *tsk);
 void event_task_end(task *tsk);
@@ -280,9 +300,12 @@ void event_recv_resume(task *tsk);
 void event_add_global(task *tsk, gaddr addr, unsigned char objtype, unsigned char fun);
 void event_remove_global(task *tsk, gaddr addr);
 void event_keep_global(task *tsk, gaddr addr);
-void event_preserve_target(task *tsk, gaddr addr);
+void event_preserve_target(task *tsk, gaddr addr, unsigned char objtype);
 void event_got_remoteref(task *tsk, gaddr addr, unsigned char objtype);
 void event_got_object(task *tsk, gaddr addr, unsigned char objtype, unsigned char extype);
+void event_add_inflight(task *tsk, gaddr addr);
+void event_remove_inflight(task *tsk, gaddr addr);
+void event_rescue_global(task *tsk, gaddr addr);
 
 void print_event(FILE *f, event *evt);
 

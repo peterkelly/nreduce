@@ -412,7 +412,10 @@ void *realloc_mem(task *tsk, void *old, unsigned int nbytes)
   unsigned int flags = ((header*)new)->flags;
   memcpy(new,old,object_size(old));
   ((header*)new)->flags = flags;
-  /* FIXME: may need to preserve DMB flag here */
+  if (((header*)old)->flags & FLAG_DMB)
+    ((header*)new)->flags |= FLAG_DMB;
+  if (((header*)old)->flags & FLAG_NEW)
+    ((header*)new)->flags |= FLAG_NEW;
   return new;
 }
 
@@ -737,17 +740,14 @@ static void preserve_targets(task *tsk)
      depend on a sysobject who's owner tid is elsewhere always have a correct target. */
 
   global *glo;
-  global *next;
-
-  for (glo = tsk->globals.first; glo; glo = next) {
-    next = glo->next;
+  for (glo = tsk->globals.first; glo; glo = glo->next) {
     if (!(glo->flags & FLAG_MARKED)) {
       int check = 0;
       REPLACE_PNTR(glo->p);
       check_valid_object(((cell*)(glo->p).data[0]));
-      if (((cell*)(glo->p).data[0])->flags & FLAG_MARKED) {
+      if (is_pntr(glo->p) && ((cell*)(glo->p).data[0])->flags & FLAG_MARKED) {
+        event_preserve_target(tsk,glo->addr,pntrtype(glo->p));
         glo->flags |= FLAG_MARKED;
-        event_preserve_target(tsk,glo->addr);
       }
     }
   }
@@ -1440,6 +1440,10 @@ static void sweep_incoming_references(task *tsk)
 
         if ((CELL_REMOTEREF == pntrtype(glo->p)) && pglobal(glo->p)->fetching)
           event_keep_global(tsk,glo->addr);
+        else if (is_pntr(glo->p) &&
+                 ((get_pntr(glo->p)->flags & FLAG_DMB) ||
+                  (get_pntr(glo->p)->flags & FLAG_NEW)))
+          event_rescue_global(tsk,glo->addr);
         else
           remove_global(tsk,glo);
       }

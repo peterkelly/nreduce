@@ -68,6 +68,9 @@ int event_sizes[EV_COUNT] = {
   sizeof(ev_preserve_target),
   sizeof(ev_got_remoteref),
   sizeof(ev_got_object),
+  sizeof(ev_add_inflight),
+  sizeof(ev_remove_inflight),
+  sizeof(ev_rescue_global),
   0, /* sizeof(ev_none) */
 };
 
@@ -93,7 +96,7 @@ static void init_event(task *tsk, int type, event *ev)
 
 static void write_event(task *tsk, void *data, int size)
 {
-  if (0 > tsk->eventsfd)
+  if (0 == tsk->eventsfd)
     return;
   write(tsk->eventsfd,data,size);
 }
@@ -310,11 +313,12 @@ void event_keep_global(task *tsk, gaddr addr)
   write_event(tsk,&ev,sizeof(ev));
 }
 
-void event_preserve_target(task *tsk, gaddr addr)
+void event_preserve_target(task *tsk, gaddr addr, unsigned char objtype)
 {
   ev_preserve_target ev;
   init_event(tsk,EV_PRESERVE_TARGET,&ev.e);
   ev.addr = addr;
+  ev.objtype = objtype;
   write_event(tsk,&ev,sizeof(ev));
 }
 
@@ -337,9 +341,33 @@ void event_got_object(task *tsk, gaddr addr, unsigned char objtype, unsigned cha
   write_event(tsk,&ev,sizeof(ev));
 }
 
+void event_add_inflight(task *tsk, gaddr addr)
+{
+  ev_add_inflight ev;
+  init_event(tsk,EV_ADD_INFLIGHT,&ev.e);
+  ev.addr = addr;
+  write_event(tsk,&ev,sizeof(ev));
+}
+
+void event_remove_inflight(task *tsk, gaddr addr)
+{
+  ev_remove_inflight ev;
+  init_event(tsk,EV_REMOVE_INFLIGHT,&ev.e);
+  ev.addr = addr;
+  write_event(tsk,&ev,sizeof(ev));
+}
+
+void event_rescue_global(task *tsk, gaddr addr)
+{
+  ev_rescue_global ev;
+  init_event(tsk,EV_RESCUE_GLOBAL,&ev.e);
+  ev.addr = addr;
+  write_event(tsk,&ev,sizeof(ev));
+}
+
 void print_event(FILE *f, event *evt)
 {
-  fprintf(f,"%08u %8s ",evt->timestamp,"EVENT");
+  fprintf(f,"%08u %2d ",evt->timestamp,evt->tid);
   switch (evt->type) {
   case EV_TASK_START:
     fprintf(f,"Task %d start",evt->tid);
@@ -468,46 +496,64 @@ void print_event(FILE *f, event *evt)
   }
   case EV_ADD_GLOBAL: {
     ev_add_global *ev = (ev_add_global*)evt;
-    fprintf(f,"%d ADD_GLOBAL addr=%d@%d objtype=%s fun=%s",
-            evt->tid,ev->addr.lid,ev->addr.tid,cell_types[ev->objtype],fun_names[ev->fun]);
+    fprintf(f,"ADD_GLOBAL addr=%d@%d objtype=%s fun=%s",
+            ev->addr.lid,ev->addr.tid,cell_types[ev->objtype],fun_names[ev->fun]);
     break;
   }
   case EV_REMOVE_GLOBAL: {
     ev_remove_global *ev = (ev_remove_global*)evt;
-    fprintf(f,"%d REMOVE_GLOBAL addr=%d@%d",
-            evt->tid,ev->addr.lid,ev->addr.tid);
+    fprintf(f,"REMOVE_GLOBAL addr=%d@%d",
+            ev->addr.lid,ev->addr.tid);
     break;
   }
   case EV_KEEP_GLOBAL: {
     ev_keep_global *ev = (ev_keep_global*)evt;
-    fprintf(f,"%d KEEP_GLOBAL addr=%d@%d",
-            evt->tid,ev->addr.lid,ev->addr.tid);
+    fprintf(f,"KEEP_GLOBAL addr=%d@%d",
+            ev->addr.lid,ev->addr.tid);
     break;
   }
   case EV_PRESERVE_TARGET: {
     ev_preserve_target *ev = (ev_preserve_target*)evt;
-    fprintf(f,"%d PRESERVE_TARGET addr=%d@%d",
-            evt->tid,ev->addr.lid,ev->addr.tid);
+    fprintf(f,"PRESERVE_TARGET addr=%d@%d objtype=%s",
+            ev->addr.lid,ev->addr.tid,cell_types[ev->objtype]);
     break;
   }
   case EV_GOT_REMOTEREF: {
     ev_got_remoteref *ev = (ev_got_remoteref*)evt;
     if (CELL_EMPTY != ev->objtype) {
-      fprintf(f,"%d GOT_REMOTEREF addr=%d@%d (existing objtype=%s)",
-              evt->tid,ev->addr.lid,ev->addr.tid,cell_types[ev->objtype]);
+      fprintf(f,"GOT_REMOTEREF addr=%d@%d (existing objtype=%s)",
+              ev->addr.lid,ev->addr.tid,cell_types[ev->objtype]);
     }
     else {
-      fprintf(f,"%d GOT_REMOTEREF addr=%d@%d (no existing object)",
-              evt->tid,ev->addr.lid,ev->addr.tid);
+      fprintf(f,"GOT_REMOTEREF addr=%d@%d (no existing object)",
+              ev->addr.lid,ev->addr.tid);
     }
     break;
   }
   case EV_GOT_OBJECT: {
     ev_got_object *ev = (ev_got_object*)evt;
-    fprintf(f,"%d GOT_OBJECT addr=%d@%d objtype=%s",
-            evt->tid,ev->addr.lid,ev->addr.tid,cell_types[ev->objtype]);
+    fprintf(f,"GOT_OBJECT addr=%d@%d objtype=%s",
+            ev->addr.lid,ev->addr.tid,cell_types[ev->objtype]);
     if (CELL_EMPTY != ev->extype)
       fprintf(f," extype=%s",cell_types[ev->extype]);
+    break;
+  }
+  case EV_ADD_INFLIGHT: {
+    ev_add_inflight *ev = (ev_add_inflight*)evt;
+    fprintf(f,"ADD_INFLIGHT addr=%d@%d",
+            ev->addr.lid,ev->addr.tid);
+    break;
+  }
+  case EV_REMOVE_INFLIGHT: {
+    ev_remove_inflight *ev = (ev_remove_inflight*)evt;
+    fprintf(f,"REMOVE_INFLIGHT addr=%d@%d",
+            ev->addr.lid,ev->addr.tid);
+    break;
+  }
+  case EV_RESCUE_GLOBAL: {
+    ev_rescue_global *ev = (ev_rescue_global*)evt;
+    fprintf(f,"RESCUE_GLOBAL addr=%d@%d",
+            ev->addr.lid,ev->addr.tid);
     break;
   }
   default:

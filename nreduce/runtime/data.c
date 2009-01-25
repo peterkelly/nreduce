@@ -116,6 +116,7 @@ void write_gaddr(array *wr, task *tsk, gaddr a)
   array_append(wr,&a.tid,sizeof(int));
   array_append(wr,&a.lid,sizeof(int));
   add_gaddr(&tsk->inflight,a);
+  event_add_inflight(tsk,a);
 }
 
 void write_end(array *wr)
