@@ -1058,7 +1058,7 @@ static void R(source *src, compilation *comp, snode *c, pmap *p, int n)
   case SNODE_SYMBOL:
     C(src,comp,c,p,n);
     SQUEEZE(c->sl,1,n);
-    SPARK(c->sl,0);
+    EVAL(c->sl,0);
     RETURN(c->sl);
     break;
   case SNODE_BUILTIN:
@@ -1595,7 +1595,7 @@ static void compile_builtins(compilation *comp)
 
       /* label l2 */
       LABEL(label2);
-      SPARK(nosl,0);
+      EVAL(nosl,0);
       RETURN(nosl);
     }
     else {
@@ -1603,7 +1603,7 @@ static void compile_builtins(compilation *comp)
         SPARK(nosl,argno);
       BIF(nosl,i);
       if (!bi->reswhnf)
-        SPARK(nosl,0);
+        EVAL(nosl,0);
       RETURN(nosl);
     }
 

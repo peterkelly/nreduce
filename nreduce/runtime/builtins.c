@@ -1923,6 +1923,7 @@ static void b_mkconn(task *tsk, pntr *argstack)
   so->sockid.coordid.localid = localid;
   so->sockid.sid = sid;
   so->connected = 1;
+  so->done_connect = 1;
 
   make_pntr(argstack[0],so->c);
 

@@ -172,7 +172,7 @@ void resume_fetchers(task *tsk, waitqueue *wq, pntr obj) /* Can be called from n
   for (l = wq->fetchers; l; l = l->next) {
     gaddr *ft = (gaddr*)l->data;
     event_send_respond(tsk,ft->tid,*ft,pntrtype(obj),FUN_RESUME_FETCHERS);
-    assert(CELL_FRAME != pntrtype(obj)); /* FIXME: crash */
+    assert(CELL_FRAME != pntrtype(obj));
     msg_fsend(tsk,ft->tid,MSG_RESPOND,"ap",*ft,obj);
   }
   list_free(wq->fetchers,free);
