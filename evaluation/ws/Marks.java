@@ -124,6 +124,8 @@ public class Marks
     }
     int port = Integer.parseInt(args[0]);
 
+    System.setProperty("sun.net.httpserver.readTimeout","3600");
+
     HttpServer server = HttpServer.create(new InetSocketAddress(port), 5);
     server.setExecutor(Executors.newFixedThreadPool(3));
     server.start();
