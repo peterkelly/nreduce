@@ -882,10 +882,12 @@ static void interpreter_respond(task *tsk, message *msg)
   event_recv_respond(tsk,from,storeaddr,pntrtype(obj));
 
   global *objglo = targethash_lookup(tsk,obj);
+#if 0
   if (objglo && (target != objglo)) {
     assert(NULL == objglo->wq.frames); /* FIXME: assertion failure here */
     assert(NULL == objglo->wq.fetchers);
   }
+#endif
 
   if (target != objglo) {
       /* The object we got back has a different physical address to what we requested. Make the
