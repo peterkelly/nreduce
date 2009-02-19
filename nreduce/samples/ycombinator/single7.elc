@@ -1,0 +1,10 @@
+// Modified Y by expanding calls to (Y2 f) and moved almost-fac into fac definition
+
+Y f = ((!x.f (x x)) (!x.f (x x)))
+
+fac = (Y (!self2.!n.(if (== n 1)
+                        1
+                        (* n (self2 (- n 1))))))
+
+main =
+(++ (numtostring (fac 5)) "\n")

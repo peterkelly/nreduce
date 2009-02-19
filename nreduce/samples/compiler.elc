@@ -1,0 +1,169 @@
+// Compiler + interpreter based on techniques from SICP
+
+// =============================================================================
+// Syntax tree nodes
+
+ADD = 1
+TIMES = 2
+NUMBER = 3
+SYMBOL = 4
+
+add left right = (cons ADD (cons left (cons right nil)))
+add-left x = (item 1 x)
+add-right x = (item 2 x)
+
+times left right = (cons TIMES (cons left (cons right nil)))
+times-left x = (item 1 x)
+times-right x = (item 2 x)
+
+number n = (cons NUMBER (cons n nil))
+num-value x = (item 1 x)
+
+symbol sym = (cons SYMBOL (cons sym nil))
+sym-name x = (item 1 x)
+
+istype x type = (== (head x) type)
+
+add? x = (istype x ADD)
+times? x = (istype x TIMES)
+number? x = (istype x NUMBER)
+symbol? x = (istype x SYMBOL)
+
+// =============================================================================
+// Tree printing
+
+print-tree indent x =
+(++ indent
+  (if (add? x)    (print-add indent x)
+  (if (times? x)  (print-times indent x)
+  (if (number? x) (print-number indent x)
+  (if (symbol? x) (print-sym indent x)
+  "?\n")))))
+
+print-add indent x =
+(++ "add\n"
+    (++ (print-tree (++ indent "  ") (add-left x))
+        (print-tree (++ indent "  ") (add-right x))))
+
+print-times indent x =
+(++ "times\n"
+    (++ (print-tree (++ indent "  ") (times-left x))
+        (print-tree (++ indent "  ") (times-right x))))
+
+print-number indent x =
+(++ (numtostring (num-value x)) "\n")
+
+print-sym indent x =
+(++ (sym-name x) "\n")
+
+// =============================================================================
+// Environment
+
+mkenv keys values = (cons keys values)
+env-keys x = (head x)
+env-values x = (tail x)
+
+lookup-pos k keys =
+(letrec
+  loop lst pos =
+  (if lst
+      (if (streq k (head lst))
+          pos
+          (loop (tail lst) (+ pos 1)))
+      nil)
+in (loop keys 0))
+
+lookup k env =
+(letrec pos = (lookup-pos k (env-keys env))
+ in (if pos
+        (item pos (env-values env))
+        nil))
+
+// =============================================================================
+// Interpreter
+
+eval env x =
+(if (istype x ADD)    (eval-add env x)
+(if (istype x TIMES)  (eval-times env x)
+(if (istype x NUMBER) (eval-number env x)
+(if (istype x SYMBOL) (eval-sym env x)
+(error (++ "Unknown expression type" (numtostring (head x))))))))
+
+eval-add env x =
+(number
+ (+ (num-value (eval env (add-left x)))
+    (num-value (eval env (add-right x)))))
+
+eval-times env x =
+(number
+ (* (num-value (eval env (add-left x)))
+    (num-value (eval env (add-right x)))))
+
+eval-number env x =
+x
+
+eval-sym env x =
+(letrec v = (lookup (sym-name x) env)
+ in (if v
+        v
+        (error (++ "Symbol not found: " (sym-name x)))))
+
+// =============================================================================
+// Compiler
+
+analyze scope x =
+(if (istype x ADD)    (analyze-add scope x)
+(if (istype x TIMES)  (analyze-times scope x)
+(if (istype x NUMBER) (analyze-number scope x)
+(if (istype x SYMBOL) (analyze-sym scope x)
+(error (++ "Unknown expression type" (numtostring (head x))))))))
+
+analyze-add scope x =
+(letrec leftc = (analyze scope (add-left x))
+        rightc = (analyze scope (add-right x))
+ in  (!values.
+      (number
+       (+ (num-value (leftc values))
+          (num-value (rightc values))))))
+
+analyze-times scope x =
+(letrec leftc = (analyze scope (times-left x))
+        rightc = (analyze scope (times-right x))
+ in  (!values.
+      (number
+       (* (num-value (leftc values))
+          (num-value (rightc values))))))
+
+analyze-number scope x =
+(!values.x)
+
+analyze-sym scope x =
+(letrec name = (sym-name x)
+        pos = (lookup-pos name scope)
+ in (if pos
+        (!values.(item pos values))
+        (error (++ "Unbound variable: " name))))
+
+// =============================================================================
+// Test routines
+
+main =
+(letrec
+ // (* 4 (+ x y))
+ tree = (times
+         (number 4)
+         (add
+          (symbol "x")
+          (symbol "y")))
+
+ keys = (cons "x" (cons "y" nil))
+ values = (cons (number 5) (cons (number 6) nil))
+ env = (mkenv keys values)
+
+ in
+ (++ "------------ tree ------------\n"
+ (++ (print-tree "" tree)
+ (++ "------------ eval ------------\n"
+ (++ (print-tree "" (eval env tree))
+ (++ "------------ exec ------------\n"
+ (print-tree "" ((analyze keys tree) values))))))))

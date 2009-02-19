@@ -1,0 +1,33 @@
+// Second version of Y combinator - removed self-passing requirement
+
+almost-even =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     1
+     (sodd2 (- n 1))))
+
+almost-odd =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     nil
+     (seven2 (- n 1))))
+
+Y2 f = (!a.!b.f (a a b) (b a b))
+
+Y f a b = ((Y2 f) (Y2 a) (Y2 b))
+
+even = (Y almost-even almost-even almost-odd)
+
+odd = (Y almost-odd almost-even almost-odd)
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

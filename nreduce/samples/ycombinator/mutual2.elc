@@ -1,0 +1,25 @@
+// Have even and odd accept themselves as parameters (for recursive calls)
+
+even =
+(!seven.!sodd.!n.
+(if (== n 0)
+    1
+    (sodd seven sodd (- n 1))))
+
+odd =
+(!seven.!sodd.!n.
+(if (== n 0)
+    nil
+    (seven seven sodd (- n 1))))
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even even odd n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

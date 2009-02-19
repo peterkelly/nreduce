@@ -1,0 +1,65 @@
+// No letrecs or top-level definitions (except for main)
+// Simulate define and letrec using continuations
+
+// Y1cont now called letrec1
+// Y2cont now called letrec2
+
+// Rewrite rules
+// (let x = e                          => (define e
+//  in body)                                     (!x.body))
+//
+// (letrec x = e                       => (letrec1 (!x.e)
+//      in body)                                   (!x.body))
+//
+// (letrec x1 = e1                     => (letrec2 (!x1.!x2.e1)
+//         x2 = e2                                 (!x1.!x2.e2)
+//      in body)                                   (!x1.!x2.body))
+
+// Use letrecN whenever you have N mutually recursive definitions
+
+main =
+((!define.
+
+(define
+  (!f.!cont.cont ((!x.f (x x)) (!x.f (x x))))
+  (!letrec1.
+
+(define
+  ((!P.
+    (!a.!b.!cont.
+      (cont ((P a) (P a) (P b))
+            ((P b) (P a) (P b)))))
+    // P
+    (!f.!x.!y.f (x x y) (y x y)))
+  (!letrec2.
+
+(letrec2
+
+  // almost-even
+  (!even.!odd.!n.
+    (if (== n 0)
+        1
+        (odd (- n 1))))
+
+  // almost-odd
+  (!even.!odd.!n.
+   (if (== n 0)
+       nil
+       (even (- n 1))))
+
+  (!even.!odd.
+
+     // loop
+     (letrec1
+       (!loop.!n.!max.
+         (if (> n max)
+             nil
+             (++ (numtostring n)
+                 (++ ": "
+                     (++ (if (even n) "even\n" "odd\n")
+                         (loop (+ n 1) max))))))
+       (!loop.
+
+         //main
+         (loop 0 10))))))))))
+(!value.!cont.cont value))

@@ -1,0 +1,33 @@
+// Modified Y by expanding calls to (Y2 f) and moved almost-fac into fac definition
+
+almost-even =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     1
+     (sodd2 (- n 1))))
+
+almost-odd =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     nil
+     (seven2 (- n 1))))
+
+Y f a b = ((!x.!y.f (x x y) (y x y))
+           (!x.!y.a (x x y) (y x y))
+           (!x.!y.b (x x y) (y x y)))
+
+even = (Y almost-even almost-even almost-odd)
+
+odd = (Y almost-odd almost-even almost-odd)
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

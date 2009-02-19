@@ -1,0 +1,29 @@
+// Abstracted out (seven seven sodd) and (sodd seven sodd) as seven2 and sodd2
+
+even =
+(!seven.!sodd.(!seven2.!sodd2.!n.
+               (if (== n 0)
+                   1
+                   (sodd2 (- n 1))))
+              (seven seven sodd)
+              (sodd seven sodd))
+
+odd =
+(!seven.!sodd.(!seven2.!sodd2.!n.
+               (if (== n 0)
+                   nil
+                   (seven2 (- n 1))))
+              (seven seven sodd)
+              (sodd seven sodd))
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even even odd n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

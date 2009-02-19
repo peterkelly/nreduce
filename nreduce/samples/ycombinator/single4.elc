@@ -1,0 +1,12 @@
+// Moved fac logic to separate combinator
+
+almost-fac =
+(!self2.!n.(if (== n 1)
+               1
+               (* n (self2 (- n 1)))))
+
+fac =
+(!self.almost-fac (self self))
+
+main =
+(++ (numtostring (fac fac 5)) "\n")

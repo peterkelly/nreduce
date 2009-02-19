@@ -1,0 +1,13 @@
+// Y2 combinator, which stil requires self-passing
+
+almost-fac =
+(!self2.!n.(if (== n 1)
+               1
+               (* n (self2 (- n 1)))))
+
+Y2 f = (!x.f (x x))
+
+fac = (Y2 almost-fac)
+
+main =
+(++ (numtostring (fac fac 5)) "\n")

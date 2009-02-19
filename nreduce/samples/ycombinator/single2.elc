@@ -1,0 +1,9 @@
+// Have fac accept itself as a parameter (for recursive calls)
+
+fac =
+(!self.!n.(if (== n 1)
+              1
+              (* n (self self (- n 1)))))
+
+main =
+(++ (numtostring (fac fac 5)) "\n")

@@ -1,0 +1,10 @@
+// Abstracted out (self self), as self2
+
+fac =
+(!self.(!self2.!n.(if (== n 1)
+                      1
+                      (* n (self2 (- n 1)))))
+       (self self))
+
+main =
+(++ (numtostring (fac fac 5)) "\n")

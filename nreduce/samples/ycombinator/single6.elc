@@ -1,0 +1,15 @@
+// Second version of Y combinator - removed self-passing requirement
+
+almost-fac =
+(!self2.!n.(if (== n 1)
+               1
+               (* n (self2 (- n 1)))))
+
+Y2 f = (!x.f (x x))
+
+Y f = ((Y2 f) (Y2 f))
+
+fac = (Y almost-fac)
+
+main =
+(++ (numtostring (fac 5)) "\n")

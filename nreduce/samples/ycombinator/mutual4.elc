@@ -1,0 +1,35 @@
+// Moved even and odd logic to separate combinators
+
+almost-even =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     1
+     (sodd2 (- n 1))))
+
+almost-odd =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     nil
+     (seven2 (- n 1))))
+
+even =
+(!seven.!sodd.almost-even
+              (seven seven sodd)
+              (sodd seven sodd))
+
+odd =
+(!seven.!sodd.almost-odd
+              (seven seven sodd)
+              (sodd seven sodd))
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even even odd n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

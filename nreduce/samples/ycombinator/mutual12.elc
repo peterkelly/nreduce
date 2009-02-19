@@ -1,0 +1,46 @@
+// No letrecs or top-level definitions (except for main)
+// loop defined using continuation as well
+// Minor tweaks
+
+main =
+((!Y1cont.!Y2cont.
+  (Y2cont
+
+    // almost-even
+    (!even.!odd.!n.
+      (if (== n 0)
+          1
+          (odd (- n 1))))
+
+    // almost-odd
+    (!even.!odd.!n.
+     (if (== n 0)
+         nil
+         (even (- n 1))))
+
+    (!even.!odd.
+
+       // loop
+       (Y1cont
+         (!loop.!n.!max.
+           (if (> n max)
+               nil
+               (++ (numtostring n)
+                   (++ ": "
+                       (++ (if (even n) "even\n" "odd\n")
+                           (loop (+ n 1) max))))))
+         (!loop.
+
+           //main
+           (loop 0 10))))))
+
+  // Y1cont
+  (!f.!cont.cont ((!x.f (x x)) (!x.f (x x))))
+
+  // Y2cont
+  ((!P.
+    (!a.!b.!cont.
+      (cont ((P a) (P a) (P b))
+            ((P b) (P a) (P b)))))
+    // P
+    (!f.!x.!y.f (x x y) (y x y))))

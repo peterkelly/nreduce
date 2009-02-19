@@ -1,0 +1,32 @@
+// Y2 combinator, which stil requires self-passing
+
+almost-even =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     1
+     (sodd2 (- n 1))))
+
+almost-odd =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     nil
+     (seven2 (- n 1))))
+
+Y2 f = (!a.!b.f (a a b) (b a b))
+
+
+even = (Y2 almost-even)
+
+odd = (Y2 almost-odd)
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even even odd n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))

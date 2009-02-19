@@ -1,0 +1,37 @@
+// Simplfied Y by using P
+
+almost-even =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     1
+     (sodd2 (- n 1))))
+
+almost-odd =
+(!seven2.!sodd2.!n.
+ (if (== n 0)
+     nil
+     (seven2 (- n 1))))
+
+P f = (!x.!y.f (x x y) (y x y))
+
+Y2 f a b = ((P f)
+            (P a)
+            (P b))
+
+evenodd f = (Y2 f almost-even almost-odd)
+
+even = (evenodd almost-even)
+odd = (evenodd almost-odd)
+
+
+main =
+(letrec
+ loop n max =
+ (if (> n max)
+     nil
+     (++ (numtostring n)
+         (++ ": "
+             (++ (if (even n) "even\n" "odd\n")
+                 (loop (+ n 1) max)))))
+in
+ (loop 0 10))
