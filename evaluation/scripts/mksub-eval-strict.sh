@@ -8,10 +8,13 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=divconq-tr-y
+expname=eval-strict
+
+run=0
+nodes=8
 
 for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes++)); do
+  for ((nodes = 1; nodes <= 8; nodes++)); do
     jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh

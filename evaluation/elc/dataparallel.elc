@@ -8,23 +8,15 @@ foldr f base lst =
     (f (head lst) (foldr f base (tail lst)))
     base)
 
-printstrings strings =
-(foldr ++ "\nEND\n" strings)
+mkrequest n ms = (++ (numtostring n) (++ " " (numtostring ms)))
 
 main args =
 (if (< (len args) 4)
     "Usage: dataparallel.elc host port size compms\n"
-
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))
         size = (stringtonum (item 2 args))
         compms = (stringtonum (item 3 args))
-
-        callservice n = (connect host
-                                 port
-                                 (++ (numtostring n)
-                                     (++ " " (numtostring compms))))
-
+        callservice n = (connect host port (mkrequest n compms))
         results = (map callservice (range 1 size))
-
- in     (printstrings results)))
+ in     (foldr ++ "\nEND\n" results)))

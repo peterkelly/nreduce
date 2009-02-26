@@ -8,11 +8,12 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=divconq-tr-y
+expname=pp-tsize-y
+nodes=8
 
 for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes++)); do
-    jobname=$expname.r$run.n$nodes
+  for ((stages = 1; stages <= 8; stages++)); do
+    jobname=$expname.r$run.n$stages
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -45,7 +46,7 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $stages >\$JOB_DIR/output 2>&1
 EOF
   done
 done

@@ -29,6 +29,7 @@ cd $OUTPUT_DIR
 cat >$PLOT_NAME.plot <<HERE
 set terminal postscript eps color size 15cm, 10cm
 set output "$PLOT_NAME.eps"
+set size 0.75, 0.75
 
 set xlabel "# frames distributed per work request"
 set ylabel "Execution time (s)"
@@ -54,8 +55,6 @@ set style line 4 linewidth 2 linecolor rgbcolor "red" linetype 2
 set style line 5 linewidth 2 linecolor rgbcolor "green" linetype 1
 set style line 6 linewidth 2 linecolor rgbcolor "green" linetype 2
 set style fill solid 0.2
-
-set size 0.75, 0.75
 
 plot "worksize-np.x128.dat" using 1:2 title "Postpone disabled" with lines ls 1, \\
      "worksize-np.x128.dat" using 1:3 notitle with lines ls 2, \\

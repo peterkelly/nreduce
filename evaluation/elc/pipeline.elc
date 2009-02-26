@@ -8,32 +8,21 @@ foldr f base lst =
     (f (head lst) (foldr f base (tail lst)))
     base)
 
-addnewline str =
-(++ str "\n")
+mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
 
-printstrings strings =
-(foldr ++ "" (map addnewline strings))
-
-// Usage: nitems comp services...
+parseresponse resp = (stringtonum (tail resp))
 
 main args =
 (if (< (len args) 4)
   "Usage: pipeline.elc nitems comp port services...\n"
 (letrec nitems = (stringtonum (item 0 args))
-        comp = (stringtonum (item 1 args))
+        compms = (stringtonum (item 1 args))
         port = (stringtonum (item 2 args))
         services = (skip 3 args)
-
-        callservice host x =
-          (stringtonum (tail (connect host
-                                      port
-                                      (++ (numtostring (+ x 1))
-                                          (++ " " (numtostring comp))))))
-
+        callservice host n =
+          (parseresponse (connect host port (mkrequest n compms)))
         f lst x = (if lst
                       (callservice (head lst) (f (tail lst) x))
                       x)
-
-        res = (map numtostring (map (f services) (range 1 nitems)))
-
- in     (++ (printstrings res) "END\n")))
+        result = (map (f services) (range 1 nitems))
+ in     (foldr ++ "END\n" (map (!x.++ (numtostring x) "\n") result))))

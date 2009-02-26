@@ -10,7 +10,7 @@ QNAME=`hostname -s`
 
 expname=pp-tr-o
 
-for ((run = 0; run < 5; run++)); do
+for ((run = 0; run < 1; run++)); do
   for ((nodes = 1; nodes <= 32; nodes++)); do
     jobname=$expname.r$run.n$nodes
     cat > $SUB_DIR/$jobname.sub <<EOF

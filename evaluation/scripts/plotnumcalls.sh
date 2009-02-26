@@ -32,6 +32,7 @@ cd $OUTPUT_DIR
 cat >$PLOT_NAME.plot <<HERE
 set terminal postscript eps color size 15cm, 10cm
 set output "$PLOT_NAME.eps"
+set size 0.75, 0.75
 
 set xlabel "# calls"
 set ylabel "Average # calls per second"
@@ -54,8 +55,6 @@ set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "#00CCCC" linetype 1
 set style line 4 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style fill solid 0.2
-
-set size 0.75, 0.75
 
 plot \\
 HERE

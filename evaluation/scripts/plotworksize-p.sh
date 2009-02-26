@@ -32,6 +32,7 @@ cd $OUTPUT_DIR
 cat >$PLOT_NAME.plot <<HERE
 set terminal postscript eps color size 15cm, 10cm
 set output "$PLOT_NAME.eps"
+set size 0.75, 0.75
 
 set xlabel "# frames distributed per work request"
 set ylabel "Relative execution time t/min(t)"
@@ -52,8 +53,6 @@ set style data lines
 set grid
 
 set style fill solid 0.2
-
-set size 0.75, 0.75
 
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "green" linetype 1

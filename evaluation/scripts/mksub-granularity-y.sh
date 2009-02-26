@@ -12,7 +12,7 @@ expname=granularity-y
 nodes=8
 
 for ((run = 0; run < 3; run++)); do
-  for ((gran = 4; gran <= 4096; gran *= 2)); do
+  for ((gran = 4; gran <= 2048; gran *= 2)); do
     jobname=$expname.r$run.n$gran
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh

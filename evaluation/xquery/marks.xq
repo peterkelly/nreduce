@@ -10,8 +10,12 @@ import service namespace svc = "http://__HOSTNAME__:__PORT__/marks?WSDL";
             $code := svc:compile($source),
             $testres :=
                 for $t in $tests
-                let $res := svc:runTest($code,string($t/input),string($t/expected))
-                return <test marks="{if ($res = 'true') then $t/marks else 0}"/>,
+                let $res := svc:runTest($code,
+                                        string($t/input),
+                                        string($t/expected))
+                return <test marks="{if ($res = 'true')
+                                     then $t/marks
+                                     else 0}"/>,
             $total := sum($testres/@marks)
         return
             <student id="{$s/id}" name="{$s/name}">

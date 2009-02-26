@@ -28,6 +28,7 @@ cd $OUTPUT_DIR
 cat >$PLOT_NAME.plot <<HERE
 set terminal postscript eps color size 15cm, 10cm
 set output "$PLOT_NAME.eps"
+set size 0.75, 0.75
 
 set xlabel "# ms/call"
 set ylabel "Execution time (s)"
@@ -35,9 +36,9 @@ set ylabel "Execution time (s)"
 set logscale x
 
 #set ytics 2
-set ytics 16
+#set ytics 16
 set xtics 2
-set xrange [4:4096]
+set xrange [4:2048]
 set format y "%4.f"
 set title "$TITLE"
 
@@ -48,8 +49,6 @@ set style line 1 linewidth 2 linecolor rgbcolor "blue" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "#00CC00" linetype 3
 set style fill solid 0.2
-
-set size 0.75, 0.75
 
 plot "$PLOT_NAME-o.dat" using 1:2 title "Orchestration" with lines ls 1, \\
      "$PLOT_NAME-y.dat" using 1:2 title "Choreography" with lines ls 2

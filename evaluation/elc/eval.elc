@@ -1,0 +1,75 @@
+mergesort cmp lst =
+(mergesort2 cmp (wrap lst))
+
+mergesort2 cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (mergesort2 cmp (merge_pairs cmp pairs))
+    (head pairs))
+  nil)
+
+merge_pairs cmp pairs =
+(if pairs
+  (if (tail pairs)
+    (letrec
+      xs = (head pairs)
+      ys = (head (tail pairs))
+      xss = (tail (tail pairs))
+     in
+      (cons (merge cmp xs ys) (merge_pairs cmp xss)))
+    pairs)
+  nil)
+
+merge cmp xlst ylst =
+(if xlst
+  (if ylst
+    (letrec
+      x = (head xlst)
+      y = (head ylst)
+     in
+      (if (> (cmp x y) 0)
+        (cons y (merge cmp xlst (tail ylst)))
+        (cons x (merge cmp (tail xlst) ylst))
+        ))
+    xlst)
+  ylst)
+
+wrap lst =
+(if lst
+  (cons
+    (cons (head lst) nil)
+    (wrap (tail lst)))
+  nil)
+
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+printstrings strings =
+(foldr ++ "\nEND\n" strings)
+
+main args =
+(if (< (len args) 4)
+    "Usage: dataparallel.elc host port size compms\n"
+
+(letrec host = (item 0 args)
+        port = (stringtonum (item 1 args))
+        size = (stringtonum (item 2 args))
+        compms = (stringtonum (item 3 args))
+
+        callservice n = (stringtonum (tail (connect host
+                                 port
+                                 (++ (numtostring n)
+                                     (++ " " (numtostring compms))))))
+
+        results = (map callservice
+                       (mergesort (!x.!y.- x y)
+                                  (map callservice (range 1 size))))
+
+ in     (printstrings (map numtostring results))))

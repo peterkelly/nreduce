@@ -22,6 +22,7 @@ OUTPUT_FILE=$PLOT_DIR/plots/$PLOT_NAME/$PLOT_NAME
 cat >$OUTPUT_FILE.plot <<HERE
 set terminal postscript eps color size 15.0cm, 10.0cm
 set output "$PLOT_NAME.eps"
+set size 0.75, 0.75
 
 set xlabel "# nodes"
 set ylabel "Data transferred between hosts (MB)"
@@ -37,8 +38,6 @@ set style line 1 linewidth 2 linecolor rgbcolor "blue" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "#00CC00" linetype 3
 set style fill solid 0.2
-
-set size 0.75, 0.75
 
 plot "$PLOT_NAME-o.dat" using 1:(\$2/1024) title "Orchestration" with lines ls 1, \\
      "$PLOT_NAME-y.dat" using 1:(\$2/1024) title "Choreography" with lines ls 2, \\

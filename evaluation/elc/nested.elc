@@ -8,35 +8,28 @@ foldr f base lst =
     (f (head lst) (foldr f base (tail lst)))
     base)
 
-addnewline str =
-(++ str "\n")
+printcol n         = (++ (numtostring n) " ")
 
-addspace str =
-(++ str " ")
+printrow row       = (foldr ++ "\n" (map printcol row))
 
-printstrings strings =
-(foldr ++ "" (map addnewline strings))
+printmatrix matrix = (foldr ++ "" (map printrow matrix))
 
-printcols strings =
-(foldr ++ "" (map addspace strings))
+creatematrix size  = (map (!x.(range x (+ x (- size 1))))
+                          (range 0 (- size 1)))
+
+mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
+
+parseresponse resp = (stringtonum (tail resp))
 
 main args =
 (if (< (len args) 4)
     "Usage: nested.elc host port size compms\n"
-
 (letrec host = (item 0 args)
         port = (stringtonum (item 1 args))
         size = (stringtonum (item 2 args))
         compms = (stringtonum (item 3 args))
-
-        callservice n = (stringtonum (tail (connect host
-                                                    port
-                                                    (++ (numtostring n)
-                                                        (++ " " (numtostring compms))))))
-
-        data = (map (!x.(range x (+ x (- size 1)))) (range 0 (- size 1)))
-        results = (map (!row.map callservice row) data)
- 
- in     (++ (printstrings (map (!row.printcols (map numtostring row))
-                               results))
-            "END\n")))
+        callservice n =
+          (parseresponse (connect host port (mkrequest n compms)))
+        input = (creatematrix size)
+        output = (map (!row.map callservice row) input)
+ in     (++ (printmatrix output) "END\n")))

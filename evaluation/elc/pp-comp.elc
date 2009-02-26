@@ -8,33 +8,22 @@ foldr f base lst =
     (f (head lst) (foldr f base (tail lst)))
     base)
 
-addnewline str =
-(++ str "\n")
+mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
 
-printstrings strings =
-(foldr ++ "" (map addnewline strings))
-
-// Usage: nitems comp services...
+parseresponse resp = (stringtonum (tail resp))
 
 main args =
 (if (< (len args) 5)
   "Usage: pp-comp.elc nitems nstages comp host port\n"
 (letrec nitems = (stringtonum (item 0 args))
         nstages = (stringtonum (item 1 args))
-        comp = (stringtonum (item 2 args))
+        compms = (stringtonum (item 2 args))
         host = (item 3 args)
         port = (stringtonum (item 4 args))
-
-        callservice x =
-          (stringtonum (tail (connect host
-                                      port
-                                      (++ (numtostring (+ x 1))
-                                          (++ " " (numtostring comp))))))
-
+        callservice n =
+          (parseresponse (connect host port (mkrequest n compms)))
         f n x = (if (> n 0)
                     (callservice (f (- n 1) x))
                     x)
-
-        res = (map numtostring (map (f nstages) (range 1 nitems)))
-
- in     (++ (printstrings res) "END\n")))
+        result = (map (f nstages) (range 1 nitems))
+ in     (foldr ++ "END\n" (map (!x.++ (numtostring x) "\n") result))))
