@@ -33,6 +33,7 @@
 #include <netinet/tcp.h>
 
 #define BACKLOG 100
+#define DEFAULT_MAX_THREADS 3
 
 long long comp_per_ms = 0;
 
@@ -208,13 +209,14 @@ long long get_comp_per_ms()
   return cpm;
 }
 
-void compute_service(int port, int direct)
+void compute_service(int port, int direct, int maxthreads)
 {
   int listensock;
   int sock;
-  int maxthreads = 3;
   int nconnections = 0;
   struct timeval start;
+
+  printf("maxthreads = %d\n",maxthreads);
 
   if (direct) {
     printf("Using single thread for all responses\n");
@@ -297,32 +299,54 @@ void compute_service(int port, int direct)
   pthread_mutex_destroy(&lock);
 }
 
+void usage()
+{
+  fprintf(stderr,"Usage: svc_compute OPTIONS <port>\n");
+  fprintf(stderr,"       svc_compute -calibrate\n");
+  fprintf(stderr,"Options:\n");
+  fprintf(stderr,"-m N    Set maximum no.of threads to N (default %d)\n",DEFAULT_MAX_THREADS);
+  exit(1);
+}
+
 int main(int argc, char **argv)
 {
-  int port;
+  int port = -1;
+  int maxthreads = DEFAULT_MAX_THREADS;
 
   setbuf(stdout,NULL);
 
-  if (2 > argc) {
-    fprintf(stderr,"Usage: svc_compute <port>\n");
-    fprintf(stderr,"       svc_compute -calibrate\n");
-    return -1;
+  int argpos;
+  for (argpos = 1; argpos < argc; argpos++) {
+    if (!strcmp(argv[argpos],"-calibrate")) {
+      calibrate();
+      exit(0);
+    }
+    else if (!strcmp(argv[argpos],"-m")) {
+      if (argpos+1 >= argc)
+        usage();
+      char *end = NULL;
+      maxthreads = strtol(argv[++argpos],&end,10);
+      if (('\0' == argv[1][0]) || ('\0' != *end)) {
+        fprintf(stderr,"Invalid max. thread count: %s\n",argv[argpos]);
+        exit(1);
+      }
+
+    }
+    else {
+      char *end = NULL;
+      port = strtol(argv[argpos],&end,10);
+      if (('\0' == argv[1][0]) || ('\0' != *end)) {
+        fprintf(stderr,"Invalid port number: %s\n",argv[argpos]);
+        exit(1);
+      }
+    }
   }
 
-  if (!strcmp(argv[1],"-calibrate")) {
-    calibrate();
-    exit(0);
-  }
-  else {
-    char *end = NULL;
-    port = strtol(argv[1],&end,10);
-    if (('\0' == argv[1][0]) || ('\0' != *end)) {
-      fprintf(stderr,"Invalid port number\n");
-      exit(1);
-    }
-    int direct = (getenv("DIRECT") != NULL);
-    compute_service(port,direct);
-  }
+  if (0 > port)
+    usage();
+
+  int direct = (getenv("DIRECT") != NULL);
+  compute_service(port,direct,maxthreads);
 
   return 0;
 }

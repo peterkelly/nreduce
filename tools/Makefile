@@ -44,7 +44,7 @@ max: max.c
 	gcc -g -Wall -o max max.c
 
 pow2: pow2.c
-	gcc -g -Wall -o pow2 pow2.c
+	gcc -g -Wall -o pow2 pow2.c -lm
 
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
@@ -55,4 +55,4 @@ saxonwebapp: SaxonServlet.java
 
 clean:
 	rm -f $(PROGRAMS) saxonclient SaxonServlet.class saxon/WEB-INF/classes/SaxonServlet.class
-	rm -rf *.DSYM
+	rm -rf *.dSYM
