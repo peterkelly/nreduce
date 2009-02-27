@@ -1,13 +1,3 @@
-foldr f base lst =
-(if lst
-    (f (head lst) (foldr f base (tail lst)))
-    base)
-
-foldl f base lst =
-(if lst
-    (foldl f (f base (head lst)) (tail lst))
-    base)
-
 zip a b =
 (if (and a b)
     (cons (cons (head a)

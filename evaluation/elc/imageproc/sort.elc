@@ -1,11 +1,6 @@
 /* ========================================================================== */
 /* Utility functions */
 
-foldr f base lst =
-(if lst
-  (f (head lst) (foldr f base (tail lst)))
-  base)
-
 mergesort cmp m =
 (if (<= (len m) 1)
   m

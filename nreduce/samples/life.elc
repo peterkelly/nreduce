@@ -1,7 +1,5 @@
 for min max f = (map f (range min max))
 
-range min max = (if (== min max) (cons min nil) (cons min (range (+ min 1) max)))
-
 creategrid rows cols = (map (!n.map (!n.0) (range 1 rows)) (range 1 cols))
 
 printcell cell = (if (== cell 1) "##" "--")

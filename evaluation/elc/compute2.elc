@@ -14,11 +14,6 @@ parmap lst =
     (cons elem rest))))
   nil)
 
-range min max =
-(if (> min max)
-  nil
-  (cons min (range (+ min 1) max)))
-
 /* "Strict" version of connect. Forces the entire response stream to be traversed before
 any data is returned to the caller. Designed for use in situations where the service call
 must complete as soon as possible, so that the connection can be closed, enabling subsequent

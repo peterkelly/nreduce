@@ -170,7 +170,7 @@ int compile_expression(elcgen *gen, int indent, expression *expr)
     gen_printf(gen,")");
   }
   else if ((XPATH_TO == expr->type)) {
-    gen_iprintf(gen,indent,"(xslt::range ");
+    gen_iprintf(gen,indent,"(xslt::xsltrange ");
     gen_iprintf(gen,indent,"  (xslt::getnumber ");
     r = r && compile_expression(gen,indent+2,expr->r.left);
     gen_printf(gen,") ");

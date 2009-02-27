@@ -413,7 +413,7 @@ getnumber x =
     nil
     (xml::item_value (head x)))))
 
-range min max = (if (<= min max) (cons (xml::mknumber min) (range (+ min 1) max)) nil)
+xqrange min max = (if (<= min max) (cons (xml::mknumber min) (xqrange (+ min 1) max)) nil)
 
 foreach lst f =
 (if lst

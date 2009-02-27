@@ -1,8 +1,3 @@
-foldr f base lst =
-(if lst
-  (f (head lst) (foldr f base (tail lst)))
-  base)
-
 resize width height image =
 (connect "localhost" 1234
 (++ "resize " (++ (numtostring width) (++ " " (++ (numtostring height) (++ "\n"

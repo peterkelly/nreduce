@@ -217,7 +217,11 @@ echo1 dest lst =
 
 echo str = (echo1 (getoutput nil) (forcelist str))
 
-stringtonum str = (_stringtonum (forcelist str))
+ston str = (_ston (forcelist str))
+
+stringtonum str = (ston str)
+
+numtostring n = (ntos n)
 
 error str = (_error (forcelist str))
 
@@ -247,3 +251,18 @@ spawn bytecode to =
        from)))
 
 compile code filename = (_compile (forcelist code) (forcelist filename))
+
+foldr f base lst =
+(if lst
+    (f (head lst) (foldr f base (tail lst)))
+    base)
+
+foldl f base lst =
+(if lst
+    (foldl f (f base (head lst)) (tail lst))
+    base)
+
+range from to =
+(if (<= from to)
+    (cons from (range (+ from 1) to))
+    nil)

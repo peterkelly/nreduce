@@ -953,7 +953,7 @@ static void b_arraystrcmp(task *tsk, pntr *argstack)
   argstack[0] = tsk->globnilpntr;
 }
 
-static void b_numtostring(task *tsk, pntr *argstack)
+static void b_ntos(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
   char str[100];
@@ -964,20 +964,20 @@ static void b_numtostring(task *tsk, pntr *argstack)
   argstack[0] = string_to_array(tsk,str);
 }
 
-static void b_stringtonum(task *tsk, pntr *argstack)
+static void b_ston(task *tsk, pntr *argstack)
 {
   pntr p = argstack[0];
   char *str;
   char *end = NULL;
 
   if (0 > array_to_string(p,&str)) {
-    set_error(tsk,"stringtonum: argument is not a string");
+    set_error(tsk,"ston: argument is not a string");
     return;
   }
 
   setnumber(&argstack[0],strtod(str,&end));
   if (('\0' == *str) || ('\0' != *end))
-    set_error(tsk,"stringtonum: \"%s\" is not a valid number",str);
+    set_error(tsk,"ston: \"%s\" is not a valid number",str);
 
   free(str);
 }
@@ -2051,8 +2051,8 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "sqrt",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_sqrt           },
 { "floor",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_floor          },
 { "ceil",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_ceil           },
-{ "numtostring",    1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_numtostring    },
-{ "_stringtonum",   1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_stringtonum    },
+{ "ntos",           1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_ntos           },
+{ "_ston",          1, 1, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_ston           },
 
 /* Logical operations */
 { "if",             3, 1, MAYBE_UNEVAL, MAYBE_FALSE,   PURE, b_if             },

@@ -6,20 +6,10 @@ times n lst =
   nil
   (append lst (times (- n 1) lst)))
 
-range from to =
-(if (<= from to)
-    (cons from (range (+ from 1) to))
-    nil)
-
 sum lst =
 (if lst
     (+ (head lst) (sum (tail lst)))
     0)
-
-foldr f base lst =
-(if lst
-    (f (head lst) (foldr f base (tail lst)))
-    base)
 
 main args =
 (if (< (len args) 4)

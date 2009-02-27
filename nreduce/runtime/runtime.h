@@ -82,8 +82,8 @@ struct gaddr;
 #define B_SQRT           17
 #define B_FLOOR          18
 #define B_CEIL           19
-#define B_NUMTOSTRING    20
-#define B_STRINGTONUM1   21
+#define B_NTOS           20
+#define B_STON           21
 
 /* Logical operations */
 #define B_IF             22
