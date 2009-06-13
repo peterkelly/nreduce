@@ -31,9 +31,6 @@ E : |[ <n1:n2 a*> ~e </n1:n2> ]|  ->
 where e1 := <filter(not(isnsattr)); toconslist>a*;
       e2 := <filter(isnsattr); toconslist>a*
 
-isnsattr = ?DirAttribute(PQName("xmlns",_),_) <+
-           ?DirAttribute(UQName("xmlns"),_)
-
 // Elements with a computed name
 E : |[ element { e1 } { e2 } ]|   ->
     |{ (cons (letrec qname = (xq::consimple e1)
@@ -52,7 +49,6 @@ E : |[ element { e1 } { e2 } ]|   ->
 E : |[ for $n in e1 return e2 ]|  -> |{ (xq::foreach e1 (!n.e2)) }|
 E : |[ for $n1 at $n2 in e1 return e2 ]| -> |{ (xq::foreachpos e1 1 (!n1.!n2.e2)) }|
 
-E : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
 E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
 
 E : |[ $n ]|                      -> |{ n }|
@@ -60,20 +56,14 @@ E : FunctionName(UQName(n))       -> |{ n }|
 
 
 
-E : |[ declare default element namespace s; ]|
-                                  -> |{ ns_ = s }|
-E : |[ declare default function namespace s; ]|
-                                  -> |{ fun_ns = s }|
-E : |[ declare namespace n = s; ]|
-                                  -> |{ ns_#n = s }|
-E : |[ declare variable $n := e; ]|
-                                  -> |{ n = e }|
+E : |[ declare default element namespace s; ]|  -> |{ ns_ = s }|
+E : |[ declare default function namespace s; ]| -> |{ fun_ns = s }|
+E : |[ declare namespace n = s; ]|              -> |{ ns_#n = s }|
+E : |[ declare variable $n := e; ]|             -> |{ n = e }|
 
-E : |[ declare variable $n external; ]|
-                                  -> |{ n = (cons
-                                              (xml::parsexml 1
-                                                (readb s))
-                                              nil) }|
+E : |[ declare variable $n external; ]|         -> |{ n = (cons
+                                                            (xml::parsexml 1 (readb s))
+                                                            nil) }|
   where <concat-strings>["external/",n,".xml"] => s
 
 E : ConcatSymbol(x1,x2) -> <conc-strings>(x1,x2)
@@ -83,16 +73,13 @@ E : Enclosed(e) -> e
 E : ForwardAxisStep(e) -> e
 E : ReverseAxisStep(e) -> Call(FunctionName(UQName("xq::fn_reverse")),[e])
 
-E : |[ e1[e2] ]|                  -> |{ (xq::filter3
-                                          (!citem.!cpos.!csize.
-                                            (xq::predicate_match cpos e2))
-                                        e1) }|
+// Node tests
 
-E : NameTest(Wildcard1())         -> |{ (!pnk.xq::type_test pnk) }|
-E : NameTest(Wildcard2(n))        -> |{ (!pnk.xq::wildcard_localname_test pnk ns_#n) }|
-E : NameTest(Wildcard3(s))        -> |{ (!pnk.xq::wildcard_uri_test pnk s) }|
-E : NameTest(UQName(n))           -> |{ (!pnk.xq::name_test pnk ns_ ~s:n) }|
-E : NameTest(PQName(n1,n2))       -> |{ (!pnk.xq::name_test pnk ns_#n1 ~s:n2) }|
+E : |[ * ]|                       -> |{ (!pnk.xq::type_test pnk) }|
+E : |[ n:* ]|                     -> |{ (!pnk.xq::wildcard_localname_test pnk ns_#n) }|
+E : |[ *:n ]|                     -> |{ (!pnk.xq::wildcard_uri_test pnk s) }| where s := n
+E : |[ n ]|                       -> |{ (!pnk.xq::name_test pnk ns_ ~s:n) }|
+E : |[ n1:n2 ]|                   -> |{ (!pnk.xq::name_test pnk ns_#n1 ~s:n2) }|
 
 E : |[ document-node() ]|         -> |{ (!pnk.(xq::type_test xml::TYPE_DOCUMENT)) }|
 E : |[ element() ]|               -> |{ (!pnk.(xq::type_test xml::TYPE_ELEMENT)) }|
@@ -128,10 +115,11 @@ E : |[ following::t ]|            -> |{ (filter (t xml::TYPE_ELEMENT)
 E : |[ attribute::t ]|            -> |{ (filter (t xml::TYPE_ATTRIBUTE)
                                           (xml::item_attributes citem)) }|
 
-// FIXME: sort, but only where appropriate
-//E : |[ e1/e2 ]|                   -> |{ (xq::path_result_sort
-//                                          (xq::foreach3 e1 (!citem.!cpos.!csize.e2))) }|
 E : |[ e1/e2 ]|                   -> |{ (xq::foreach3 e1 (!citem.!cpos.!csize.e2)) }|
+E : |[ e1[e2] ]|                  -> |{ (xq::filter3
+                                          (!citem.!cpos.!csize.
+                                            (xq::predicate_match cpos e2))
+                                        e1) }|
 
 // Function calls
 E : |[ e1() ]|                    -> |{ e1 }|
@@ -140,7 +128,6 @@ E : |[ e1(e2,e3*) ]|              -> |[ e1(e2)(e3*) ]|
     where <notempty>e3*
 
 // Simple expressions
-E : |[ . ]|                       -> |{ (cons citem nil) }|
 E : |[ () ]|                      -> |{ nil }|
 E : |[ e1 + e2 ]|                 -> |{ (xq::add e1 e2) }|
 E : |[ e1 - e2 ]|                 -> |{ (xq::subtract e1 e2) }|
@@ -167,83 +154,77 @@ E : |[ -e ]|                      -> |{ (xq::uminus e) }|
 E : |[ e1 and e2 ]|               -> |{ (cons (xml::mkbool (&& (xq::ebv e1) (xq::ebv e2))) nil) }|
 E : |[ e1 or e2 ]|                -> |{ (cons (xml::mkbool (|| (xq::ebv e1) (xq::ebv e2))) nil) }|
 
+// Dynamic context components
+
+E : |[ . ]|                       -> |{ (cons citem nil) }|
 E : |{ xq::fn_position }|         -> |{ (cons (xml::mknumber cpos) nil) }|
 E : |{ xq::fn_last }|             -> |{ (cons (xml::mknumber csize) nil) }|
 
-// Abbreviated steps
+/* ---------------------------- Simplification -------------------------------------- */
 
-S1 : |[ @t ]|                     -> |[ attribute::t ]|
-S1 : |[ .. ]|                     -> |[ parent::node() ]|
-S1 : |[ e1/ /e2 ]|                -> |[ e1/descendant-or-self::node()/e2 ]|
-S1 : |[ t ]|                      -> |[ child::t ]|
+// Simplify Abbreviated steps
+
+SIMPLIFY : |[ @t ]|                     -> |[ attribute::t ]|
+SIMPLIFY : |[ .. ]|                     -> |[ parent::node() ]|
+SIMPLIFY : |[ e1/ /e2 ]|                -> |[ e1/descendant-or-self::node()/e2 ]|
+SIMPLIFY : |[ t ]|                      -> |[ child::t ]|
      where not(!t;?AttributeTest(_)); not(!t;?SchemaAttributeTest(_))
-S1 : ForwardStepChild(AttributeTest(x))
+SIMPLIFY : ForwardStepChild(AttributeTest(x))
                                   -> ForwardStep(AxisAttribute(),AttributeTest(x))
-S1 : ForwardStepChild(SchemaAttributeTest(x))
+SIMPLIFY : ForwardStepChild(SchemaAttributeTest(x))
                                   -> ForwardStep(AxisAttribute(),SchemaAttributeTest(x))
 
 // Simplify XQuery expressions
 
-simplify_xquery = S0 <+ S1
-
-S0 : |[ <n a*/> ]|                -> |[ <n a*></n> ]|
-S0 : |[ <n1:n2 a*/> ]|            -> |[ <n1:n2 a*></n1:n2> ]|
-S0 : |[ element n { } ]|          -> |[ element n { () } ]|
-S0 : |[ element n1:n2 { } ]|      -> |[ element n1:n2 { () } ]|
-S0 : |[ element { e1 } { } ]|     -> |[ element { e1 } { () } ]|
-S0 : |[ element n { e } ]|        -> |[ <n>{e}</n> ]|
-S0 : |[ element n1:n2 { e } ]|    -> |[ <n1:n2>{e}</n1:n2> ]|
-S0 : |[ attribute n { } ]|        -> |[ attribute n { () } ]|
-S0 : |[ attribute n1:n2 { } ]|    -> |[ attribute n1:n2 { () } ]|
-S0 : |[ attribute { e1 } { } ]|   -> |[ attribute { e1 } { () } ]|
-S0 : |[ <n2 a*> ~e </n2> ]|       -> |[ <n1:n2 a*> ~e </n1:n2> ]|
+SIMPLIFY : |[ <n a*/> ]|                -> |[ <n a*></n> ]|
+SIMPLIFY : |[ <n1:n2 a*/> ]|            -> |[ <n1:n2 a*></n1:n2> ]|
+SIMPLIFY : |[ element n { } ]|          -> |[ element n { () } ]|
+SIMPLIFY : |[ element n1:n2 { } ]|      -> |[ element n1:n2 { () } ]|
+SIMPLIFY : |[ element { e1 } { } ]|     -> |[ element { e1 } { () } ]|
+SIMPLIFY : |[ element n { e } ]|        -> |[ <n>{e}</n> ]|
+SIMPLIFY : |[ element n1:n2 { e } ]|    -> |[ <n1:n2>{e}</n1:n2> ]|
+SIMPLIFY : |[ attribute n { } ]|        -> |[ attribute n { () } ]|
+SIMPLIFY : |[ attribute n1:n2 { } ]|    -> |[ attribute n1:n2 { () } ]|
+SIMPLIFY : |[ attribute { e1 } { } ]|   -> |[ attribute { e1 } { () } ]|
+SIMPLIFY : |[ <n2 a*> ~e </n2> ]|       -> |[ <n1:n2 a*> ~e </n1:n2> ]|
                                      where n1 := ""
-S0 : |[ attribute n2 { e } ]|     -> |[ attribute n1:n2 { e } ]|
+SIMPLIFY : |[ attribute n2 { e } ]|     -> |[ attribute n1:n2 { e } ]|
                                      where n1 := ""
 
 // Built-in functions with no parameters
-S0 : |[ string() ]|                -> |[ string(.) ]|
-
-//S1 : Call(x,p) -> Call(VarRef(x),p)
-//  where not(!x;?VarRef(_))
-
+SIMPLIFY : |[ string() ]|                -> |[ string(.) ]|
 
 // Convert a complex FLWOR expression into a nested set of simple FLWOR expressions
 // (where each has only one for or one let)
 // Note: We do not deal with order by yet
 
-S1 : FLWOR(f,Some(Where(x)),o,b) -> FLWOR(f,None(),o,If(x,b,EmptySeq()))
+SIMPLIFY : FLWOR([For([p|rest])],None(),o,b) ->
+           FLWOR([For([p])],None(),None(), FLWOR([For(rest)],None(),o,b))
+           where <notempty>rest
 
-S1 : FLWOR([p|rest],None(),o,b) ->
-    FLWOR([p],None(),None(),FLWOR(rest,None(),o,b))
-    where <notempty>rest
+SIMPLIFY : FLWOR([Let([p|rest])],None(),o,b) ->
+           FLWOR([Let([p])],None(),None(),FLWOR([Let(rest)],None(),o,b))
+           where <notempty>rest
 
-S1 : FLWOR([For([p|rest])],None(),o,b) ->
-    FLWOR([For([p])],None(),None(), FLWOR([For(rest)],None(),o,b))
-    where <notempty>rest
+SIMPLIFY : FLWOR(f,Some(Where(x)),o,b) -> FLWOR(f,None(),o,If(x,b,EmptySeq()))
 
-S1 : FLWOR([Let([p|rest])],None(),o,b) ->
-    FLWOR([Let([p])],None(),None(),FLWOR([Let(rest)],None(),o,b))
-    where <notempty>rest
+SIMPLIFY : FLWOR([p|rest],None(),o,b) ->
+           FLWOR([p],None(),None(),FLWOR(rest,None(),o,b))
+           where <notempty>rest
 
-
+SIMPLIFY : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
 
 /* ---------------------------- Misc -------------------------------------------------- */
-
-
-//E : MainModule(_,Prolog([],[]),e) ->
-//    Program([],[SComb("query",["citem","cpos","csize"],e)])
-//E : MainModule(_,Prolog([],[x|y]),e) ->
-//    Program([],<conc>([x|y],[SComb("query",["citem","cpos","csize"],e)]))
 
 E : MainModule(_,Prolog(a,b),e) ->
     Program([],<concat>[a,b,[SComb("query",["citem","cpos","csize"],e)]])
 
-E : Integer(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
-E : Decimal(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
-E : Double(n) -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
-E : String(Chars(n)) -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(n))),Nl())
-E : AttrString(n) -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(n))),Nl())
+E : Integer(n)       -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : Decimal(n)       -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : Double(n)        -> App(App(Sym("cons"),App(Sym("xml::mknumber"),Number(n))),Nl())
+E : String(Chars(s)) -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(s))),Nl())
+E : AttrString(s)    -> App(App(Sym("cons"),App(Sym("xml::mkstring"),Str(s))),Nl())
+E : Text(s)          -> App(App(Sym("cons"),App(Sym("xml::mktext"),Str(<escape>s))),Nl())
 
 E : LCurly() -> String(Chars("{"))
 E : RCurly() -> String(Chars("}"))
@@ -251,41 +232,58 @@ E : RCurly() -> String(Chars("}"))
 E : Function(x,p,_,e) -> SComb(x,p,e)
 E : Param(VarName(UQName(n)),t) -> n
 
-E : Text(s) -> App(App(Sym("cons"),App(Sym("xml::mktext"),Str(<escape>s))),Nl())
 
 
 /* ---------------------------- Optimisation and simplification ----------------------- */
 
 // ELC code optimisation (XQuery-specific)
 
-OX : |{ (xq::consimple (cons (xml::mkstring e) nil)) }| -> |{ e }|
-OX : |{ (xq::consimple nil) }| -> |{ nil }|
-OX : |{ (xq::ebv (cons (xml::mkbool e) nil)) }| -> |{ e }|
-
-/*
-OX : |{ (x
-          (cons (xml::mknumber e1) nil)
-          (cons (xml::mknumber e2) nil)) }| -> |{ (cons (xml::mknumber (+ e1 e2)) nil) }|
-
-OX : |{ (xq::general_eq
-          (cons (xml::mknumber e1) nil)
-          (cons (xml::mknumber e2) nil)) }| -> |{ (== e1 e2) }|
-*/
+XQOPT : |{ (xq::consimple (cons (xml::mkstring e) nil)) }| -> |{ e }|
+XQOPT : |{ (xq::consimple nil) }| -> |{ nil }|
+XQOPT : |{ (xq::ebv (cons (xml::mkbool e) nil)) }| -> |{ e }|
 
 // ELC code optimisation (general)
 
-O1 : |{ (if e1 (x e2 nil) (x e3 nil)) }| -> |{ (x (if e1 e2 e3) nil) }|
-O1 : |{ (if e1 (x e2) (x e3)) }| -> |{ (x (if e1 e2 e3)) }|
+ELCOPT : |{ (if e1 (x e2 nil) (x e3 nil)) }| -> |{ (x (if e1 e2 e3) nil) }|
+ELCOPT : |{ (if e1 (x e2) (x e3)) }| -> |{ (x (if e1 e2 e3)) }|
 
-O1 : |{ (filter (!x.1) e) }|      -> |{ e }|
+ELCOPT : |{ (filter (!x.1) e) }|      -> |{ e }|
 
-O1 : |{ (++ nil e) }|             -> |{ e }|
-O1 : |{ (++ (++ e1 e2) e3) }|     -> |{ ++ e1 (++ e2 e3) }|
-O1 : |{ (++ (cons e1 e2) e3) }|   -> |{ (cons e1 (++ e2 e3)) }|
+ELCOPT : |{ (++ nil e) }|             -> |{ e }|
+ELCOPT : |{ (++ (++ e1 e2) e3) }|     -> |{ ++ e1 (++ e2 e3) }|
+ELCOPT : |{ (++ (cons e1 e2) e3) }|   -> |{ (cons e1 (++ e2 e3)) }|
 
-O1 : |{ (++ s nil) }|             -> |{ s }|
-O1 : |{ (++ s1 s2) }|             -> |{ s3 }|
-     where s3 := <conc-strings>(s1,s2)
+ELCOPT : |{ (++ s nil) }|             -> |{ s }|
+ELCOPT : |{ (++ s1 s2) }|             -> |{ s3 }|
+         where s3 := <conc-strings>(s1,s2)
+
+
+elcunique =
+  {| RenameELC : Letrec(elcunique,elcunique) |}
+<+ (?Binding(name,value);
+     <newname>name => name2;
+     rules(RenameELC : Sym(name) -> Sym(name2));
+    !Binding(name2,<elcunique>value))
+<+ RenameELC
+<+ all(elcunique)
+// FIXME: take into account lambda definitions
+
+elcsubstletrec =
+  (?Cons(Binding(name,Nl()),rest);
+   rules(ELCSubst : Sym(name) -> Nl())
+)
+/*
+<+ (?[Binding(name,Sym(x))|rest];
+   rules(ELCSubst : Sym(name) -> Sym(x));
+   !rest) */
+
+<+ ELCSubst
+<+ all-l(elcsubstletrec)
+
+elccleanletrec : Letrec([],body) -> body
+
+
+/* ---------------------------- Fix ELC code for pretty printing ----------------------- */
 
 fixapp1 : SComb(n,[],Str(x))      -> SCombConst(n,[],Str(x))
 fixapp1 : SComb(n,[],Sym(x))      -> SCombConst(n,[],Sym(x))
@@ -307,19 +305,10 @@ fixapp2 : SComb(x,y,ListApp(z))   -> SCombNB(x,y,ListApp(z))
 fixapp2 : SComb(x,y,SmallApp(z))  -> SCombNB(x,y,ListApp(z))
 fixapp3 : ListApp(x)              -> Parenthetical(ListApp(x))
 
-addmain:
-  Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[m|funcs])
-  where if <get-config>XQTS() then
-          !|{ main args stdin = (xq::main args stdin query nil) }|
-        else
-          !|{ main args stdin = (xq::main args stdin query 1) }|
-        end => m
-
-buildns: [NamespaceDecl(s1,Chars(s2))|e] -> |{ (cons (cons s1 s2) e) }|
-buildns: [] -> |{ nil }|
-
-
 /* --------------------- Variable and function namespace consolidation ---------------- */
+
+// Convert names of the form prefix:localname to uri:localname (i.e. remove prefixes, which
+// can differ throughout the tree)
 
 names_to_uris =
      NameToURI
@@ -332,6 +321,8 @@ names_to_uris =
   <+ ?DirElemConstructor2(_,_,_,_); {| NameToURI: all(names_to_uris) |}
   <+ all(names_to_uris)
 
+// Convert names of the form uri:localname to unqualified names (with a unique localname)
+
 uris_to_names =
   (?|[ declare namespace n = s; ]| <+
    ?|[ declare default function namespace s; ]| <+
@@ -342,6 +333,9 @@ uris_to_names =
   rules(URIToName: FunctionName(RQName(s,n2)) -> FunctionName(UQName(name))
         where name := <concat-strings>[proxy,"_",n2])
   <+ all(uris_to_names)
+
+// Convert names in the XQuery functions & operators or XML Schema namespaces to those
+// referencing functions in the xq ELC module
 
 StaticURIToName:
   FunctionName(RQName("http://www.w3.org/2005/xpath-functions",n2)) ->
@@ -381,6 +375,20 @@ RenameLet : |[ let $n1 := e1 return e2 ]| -> |[ let $n2 := e1 return e2 ]|
 newvar : n1 -> n2
   where if <RenameVar>|[ $n1 ]| then new else !n1 end => n2;
         rules(RenameVar : |[ $n1 ]| -> |[ $n2 ]|)
+
+/* --------------------- Program structure ---------------- */
+
+addmain:
+  Program(imports,funcs)   -> Program([Import("xq"),Import("xml")|imports],[m|funcs])
+  where if <get-config>XQTS() then
+          !|{ main args stdin = (xq::main args stdin query nil) }|
+        else
+          !|{ main args stdin = (xq::main args stdin query 1) }|
+        end => m
+
+buildns: [NamespaceDecl(s1,Chars(s2))|e] -> |{ (cons (cons s1 s2) e) }|
+buildns: [] -> |{ nil }|
+
 
 addnamespaces(|e):
   Program(imports,funcs)   -> Program(imports,[n|funcs])
@@ -501,7 +509,7 @@ replaceops: Prolog(a,b) -> Prolog(a,<conc>(newfuns,b))
 ; bottomup(try(fixapp3))
 
   simplify =
-    innermost(simplify_xquery)
+    innermost(SIMPLIFY)
   ; innermost(def_elem <+ def_fun) // Define default function/element namespace
   ; MainModule(id,addpredeclared,id)
   ; fixvarnames
@@ -512,8 +520,11 @@ replaceops: Prolog(a,b) -> Prolog(a,<conc>(newfuns,b))
   //; where(!ns; debug(!"got namespaces: "))
   ; bottomup(try(bind_nsdecls))
   ; topdown(try(repeat(E)))        // Main compilation routines
-  ; innermost(OX)                  // ELC code optimisation (XQuery-specific)
-  ; innermost(O1)                  // ELC code optimisation (general)
+  ; innermost(XQOPT)               // ELC code optimisation (XQuery-specific)
+  ; innermost(ELCOPT)              // ELC code optimisation (general)
+//  ; elcunique
+//  ; elcsubstletrec
+  ; topdown(try(repeat(elccleanletrec)))
   ; addmain                        // Add main function
   ; addnamespaces(|ns)             // Add in-scope namespaces variable
   ; fixapp                         // Convert ELC constructs to pretty-print forms

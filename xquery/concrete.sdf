@@ -46,6 +46,7 @@ exports
   "|[" ForwardStep "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
   "|[" ReverseStep "]|"    -> StrategoTerm{cons("ToTerm"),prefer}
   "|[" KindTest "]|"       -> StrategoTerm{cons("ToTerm"),prefer}
+  "|[" NameTest "]|"       -> StrategoTerm{cons("ToTerm"),prefer}
   "|{" Expression "}|"     -> StrategoTerm{cons("ToTerm"),prefer}
   "|{" SComb "}|"          -> StrategoTerm{cons("ToTerm"),prefer}
 
