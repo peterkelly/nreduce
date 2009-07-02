@@ -68,6 +68,11 @@ init()
   mkdir -p $JOB_DIR/logs/ 2>/dev/null
   rm -f $JOB_DIR/logs/* 2>/dev/null
   echo "ok"
+
+  echo -n "Listing all processes... "
+  mkdir $JOB_DIR/processes
+  parsh -h $JOB_DIR/jobnodes $SCRIPT_DIR/listprocs.sh $JOB_DIR
+  echo "ok"
 }
 
 startservice()
