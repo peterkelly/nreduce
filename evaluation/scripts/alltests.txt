@@ -1,0 +1,74 @@
+Chapter 6: Managing parallelism
+Evaluation modes and detection of parallelism
+  mksub-eval-lazy.sh
+  mksub-eval-strict.sh
+Load balancing of requests during choreography
+  mksub-worksize-np.sh
+  mksub-worksize-p.sh
+
+
+Chapter 7: Performance evaluation
+Parallel service invocation
+Amount of parallelism:
+  mksub-numcalls-o.sh
+Granularity: 
+  mksub-granularity-o.sh
+  mksub-granularity-y.sh
+
+Types of paralellism
+Data parallelism
+  mksub-dataparallel-o.sh
+  mksub-dataparallel-y.sh
+Nested data parallelism
+  mksub-nested-o.sh
+  mksub-nested-y.sh
+Divide and conquer
+  mksub-divconq-utilisation.sh
+  mksub-divconq-comp-o.sh
+  mksub-divconq-comp-y.sh
+Pipeline parallelism
+  mksub-pipeline-utilisation.sh
+Software pipelining
+  mksub-pp-utilisation.sh
+  mksub-pp-comp-o.sh
+  mksub-pp-comp-y.sh
+Multi-stage data parallelism
+  mksub-msdp-comp-o.sh
+  mksub-msdp-comp-y.sh
+
+Data transfer
+Divide and Conquer
+  mksub-divconq-tr-o.sh
+  mksub-divconq-tr-y.sh
+Pipeline
+  mksub-pipeline-tr-o.sh
+  mksub-pipeline-tr-y.sh
+Software pipelining
+  mksub-pp-tr-o.sh
+  mksub-pp-tr-y.sh
+Multi-stage data parallelism
+  mksub-msdp-tr-o.sh
+  mksub-msdp-tr-y.sh
+
+XQuery
+Marks
+  mksub-marks-time-o.sh
+  mksub-marks-time-y.sh
+
+
+
+Not currently used
+
+  mksub-divconq-tsize-o.sh
+  mksub-divconq-tsize-y.sh
+  mksub-msdp-tsize-o.sh
+  mksub-msdp-tsize-y.sh
+  mksub-pp-tdata-o.sh
+  mksub-pp-tdata-y.sh
+  mksub-pp-tsize-o.sh
+  mksub-pp-tsize-y.sh
+  mksub-nfib.sh
+  mksub-numcalls-hn.sh
+  mksub-seqcalls.sh
+  mksub-xq-dataparallel-o.sh
+  mksub-xq-dataparallel-y.sh
