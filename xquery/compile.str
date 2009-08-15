@@ -49,7 +49,7 @@ E : |[ element { e1 } { e2 } ]|   ->
 E : |[ for $n in e1 return e2 ]|  -> |{ (xq::foreach e1 (!n.e2)) }|
 E : |[ for $n1 at $n2 in e1 return e2 ]| -> |{ (xq::foreachpos e1 1 (!n1.!n2.e2)) }|
 
-E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
+E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = (xq::reparent e1 nil nil nil) in e2) }|
 
 E : |[ $n ]|                      -> |{ n }|
 E : FunctionName(UQName(n))       -> |{ n }|
