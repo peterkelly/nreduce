@@ -39,7 +39,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include <signal.h>
-#include <ucontext.h>
+#include <sys/ucontext.h>
 #include <unistd.h>
 #include <fenv.h>
 #include <sys/mman.h>
