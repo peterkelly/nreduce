@@ -46,7 +46,7 @@ LDFLAGS="-rdynamic"
 ######################### COMPILE OPTIONS ##########################
 
 # Normal compilation mode to use during development; include debug info but no optimization
-CFLAGS="-ggdb3 -Wall -O0"
+CFLAGS="-m32 -ggdb3 -Wall -O0"
 
 # Max. optimizations, for performance testing
 #CFLAGS="-ggdb3 -Wall -O3 -fno-strict-aliasing -DNDEBUG"

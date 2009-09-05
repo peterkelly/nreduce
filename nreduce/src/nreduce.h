@@ -23,6 +23,8 @@
 #ifndef _NREDUCE_H
 #define _NREDUCE_H
 
+#define _XOPEN_SOURCE /* for ucontext routines on snow leopard */
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
