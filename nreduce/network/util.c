@@ -760,27 +760,12 @@ int lookup_address(const char *host, in_addr_t *out, int *h_errout)
 int determine_ip(in_addr_t *out)
 {
   in_addr_t addr = 0;
-  char hostname[4097];
-  FILE *hf = popen("hostname","r");
-  int size;
-  if (NULL == hf) {
-    fprintf(stderr,
-            "Could not determine IP address, because executing the hostname command "
-            "failed (%s)\n",strerror(errno));
+  char hostname[256];
+  if (0 > gethostname(hostname,256)) {
+    fprintf(stderr,"Could not determine IP address; gethostname error: %s\n",
+            strerror(errno));
     return -1;
   }
-  size = fread(hostname,1,4096,hf);
-  if (0 > hf) {
-    fprintf(stderr,
-            "Could not determine IP address, because reading output from the hostname "
-            "command failed (%s)\n",strerror(errno));
-    pclose(hf);
-    return -1;
-  }
-  pclose(hf);
-  if ((0 < size) && ('\n' == hostname[size-1]))
-    size--;
-  hostname[size] = '\0';
 
   if (0 > lookup_address(hostname,&addr,NULL)) {
     fprintf(stderr,
