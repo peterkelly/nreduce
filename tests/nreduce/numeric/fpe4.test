@@ -2,12 +2,8 @@
 nreduce runtests.tmp/test.l
 ===================================== FILE =====================================
 test.l
-main =
-(letrec
-  inf = (/ 1 0)
- in
-  (append (numtostring (* inf 0)) "\n"))
+main = (append (numtostring (* (/ 1 0) 0)) "\n")
 ==================================== OUTPUT ====================================
-runtests.tmp/test.l:3: *: floating point exception
+runtests.tmp/test.l:1: *: floating point exception
 ================================== RETURN CODE =================================
 1
