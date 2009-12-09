@@ -793,6 +793,7 @@ int worker(int port, const char *initial_str);
 
 /* interpreter */
 
+void response_for_fetching_ref(task *tsk, global *target, pntr obj);
 void add_waiter_frame(waitqueue *wq, frame *f);
 void schedule_frame(task *tsk, frame *f, int desttsk, array *msg);
 void eval_remoteref(task *tsk, frame *f2, pntr p);

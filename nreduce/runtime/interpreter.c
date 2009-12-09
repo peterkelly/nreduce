@@ -802,13 +802,30 @@ static void resolve_local_fetchers(task *tsk, frame *f)
     assert(NULL != glo);
     assert(glo->addr.lid == current->lid);
     assert(glo->addr.tid == current->tid);
-    assert(glo->fetching);
-
-    transfer_waiters_and_fetchers(&glo->wq,&f->wq);
-    glo->fetching = 0;
+    if (glo->fetching) {
+      transfer_waiters_and_fetchers(&glo->wq,&f->wq);
+      glo->fetching = 0;
+    }
   }
   list_free(to_transfer,free);
   
+}
+
+void response_for_fetching_ref(task *tsk, global *target, pntr obj)
+{
+  frame *w;
+  for (w = target->wq.frames; w; w = w->waitlnk)
+    tsk->nfetching--;
+  assert(0 <= tsk->nfetching);
+
+  /* Respond to any FETCH requests for the reference that were made by other tasks */
+  resume_waiters(tsk,&target->wq,obj);
+
+  /* If the received object is a frame, start it running */
+  if (CELL_FRAME == pntrtype(obj)) {
+    resolve_local_fetchers(tsk,pframe(obj));
+    run_frame_after_first(tsk,pframe(obj));
+  }
 }
 
 static void interpreter_respond(task *tsk, message *msg)
@@ -841,29 +858,34 @@ static void interpreter_respond(task *tsk, message *msg)
   assert(!is_nullpntr(reference->p));
   if (CELL_REMOTEREF != pntrtype(reference->p)) {
 
-    /* FIXME: We should make sure this can't happen - if we receive a frame that we previously
-       had a reference to, we should remove ourselves from the fetcher list. */
+    /* If the object we're being told to store the response in is not a REMOTEREF cell, it means
+       that we've already received this object from another node. This can happen in the case
+       where an object is sent as part of a message which relates to another object, and this
+       one happened to be included in it.
 
-    node_log(tsk->n,LOG_ERROR,"recv(%d->%d) RESPOND storeaddr %d@%d - store not remoteref (%s)",
+       In this situation I think it should be safe to just ignore the second copy, since we
+       already have it. */
+    node_log(tsk->n,LOG_WARNING,"recv(%d->%d) RESPOND storeaddr %d@%d - store not remoteref (%s)",
              from,tsk->tid,storeaddr.lid,storeaddr.tid,cell_types[pntrtype(reference->p)]);
-    assert(0); /* FIXME: crash */
+    pntr dest = reference->p;
+    if (CELL_IND == pntrtype(dest)) {
+      dest = resolve_pntr(reference->p);
+      node_log(tsk->n,LOG_WARNING,"target of IND is %s",cell_types[pntrtype(dest)]);
+    }
+    if (CELL_FRAME == pntrtype(dest)) {
+      const char *fname = frame_fname(tsk,pframe(dest));
+      node_log(tsk->n,LOG_WARNING,"FRAME %s",fname);
+    }
 
-    /* If we get a RESPOND message and it turns out that we already have something
-       for the specified store address, it means we have been given the object as
-       part of another message (e.g. a frame being schedulued). This means that the
-       object sent back in this message should be a remote reference pointing to the
-       object at its new location on this node. So we just need to verify that this
-       is indeed the case. */
+    /* Read the object just so we can log the event */
+    read_pntr(&rd,&obj);
+    read_end(&rd);
 
-    int type;
-    gaddr addr;
-    read_check_tag(&rd,PNTR_TAG);
-    read_int(&rd,&type);
-    assert(CELL_REMOTEREF == type);
-    read_gaddr(&rd,&addr);
-    assert(0 <= addr.lid);
-    assert(addr.tid == tsk->tid);
+    node_log(tsk->n,LOG_WARNING,"Received object is %s",cell_types[pntrtype(obj)]);
+
     finish_address_reading(tsk,from,msg->tag);
+
+    event_recv_respond(tsk,from,storeaddr,pntrtype(obj));
     return;
   }
   assert(CELL_REMOTEREF == pntrtype(reference->p));
@@ -898,19 +920,7 @@ static void interpreter_respond(task *tsk, message *msg)
     cell_make_ind(tsk,refcell,obj);
   }
 
-  frame *w;
-  for (w = target->wq.frames; w; w = w->waitlnk)
-    tsk->nfetching--;
-  assert(0 <= tsk->nfetching);
-
-  /* Respond to any FETCH requests for the reference that were made by other tasks */
-  resume_waiters(tsk,&target->wq,obj);
-
-  /* If the received object is a frame, start it running */
-  if (CELL_FRAME == pntrtype(obj)) {
-    resolve_local_fetchers(tsk,pframe(obj));
-    run_frame_after_first(tsk,pframe(obj));
-  }
+  response_for_fetching_ref(tsk,target,obj);
 }
 
 static void add_fetcher_unique(waitqueue *wq, gaddr srcaddr)
@@ -2319,6 +2329,8 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
   gettimeofday(&end,NULL);
 
   int totalms = timeval_diffms(start,end);
+  if (totalms == 0)
+    totalms = 1;
   int gcms = tsk->gcms;
   int runms = totalms-gcms;
   double gcpct = 100.0*((double)gcms)/((double)totalms);

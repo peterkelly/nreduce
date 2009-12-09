@@ -61,6 +61,9 @@ void pause_all(node *n, endpoint *endpt, gcarg *ga)
   int waiting = ga->ntasks;
   while (0 < waiting) {
     message *msg = endpoint_receive(endpt,-1);
+    if (MSG_PAUSEACK != msg->tag) {
+      node_log(n,LOG_ERROR,"gc_thread: pause_all got message %d",msg->tag);
+    }
     assert(MSG_PAUSEACK == msg->tag);
     waiting--;
   }

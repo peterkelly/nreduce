@@ -555,6 +555,12 @@ void read_pntr(reader *rd, pntr *pout)
       assert(lookup);
       assert(existing == lookup);
 
+      if (existing->fetching) {
+        node_log(tsk->n,LOG_WARNING,"read_pntr %d@%d: found fetching ref",addr.lid,addr.tid);
+        global *target = pglobal(existing->p);
+        response_for_fetching_ref(tsk,target,*pout);
+      }
+
       cell *refcell = get_pntr(existing->p);
       cell_make_ind(tsk,refcell,*pout);
       if (inphys)
