@@ -63,11 +63,16 @@ public class Marks
     for (int i = 0; i < inoutChars.length; i++)
       inoutChars[i] = (char)('A'+(i%26));
     inout = new String(inoutChars);
+    String outFail = inout.toLowerCase();
 
-    // Tests
+    // Tests - every second one fails
     tests = new Test[ntests];
-    for (int i = 0; i < ntests; i++)
-      tests[i] = new Test("Test "+i,i+1,inout,inout);
+    for (int i = 0; i < ntests; i++) {
+      if (i % 2 == 0)
+        tests[i] = new Test("Test "+i,i+1,inout,inout); // will pass
+      else
+        tests[i] = new Test("Test "+i,i+1,inout,outFail); // will fail
+    }
   }
 
   private int setOption(String name, int def)
@@ -112,7 +117,12 @@ public class Marks
   public boolean runTest(byte[] code, String input, String output)
   {
     comp.compute(0,testms);
-    return (rand.nextDouble() >= 0.5);
+
+    // If the first character is uppercase 'A', we treat it as a pass.
+    // Otherwise we consider it a failure.
+    // This allows us to get deterministic results so that we can validate
+    // the output of workflows
+    return (output.charAt(0) == 'A');
   }
 
   public static void main(String[] args)
