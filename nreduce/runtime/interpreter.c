@@ -2207,6 +2207,9 @@ void interpreter_thread(node *n, endpoint *endpt, void *arg)
     pthread_kill(pthread_self(),SIGUSR1);
     tsk->usr1setup = 1;
     ((native_fun*)tsk->code)();;
+    /* Clear floating point exceptions - seems to be needed on
+       Linux for some reason, otherwise SIGFPEs get re-raised. */
+    asm("fnclex");
   }
   else if (0 != setjmp(tsk->jbuf)) {
     /* skip any futher interpretation */
