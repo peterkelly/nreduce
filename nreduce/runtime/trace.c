@@ -164,7 +164,7 @@ static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, p
   case CELL_AREF: {
     carray *arr = aref_array(p);
     if (1 == arr->elemsize) {
-      pntr tail = resolve_pntr(arr->tail);
+      pntr tail = resolve_pntr(aref_tail(p));
       char *val  = (char*)malloc(arr->size+1);
       memcpy(val,(char*)arr->elements,arr->size);
       val[arr->size] = '\0';
@@ -174,8 +174,8 @@ static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, p
       free(val);
 
       if (CELL_NIL != pntrtype(tail)) {
-        dot_graph_r(f,arr->tail,done,doind,fun,arg,p,landscape);
-        dot_edge(f,p,arr->tail,doind,"color=red");
+        dot_graph_r(f,tail,done,doind,fun,arg,p,landscape);
+        dot_edge(f,p,tail,doind,"color=red");
       }
     }
     else {
@@ -186,8 +186,8 @@ static void dot_graph_r(FILE *f, pntr p, pntrset *done, int doind, dotfun fun, p
         dot_graph_r(f,elem,done,doind,fun,arg,p,landscape);
         dot_edge(f,p,elem,doind,"color=red");
       }
-      dot_graph_r(f,arr->tail,done,doind,fun,arg,p,landscape);
-      dot_edge(f,p,arr->tail,doind,"color=red");
+      dot_graph_r(f,aref_tail(p),done,doind,fun,arg,p,landscape);
+      dot_edge(f,p,aref_tail(p),doind,"color=red");
     }
     break;
   }

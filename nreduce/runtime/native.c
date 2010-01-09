@@ -249,8 +249,6 @@ op_fun *op_handlers[OP_COUNT] = {
 
 #define CARRAY_ELEMENTS ((int)&((carray*)0)->elements[0])
 #define CARRAY_SIZE ((int)&((carray*)0)->size)
-#define CARRAY_TAIL ((int)&((carray*)0)->tail)
-#define CARRAY_WRAPPER ((int)&((carray*)0)->wrapper)
 #define CARRAY_ELEMSIZE ((int)&((carray*)0)->elemsize)
 
 void print_value(const char *str, void *p)
@@ -1768,19 +1766,20 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       int n = instr->arg0;
       int i;
 
-      // carray *arr = carray_new(tsk,sizeof(pntr),n-1,NULL,NULL);
-      // EDI: arr
-      BEGIN_CALL(20);
-      I_PUSH(imm(0));
-      I_PUSH(imm(0));
+      // cell *refcell = create_array_cell(tsk,sizeof(pntr),n-1)
+      // ECX: refcell
+      BEGIN_CALL(12);
       I_PUSH(imm(n-1));
       I_PUSH(imm(sizeof(pntr)));
       I_PUSH(imm((int)tsk));
-      I_MOV(reg(EAX),imm((int)carray_new));
+      I_MOV(reg(EAX),imm((int)create_array_cell));
       I_CALL(reg(EAX));
-      I_ADD(reg(ESP),imm(20));
-      I_MOV(regmem(ESP,32-PUSHAD_OFFSET_EDI),reg(EAX));
+      I_ADD(reg(ESP),imm(12));
+      I_MOV(regmem(ESP,32-PUSHAD_OFFSET_ECX),reg(EAX));
       END_CALL;
+
+      // EDI = arr = get_pntr(refcell->field1) (carray*)
+      I_MOV(reg(EDI),regmem(ECX,CELL_FIELD1));
 
       for (i = 0; i < n-1; i++) {
         // ((pntr*)arr->elements)[i] = runnable->data[instr->expcount-i-1];
@@ -1793,15 +1792,14 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
       // arr->size = n-1;
       I_MOV(regmem(EDI,CARRAY_SIZE),imm(n-1));
 
-      // arr->tail = runnable->data[instr->expcount-n];
+      // refcell->field2 = runnable->data[instr->expcount-n];
       I_MOV(reg(EAX),regmem(EBP,FRAME_DATA+8*(instr->expcount-n)));
       I_MOV(reg(EBX),regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4));
-      I_MOV(regmem(EDI,CARRAY_TAIL),reg(EAX));
-      I_MOV(regmem(EDI,CARRAY_TAIL+4),reg(EBX));
+      I_MOV(regmem(ECX,CELL_FIELD2),reg(EAX));
+      I_MOV(regmem(ECX,CELL_FIELD2+4),reg(EBX));
 
-      // make_aref_pntr(runnable->data[instr->expcount-n],arr->wrapper,0);
-      I_MOV(reg(EAX),regmem(EDI,CARRAY_WRAPPER));
-      I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)),reg(EAX));
+      // make_aref_pntr(runnable->data[instr->expcount-n],refcell,0);
+      I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)),reg(ECX));
       I_MOV(regmem(EBP,FRAME_DATA+8*(instr->expcount-n)+4),imm(PNTR_VALUE));
 
       LABEL(bplabels[0][addr]);

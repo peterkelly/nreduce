@@ -217,6 +217,7 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
   case CELL_AREF: {
     mark(tsk,c->field1,bit,depth+1);
     c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
+    c->field2 = resolve_copy_pntr(tsk,c,bit,c->field2);
     carray *arr = (carray*)get_pntr(c->field1);
 
     int i;
@@ -228,9 +229,8 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
         mark(tsk,((pntr*)arr->elements)[i],bit,depth+1);
       }
     }
-    arr->tail = resolve_copy_pntr(tsk,c,bit,arr->tail);
-    if (is_pntr(arr->tail))
-      return (header*)get_pntr(arr->tail);
+    if (is_pntr(c->field2))
+      return (header*)get_pntr(c->field2);
     break;
   }
   case CELL_CONS: {
@@ -850,9 +850,7 @@ static void replace_refs_cell(task *tsk, cell *c, int check)
       for (i = 0; i < carr->size; i++)
         REPLACE_PNTR(((pntr*)carr->elements)[i]);
     }
-    REPLACE_PNTR(carr->tail);
-    REPLACE_CELL(carr->wrapper);
-    assert(c == carr->wrapper);
+    REPLACE_PNTR(c->field2);
     break;
   }
   case CELL_FRAME: {

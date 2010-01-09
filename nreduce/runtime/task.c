@@ -509,12 +509,11 @@ task *task_new(int tid, int groupsize, const char *bcdata, int bcsize, array *ar
 
   tsk->argsp = tsk->globnilpntr;
   if (0 < argc) {
-    carray *arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
-    make_pntr(tsk->argsp,arr->wrapper);
-    for (i = 0; i < argc; i++) {
-      pntr p = string_to_array(tsk,array_item(args,i,char*));
-      carray_append(tsk,&arr,&p,1,sizeof(pntr));
-    }
+    pntr *pointers = (pntr*)malloc(argc*sizeof(pntr));
+    for (i = 0; i < argc; i++)
+      pointers[i] = string_to_array(tsk,array_item(args,i,char*));
+    tsk->argsp = pointers_to_list(tsk,pointers,argc,tsk->globnilpntr); 
+    free(pointers);
   }
 
   if (NULL == bcdata)

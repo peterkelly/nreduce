@@ -238,6 +238,7 @@ typedef struct cell {
                             (__p).data[1] = (PNTR_VALUE | (__i)); }
 #define aref_index(__p) ((__p).data[1] & ~PNTR_MASK)
 #define aref_array(__p) ((carray*)get_pntr(get_pntr(__p)->field1))
+#define aref_tail(__p) (get_pntr(__p)->field2)
 #define get_pntr(__p) (assert(is_pntr(__p)), ((cell*)(*((unsigned int*)&(__p)))))
 #define pntrequal(__a,__b) (((__a).data[0] == (__b).data[0]) && ((__a).data[1] == (__b).data[1]))
 
@@ -334,8 +335,7 @@ typedef struct carray {
   int alloc;
   int size;
   int elemsize;
-  pntr tail;
-  cell *wrapper;
+  int pad;
   int nchars;
   char elements[];
 } carray;
@@ -772,10 +772,9 @@ void run_reduction(source *src, char *trace_dir, int trace_type, array *args);
 void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
 void invalid_binary_args(task *tsk, pntr *argstack, int bif);
 
-carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper);
-void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize);
-pntr data_to_list(task *tsk, const char *data, int size, pntr tail);
-
+cell *create_array_cell(task *tsk, int dsize, int alloc);
+pntr create_array(task *tsk, int dsize, int alloc);
+pntr pointers_to_list(task *tsk, pntr *data, int size, pntr tail);
 pntr socketid_string(task *tsk, socketid sockid);
 pntr mkcons(task *tsk, pntr head, pntr tail);
 
@@ -862,9 +861,6 @@ int calc_newgenbytes(task *tsk);
 void send_checkrefs(task *tsk);
 
 /* graph */
-
-pntr graph_replace(task *tsk, pntr root, pntr old, pntr new);
-int graph_size(pntr root);
 
 pntrset *pntrset_new();
 void pntrset_free(pntrset *ps);

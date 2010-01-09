@@ -251,7 +251,7 @@ static void write_aref(array *arr, task *tsk, pntr p)
   else
     for (i = 0; i < carr->size; i++)
       write_ref(arr,tsk,((pntr*)carr->elements)[i]);
-  write_ref(arr,tsk,carr->tail);
+  write_ref(arr,tsk,aref_tail(p));
 }
 
 static void read_aref(reader *rd, pntr *pout)
@@ -260,8 +260,6 @@ static void read_aref(reader *rd, pntr *pout)
   int index;
   int elemsize;
   int size;
-  carray *carr;
-  int i;
 
   read_int(rd,&index);
   read_int(rd,&elemsize);
@@ -271,16 +269,21 @@ static void read_aref(reader *rd, pntr *pout)
   assert(MAX_ARRAY_SIZE >= size);
   assert(index < size);
 
-  carr = carray_new(tsk,elemsize,size,NULL,NULL);
+  pntr paref = create_array(tsk,elemsize,size);
+  cell *refcell = get_pntr(paref);
+  carray *carr = aref_array(paref);
   carr->size = size;
   assert(carr->alloc == size);
-  if (1 == elemsize)
+  if (1 == elemsize) {
     read_binary(rd,carr->elements,size);
-  else
+  }
+  else {
+    int i;
     for (i = 0; i < size; i++)
       read_pntr(rd,&((pntr*)carr->elements)[i]);
-  read_pntr(rd,&carr->tail);
-  make_aref_pntr(*pout,carr->wrapper,index);
+  }
+  read_pntr(rd,&refcell->field2);
+  make_aref_pntr(*pout,refcell,index);
 }
 
 static void write_cons(array *arr, task *tsk, pntr p)

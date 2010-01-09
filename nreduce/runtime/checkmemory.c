@@ -80,14 +80,13 @@ static void check_all_refs(task *tsk, int cnewgen)
       case CELL_AREF: {
         assert(oldgen_pntr_valid(tsk,cnewgen,c->field1));
         carray *carr = (carray*)get_pntr(c->field1);
+        pntr tail = c->field2;
         if (sizeof(pntr) == carr->elemsize) {
           int i;
           for (i = 0; i < carr->size; i++)
             assert(oldgen_pntr_valid(tsk,cnewgen,((pntr*)carr->elements)[i]));
         }
-        assert(oldgen_pntr_valid(tsk,cnewgen,carr->tail));
-        assert(oldgen_cell_valid(tsk,cnewgen,carr->wrapper));
-        assert(c == carr->wrapper);
+        assert(oldgen_pntr_valid(tsk,cnewgen,tail));
         break;
       }
       case CELL_FRAME: {
@@ -175,6 +174,7 @@ static int cell_has_new_ref(task *tsk, cell *c)
     if (is_new_ref(c->field1))
       return 1;
     carray *carr = (carray*)get_pntr(c->field1);
+    pntr tail = c->field2;
     if (sizeof(pntr) == carr->elemsize) {
       int i;
       for (i = 0; i < carr->size; i++) {
@@ -182,9 +182,7 @@ static int cell_has_new_ref(task *tsk, cell *c)
           return 1;
       }
     }
-    if (is_new_ref(carr->tail))
-      return 1;
-    return is_new_cell(carr->wrapper);
+    return is_new_ref(tail);
   }
   case CELL_FRAME: {
     frame *f = (frame*)get_pntr(c->field1);
@@ -262,6 +260,7 @@ void check_remembered_set(task *tsk)
 
           if (CELL_AREF == c->type) {
             carray *carr = (carray*)get_pntr(c->field1);
+            pntr tail = c->field2;
             if (sizeof(pntr) == carr->elemsize) {
               int i;
               for (i = 0; i < carr->size; i++) {
@@ -271,14 +270,10 @@ void check_remembered_set(task *tsk)
                 }
               }
             }
-            if (is_new_ref(carr->tail)) {
+            if (is_new_ref(tail)) {
               node_log(tsk->n,LOG_ERROR,"new ref: array tail %s %p",
-                       cell_types[pntrtype(carr->tail)],
-                       is_pntr(carr->tail) ? get_pntr(carr->tail) : 0);
-            }
-            if (is_new_cell(carr->wrapper)) {
-              node_log(tsk->n,LOG_ERROR,"new ref: array wrapper %s",
-                       cell_types[carr->wrapper->type]);
+                       cell_types[pntrtype(tail)],
+                       is_pntr(tail) ? get_pntr(tail) : 0);
             }
           }
         }

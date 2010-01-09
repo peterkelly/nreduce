@@ -1998,15 +1998,17 @@ inline void op_jeq(task *tsk, frame *runnable, const instruction *instr)
 inline void op_consn(task *tsk, frame *runnable, const instruction *instr)
 {
   int n = instr->arg0;
-  carray *arr = carray_new(tsk,sizeof(pntr),n-1,NULL,NULL);
+  pntr aref = create_array(tsk,sizeof(pntr),n-1);
+  cell *refcell = get_pntr(aref);
+  carray *arr = aref_array(aref);
   int i;
 
   assert(n-1 == arr->alloc);
   for (i = 0; i < n-1; i++)
     ((pntr*)arr->elements)[i] = runnable->data[instr->expcount-i-1];
   arr->size = n-1;
-  arr->tail = runnable->data[instr->expcount-n];
-  make_aref_pntr(runnable->data[instr->expcount-n],arr->wrapper,0);
+  refcell->field2 = runnable->data[instr->expcount-n];
+  make_aref_pntr(runnable->data[instr->expcount-n],refcell,0);
 }
 
 void make_item_frame(task *tsk, frame *runnable, int expcount, int pos)

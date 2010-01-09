@@ -153,7 +153,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
     carray *arr = aref_array(p);
     int index = aref_index(p);
     if (1 == arr->elemsize) {
-      pntr tail = resolve_pntr(arr->tail);
+      pntr tail = resolve_pntr(aref_tail(p));
       snode *str = s;
 
       if (CELL_NIL != pntrtype(tail)) {
@@ -173,7 +173,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
 
         app2->type = SNODE_APPLICATION;
         app2->left = app1;
-        app2->right = graph_to_syntax_r(src,d,arr->tail);
+        app2->right = graph_to_syntax_r(src,d,aref_tail(p));
       }
 
       str->type = SNODE_STRING;
@@ -205,7 +205,7 @@ snode *graph_to_syntax_r(source *src, p2sdata *d, pntr p)
       }
 
       app->type = SNODE_WRAP;
-      app->target = graph_to_syntax_r(src,d,arr->tail);
+      app->target = graph_to_syntax_r(src,d,aref_tail(p));
     }
     break;
   }

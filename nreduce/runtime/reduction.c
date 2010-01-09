@@ -399,7 +399,8 @@ static void stream(task *tsk, pntr lst)
     else if (CELL_AREF == pntrtype(p)) {
       carray *arr = aref_array(p);
       int index = aref_index(p);
-      pntrstack_push(tsk->streamstack,arr->tail);
+      pntr tail = aref_tail(p);
+      pntrstack_push(tsk->streamstack,tail);
       if (1 == arr->elemsize) {
         char *str = (char*)malloc(arr->size-index+1);
         memcpy(str,&((char*)arr->elements)[index],arr->size-index);

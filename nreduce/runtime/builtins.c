@@ -302,32 +302,32 @@ static void b_if(task *tsk, pntr *argstack)
   argstack[0] = source;
 }
 
-void array_resolve_tail(task *tsk, carray *arr)
+static void aref_resolve_tail(task *tsk, cell *c)
 {
-  if (CELL_IND == pntrtype(arr->tail)) {
-    arr->tail = resolve_pntr(arr->tail);
-    write_barrier_ifnew(tsk,arr->wrapper,arr->tail);
+  if (CELL_IND == pntrtype(c->field2)) {
+    c->field2 = resolve_pntr(c->field2);
+    write_barrier_ifnew(tsk,c,c->field2);
   }
 }
 
-void array_resolve_element(task *tsk, carray *arr, int pos)
+static void aref_resolve_element(task *tsk, cell *refcell, int pos)
 {
+  carray *arr = (carray*)get_pntr(refcell->field1);
   assert(sizeof(pntr) == arr->elemsize);
   pntr *elements = (pntr*)arr->elements;
   if (CELL_IND == pntrtype(elements[pos])) {
     elements[pos] = resolve_pntr(elements[pos]);
-    write_barrier_ifnew(tsk,arr->wrapper,elements[pos]);
+    write_barrier_ifnew(tsk,refcell,elements[pos]);
   }
 }
 
-void array_set_tail(task *tsk, carray *arr, pntr newtail)
+static void aref_set_tail(task *tsk, cell *ref, pntr newtail)
 {
-  arr->tail = newtail;
-  write_barrier_ifnew(tsk,arr->wrapper,newtail);
+  ref->field2 = newtail;
+  write_barrier_ifnew(tsk,ref,newtail);
 }
 
-/* Can be called from native code */
-carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewrapper)
+static carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr)
 {
   carray *arr;
 
@@ -344,25 +344,34 @@ carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr, cell *usewra
   arr->alloc = alloc;
   arr->size = 0;
   arr->elemsize = dsize;
-  arr->tail = tsk->globnilpntr;
   arr->nchars = 0;
-  if (usewrapper)
-    write_barrier(tsk,usewrapper);
-  arr->wrapper = usewrapper ? usewrapper : alloc_cell(tsk);
-  arr->wrapper->type = CELL_AREF;
-  make_pntr(arr->wrapper->field1,arr);
-
-  if (oldarr) {
-    pntr p;
-    make_aref_pntr(p,arr->wrapper,0);
-    array_set_tail(tsk,oldarr,p);
-  }
 
   #ifdef PROFILING
   tsk->stats.array_allocs++;
   #endif
 
   return arr;
+}
+
+/* Can be called from native code */
+cell *create_array_cell(task *tsk, int dsize, int alloc)
+{
+  carray *carr = carray_new(tsk,dsize,alloc,NULL);
+
+  cell *refcell = alloc_cell(tsk);
+  refcell->type = CELL_AREF;
+  make_pntr(refcell->field1,carr);
+  refcell->field2 = tsk->globnilpntr;
+
+  return refcell;
+}
+
+pntr create_array(task *tsk, int dsize, int alloc)
+{
+  cell *refcell = create_array_cell(tsk,dsize,alloc);
+  pntr p;
+  make_pntr(p,refcell);
+  return p;
 }
 
 int pntr_is_char(pntr p)
@@ -389,16 +398,16 @@ static void convert_to_string(task *tsk, carray *arr)
   arr->elemsize = 1;
 }
 
-static void check_array_convert(task *tsk, carray *arr, const char *from)
+static void check_array_convert(task *tsk, cell *refcell, const char *from)
 {
-#ifndef DISABLE_ARRAYS
-  array_resolve_tail(tsk,arr);
+  carray *arr = (carray*)get_pntr(refcell->field1);
+  aref_resolve_tail(tsk,refcell);
   if ((sizeof(pntr) == arr->elemsize) &&
-      ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(arr->tail)))) {
+      ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(refcell->field2)))) {
     pntr *pelements = (pntr*)arr->elements;
 
     while (arr->nchars < arr->size) {
-      array_resolve_element(tsk,arr,arr->nchars);
+      aref_resolve_element(tsk,refcell,arr->nchars);
       if (pntr_is_char(pelements[arr->nchars]))
         arr->nchars++;
       else
@@ -408,44 +417,42 @@ static void check_array_convert(task *tsk, carray *arr, const char *from)
     if (arr->nchars == arr->size)
       convert_to_string(tsk,arr);
   }
-#endif
 }
 
-void carray_append(task *tsk, carray **arr, const void *data, int totalcount, int dsize)
+static void carray_append(task *tsk, cell **refcell, const void *data, int totalcount, int dsize)
 {
-  assert(dsize == (*arr)->elemsize); /* sanity check */
+  carray *arr = (carray*)get_pntr((*refcell)->field1);
+  assert(dsize == arr->elemsize); /* sanity check */
 
   while (1) {
     int count = totalcount;
-    if ((*arr)->size+count > MAX_ARRAY_SIZE)
-      count = MAX_ARRAY_SIZE - (*arr)->size;
+    if (arr->size+count > MAX_ARRAY_SIZE)
+      count = MAX_ARRAY_SIZE - arr->size;
 
-    write_barrier(tsk,(*arr)->wrapper);
+    write_barrier(tsk,*refcell);
 
-    if ((*arr)->alloc < (*arr)->size+count) {
-      cell *wrapper = (*arr)->wrapper;
-      assert(wrapper);
-      while ((*arr)->alloc < (*arr)->size+count)
-        (*arr)->alloc *= 4;
-      unsigned int sizereq = sizeof(carray)+(*arr)->alloc*(*arr)->elemsize;
+    if (arr->alloc < arr->size+count) {
+      while (arr->alloc < arr->size+count)
+        arr->alloc *= 4;
+      unsigned int sizereq = sizeof(carray)+arr->alloc*arr->elemsize;
 
       if (0 != sizereq%8)
         sizereq += 8-(sizereq%8);
 
-      if (sizereq > (*arr)->nbytes) {
-        (*arr) = (carray*)realloc_mem(tsk,*arr,sizereq);
-        (*arr)->nbytes = sizereq;
+      if (sizereq > arr->nbytes) {
+        arr = (carray*)realloc_mem(tsk,arr,sizereq);
+        arr->nbytes = sizereq;
       }
 
-      make_pntr(wrapper->field1,*arr);
+      make_pntr((*refcell)->field1,arr);
       #ifdef PROFILING
       tsk->stats.array_resizes++;
       #endif
     }
 
-    memmove(((unsigned char*)(*arr)->elements)+(*arr)->size*(*arr)->elemsize,
-            data,count*(*arr)->elemsize);
-    (*arr)->size += count;
+    memmove(((unsigned char*)arr->elements)+arr->size*arr->elemsize,
+            data,count*arr->elemsize);
+    arr->size += count;
 
     data += count;
     totalcount -= count;
@@ -453,15 +460,27 @@ void carray_append(task *tsk, carray **arr, const void *data, int totalcount, in
     if (0 == totalcount)
       break;
 
-    check_array_convert(tsk,*arr,"append");
+    /* Still more data to append - create a new chain in the array */
 
-    *arr = carray_new(tsk,dsize,totalcount,*arr,NULL);
+    check_array_convert(tsk,*refcell,"append");
+
+    cell *oldref = *refcell;
+
+    arr = carray_new(tsk,dsize,totalcount,arr);
+
+    *refcell = alloc_cell(tsk);
+    (*refcell)->type = CELL_AREF;
+    make_pntr((*refcell)->field1,arr);
+    (*refcell)->field2 = tsk->globnilpntr;
+
+    pntr p;
+    make_aref_pntr(p,*refcell,0);
+    aref_set_tail(tsk,oldref,p);
   }
 }
 
 void maybe_expand_array(task *tsk, pntr p)
 {
-#ifndef DISABLE_ARRAYS
   if (CELL_CONS == pntrtype(p)) {
     cell *firstcell = get_pntr(p);
     pntr firsthead = resolve_pntr(firstcell->field1);
@@ -474,44 +493,45 @@ void maybe_expand_array(task *tsk, pntr p)
       cell *secondcell = get_pntr(firsttail);
       pntr secondhead = resolve_pntr(secondcell->field1);
       pntr secondtail = resolve_pntr(secondcell->field2);
-      carray *arr;
 
-      arr = carray_new(tsk,sizeof(pntr),0,NULL,firstcell);
-      carray_append(tsk,&arr,&firsthead,1,sizeof(pntr));
-      carray_append(tsk,&arr,&secondhead,1,sizeof(pntr));
-      array_set_tail(tsk,arr,secondtail);
+      carray *arr = carray_new(tsk,sizeof(pntr),8,NULL); /* allocate 8 to allow for expansion */
+
+      cell *refcell = firstcell;
+      write_barrier(tsk,refcell);
+      refcell->type = CELL_AREF;
+      make_pntr(refcell->field1,arr);
+      refcell->field2 = tsk->globnilpntr;
+
+      ((pntr*)arr->elements)[0] = firsthead;
+      ((pntr*)arr->elements)[1] = secondhead;
+      arr->size = 2;
+
+      aref_set_tail(tsk,refcell,secondtail);
     }
   }
 
   if (CELL_AREF == pntrtype(p)) {
+    cell *refcell = (cell*)get_pntr(p);
     carray *arr = aref_array(p);
-    array_resolve_tail(tsk,arr);
 
-    /* FIXME: need to optimise this code by making sure it adjusts references to the
-       old tails to point to this array, wherver possible. We can't just replace the
-       old tails with INDs, because the execution engine assumes that once a cell is
-       non-IND, it remains non-IND for the rest of its lifetime. */
+    aref_resolve_tail(tsk,refcell);
 
     if (sizeof(pntr) == aref_array(p)->elemsize) {
       while (MAX_ARRAY_SIZE > arr->size) {
-        if (CELL_CONS == pntrtype(arr->tail)) {
-          cell *tailcell = get_pntr(arr->tail);
+        if (CELL_CONS == pntrtype(refcell->field2)) {
+          cell *tailcell = get_pntr(refcell->field2);
           pntr tailhead = resolve_pntr(tailcell->field1);
-          carray_append(tsk,&arr,&tailhead,1,sizeof(pntr));
-          array_set_tail(tsk,arr,resolve_pntr(tailcell->field2));
-
-          /* FIXME: is there a way to do this safely? */
-/*           pntr newtail; */
-/*           make_aref_pntr(newtail,arr->wrapper,arr->size-1); */
-/*           cell_make_ind(tsk,tailcell,newtail); */
+          carray_append(tsk,&refcell,&tailhead,1,sizeof(pntr));
+          aref_set_tail(tsk,refcell,resolve_pntr(tailcell->field2));
         }
-        else if ((CELL_AREF == pntrtype(arr->tail)) &&
-                 (sizeof(pntr) == aref_array(arr->tail)->elemsize)) {
-          carray *otharr = aref_array(arr->tail);
-          int othindex = aref_index(arr->tail);
-          carray_append(tsk,&arr,&((pntr*)otharr->elements)[othindex],
-                        otharr->size-othindex,sizeof(pntr));
-          array_set_tail(tsk,arr,otharr->tail);
+        else if ((CELL_AREF == pntrtype(refcell->field2)) &&
+                 (sizeof(pntr) == aref_array(refcell->field2)->elemsize)) {
+          carray *otharr = aref_array(refcell->field2);
+          pntr othtail = aref_tail(refcell->field2);
+          int othindex = aref_index(refcell->field2);
+          carray_append(tsk,&refcell,&((pntr*)otharr->elements)[othindex],
+                         otharr->size-othindex,sizeof(pntr));
+          aref_set_tail(tsk,refcell,othtail);
         }
         else {
           break;
@@ -521,61 +541,57 @@ void maybe_expand_array(task *tsk, pntr p)
     else {
       /* string */
       while (1) {
-        if (CELL_AREF != pntrtype(arr->tail))
+        if (CELL_AREF != pntrtype(refcell->field2))
           break;
-        carray *tail_arr = aref_array(arr->tail);
-        int tail_index = aref_index(arr->tail);
+        carray *tail_arr = aref_array(refcell->field2);
+        pntr tail_tail = aref_tail(refcell->field2);
+        int tail_index = aref_index(refcell->field2);
         int tail_size = tail_arr->size-tail_index;
         if (tail_arr->elemsize != arr->elemsize)
           break;
         if (arr->size+tail_size > MAX_ARRAY_SIZE)
           break;
-        carray_append(tsk,&arr,&tail_arr->elements[tail_index],tail_size,arr->elemsize);
-        arr->tail = tail_arr->tail;
-        write_barrier_ifnew(tsk,arr->wrapper,arr->tail);
+        carray_append(tsk,&refcell,&tail_arr->elements[tail_index],tail_size,arr->elemsize);
+        refcell->field2 = tail_tail;
+        write_barrier_ifnew(tsk,refcell,refcell->field2);
       }
     }
 
-    check_array_convert(tsk,arr,"expand");
+    check_array_convert(tsk,refcell,"expand");
   }
-
-
-#endif
 }
 
-pntr data_to_list(task *tsk, const char *data, int size, pntr tail)
+pntr pointers_to_list(task *tsk, pntr *data, int size, pntr tail)
 {
-  #ifdef DISABLE_ARRAYS
-  pntr p = tsk->globnilpntr;
-  pntr *prev = &p;
-  int i;
-  for (i = 0; i < size; i++) {
-    cell *ch = alloc_cell(tsk);
-    ch->type = CELL_CONS;
-    ch->field1 = data[i];
-    make_pntr(*prev,ch);
-    prev = &ch->field2;
-  }
-  *prev = tail;
-  return p;
-  #else
   if (0 == size) {
     return tail;
   }
   else {
-    carray *arr = carray_new(tsk,1,size,NULL,NULL);
-    pntr p;
-    make_aref_pntr(p,arr->wrapper,0);
-    carray_append(tsk,&arr,data,size,1);
-    array_set_tail(tsk,arr,tail);
-    return p;
+    pntr aref = create_array(tsk,sizeof(pntr),size);
+    cell *refcell = get_pntr(aref);
+    carray_append(tsk,&refcell,data,size,sizeof(pntr));
+    aref_set_tail(tsk,refcell,tail);
+    return aref;
   }
-  #endif
+}
+
+pntr binary_data_to_list(task *tsk, const char *data, int size, pntr tail)
+{
+  if (0 == size) {
+    return tail;
+  }
+  else {
+    pntr aref = create_array(tsk,1,size);
+    cell *refcell = get_pntr(aref);
+    carray_append(tsk,&refcell,data,size,1);
+    aref_set_tail(tsk,refcell,tail);
+    return aref;
+  }
 }
 
 pntr string_to_array(task *tsk, const char *str)
 {
-  return data_to_list(tsk,str,strlen(str),tsk->globnilpntr);
+  return binary_data_to_list(tsk,str,strlen(str),tsk->globnilpntr);
 }
 
 int array_to_string(pntr refpntr, char **str)
@@ -626,7 +642,7 @@ int array_to_string(pntr refpntr, char **str)
           }
         }
       }
-      p = resolve_pntr(arr->tail);
+      p = aref_tail(p);
     }
     else if (CELL_NIL == pntrtype(p)) {
       break;
@@ -688,7 +704,7 @@ int flatten_list(pntr refpntr, pntr **data)
           pelements[i] = resolve_pntr(pelements[i]);
         array_append(buf,&pelements[index],(arr->size-index)*sizeof(pntr));
       }
-      p = resolve_pntr(arr->tail);
+      p = aref_tail(p);
     }
     else if (CELL_NIL == pntrtype(p)) {
       break;
@@ -760,15 +776,16 @@ static void b_tail(task *tsk, pntr *argstack)
     argstack[0] = conscell->field2;
   }
   else if (CELL_AREF == pntrtype(arg)) {
+    cell *refcell = get_pntr(arg);
     int index = aref_index(arg);
     carray *arr = aref_array(arg);
     assert(index < arr->size);
 
     if (index+1 < arr->size) {
-      make_aref_pntr(argstack[0],arr->wrapper,index+1);
+      make_aref_pntr(argstack[0],refcell,index+1);
     }
     else {
-      argstack[0] = arr->tail;
+      argstack[0] = aref_tail(arg);
     }
   }
   else {
@@ -817,15 +834,16 @@ static void b_arrayskip(task *tsk, pntr *argstack)
       argstack[0] = get_pntr(refpntr)->field2;
   }
   else if (CELL_AREF == pntrtype(refpntr)) {
+    cell *refcell = get_pntr(refpntr);
     carray *arr = aref_array(refpntr);
     int index = aref_index(refpntr);
     assert(index < arr->size);
     assert(index+n <= arr->size);
 
     if (index+n == arr->size)
-      argstack[0] = arr->tail;
+      argstack[0] = aref_tail(refpntr);
     else
-      make_aref_pntr(argstack[0],arr->wrapper,index+n);
+      make_aref_pntr(argstack[0],refcell,index+n);
   }
   else {
     set_error(tsk,"arrayskip: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
@@ -874,7 +892,6 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
   pntr refpntr = argstack[1];
   pntr restpntr = argstack[0];
   int n;
-  carray *prefix;
 
   CHECK_ARG(2,CELL_NUMBER);
   n = (int)pntrdouble(npntr);
@@ -902,10 +919,11 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
     if (n > arr->size-index)
       n = arr->size-index;
 
-    prefix = carray_new(tsk,arr->elemsize,n,NULL,NULL);
-    array_set_tail(tsk,prefix,restpntr);
-    make_aref_pntr(argstack[0],prefix->wrapper,0);
-    carray_append(tsk,&prefix,arr->elements+index*arr->elemsize,n,arr->elemsize);
+    /* Create a new array with a copy of the old data */
+    if (sizeof(pntr) == arr->elemsize)
+      argstack[0] = pointers_to_list(tsk,(pntr*)(arr->elements+index*arr->elemsize),n,restpntr);
+    else
+      argstack[0] = binary_data_to_list(tsk,arr->elements+index*arr->elemsize,n,restpntr);
   }
   else {
     set_error(tsk,"arrayprefix: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
@@ -922,12 +940,15 @@ static void b_arraystrcmp(task *tsk, pntr *argstack)
   if ((CELL_AREF == pntrtype(a)) && (CELL_AREF == pntrtype(b))) {
     carray *aarr = aref_array(a);
     carray *barr = aref_array(b);
+    pntr atail = aref_tail(a);
+    pntr btail = aref_tail(b);
     int aindex = aref_index(a);
     int bindex = aref_index(b);
-    array_resolve_tail(tsk,aarr);
-    array_resolve_tail(tsk,barr);
+    aref_resolve_tail(tsk,get_pntr(a));
+    aref_resolve_tail(tsk,get_pntr(b));
     if ((1 == aarr->elemsize) && (1 == barr->elemsize) &&
-        (CELL_NIL == pntrtype(aarr->tail)) && (CELL_NIL == pntrtype(barr->tail))) {
+        (CELL_NIL == pntrtype(atail)) &&
+        (CELL_NIL == pntrtype(btail))) {
 
       /* Compare character by character until we reach the end of either or both strings */
       while ((aindex < aarr->size) && (bindex < barr->size)) {
@@ -986,23 +1007,15 @@ static void b_teststring(task *tsk, pntr *argstack)
 {
   pntr tail = argstack[0];
   pntr p = string_to_array(tsk,"this part shouldn't be here! test");
-  carray *arr = aref_array(p);
-  array_set_tail(tsk,arr,tail);
-  make_aref_pntr(argstack[0],arr->wrapper,29);
+  cell *refcell = get_pntr(p);
+  aref_set_tail(tsk,refcell,tail);
+  make_aref_pntr(argstack[0],refcell,29);
 }
 
 static void b_testarray(task *tsk, pntr *argstack)
 {
-  pntr content = argstack[1];
-  pntr tail = argstack[0];
-  carray *arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
-  pntr p;
-  int i;
-  make_aref_pntr(p,arr->wrapper,2);
-  for (i = 0; i < 5; i++)
-    carray_append(tsk,&arr,&content,1,sizeof(pntr));
-  array_set_tail(tsk,arr,tail);
-  argstack[0] = p;
+  /* no longer used; could be safely removed */
+  argstack[0] = tsk->globnilpntr;
 }
 
 static void b_openfd(task *tsk, pntr *argstack)
@@ -1065,24 +1078,20 @@ static void b_readchunk(task *tsk, pntr *argstack)
     return;
   }
 
-  argstack[0] = data_to_list(tsk,buf,r,nextpntr);
+  argstack[0] = binary_data_to_list(tsk,buf,r,nextpntr);
 }
 
 static void b_readdir(task *tsk, pntr *argstack)
 {
-  DIR *dir;
   char *path;
   pntr filenamepntr = argstack[0];
-  struct dirent tmp;
-  struct dirent *entry;
-  carray *arr = NULL;
-  int count = 0;
 
   if (0 > array_to_string(filenamepntr,&path)) {
     set_error(tsk,"readdir: path is not a string");
     return;
   }
 
+  DIR *dir;
   if (NULL == (dir = opendir(path))) {
     set_error(tsk,"%s: %s",path,strerror(errno));
     free(path);
@@ -1091,13 +1100,12 @@ static void b_readdir(task *tsk, pntr *argstack)
 
   argstack[0] = tsk->globnilpntr;
 
+  array *dircontents = array_new(sizeof(pntr),0);
+
+  struct dirent tmp;
+  struct dirent *entry;
   while ((0 == readdir_r(dir,&tmp,&entry)) && (NULL != entry)) {
     char *fullpath;
-    pntr namep;
-    pntr typep;
-    pntr sizep;
-    pntr entryp;
-    carray *entryarr;
     struct stat statbuf;
     char *type;
 
@@ -1115,29 +1123,23 @@ static void b_readdir(task *tsk, pntr *argstack)
       else
         type = "other";
 
-      namep = string_to_array(tsk,entry->d_name);
-      typep = string_to_array(tsk,type);
-      set_pntrdouble(sizep,statbuf.st_size);
+      pntr fields[3];
+      fields[0] = string_to_array(tsk,entry->d_name);
+      fields[1] = string_to_array(tsk,type);
+      set_pntrdouble(fields[2],statbuf.st_size);
+      pntr entryp = pointers_to_list(tsk,fields,3,tsk->globnilpntr);
 
-      entryarr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
-      carray_append(tsk,&entryarr,&namep,1,sizeof(pntr));
-      carray_append(tsk,&entryarr,&typep,1,sizeof(pntr));
-      carray_append(tsk,&entryarr,&sizep,1,sizeof(pntr));
-      make_aref_pntr(entryp,entryarr->wrapper,0);
-
-      if (0 == count) {
-        arr = carray_new(tsk,sizeof(pntr),0,NULL,NULL);
-        make_aref_pntr(argstack[0],arr->wrapper,0);
-      }
-
-      carray_append(tsk,&arr,&entryp,1,sizeof(pntr));
-      count++;
+      array_append(dircontents,&entryp,sizeof(pntr));
     }
 
     free(fullpath);
   }
-  closedir(dir);
 
+  argstack[0] = pointers_to_list(tsk,(pntr*)dircontents->data,
+                                 array_count(dircontents),tsk->globnilpntr);
+
+  closedir(dir);
+  array_free(dircontents);
   free(path);
 }
 
@@ -1485,10 +1487,9 @@ static void b_readcon(task *tsk, pntr *argstack)
       sysobject_delete_if_finished(so);
     }
     else {
-      carray *arr = carray_new(tsk,1,so->len,NULL,NULL);
-      make_aref_pntr(argstack[0],arr->wrapper,0);
-      carray_append(tsk,&arr,so->buf,so->len,1);
-      array_set_tail(tsk,arr,nextpntr);
+
+      argstack[0] = binary_data_to_list(tsk,so->buf,so->len,nextpntr);
+
       free(so->buf);
       so->buf = NULL;
       so->len = 0;
@@ -1997,9 +1998,7 @@ static void b_compile(task *tsk, pntr *argstack)
     set_error(tsk,"compile error");
   }
   else {
-    carray *arr = carray_new(tsk,1,0,NULL,NULL);
-    make_pntr(argstack[0],arr->wrapper);
-    carray_append(tsk,&arr,bcdata,bcsize,1);
+    argstack[0] = binary_data_to_list(tsk,bcdata,bcsize,tsk->globnilpntr);
   }
 
   free(bcdata);
