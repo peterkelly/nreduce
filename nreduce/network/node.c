@@ -270,14 +270,14 @@ static void node_free(node *n)
   assert(NULL == n->p->endpoints.first);
   assert(NULL == n->p->listeners.first);
 
-  pthread_cond_destroy(&n->p->closecond);
-  destroy_mutex(&n->clock_lock);
-  destroy_mutex(&n->p->lock);
   close(n->p->ioready_readfd);
   close(n->p->ioready_writefd);
   list_free(n->p->servers,free);
   portset_destroy(&n->p->outports);
   node_log(n,LOG_INFO,"Shutdown complete");
+  pthread_cond_destroy(&n->p->closecond);
+  destroy_mutex(&n->clock_lock);
+  destroy_mutex(&n->p->lock);
   free(n->p);
   free(n);
 }
