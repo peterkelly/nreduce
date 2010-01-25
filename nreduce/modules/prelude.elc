@@ -262,6 +262,12 @@ foldl f base lst =
     (foldl f (f base (head lst)) (tail lst))
     base)
 
+zipwith f a b =
+(if (and a b)
+    (cons (f (head a) (head b))
+          (zipwith f (tail a) (tail b)))
+    nil)
+
 range from to =
 (if (<= from to)
     (cons from (range (+ from 1) to))

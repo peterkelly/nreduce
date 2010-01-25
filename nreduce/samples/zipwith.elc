@@ -1,0 +1,6 @@
+main =
+(foldr ++ ""
+       (map (\num.++ (ntos num) "\n")
+            (zipwith +
+                     (cons 1 (cons 2 (cons 3 nil)))
+                     (cons 4 (cons 5 (cons 6 nil))))))

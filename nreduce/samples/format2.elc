@@ -1,0 +1,23 @@
+format pattern =
+(letrec
+   format_rec got fmt =
+     (if fmt
+         (if (== (head fmt) '%')
+             (if (tail fmt)
+                 (if (== (head (tail fmt)) 's')
+                     (\arg.format_rec (++ (reverse arg) got) (skip 2 fmt))
+                 (if (== (head (tail fmt)) 'd')
+                     (\arg.format_rec (++ (reverse (ntos arg)) got) (skip 2 fmt))
+                 (if (== (head (tail fmt)) '%')
+                     (format_rec (++ "%" got) (skip 2 fmt))
+                     (format_rec (++ "%" got) (tail fmt)))))
+                 (format_rec (++ "%" got) ""))
+             (format_rec (cons (head fmt) got) (tail fmt)))
+         (reverse got))
+ in
+   (format_rec nil pattern))
+
+main =
+(foldr ++ ""
+       (map (\num.format "square(%d) = %d\n" num (* num num))
+            (range 1 10)))
