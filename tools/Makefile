@@ -1,4 +1,4 @@
-PROGRAMS = parsh showload loadbal waitconn nobuftail runtests measure svc_compute compute connections average min max pow2
+PROGRAMS = parsh showload loadbal waitconn nobuftail runtests measure svc_compute compute connections average min max pow2 proxy
 
 almostall: $(PROGRAMS)
 
@@ -45,6 +45,9 @@ max: max.c
 
 pow2: pow2.c
 	gcc -g -Wall -o pow2 pow2.c -lm
+
+proxy: proxy.c
+	gcc -g -Wall -o proxy proxy.c -lpthread
 
 saxonclient: saxonclient.c
 	gcc -g -Wall -o saxonclient saxonclient.c -lcurl
