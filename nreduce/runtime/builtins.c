@@ -327,7 +327,7 @@ static void aref_set_tail(task *tsk, cell *ref, pntr newtail)
   write_barrier_ifnew(tsk,ref,newtail);
 }
 
-static carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr)
+static carray *carray_new(task *tsk, int dsize, int alloc)
 {
   carray *arr;
 
@@ -344,6 +344,7 @@ static carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr)
   arr->alloc = alloc;
   arr->size = 0;
   arr->elemsize = dsize;
+  arr->multiref = 0;
   arr->nchars = 0;
 
   #ifdef PROFILING
@@ -356,7 +357,7 @@ static carray *carray_new(task *tsk, int dsize, int alloc, carray *oldarr)
 /* Can be called from native code */
 cell *create_array_cell(task *tsk, int dsize, int alloc)
 {
-  carray *carr = carray_new(tsk,dsize,alloc,NULL);
+  carray *carr = carray_new(tsk,dsize,alloc);
 
   cell *refcell = alloc_cell(tsk);
   refcell->type = CELL_AREF;
@@ -401,6 +402,7 @@ static void convert_to_string(task *tsk, carray *arr)
 static void check_array_convert(task *tsk, cell *refcell, const char *from)
 {
   carray *arr = (carray*)get_pntr(refcell->field1);
+  assert(!arr->multiref);
   aref_resolve_tail(tsk,refcell);
   if ((sizeof(pntr) == arr->elemsize) &&
       ((MAX_ARRAY_SIZE == arr->size) || (CELL_FRAME != pntrtype(refcell->field2)))) {
@@ -423,6 +425,7 @@ static void carray_append(task *tsk, cell **refcell, const void *data, int total
 {
   carray *arr = (carray*)get_pntr((*refcell)->field1);
   assert(dsize == arr->elemsize); /* sanity check */
+  assert(!arr->multiref); /* can only append if there's a single reference */
 
   while (1) {
     int count = totalcount;
@@ -466,7 +469,7 @@ static void carray_append(task *tsk, cell **refcell, const void *data, int total
 
     cell *oldref = *refcell;
 
-    arr = carray_new(tsk,dsize,totalcount,arr);
+    arr = carray_new(tsk,dsize,totalcount);
 
     *refcell = alloc_cell(tsk);
     (*refcell)->type = CELL_AREF;
@@ -494,7 +497,7 @@ void maybe_expand_array(task *tsk, pntr p)
       pntr secondhead = resolve_pntr(secondcell->field1);
       pntr secondtail = resolve_pntr(secondcell->field2);
 
-      carray *arr = carray_new(tsk,sizeof(pntr),8,NULL); /* allocate 8 to allow for expansion */
+      carray *arr = carray_new(tsk,sizeof(pntr),8); /* allocate 8 to allow for expansion */
 
       cell *refcell = firstcell;
       write_barrier(tsk,refcell);
@@ -513,6 +516,12 @@ void maybe_expand_array(task *tsk, pntr p)
   if (CELL_AREF == pntrtype(p)) {
     cell *refcell = (cell*)get_pntr(p);
     carray *arr = aref_array(p);
+
+    /* If the array object potentially has multiple AREF cells referencing it, then it
+       might be part of several lists and thus we must avoid expanding it as otherwise
+       we could end up with extra data appearing in the middle of existing lists. */
+    if (arr->multiref)
+      return;
 
     aref_resolve_tail(tsk,refcell);
 
@@ -886,6 +895,26 @@ static void b_arrayitem(task *tsk, pntr *argstack)
   }
 }
 
+static void b_restring(task *tsk, pntr *argstack)
+{
+  /* This function is an ugly hack necessary to get around a race condition in Java's
+     built-in web server used for publishing web services. The race condition causes
+     it to "miss" some of the data contained in a HTTP request if the request line
+     and headers are not received as a single unit by the server. When sending a
+     request built out of multiple arrays, NReduce issues one write operation for each,
+     exposing the race condition in the web server. This function joins a set of arrays
+     into a single array; it is called from xq::post2 to ensure that the request is
+     sent as a single unit. */
+
+  char *str = NULL;
+  if (0 > array_to_string(argstack[0],&str)) {
+    set_error(tsk,"restring: argument is not a string");
+    return;
+  }
+  argstack[0] = string_to_array(tsk,str);
+  free(str);
+}
+
 static void b_arrayprefix(task *tsk, pntr *argstack)
 {
   pntr npntr = argstack[2];
@@ -912,18 +941,36 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
     int index = aref_index(refpntr);
 
     if (0 >= n) {
-      argstack[0] = tsk->globnilpntr;
+      argstack[0] = restpntr;
       return;
     }
 
     if (n > arr->size-index)
       n = arr->size-index;
 
-    /* Create a new array with a copy of the old data */
-    if (sizeof(pntr) == arr->elemsize)
-      argstack[0] = pointers_to_list(tsk,(pntr*)(arr->elements+index*arr->elemsize),n,restpntr);
-    else
-      argstack[0] = binary_data_to_list(tsk,arr->elements+index*arr->elemsize,n,restpntr);
+    if ((0 == index) && (n == arr->size)) {
+      /* Optimisation: Instead of creating a new array with a copy of the data, simply
+         create a new aref cell which references the existing array data. This means that
+         the data can be shared, which is useful if the array is large and the copy is
+         part of another list. */
+
+      cell *new_aref = alloc_cell(tsk);
+      new_aref->type = CELL_AREF;
+      make_pntr(new_aref->field1,arr);
+      aref_set_tail(tsk,new_aref,restpntr);
+      make_aref_pntr(argstack[0],new_aref,index);
+
+      /* We set the multiref flag here to ensure that this array never gets expanded. If
+         this wasn't done, then we could get data unexpectedly appearing in existing lists. */
+      arr->multiref = 1;
+    }
+    else {
+      /* Create a new array with a copy of the old data */
+      if (sizeof(pntr) == arr->elemsize)
+        argstack[0] = pointers_to_list(tsk,(pntr*)(arr->elements+index*arr->elemsize),n,restpntr);
+      else
+        argstack[0] = binary_data_to_list(tsk,arr->elements+index*arr->elemsize,n,restpntr);
+    }
   }
   else {
     set_error(tsk,"arrayprefix: expected aref or cons, got %s",cell_types[pntrtype(refpntr)]);
@@ -2117,5 +2164,6 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "isspace",        1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_isspace        },
 
 { "lcons",          2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
+{ "restring",       1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_restring       },
 
 };

@@ -149,8 +149,9 @@ struct gaddr;
 #define B_ISSPACE        66
 
 #define B_LCONS          67
+#define B_RESTRING       68
 
-#define NUM_BUILTINS     68
+#define NUM_BUILTINS     69
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -219,7 +220,7 @@ typedef struct cell {
 #define INDEX_MASK 0x0003FFFF
 #define PNTR_VALUE 0xFFF00000
 #define NULL_PNTR (*(pntr*)NULL_PNTR_BITS)
-#define MAX_ARRAY_SIZE (1 << 18)
+#define MAX_ARRAY_SIZE (1 << 19)
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
@@ -335,7 +336,7 @@ typedef struct carray {
   int alloc;
   int size;
   int elemsize;
-  int pad;
+  int multiref;
   int nchars;
   char elements[];
 } carray;

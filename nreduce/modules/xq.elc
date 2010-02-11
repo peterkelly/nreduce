@@ -893,7 +893,7 @@ post url content = (http::parse_url url (post2 url content))
 
 post2 url content scheme host port path =
 (letrec
-  request = (++ "HEAD / HTTP/1.1\r\nHost: "
+  request = (++ (restring (++ "HEAD / HTTP/1.1\r\nHost: "
             (++ host
             (++ "\r\n\r\n"
             (++ "POST "
@@ -902,7 +902,7 @@ post2 url content scheme host port path =
             (++ host
             (++ "\r\nContent-Type: text/xml; charset=utf-8\r\nSOAPAction: \"\"\r\nContent-Length: "
             (++ (numtostring (len content))
-            (++ "\r\nConnection: close\r\n\r\n" content))))))))))
+            "\r\nConnection: close\r\n\r\n")))))))))) content)
   stream = (connect host (stringtonum port) request)
  in
   (http::parse_response stream (post3 url content)))
