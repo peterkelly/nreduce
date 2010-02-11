@@ -32,3 +32,6 @@ $SCRIPT_DIR/plotdata.sh jobs plots divconq-tr "Divide & conquer"
 $SCRIPT_DIR/plotdata.sh jobs plots pipeline-tr "Pipeline"
 $SCRIPT_DIR/plotdata.sh jobs plots pp-tr "Software pipeline"
 $SCRIPT_DIR/plotdata.sh jobs plots msdp-tr "Multi-stage data parallelism"
+
+$SCRIPT_DIR/plotjob.sh jobs plots marks-time "Student marks workflow"
+$SCRIPT_DIR/plotdata.sh jobs plots marks-tr "Student marks workflow"

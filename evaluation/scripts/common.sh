@@ -221,7 +221,7 @@ shutdown()
     check_for_crash
     echo "ok"
 
-    echo -n "Killing any lingering VM noes... "
+    echo -n "Killing any lingering VM nodes... "
     parsh -h $JOB_DIR/jobnodes 'killall -9 nreduce' >/dev/null 2>&1
     echo "ok"
 

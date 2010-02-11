@@ -20,8 +20,8 @@ mkdir -p $PLOT_DIR/plots/$PLOT_NAME
 
 
 # Extract + collate execution times from all runs
-gettimes.sh $JOBS_DIR/worksize-p worksize-p.x128 $PLOT_DIR/plots/$PLOT_NAME/worksize-p.x128.dat
-gettimes.sh $JOBS_DIR/worksize-np worksize-np.x128 $PLOT_DIR/plots/$PLOT_NAME/worksize-np.x128.dat
+$SCRIPT_DIR/gettimes.sh $JOBS_DIR/worksize-p worksize-p.x128 $PLOT_DIR/plots/$PLOT_NAME/worksize-p.x128.dat
+$SCRIPT_DIR/gettimes.sh $JOBS_DIR/worksize-np worksize-np.x128 $PLOT_DIR/plots/$PLOT_NAME/worksize-np.x128.dat
 
 # Plot execution time
 cd $OUTPUT_DIR

@@ -24,4 +24,5 @@ fi
 
 export LOCAL_PORT_RANGE=49152-65535
 #export EVENTS_DIR=$JOB_DIR/logs
+export JOB_DIR
 ~/dev/nreduce/src/nreduce -w >$JOB_DIR/logs/$INITIAL.log 2>&1
