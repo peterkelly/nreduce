@@ -138,7 +138,6 @@ public class Marks
 
     HttpServer server = HttpServer.create(new InetSocketAddress(port), 5);
     server.setExecutor(Executors.newFixedThreadPool(3));
-    server.start();
 
     Endpoint endpoint = Endpoint.create(new Marks());
     endpoint.publish(server.createContext("/marks"));
@@ -146,6 +145,7 @@ public class Marks
     HttpContext context = server.createContext("/");
     context.setHandler(new BasicHandler());
 
+    server.start();
     System.out.println("Marks service started");
   }
 }
