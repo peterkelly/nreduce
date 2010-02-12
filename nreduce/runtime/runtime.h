@@ -506,6 +506,7 @@ typedef struct task {
   pntr argsp;
   int eventskey;
   int eventsfd;
+  int native_started;
 
   /* bytecode */
   char *bcdata;

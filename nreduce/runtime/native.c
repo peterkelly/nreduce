@@ -420,13 +420,25 @@ void print_instruction(task *tsk, int ebp, int addr, int opcode)
  * 
  * The code modification used to be done by setting a single byte 0xCC at both places, which
  * corresponds to an INT 3 instruction that causes a SIGTRAP signal to be sent to the process.
- * However, a kernel bug in OS X causes the SIGTRAP signals to be occasionally missed. For this
- * reason we now use CALL instead.
+ * However, a kernel bug in OS X 10.4 caused the SIGTRAP signals to be occasionally missed. For
+ * this reason we now use CALL instead. The bug was fixed in 10.5 but given the current solution
+ * works I decided to keep it instead of changing back.
  */
 void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 {
   ucontext_t *uc = (ucontext_t*)uc1;
   task *tsk = pthread_getspecific(task_key);
+
+  assert(tsk);
+
+  if (!tsk->usr1setup)
+    return;
+  if (!tsk->native_started) {
+    node_log(tsk->n,LOG_INFO,"SIGUSR1 before native start; handling interrupt directly");
+    handle_interrupt(tsk);
+    return;
+  }
+
   int stackoffset = tsk->normal_esp-(void*)UC_ESP(uc);
   const instruction *program_ops = bc_instructions(tsk->bcdata);
   void *eip;
@@ -434,11 +446,6 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
   int bcaddr;
   unsigned char zero5[5] = {0,0,0,0,0};
   int bp;
-
-  assert(tsk);
-
-  if (!tsk->usr1setup)
-    return;
 
   if (tsk->trap_pending || tsk->native_finished || tsk->done)
     return;
@@ -988,6 +995,10 @@ void native_compile(char *bcdata, int bcsize, task *tsk)
   /* basically runnable_owner_native_code but without the assert */
   I_MOV(reg(EBP),absmem((int)tsk->runptr));
   I_MOV(absmem((int)tsk->runptr),imm(1));
+
+  /* Set the started flag so that native_sigusr1 can rely on having
+     the task in the expected state */
+  I_MOV(absmem((int)&tsk->native_started),imm(1));
 
   asm_check_runnable(tsk,as);
   assert(OP_BEGIN == program_ops[0].opcode);
