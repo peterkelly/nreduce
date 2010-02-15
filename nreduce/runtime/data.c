@@ -231,12 +231,69 @@ void read_end(reader *rd)
 
 /* Write & read functions for heap objects */
 
+static void write_object_address(array *arr, task *tsk, pntr p)
+{
+  global *target;
+  assert(CELL_NUMBER != pntrtype(p));
+  if (NULL != (target = targethash_lookup(tsk,p))) {
+    /* This object is a replica of an object in another task... send the address of the
+       master copy, rather than our own */
+    assert(0 <= target->addr.lid);
+    assert(target->addr.tid != tsk->tid);
+    write_gaddr(arr,tsk,target->addr);
+  }
+  else {
+    /* We have the master copy of the object... send the physical address */
+    write_gaddr(arr,tsk,get_physical_address(tsk,p));
+  }
+}
+
+static void write_buildarray_frame(array *arr, task *tsk, pntr p)
+{
+  /* Instead of sending the actual aref object, send a frame representing a call
+     to the buildarray function. The first parameter is the actual carray object,
+     which will be sent as a reference, for which the recipient will send another
+     FETCH request if it does not already have the array. If it does have the array,
+     we avoid the redundant transfer.
+
+     When this frame is run by the recipient, it will build an AREF cell referencing
+     the array, with the appropriate index and tail fields set. */
+
+  int address = bc_funinfo(tsk->bcdata)[B_BUILDARRAY].address;
+  int nfetchers = 0;
+
+  assert(3 == bc_instructions(tsk->bcdata)[address].expcount);
+
+  cell *aref = get_pntr(p);
+  pntr indexp;
+  set_pntrdouble(indexp,(double)aref_index(p));
+
+  write_int(arr,CELL_FRAME);        /* Object type */
+  write_object_address(arr,tsk,p);  /* Object address */
+  write_int(arr,address);           /* Address of start of buildarray wrapper function */
+  write_int(arr,nfetchers);         /* Fetchers (none) */
+  write_ref(arr,tsk,aref->field2);  /* Third arg: tail */
+  write_ref(arr,tsk,indexp);        /* Second arg: index */
+  write_ref(arr,tsk,aref->field1);  /* First arg: carray object */
+}
+
 static void write_aref(array *arr, task *tsk, pntr p)
 {
   assert(CELL_AREF == pntrtype(p));
+
   carray *carr = aref_array(p);
   int index = aref_index(p);
   int i;
+
+  /* If the array size is 1kb or greater, send a builarray frame so that the data is shared. */
+  if (carr->size >= 1024) {
+    write_buildarray_frame(arr,tsk,p);
+    return;
+  }
+
+  /* Otherwise, just send the aref directly, and the recipient will make a copy of it. */
+  write_int(arr,CELL_AREF);
+  write_object_address(arr,tsk,p);
 
   assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
   assert(MAX_ARRAY_SIZE >= carr->size);
@@ -248,10 +305,12 @@ static void write_aref(array *arr, task *tsk, pntr p)
 
   if (1 == carr->elemsize)
     write_binary(arr,carr->elements,carr->size);
-  else
+  else {
     for (i = 0; i < carr->size; i++)
       write_ref(arr,tsk,((pntr*)carr->elements)[i]);
+  }
   write_ref(arr,tsk,aref_tail(p));
+  carr->multiref = 1; /* prevent further expansion */
 }
 
 static void read_aref(reader *rd, pntr *pout)
@@ -273,6 +332,7 @@ static void read_aref(reader *rd, pntr *pout)
   cell *refcell = get_pntr(paref);
   carray *carr = aref_array(paref);
   carr->size = size;
+  carr->multiref = 1; /* prevent further expansion */
   assert(carr->alloc == size);
   if (1 == elemsize) {
     read_binary(rd,carr->elements,size);
@@ -286,9 +346,62 @@ static void read_aref(reader *rd, pntr *pout)
   make_aref_pntr(*pout,refcell,index);
 }
 
+static void write_array(array *arr, task *tsk, pntr p)
+{
+  assert(CELL_O_ARRAY == pntrtype(p));
+  carray *carr = (carray*)get_pntr(p);
+  int i;
+
+  assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
+  assert(MAX_ARRAY_SIZE >= carr->size);
+
+  write_int(arr,CELL_O_ARRAY);
+  write_object_address(arr,tsk,p);
+  write_int(arr,carr->elemsize);
+  write_int(arr,carr->size);
+
+  if (1 == carr->elemsize)
+    write_binary(arr,carr->elements,carr->size);
+  else {
+    for (i = 0; i < carr->size; i++)
+      write_ref(arr,tsk,((pntr*)carr->elements)[i]);
+  }
+
+  carr->multiref = 1; /* prevent further expansion */
+}
+
+static void read_array(reader *rd, pntr *pout)
+{
+  task *tsk = rd->tsk;
+  int elemsize;
+  int size;
+
+  read_int(rd,&elemsize);
+  read_int(rd,&size);
+
+  assert((1 == elemsize) || (sizeof(pntr) == elemsize));
+  assert(MAX_ARRAY_SIZE >= size);
+
+  carray *carr = carray_new(tsk,elemsize,size);
+  carr->size = size;
+  carr->multiref = 1; /* prevent further expansion */
+  assert(carr->alloc == size);
+  if (1 == elemsize) {
+    read_binary(rd,carr->elements,size);
+  }
+  else {
+    int i;
+    for (i = 0; i < size; i++)
+      read_pntr(rd,&((pntr*)carr->elements)[i]);
+  }
+  make_pntr(*pout,carr);
+}
+
 static void write_cons(array *arr, task *tsk, pntr p)
 {
   assert(CELL_CONS == pntrtype(p));
+  write_int(arr,CELL_CONS);
+  write_object_address(arr,tsk,p);
   write_ref(arr,tsk,get_pntr(p)->field1);
   write_ref(arr,tsk,get_pntr(p)->field2);
 }
@@ -312,6 +425,8 @@ static void read_cons(reader *rd, pntr *pout)
 
 static void write_frame(array *arr, task *tsk, pntr p)
 {
+  write_int(arr,CELL_FRAME);
+  write_object_address(arr,tsk,p);
   assert(CELL_FRAME == pntrtype(p));
   frame *f = (frame*)get_pntr(get_pntr(p)->field1);
   int i;
@@ -393,6 +508,8 @@ static void write_cap(array *arr, task *tsk, pntr p)
   assert(CELL_CAP == pntrtype(p));
   cap *cp = (cap*)get_pntr(get_pntr(p)->field1);
   int i;
+  write_int(arr,CELL_CAP);
+  write_object_address(arr,tsk,p);
   write_int(arr,cp->arity);
   write_int(arr,cp->address);
   write_int(arr,cp->fno);
@@ -444,6 +561,8 @@ static void write_sysobject(array *arr, task *tsk, pntr p)
 {
   assert(CELL_SYSOBJECT == pntrtype(p));
   sysobject *so = (sysobject*)get_pntr(get_pntr(p)->field1);
+  write_int(arr,CELL_SYSOBJECT);
+  write_object_address(arr,tsk,p);
   write_int(arr,so->type);
   write_int(arr,so->ownertid);
   write_socketid(arr,so->sockid);
@@ -516,6 +635,7 @@ void read_pntr(reader *rd, pntr *pout)
 
     switch (type) {
     case CELL_AREF:      read_aref(rd,pout); break;
+    case CELL_O_ARRAY:   read_array(rd,pout); break;
     case CELL_CONS:      read_cons(rd,pout); break;
     case CELL_FRAME:     read_frame(rd,pout); break;
     case CELL_CAP:       read_cap(rd,pout); break;
@@ -638,27 +758,13 @@ void write_pntr(array *arr, task *tsk, pntr p, int refonly)
     }
   }
   else {
-    global *target;
 
     if ((CELL_CONS == pntrtype(p)) || (CELL_AREF == pntrtype(p)))
       maybe_expand_array(tsk,p);
 
-    write_int(arr,pntrtype(p));
-
-    if (NULL != (target = targethash_lookup(tsk,p))) {
-      /* This object is a replica of an object in another task... send the address of the
-         master copy, rather than our own */
-      assert(0 <= target->addr.lid);
-      assert(target->addr.tid != tsk->tid);
-      write_gaddr(arr,tsk,target->addr);
-    }
-    else {
-      /* We have the master copy of the object... send the physical address */
-      write_gaddr(arr,tsk,get_physical_address(tsk,p));
-    }
-
     switch (pntrtype(p)) {
     case CELL_AREF:      write_aref(arr,tsk,p); break;
+    case CELL_O_ARRAY:   write_array(arr,tsk,p); break;
     case CELL_CONS:      write_cons(arr,tsk,p); break;
     case CELL_FRAME:     write_frame(arr,tsk,p); break;
     case CELL_CAP:       write_cap(arr,tsk,p); break;

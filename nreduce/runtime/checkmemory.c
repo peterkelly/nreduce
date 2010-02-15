@@ -79,14 +79,16 @@ static void check_all_refs(task *tsk, int cnewgen)
       }
       case CELL_AREF: {
         assert(oldgen_pntr_valid(tsk,cnewgen,c->field1));
-        carray *carr = (carray*)get_pntr(c->field1);
-        pntr tail = c->field2;
+        assert(oldgen_pntr_valid(tsk,cnewgen,c->field2));
+        break;
+      }
+      case CELL_O_ARRAY: {
+        carray *carr = (carray*)c;
         if (sizeof(pntr) == carr->elemsize) {
           int i;
           for (i = 0; i < carr->size; i++)
             assert(oldgen_pntr_valid(tsk,cnewgen,((pntr*)carr->elements)[i]));
         }
-        assert(oldgen_pntr_valid(tsk,cnewgen,tail));
         break;
       }
       case CELL_FRAME: {
@@ -170,11 +172,12 @@ static int cell_has_new_ref(task *tsk, cell *c)
   case CELL_IND:
     return is_new_ref(c->field1);
     break;
-  case CELL_AREF: {
+  case CELL_AREF:
     if (is_new_ref(c->field1))
       return 1;
-    carray *carr = (carray*)get_pntr(c->field1);
-    pntr tail = c->field2;
+    return is_new_ref(c->field2);
+  case CELL_O_ARRAY: {
+    carray *carr = (carray*)c;
     if (sizeof(pntr) == carr->elemsize) {
       int i;
       for (i = 0; i < carr->size; i++) {
@@ -182,7 +185,7 @@ static int cell_has_new_ref(task *tsk, cell *c)
           return 1;
       }
     }
-    return is_new_ref(tail);
+    return 0;
   }
   case CELL_FRAME: {
     frame *f = (frame*)get_pntr(c->field1);

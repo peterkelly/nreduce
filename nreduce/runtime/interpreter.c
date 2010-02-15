@@ -2011,6 +2011,7 @@ inline void op_consn(task *tsk, frame *runnable, const instruction *instr)
   make_aref_pntr(runnable->data[instr->expcount-n],refcell,0);
 }
 
+/* Can be called from native code */
 void make_item_frame(task *tsk, frame *runnable, int expcount, int pos)
 {
   const instruction *program_ops = bc_instructions(tsk->bcdata);

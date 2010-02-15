@@ -214,23 +214,24 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
   #endif
   cell *c = (cell*)v;
   switch (v->type) {
-  case CELL_AREF: {
-    mark(tsk,c->field1,bit,depth+1);
+  case CELL_AREF:
     c->field1 = resolve_copy_pntr(tsk,c,bit,c->field1);
+    assert(CELL_O_ARRAY == pntrtype(c->field1));
+    mark(tsk,c->field1,bit,depth+1);
     c->field2 = resolve_copy_pntr(tsk,c,bit,c->field2);
-    carray *arr = (carray*)get_pntr(c->field1);
-
-    int i;
-    assert(CELL_O_ARRAY == arr->type);
+    if (is_pntr(c->field2))
+      return (header*)get_pntr(c->field2);
+    break;
+  case CELL_O_ARRAY: {
+    carray *arr = (carray*)c;
     assert(MAX_ARRAY_SIZE >= arr->size);
     if (sizeof(pntr) == arr->elemsize) {
+      int i;
       for (i = 0; i < arr->size; i++) {
         ((pntr*)arr->elements)[i] = resolve_copy_pntr(tsk,c,bit,((pntr*)arr->elements)[i]);
         mark(tsk,((pntr*)arr->elements)[i],bit,depth+1);
       }
     }
-    if (is_pntr(c->field2))
-      return (header*)get_pntr(c->field2);
     break;
   }
   case CELL_CONS: {
@@ -284,8 +285,6 @@ static header *mark_refs(task *tsk, header *v, unsigned int bit, int depth)
   case CELL_HOLE:
   case CELL_SYMBOL:
     break;
-  case CELL_O_ARRAY:
-    /* taken care of by the AREF cell */
   case CELL_O_CAP:
     /* taken care of by the CAP cell */
     break;
@@ -844,13 +843,16 @@ static void replace_refs_cell(task *tsk, cell *c, int check)
     break;
   case CELL_AREF: {
     REPLACE_PNTR(c->field1);
-    carray *carr = (carray*)get_pntr(c->field1);
+    REPLACE_PNTR(c->field2);
+    break;
+  }
+  case CELL_O_ARRAY: {
+    carray *carr = (carray*)c;
     if (sizeof(pntr) == carr->elemsize) {
       int i;
       for (i = 0; i < carr->size; i++)
         REPLACE_PNTR(((pntr*)carr->elements)[i]);
     }
-    REPLACE_PNTR(c->field2);
     break;
   }
   case CELL_FRAME: {
@@ -982,8 +984,7 @@ static void replace_refs(task *tsk, int check)
     unsigned int off;
     for (off = BLOCK_START; off < BLOCK_END; off += object_size(off+(char*)bl)) {
       header *h = (header*)(off+(char*)bl);
-      if (h->type < CELL_OBJS)
-        replace_refs_cell(tsk,(cell*)h,check);
+      replace_refs_cell(tsk,(cell*)h,check);
     }
   }
 

@@ -150,8 +150,9 @@ struct gaddr;
 
 #define B_LCONS          67
 #define B_RESTRING       68
+#define B_BUILDARRAY     69
 
-#define NUM_BUILTINS     69
+#define NUM_BUILTINS     70
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -635,6 +636,7 @@ typedef struct task {
   int trap_bcaddr;
   void *interrupt_return_eip;
   int itransfer;
+  int in_direct_handle;
 
   /* tracing */
   pntr trace_root;
@@ -774,6 +776,7 @@ void run_reduction(source *src, char *trace_dir, int trace_type, array *args);
 void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
 void invalid_binary_args(task *tsk, pntr *argstack, int bif);
 
+carray *carray_new(task *tsk, int dsize, int alloc);
 cell *create_array_cell(task *tsk, int dsize, int alloc);
 pntr create_array(task *tsk, int dsize, int alloc);
 pntr pointers_to_list(task *tsk, pntr *data, int size, pntr tail);

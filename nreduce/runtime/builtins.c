@@ -327,7 +327,7 @@ static void aref_set_tail(task *tsk, cell *ref, pntr newtail)
   write_barrier_ifnew(tsk,ref,newtail);
 }
 
-static carray *carray_new(task *tsk, int dsize, int alloc)
+carray *carray_new(task *tsk, int dsize, int alloc)
 {
   carray *arr;
 
@@ -432,8 +432,6 @@ static void carray_append(task *tsk, cell **refcell, const void *data, int total
     if (arr->size+count > MAX_ARRAY_SIZE)
       count = MAX_ARRAY_SIZE - arr->size;
 
-    write_barrier(tsk,*refcell);
-
     if (arr->alloc < arr->size+count) {
       while (arr->alloc < arr->size+count)
         arr->alloc *= 4;
@@ -447,12 +445,14 @@ static void carray_append(task *tsk, cell **refcell, const void *data, int total
         arr->nbytes = sizereq;
       }
 
+      write_barrier(tsk,*refcell);
       make_pntr((*refcell)->field1,arr);
       #ifdef PROFILING
       tsk->stats.array_resizes++;
       #endif
     }
 
+    write_barrier(tsk,(cell*)arr);
     memmove(((unsigned char*)arr->elements)+arr->size*arr->elemsize,
             data,count*arr->elemsize);
     arr->size += count;
@@ -906,6 +906,11 @@ static void b_restring(task *tsk, pntr *argstack)
      into a single array; it is called from xq::post2 to ensure that the request is
      sent as a single unit. */
 
+  /* FIXME: this function fails when the argument contains a REMOTEREF to a later portion
+     of the string. This could be fixed by sending a fetch request for the appropriate
+     tail, and then suspending the calling frame so that this function is woken up when
+     the object arrives. */
+
   char *str = NULL;
   if (0 > array_to_string(argstack[0],&str)) {
     set_error(tsk,"restring: argument is not a string");
@@ -913,6 +918,52 @@ static void b_restring(task *tsk, pntr *argstack)
   }
   argstack[0] = string_to_array(tsk,str);
   free(str);
+}
+
+static void b_buildarray(task *tsk, pntr *argstack)
+{
+  /* When an attempt is made to send an AREF between machines, what is actually sent is
+     a frame which is a call to b_buildarray, containing parameters for the carray object
+     and the tail. When this frame is arrives, the receiver will think that the object
+     associated with the global address it requested is not an AREF, but rather a frame.
+     It will execute this frame, which will call buildarray. When buildarray returns,
+     the frame cell will change to an IND cell which points to the AREF cell. Thus, the
+     object associated with the global address will be an AREF, which is what we originally
+     wanted.
+
+     This approach enables us to do the two transfers (aref and carray object) without having
+     to modify the logic that deals with object reception. We rely on the existing
+     evaluation mechanism to send a FETCH request for the carray object (which it will do
+     before it calls the buildarray function).
+
+     As an optimisation, we could perhaps send the full array if it is less than a particular
+     size. */
+  pntr arrayp = argstack[2];
+  pntr indexp = argstack[1];
+  pntr tailp = argstack[0];
+
+  node_log(tsk->n,LOG_INFO,"b_buildarray start: arrayp %s indexp %s tailp %s",
+           cell_types[pntrtype(arrayp)],
+           cell_types[pntrtype(indexp)],
+           cell_types[pntrtype(tailp)]);
+
+  CHECK_ARG(2,CELL_O_ARRAY); /* first arg */
+  CHECK_ARG(1,CELL_NUMBER); /* second arg */
+
+  carray *carr = (carray*)get_pntr(arrayp);
+  int index = (int)pntrdouble(indexp);
+
+  assert((1 == carr->elemsize) || (sizeof(pntr) == carr->elemsize));
+  assert(MAX_ARRAY_SIZE >= carr->size);
+  assert(index < carr->size);
+
+  cell *refcell = alloc_cell(tsk);
+  refcell->type = CELL_AREF;
+  make_pntr(refcell->field1,carr);
+  refcell->field2 = tailp;
+  make_aref_pntr(argstack[0],refcell,index);
+  node_log(tsk->n,LOG_INFO,"b_buildarray end: elemsize %d, size %d",
+           carr->elemsize,carr->size);
 }
 
 static void b_arrayprefix(task *tsk, pntr *argstack)
@@ -2165,5 +2216,6 @@ builtin builtin_info[NUM_BUILTINS] = {
 
 { "lcons",          2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
 { "restring",       1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_restring       },
+{ "buildarray",     3, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_buildarray     },
 
 };

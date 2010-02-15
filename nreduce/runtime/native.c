@@ -431,11 +431,13 @@ void native_sigusr1(int sig, siginfo_t *ino, void *uc1)
 
   assert(tsk);
 
-  if (!tsk->usr1setup)
+  if (!tsk->usr1setup || tsk->in_direct_handle)
     return;
   if (!tsk->native_started) {
     node_log(tsk->n,LOG_INFO,"SIGUSR1 before native start; handling interrupt directly");
+    tsk->in_direct_handle = 1;
     handle_interrupt(tsk);
+    tsk->in_direct_handle = 0;
     return;
   }
 
