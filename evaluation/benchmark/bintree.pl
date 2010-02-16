@@ -2,13 +2,13 @@
 
 sub bintree
 {
-  my ($depth,$max) = @_;
+  my $depth = $_[0];
 
-  if ($depth == $max) {
+  if ($depth == 0) {
     return undef;
   }
   else {
-    return [ bintree($depth+1,$max), bintree($depth+1,$max) ];
+    return [ bintree($depth-1), bintree($depth-1) ];
   }
 }
 
@@ -24,6 +24,6 @@ sub countnodes
 }
 
 my $n = ($#ARGV < 0) ? 16 : $ARGV[0];
-my $tree = bintree(0,$n);
+my $tree = bintree($n);
 my $count = countnodes($tree);
 print "$count\n";

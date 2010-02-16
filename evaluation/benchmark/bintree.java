@@ -9,12 +9,12 @@ public class bintree
     this.right = right;
   }
 
-  static bintree mktree(int depth, int max)
+  static bintree mktree(int depth)
   {
-    if (depth == max)
+    if (depth == 0)
       return null;
     else
-      return new bintree(mktree(depth+1,max),mktree(depth+1,max));
+      return new bintree(mktree(depth-1),mktree(depth-1));
   }
 
   static int countnodes(bintree tree)
@@ -30,7 +30,7 @@ public class bintree
     int n = 16;
     if (args.length > 0)
       n = Integer.parseInt(args[0]);
-    bintree tree = mktree(0,n);
+    bintree tree = mktree(n);
     int count = countnodes(tree);
     System.out.println(count);
   }

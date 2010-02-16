@@ -74,9 +74,11 @@ if [ -e "${PROGRAM}2.py" ]; then
   runcmd "./${PROGRAM}2.py" "python2"
 fi
 
-runcmd "js ${PROGRAM}.js" "js"
+runcmd "./v8wrapper.sh ${PROGRAM}.js" "js"
 if [ -e "${PROGRAM}2.js" ]; then
-  runcmd "js ${PROGRAM}2.js" "js2"
+  runcmd "./v8wrapper.sh ${PROGRAM}2.js" "js2"
 fi
+
+runcmd "./hs${PROGRAM}" "haskell"
 
 rmdir "$TEMPDIR"

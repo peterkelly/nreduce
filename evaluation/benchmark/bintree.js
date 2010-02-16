@@ -4,12 +4,12 @@ function node(left,right)
   this.right = right;
 }
 
-function bintree(depth,max)
+function bintree(depth)
 {
-  if (depth == max)
+  if (depth == 0)
     return null;
   else
-    return new node(bintree(depth+1,max),bintree(depth+1,max));
+    return new node(bintree(depth-1),bintree(depth-1));
 }
 
 function countnodes(tree)
@@ -24,6 +24,6 @@ var n = 16;
 if (arguments.length > 0)
   n = arguments[0];
 
-var tree = bintree(0,n);
+var tree = bintree(n);
 var count = countnodes(tree);
 print(count);

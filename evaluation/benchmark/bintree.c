@@ -14,15 +14,15 @@ int countnodes(bintree *tree)
     return 0;
 }
 
-bintree *mktree(int depth, int max)
+bintree *mktree(int depth)
 {
-  if (depth == max) {
+  if (depth == 0) {
     return NULL;
   }
   else {
     bintree *tree = (bintree*)malloc(sizeof(bintree));
-    tree->left = mktree(depth+1,max);
-    tree->right = mktree(depth+1,max);
+    tree->left = mktree(depth-1);
+    tree->right = mktree(depth-1);
     return tree;
   }
 }
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
   if (2 <= argc)
     n = atoi(argv[1]);
 
-  tree = mktree(0,n);
+  tree = mktree(n);
   printf("%d\n",countnodes(tree));
   freetree(tree);
   return 0;
