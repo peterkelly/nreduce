@@ -66,3 +66,4 @@ hsnsieve: hsnsieve.hs
 clean:
 	rm -f $(objects)
 	rm -f *.class
+	rm -f *.hi

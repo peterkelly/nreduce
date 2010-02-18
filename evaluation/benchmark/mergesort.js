@@ -44,10 +44,10 @@ function merge(xlst,ylst)
       y++;
     }
   }
-  if (x < xlst.length)
-    res = res.concat(xlst.slice(x,xlst.length));
-  if (y < ylst.length)
-    res = res.concat(ylst.slice(y,ylst.length));
+  while (x < xlst.length)
+    res.push(xlst[x++]);
+  while (y < ylst.length)
+    res.push(ylst[y++]);
   return res;
 }
 

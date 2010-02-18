@@ -71,11 +71,11 @@ if (doprint) {
   print("--");
   printMatrix(b);
   print("--");
- }
+}
 
 var c = multiply(a,b);
 if (doprint) {
   printMatrix(c);
   print("");
- }
+}
 print("sum = "+matsum(c));

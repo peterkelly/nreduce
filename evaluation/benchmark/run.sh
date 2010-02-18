@@ -79,6 +79,11 @@ if [ -e "${PROGRAM}2.js" ]; then
   runcmd "./v8wrapper.sh ${PROGRAM}2.js" "js2"
 fi
 
+runcmd "php ${PROGRAM}.php" "php"
+if [ -e "${PROGRAM}2.php" ]; then
+  runcmd "php ${PROGRAM}2.php" "php2"
+fi
+
 runcmd "./hs${PROGRAM}" "haskell"
 
 rmdir "$TEMPDIR"
