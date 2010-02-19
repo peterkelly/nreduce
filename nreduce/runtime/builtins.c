@@ -942,11 +942,6 @@ static void b_buildarray(task *tsk, pntr *argstack)
   pntr indexp = argstack[1];
   pntr tailp = argstack[0];
 
-  node_log(tsk->n,LOG_INFO,"b_buildarray start: arrayp %s indexp %s tailp %s",
-           cell_types[pntrtype(arrayp)],
-           cell_types[pntrtype(indexp)],
-           cell_types[pntrtype(tailp)]);
-
   CHECK_ARG(2,CELL_O_ARRAY); /* first arg */
   CHECK_ARG(1,CELL_NUMBER); /* second arg */
 
@@ -962,8 +957,6 @@ static void b_buildarray(task *tsk, pntr *argstack)
   make_pntr(refcell->field1,carr);
   refcell->field2 = tailp;
   make_aref_pntr(argstack[0],refcell,index);
-  node_log(tsk->n,LOG_INFO,"b_buildarray end: elemsize %d, size %d",
-           carr->elemsize,carr->size);
 }
 
 static void b_arrayprefix(task *tsk, pntr *argstack)

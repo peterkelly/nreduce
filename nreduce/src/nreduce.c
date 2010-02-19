@@ -274,6 +274,13 @@ static void sigsegv(int sig)
   exit(1);
 }
 
+static void sigterm(int sig)
+{
+  char *str = "Received SIGTERM\n";
+  write(STDERR_FILENO,str,strlen(str));
+  exit(1);
+}
+
 static void init_evaluation()
 {
   char *evaluation = args.evaluation;
@@ -320,6 +327,7 @@ int main(int argc, char **argv)
   setbuf(stdout,NULL);
   signal(SIGABRT,sigabrt);
   signal(SIGSEGV,sigsegv);
+  signal(SIGTERM,sigterm);
   signal(SIGPIPE,SIG_IGN);
 
   enable_invalid_fpe();
