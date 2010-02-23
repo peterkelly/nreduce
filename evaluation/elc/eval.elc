@@ -49,17 +49,17 @@ main args =
     "Usage: dataparallel.elc host port size compms\n"
 
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        size = (stringtonum (item 2 args))
-        compms = (stringtonum (item 3 args))
+        port = (ston (item 1 args))
+        size = (ston (item 2 args))
+        compms = (ston (item 3 args))
 
-        callservice n = (stringtonum (tail (connect host
+        callservice n = (ston (tail (connect host
                                  port
-                                 (++ (numtostring n)
-                                     (++ " " (numtostring compms))))))
+                                 (++ (ntos n)
+                                     (++ " " (ntos compms))))))
 
         results = (map callservice
                        (mergesort (!x.!y.- x y)
                                   (map callservice (range 1 size))))
 
- in     (printstrings (map numtostring results))))
+ in     (printstrings (map ntos results))))

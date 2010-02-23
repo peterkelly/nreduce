@@ -1,12 +1,12 @@
-mkrequest n ms = (++ (numtostring n) (++ " " (numtostring ms)))
+mkrequest n ms = (++ (ntos n) (++ " " (ntos ms)))
 
 main args =
 (if (< (len args) 4)
     "Usage: dataparallel.elc host port size compms\n"
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        size = (stringtonum (item 2 args))
-        compms = (stringtonum (item 3 args))
+        port = (ston (item 1 args))
+        size = (ston (item 2 args))
+        compms = (ston (item 3 args))
         callservice n = (connect host port (mkrequest n compms))
         results = (map callservice (range 1 size))
  in     (foldr ++ "\nEND\n" results)))

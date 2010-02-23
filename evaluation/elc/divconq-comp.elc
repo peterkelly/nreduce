@@ -12,19 +12,19 @@ in      (f (divconq f (sub 0 mid lst))
            (divconq f (sub mid right lst)))))))
 
 mkrequest x y ms =
-(++ (numtostring (+ x y)) (++ " " (numtostring ms)))
+(++ (ntos (+ x y)) (++ " " (ntos ms)))
 
 parseresponse resp =
-(stringtonum (tail resp))
+(ston (tail resp))
 
 main args =
 (if (< (len args) 4)
     "Usage: divconq-comp.elc host port size comp\n"
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        size = (stringtonum (item 2 args))
-        comp = (stringtonum (item 3 args))
+        port = (ston (item 1 args))
+        size = (ston (item 2 args))
+        comp = (ston (item 3 args))
         callservice x y =
           (parseresponse (connect host port (mkrequest x y comp)))
         result = (divconq callservice (range 1 size))
- in     (++ (numtostring result) "\nEND\n")))
+ in     (++ (ntos result) "\nEND\n")))

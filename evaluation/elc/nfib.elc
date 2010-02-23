@@ -8,10 +8,10 @@ main args =
 (if (< (len args) 1)
   "Usage: nfib.elc n\n"
   (letrec
-     n = (stringtonum (head args))
+     n = (ston (head args))
    in
      (++ "nfib("
-     (++ (numtostring n)
+     (++ (ntos n)
      (++ ") = "
-     (++ (numtostring (nfib n))
+     (++ (ntos (nfib n))
          "\n"))))))

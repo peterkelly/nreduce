@@ -17,11 +17,11 @@ printstrings strings =
 main args =
 (if (< (len args) 5)
   "Usage: pp-tr.elc nitems nstages isize host port\n"
-(letrec nitems = (stringtonum (item 0 args))
-        nstages = (stringtonum (item 1 args))
-        isize = (stringtonum (item 2 args))
+(letrec nitems = (ston (item 0 args))
+        nstages = (ston (item 1 args))
+        isize = (ston (item 2 args))
         host = (item 3 args)
-        port = (stringtonum (item 4 args))
+        port = (ston (item 4 args))
 
         input = (times isize inputstr)
 

@@ -1,19 +1,19 @@
-mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
+mkrequest n ms     = (++ (ntos n) (++ " " (ntos ms)))
 
-parseresponse resp = (stringtonum (tail resp))
+parseresponse resp = (ston (tail resp))
 
 main args =
 (if (< (len args) 5)
   "Usage: pp-comp.elc nitems nstages comp host port\n"
-(letrec nitems = (stringtonum (item 0 args))
-        nstages = (stringtonum (item 1 args))
-        compms = (stringtonum (item 2 args))
+(letrec nitems = (ston (item 0 args))
+        nstages = (ston (item 1 args))
+        compms = (ston (item 2 args))
         host = (item 3 args)
-        port = (stringtonum (item 4 args))
+        port = (ston (item 4 args))
         callservice n =
           (parseresponse (connect host port (mkrequest n compms)))
         f n x = (if (> n 0)
                     (callservice (f (- n 1) x))
                     x)
         result = (map (f nstages) (range 1 nitems))
- in     (foldr ++ "END\n" (map (!x.++ (numtostring x) "\n") result))))
+ in     (foldr ++ "END\n" (map (!x.++ (ntos x) "\n") result))))

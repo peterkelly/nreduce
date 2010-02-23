@@ -22,7 +22,7 @@ strict_connect host port out =
 (forcelist (connect host port out))
 
 callcompute n =
-(strict_connect "localhost" 1234 (++ (numtostring n) " 20\n"))
+(strict_connect "localhost" 1234 (++ (ntos n) " 20\n"))
 
 flatten lst =
 (if lst

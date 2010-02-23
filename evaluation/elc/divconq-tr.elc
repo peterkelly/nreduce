@@ -23,9 +23,9 @@ main args =
 (if (< (len args) 4)
     "Usage: divconq-tr.elc host port nitems itemsize\n"
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        nitems = (stringtonum (item 2 args))
-        itemsize = (stringtonum (item 3 args))
+        port = (ston (item 1 args))
+        nitems = (ston (item 2 args))
+        itemsize = (ston (item 3 args))
 
         input = (times itemsize inputstr)
 

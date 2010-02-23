@@ -1,13 +1,13 @@
-mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
+mkrequest n ms     = (++ (ntos n) (++ " " (ntos ms)))
 
-parseresponse resp = (stringtonum (tail resp))
+parseresponse resp = (ston (tail resp))
 
 main args =
 (if (< (len args) 4)
   "Usage: pipeline.elc nitems comp port services...\n"
-(letrec nitems = (stringtonum (item 0 args))
-        compms = (stringtonum (item 1 args))
-        port = (stringtonum (item 2 args))
+(letrec nitems = (ston (item 0 args))
+        compms = (ston (item 1 args))
+        port = (ston (item 2 args))
         services = (skip 3 args)
         callservice host n =
           (parseresponse (connect host port (mkrequest n compms)))
@@ -15,4 +15,4 @@ main args =
                       (callservice (head lst) (f (tail lst) x))
                       x)
         result = (map (f services) (range 1 nitems))
- in     (foldr ++ "END\n" (map (!x.++ (numtostring x) "\n") result))))
+ in     (foldr ++ "END\n" (map (!x.++ (ntos x) "\n") result))))

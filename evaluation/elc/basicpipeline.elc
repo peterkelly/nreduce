@@ -3,15 +3,15 @@ main args =
     "Please specify host and port\n"
 
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
+        port = (ston (item 1 args))
 
-        callservice a b = (stringtonum (connect host
+        callservice a b = (ston (connect host
                                                 port
-                                                (++ (numtostring (+ a b))
+                                                (++ (ntos (+ a b))
                                                     " 1")))
 
         result = (foldr callservice 0 (range 1 5))
 
 
- in     (++ (numtostring result) "\n")))
+ in     (++ (ntos result) "\n")))
 

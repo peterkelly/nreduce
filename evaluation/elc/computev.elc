@@ -18,9 +18,9 @@ strict_connect host port out =
 
 callcompute work n =
 (strict_connect "localhost" 1234
-  (++ (numtostring n)
+  (++ (ntos n)
   (++ " "
-  (++ (numtostring work) "\n"))))
+  (++ (ntos work) "\n"))))
 
 flatten lst =
 (if lst
@@ -31,7 +31,7 @@ main args =
 (if (< (len args) 1)
   "Usage: callcompute3d <work>\n"
 (letrec
-  work = (stringtonum (item 0 args))
+  work = (ston (item 0 args))
 in
 (flatten
   (parmap (callcompute work) (range 1 100)))))

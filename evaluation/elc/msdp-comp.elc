@@ -3,19 +3,19 @@ sum lst =
     (+ (head lst) (sum (tail lst)))
     0)
 
-mkrequest n ms     = (++ (numtostring n) (++ " " (numtostring ms)))
+mkrequest n ms     = (++ (ntos n) (++ " " (ntos ms)))
 
-parseresponse resp = (stringtonum (tail resp))
+parseresponse resp = (ston (tail resp))
 
 main args =
 (if (< (len args) 4)
     "Usage: msdp-comp.elc host port size stages compms\n"
 
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        size = (stringtonum (item 2 args))
-        stages = (stringtonum (item 3 args))
-        compms = (stringtonum (item 4 args))
+        port = (ston (item 1 args))
+        size = (ston (item 2 args))
+        stages = (ston (item 3 args))
+        compms = (ston (item 4 args))
         callservice n =
           (parseresponse (connect host port (mkrequest n compms)))
         loop total stages =
@@ -27,4 +27,4 @@ main args =
                  (loop total2 (- stages 1)))
               total)
         result = (loop 0 stages)
- in     (++ (numtostring result) "\nEND\n")))
+ in     (++ (ntos result) "\nEND\n")))

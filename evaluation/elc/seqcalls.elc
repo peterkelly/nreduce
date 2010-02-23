@@ -9,6 +9,6 @@ main args =
 (if (< (len args) 3)
     "Usage: seqcalls.elc host port ncalls\n"
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        ncalls = (stringtonum (item 2 args))
+        port = (ston (item 1 args))
+        ncalls = (ston (item 2 args))
 in      (loop host port 0 ncalls)))

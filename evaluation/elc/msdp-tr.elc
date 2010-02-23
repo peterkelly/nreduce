@@ -16,10 +16,10 @@ main args =
     "Usage: msdp-tr.elc host port nitems nstages inpsize\n"
 
 (letrec host = (item 0 args)
-        port = (stringtonum (item 1 args))
-        nitems = (stringtonum (item 2 args))
-        nstages = (stringtonum (item 3 args))
-        inpsize = (stringtonum (item 4 args))
+        port = (ston (item 1 args))
+        nitems = (ston (item 2 args))
+        nstages = (ston (item 3 args))
+        inpsize = (ston (item 4 args))
 
 
         input = (times inpsize inputstr)
@@ -27,7 +27,7 @@ main args =
         process data index =
           (connect host
                    port
-                   (++ "process\n" (++ (numtostring index) (++ " " data))))
+                   (++ "process\n" (++ (ntos index) (++ " " data))))
 
         combine results =
           (connect host
