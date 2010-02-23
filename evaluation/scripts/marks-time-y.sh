@@ -5,9 +5,8 @@ XQ_DIR=$SCRIPT_DIR/../xquery
 
 . $SCRIPT_DIR/common.sh
 
-echo "export NSTUDENTS=1" > $JOB_DIR/env
-echo "export NTESTS=1024" >> $JOB_DIR/env
-echo "export TESTMS=500" >> $JOB_DIR/env
+. $SCRIPT_DIR/marks-time-params.sh
+
 echo "export OPT_FISHFRAMES=64" >> $JOB_DIR/env
 
 startcservice 'java -cp dev/evaluation/ws Marks' 5000

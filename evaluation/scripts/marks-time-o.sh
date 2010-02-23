@@ -5,9 +5,7 @@ XQ_DIR=$SCRIPT_DIR/../xquery
 
 . $SCRIPT_DIR/common.sh
 
-echo "export NSTUDENTS=1" > $JOB_DIR/env
-echo "export NTESTS=1024" >> $JOB_DIR/env
-echo "export TESTMS=500" >> $JOB_DIR/env
+. $SCRIPT_DIR/marks-time-params.sh
 
 startcservice 'java -cp dev/evaluation/ws Marks' 5000
 startloadbal
@@ -20,7 +18,11 @@ cat $XQ_DIR/marks.xq \
 
 $SCRIPT_DIR/../../xquery/runcompile $JOB_DIR/program.xq > $JOB_DIR/program.elc
 
-time nreduce $JOB_DIR/program.elc
+export LOG_LEVEL=info
+mkdir $JOB_DIR/local_logs
+time nreduce $JOB_DIR/program.elc > $JOB_DIR/program.out 2>$JOB_DIR/local_logs/$HOSTNAME.log
 echo Program exited with status $?
 
 shutdown
+
+java -cp $SCRIPT_DIR/.. util.CollateNetStats $JOB_DIR/local_logs > $JOB_DIR/logs/netstats
