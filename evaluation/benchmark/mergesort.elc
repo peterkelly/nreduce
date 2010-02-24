@@ -18,9 +18,9 @@ mergesort m =
     left2 = (mergesort left)
     right2 = (mergesort right)
   in
-    (merge left2 right2 nil)))
+    (merge left2 right2)))
 
-merge xlst ylst out =
+merge xlst ylst =
 (if xlst
   (if ylst
     (letrec
@@ -28,12 +28,10 @@ merge xlst ylst out =
       y = (head ylst)
      in
       (if (> (strcmp x y) 0)
-        (merge xlst (tail ylst) (cons y out))
-        (merge (tail xlst) ylst (cons x out))))
-    (merge (tail xlst) ylst (cons (head xlst) out)))
-  (if ylst
-    (merge xlst (tail ylst) (cons (head ylst) out))
-    (reverse out)))
+        (cons y (merge xlst (tail ylst)))
+        (cons x (merge (tail xlst) ylst))))
+    xlst)
+  ylst)
 
 main args =
 (letrec
