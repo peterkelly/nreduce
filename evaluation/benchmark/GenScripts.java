@@ -14,18 +14,18 @@ public class GenScripts
     }
   }
 
-  static void genScript(String scriptsDir, String program, int n, int run)
+  static void genScript(String scriptsDir, int run)
     throws IOException
   {
-    PrintWriter out = new PrintWriter(scriptsDir+"/"+program+"_"+n+"_"+run+".sub");
+    PrintWriter out = new PrintWriter(scriptsDir+"/all"+run+".sub");
     out.println("#!/bin/sh");
 
     out.println("#PBS -V");
-    out.println("#PBS -N nreduce");
+    out.println("#PBS -N benchmark");
     out.println("#PBS -j oe");
-    out.println("#PBS -q titan");
+    out.println("#PBS -q hydra");
 
-    out.println("#PBS -l nodes=1:ppn=2,walltime=00:30:00");
+    out.println("#PBS -l nodes=1:ppn=2,walltime=02:00:00");
 
     out.println("# This job's working directory");
     out.println("echo Working directory is $PBS_O_WORKDIR");
@@ -33,18 +33,10 @@ public class GenScripts
     out.println("echo Running on host `hostname`");
     out.println("echo Time is `date`");
 
-    out.println("cd ~/dev/nreduce/benchmark");
-    out.println("export ENGINE=native");
+    out.println("cd ~/dev/evaluation/benchmark");
     out.println("export PATH=\"~/dev/nreduce/src:$PATH\"");
-    out.println("./run.sh "+program+" "+n+" results/run"+run);
+    out.println("scripts/all.sh ~/jobs/benchmark/run"+run);
     out.close();
-  }
-
-  static void genScripts(String scriptsDir, String program, int ns[])
-    throws IOException
-  {
-    for (int n : ns)
-      genScript(scriptsDir,program,n,1);
   }
 
   public static void main(String[] args)
@@ -68,21 +60,37 @@ public class GenScripts
 
     int maxvalues = 0;
     for (ProgTest test : tests) {
-      genScripts(scriptsDir,test.name,test.values);
       if (maxvalues < test.values.length)
         maxvalues = test.values.length;
     }
 
-    PrintWriter out = new PrintWriter(scriptsDir+"/all.sh");
-    for (int run = 1; run <= 5; run++) {
-      for (int i = 0; i < maxvalues; i++) {
-        for (ProgTest test : tests) {
-          if (i < test.values.length) {
-            out.println("./run.sh "+test.name+" "+test.values[i]+" results/run"+run);
-          }
+    int numTests = 10;
+
+    for (int i = 0; i < numTests; i++)
+      genScript(scriptsDir,i);
+
+    File allFile = new File(scriptsDir+"/all.sh");
+    PrintWriter out = new PrintWriter(allFile);
+
+    out.println("#!/bin/bash");
+    out.println("OUTDIR=$1");
+    out.println("if [ -z \"$OUTDIR\" ]; then");
+    out.println("  echo \"Usage: $0 outdir\"");
+    out.println("  exit 1");
+    out.println("fi");
+    out.println();
+    out.println("mkdir -p \"$OUTDIR\"");
+    out.println();
+    for (int i = 0; i < maxvalues; i++) {
+      for (ProgTest test : tests) {
+        if (i < test.values.length) {
+          out.println("./run.sh "+test.name+" "+test.values[i]+" \"$OUTDIR\"");
         }
       }
     }
+    out.println();
+    out.println("touch \"$OUTDIR/done\"");
     out.close();
+    allFile.setExecutable(true);
   }
 }

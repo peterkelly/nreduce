@@ -2,7 +2,9 @@
 program=$1
 arg=$2
 
-echo "arguments = [$arg];" > temp.js
-cat $program >> temp.js
-v8shell temp.js
-rm -f temp.js
+tempfile=`mktemp`
+
+echo "arguments = [$arg];" > $tempfile
+cat $program >> $tempfile
+v8shell $tempfile
+rm -f $tempfile

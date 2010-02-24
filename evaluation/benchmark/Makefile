@@ -1,4 +1,4 @@
-objects = nsieve nsieve.class matmult2 matmult2.class matmult matmult.class bintree bintree.class \
+objects = nsieve nsieve.class matmult matmult.class bintree bintree.class \
 	quicksort quicksort.class quicksort2.class quicksort2 mergesort mergesort.class \
 	mergesort2 mergesort2.class nfib nfib.class mandelbrot mandelbrot.class ProcessResults.class \
 	GenScripts.class hsbintree hsmandelbrot hsnfib hsnfibdouble hsmatmult hsmergesort hsquicksort \
@@ -8,9 +8,6 @@ all: $(objects)
 
 nsieve: nsieve.c
 	gcc -Wall -O3 -o nsieve nsieve.c
-
-matmult2: matmult2.c
-	gcc -Wall -O3 -o matmult2 matmult2.c
 
 matmult: matmult.c
 	gcc -Wall -O3 -o matmult matmult.c -lm

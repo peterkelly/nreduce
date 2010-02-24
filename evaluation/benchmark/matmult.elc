@@ -22,8 +22,8 @@ mkmatrix width height val =
 dosum !x !aptr !bptr !total =
 (if aptr
   (dosum x (tail aptr) (tail bptr)
-    (+ total (* (head aptr)
-                (item x (head bptr)))))
+    (+ total (* (item x (head bptr))
+                (head aptr))))
   total)
 
 multiply a b =

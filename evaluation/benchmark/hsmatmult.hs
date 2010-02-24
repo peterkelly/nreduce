@@ -6,22 +6,22 @@ for i max f = if i < max then
               else
                   []
 
-mkrow :: Int -> Int -> [Int]
+mkrow :: Int -> Int -> [Double]
 mkrow 0 _ = []
-mkrow n val = (val `mod` 23) : (mkrow (n - 1) (val + 1))
+mkrow n val = (fromIntegral (val `mod` 23)) : (mkrow (n - 1) (val + 1))
 
-mkmatrix :: Int -> Int -> Int -> [[Int]]
+mkmatrix :: Int -> Int -> Int -> [[Double]]
 mkmatrix _ 0 _ = []
 mkmatrix width height val = (mkrow width val) :
                             (mkmatrix width (height - 1) (val + width))
 
-dosum :: Int -> [Int] -> [[Int]] -> Int -> Int
+dosum :: Int -> [Double] -> [[Double]] -> Double -> Double
 dosum _ [] _ total = total
 dosum x aptr bptr total =
     dosum x (tail aptr) (tail bptr)
           (total + ((head aptr) * ((head bptr) !! x)))
 
-multiply :: [[Int]] -> [[Int]] -> [[Int]]
+multiply :: [[Double]] -> [[Double]] -> [[Double]]
 multiply a b =
     let arows = length a
         acols = length (head a)
@@ -40,15 +40,15 @@ pad n = if n <= 0 then
 padnum n width = let str = (show n)
                  in (pad (width - (length str))) ++ str
 
-printrow :: [Int] -> String
+printrow :: [Double] -> String
 printrow [] = "\n"
 printrow (h:t) = (padnum h 5) ++ " " ++ (printrow t)
 
-printmatrix :: [[Int]] -> String
+printmatrix :: [[Double]] -> String
 printmatrix [] = ""
 printmatrix (h:t) = (printrow h) ++ (printmatrix t)
 
-matsum :: [[Int]] -> Int
+matsum :: [[Double]] -> Double
 matsum matrix = (sum (map sum matrix))
 
 
@@ -65,9 +65,9 @@ main2 args = let size = (if (length args) > 0 then
                      (printmatrix a) ++ "--\n" ++
                      (printmatrix b) ++ "--\n" ++
                      (printmatrix c) ++ "\nsum = "
-                     ++ (show (matsum c)) ++ "\n"
+                     ++ (show (floor (matsum c))) ++ "\n"
                  else
-                     "sum = " ++ (show (matsum c)) ++ "\n"
+                     "sum = " ++ (show (floor (matsum c))) ++ "\n"
 
 main = do
   args <- getArgs
