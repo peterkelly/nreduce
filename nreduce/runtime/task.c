@@ -51,7 +51,7 @@ pthread_key_t task_key;
 int engine_type = ENGINE_NATIVE;
 int strict_evaluation = 1;
 int opt_postpone = 1;
-int opt_fishframes = 64;
+int opt_fishframes = 128;
 
 global *targethash_lookup(task *tsk, pntr p)
 {
