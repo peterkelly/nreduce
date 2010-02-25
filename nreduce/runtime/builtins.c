@@ -627,7 +627,7 @@ int array_to_string(pntr refpntr, char **str)
         badtype = pntrtype(head);
         break;
       }
-      p = tail;
+      p = resolve_pntr(tail);
     }
     else if (CELL_AREF == pntrtype(p)) {
       carray *arr = aref_array(p);
@@ -651,7 +651,7 @@ int array_to_string(pntr refpntr, char **str)
           }
         }
       }
-      p = aref_tail(p);
+      p = resolve_pntr(aref_tail(p));
     }
     else if (CELL_NIL == pntrtype(p)) {
       break;
