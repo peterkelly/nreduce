@@ -1,10 +1,10 @@
-set terminal postscript eps color size 15cm, 10cm
+set terminal postscript eps color size 15cm, 9cm
 set out "plots/eps/pipeline-utilisation.eps"
 set size 0.75, 0.75
 
 set xlabel "Time (s)"
 set ylabel "Utilization (%)"
-set title "Pipeline with 8 stages"
+set title "Physical pipelining with 8 stages"
 set yr [0:105]
 
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1

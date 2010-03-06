@@ -17,7 +17,11 @@ startloadbal
 startshowload
 echo "Startup completed"
 
-time nreduce $ELC_DIR/pipeline.elc $NITEMS 10000 5000 `grep -v $HOSTNAME $JOB_DIR/jobnodes`
+COMPMS=10000
+PORT=5000
+SERVICES=`grep -v $HOSTNAME $JOB_DIR/jobnodes`
+
+time nreduce $ELC_DIR/pipeline.elc $NITEMS $COMPMS $PORT $SERVICES
 echo Program exited with status $?
 
 shutdown

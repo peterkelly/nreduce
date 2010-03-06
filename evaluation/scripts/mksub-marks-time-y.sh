@@ -13,6 +13,11 @@ expname=marks-time-y
 for ((run = 0; run < 3; run++)); do
   for ((nodes = 1; nodes <= 32; nodes++)); do
     jobname=$expname.r$run.n$nodes
+    if ((nodes >= 8)); then
+      walltime=00:10:00
+    else
+      walltime=01:00:00
+    fi
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -34,7 +39,7 @@ for ((run = 0; run < 3; run++)); do
 #PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=01:30:00
+#PBS -l nodes=$((nodes+1)):ppn=2,walltime=$walltime
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR

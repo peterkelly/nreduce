@@ -13,6 +13,7 @@ JOBS_DIR=$1
 PLOT_DIR=$2
 PLOT_NAME=$3
 TITLE=$4
+EXTRA=$5
 JOB_NAMES="$PLOT_NAME-o $PLOT_NAME-y"
 
 mkdir -p $PLOT_DIR/plots/$PLOT_NAME
@@ -20,15 +21,16 @@ mkdir -p $PLOT_DIR/plots/$PLOT_NAME
 OUTPUT_FILE=$PLOT_DIR/plots/$PLOT_NAME/$PLOT_NAME
 
 cat >$OUTPUT_FILE.plot <<HERE
-set terminal postscript eps color size 15.0cm, 10.0cm
+set terminal postscript eps color size 15.0cm, 9cm
 set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 
 set xlabel "# nodes"
 set ylabel "Data transferred between hosts (MB)"
-set xtics 4
+set xtics (1,4,8,12,16,20,24,28,32)
 set format y "%4.f"
 set title "$TITLE - data transfer"
+set xrange [1:]
 
 set style data lines
 set key bottom right
@@ -37,12 +39,14 @@ set grid
 set style line 1 linewidth 2 linecolor rgbcolor "blue" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "#00CC00" linetype 3
+set style line 4 linewidth 2 linecolor rgbcolor "#FF0000" linetype 1
 set style fill solid 0.2
 
 plot "$PLOT_NAME-o.dat" using 1:(\$2/1024) title "Orchestration" with lines ls 1, \\
      "$PLOT_NAME-y.dat" using 1:(\$2/1024) title "Choreography" with lines ls 2, \\
-     "$PLOT_NAME-y.dat" using 1:(\$3/1024) notitle with lines ls 3, \\
-     "$PLOT_NAME-y.dat" using 1:(\$4/1024) notitle with lines ls 3
+     "$PLOT_NAME-y.dat" using 1:(\$3/1024) title "Choreography min/max" with lines ls 3, \\
+     "$PLOT_NAME-y.dat" using 1:(\$4/1024) notitle with lines ls 3 \
+$EXTRA
 HERE
 
 

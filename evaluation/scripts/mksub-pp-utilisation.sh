@@ -11,7 +11,6 @@ QNAME=`hostname -s`
 expname=pp-utilisation
 
 run=0
-nodes=8
 
 for ((nitems=10; nitems <= 50; nitems += 10)); do
   jobname=$expname.r$run.n$nitems
@@ -36,7 +35,7 @@ for ((nitems=10; nitems <= 50; nitems += 10)); do
 #PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=00:30:00
+#PBS -l nodes=9:ppn=2,walltime=00:30:00
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR
@@ -47,6 +46,6 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh $nitems $nodes >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $nitems >\$JOB_DIR/output 2>&1
 EOF
 done

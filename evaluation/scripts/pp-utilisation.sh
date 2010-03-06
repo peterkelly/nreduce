@@ -1,12 +1,11 @@
 #!/bin/bash
 
-if (($# < 2)); then
+if (($# < 1)); then
   echo "Usage: $0 <size> <nstages>"
   exit 1
 fi
 
 NITEMS=$1
-NSTAGES=$2
 
 SCRIPT_DIR=`dirname $0`
 ELC_DIR=$SCRIPT_DIR/../elc
@@ -18,7 +17,11 @@ startloadbal
 startshowload
 echo "Startup completed"
 
-time nreduce $ELC_DIR/pp-comp.elc $NITEMS $NSTAGES 10000 $HOSTNAME 5001
+COMPMS=10000
+PORT=5001
+SERVICES="$HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME"
+
+time nreduce $ELC_DIR/pipeline.elc $NITEMS $COMPMS $PORT $SERVICES
 echo Program exited with status $?
 
 shutdown

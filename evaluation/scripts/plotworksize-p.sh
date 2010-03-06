@@ -30,7 +30,7 @@ done
 cd $OUTPUT_DIR
 
 cat >$PLOT_NAME.plot <<HERE
-set terminal postscript eps color size 15cm, 10cm
+set terminal postscript eps color size 15cm, 9cm
 set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 

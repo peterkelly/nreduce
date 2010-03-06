@@ -1,59 +1,86 @@
+Differences:
+eval-utilisation.eps - strict evaluation uses only 7/8ths of CPU time (not ok)
+postpone.eps - disabled case gives higher values (ok)
+worksize-p.eps - optimal # frames slightly higher (~96?) (ok) - adjust default fishframes
+
+
 Chapter 6: Managing parallelism
 Evaluation modes and detection of parallelism
-  mksub-eval-lazy.sh
-  mksub-eval-strict.sh
+  eval-lazy
+  eval-strict
+  -- produces eval-utilisation.eps (ploteval.sh)
+  -- produces eval-time.eps (eval-utilisation.plot)
 Load balancing of requests during choreography
-  mksub-worksize-np.sh
-  mksub-worksize-p.sh
+  worksize-np
+  worksize-p
+  -- produces postpone.eps (plotpostpone.sh) (section "Example")
+  -- produces worksize-p.eps (plotworksize-p.sh) (section "How many frames to distribute?")
 
 
 Chapter 7: Performance evaluation
 Parallel service invocation
 Amount of parallelism:
-  mksub-numcalls-o.sh
+  numcalls-o
+  -- produces numcalls-o.eps (plotnumcalls.sh)
 Granularity: 
-  mksub-granularity-o.sh
-  mksub-granularity-y.sh
+  granularity-o
+  granularity-y
+  -- produces granularity.eps (plotgranularity.sh)
 
 Types of paralellism
 Data parallelism
-  mksub-dataparallel-o.sh
-  mksub-dataparallel-y.sh
+  dataparallel-o
+  dataparallel-y
+  -- produces dataparallel-time.eps, dataparallel-speedup.eps (plotjob.sh)
 Nested data parallelism
-  mksub-nested-o.sh
-  mksub-nested-y.sh
+  nested-o
+  nested-y
+  -- produces nested-time.eps, nested-speedup.eps (plotjob.sh)
 Divide and conquer
-  mksub-divconq-utilisation.sh
-  mksub-divconq-comp-o.sh
-  mksub-divconq-comp-y.sh
+  divconq-utilisation
+  -- produces divconq-utilisation.eps (divconq-utilisation.plot)
+  divconq-comp-o
+  divconq-comp-y
+  -- produces divconq-comp-time.eps, divconq-comp-speedup.eps (plotjob.sh)
 Pipeline parallelism
-  mksub-pipeline-utilisation.sh
+  pipeline-utilisation
+  -- produces pipeline-utilisation.eps (pipeline-utilisation.plot)
 Software pipelining
-  mksub-pp-utilisation.sh
-  mksub-pp-comp-o.sh
-  mksub-pp-comp-y.sh
+  pp-utilisation
+  -- produces pp-utilisation.eps (pp-utilisation.plot)
+  pp-comp-o
+  pp-comp-y
+  -- produces pp-comp-time.eps, pp-comp-speedup.eps (plotjob.sh)
 Multi-stage data parallelism
-  mksub-msdp-comp-o.sh
-  mksub-msdp-comp-y.sh
+  msdp-comp-o
+  msdp-comp-y
+  -- produces msdp-comp-utilisation.eps (msdp-comp-utilisation.plot)
+  -- produces msdp-comp-time.eps, msdp-comp-speedup.eps (plotmsdp-comp.sh)
 
 Data transfer
 Divide and Conquer
-  mksub-divconq-tr-o.sh
-  mksub-divconq-tr-y.sh
+  divconq-tr-o
+  divconq-tr-y
+  -- produces divconq-tr.eps (plotdata.sh)
 Pipeline
-  mksub-pipeline-tr-o.sh
-  mksub-pipeline-tr-y.sh
+  pipeline-tr-o
+  pipeline-tr-y
+  -- produces pipeline-tr.eps (plotdata.sh)
 Software pipelining
-  mksub-pp-tr-o.sh
-  mksub-pp-tr-y.sh
+  pp-tr-o
+  pp-tr-y
+  -- produces pp-tr.eps (plotdata.sh)
 Multi-stage data parallelism
-  mksub-msdp-tr-o.sh
-  mksub-msdp-tr-y.sh
+  msdp-tr-o
+  msdp-tr-y
+  -- produces msdp-tr.eps (plotdata.sh)
 
 XQuery
 Marks
-  mksub-marks-time-o.sh
-  mksub-marks-time-y.sh
+  marks-time-o
+  marks-time-y
+  -- produces marks-time-time.eps, marks-time-speedup.eps (plotjob.sh)
+  -- produces marks-tr.eps (plotdata.sh) via aliases marks-tr-o and marks-tr-y
 
 
 

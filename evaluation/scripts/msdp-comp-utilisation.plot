@@ -1,4 +1,4 @@
-set terminal postscript eps color size 15cm, 10cm
+set terminal postscript eps color size 15cm, 9cm
 set out "plots/eps/msdp-comp-utilisation.eps"
 set size 0.75, 0.75
 

@@ -30,7 +30,7 @@ done
 cd $OUTPUT_DIR
 
 cat >$PLOT_NAME.plot <<HERE
-set terminal postscript eps color size 15cm, 10cm
+set terminal postscript eps color size 15cm, 9cm
 set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 
@@ -42,8 +42,10 @@ unset mxtics
 unset mytics
 set key top left
 
-set xtics 4
-set xrange [:262144]
+set xtics 2
+set xrange [:2097152]
+set xtics rotate by 90
+set format x "%7.f"
 set format y "%4.f"
 set title "$TITLE"
 
@@ -64,7 +66,7 @@ for ms in $msvalues; do
   if ((count > 1)); then
     echo ", \\" >> $PLOT_NAME.plot
   fi
-  echo -n "\"$PLOT_NAME.ms$ms.dat\" using 1:(\$1/\$2) title \"$ms ms/call\" with lines ls $count" >> $PLOT_NAME.plot
+  echo -n "\"$PLOT_NAME.ms$ms.dat\" using 1:(\$1/\$2) notitle with lines ls $count" >> $PLOT_NAME.plot
   ((count++))
 done
 

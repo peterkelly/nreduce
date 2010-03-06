@@ -34,7 +34,7 @@ for ((run = 0; run < 3; run++)); do
 #PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=01:30:00
+#PBS -l nodes=$((nodes+1)):ppn=2,walltime=02:00:00
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR

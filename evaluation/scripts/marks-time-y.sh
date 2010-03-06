@@ -7,8 +7,6 @@ XQ_DIR=$SCRIPT_DIR/../xquery
 
 . $SCRIPT_DIR/marks-time-params.sh
 
-echo "export OPT_FISHFRAMES=64" >> $JOB_DIR/env
-
 startcservice 'java -cp dev/evaluation/ws Marks' 5000
 startvm
 startshowload

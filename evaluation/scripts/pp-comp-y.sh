@@ -10,8 +10,13 @@ startvm
 startshowload
 echo "Startup completed"
 
-time nreduce --client $INITIAL run 0 $ELC_DIR/pp-comp.elc \
-    64 5 5000 localhost 5000
+NITEMS=256
+COMPMS=1000
+PORT=5000
+SERVICES="localhost localhost localhost localhost localhost"
+
+time nreduce --client $INITIAL run 0 $ELC_DIR/pipeline.elc \
+    $NITEMS $COMPMS $PORT $SERVICES
 echo Program exited with status $?
 
 shutdown

@@ -11,8 +11,8 @@ QNAME=`hostname -s`
 expname=numcalls-o
 nodes=1
 
-for ms in 0 5 10 20; do
-  for ((run = 0; run < 3; run++)); do
+for ms in 0; do
+  for ((run = 0; run < 10; run++)); do
     for ((numcalls = 1; numcalls <= 2097152; numcalls *= 2)); do
       jobname=$expname.ms$ms.r$run.n$numcalls
       cat > $SUB_DIR/$jobname.sub <<EOF

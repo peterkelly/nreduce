@@ -19,7 +19,7 @@ if [ -e amdahl_p ]; then
 fi
 
 cat >>$PLOT_NAME-speedup.plot <<HERE
-set terminal postscript eps color size 15cm, 10cm
+set terminal postscript eps color size 15cm, 9cm
 set output "$PLOT_NAME-speedup.eps"
 set size 0.75, 0.75
 
