@@ -51,6 +51,7 @@
 
 extern int opt_postpone;
 extern int opt_fishframes;
+extern int opt_buildarray;
 
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
@@ -314,6 +315,10 @@ void parse_optimisations()
   char *fishframes = getenv("OPT_FISHFRAMES");
   if (NULL != fishframes)
     opt_fishframes = atoi(fishframes);
+
+  char *buildarray = getenv("OPT_BUILDARRAY");
+  if (NULL != buildarray)
+    opt_buildarray = atoi(buildarray);
 }
 
 int main(int argc, char **argv)

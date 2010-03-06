@@ -39,6 +39,8 @@
 #include <math.h>
 #include <errno.h>
 
+extern int opt_buildarray;
+
 /* Write & read functions for basic types */
 
 array *write_start(void)
@@ -286,7 +288,7 @@ static void write_aref(array *arr, task *tsk, pntr p)
   int i;
 
   /* If the array size is 1kb or greater, send a builarray frame so that the data is shared. */
-  if (carr->size >= 1024) {
+  if (opt_buildarray && (carr->size >= 1024)) {
     write_buildarray_frame(arr,tsk,p);
     return;
   }
