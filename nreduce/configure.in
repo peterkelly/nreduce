@@ -49,7 +49,7 @@ LDFLAGS="-rdynamic"
 CFLAGS="-m32 -ggdb3 -Wall -O0"
 
 # Max. optimizations, for performance testing
-#CFLAGS="-ggdb3 -Wall -O3 -fno-strict-aliasing -DNDEBUG"
+#CFLAGS="-m32 -ggdb3 -Wall -O3 -fno-strict-aliasing -DNDEBUG"
 
 # For gprof
 #CFLAGS="-ggdb3 -Wall -O0 -pg"
