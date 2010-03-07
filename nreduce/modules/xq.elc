@@ -3,7 +3,9 @@ import http
 
 output indent raw =
 (letrec
-  nodes = (if indent (xml::add_whitespace raw) raw)
+  nodes = (if indent
+              (cons (xml::mkdoc (xml::add_whitespace (xml::item_children raw))) nil)
+              (cons raw nil))
  in
   (xml::print_nodes nodes nil nil))
 
@@ -80,7 +82,7 @@ base_cmp x y =
       (strcmp (xml::item_value x) (xml::item_value y))
       (if (and (== tx xml::TYPE_BOOLEAN) (== ty xml::TYPE_BOOLEAN))
         (boolcmp (xml::item_value x) (xml::item_value y))
-        (error "XPTY0004: invalid types in comparison")))))
+        (error "XPTY0004: invalid types in comparison: ")))))
 
 boolcmp x y =
 (if (and x (not y))
@@ -413,6 +415,15 @@ getnumber x =
     nil
     (xml::item_value (head x)))))
 
+getstring x =
+(if (not x)
+    (error "Expected a string; got an empty sequence")
+(if (tail x)
+    (error "Expected a string; got a sequence of 2 or more items")
+(if (!= (xml::item_type (head x)) xml::TYPE_STRING)
+    (error "Expected a string")
+    (xml::item_value (head x)))))
+
 xqrange min max = (if (<= min max) (cons (xml::mknumber min) (xqrange (+ min 1) max)) nil)
 
 foreach lst f =
@@ -445,6 +456,20 @@ filter3a f lst !pos !total =
         (cons (head lst) (filter3a f (tail lst) (+ pos 1) (+ total 1)))
         (filter3a f (tail lst) (+ pos 1) (+ total 1)))
     nil)
+
+some f lst =
+(if lst
+  (if (f (cons (head lst) nil))
+    1
+    (some f (tail lst)))
+  nil)
+
+every f lst =
+(if lst
+  (if (f (cons (head lst) nil))
+    (every f (tail lst))
+    nil)
+  1)
 
 isnode x =
 (letrec
@@ -734,15 +759,78 @@ fn_avg lst =
 fn_reverse lst =
 (reverse lst)
 
+fn_zero-or-one lst =
+(if lst
+  (if (tail lst)
+    (error "Cardinality mismatch: must be zero or one")
+    lst)
+  lst)
+
+fn_exactly-one lst =
+(if lst
+  (if (tail lst)
+    (error "Cardinality mismatch: must be exactly one")
+    lst)
+  (error "Cardinality mismatch: must be exactly one"))
+
+remove-adjacent lst =
+(if lst
+    (if (if (tail lst)
+            (== 0
+                (base_cmp (head (tail (head lst)))
+                          (head (tail (head (tail lst))))))
+            nil)
+        (remove-adjacent (tail lst))
+        (cons (head lst)
+              (remove-adjacent (tail lst))))
+    nil)
+
+number pos lst =
+(if lst
+    (cons (cons pos (cons (atomize1 (head lst)) (head lst)))
+          (number (+ pos 1) (tail lst)))
+    nil)
+
+fn_distinct-values lst =
+(letrec
+  pairs = (number 0 lst)
+  sorted = (mergesort (!a.!b.base_cmp (head (tail a)) (head (tail b))) pairs)
+in
+  (map (!x.tail (tail x))
+       (mergesort (!a.!b.- (head a) (head b))
+                  (remove-adjacent sorted))))
 
 
 
+contains-part haystack needle =
+(if needle
+    (if haystack
+        (if (== (head needle) (head haystack))
+            (contains-part (tail haystack) (tail needle))
+            nil)
+        nil)
+    1)
 
+contains haystack needle =
+(if haystack
+    (if (contains-part haystack needle)
+        1
+        (contains (tail haystack) needle))
+    nil)
 
-
-
-
-
+fn_contains haystack needle =
+(cons
+  (xml::mkbool
+    (letrec
+       haystack-str = (if haystack (getstring haystack) "")
+       needle-str = (if needle (getstring needle) "")
+     in
+       (if (not (needle-str))
+           1 // needle is empty: return true
+       (if (not (haystack-str))
+           nil // haystack is empty: return false
+       (contains haystack-str needle-str)))))
+   nil)
 
 
 
@@ -885,7 +973,7 @@ node_following node =
 
 fn_post url content =
   (letrec
-   text = (post (consimple url) (output nil content))
+   text = (post (consimple url) (output nil (xml::mkdoc content)))
   in
   (cons (xml::parsexml 1 text) nil))
 
@@ -1101,7 +1189,7 @@ main args stdin query INDENT =
         (xml::mkdoc nil))
       (xml::parsexml STRIPALL (readb (head args))))
   result = (query input 1 1)
-  doc = (cons (xml::mkdoc (concomplex result)) nil)
+  doc = (xml::mkdoc (concomplex result))
 in
  (output INDENT doc))
 
@@ -1221,3 +1309,31 @@ cast_integer arg =
 (if (isstring (head arg))
   (cons (xml::mknumber (floor (stringtonum (xml::item_value (head arg))))) nil)
   (error "Cannot cast to number")))))
+
+//==================================================================================================
+// Merge sort
+
+mergesort cmp m =
+(if (<= (len m) 1)
+  m
+  (letrec
+    middle = (floor (/ (len m) 2))
+    left = (prefix middle m)
+    right = (skip middle m)
+    left2 = (mergesort cmp left)
+    right2 = (mergesort cmp right)
+  in
+    (merge cmp left2 right2)))
+
+merge cmp xlst ylst =
+(if xlst
+  (if ylst
+    (letrec
+      x = (head xlst)
+      y = (head ylst)
+     in
+      (if (> (cmp x y) 0)
+        (cons y (merge cmp xlst (tail ylst)))
+        (cons x (merge cmp (tail xlst) ylst))))
+    xlst)
+  ylst)

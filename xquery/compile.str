@@ -45,11 +45,16 @@ E : |[ element { e1 } { e2 } ]|   ->
 
 /* ---------------------------- Expressions ------------------------------------------- */
 
+E : |[ some $n in e1 satisfies e2 ]| -> |{ (cons (xml::mkbool (xq::some (!n.xq::ebv e2) e1))
+                                                 nil) }|
+E : |[ every $n in e1 satisfies e2 ]| -> |{ (cons (xml::mkbool (xq::every (!n.xq::ebv e2) e1))
+                                                 nil) }|
+
 // FIXME: support type declaration
 E : |[ for $n in e1 return e2 ]|  -> |{ (xq::foreach e1 (!n.e2)) }|
 E : |[ for $n1 at $n2 in e1 return e2 ]| -> |{ (xq::foreachpos e1 1 (!n1.!n2.e2)) }|
 
-E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = (xq::reparent e1 nil nil nil) in e2) }|
+E : |[ let $n := e1 return e2 ]|   -> |{ (letrec n = e1 in e2) }|
 
 E : |[ $n ]|                      -> |{ n }|
 E : FunctionName(UQName(n))       -> |{ n }|
@@ -154,6 +159,15 @@ E : |[ -e ]|                      -> |{ (xq::uminus e) }|
 E : |[ e1 and e2 ]|               -> |{ (cons (xml::mkbool (&& (xq::ebv e1) (xq::ebv e2))) nil) }|
 E : |[ e1 or e2 ]|                -> |{ (cons (xml::mkbool (|| (xq::ebv e1) (xq::ebv e2))) nil) }|
 
+// FIXME: this implementation of << and >> does not ensure both nodes are in the same document
+E : |[ e1 << e2 ]| -> |{ (cons (xml::mkbool (< (xml::item_index (head (xq::fn_exactly-one e1)))
+                                               (xml::item_index (head (xq::fn_exactly-one e2)))))
+                               nil) }|
+
+E : |[ e1 >> e2 ]| -> |{ (cons (xml::mkbool (> (xml::item_index (head (xq::fn_exactly-one e1)))
+                                               (xml::item_index (head (xq::fn_exactly-one e2)))))
+                               nil) }|
+
 // Dynamic context components
 
 E : |[ . ]|                       -> |{ (cons citem nil) }|
@@ -213,6 +227,12 @@ SIMPLIFY : FLWOR([p|rest],None(),o,b) ->
            where <notempty>rest
 
 SIMPLIFY : |[ let $x as ~t := e1 return e2 ]| -> |[ let $x := e1 return e2 ]|
+
+// FIXME: the following two rules only work for X,Y - not X,Y,Z...
+SIMPLIFY : |[ some $n1 in e1, $n2 in e2 satisfies e3 ]| ->
+           |[ some $n1 in e1 satisfies (some $n2 in e2 satisfies e3) ]|
+SIMPLIFY : |[ every $n1 in e1, $n2 in e2 satisfies e3 ]| ->
+           |[ every $n1 in e1 satisfies (every $n2 in e2 satisfies e3) ]|
 
 /* ---------------------------- Misc -------------------------------------------------- */
 
