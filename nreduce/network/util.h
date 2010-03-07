@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <netdb.h>
 #include <sys/time.h>
+#include "malloc.h"
 
 #define STACK_LIMIT 10240
 
