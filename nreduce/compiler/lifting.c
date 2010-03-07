@@ -570,7 +570,7 @@ static void lift_if_complex(source *src, snode **k, scomb *sc)
   }
 
   if (0 < nappargs) {
-    if ((SNODE_BUILTIN == expr->type) && (B_CONS == expr->bif)) {
+    if ((SNODE_BUILTIN == expr->type) && ((B_CONS == expr->bif) || (B_LCONS == expr->bif))) {
       /* A call to cons... this will be treated specially by the bytecode compiler and execute
          directly. Inspect the arguments though */
       nonstrict_lift_r(src,k,sc);

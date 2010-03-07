@@ -643,7 +643,8 @@ static int iscons(snode *c)
   return ((SNODE_APPLICATION == c->type) &&
           (SNODE_APPLICATION == c->left->type) &&
           (SNODE_BUILTIN == c->left->left->type) &&
-          (B_CONS == c->left->left->bif));
+          ((B_CONS == c->left->left->bif) ||
+           (B_LCONS == c->left->left->bif)));
 }
 
 static void E(source *src, compilation *comp, snode *c, pmap *p, int n)
