@@ -47,6 +47,8 @@
 
 static void *add_to_oldgen(task *tsk, void *mem);
 
+extern int opt_maxheap;
+
 unsigned char NULL_PNTR_BITS[8] = { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF };
 
 const char *cell_types[CELL_COUNT] = {
@@ -352,6 +354,15 @@ void mark_end(task *tsk, unsigned int bit)
   tsk->markstack = NULL;
 }
 
+void force_minor_collection(task *tsk)
+{
+  if (tsk->need_minor)
+    return;
+  tsk->need_minor = 1;
+  if (tsk->endpt)
+    endpoint_interrupt(tsk->endpt);
+}
+
 /* FIXME: setting FLAG_DMB on newly created objects is not sufficient to ensure they
    survive beyond the end of the current distributed garbage collection cycle. This is
    because object retention is no longer based on marks, but on them being referenced
@@ -367,17 +378,15 @@ void *alloc_mem(task *tsk, unsigned int nbytes)
   /* New allocation method - pointer increment */
   assert(((int)tsk->newgenoffset >= sizeof(block)) || (NULL != tsk->newgen));
 
-  if (tsk->newgenoffset >= sizeof(block)-nbytes) {
-    if (tsk->newgen) {
-      /* Filled up the first block... request a minor collection */
-      tsk->need_minor = 1;
-      if (tsk->endpt) {
-/*         fprintf(stderr,"first block full; requesting minor collection\n"); */
-        endpoint_interrupt(tsk->endpt);
-      }
-    }
+  if (opt_maxheap && tsk->newgen && (tsk->oldgenbytes + tsk->newgenoffset >= opt_maxheap))
+    force_minor_collection(tsk);
 
-    block *bl = (block*)calloc(1,sizeof(block));
+  if (tsk->newgenoffset >= sizeof(block)-nbytes) {
+    /* If filled up the first block... request a minor collection */
+    if (tsk->newgen)
+      force_minor_collection(tsk);
+
+    block *bl = (block*)malloc(sizeof(block));
     bl->next = tsk->newgen;
     bl->used = tsk->newgenoffset;
     tsk->newgen = bl;
@@ -798,7 +807,7 @@ static void *add_to_oldgen(task *tsk, void *mem)
   unsigned int size = object_size(mem);
 
   if (tsk->oldgenoffset >= sizeof(block)-size) {
-    block *bl = (block*)calloc(1,sizeof(block));
+    block *bl = (block*)malloc(sizeof(block));
     bl->next = tsk->oldgen;
     bl->used = tsk->oldgenoffset;
     tsk->oldgen = bl;
@@ -994,7 +1003,9 @@ static void replace_refs(task *tsk, int check)
 static void init_oldgen(task *tsk)
 {
   if (NULL == tsk->oldgen) {
-    tsk->oldgen = (block*)calloc(1,sizeof(block));
+    tsk->oldgen = (block*)malloc(sizeof(block));
+    tsk->oldgen->used = 0;
+    tsk->oldgen->next = NULL;
     tsk->oldgenoffset = BLOCK_START;
   }
 }
@@ -1297,15 +1308,21 @@ void local_collect(task *tsk)
   if (prev_newgenbytes > 0)
     survived = (int)((100.0*(double)copiedbytes)/((double)prev_newgenbytes));
 
-  node_log(tsk->n,LOG_INFO,"minor: %dms; %dkb of %dkb survived (%d%%); rset %d, oldgen now %dkb",
+  node_log(tsk->n,LOG_INFO,"minor: %dms; %dkb of %dkb survived (%d%%); rset %d, oldgen now %dkb, maxheap %dkb",
            timeval_diffms(start,end),
            copiedbytes/1024,
            prev_newgenbytes/1024,
            survived,
            rsetsize,
-           tsk->oldgenbytes/1024);
+           tsk->oldgenbytes/1024,
+           opt_maxheap/1024);
   tsk->minorms += timeval_diffms(start,end);
   tsk->gcms += timeval_diffms(start,end);
+
+  if (opt_maxheap && (tsk->oldgenbytes >= opt_maxheap)) {
+    tsk->need_major = 1;
+    tsk->skipremaining = 0;
+  }
 
   /* Major collection cycle */
   if (tsk->need_major) {
@@ -1372,6 +1389,13 @@ void local_collect(task *tsk)
                (int)(100.0*survived));
       tsk->majorms += timeval_diffms(start,end);
       tsk->gcms += timeval_diffms(start,end);
+
+      /* If, after a major collection, we still have more data than we're supposed to, abort. */
+      if (opt_maxheap && (tsk->oldgenbytes >= opt_maxheap)) {
+        fprintf(stderr,"Out of heap space!\n");
+        exit(1);
+      }
+
     }
     tsk->need_major = 0;
   }

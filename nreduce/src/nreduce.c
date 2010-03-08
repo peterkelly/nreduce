@@ -52,6 +52,7 @@
 extern int opt_postpone;
 extern int opt_fishframes;
 extern int opt_buildarray;
+extern int opt_maxheap;
 
 char *exec_modes[3] = { "interpreter", "native", "reducer" };
 
@@ -319,6 +320,10 @@ void parse_optimisations()
   char *buildarray = getenv("OPT_BUILDARRAY");
   if (NULL != buildarray)
     opt_buildarray = atoi(buildarray);
+
+  char *maxheap = getenv("OPT_MAXHEAP");
+  if (NULL != maxheap)
+    opt_maxheap = atoi(maxheap)*1024*1024;
 }
 
 int main(int argc, char **argv)
