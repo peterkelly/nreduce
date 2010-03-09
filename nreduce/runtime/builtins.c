@@ -1,6 +1,6 @@
 /*
  * This file is part of the nreduce project
- * Copyright (C) 2006-2009 Peter Kelly (pmk@cs.adelaide.edu.au)
+ * Copyright (C) 2006-2010 Peter Kelly (pmk@cs.adelaide.edu.au)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -421,7 +421,7 @@ static void check_array_convert(task *tsk, cell *refcell, const char *from)
   }
 }
 
-static void carray_append(task *tsk, cell **refcell, const void *data, int totalcount, int dsize)
+void carray_append(task *tsk, cell **refcell, const void *data, int totalcount, int dsize)
 {
   carray *arr = (carray*)get_pntr((*refcell)->field1);
   assert(dsize == arr->elemsize); /* sanity check */
@@ -2210,5 +2210,6 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "lcons",          2, 0, ALWAYS_VALUE, ALWAYS_TRUE,   PURE, b_cons           },
 { "restring",       1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_restring       },
 { "buildarray",     3, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_buildarray     },
+{ "parsexmlfile",   1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_parsexmlfile   },
 
 };

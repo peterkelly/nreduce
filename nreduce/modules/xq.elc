@@ -204,9 +204,9 @@ uplus x = (if (not x)
 // Node tests
 
 name_test type nsuri localname node =
-(if (== (xml::item_type node) type)
+(if (streq (xml::item_localname node) localname)
   (if (streq (xml::item_nsuri node) nsuri)
-    (streq (xml::item_localname node) localname)
+    (== (xml::item_type node) type)
     nil)
   nil)
 
@@ -1187,7 +1187,9 @@ main args stdin query INDENT =
       (if stdin
         (xml::parsexml STRIPALL stdin)
         (xml::mkdoc nil))
-      (xml::parsexml STRIPALL (readb (head args))))
+      (if (streq (head args) "cparser")
+          (parsexmlfile (head (tail args)))
+          (xml::parsexml STRIPALL (readb (head args)))))
   result = (query input 1 1)
   doc = (xml::mkdoc (concomplex result))
 in

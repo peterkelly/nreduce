@@ -19,7 +19,8 @@ libruntime_la_SOURCES = worker.c \
 	assembler.c \
 	native.c \
 	java.c \
-	events.c
+	events.c \
+	xml.c
 
-INCLUDES = -I@top_srcdir@
+INCLUDES = -I@top_srcdir@ -I/usr/include/libxml2
 CLEANFILES = *.da *.bb *.bbg *.gcov

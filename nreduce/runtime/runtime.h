@@ -1,6 +1,6 @@
 /*
  * This file is part of the nreduce project
- * Copyright (C) 2006-2009 Peter Kelly (pmk@cs.adelaide.edu.au)
+ * Copyright (C) 2006-2010 Peter Kelly (pmk@cs.adelaide.edu.au)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -151,8 +151,9 @@ struct gaddr;
 #define B_LCONS          67
 #define B_RESTRING       68
 #define B_BUILDARRAY     69
+#define B_PARSEXMLFILE   70
 
-#define NUM_BUILTINS     70
+#define NUM_BUILTINS     71
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
@@ -777,6 +778,7 @@ void invalid_arg(task *tsk, pntr arg, int bif, int argno, int type);
 void invalid_binary_args(task *tsk, pntr *argstack, int bif);
 
 carray *carray_new(task *tsk, int dsize, int alloc);
+void carray_append(task *tsk, cell **refcell, const void *data, int totalcount, int dsize);
 cell *create_array_cell(task *tsk, int dsize, int alloc);
 pntr create_array(task *tsk, int dsize, int alloc);
 pntr pointers_to_list(task *tsk, pntr *data, int size, pntr tail);
@@ -788,6 +790,7 @@ void maybe_expand_array(task *tsk, pntr p);
 pntr string_to_array(task *tsk, const char *str);
 int array_to_string(pntr refpntr, char **str);
 int flatten_list(pntr refpntr, pntr **data);
+void b_parsexmlfile(task *tsk, pntr *argstack);
 
 /* worker */
 
