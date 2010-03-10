@@ -992,7 +992,7 @@ static void b_arrayprefix(task *tsk, pntr *argstack)
     if (n > arr->size-index)
       n = arr->size-index;
 
-    if ((0 == index) && (n == arr->size)) {
+    if ((n == arr->size-index) && (BUILDARRAY_THRESHOLD <= n)) {
       /* Optimisation: Instead of creating a new array with a copy of the data, simply
          create a new aref cell which references the existing array data. This means that
          the data can be shared, which is useful if the array is large and the copy is

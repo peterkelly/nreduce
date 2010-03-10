@@ -194,6 +194,8 @@ typedef struct {
 
 #define CELL_COUNT       0x12
 
+#define BUILDARRAY_THRESHOLD 1024
+
 #define HEADER_FIELDS \
   unsigned int type; \
   unsigned int flags; \
