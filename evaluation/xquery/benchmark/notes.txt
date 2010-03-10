@@ -1,0 +1,28 @@
+xmlgen + queries
+http://www.xml-benchmark.org/downloads.html
+
+Queries that don't compile:
+q19 (order by)
+
+
+
+q1 - correct results
+q2 - correct results
+q3 - correct results, but different attribute order
+q4 - correct results
+q5 - correct results
+q6 - correct results
+q7 - correct results
+q8 - correct results
+q9 - correct results
+q10 - correct results, except for distinct-values order & different attr handling
+q11 - correct results
+q12 - correct results
+q13 - correct results
+q14 - correct results
+q15 - correct results
+q16 - correct results
+q17 - correct results
+q18 - correct results, but different no. of significant digits in output
+q19 - doesn't compile
+q20 - correct results
