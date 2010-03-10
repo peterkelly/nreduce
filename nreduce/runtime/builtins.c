@@ -906,13 +906,19 @@ static void b_restring(task *tsk, pntr *argstack)
      into a single array; it is called from xq::post2 to ensure that the request is
      sent as a single unit. */
 
-  /* FIXME: this function fails when the argument contains a REMOTEREF to a later portion
-     of the string. This could be fixed by sending a fetch request for the appropriate
-     tail, and then suspending the calling frame so that this function is woken up when
-     the object arrives. */
-
   char *str = NULL;
   if (0 > array_to_string(argstack[0],&str)) {
+
+    /* Check if the string ends in a REMOTEREF cell, and if so, send a fetch request for it */
+    pntr p = argstack[0];
+    while ((CELL_AREF == pntrtype(p)) || (CELL_CONS == pntrtype(p)))
+      p = resolve_pntr(get_pntr(p)->field2);
+
+    if (CELL_REMOTEREF == pntrtype(p)) {
+      eval_remoteref(tsk,*tsk->runptr,p);
+      return;
+    }
+
     set_error(tsk,"restring: argument is not a string");
     return;
   }
