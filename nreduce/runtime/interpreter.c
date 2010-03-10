@@ -52,6 +52,7 @@
 
 extern int opt_postpone;
 extern int opt_fishframes;
+extern int opt_fishhalf;
 
 inline void op_begin(task *tsk, frame *runnable, const instruction *instr)
   __attribute__ ((always_inline));
@@ -605,6 +606,17 @@ static int get_idmap_index(task *tsk, endpointid epid)
   return -1;
 }
 
+static int count_sparks(task *tsk)
+{
+  int count = 0;
+  frame *spark = tsk->sparklist->sprev;
+  while (spark != tsk->sparklist) {
+    spark = spark->sprev;
+    count++;
+  }
+  return count;
+}
+
 static void interpreter_fish(task *tsk, message *msg)
 {
   reader rd;
@@ -625,25 +637,52 @@ static void interpreter_fish(task *tsk, message *msg)
   event_recv_fish(tsk,from,reqtsk,age);
   finish_address_reading(tsk,from,msg->tag);
 
-  if (reqtsk == tsk->tid)
-    return;
+  if (opt_fishhalf) {
+    /* Schedule half of all sparks to the requestor */
 
-  newmsg = write_start();
+    newmsg = write_start();
+    if (reqtsk != tsk->tid) {
+      int nsparks = count_sparks(tsk);
+      int nframes = nsparks/2;
+      while (0 < nframes) {
+        frame *spark = tsk->sparklist->sprev;
 
-  int nframes = opt_fishframes;
-  while (0 < nframes) {
-    frame *spark = tsk->sparklist->sprev;
+        if (spark == tsk->sparklist)
+          break; /* Spark list is empty */
 
-    if (spark == tsk->sparklist)
-      break; /* Spark list is empty */
+        pntr p;
+        assert(spark->c);
+        make_pntr(p,spark->c);
 
-    pntr p;
-    assert(spark->c);
-    make_pntr(p,spark->c);
+        schedule_frame(tsk,spark,reqtsk,newmsg);
+        scheduled++;
+        nframes--;
+      }
+    }
+  }
+  else {
+    /* Schedule a fixed number of sparks to the requestor */
 
-    schedule_frame(tsk,spark,reqtsk,newmsg);
-    scheduled++;
-    nframes--;
+    if (reqtsk == tsk->tid)
+      return;
+
+    newmsg = write_start();
+
+    int nframes = opt_fishframes;
+    while (0 < nframes) {
+      frame *spark = tsk->sparklist->sprev;
+
+      if (spark == tsk->sparklist)
+        break; /* Spark list is empty */
+
+      pntr p;
+      assert(spark->c);
+      make_pntr(p,spark->c);
+
+      schedule_frame(tsk,spark,reqtsk,newmsg);
+      scheduled++;
+      nframes--;
+    }
   }
 
   if (0 < scheduled) {

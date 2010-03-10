@@ -51,6 +51,7 @@
 
 extern int opt_postpone;
 extern int opt_fishframes;
+extern int opt_fishhalf;
 extern int opt_buildarray;
 extern int opt_maxheap;
 
@@ -316,6 +317,10 @@ void parse_optimisations()
   char *fishframes = getenv("OPT_FISHFRAMES");
   if (NULL != fishframes)
     opt_fishframes = atoi(fishframes);
+
+  char *fishhalf = getenv("OPT_FISHHALF");
+  if (NULL != fishhalf)
+    opt_fishhalf = atoi(fishhalf);
 
   char *buildarray = getenv("OPT_BUILDARRAY");
   if (NULL != buildarray)
