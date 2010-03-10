@@ -44,6 +44,7 @@
 #define MSG_RESUME              15
 #define MSG_CHECKALLREFS        16
 #define MSG_CHECKREFS           17
+#define MSG_HISTMAX             18
 
 /* Process startup */
 #define MSG_NEWTASK             100

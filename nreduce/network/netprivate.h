@@ -28,6 +28,7 @@
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include "runtime/messages.h"
 
 #define CONNECTION_HASH_SIZE 7919
 
@@ -177,6 +178,8 @@ typedef struct node_private {
   list *servers;
   connection *connhash[CONNECTION_HASH_SIZE];
   portset outports;
+  int counthist[MSG_HISTMAX];
+  int sizehist[MSG_HISTMAX];
 } node_private;
 
 #define lock_node(_n) { lock_mutex(&(_n)->p->lock);

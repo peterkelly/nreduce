@@ -55,6 +55,26 @@ const char *log_levels[LOG_COUNT] = {
   "DEBUG2",
 };
 
+const char *msg_names[MSG_HISTMAX] = {
+  "DONE",
+  "FISH",
+  "FETCH",
+  "ACK",
+  "MARKROOTS",
+  "MARKENTRY",
+  "SWEEP",
+  "SWEEPACK",
+  "UPDATE",
+  "RESPOND",
+  "SCHEDULE",
+  "STARTDISTGC",
+  "PAUSE",
+  "GOTPAUSE",
+  "PAUSEACK",
+  "RESUME",
+  "CHECKALLREFS",
+  "CHECKREFS"};
+
 static void endpoint_add_message(endpoint *endpt, message *msg);
 static endpointid node_add_thread_locked(node *n, const char *type,
                                          endpoint_threadfun fun, void *arg, pthread_t *threadp,
@@ -317,6 +337,17 @@ static void node_show_netstats(node *n)
   }
 }
 
+static void node_show_msg_hist(node *n)
+{
+  node_log(n,LOG_INFO,"Message histogram:");
+  node_log(n,LOG_INFO,"         %-20s %-9s %-9s","Message","Count","Size");
+  int i;
+  for (i = 0; i < MSG_HISTMAX; i++) {
+    node_log(n,LOG_INFO,"MSGHIST  %-20s %-9d %-9d",
+             msg_names[i],n->p->counthist[i],n->p->sizehist[i]);
+  }
+}
+
 void node_run(node *n)
 {
   if (0 != pthread_join(n->p->iothread,NULL))
@@ -324,6 +355,7 @@ void node_run(node *n)
   node_close_endpoints(n);
   node_close_connections(n);
   node_show_netstats(n);
+  node_show_msg_hist(n);
   node_free(n);
 }
 
@@ -579,6 +611,11 @@ void node_send_locked(node *n, uint32_t sourcelocalid, endpointid destendpointid
     got_message(n,&hdr,source,tag,size,data);
   }
   else {
+    if (MSG_HISTMAX > tag) {
+      n->p->counthist[tag]++;
+      n->p->sizehist[tag] += size + sizeof(msgheader);
+    }
+
     if (NULL == (conn = find_connection(n,destendpointid.ip,destendpointid.port))) {
       char *hostname;
       unsigned char *addrbytes = (unsigned char*)&destendpointid.ip;
