@@ -35,7 +35,7 @@
 #define BACKLOG 100
 #define DEFAULT_MAX_THREADS 3
 
-long long comp_per_ms = 0;
+int comp_per_ms = 0;
 
 struct timeval timeval_diff(struct timeval from, struct timeval to)
 {
@@ -98,16 +98,22 @@ int nthreads = 0;
 
 #define BUFSIZE 1024
 
-void run(long long work, long long iterations)
+void run(long long total)
 {
-  long long total = work*iterations;
   long long i;
+  double a = 1;
+  double b = 1;
+  double c = 1;
+  double d = 1;
   for (i = 0; i < total; i++) {
+    a += 0.00001;
+    b += a;
+    c += b;
+    d += c;
   }
 }
 
-#define DEFAULT_WORK 1000000
-#define CALIB_ITERATIONS 1000
+#define CALIB_WORK 1000000000
 
 long long get_micro_time()
 {
@@ -116,32 +122,32 @@ long long get_micro_time()
   return (long long)tv.tv_sec*1000000 + (long long)tv.tv_usec;
 }
 
-long calibrate()
+int calibrate()
 {
   printf("Warmup\n");
-  run(DEFAULT_WORK,CALIB_ITERATIONS);
+  run(CALIB_WORK);
   long long start = get_micro_time();
 
   printf("Calibration\n");
-  run(DEFAULT_WORK,CALIB_ITERATIONS);
+  run(CALIB_WORK);
   long long end = get_micro_time();
   long long ms = (end-start)/1000;
-  printf("%d iterations took %lldms\n",CALIB_ITERATIONS,ms);
-  long long comp_per_ms = DEFAULT_WORK*CALIB_ITERATIONS/ms;
-  printf("comp per ms = %lld\n",comp_per_ms);
+  printf("%d work took %lldms\n",CALIB_WORK,ms);
+  int comp_per_ms = CALIB_WORK/ms;
+  printf("comp per ms = %d\n",comp_per_ms);
 
   printf("Testing\n");
   int i;
-  for (i = 1; i <= 16384; i *= 2) {
+  for (i = 1; i <= 4096; i *= 2) {
     long long start = get_micro_time();
-    run(comp_per_ms,i);
+    run(comp_per_ms*i);
     long long end = get_micro_time();
     double ratio = (end-start)/(i*1000.0);
-    printf("Goal=%dms Actual=%lldms (%.3f%%)\n",
-           i,(end-start)/1000,100.0*ratio);
+    printf("Goal=%dms Actual=%lldms (%.3f%% error)\n",
+           i,(end-start)/1000,fabs(100.0-100.0*ratio));
   }
 
-  return 0;
+  return comp_per_ms;
 }
 
 void handle(int sock)
@@ -168,7 +174,7 @@ void handle(int sock)
   if (2 == sscanf(data,"%d %d",&value,&ms)) {
 
     /* Compute for requested time */
-    run(comp_per_ms,ms);
+    run(comp_per_ms*ms);
 
     /* Send back value */
     snprintf(data,1024,"%d",value);
@@ -192,23 +198,6 @@ void *connection_handler(void *arg)
   return NULL;
 }
 
-long long get_comp_per_ms()
-{
-  char *cpmstr = getenv("COMP_PER_MS");
-  if (NULL == cpmstr) {
-    fprintf(stderr,"Environment variable COMP_PER_MS not set; run with -calibrate to determine\n");
-    exit(-1);
-  }
-  char *end = NULL;
-  long long cpm = strtol(cpmstr,&end,10);
-  if (('\0' == cpmstr[0]) || ('\0' != *end)) {
-    fprintf(stderr,"Environment variable COMP_PER_MS invalid (\"%s\"); must be a number\n",
-            cpmstr);
-    exit(1);
-  }
-  return cpm;
-}
-
 void compute_service(int port, int direct, int maxthreads)
 {
   int listensock;
@@ -225,9 +214,7 @@ void compute_service(int port, int direct, int maxthreads)
     printf("Using separate threads for each response\n");
   }
 
-  comp_per_ms = get_comp_per_ms();
-
-  printf("COMP_PER_MS = %lld\n",comp_per_ms);
+  printf("COMP_PER_MS = %d\n",comp_per_ms);
 
   printf("Starting compute service on port %d\n",port);
 
@@ -344,6 +331,8 @@ int main(int argc, char **argv)
 
   if (0 > port)
     usage();
+
+  comp_per_ms = calibrate();
 
   int direct = (getenv("DIRECT") != NULL);
   compute_service(port,direct,maxthreads);

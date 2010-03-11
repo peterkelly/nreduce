@@ -32,23 +32,75 @@ import java.io.InputStreamReader;
              use=SOAPBinding.Use.LITERAL)
 public class Compute
 {
+    int compPerMs = 0;
+
+    public Compute()
+    {
+      BufferedReader bread = null;
+      try {
+        String[] args = {"/bin/bash","-c","svc_compute -calibrate"};
+        Process proc = Runtime.getRuntime().exec(args);
+
+        bread = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+        try {
+          String line;
+          String search = "comp per ms = ";
+          while ((line = bread.readLine()) != null) {
+            System.out.println(line);
+            if (line.indexOf(search) >= 0)
+              compPerMs = Integer.parseInt(line.substring(search.length()));
+          }
+        }
+        finally {
+          try { bread.close(); }
+          catch (IOException e) {}
+        }
+
+        int rc = proc.waitFor();
+        if (rc != 0) {
+          System.err.println("svc_compute exited with status "+rc);
+          compPerMs = 0;
+        }
+      }
+      catch (IOException e) {
+        e.printStackTrace();
+      }
+      catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+      finally {
+        if (compPerMs == 0) {
+          System.err.println("Calibration failed");
+          System.exit(1);
+        }
+      }
+    }
+
     @WebMethod
     public int compute(int value, int ms)
     {
       System.out.println("Starting compute "+value+" "+ms);
       String[] args = {"/bin/bash","-c","compute "+ms};
+      BufferedReader bread = null;
       try {
-        Process proc = Runtime.getRuntime().exec(args);
+        String[] envp = {"PATH="+System.getenv("PATH"),
+                         "COMP_PER_MS="+compPerMs};
+        Process proc = Runtime.getRuntime().exec(args,envp);
 
-
-        BufferedReader bread = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+        bread = new BufferedReader(new InputStreamReader(proc.getInputStream()));
         String line;
         while ((line = bread.readLine()) != null)
           System.out.println(line);
 
         bread = new BufferedReader(new InputStreamReader(proc.getErrorStream()));
-        while ((line = bread.readLine()) != null)
-          System.out.println(line);
+        try {
+          while ((line = bread.readLine()) != null)
+            System.out.println(line);
+        }
+        finally {
+          try { bread.close(); }
+          catch (IOException e) {}
+        }
 
         int rc = proc.waitFor();
 

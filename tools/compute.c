@@ -31,11 +31,18 @@
 #include <pthread.h>
 #include <math.h>
 
-void run(long long work, long long iterations)
+void run(long long total)
 {
-  long long total = work*iterations;
   long long i;
+  double a = 1;
+  double b = 1;
+  double c = 1;
+  double d = 1;
   for (i = 0; i < total; i++) {
+    a += 0.00001;
+    b += a;
+    c += b;
+    d += c;
   }
 }
 
@@ -76,11 +83,11 @@ int main(int argc, char **argv)
   long long comp_per_ms = get_comp_per_ms();
 
   long long start = get_micro_time();
-  run(comp_per_ms,ms);
+  run(comp_per_ms*ms);
   long long end = get_micro_time();
   double ratio = (end-start)/(ms*1000.0);
-  printf("Goal=%dms Actual=%lldms (%.3f%%)\n",
-         ms,(end-start)/1000,100.0*ratio);
+  printf("Comp per ms=%lld, Goal=%dms Actual=%lldms (%.3f%%)\n",
+         comp_per_ms,ms,(end-start)/1000,100.0*ratio);
 
   return 0;
 }

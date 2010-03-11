@@ -30,7 +30,7 @@ public class Marks
 
   private Random rand;
 
-  private Compute comp = new Compute();
+  private static Compute comp;
 
   public Marks()
   {
@@ -133,6 +133,8 @@ public class Marks
       System.exit(1);
     }
     int port = Integer.parseInt(args[0]);
+
+    comp = new Compute(); // does calibration
 
     System.setProperty("sun.net.httpserver.readTimeout","3600");
 
