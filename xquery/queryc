@@ -1,0 +1,10 @@
+#!/bin/bash
+DIR=`dirname $0`
+QUERYFILE=$1
+INPUTFILE=$2
+$DIR/runcompile $QUERYFILE > out.elc || exit 1
+if [ ! -z "$INPUTFILE" ]; then
+  nreduce out.elc cparser "$INPUTFILE"
+else
+  nreduce out.elc
+fi
