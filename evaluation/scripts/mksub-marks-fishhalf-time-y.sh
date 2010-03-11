@@ -8,7 +8,7 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=marks-time-o
+expname=marks-fishhalf-time-y
 
 for ((run = 0; run < 3; run++)); do
   for ((nodes = 1; nodes <= 32; nodes++)); do

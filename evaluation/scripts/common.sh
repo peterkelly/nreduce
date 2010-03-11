@@ -87,7 +87,7 @@ startservice()
         >$JOB_DIR/logs/parsh_service.out &
   local node
   for node in `cat $JOB_DIR/jobnodes`; do
-    ~/dev/tools/waitconn $node $port 30
+    ~/dev/tools/waitconn $node $port 60
   done
   echo "ok"
 }
@@ -104,7 +104,7 @@ startcservice()
         >$JOB_DIR/logs/parsh_service.out &
   local node
   for node in `cat $JOB_DIR/jobnodes`; do
-    ~/dev/tools/waitconn $node $port 30
+    ~/dev/tools/waitconn $node $port 60
   done
   echo "ok"
 }

@@ -8,15 +8,16 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=marks-time-o
+expname=marks-scale-y-normal
+nodes=32
 
 for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes++)); do
-    jobname=$expname.r$run.n$nodes
-    if ((nodes >= 8)); then
-      walltime=00:10:00
+  for ((ms = 1; ms <= 10; ms++)); do
+    jobname=$expname.r$run.ms$ms
+    if ((ms >= 8)); then
+      walltime=00:30:00
     else
-      walltime=01:00:00
+      walltime=00:10:00
     fi
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
@@ -50,7 +51,7 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $ms >\$JOB_DIR/output 2>&1
 EOF
   done
 done

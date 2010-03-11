@@ -35,4 +35,6 @@ $SCRIPT_DIR/plotdata-msdp.sh jobs plots msdp-tr "Multi-stage data parallelism"
 
 $SCRIPT_DIR/plotjob.sh jobs plots marks-time "Student marks workflow"
 $SCRIPT_DIR/plotdata.sh jobs plots marks-tr "Student marks workflow"
-$SCRIPT_DIR/plotdata.sh jobs plots marks-badtr "Student marks workflow - bad"
+$SCRIPT_DIR/plotjob.sh jobs plots marks-fishhalf-time "Student marks workflow"
+$SCRIPT_DIR/plotdata.sh jobs plots marks-fishhalf-tr "Student marks workflow"
+$SCRIPT_DIR/plotscale.sh jobs plots

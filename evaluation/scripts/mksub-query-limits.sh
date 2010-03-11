@@ -8,16 +8,11 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=marks-time-o
+queries=`cat ~/dev/evaluation/xquery/benchmark/usequeries.txt`
 
-for ((run = 0; run < 3; run++)); do
-  for ((nodes = 1; nodes <= 32; nodes++)); do
-    jobname=$expname.r$run.n$nodes
-    if ((nodes >= 8)); then
-      walltime=00:10:00
-    else
-      walltime=01:00:00
-    fi
+for q in $queries; do
+  for ((run = 0; run < 5; run++)); do
+    jobname=query-limits.r$run.$q
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -39,7 +34,7 @@ for ((run = 0; run < 3; run++)); do
 #PBS -q $QNAME
 
 ### Request nodes NB THIS IS REQUIRED
-#PBS -l nodes=$((nodes+1)):ppn=2,walltime=$walltime
+#PBS -l nodes=$((nodes+1)):ppn=2,walltime=01:00:00
 
 # This job's working directory
 echo Working directory is \$PBS_O_WORKDIR
@@ -48,9 +43,13 @@ echo Running on host \`hostname\`
 echo Time is \`date\`
 
 # Run the executable
-export JOB_DIR=~/jobs/$expname/$jobname
+export JOB_DIR=~/jobs/query-limits/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh >\$JOB_DIR/output 2>&1
+cd \$JOB_DIR
+~/dev/evaluation/xquery/benchmark/query-limit.sh ~/dev/xquery/query $q xqnelc >\$JOB_DIR/output 2>&1
+~/dev/evaluation/xquery/benchmark/query-limit.sh ~/dev/xquery/queryc $q xqncp >>\$JOB_DIR/output 2>&1
+~/dev/evaluation/xquery/benchmark/query-limit.sh saxonq $q saxon >>\$JOB_DIR/output 2>&1
+echo DONE
 EOF
   done
 done
