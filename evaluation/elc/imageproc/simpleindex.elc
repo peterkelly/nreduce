@@ -1,0 +1,108 @@
+/* ========================================================================== */
+/* Utility functions */
+
+mergesort cmp m =
+(if (<= (len m) 1) m                              // empty/single; return
+(letrec middle = (floor (/ (len m) 2))            // middle = len(m)/2
+        left = (mergesort cmp (prefix middle m))  // sort left half
+        right = (mergesort cmp (skip middle m))   // sort right half
+in      (merge cmp left right)))                  // merge sorted halves
+
+merge cmp xs ys =
+(if (not xs) ys                                   // xs empty; return ys
+(if (not ys) xs                                   // ys empty; return xs
+(if (< (cmp (head xs) (head ys)) 0)               // xs[0] < ys[0] ?
+    (cons (head xs) (merge cmp (tail xs) ys))     // add xs[0] to list
+    (cons (head ys) (merge cmp xs (tail ys))))))  // add ys[0] to list
+
+split1 str start count =
+(if str
+  (if (isspace (head str))
+    (cons (prefix count start) (split1 (tail str) (tail str) 0))
+    (split1 (tail str) start (+ count 1)))
+  (if (> count 0)
+    (cons (prefix count start) nil)
+    nil))
+
+split str = (split1 str str 0)
+
+/* ========================================================================== */
+/* Service operations */
+
+finconnect host port out = (tail (connect host port out))
+
+host = "localhost"
+port = 1234
+
+analyze image =
+(map ston (split (finconnect host port
+                             (++ "analyze\n"
+                             (++ (ntos (len image))
+                             (++ "\n"
+                                 image))))))
+
+get name =
+(finconnect host port (++ "get " (++ name "\n")))
+
+list = (split (finconnect host port "list\n"))
+
+flatten-numbers list =
+(foldr ++ "" (map (\num.++ (ntos num) " ") list))
+
+compare profile1 profile2 =
+(ston
+ (finconnect host port
+             (++ "compare "
+             (++ (flatten-numbers profile1)
+             (++ " "
+                 (flatten-numbers profile2))))))
+
+/* ========================================================================== */
+/* Workflow */
+
+main =
+(build-index list)
+
+
+
+build-index image-names =
+(letrec
+  records = (map (\name.make-record name                    // Step 1
+                                    (analyze (get name)))
+                 image-names)
+  results =                                                 // Step 2
+    (map (\this.                                            // (loop)
+           (letrec
+              comparisons =                                 // Step 2a
+                (map (\other.
+                       (make-compres
+                         (record-name other)
+                         (compare (record-profile this)
+                                  (record-profile other))))
+                     records)
+              best-matches =                                // Step 2b
+                (filter (\a.>= (compres-score a) 0.9)
+                        comparisons)
+              sorted-matches =                              // Step 2c
+                (mergesort (\a.\b.- (compres-score b)
+                                    (compres-score a))
+                      best-matches)
+            in
+              (++ (record-name this) (++ "\n"               // Step 2d
+              (foldr ++ "" (map print-compres
+                                sorted-matches))))))
+         records)
+in
+  (foldr ++ "" results))                                    // Step 3
+
+print-compres compres =
+(++ "  " (++ (compres-name compres)
+(++ ": " (++ (ntos (compres-score compres)) "\n"))))
+
+make-record name profile = (cons name profile)
+record-name record       = (head record)
+record-profile record    = (tail record)
+
+make-compres name score  = (cons name score)
+compres-name compres     = (head compres)
+compres-score compres    = (tail compres)

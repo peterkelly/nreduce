@@ -29,6 +29,8 @@ import java.io.PrintWriter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
 import java.awt.Point;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -114,8 +116,28 @@ public class ImageProc extends Server
     double weightedHue = (totalWeight == 0.0) ? 0.0 : totalWeightedHue/totalWeight;
 
     PrintWriter writer = new PrintWriter(out,true);
-    writer.format("%d %d %.3f %.3f %.3f %.3f\n",
-                  width,height,hue,saturation,value,weightedHue);
+    writer.format("%.3f %.3f %.3f %.3f\n",
+                  hue,saturation,value,weightedHue);
+  }
+
+  static void compare(String[] args, OutputStream out)
+    throws IOException
+  {
+    double hue1 = Double.parseDouble(args[1]);
+    double sat1 = Double.parseDouble(args[2]);
+    double val1 = Double.parseDouble(args[3]);
+    double whue1 = Double.parseDouble(args[4]);
+    double hue2 = Double.parseDouble(args[5]);
+    double sat2 = Double.parseDouble(args[6]);
+    double val2 = Double.parseDouble(args[7]);
+    double whue2 = Double.parseDouble(args[8]);
+
+    double result = 1.0-(Math.abs(hue2 - hue1) +
+                         Math.abs(sat2 - sat1) +
+                         Math.abs(val2 - val1) +
+                         Math.abs(whue2 - whue1))/4;
+    PrintWriter writer = new PrintWriter(out,true);
+    writer.format("%.3f",result);
   }
 
   static void smooth(InputStream in, int iterations, OutputStream out)
@@ -389,6 +411,9 @@ public class ImageProc extends Server
       for (InputStream s : inputs)
         s.close();
     }
+    else if ((9 == args.length) && (args[0].equals("compare"))) {
+      compare(args,cout);
+    }
     else {
       PrintWriter writer = new PrintWriter(cout);
       writer.println("Invalid request: "+line);
@@ -440,7 +465,7 @@ public class ImageProc extends Server
       ip.serve();
     }
     else {
-      System.out.println("Usage: services.ImageProc <port>");
+      System.out.println("Usage: services.ImageProc <port> <imgdir>");
       System.out.println("or     services.ImageProc [command]");
       System.out.println("where [command] is done of:");
       System.out.println("  analyze <input>");
