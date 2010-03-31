@@ -3,8 +3,7 @@ set out "plots/eps/divconq-utilisation.eps"
 set size 0.75, 0.75
 
 set xlabel "Time (s)"
-set ylabel "Utilization (%)"
-set title "Divide & conquer, 32 nodes (64 processors)"
+set ylabel "Average processor utilisation (%)"
 set yr [0:105]
 
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1

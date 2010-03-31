@@ -4,16 +4,15 @@ BASE=`pwd`
 
 SCRIPT_DIR=`dirname $0`
 
-if (($# < 4)); then
-  echo "Usage: $0 <jobsdir> <plotdir> <plotname> <title>"
+if (($# < 3)); then
+  echo "Usage: $0 <jobsdir> <plotdir> <plotname>"
   exit 1
 fi
 
 JOBS_DIR=$1
 PLOT_DIR=$2
 PLOT_NAME=$3
-TITLE=$4
-EXTRA=$5
+EXTRA=$4
 JOB_NAMES="$PLOT_NAME-o $PLOT_NAME-y"
 
 mkdir -p $PLOT_DIR/plots/$PLOT_NAME
@@ -26,10 +25,9 @@ set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 
 set xlabel "# nodes"
-set ylabel "Data transferred between hosts (MB)"
+set ylabel "Data transferred between hosts (Mb)"
 set xtics (1,4,8,12,16,20,24,28,32)
 set format y "%4.f"
-set title "$TITLE - data transfer"
 set xrange [1:]
 
 set style data lines

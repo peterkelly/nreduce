@@ -1,12 +1,11 @@
 #!/bin/bash
 
-if (($# < 2)); then
-  echo "Usage: $0 <plotname> <title>"
+if (($# < 1)); then
+  echo "Usage: $0 <plotname>"
   exit 1
 fi
 
 PLOT_NAME=$1
-TITLE=$2
 
 t1o=`grep '^1 ' $PLOT_NAME-o.dat | awk '{print $2}'`
 t1y=`grep '^1 ' $PLOT_NAME-y.dat | awk '{print $2}'`
@@ -28,7 +27,6 @@ set ylabel "Speedup"
 set xtics 4
 set ytics 4
 set format y "%4.f"
-set title "$TITLE - speedup"
 
 set style data lines
 set key top left

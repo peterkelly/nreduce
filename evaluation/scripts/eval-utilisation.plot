@@ -3,8 +3,7 @@ set out "plots/eps/eval-utilisation.eps"
 set size 0.75, 0.75
 
 set xlabel "Time (s)"
-set ylabel "Utilisation (%)"
-set title "Utilisation vs. evaluation mode - 4 processors"
+set ylabel "Average processor utilisation (%)"
 set yr [0:105]
 
 set style line 1 linewidth 2 linecolor rgbcolor "blue" linetype 1

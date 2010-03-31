@@ -14,7 +14,7 @@ set terminal postscript eps solid color
 set out "$OUTPUT_FILE"
 
 set xlabel "Time (s)"
-set ylabel "Utilization (%)"
+set ylabel "Average processor utilisation (%)"
 set yr [0:105]
 HERE
 

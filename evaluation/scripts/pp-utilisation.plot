@@ -3,9 +3,10 @@ set out "plots/eps/pp-utilisation.eps"
 set size 0.75, 0.75
 
 set xlabel "Time (s)"
-set ylabel "Utilization (%)"
-set title "Logical pipelining with 8 stages"
+set ylabel "Average processor utilisation (%)"
 set yr [0:105]
+set xr [0:260]
+set key bottom right
 
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "green" linetype 1

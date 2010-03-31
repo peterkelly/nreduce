@@ -35,7 +35,6 @@ set ylabel "Execution time (s)"
 set yrange [0:]
 set xtics 1
 set format y "%4.f"
-set title "$TITLE - execution time"
 
 set style data lines
 set grid

@@ -2,15 +2,14 @@
 
 SCRIPT_DIR=`dirname $0`
 
-if (($# < 4)); then
-  echo "Usage: $0 <jobsdir> <plotdir> <plotname> <title>"
+if (($# < 3)); then
+  echo "Usage: $0 <jobsdir> <plotdir> <plotname>"
   exit 1
 fi
 
 JOBS_DIR=$1
 PLOT_DIR=$2
 PLOT_NAME=$3
-TITLE=$4
 
 OUTPUT_DIR=$PLOT_DIR/plots/$PLOT_NAME
 
@@ -24,6 +23,6 @@ $SCRIPT_DIR/gettimes.sh $JOBS_DIR/$PLOT_NAME-y $PLOT_NAME-y $OUTPUT_DIR/$PLOT_NA
 
 # Plot execution time and speedup
 cd $OUTPUT_DIR
-$SCRIPT_DIR/plotjob-time.sh $PLOT_NAME "$TITLE"
-$SCRIPT_DIR/plotjob-speedup.sh $PLOT_NAME "$TITLE"
+$SCRIPT_DIR/plotjob-time.sh $PLOT_NAME
+$SCRIPT_DIR/plotjob-speedup.sh $PLOT_NAME
 cp -f *.eps ../../eps

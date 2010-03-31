@@ -2,15 +2,14 @@
 
 SCRIPT_DIR=`dirname $0`
 
-if (($# < 4)); then
-  echo "Usage: $0 <jobsdir> <plotdir> <plotname> <title>"
+if (($# < 3)); then
+  echo "Usage: $0 <jobsdir> <plotdir> <plotname>"
   exit 1
 fi
 
 JOBS_DIR=$1
 PLOT_DIR=$2
 PLOT_NAME=$3
-TITLE=$4
 
 OUTPUT_DIR=$PLOT_DIR/plots/$PLOT_NAME
 
@@ -37,13 +36,12 @@ set ylabel "Execution time (s)"
 set logscale x
 unset mxtics
 unset mytics
-set key top left
+set key bottom left
 
 set xtics 4
 set xrange [1:4096]
 set yrange [0:]
 set format y "%4.f"
-set title "$TITLE"
 
 set style data lines
 set grid

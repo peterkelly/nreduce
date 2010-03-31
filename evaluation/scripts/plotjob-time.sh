@@ -1,12 +1,11 @@
 #!/bin/bash
 
-if (($# < 2)); then
-  echo "Usage: $0 <plotname> <title>"
+if (($# < 1)); then
+  echo "Usage: $0 <plotname>"
   exit 1
 fi
 
 PLOT_NAME=$1
-TITLE=$2
 
 cat >$PLOT_NAME-time.plot <<HERE
 set terminal postscript eps color size 15cm, 9cm
@@ -18,7 +17,6 @@ set ylabel "Execution time (s)"
 set yrange [0:]
 set xtics 4
 set format y "%4.f"
-set title "$TITLE - execution time"
 
 set style data lines
 set grid

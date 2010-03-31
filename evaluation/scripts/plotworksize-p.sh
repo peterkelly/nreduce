@@ -2,15 +2,14 @@
 
 SCRIPT_DIR=`dirname $0`
 
-if (($# < 4)); then
-  echo "Usage: $0 <jobsdir> <plotdir> <plotname> <title>"
+if (($# < 3)); then
+  echo "Usage: $0 <jobsdir> <plotdir> <plotname>"
   exit 1
 fi
 
 JOBS_DIR=$1
 PLOT_DIR=$2
 PLOT_NAME=$3
-TITLE=$4
 
 OUTPUT_DIR=$PLOT_DIR/plots/$PLOT_NAME
 
@@ -47,7 +46,6 @@ set xrange [:4096]
 set yrange [0.9:]
 set ytics 1, 0.5
 set format y "%3.1f"
-set title "$TITLE"
 
 set style data lines
 set grid
