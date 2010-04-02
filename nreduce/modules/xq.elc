@@ -832,9 +832,25 @@ fn_contains haystack needle =
        (contains haystack-str needle-str)))))
    nil)
 
+fn_floor0 n =
+(cons (xml::mknumber (floor n)) nil)
 
+fn_floor arg =
+(if arg
+  (if (tail arg)
+    (error "floor: argument is a list of length > 1")
+    (fn_floor0 (tonumber (atomize1 (head arg)))))
+  (error "floor: argument is an empty list"))
 
+fn_ceiling0 n =
+(cons (xml::mknumber (ceil n)) nil)
 
+fn_ceiling arg =
+(if arg
+  (if (tail arg)
+    (error "ceiling: argument is a list of length > 1")
+    (fn_ceiling0 (tonumber (atomize1 (head arg)))))
+  (error "ceiling: argument is an empty list"))
 
 
 // FIXME: also allow parent/next/prev on text nodes and comments
