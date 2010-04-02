@@ -1,13 +1,14 @@
 module elc
 exports 
 
-  sorts Symbol Int StrChars StrChar
+  sorts Symbol Int StrChars StrChar String
   lexical syntax
     [A-Za-z\.\-\_][A-Za-z0-9\-\_\:\+]* -> Symbol
     [0-9]+                 -> Int
     StrChar*               -> StrChars
     ~[\"\\\n]              -> StrChar
     [\\][\"\\n]            -> StrChar
+    "\"" StrChars "\""     -> String
     "import"               -> Symbol {reject}
     "nil"                  -> Symbol {reject}
   lexical restrictions
@@ -48,7 +49,7 @@ exports
     "++"                                -> Symbol
 
   context-free syntax
-    "\"" StrChars "\""                  -> Expression {cons("Str")}
+    String                              -> Expression {cons("Str")}
 
     Symbol                              -> Expression {cons("Sym")}
     "nil"                               -> Expression {cons("Nl")}

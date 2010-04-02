@@ -11,7 +11,8 @@ E : DirAttribute(PQName(n1,n2),vs) -> |{ (xml::mknpattr ns_#n1 ~s:n1 ~s:n2 ~vs) 
     where not(<equal>(n1,"xmlns"))
 E : DirAttribute(PQName("xmlns",n),s) -> |{ (xml::mknamespace ~s ~s:n) }|
 
-E : AttrValues(x) -> <foldr(!Nl(),\(e1,e2) -> |{ (++ (xq::consimple e1) e2) }|\)>x
+E : AttrValues(x) -> |{ (xq::join_strings e " ") }|
+  where e := <foldr(!Nl(),\(e1,e2) -> |{ (cons (xq::consimple e1) e2) }|\)>x
 E : DirElemContents(x) -> <toappendlist>x
 
 E : |[ comment { e } ]|           -> |{ (cons (xml::mkcomment (xq::consimple e)) nil) }|
