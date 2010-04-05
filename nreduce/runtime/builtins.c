@@ -2110,6 +2110,25 @@ static void b_isspace(task *tsk, pntr *argstack)
   setbool(tsk,&argstack[0],isspace((int)pntrdouble(argstack[0])));
 }
 
+static void b_genstring(task *tsk, pntr *argstack)
+{
+  CHECK_ARG(0,CELL_NUMBER);
+  int len = (int)pntrdouble(argstack[0]);
+
+  if (len > 32*MB) { /* sanity check */
+    set_error(tsk,"genstring: too long");
+    return;
+  }
+
+  char *str = (char*)malloc(len+1);
+  int i;
+  for (i = 0; i < len; i++)
+    str[i] = 'A'+(i%26);
+  str[len] = '\0';
+  argstack[0] = string_to_array(tsk,str);
+  free(str);
+}
+
 int get_builtin(const char *name)
 {
   int i;
@@ -2217,5 +2236,6 @@ builtin builtin_info[NUM_BUILTINS] = {
 { "restring",       1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_restring       },
 { "buildarray",     3, 2, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_buildarray     },
 { "parsexmlfile",   1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_parsexmlfile   },
+{ "genstring",      1, 1, ALWAYS_VALUE, MAYBE_FALSE,   PURE, b_genstring      },
 
 };

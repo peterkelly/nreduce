@@ -152,8 +152,9 @@ struct gaddr;
 #define B_RESTRING       68
 #define B_BUILDARRAY     69
 #define B_PARSEXMLFILE   70
+#define B_GENSTRING      71
 
-#define NUM_BUILTINS     71
+#define NUM_BUILTINS     72
 
 #ifdef NDEBUG
 #define checkcell(_c) (_c)
