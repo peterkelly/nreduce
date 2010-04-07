@@ -513,6 +513,8 @@ static void remove_global(task *tsk, global *glo)
   llist_remove(&tsk->globals,glo);
   /* Free fetchers */
   list_free(glo->wq.fetchers,free);
+  /* Free list of tasks known to contain replicas */
+  list_free(glo->known_replicas,free);
 
   /* Free memory */
   free(glo);
@@ -759,6 +761,48 @@ static void preserve_targets(task *tsk)
       }
     }
   }
+}
+
+static void mark_replicas(task *tsk, int bit)
+{
+  /* Mark all replica objects to ensure they remain when the sweep occurs. For all replicas
+     which have just become stale for the first time, send a HAVE_REPLICAS message to the
+     appropriate nodes containing the master objects. */
+
+  array **messages = (array**)calloc(tsk->groupsize,sizeof(array*));
+  global *glo;
+  for (glo = tsk->globals.first; glo; glo = glo->next) {
+    if ((glo->addr.tid != tsk->tid) && !(glo->flags & FLAG_MARKED) && !glo->deleteme) {
+
+      assert(0 <= glo->addr.tid);
+      assert(glo->addr.tid < tsk->groupsize);
+
+      if (!glo->stale_replica) {
+        glo->stale_replica = 1;
+        if (!glo->master_notified) {
+          if (NULL == messages[glo->addr.tid])
+            messages[glo->addr.tid] = array_new(1,0);
+          array_append(messages[glo->addr.tid],&glo->addr,sizeof(gaddr));
+
+          glo->master_notified = 1;
+        }
+      }
+    }
+  }
+
+  for (glo = tsk->globals.first; glo; glo = glo->next) {
+    if ((glo->addr.tid != tsk->tid) && !(glo->flags & FLAG_MARKED) && !glo->deleteme)
+      mark_global(tsk,glo,bit,0);
+  }
+
+  int peer;
+  for (peer = 0; peer < tsk->groupsize; peer++) {
+    if (messages[peer]) {
+      msg_send(tsk,peer,MSG_HAVE_REPLICAS,messages[peer]->data,messages[peer]->nbytes);
+      array_free(messages[peer]);
+    }
+  }
+  free(messages);
 }
 
 static void sweep_globals(task *tsk)
@@ -1286,6 +1330,7 @@ void local_collect(task *tsk)
   mark_mature_remoteref_globals(tsk,FLAG_MARKED);
   mark_remembered_set(tsk);
   mark_new_objects(tsk,tsk->newgen);
+  mark_replicas(tsk,FLAG_MARKED);
   mark_end(tsk,FLAG_MARKED);
 
   #ifdef CHECK_HEAP_INTEGRITY
@@ -1345,6 +1390,7 @@ void local_collect(task *tsk)
       mark_roots(tsk,FLAG_MARKED);
       mark_incoming_global_refs(tsk,FLAG_MARKED);
       mark_new_objects(tsk,prevgen);
+      mark_replicas(tsk,FLAG_MARKED);
       mark_end(tsk,FLAG_MARKED);
 
       /* Copy phase */
@@ -1442,6 +1488,11 @@ static void sweep_incoming_references(task *tsk)
   global *glo;
   global *next;
 
+  array **deletions = (array**)calloc(tsk->groupsize,sizeof(array*));
+  int i;
+  for (i = 0; i < tsk->groupsize; i++)
+    deletions[i] = array_new(sizeof(gaddr),0);
+
   for (glo = tsk->globals.first; glo; glo = next) {
     next = glo->next;
 
@@ -1467,11 +1518,28 @@ static void sweep_incoming_references(task *tsk)
                  ((get_pntr(glo->p)->flags & FLAG_DMB) ||
                   (get_pntr(glo->p)->flags & FLAG_NEW)))
           event_rescue_global(tsk,glo->addr);
-        else
+        else {
+          list *l;
+          for (l = glo->known_replicas; l; l = l->next) {
+            int peer = *(int*)l->data;
+            array_append(deletions[peer],&glo->addr,sizeof(gaddr));
+          }
+
           remove_global(tsk,glo);
+        }
       }
     }
   }
+
+  /* Send DELETE_REPLICAS messages */
+
+  int pid;
+  for (pid = 0; pid < tsk->groupsize; pid++) {
+    if (0 < array_count(deletions[pid]))
+      msg_send(tsk,pid,MSG_DELETE_REPLICAS,deletions[pid]->data,deletions[pid]->nbytes);
+    free(deletions[pid]);
+  }
+  free(deletions);
 }
 
 static void reset_dmb(task *tsk)

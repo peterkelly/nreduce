@@ -73,7 +73,9 @@ const char *msg_names[MSG_HISTMAX] = {
   "PAUSEACK",
   "RESUME",
   "CHECKALLREFS",
-  "CHECKREFS"};
+  "CHECKREFS",
+  "HAVE_REPLICAS",
+  "DELETE_REPLICAS"};
 
 static void endpoint_add_message(endpoint *endpt, message *msg);
 static endpointid node_add_thread_locked(node *n, const char *type,

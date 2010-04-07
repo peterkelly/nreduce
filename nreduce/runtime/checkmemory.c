@@ -385,7 +385,7 @@ void send_checkrefs(task *tsk)
       array *arr = array_new(1,0);
       global *glo;
       for (glo = tsk->globals.first; glo; glo = glo->next) {
-        if (glo->addr.tid == i)
+        if ((glo->addr.tid == i) && !glo->stale_replica)
           array_append(arr,&glo->addr,sizeof(gaddr));
       }
 

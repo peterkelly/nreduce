@@ -481,6 +481,10 @@ typedef struct global {
   struct global *addrnext; /* for addrhash entries */
   struct global *next; /* for tsk->globals */
   struct global *prev; /* for tsk->globals */
+  int stale_replica;
+  int master_notified;
+  list *known_replicas;
+  int deleteme;
 } global;
 
 /* task */

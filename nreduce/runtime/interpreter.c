@@ -1248,6 +1248,71 @@ static void interpreter_checkrefs(task *tsk, message *msg)
   }
 }
 
+void add_known_replica(global *glo, int peer)
+{
+  list *l;
+
+  /* Check that it doesn't already exist */
+  for (l = glo->known_replicas; l; l = l->next) {
+    int *other = (int*)l->data;
+    assert(*other != peer);
+  }
+
+  /* Add it to the list */
+  int *peercopy = (int*)malloc(sizeof(int));
+  *peercopy = peer;
+  list_push(&glo->known_replicas,peercopy);
+}
+
+static void interpreter_have_replicas(task *tsk, message *msg)
+{
+  int from = get_idmap_index(tsk,msg->source);
+
+  array *deleted = array_new(1,0);
+
+  assert(0 == (msg->size % sizeof(gaddr)));
+  int count = msg->size/sizeof(gaddr);
+  int i;
+  for (i = 0; i < count; i++) {
+    gaddr addr = ((gaddr*)msg->data)[i];;
+    assert(addr.tid == tsk->tid);
+    global *glo = addrhash_lookup(tsk,addr);
+    if (NULL == glo) {
+      /* We have already deleted this replica... send back a DELETE_REPLICA message immediately */
+      array_append(deleted,&addr,sizeof(gaddr));
+    }
+    else {
+      /* Master object still exists - add source to list of known replicas */
+      add_known_replica(glo,from);
+    }
+  }
+
+  if (0 < deleted->nbytes)
+    msg_send(tsk,from,MSG_DELETE_REPLICAS,deleted->data,deleted->nbytes);
+  array_free(deleted);
+}
+
+static void interpreter_delete_replicas(task *tsk, message *msg)
+{
+  int from = get_idmap_index(tsk,msg->source);
+
+  assert(0 == (msg->size % sizeof(gaddr)));
+  int count = msg->size/sizeof(gaddr);
+  int i;
+  for (i = 0; i < count; i++) {
+    gaddr addr = ((gaddr*)msg->data)[i];;
+    assert(addr.tid == from);
+    global *glo = addrhash_lookup(tsk,addr);
+    if (NULL == glo) {
+      /* We have already deleted this replica; do nothing */
+    }
+    else {
+      /* Replica still exists */
+      glo->deleteme = 1;
+    }
+  }
+}
+
 static void handle_message(task *tsk, message *msg)
 {
   switch (msg->tag) {
@@ -1329,6 +1394,12 @@ static void handle_message(task *tsk, message *msg)
     break;
   case MSG_CHECKREFS:
     interpreter_checkrefs(tsk,msg);
+    break;
+  case MSG_HAVE_REPLICAS:
+    interpreter_have_replicas(tsk,msg);
+    break;
+  case MSG_DELETE_REPLICAS:
+    interpreter_delete_replicas(tsk,msg);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");

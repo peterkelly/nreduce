@@ -658,6 +658,8 @@ void read_pntr(reader *rd, pntr *pout)
     }
 
     int existing_type = existing ? pntrtype(existing->p) : CELL_EMPTY;
+    assert((NULL == existing) ||
+           ((existing->addr.lid == addr.lid) && (existing->addr.tid == addr.tid)));
     if (NULL == existing) {
       assert(addr.tid != tsk->tid);
       assert(addr.lid >= 0);
@@ -685,6 +687,8 @@ void read_pntr(reader *rd, pntr *pout)
         global *target = pglobal(existing->p);
         response_for_fetching_ref(tsk,target,*pout);
       }
+
+      existing->stale_replica = 0;
 
       cell *refcell = get_pntr(existing->p);
       cell_make_ind(tsk,refcell,*pout);
