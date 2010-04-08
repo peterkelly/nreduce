@@ -560,6 +560,8 @@ void maybe_expand_array(task *tsk, pntr p)
           break;
         if (arr->size+tail_size > MAX_ARRAY_SIZE)
           break;
+        if (BUILDARRAY_THRESHOLD <= tail_size)
+          break;
         carray_append(tsk,&refcell,&tail_arr->elements[tail_index],tail_size,arr->elemsize);
         refcell->field2 = tail_tail;
         write_barrier_ifnew(tsk,refcell,refcell->field2);
