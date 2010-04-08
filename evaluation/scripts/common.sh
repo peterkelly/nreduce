@@ -61,7 +61,7 @@ init()
   echo "Nodes:" `cat $JOB_DIR/jobnodes`
 
   echo -n "Killing existing processes... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce loadbal showload svc_compute compute' >/dev/null 2>&1
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java nreduce loadbal showload svc_compute svc_compdata compute' >/dev/null 2>&1
   echo "ok"
 
   echo -n "Clearing log dir... "
@@ -202,7 +202,7 @@ shutdown()
   echo "ok"
 
   echo -n "Stopping services... "
-  parsh -h $JOB_DIR/jobnodes 'killall -9 java svc_compute compute' >/dev/null 2>&1
+  parsh -h $JOB_DIR/jobnodes 'killall -9 java svc_compute svc_compdata compute' >/dev/null 2>&1
   echo "ok"
 
   if [ $VM_RUNNING -ne 0 ]; then

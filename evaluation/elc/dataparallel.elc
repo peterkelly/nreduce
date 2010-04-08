@@ -1,12 +1,27 @@
-mkrequest n ms = (++ (ntos n) (++ " " (ntos ms)))
+main args =                             // Main function
+(if (< (len args) 5)                    // Check command-line args
+  "Usage: dataparallel.elc host port nitems compms itemsize\n"
+(letrec
+  host = (item 0 args)                  // Process command-line args,
+  port = (ston (item 1 args))           // converting to numbers using
+  nitems = (ston (item 2 args))         // ston for numeric args
+  compms = (ston (item 3 args))
+  itemsize = (ston (item 4 args))
 
-main args =
-(if (< (len args) 4)
-    "Usage: dataparallel.elc host port size compms\n"
-(letrec host = (item 0 args)
-        port = (ston (item 1 args))
-        size = (ston (item 2 args))
-        compms = (ston (item 3 args))
-        callservice n = (connect host port (mkrequest n compms))
-        results = (map callservice (range 1 size))
- in     (foldr ++ "\nEND\n" results)))
+  input = (genstring itemsize)          // Generate input string of
+                                        // requested size
+
+  callservice n =                       // Service stub function -
+    (connect host port                  // connect to specified server
+    (mkrequest compms n input))         // and send request
+
+  results =                             // For i in 1..nitems, invoke
+    (map callservice (range 1 nitems))  // service with value i
+in
+  (foldr ++ "\nEND\n" results)))        // Print result list, terminated
+                                        // by "END" to confirm completion
+
+mkrequest ms n input =                  // Function to build request
+(++ (ntos ms) (++ " "                   // Send no. ms of computation,
+(++ (ntos n) (++ " "                    // then current value of i, then
+    input))))                           // input data of requested size

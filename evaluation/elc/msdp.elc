@@ -1,0 +1,41 @@
+main args =                             // Main function
+(if (< (len args) 5)                    // Check command-line args
+  "Usage: msdp.elc host port nitems nstages compms itemsize\n"
+(letrec
+  host = (item 0 args)                  // Process command-line args,
+  port = (ston (item 1 args))           // converting to numbers using
+  nitems = (ston (item 2 args))         // ston for numeric args
+  nstages = (ston (item 3 args))
+  compms = (ston (item 4 args))
+  itemsize = (ston (item 5 args))
+
+  input = (genstring itemsize)          // Generate input string of
+                                        // requested size
+
+  process data index =                  // Service call: single item
+    (tail                               // Ignore first response char (.)
+    (connect host port                  // Connect to service
+    (++ "process "                      // Send "process" command
+    (++ (ntos compms)                   // Send requested compute time
+    (++ " " data)))))                   // Send input data
+                                 
+  combine results =                     // Service call: collective op
+    (tail                               // Ignore first response char (.)
+    (connect host port                  // Connect to service
+    (++ "combine "                      // Send "combine" command
+    (++ (ntos compms)                   // Send requested compute time
+    (foldr ++ ""                        // Send concatenated results of
+    (map (!x.++ " " x) results))))))    // all individual process calls
+
+  loop value nstages =                  // Iterate over stages
+    (if (> nstages 0)                   // If more stages remaining
+        (loop (combine                  // Recursive call, with input
+                (map (process value)    // from applying combine to all
+                     (range 1 nitems))) // results of process calls
+              (- nstages 1))
+        value)                          // Otherwise, return last result
+
+  result = (loop input nstages)         // Start iteration
+in
+  (++ result "\nEND\n")))               // Print result, terminated by
+                                        // "END" to confirm completion

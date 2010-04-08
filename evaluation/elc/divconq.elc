@@ -1,0 +1,43 @@
+main args =                             // Main function
+(if (< (len args) 5)                    // Check command-line args
+  "Usage: divconq.elc host port nitems compms itemsize\n"
+(letrec
+  host = (item 0 args)                  // Process command-line args,
+  port = (ston (item 1 args))           // converting to numbers using
+  nitems = (ston (item 2 args))         // ston for numeric args
+  compms = (ston (item 3 args))
+  itemsize = (ston (item 4 args))
+
+  input = (genstring itemsize)          // Generate input string of
+                                        // requested size
+
+  callservice x y =                     // Service stub function -
+   (connect host port                   // concatenate args and
+            (++ (ntos compms)           // pass to service
+            (++ " " (++ x y))))
+
+  result =                              // Generate list of numbers 1-n
+    (divconq callservice                // and apply divide & conquer
+             (map (!x.input)            // using callservice as the
+                  (range 1 nitems)))    // combining function
+  
+in
+  (++ result                            // Print result, terminated by
+      "\nEND\n")))                      // "END" to confirm completion
+
+divconq f lst =                         // Divide & conquer function
+                                        // (f is the combining function)
+
+(if (== (len lst) 0)                    // Empty list: error
+    (error "Empty list")
+(if (== (len lst) 1)                    // Single item: return it
+    (head lst)
+(if (== (len lst) 2)                    // Exactly two items:
+    (f (item 0 lst)                     // combine them
+       (item 1 lst))
+(letrec                                 // More than two items:
+  mid = (floor (/ (len lst) 2))         // Split list in half
+  right = (- (len lst) mid)
+in                                      // Solve recursively, and
+  (f (divconq f (sub 0 mid lst))        // combine results
+     (divconq f (sub mid right lst)))))))

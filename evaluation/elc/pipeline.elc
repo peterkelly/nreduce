@@ -1,18 +1,33 @@
-mkrequest n ms     = (++ (ntos n) (++ " " (ntos ms)))
+main args =                             // Main function
+(if (< (len args) 4)                    // Check command-line args
+  "Usage: pipeline.elc nitems comp port itemsize services...\n"
+(letrec
+  nitems = (ston (item 0 args))         // Process command-line args,
+  compms = (ston (item 1 args))         // converting to numbers using
+  port = (ston (item 2 args))           // ston for numeric args
+  itemsize = (ston (item 3 args))
+  services = (skip 4 args)              // Remaining args: service hosts
 
-parseresponse resp = (ston (tail resp))
+  input = (genstring itemsize)          // Generate input string of
+                                        // requested size
 
-main args =
-(if (< (len args) 4)
-  "Usage: pipeline.elc nitems comp port services...\n"
-(letrec nitems = (ston (item 0 args))
-        compms = (ston (item 1 args))
-        port = (ston (item 2 args))
-        services = (skip 3 args)
-        callservice host n =
-          (parseresponse (connect host port (mkrequest n compms)))
-        f lst x = (if lst
-                      (callservice (head lst) (f (tail lst) x))
-                      x)
-        result = (map (f services) (range 1 nitems))
- in     (foldr ++ "END\n" (map (!x.++ (ntos x) "\n") result))))
+  callservice host input =              // Service stub function -
+    (connect host port                  // connect to specified server
+    (mkrequest compms input))           // and send request
+
+  pipeline stages arg =
+    (if stages                          // If more stages remain, call
+        (callservice                    // the service for the current
+          (head stages)                 // stage, passing the result of
+          (pipeline (tail stages) arg)) // the previous stage as input
+        arg)                            // Else return initial input
+
+  result =
+    (map (!n.pipeline services input)   // For i in 1..nitems, apply
+         (range 1 nitems))              // pipeline starting with input
+in
+  (foldr ++ "END\n" result)))           // Print result list, terminated
+                                        // by "END" to confirm completion
+
+mkrequest compms input =                // Produce request body: amount
+(++ (ntos compms) (++ " " input))       // of computation + data to echo

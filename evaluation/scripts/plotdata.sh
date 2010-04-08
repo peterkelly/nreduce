@@ -11,17 +11,17 @@ fi
 
 JOBS_DIR=$1
 PLOT_DIR=$2
-PLOT_NAME=$3
+EXP_NAME=$3
 EXTRA=$4
-JOB_NAMES="$PLOT_NAME-o $PLOT_NAME-y"
+JOB_NAMES="$EXP_NAME-o $EXP_NAME-y"
 
-mkdir -p $PLOT_DIR/plots/$PLOT_NAME
+mkdir -p $PLOT_DIR/plots/$EXP_NAME
 
-OUTPUT_FILE=$PLOT_DIR/plots/$PLOT_NAME/$PLOT_NAME
+OUTPUT_FILE=$PLOT_DIR/plots/$EXP_NAME/$EXP_NAME-data
 
 cat >$OUTPUT_FILE.plot <<HERE
 set terminal postscript eps color size 15.0cm, 9cm
-set output "$PLOT_NAME.eps"
+set output "$EXP_NAME-data.eps"
 set size 0.75, 0.75
 
 set xlabel "# nodes"
@@ -40,10 +40,10 @@ set style line 3 linewidth 2 linecolor rgbcolor "#00CC00" linetype 3
 set style line 4 linewidth 2 linecolor rgbcolor "#FF0000" linetype 1
 set style fill solid 0.2
 
-plot "$PLOT_NAME-o.dat" using 1:(\$2/1024) title "Orchestration" with lines ls 1, \\
-     "$PLOT_NAME-y.dat" using 1:(\$2/1024) title "Choreography" with lines ls 2, \\
-     "$PLOT_NAME-y.dat" using 1:(\$3/1024) title "Choreography min/max" with lines ls 3, \\
-     "$PLOT_NAME-y.dat" using 1:(\$4/1024) notitle with lines ls 3 \
+plot "$EXP_NAME-o-data.dat" using 1:(\$2/1024) title "Orchestration" with lines ls 1, \\
+     "$EXP_NAME-y-data.dat" using 1:(\$2/1024) title "Choreography" with lines ls 2, \\
+     "$EXP_NAME-y-data.dat" using 1:(\$3/1024) title "Choreography min/max" with lines ls 3, \\
+     "$EXP_NAME-y-data.dat" using 1:(\$4/1024) notitle with lines ls 3 \
 $EXTRA
 HERE
 
@@ -51,7 +51,7 @@ HERE
 for JOB in $JOB_NAMES; do
   echo -n Getting data transfer statistics for $JOB
   cd $BASE/$JOBS_DIR/$JOB
-  DATAFILE=$BASE/$PLOT_DIR/plots/$PLOT_NAME/$JOB.dat
+  DATAFILE=$BASE/$PLOT_DIR/plots/$EXP_NAME/$JOB-data.dat
   echo "# n avg min max" > $DATAFILE
 
   if echo $JOB | grep -qE -- '-o$'; then
@@ -76,7 +76,7 @@ for JOB in $JOB_NAMES; do
   echo
 done
 
-cd $BASE/$PLOT_DIR/plots/$PLOT_NAME
-gnuplot $PLOT_NAME.plot
+cd $BASE/$PLOT_DIR/plots/$EXP_NAME
+gnuplot $EXP_NAME-data.plot
 mkdir -p ../../eps
-cp -f $PLOT_NAME.eps ../../eps
+cp -f $EXP_NAME-data.eps ../../eps

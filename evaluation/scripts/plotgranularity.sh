@@ -41,8 +41,8 @@ set ylabel "Execution time (s)"
 set logscale x
 set logscale x2
 
-#set ytics 2
-#set ytics 16
+unset mxtics
+unset mx2tics
 set xtics 2
 set xrange [4:2048]
 set x2range [16384:32]

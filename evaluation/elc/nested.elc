@@ -1,25 +1,43 @@
-printcol n         = (++ (ntos n) " ")
+main args =                          // Main function
+(if (< (len args) 5)                 // Check command-line args
+  "Usage: nested.elc host port size compms itemsize\n"
+(letrec
+  host = (item 0 args)               // Process command-line args,
+  port = (ston (item 1 args))        // converting to numbers using
+  size = (ston (item 2 args))        // ston for numeric args
+  compms = (ston (item 3 args))
+  itemsize = (ston (item 4 args))
 
-printrow row       = (foldr ++ "\n" (map printcol row))
+  callservice n =                    // Service stub function -
+    (connect host port               // connect to specified server
+    (mkrequest compms n))            // and send request
 
-printmatrix matrix = (foldr ++ "" (map printrow matrix))
+  data = (genstring itemsize)        // Generate array element content
+                                     // of requested size
 
-creatematrix size  = (map (!x.(range x (+ x (- size 1))))
-                          (range 0 (- size 1)))
+  input = (create2darray size data)  // Construct size*size input array
 
-mkrequest n ms     = (++ (ntos n) (++ " " (ntos ms)))
+  result =
+    (map (!row.map callservice row)  // For each column in each row,
+         input)                      // call the service
+in
+  (++ (print2darray result)          // Print output array, terminated
+      "END\n")))                     // by "END" to confirm completion
 
-parseresponse resp = (ston (tail resp))
 
-main args =
-(if (< (len args) 4)
-    "Usage: nested.elc host port size compms\n"
-(letrec host = (item 0 args)
-        port = (ston (item 1 args))
-        size = (ston (item 2 args))
-        compms = (ston (item 3 args))
-        callservice n =
-          (parseresponse (connect host port (mkrequest n compms)))
-        input = (creatematrix size)
-        output = (map (!row.map callservice row) input)
- in     (++ (printmatrix output) "END\n")))
+print2darray array =                 // Array to string: Loop over rows
+(foldr ++ ""                         // and columns, concatenating column
+       (map (!row.foldr ++ "\n" row) // elements on a single line, and
+            array))                  // row elements on separate lines
+
+create2darray size content =         // Create input array:
+(map (!row.map (!col.++ (ntos row)   // For each row and column, create
+                    (++ " "          // array element containing row num,
+                    (++ (ntos col)   // column num, and input string
+                    (++ " " content))))
+               (range 1 size))
+     (range 1 size))
+
+mkrequest ms data =                  // Build request:
+(++ (ntos ms)                        // Send no. ms of computation, and
+(++ " " data))                       // input data to be echoed back

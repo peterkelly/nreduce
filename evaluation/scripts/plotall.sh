@@ -16,25 +16,28 @@ $SCRIPT_DIR/plotpostpone.sh jobs plots postpone
 $SCRIPT_DIR/plotnumcalls.sh jobs plots numcalls-o
 #$SCRIPT_DIR/plotnumcalls.sh jobs plots numcalls-hn
 $SCRIPT_DIR/plotgranularity.sh jobs plots granularity
+$SCRIPT_DIR/plotgranularity.sh jobs plots xq-granularity
 
-$SCRIPT_DIR/plotjob.sh jobs plots dataparallel
-$SCRIPT_DIR/plotjob.sh jobs plots nested
-$SCRIPT_DIR/plotjob.sh jobs plots divconq-comp
-$SCRIPT_DIR/plotjob.sh jobs plots pp-comp
-$SCRIPT_DIR/plotmsdp-comp.sh jobs plots msdp-comp
+$SCRIPT_DIR/plotjob2.sh jobs plots dataparallel "1 sec, 0 Kb" "5 sec, 256 Kb"
+$SCRIPT_DIR/plotjob2.sh jobs plots nested "1 sec, 0 Kb" "5 sec, 256 Kb"
+$SCRIPT_DIR/plotjob2.sh jobs plots divconq "1 sec, 0 Kb" "5 sec, 64 Kb"
+$SCRIPT_DIR/plotjob2.sh jobs plots pp "1 sec, 0 Kb" "5 sec, 256 Kb"
+$SCRIPT_DIR/plotmsdp-comp.sh jobs plots msdp "2.5 sec, 0 Kb" "5 sec, 64 Kb"
 
 gnuplot $SCRIPT_DIR/divconq-utilisation.plot
 gnuplot $SCRIPT_DIR/pipeline-utilisation.plot
 gnuplot $SCRIPT_DIR/pp-utilisation.plot
-gnuplot $SCRIPT_DIR/msdp-comp-utilisation.plot
+gnuplot $SCRIPT_DIR/msdp-small-utilisation.plot
 
-$SCRIPT_DIR/plotdata.sh jobs plots divconq-tr
+$SCRIPT_DIR/plotdata.sh jobs plots dataparallel-big
+$SCRIPT_DIR/plotdata.sh jobs plots nested-big
+$SCRIPT_DIR/plotdata.sh jobs plots divconq-big
 $SCRIPT_DIR/plotdata.sh jobs plots pipeline-tr
-$SCRIPT_DIR/plotdata.sh jobs plots pp-tr
-$SCRIPT_DIR/plotdata-msdp.sh jobs plots msdp-tr
+$SCRIPT_DIR/plotdata.sh jobs plots pp-big
+$SCRIPT_DIR/plotdata-msdp.sh jobs plots msdp-big
 
-$SCRIPT_DIR/plotjob.sh jobs plots marks-time
-$SCRIPT_DIR/plotdata.sh jobs plots marks-tr
+$SCRIPT_DIR/plotjob.sh jobs plots marks
+$SCRIPT_DIR/plotdata.sh jobs plots marks
 $SCRIPT_DIR/plotjob.sh jobs plots marks-fishhalf-time
 $SCRIPT_DIR/plotdata.sh jobs plots marks-fishhalf-tr
 $SCRIPT_DIR/plotscale.sh jobs plots
