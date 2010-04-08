@@ -26,7 +26,7 @@ echo ARGS $ARGS
 
 export LOG_LEVEL=info
 mkdir $JOB_DIR/local_logs
-time nreduce $PROGRAM $ARGS >$JOB_DIR/program.out 2>$JOB_DIR/local_logs/$HOSTNAME.log
+time nreduce $PROGRAM $ARGS >/dev/null 2>$JOB_DIR/local_logs/$HOSTNAME.log
 echo Program exited with status $?
 
 shutdown
