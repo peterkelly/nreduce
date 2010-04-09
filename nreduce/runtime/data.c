@@ -50,7 +50,7 @@ array *write_start(void)
 
 void write_tag(array *wr, int tag)
 {
-  array_append(wr,&tag,sizeof(int));
+/*   array_append(wr,&tag,sizeof(int)); */
 }
 
 void write_char(array *wr, char c)
@@ -145,9 +145,9 @@ static void read_bytes(reader *rd, void *data, int count)
 
 void read_check_tag(reader *rd, int tag)
 {
-  int got;
-  read_bytes(rd,&got,sizeof(int));
-  assert(got == tag);
+/*   int got; */
+/*   read_bytes(rd,&got,sizeof(int)); */
+/*   assert(got == tag); */
 }
 
 static void read_tagged_bytes(reader *rd, int tag, void *data, int count)
