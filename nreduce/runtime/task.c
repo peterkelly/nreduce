@@ -52,7 +52,7 @@ int engine_type = ENGINE_NATIVE;
 int strict_evaluation = 1;
 int opt_postpone = 1;
 int opt_fishframes = 128;
-int opt_fishhalf = 1;
+int opt_fishhalf = 0;
 int opt_buildarray = 1;
 int opt_maxheap = 0;
 
