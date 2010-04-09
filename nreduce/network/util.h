@@ -54,6 +54,9 @@ typedef struct stack {
 
 void fatal(const char *format, ...);
 
+int min(int a, int b);
+int max(int a, int b);
+
 array *array_new(int elemsize, int initroom);
 int array_equals(array *a, array *b);
 void array_mkroom(array *arr, const int size);

@@ -46,7 +46,10 @@
 #define MSG_CHECKREFS           17
 #define MSG_HAVE_REPLICAS       18
 #define MSG_DELETE_REPLICAS     19
-#define MSG_HISTMAX             20
+#define MSG_COUNT_SPARKS        20
+#define MSG_NUM_SPARKS          21
+#define MSG_DISTRIBUTE          22
+#define MSG_HISTMAX             23
 
 /* Process startup */
 #define MSG_NEWTASK             100

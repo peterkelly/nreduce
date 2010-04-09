@@ -807,6 +807,7 @@ int worker(int port, const char *initial_str);
 
 /* interpreter */
 
+int count_sparks(task *tsk);
 void response_for_fetching_ref(task *tsk, global *target, pntr obj);
 void add_waiter_frame(waitqueue *wq, frame *f);
 void schedule_frame(task *tsk, frame *f, int desttsk, array *msg);
@@ -910,9 +911,20 @@ void native_sigfpe(int sig, siginfo_t *ino, void *uc1);
 void native_sigsegv(int sig, siginfo_t *ino, void *uc1);
 void native_compile(char *bcdata, int bcsize, task *tsk);
 
-/* taskman */
+/* manager */
+
+typedef struct gcarg {
+  int ntasks;
+  endpointid idmap[0];
+} gcarg;
 
 void start_manager(node *n);
+
+/* scheduler */
+
+void interpreter_count_sparks(task *tsk, message *msg);
+void interpreter_distribute(task *tsk, message *msg);
+void scheduler_thread(node *n, endpoint *endpt, void *arg);
 
 /* java */
 

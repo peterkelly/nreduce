@@ -48,11 +48,6 @@
 
 #define PAUSE_DURING_GC
 
-typedef struct gcarg {
-  int ntasks;
-  endpointid idmap[0];
-} gcarg;
-
 void pause_all(node *n, endpoint *endpt, gcarg *ga)
 {
   int i;
@@ -319,4 +314,5 @@ static void manager_thread(node *n, endpoint *endpt, void *arg)
 void start_manager(node *n)
 {
   node_add_thread2(n,"manager",manager_thread,NULL,NULL,MANAGER_ID,0);
+/*   node_add_thread(n,"scheduler",scheduler_thread,ga,NULL); */
 }

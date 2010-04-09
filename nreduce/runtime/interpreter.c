@@ -606,7 +606,7 @@ static int get_idmap_index(task *tsk, endpointid epid)
   return -1;
 }
 
-static int count_sparks(task *tsk)
+int count_sparks(task *tsk)
 {
   int count = 0;
   frame *spark = tsk->sparklist->sprev;
@@ -1400,6 +1400,12 @@ static void handle_message(task *tsk, message *msg)
     break;
   case MSG_DELETE_REPLICAS:
     interpreter_delete_replicas(tsk,msg);
+    break;
+  case MSG_COUNT_SPARKS:
+    interpreter_count_sparks(tsk,msg);
+    break;
+  case MSG_DISTRIBUTE:
+    interpreter_distribute(tsk,msg);
     break;
   case MSG_KILL:
     node_log(tsk->n,LOG_INFO,"task: received KILL");

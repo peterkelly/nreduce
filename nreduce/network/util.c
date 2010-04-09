@@ -55,6 +55,22 @@ void fatal(const char *format, ...)
   abort();
 }
 
+int min(int a, int b)
+{
+  if (a < b)
+    return a;
+  else
+    return b;
+}
+
+int max(int a, int b)
+{
+  if (a > b)
+    return a;
+  else
+    return b;
+}
+
 array *array_new(int elemsize, int initroom)
 {
   array *arr = (array*)malloc(sizeof(array));
