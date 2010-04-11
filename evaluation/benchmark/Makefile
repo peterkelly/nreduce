@@ -1,8 +1,8 @@
 objects = nsieve nsieve.class matmult matmult.class bintree bintree.class \
 	quicksort quicksort.class quicksort2.class quicksort2 mergesort mergesort.class \
 	mergesort2 mergesort2.class nfib nfib.class mandelbrot mandelbrot.class ProcessResults.class \
-	GenScripts.class hsbintree hsmandelbrot hsnfib hsnfibdouble hsmatmult hsmergesort hsquicksort \
-	hsnsieve
+	GenScripts.class hsbintree hsmandelbrot hsnfib hsnfibdouble hsmatmult hsmatmultarray hsmergesort \
+	hsquicksort hsnsieve
 
 all: $(objects)
 
@@ -47,6 +47,9 @@ hsnfibdouble: hsnfibdouble.hs
 
 hsmatmult: hsmatmult.hs
 	ghc -O3 -o hsmatmult hsmatmult.hs
+
+hsmatmultarray: hsmatmultarray.hs
+	ghc -O3 -o hsmatmultarray hsmatmultarray.hs
 
 hsmergesort: hsmergesort.hs
 	ghc -O3 -o hsmergesort hsmergesort.hs

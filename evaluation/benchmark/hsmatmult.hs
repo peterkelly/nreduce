@@ -37,7 +37,7 @@ pad n = if n <= 0 then
         else
             " " ++ (pad (n - 1))
 
-padnum n width = let str = (show n)
+padnum n width = let str = (show (floor n))
                  in (pad (width - (length str))) ++ str
 
 printrow :: [Double] -> String
