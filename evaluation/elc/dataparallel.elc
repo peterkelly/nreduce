@@ -11,17 +11,15 @@ main args =                             // Main function
   input = (genstring itemsize)          // Generate input string of
                                         // requested size
 
-  callservice n =                       // Service stub function -
-    (connect host port                  // connect to specified server
-    (mkrequest compms n input))         // and send request
+  inputlist = (map (!n.input)           // Create input list with n
+                   (range 1 nitems))    // copies of input string
 
-  results =                             // For i in 1..nitems, invoke
-    (map callservice (range 1 nitems))  // service with value i
+  callservice value =                   // Service stub function: connect
+    (connect host port                  // to service and send request
+    (++ (ntos compms) (++ " " value)))  // containing comp time & data
+
+  results = (map callservice inputlist) // Invoke service for each item
+                                        // in input list
 in
   (foldr ++ "\nEND\n" results)))        // Print result list, terminated
                                         // by "END" to confirm completion
-
-mkrequest ms n input =                  // Function to build request
-(++ (ntos ms) (++ " "                   // Send no. ms of computation,
-(++ (ntos n) (++ " "                    // then current value of i, then
-    input))))                           // input data of requested size

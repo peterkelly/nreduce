@@ -11,7 +11,10 @@ main args =                             // Main function
   input = (genstring itemsize)          // Generate input string of
                                         // requested size
 
-  callservice host input =              // Service stub function -
+  inputlist = (map (!n.input)           // Create input list with n
+                   (range 1 nitems))    // copies of input string
+
+  callservice host input =              // Service stub function:
     (connect host port                  // connect to specified server
     (mkrequest compms input))           // and send request
 
@@ -22,9 +25,8 @@ main args =                             // Main function
           (pipeline (tail stages) arg)) // the previous stage as input
         arg)                            // Else return initial input
 
-  result =
-    (map (!n.pipeline services input)   // For i in 1..nitems, apply
-         (range 1 nitems))              // pipeline starting with input
+  result = (map (pipeline services)     // Invoke pipeline for each item
+                inputlist)              // in input list
 in
   (foldr ++ "END\n" result)))           // Print result list, terminated
                                         // by "END" to confirm completion

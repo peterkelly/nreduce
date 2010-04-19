@@ -11,25 +11,24 @@ main args =                             // Main function
   input = (genstring itemsize)          // Generate input string of
                                         // requested size
 
+  inputlist = (map (!n.input)           // Create input list with n
+                   (range 1 nitems))    // copies of input string
+
   callservice x y =                     // Service stub function -
    (connect host port                   // concatenate args and
             (++ (ntos compms)           // pass to service
             (++ " " (++ x y))))
 
-  result =                              // Generate list of numbers 1-n
-    (divconq callservice                // and apply divide & conquer
-             (map (!x.input)            // using callservice as the
-                  (range 1 nitems)))    // combining function
-  
+  result = (divconq callservice         // Apply divide and conquer using
+                    inputlist)          // callservice as the combining
+                                        // function
 in
   (++ result                            // Print result, terminated by
       "\nEND\n")))                      // "END" to confirm completion
 
-divconq f lst =                         // Divide & conquer function
+divconq f lst =                         // Divide and conquer function
                                         // (f is the combining function)
 
-(if (== (len lst) 0)                    // Empty list: error
-    (error "Empty list")
 (if (== (len lst) 1)                    // Single item: return it
     (head lst)
 (if (== (len lst) 2)                    // Exactly two items:
@@ -40,4 +39,4 @@ divconq f lst =                         // Divide & conquer function
   right = (- (len lst) mid)
 in                                      // Solve recursively, and
   (f (divconq f (sub 0 mid lst))        // combine results
-     (divconq f (sub mid right lst)))))))
+     (divconq f (sub mid right lst))))))
