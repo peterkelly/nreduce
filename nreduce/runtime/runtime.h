@@ -222,10 +222,10 @@ typedef struct cell {
 } __attribute__ ((__packed__)) cell;
 
 #define PNTR_MASK  0xFFF80000
-#define INDEX_MASK 0x0003FFFF
+#define INDEX_MASK 0x0007FFFF
 #define PNTR_VALUE 0xFFF00000
 #define NULL_PNTR (*(pntr*)NULL_PNTR_BITS)
-#define MAX_ARRAY_SIZE (1 << 18)
+#define MAX_ARRAY_SIZE (1 << 19)
 
 #define pfield1(__p) (get_pntr(__p)->field1)
 #define pfield2(__p) (get_pntr(__p)->field2)
