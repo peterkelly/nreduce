@@ -216,8 +216,11 @@ void handle(int sock)
     printf("Done combine request, ms = %d, item size = %d, nitems = %d\n",
            ms,itemsize,nitems);
   }
+  else if (0 == size) {
+    printf("Zero-length input\n");
+  }
   else {
-    printf("Invalid input\n");
+    printf("Invalid input (%d bytes)\n",size);
   }
 
   free(data);
