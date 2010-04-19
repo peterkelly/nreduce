@@ -12,7 +12,7 @@ ELC_DIR=$SCRIPT_DIR/../elc
 
 . $SCRIPT_DIR/common.sh
 
-startcservice dev/tools/svc_compute 5000
+startcservice dev/tools/svc_compdata 5000
 startloadbal
 startshowload
 echo "Startup completed"
@@ -20,8 +20,15 @@ echo "Startup completed"
 COMPMS=10000
 PORT=5001
 SERVICES="$HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME $HOSTNAME"
+ITEMSIZE=65536
 
-time nreduce $ELC_DIR/pipeline.elc $NITEMS $COMPMS $PORT $SERVICES
+echo NITEMS $NITEMS
+echo COMPMS $COMPMS
+echo PORT $PORT
+echo ITEMSIZE $ITEMSIZE
+echo SERVICES $SERVICES
+
+time nreduce $ELC_DIR/pipeline.elc $NITEMS $COMPMS $PORT $ITEMSIZE $SERVICES
 echo Program exited with status $?
 
 shutdown

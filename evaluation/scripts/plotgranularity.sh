@@ -34,9 +34,9 @@ set terminal postscript eps color size 15cm, 9cm
 set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 
-set xlabel "# ms/call"
-set x2label "# calls"
-set ylabel "Execution time (s)"
+set xlabel "Amount of computation per call (milliseconds)"
+set x2label "Number of calls"
+set ylabel "Execution time (seconds)"
 
 set logscale x
 set logscale x2

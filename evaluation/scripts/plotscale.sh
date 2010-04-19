@@ -18,14 +18,14 @@ mkdir -p $PLOT_DIR/plots/$PLOT_NAME
 
 OUTPUT_FILE=$PLOT_DIR/plots/$PLOT_NAME/$PLOT_NAME
 
-for test in marks-scale-o marks-scale-y-normal marks-scale-y-fishhalf; do
+for test in marks-scale-o marks-scale-y; do
   echo "# S/call   Time       Speedup" > $PLOT_DIR/plots/$PLOT_NAME/$test.dat
   grep 'execution time' $JOBS_DIR/$test/*/output |\
   sed -e 's_^.*ms__' -e 's_/_ _' |\
   awk '{total[$1] += $5; count[$1]++}
        END { for (s in total) {
                avg=total[s]/count[s]
-               printf("%-10d %-10.3f %-10.3f\n",s,avg,4096*s/2/avg) }}' |\
+               printf("%-10d %-10.3f %-10.3f\n",s,avg,4096*s/2/avg/1000) }}' |\
   sort -n -k 1 >>\
   $PLOT_DIR/plots/$PLOT_NAME/$test.dat
 done
@@ -37,8 +37,8 @@ set size 0.75, 0.75
 
 set xlabel "Seconds per test"
 set ylabel "Speedup"
-set yrange [0:32]
-set ytics 4
+#set yrange [0:32]
+#set ytics 4
 
 set style data lines
 set key bottom right
@@ -50,7 +50,7 @@ set style line 3 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style fill solid 0.2
 
 plot "$PLOT_NAME-o.dat" using 1:3 title "Orchestration" with lines ls 1, \\
-     "$PLOT_NAME-y-fishhalf.dat" using 1:3 title "Choreography" with lines ls 2
+     "$PLOT_NAME-y.dat" using 1:3 title "Choreography" with lines ls 2
 $EXTRA
 HERE
 

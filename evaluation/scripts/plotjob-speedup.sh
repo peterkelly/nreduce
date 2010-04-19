@@ -24,7 +24,7 @@ set size 0.75, 0.75
 
 set xlabel "# nodes"
 set ylabel "Speedup"
-set xtics 4
+set xtics (1,4,8,12,16,20,24,28,32)
 set ytics 4
 set format y "%4.f"
 

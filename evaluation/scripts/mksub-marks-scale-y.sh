@@ -8,13 +8,13 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=marks-scale-y-fishhalf
+expname=marks-scale-y
 nodes=32
 
-for ((run = 0; run < 3; run++)); do
-  for ((ms = 1; ms <= 10; ms++)); do
+for ((run = 0; run < 10; run++)); do
+  for ms in 250 500 750 1000 1500 2000 3000 4000 5000 6000 7000 8000; do
     jobname=$expname.r$run.ms$ms
-    if ((ms >= 8)); then
+    if ((ms >= 7000)); then
       walltime=00:30:00
     else
       walltime=00:10:00

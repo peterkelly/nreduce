@@ -22,7 +22,7 @@ $SCRIPT_DIR/plotjob2.sh jobs plots dataparallel "1 sec, 0 Kb" "5 sec, 256 Kb"
 $SCRIPT_DIR/plotjob2.sh jobs plots nested "1 sec, 0 Kb" "5 sec, 256 Kb"
 $SCRIPT_DIR/plotjob2.sh jobs plots divconq "1 sec, 0 Kb" "5 sec, 64 Kb"
 $SCRIPT_DIR/plotjob2.sh jobs plots pp "1 sec, 0 Kb" "5 sec, 256 Kb"
-$SCRIPT_DIR/plotmsdp-comp.sh jobs plots msdp "2.5 sec, 0 Kb" "5 sec, 64 Kb"
+$SCRIPT_DIR/plotmsdp-comp.sh jobs plots msdp "2.5 sec, 0 Kb" "5 sec, 256 Kb"
 
 gnuplot $SCRIPT_DIR/divconq-utilisation.plot
 gnuplot $SCRIPT_DIR/pipeline-utilisation.plot
@@ -38,6 +38,8 @@ $SCRIPT_DIR/plotdata-msdp.sh jobs plots msdp-big
 
 $SCRIPT_DIR/plotjob.sh jobs plots marks
 $SCRIPT_DIR/plotdata.sh jobs plots marks
-$SCRIPT_DIR/plotjob.sh jobs plots marks-fishhalf-time
-$SCRIPT_DIR/plotdata.sh jobs plots marks-fishhalf-tr
+$SCRIPT_DIR/plotdata-ntests.sh jobs plots marks-ntests
+$SCRIPT_DIR/plotjob-ntests.sh jobs plots marks-ntests
+$SCRIPT_DIR/plotdata-codesize.sh jobs plots marks-codesize
+$SCRIPT_DIR/plotjob-codesize.sh jobs plots marks-codesize
 $SCRIPT_DIR/plotscale.sh jobs plots

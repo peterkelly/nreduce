@@ -1,12 +1,7 @@
 #!/bin/bash
 
-MS=$1
-
-if [ -z "$MS" ]; then
-  echo "Error: ms must be specified"
-  exit 1
-fi
-
+CODESIZEK=$1
+((CODESIZE=CODESIZEK*1024))
 SCRIPT_DIR=`dirname $0`
 XQ_DIR=$SCRIPT_DIR/../xquery
 
@@ -14,11 +9,10 @@ XQ_DIR=$SCRIPT_DIR/../xquery
 
 echo "export NSTUDENTS=64" > $JOB_DIR/env
 echo "export NTESTS=64" >> $JOB_DIR/env
-echo "export TESTMS=${MS}000" >> $JOB_DIR/env
-echo "export CODESIZE=131072" >> $JOB_DIR/env
-echo "export SOURCESIZE=131072" >> $JOB_DIR/env
+echo "export TESTMS=1000" >> $JOB_DIR/env
+echo "export CODESIZE=$CODESIZE" >> $JOB_DIR/env
+echo "export SOURCESIZE=$CODESIZE" >> $JOB_DIR/env
 echo "export INOUTSIZE=10" >> $JOB_DIR/env
-echo "export OPT_FISHHALF=1" >> $JOB_DIR/env
 
 startcservice 'java -cp dev/evaluation/ws Marks' 5000
 startvm

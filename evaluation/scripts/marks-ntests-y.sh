@@ -1,20 +1,14 @@
 #!/bin/bash
 
-MS=$1
-
-if [ -z "$MS" ]; then
-  echo "Error: ms must be specified"
-  exit 1
-fi
-
+NTESTS=$1
 SCRIPT_DIR=`dirname $0`
 XQ_DIR=$SCRIPT_DIR/../xquery
 
 . $SCRIPT_DIR/common.sh
 
 echo "export NSTUDENTS=64" > $JOB_DIR/env
-echo "export NTESTS=64" >> $JOB_DIR/env
-echo "export TESTMS=${MS}000" >> $JOB_DIR/env
+echo "export NTESTS=$NTESTS" >> $JOB_DIR/env
+echo "export TESTMS=1000" >> $JOB_DIR/env
 echo "export CODESIZE=131072" >> $JOB_DIR/env
 echo "export SOURCESIZE=131072" >> $JOB_DIR/env
 echo "export INOUTSIZE=10" >> $JOB_DIR/env

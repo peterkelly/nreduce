@@ -8,17 +8,14 @@ fi
 SUB_DIR=$1
 QNAME=`hostname -s`
 
-expname=marks-scale-o
+expname=marks-codesize-o
+
 nodes=32
 
-for ((run = 0; run < 10; run++)); do
-  for ms in 250 500 750 1000 1500 2000 3000 4000 5000 6000 7000 8000; do
-    jobname=$expname.r$run.ms$ms
-    if ((ms >= 7000)); then
-      walltime=00:30:00
-    else
-      walltime=00:10:00
-    fi
+for ((run = 0; run < 3; run++)); do
+  for ((s = 16; s <= 384; s += 16)); do
+    jobname=$expname.r$run.n$s
+    walltime=00:10:00
     cat > $SUB_DIR/$jobname.sub <<EOF
 #!/bin/sh
 
@@ -51,7 +48,7 @@ echo Time is \`date\`
 # Run the executable
 export JOB_DIR=~/jobs/$expname/$jobname
 mkdir -p \$JOB_DIR
-~/dev/evaluation/scripts/$expname.sh $ms >\$JOB_DIR/output 2>&1
+~/dev/evaluation/scripts/$expname.sh $s >\$JOB_DIR/output 2>&1
 EOF
   done
 done

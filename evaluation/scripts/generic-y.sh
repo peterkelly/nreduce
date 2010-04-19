@@ -24,7 +24,7 @@ PORT=5000
 echo PROGRAM $PROGRAM
 echo ARGS $ARGS
 
-time nreduce --client $INITIAL run 0 $PROGRAM $ARGS >/dev/null 2>$JOB_DIR/program.err
+time nreduce --client $INITIAL run 0 $PROGRAM $ARGS >/dev/null
 echo Program exited with status $?
 
 shutdown
