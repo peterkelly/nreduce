@@ -48,10 +48,10 @@ public class CollateNetStats
     InetAddress toip;
     int fromport;
     int toport;
-    int sent;
-    int received;
+    long sent;
+    long received;
 
-    public NetStats(String from, String to, int sent, int received)
+    public NetStats(String from, String to, long sent, long received)
       throws Exception
     {
       this.from = from;
@@ -65,7 +65,7 @@ public class CollateNetStats
     }
   }
 
-  String sizeStr(int bytes)
+  String sizeStr(long bytes)
   {
     return String.format("%.3f KB",((double)bytes)/1024.0);
   }
@@ -93,7 +93,7 @@ public class CollateNetStats
 
   void printStats(String type, boolean betweenonly)
   {
-    int totalData = 0;
+    long totalData = 0;
     for (NetStats ns : stats.values()) {
       if (ports.isEmpty() || (ports.contains(ns.fromport) && ports.contains(ns.toport))) {
 
@@ -160,7 +160,7 @@ public class CollateNetStats
     out.close();
   }
 
-  void addStats(String from, String to, int sent, int received)
+  void addStats(String from, String to, long sent, long received)
     throws Exception
   {
     String key = from+" "+to;
@@ -196,8 +196,8 @@ public class CollateNetStats
       m = linePattern.matcher(line);
       if (m.matches()) {
         String otherip = m.group(1);
-        int sent = Integer.parseInt(m.group(2));
-        int received = Integer.parseInt(m.group(3));
+        long sent = Long.parseLong(m.group(2));
+        long received = Long.parseLong(m.group(3));
 
         if (thisip.compareTo(otherip) < 0)
           addStats(thisip,otherip,sent,received);
