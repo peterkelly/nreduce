@@ -54,12 +54,13 @@ set grid
 
 set style line 1 linewidth 2 linecolor rgbcolor "blue" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
-set style line 3 linewidth 2 linecolor rgbcolor "#00CC00" linetype 3
+set style line 3 linewidth 2 linecolor rgbcolor "magenta" linetype 1
 set style fill solid 0.2
 
 plot "$PLOT_NAME-o2.dat" using 1:2 title "Orchestration" with lines ls 1, \\
      "$PLOT_NAME-y2.dat" using 1:2 title "Choreography" with lines ls 2, \\
-     "$PLOT_NAME-y2.dat" using 5:2 axes x2y1 notitle with lines ls 2
+     "$PLOT_NAME-y2.dat" using 5:2 axes x2y1 notitle with lines ls 2, \\
+     4 with lines ls 3 title "Optimal"
 HERE
 
 

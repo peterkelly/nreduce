@@ -14,7 +14,6 @@ $SCRIPT_DIR/plotworksize-p.sh jobs plots worksize-p
 $SCRIPT_DIR/plotpostpone.sh jobs plots postpone
 
 $SCRIPT_DIR/plotnumcalls.sh jobs plots numcalls-o
-#$SCRIPT_DIR/plotnumcalls.sh jobs plots numcalls-hn
 $SCRIPT_DIR/plotgranularity.sh jobs plots granularity
 $SCRIPT_DIR/plotgranularity.sh jobs plots xq-granularity
 

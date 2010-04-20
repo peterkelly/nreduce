@@ -3,8 +3,8 @@ main args =                             // Main function
   "Usage: pipeline.elc nitems comp port itemsize services...\n"
 (letrec
   nitems = (ston (item 0 args))         // Process command-line args,
-  compms = (ston (item 1 args))         // converting to numbers using
-  port = (ston (item 2 args))           // ston for numeric args
+  compms = (ston (item 1 args))         // using ston to convert strings
+  port = (ston (item 2 args))           // to numbers for numeric args
   itemsize = (ston (item 3 args))
   services = (skip 4 args)              // Remaining args: service hosts
 
@@ -14,9 +14,10 @@ main args =                             // Main function
   inputlist = (map (!n.input)           // Create input list with n
                    (range 1 nitems))    // copies of input string
 
-  callservice host input =              // Service stub function:
-    (connect host port                  // connect to specified server
-    (mkrequest compms input))           // and send request
+  callservice host value =              // Service stub function:
+    (tail                               // Ignore first response char (.)
+    (connect host port                  // Connect to specified server
+    (mkrequest compms value)))          // and send request
 
   pipeline stages arg =
     (if stages                          // If more stages remain, call
@@ -31,5 +32,5 @@ in
   (foldr ++ "END\n" result)))           // Print result list, terminated
                                         // by "END" to confirm completion
 
-mkrequest compms input =                // Produce request body: amount
-(++ (ntos compms) (++ " " input))       // of computation + data to echo
+mkrequest compms value =                // Produce request body: amount
+(++ (ntos compms) (++ " " value))       // of computation + input value

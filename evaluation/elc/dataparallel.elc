@@ -3,8 +3,8 @@ main args =                             // Main function
   "Usage: dataparallel.elc host port nitems compms itemsize\n"
 (letrec
   host = (item 0 args)                  // Process command-line args,
-  port = (ston (item 1 args))           // converting to numbers using
-  nitems = (ston (item 2 args))         // ston for numeric args
+  port = (ston (item 1 args))           // using ston to convert strings
+  nitems = (ston (item 2 args))         // to numbers for numeric args
   compms = (ston (item 3 args))
   itemsize = (ston (item 4 args))
 

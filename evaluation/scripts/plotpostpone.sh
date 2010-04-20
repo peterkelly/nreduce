@@ -54,10 +54,10 @@ set style line 5 linewidth 2 linecolor rgbcolor "green" linetype 1
 set style line 6 linewidth 2 linecolor rgbcolor "green" linetype 2
 set style fill solid 0.2
 
-plot "worksize-np.x128.dat" using 1:2 title "Postpone disabled" with lines ls 1, \\
+plot "worksize-np.x128.dat" using 1:2 title "Postponing disabled" with lines ls 1, \\
      "worksize-np.x128.dat" using 1:3 notitle with lines ls 2, \\
      "worksize-np.x128.dat" using 1:4 notitle with lines ls 2, \\
-     "worksize-p.x128.dat" using 1:2 title "Postpone enabled" with lines ls 3, \\
+     "worksize-p.x128.dat" using 1:2 title "Postponing enabled" with lines ls 3, \\
      "worksize-p.x128.dat" using 1:3 notitle with lines ls 4, \\
      "worksize-p.x128.dat" using 1:4 notitle with lines ls 4
 

@@ -3,8 +3,8 @@ main args =                          // Main function
   "Usage: nested.elc host port size compms itemsize\n"
 (letrec
   host = (item 0 args)               // Process command-line args,
-  port = (ston (item 1 args))        // converting to numbers using
-  size = (ston (item 2 args))        // ston for numeric args
+  port = (ston (item 1 args))        // using ston to convert strings
+  size = (ston (item 2 args))        // to numbers for numeric args
   compms = (ston (item 3 args))
   itemsize = (ston (item 4 args))
 
@@ -12,20 +12,20 @@ main args =                          // Main function
     (connect host port               // connect to specified server
     (mkrequest compms n))            // and send request
 
-  data = (genstring itemsize)        // Generate array element content
+  input = (genstring itemsize)       // Generate array element content
                                      // of requested size
 
-  input = (create2darray size data)  // Construct size*size input array
+  array = (create2darray size input) // Construct size*size input array
 
   result =
     (map (!row.map callservice row)  // For each column in each row,
-         input)                      // call the service
+         array)                      // call the service
 in
-  (++ (print2darray result)          // Print output array, terminated
+  (++ (str2darray result)            // Print output array, terminated
       "END\n")))                     // by "END" to confirm completion
 
 
-print2darray array =                 // Array to string: Loop over rows
+str2darray array =                   // Array to string: Loop over rows
 (foldr ++ ""                         // and columns, concatenating column
        (map (!row.foldr ++ "\n" row) // elements on a single line, and
             array))                  // row elements on separate lines
