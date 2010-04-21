@@ -39,7 +39,7 @@
 #include <signal.h>
 
 #define CHUNKSIZE 4
-#define DELAYMS 1000
+#define DELAYMS 250
 #define HOSTWIDTH 12
 
 FILE *logfile = NULL;
