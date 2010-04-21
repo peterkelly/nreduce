@@ -55,9 +55,9 @@ set style fill solid 0.2
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "green" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "blue" linetype 1
-set style line 4 linewidth 2 linecolor rgbcolor "magenta" linetype 1
-set style line 5 linewidth 2 linecolor rgbcolor "#00CCCC" linetype 1
-set style line 6 linewidth 2 linecolor rgbcolor "#808000" linetype 1
+set style line 4 linewidth 2 linecolor rgbcolor "violet" linetype 1
+set style line 5 linewidth 2 linecolor rgbcolor "orange" linetype 1
+set style line 6 linewidth 2 linecolor rgbcolor "#008080" linetype 1
 
 plot \\
 HERE

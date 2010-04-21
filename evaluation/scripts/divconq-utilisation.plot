@@ -9,8 +9,8 @@ set yr [0:105]
 set style line 1 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style line 2 linewidth 2 linecolor rgbcolor "green" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "blue" linetype 1
-set style line 4 linewidth 2 linecolor rgbcolor "magenta" linetype 1
-set style line 5 linewidth 2 linecolor rgbcolor "cyan" linetype 1
+set style line 4 linewidth 2 linecolor rgbcolor "violet" linetype 1
+set style line 5 linewidth 2 linecolor rgbcolor "orange" linetype 1
 
 plot "<grep total jobs/divconq-utilisation/divconq-utilisation.r0.n512/showload.log" \
      using 2:3 title "512 items" with lines ls 1, \
