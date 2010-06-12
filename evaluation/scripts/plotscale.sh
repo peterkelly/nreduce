@@ -35,7 +35,7 @@ set terminal postscript eps color size 15.0cm, 9cm
 set output "$PLOT_NAME.eps"
 set size 0.75, 0.75
 
-set xlabel "Seconds per test"
+set xlabel "Seconds of computation per test"
 set ylabel "Speedup"
 #set yrange [0:32]
 #set ytics 4
@@ -49,8 +49,8 @@ set style line 2 linewidth 2 linecolor rgbcolor "#00CC00" linetype 1
 set style line 3 linewidth 2 linecolor rgbcolor "red" linetype 1
 set style fill solid 0.2
 
-plot "$PLOT_NAME-o.dat" using 1:3 title "Orchestration" with lines ls 1, \\
-     "$PLOT_NAME-y.dat" using 1:3 title "Choreography" with lines ls 2
+plot "$PLOT_NAME-o.dat" using (\$1/1000):3 title "Orchestration" with lines ls 1, \\
+     "$PLOT_NAME-y.dat" using (\$1/1000):3 title "Choreography" with lines ls 2
 $EXTRA
 HERE
 
