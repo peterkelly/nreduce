@@ -115,7 +115,7 @@ void array_vprintf(array *arr, const char *format, va_list ap)
     int r;
 
     va_copy(tmp,ap);
-    r = vsnprintf(&arr->data[arr->nbytes],arr->alloc-arr->nbytes,format,ap);
+    r = vsnprintf(&arr->data[arr->nbytes],arr->alloc-arr->nbytes,format,tmp);
     va_end(tmp);
 
     if ((0 > r) || (r >= arr->alloc-arr->nbytes)) {
