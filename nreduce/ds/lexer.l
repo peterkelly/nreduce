@@ -3,8 +3,8 @@
 %x string comment comment2 sexpr
 %{
 /*
- * This file is part of the nreduce project
- * Copyright (C) 2006-2008 Peter Kelly (pmk@cs.adelaide.edu.au)
+ * This file is part of the NReduce project
+ * Copyright (C) 2007-2010 Peter Kelly <kellypmk@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,7 +20,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * $Id: lexer.l 653 2007-10-02 05:46:20Z pmkelly $
+ * $Id: nreduce.c 911 2010-03-10 11:44:05Z pmkelly $
  *
  */
 

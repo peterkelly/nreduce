@@ -3,8 +3,8 @@
 %x string comment comment2 intline
 %{
 /*
- * This file is part of the nreduce project
- * Copyright (C) 2006-2009 Peter Kelly (pmk@cs.adelaide.edu.au)
+ * This file is part of the NReduce project
+ * Copyright (C) 2006-2010 Peter Kelly <kellypmk@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
